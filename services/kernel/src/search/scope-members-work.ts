@@ -11,6 +11,7 @@ import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { readCollectionSourceWorkState } from '../library/collection-source-work-native.ts';
 import type { MembersPreparationWorkDefinition } from '../library/members-preparation.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
+import type { WorkDimensions } from '../library/collection-source.ts';
 import { leafProvider, type CollectionMemberAdmission, type OwnerFilterFactLocator } from '../library/owner-filter.ts';
 import { readOwnerFilterCandidate, type OwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import factsQuery from '../library/owner-filter-native-closure-facts.sql';
@@ -21,8 +22,15 @@ import type { IdentityScopeObservation } from '../semantic/identity-scope-types.
 import type { CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import { readMembersPreparationWorkDefinition, type MembersPreparationWorkContext } from './scope-work-context.ts';
 import {
+  MEMBERS_SEARCH_QUERY_SQL,
+  MEMBERS_SNAPSHOT_OWNER_FENCE_DIMENSIONS,
   membersBounded,
+  membersFactsDimensions,
+  membersGroupDimensions,
+  membersOrdinalProbeDimensions,
+  membersSnapshotScopeDimensions,
   membersSource,
+  membersTerminalDimensions,
   meterMembersDefinition,
   withMembersWorkBudget,
 } from './scope-members-work-cost.ts';
@@ -73,31 +81,13 @@ async function query<R extends QueryResultRow>(
   work: NativeCollectionWork,
   sql: string,
   values: unknown[],
-  rows: number,
-  points = 1,
-  keys = 0,
-  bytes = rows * 256,
-  identityRows = 0,
+  bound: WorkDimensions,
 ): Promise<R[]> {
   if (!hasLiveOperationalTransaction(input.work.tx)) throw unavailable();
-  return membersBounded(
-    work,
-    {
-      ...zeroScopeWork(),
-      nativeRows: rows,
-      identityMetadataRows: identityRows,
-      nativePoints: points,
-      statements: 1,
-      emptySeeks: 1,
-      candidateKeys: keys,
-      witnessKeys: keys,
-      bytes: bytes + Buffer.byteLength(sql) + Buffer.byteLength(JSON.stringify(values)),
-    },
-    async () => {
-      const config = { text: sql, values, query_timeout: Math.max(1, input.deadline - Date.now()) };
-      return (await input.work.tx.query<R>(config)).rows;
-    },
-  );
+  return membersBounded(work, { ...zeroScopeWork(), ...bound }, async () => {
+    const config = { text: sql, values, query_timeout: Math.max(1, input.deadline - Date.now()) };
+    return (await input.work.tx.query<R>(config)).rows;
+  });
 }
 
 /** The native source reader checks the complete canonical basis, metadata and immutable definition.
@@ -111,18 +101,18 @@ export async function readMembersSnapshot(
     readCollectionSourceWorkState(input.pool, input.work, { ...input, allowance }),
   );
   if (!isDeepStrictEqual(source.definition, native)) throw unavailable();
+  const scopeValues = [
+    native.sourceIdentity.route,
+    native.sourceIdentity.collectionId,
+    source.basis.sourceFence,
+    source.generation,
+  ];
   const [scope] = await query<{ identity: unknown; capture: string; revision: string }>(
     input,
     work,
-    `SELECT s.identity,s.capture_id::text AS capture,s.committed_revision::text AS revision
-     FROM library.canonical_source_scope s JOIN library.canonical_source_head h
-       ON h.route=s.route AND h.collection_id=s.collection_id AND h.generation=$4
-     WHERE s.route=$1 AND s.collection_id=$2 AND s.source_fence=$3`,
-    [native.sourceIdentity.route, native.sourceIdentity.collectionId, source.basis.sourceFence, source.generation],
-    16,
-    2,
-    0,
-    8192,
+    MEMBERS_SEARCH_QUERY_SQL.snapshotScope,
+    scopeValues,
+    membersSnapshotScopeDimensions(scopeValues),
   );
   if (
     !scope?.capture ||
@@ -139,11 +129,8 @@ export async function readMembersSnapshot(
     committedRevision: BigInt(scope.revision),
   };
   await revalidateMembersObservation(input, observation, work);
-  const owner = await membersBounded(
-    work,
-    { nativeRows: 4, nativePoints: 1, statements: 1, emptySeeks: 1, bytes: 1024 },
-    () =>
-      fenceQuery.run(input.work.tx, { route: input.work.locator.route, account_id: input.work.locator.ownerAccountId }),
+  const owner = await membersBounded(work, MEMBERS_SNAPSHOT_OWNER_FENCE_DIMENSIONS, () =>
+    fenceQuery.run(input.work.tx, { route: input.work.locator.route, account_id: input.work.locator.ownerAccountId }),
   );
   // Native owner predicates need the writer's real fence, including when their answer is absence.
   if (!owner) throw new ProblemError('dependency_unavailable');
@@ -212,6 +199,14 @@ export function membersExecution(
 export async function membersTerminal(execution: MembersExecution, original: string, work: NativeCollectionWork) {
   const { input, snapshot } = execution;
   const address = identityScopeAddress(snapshot.observation.key);
+  const terminalValues = [
+    address.partition,
+    address.source,
+    address.scope,
+    snapshot.observation.captureId,
+    snapshot.observation.committedRevision.toString(),
+    original,
+  ];
   const [row] = await query<{
     terminal: string;
     ticket: { original?: string; capture_id?: string; registration?: string };
@@ -219,25 +214,9 @@ export async function membersTerminal(execution: MembersExecution, original: str
   }>(
     input,
     work,
-    `SELECT f.directory_group::text AS terminal,f.ticket,s.registration::text
-     FROM semantic.identity_scope_summary s JOIN semantic.identity_scope_forward f
-       ON (f.partition_no,f.source_key,f.scope_id,f.registration)=(s.partition_no,s.source_key,s.scope_id,s.registration)
-     WHERE s.partition_no=$1 AND s.source_key=$2 AND s.scope_id=$3 AND s.capture_id=$4 AND s.revision=$5
-       AND s.state='ready' AND s.active=0 AND f.dependency=$6 AND f.original=$6::uuid
-       AND f.ticket IS NOT NULL AND f.directory_group IS NOT NULL`,
-    [
-      address.partition,
-      address.source,
-      address.scope,
-      snapshot.observation.captureId,
-      snapshot.observation.committedRevision.toString(),
-      original,
-    ],
-    16,
-    2,
-    1,
-    4096,
-    16,
+    MEMBERS_SEARCH_QUERY_SQL.terminal,
+    terminalValues,
+    membersTerminalDimensions(terminalValues),
   );
   if (
     !row ||
@@ -257,27 +236,21 @@ async function group(execution: MembersExecution, subject: string, work: NativeC
   const limit = Math.min(100, 101 - saved.keys.length, work.available('candidateKeys'), work.available('witnessKeys'));
   if (limit < 1) return saved;
   const last = saved.keys.at(-1);
+  const groupValues = [
+    execution.input.work.locator.route,
+    execution.input.work.locator.collectionId,
+    execution.snapshot.source.generation,
+    subject,
+    last?.original ?? null,
+    last?.fact ?? null,
+    limit,
+  ];
   const rows = await query<RawKey>(
     execution.input,
     work,
-    `SELECT stored_subject_id::text AS original,driver,fact_id::text AS fact
-     FROM library.canonical_source_reference
-     WHERE route=$1 AND collection_id=$2 AND generation=$3 AND canonical_subject_id=$4
-       AND (stored_subject_id,driver,fact_id)>(COALESCE($5::uuid,'00000000-0000-0000-0000-000000000000'),0,COALESCE($6::uuid,'00000000-0000-0000-0000-000000000000'))
-     ORDER BY stored_subject_id,driver,fact_id LIMIT $7`,
-    [
-      execution.input.work.locator.route,
-      execution.input.work.locator.collectionId,
-      execution.snapshot.source.generation,
-      subject,
-      last?.original ?? null,
-      last?.fact ?? null,
-      limit,
-    ],
-    8 * limit + 8,
-    1,
-    limit,
-    limit * 256,
+    MEMBERS_SEARCH_QUERY_SQL.group,
+    groupValues,
+    membersGroupDimensions(groupValues, limit),
   );
   if (rows.some((row) => row.driver !== 0 || routeOf(row.original) === null || routeOf(row.fact) === null))
     throw unavailable();
@@ -321,24 +294,13 @@ async function closure(
     if (original !== subject && (await membersTerminal(execution, original, work)) !== subject) throw unavailable();
     const limit = Math.min(remaining, work.available('candidateKeys'), work.available('witnessKeys'));
     if (limit < 1) return null;
-    const rows = await membersBounded(
-      work,
-      {
-        nativeRows: 32 * limit + 32,
-        nativePoints: 5,
-        statements: 1,
-        candidateKeys: limit,
-        witnessKeys: limit,
-        emptySeeks: 1,
-        bytes: 256 * limit + 4096,
-      },
-      () =>
-        factsQuery.run(execution.input.work.tx, {
-          route: execution.input.work.locator.route,
-          account_id: execution.input.work.locator.ownerAccountId,
-          subject_id: original,
-          limit,
-        }),
+    const rows = await membersBounded(work, membersFactsDimensions(limit), () =>
+      factsQuery.run(execution.input.work.tx, {
+        route: execution.input.work.locator.route,
+        account_id: execution.input.work.locator.ownerAccountId,
+        subject_id: original,
+        limit,
+      }),
     );
     if (rows.length === limit || rows.some((row) => row.driver === 0)) return null;
     const facts: OwnerFilterFactLocator[] = [];
@@ -415,17 +377,17 @@ export async function firstMembersOrdinal(
   if (!raw.complete || !raw.keys.length || raw.keys.length > 100) return null;
   let first: NativeOrdinalKey | null = null;
   for (const key of raw.keys) {
+    const ordinalValues = [
+      execution.input.work.locator.route,
+      execution.input.work.locator.collectionId,
+      key.fact,
+    ];
     const [row] = await query<{ memberId: string; ordinalKey: string; subject: string }>(
       execution.input,
       work,
-      `SELECT member_id::text AS "memberId",ordinal_key AS "ordinalKey",subject_id::text AS subject
-       FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3
-         AND deletion_id IS NULL AND deleted_at IS NULL`,
-      [execution.input.work.locator.route, execution.input.work.locator.collectionId, key.fact],
-      4,
-      1,
-      1,
-      256,
+      MEMBERS_SEARCH_QUERY_SQL.ordinalProbe,
+      ordinalValues,
+      membersOrdinalProbeDimensions(ordinalValues),
     );
     if (!row) continue;
     if (row.subject !== key.original) throw unavailable();

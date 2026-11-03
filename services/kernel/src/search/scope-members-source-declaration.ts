@@ -1,5 +1,6 @@
 import type { WorkDimensions } from '../library/collection-source.ts';
 import { MEMBERS_PREPARATION_BRANCH_COST } from '../library/members-preparation-cost.ts';
+import { MEMBERS_SEARCH_QUERY_COST } from './scope-members-work-cost.ts';
 
 /** SelectedCost is the eight shared Source dimensions plus engineRequests. Keep the axes named here. */
 export const MEMBERS_PREPARATION_SOURCE_AXES = Object.freeze([
@@ -24,7 +25,14 @@ export type MembersPreparationSourceTerm = Readonly<{
 
 const axes = MEMBERS_PREPARATION_SOURCE_AXES;
 const axisSet = new Set<string>(axes);
-const knownTermNames = new Set(['library-source-metadata-prefix']);
+const knownTermNames = new Set([
+  'library-source-metadata-prefix',
+  'read-members-snapshot',
+  'members-terminal',
+  'group',
+  'closure',
+  'first-members-ordinal',
+]);
 
 function isCost(value: unknown): value is MembersPreparationSourceCost {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -70,18 +78,9 @@ function selectedCost(cost: Readonly<WorkDimensions>): MembersPreparationSourceC
   return Object.freeze({ ...cost, engineRequests: 0 });
 }
 
-/**
- * The only whole branch subtotal already owned by the producer contract. Its internal
- * multiplicities are 9 step reads, 5 Source metadata reads, and 2 owner-fence reads.
- * It does not include Search's nested Source calls or establish a complete quote.
- */
-export const MEMBERS_PREPARATION_SOURCE_KNOWN_TERMS = Object.freeze([
-  Object.freeze({
-    name: 'library-source-metadata-prefix',
-    multiplicity: 1,
-    cost: selectedCost(MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata),
-  }),
-] satisfies readonly MembersPreparationSourceTerm[]);
+function pathMaximum(idCount: number, ordinalCount: number): number {
+  return idCount > ordinalCount ? idCount : ordinalCount;
+}
 
 const allAxes = axes;
 
@@ -138,6 +137,62 @@ export const MEMBERS_PREPARATION_SOURCE_PATHS = Object.freeze({
 });
 
 /**
+ * Library metadata prefix plus Search-owned SQL/parameter terms. Id and ordinal are
+ * mutually exclusive; each Search term's multiplicity is the larger path maximum.
+ * Facts use limit 50, the remaining that 50 ids leave for those 50 calls.
+ * This is still not a complete quote: child owners remain missing.
+ */
+export const MEMBERS_PREPARATION_SOURCE_KNOWN_TERMS = Object.freeze([
+  Object.freeze({
+    name: 'library-source-metadata-prefix',
+    multiplicity: 1,
+    cost: selectedCost(MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata),
+  }),
+  Object.freeze({
+    name: 'read-members-snapshot',
+    multiplicity: pathMaximum(
+      MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots,
+      MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.membersSnapshots,
+    ),
+    cost: selectedCost(MEMBERS_SEARCH_QUERY_COST.snapshot),
+  }),
+  Object.freeze({
+    name: 'members-terminal',
+    multiplicity: pathMaximum(
+      MEMBERS_PREPARATION_SOURCE_PATHS.id.closurePasses *
+        MEMBERS_PREPARATION_SOURCE_PATHS.id.terminalQueriesPerClosureMaximum,
+      MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.terminalQueriesBeforeEvaluationMaximum +
+        MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.closurePasses *
+          MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.terminalQueriesPerClosureMaximum,
+    ),
+    cost: selectedCost(MEMBERS_SEARCH_QUERY_COST.terminal),
+  }),
+  Object.freeze({
+    name: 'group',
+    multiplicity: pathMaximum(
+      MEMBERS_PREPARATION_SOURCE_PATHS.id.distinctGroupQueries,
+      MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.distinctGroupQueries,
+    ),
+    cost: selectedCost(MEMBERS_SEARCH_QUERY_COST.group),
+  }),
+  Object.freeze({
+    name: 'closure',
+    multiplicity: pathMaximum(
+      MEMBERS_PREPARATION_SOURCE_PATHS.id.closurePasses *
+        MEMBERS_PREPARATION_SOURCE_PATHS.id.factQueriesPerClosureMaximum,
+      MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.closurePasses *
+        MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.factQueriesPerClosureMaximum,
+    ),
+    cost: selectedCost(MEMBERS_SEARCH_QUERY_COST.facts),
+  }),
+  Object.freeze({
+    name: 'first-members-ordinal',
+    multiplicity: MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.earliestOrdinalProbesMaximum,
+    cost: selectedCost(MEMBERS_SEARCH_QUERY_COST.ordinalProbe),
+  }),
+] satisfies readonly MembersPreparationSourceTerm[]);
+
+/**
  * These dependencies are deliberately unresolved. The known subtotal is useful for
  * composition review, but this export has no `cost` field and cannot populate SelectedChildren.source.
  */
@@ -182,21 +237,6 @@ export const MEMBERS_PREPARATION_SOURCE_MISSING_DECLARATIONS = Object.freeze([
     missing: Object.freeze([
       'finite child quote for capture/revision revalidation and its transitive native statements',
       'currentness failure and cleanup price',
-    ]),
-  }),
-  Object.freeze({
-    name: 'search-scope-members-query-aggregate',
-    owner: 'Search',
-    body: 'readMembersSnapshot, membersTerminal, group, closure factsQuery, and firstMembersOrdinal',
-    callsByPath: Object.freeze({
-      id: Object.freeze({ snapshots: 8, terminalQueriesPerClosure: 49, factQueriesPerClosure: 50, closures: 2 }),
-      ordinal: Object.freeze({ snapshots: 4, earliestOrdinalProbes: 99, rawRows: 1, closures: 2 }),
-    }),
-    axes: allAxes,
-    missing: Object.freeze([
-      'sum the actual bounded query costs and SQL/serialized-parameter byte projections over the path maxima',
-      'retain the separate native child costs of revalidation, Collection Source, and owner providers',
-      'do not substitute a remaining WorkAllowance or successful WorkReceipt for this static sum',
     ]),
   }),
   Object.freeze({

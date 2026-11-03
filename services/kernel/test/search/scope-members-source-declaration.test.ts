@@ -22,28 +22,33 @@ test('the Members Source subtotal composes finite named axes and refuses an inco
     'engineRequests',
   ]);
   expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.status).toBe('incomplete');
+  expect('cost' in MEMBERS_PREPARATION_SOURCE_DECLARATION).toBe(false);
   for (const dependency of MEMBERS_PREPARATION_SOURCE_MISSING_DECLARATIONS)
     expect(dependency.axes).toEqual(MEMBERS_PREPARATION_SOURCE_AXES);
+  expect(MEMBERS_PREPARATION_SOURCE_KNOWN_TERMS.map(({ name, multiplicity }) => [name, multiplicity])).toEqual([
+    ['library-source-metadata-prefix', 1],
+    ['read-members-snapshot', 8],
+    ['members-terminal', 99],
+    ['group', 1],
+    ['closure', 100],
+    ['first-members-ordinal', 99],
+  ]);
   expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.knownSubtotal).toEqual({
-    candidateKeys: 0,
-    nativeRows: 45,
-    identityMetadataRows: 0,
-    nativePoints: 45,
-    witnessKeys: 0,
-    statements: 16,
-    bytes: 19_924_992,
-    emptySeeks: 45,
+    candidateKeys: 5_298,
+    nativeRows: 166_193,
+    identityMetadataRows: 1_584,
+    nativePoints: 867,
+    witnessKeys: 5_298,
+    statements: 331,
+    bytes: 22_253_184,
+    emptySeeks: 360,
     engineRequests: 0,
   });
-  expect(MEMBERS_PREPARATION_SOURCE_KNOWN_TERMS[0]?.multiplicity).toBe(1);
   expect(MEMBERS_PREPARATION_SOURCE_PATHS.id.definitionGetters).toBe(15);
   expect(MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.definitionGetters).toBe(11);
-  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.missing.map(({ name }) => name)).toContain(
-    'selected-runtime-source-field-and-final-authority',
-  );
-  expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.missing.map(({ name }) => name)).toContain(
-    'search-scope-members-query-aggregate',
-  );
+  const missing = MEMBERS_PREPARATION_SOURCE_DECLARATION.missing.map(({ name }) => name);
+  expect(missing).toContain('selected-runtime-source-field-and-final-authority');
+  expect(missing).not.toContain('search-scope-members-query-aggregate');
 
   expect(
     sumMembersPreparationSourceTerms([

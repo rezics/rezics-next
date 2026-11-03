@@ -6,7 +6,11 @@
 `MEMBERS_PREPARATION_SOURCE_PATHS`, `MEMBERS_PREPARATION_SOURCE_MISSING_DECLARATIONS`, and
 `sumMembersPreparationSourceTerms`. The declaration is explicitly `incomplete`: it contains a finite known subtotal
 and the body-derived path maxima, but has no `cost` field. A `WorkAllowance`, `WorkReceipt`, per-call ceiling or this
-subtotal cannot be installed as `SelectedChildren.source`.
+subtotal cannot be installed as `SelectedChildren.source`. Search-owned snapshot, terminal, group, closure-facts and
+ordinal-probe terms now use each producer's row, point, candidate, witness, statement and SQL/parameter byte
+projection. Each term's multiplicity is the mutually exclusive envelope of the id and ordinal call maxima; facts
+queries use limit 50, the remaining those 50 calls require. Child Library, Semantic, Core and Selected Runtime
+declarations still keep the nine-axis quote uncomposed.
 
 The shared axes are candidateKeys, nativeRows, identityMetadataRows, nativePoints, witnessKeys, statements, bytes,
 emptySeeks and engineRequests. Library's existing `MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata` is the one
@@ -65,7 +69,7 @@ or physical authority:
 | Library                                            | `MembersPreparation.readWorkDefinition` and retained release reconstruction                          | Current `NativeSourceIdentity`, current `CollectionSourceObservation`, cold release and header statement/row/point/byte bounds, same-client revalidation cost |
 | Library                                            | `readCollectionSourceWorkState`, `createCollectionSource.prepare`, id prefix and raw ordinal prefix  | Per-call cost declarations and transitive native statement, row, point, empty-seek and byte bounds                                                            |
 | Semantic                                           | `createIdentityScopedObservations.revalidate`                                                        | A finite child quote for the capture/revision fence, including reached failure and cleanup                                                                    |
-| Search                                             | `readMembersSnapshot`, `membersTerminal`, `group`, `closure` facts queries and `firstMembersOrdinal` | Sum the direct query bounds and SQL/serialized-parameter byte projections across the path maxima                                                              |
+| Search                                             | `readMembersSnapshot`, `membersTerminal`, `group`, `closure` facts queries and `firstMembersOrdinal` | Delivered: named finite terms with envelope multiplicities and SQL/parameter byte projections. Revalidation, Collection Source and owner providers stay separate. |
 | Library                                            | Owner fact providers, accepted release body reads and `readOwnerFilterCandidate`                     | Transitive native statements and the bounded fact/release byte projections over both closure passes                                                           |
 | Core                                               | `runOperationalTransaction` around `readReleasedPreparationSource`                                   | Work-step setup, time/owner fences, and commit or rollback/connection cleanup cost                                                                            |
 | Commerce successor with Library producer ownership | `MEMBERS_SELECTED_CHILDREN.source` and `checkMembersPreparationCompletion`                           | The complete `SelectedCost`, the installed source field, and final physical-source authority                                                                  |
