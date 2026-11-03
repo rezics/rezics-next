@@ -166,7 +166,7 @@ export async function readReactionRequest(
           ? await client.threads({ id: input.id }).get({ headers })
           : await client.posts({ id: input.id }).get({ headers });
       if (result.error) return refusal(result.status, result.headers, result.error.value);
-      reactionsAsOf = result.data?.reactionsAsOf;
+      reactionsAsOf = result.data && 'reactionsAsOf' in result.data ? result.data.reactionsAsOf : undefined;
       const data = result.data as { thread?: unknown; post?: unknown } | null;
       const target = (input.target === 'thread' ? data?.thread : data?.post) as
         | { reactions?: Partial<Record<ReactionKind, number>>; viewerReaction?: unknown }
