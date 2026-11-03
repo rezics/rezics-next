@@ -26,11 +26,9 @@ export async function afterInboxActorProfile<T>(
             if (property === 'query') {
               return (...queryArgs: unknown[]) => {
                 const input = queryArgs[0] as QueryInput;
-                const text = typeof input === 'string' ? input : input?.text ?? '';
+                const text = typeof input === 'string' ? input : (input?.text ?? '');
                 const actorProfile =
-                  !transitioned &&
-                  text.includes('public_views') &&
-                  text.includes('FROM access.account');
+                  !transitioned && text.includes('public_views') && text.includes('FROM access.account');
                 const result = Reflect.apply(target.query, target, queryArgs);
                 if (!actorProfile || queryArgs.some((value) => typeof value === 'function')) return result;
                 return Promise.resolve(result).then(async (value) => {

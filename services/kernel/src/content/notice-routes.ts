@@ -113,12 +113,15 @@ const item = t.Object({
   ),
   unread: t.Boolean(),
 });
-const countResponse = t.Object({
-  count: t.Integer({ minimum: 0, maximum: 100 }),
-  capped: t.Boolean(),
-  basis: t.Union([t.Literal('current-visible-unread'), t.Literal('current-visible-lower-bound')]),
-  witness: t.Object({ kind: t.Literal('current-disclosure'), at: t.String({ format: 'date-time' }) }),
-}, { additionalProperties: false });
+const countResponse = t.Object(
+  {
+    count: t.Integer({ minimum: 0, maximum: 100 }),
+    capped: t.Boolean(),
+    basis: t.Union([t.Literal('current-visible-unread'), t.Literal('current-visible-lower-bound')]),
+    witness: t.Object({ kind: t.Literal('current-disclosure'), at: t.String({ format: 'date-time' }) }),
+  },
+  { additionalProperties: false },
+);
 const seenBody = strictContentSchema(t.Object({ through: t.String() }, { additionalProperties: false }));
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const listFailures = { ...failures, 400: problemSchema('invalid_request', 'invalid_cursor') };

@@ -422,8 +422,7 @@ export async function discloseNoticeCandidates(
         if (candidate.source_id === after.value.id || isAppeal) {
           currentSourceIds.add(candidate.notice_id);
           const originalTarget = source.get(candidate.notice_id)!;
-          const sameTarget =
-            after.value.targetKind === before.target.kind && after.value.targetId === before.target.id;
+          const sameTarget = after.value.targetKind === before.target.kind && after.value.targetId === before.target.id;
           const summary = isAppeal
             ? appeal.outcome === 'reversed'
               ? 'your appeal restored the content'

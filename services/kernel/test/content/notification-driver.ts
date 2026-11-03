@@ -364,9 +364,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
     },
     inbox: readInbox,
     async inboxDuringActorHydration(accountId, actor, query, transition) {
-      return afterInboxActorProfile(setup.system.database.pool, transition, () =>
-        readInbox(accountId, actor, query),
-      );
+      return afterInboxActorProfile(setup.system.database.pool, transition, () => readInbox(accountId, actor, query));
     },
     async unread(accountId, actor) {
       const result = await request('GET', `/v1/accounts/${accountId}/notifications/count`, actor);

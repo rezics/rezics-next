@@ -432,11 +432,8 @@ test('the final Inbox pass omits a revoked ordinary target but retains the repor
     expect(dismissed.response.ok).toBe(true);
     await driver.effects('drain');
 
-    const inbox = await driver.inboxDuringActorHydration(
-      people.reporter.id,
-      people.reporter,
-      { limit: 20 },
-      () => driver.fixtures.realmMember(people.reporter, false),
+    const inbox = await driver.inboxDuringActorHydration(people.reporter.id, people.reporter, { limit: 20 }, () =>
+      driver.fixtures.realmMember(people.reporter, false),
     );
     expect(inbox.response.status).toBe(200);
     const items = inbox.value!.items as unknown as Array<{
@@ -487,10 +484,12 @@ test('actor erasure and a changed author decision are finished after actor hydra
     );
     expect(affected.response.status).toBe(201);
     expect(
-      (await driver.takedown({ kind: 'thread', id: affected.value!.id }, 'Decision statement', {
-        actor: people.moderator,
-        key: JSON.stringify('hydration-decision'),
-      })).response.ok,
+      (
+        await driver.takedown({ kind: 'thread', id: affected.value!.id }, 'Decision statement', {
+          actor: people.moderator,
+          key: JSON.stringify('hydration-decision'),
+        })
+      ).response.ok,
     ).toBe(true);
     await driver.effects('drain');
 
@@ -506,18 +505,13 @@ test('actor erasure and a changed author decision are finished after actor hydra
     expect(appeal.response.status).toBe(201);
 
     let resolution: Awaited<ReturnType<typeof driver.resolveAppeal>> | undefined;
-    const current = await driver.inboxDuringActorHydration(
-      people.author.id,
-      people.author,
-      { limit: 20 },
-      async () => {
-        resolution = await driver.resolveAppeal(appeal.value!.id, 'reverse', 'The removal was mistaken', {
-          actor: people.moderator,
-          key: JSON.stringify('hydration-appeal-resolution'),
-        });
-        await driver.fixtures.accountState(people.replier, 'deleted');
-      },
-    );
+    const current = await driver.inboxDuringActorHydration(people.author.id, people.author, { limit: 20 }, async () => {
+      resolution = await driver.resolveAppeal(appeal.value!.id, 'reverse', 'The removal was mistaken', {
+        actor: people.moderator,
+        key: JSON.stringify('hydration-appeal-resolution'),
+      });
+      await driver.fixtures.accountState(people.replier, 'deleted');
+    });
     expect(current.response.status).toBe(200);
     expect(resolution?.response.status).toBe(200);
     expect(resolution?.value).toMatchObject({ outcome: 'reverse' });
