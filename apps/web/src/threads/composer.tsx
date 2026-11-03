@@ -1,6 +1,6 @@
 import { sessionCsrfToken, sessionQuery } from '../session/query';
 import { QueryClientContext } from '@tanstack/react-query';
-import { fromPlainText, hasDocumentContent, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import { documentText, fromPlainText, hasDocumentContent, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -30,6 +30,8 @@ import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from './authoring-departure';
 import { EditConflictRecovery } from './edit-conflict-recovery';
 import { SlowModeEligibility } from './slow-mode';
+import { writingScope } from './local-writing-draft';
+import { LocalWritingDraftControls, useLocalWritingDraft } from './local-writing-draft-controls';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -638,6 +640,8 @@ function PostComposerContent<T, Context = undefined>({
         uncertainChanged),
     lifetime.current() && (submittingRef.current || replyIntent.current.unresolved),
     departureSignature,
+    undefined,
+    () => lifetime.retire(),
   );
   const uploadTarget = containerId ?? (boardId ? { newThread: { boardId, idempotencyKey } } : undefined);
   const mediaUpload = useComposerUpload(uploadTarget, ownedMediaIds, refusalRef, lifetime);
@@ -650,6 +654,17 @@ function PostComposerContent<T, Context = undefined>({
     (media) => setFailure((current) => (current?.reason === 'media-unavailable' ? { ...current, media } : current)),
     lifetime,
   );
+
+  const localWriting = useLocalWritingDraft({
+    actor: session?.state === 'signed-in' ? session.subject ?? null : null,
+    scope: writingScope({ containerId, boardId, replyTargetId, submissionContext }),
+    current: () => lifetime.current(),
+    signal: lifetime.controller.signal,
+    admitted: canSubmit,
+    title,
+    body,
+    suspended: submitting || replyIntent.current.unresolved,
+  });
 
   useEffect(() => {
     if (!containerId) return;
@@ -931,6 +946,7 @@ function PostComposerContent<T, Context = undefined>({
       ...(submissionContext === undefined ? {} : { submissionContext }),
     };
     if (!replyIntent.current.canPrepare(draft, replyTargetId ?? null, commandContext)) return;
+    if (localWriting.draft && !localWriting.draft.beginSubmission()) return;
     const command = replyIntent.current.prepare(draft, replyTargetId ?? null, commandContext);
     // Pending and lost responses both retain the entire command until its outcome is known.
     replyIntent.current.settle(false);
@@ -948,6 +964,7 @@ function PostComposerContent<T, Context = undefined>({
       if (!lifetime.current(owner)) return;
       if (!result.ok) {
         replyIntent.current.settle(result.reason !== 'unavailable');
+        localWriting.draft?.settle(result.reason === 'unavailable' ? 'unknown' : 'refused');
         setFailure({
           ...result,
           ...(result.reason === 'media-unavailable'
@@ -957,6 +974,7 @@ function PostComposerContent<T, Context = undefined>({
         return;
       }
       replyIntent.current.settle(true);
+      localWriting.draft?.settle('success');
       setTitle('');
       const empty = fromPlainText('', 'blocks');
       initialBodyRef.current = empty;
@@ -974,6 +992,7 @@ function PostComposerContent<T, Context = undefined>({
     } catch {
       if (!lifetime.current(owner)) return;
       replyIntent.current.settle(false);
+      localWriting.draft?.settle('unknown');
       setFailure({ ok: false, reason: 'unavailable' });
     } finally {
       if (lifetime.current(owner)) {
@@ -1029,7 +1048,9 @@ function PostComposerContent<T, Context = undefined>({
               contentEditable={!submitting}
               role="textbox"
               suppressContentEditableWarning
-            />
+            >
+              {documentText(body)}
+            </div>
           ) : null}
           <RichTextEditor
             value={body}
@@ -1091,6 +1112,28 @@ function PostComposerContent<T, Context = undefined>({
         <p className="mt-5 min-w-0 [overflow-wrap:anywhere]" role="alert">
           {uploadNotice}
         </p>
+      ) : null}
+      {localWriting.draft ? (
+        <LocalWritingDraftControls
+          key={JSON.stringify(localWriting.draft.scope)}
+          draft={localWriting.draft}
+          read={localWriting.read}
+          live={() => ({ title, body: bodyRef.current })}
+          suspended={submitting || replyIntent.current.unresolved}
+          restoreDisabled={pendingUploads > 0}
+          hasLiveWriting={Boolean(title) || hasDocumentContent(body)}
+          onRestore={(payload) => {
+            if (!lifetime.current() || submittingRef.current || replyIntent.current.unresolved || pendingRef.current > 0) return;
+            const nextKey = crypto.randomUUID();
+            replyIntent.current.reset(nextKey);
+            setIdempotencyKey(nextKey);
+            setTitle(payload.title);
+            updateBody(payload.body);
+            setFailure(null);
+            setUploadNotice(payload.attachmentRepair ? m.thread_draft_attachments() : null);
+            requestComposerFocus(focusRequest);
+          }}
+        />
       ) : null}
       {uncertainChanged ? (
         <p className="mt-5 min-w-0 [overflow-wrap:anywhere]" role="alert">
