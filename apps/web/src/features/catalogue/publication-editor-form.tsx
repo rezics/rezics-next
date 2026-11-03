@@ -176,7 +176,7 @@ function PublicationEditorLive({
     error.target && holders.has(error.holder) ? error : { ...error, target: undefined },
   );
   const hasControlError = (target: string) => errorRows.some((error) => error.target === target);
-  const pendingHolderFocus = useRef<string>();
+  const pendingHolderFocus = useRef<string | undefined>(undefined);
   const controlErrorId = (target: string) => errorRows.find((error) => error.target === target)?.id;
   const reviewContext: StatementFieldsRead | undefined = displayRelease
     ? {

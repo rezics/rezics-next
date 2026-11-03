@@ -10,12 +10,8 @@ import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { DefinitionMeaning } from './definition-meaning';
 import { emptyCreationStatement, type SnakInput, type StatementInput } from './statement-editor';
-import {
-  controlId,
-  StatementFields,
-  statementHolderKey,
-  type StatementFieldsRead,
-} from './statement-editor-view';
+import { StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
+import { controlId } from './statement-validation-presentation';
 import {
   publicationFactId,
   publicationWorkId,
@@ -212,7 +208,7 @@ export function PublicationFacts({
   workLink: StatementInput;
   facts: PublicationFactRow[];
   profile: PublicationProfile;
-  currentProfile?: PublicationProfile;
+  currentProfile?: PublicationProfile | undefined;
   release: Release;
   locale: string;
   search: EntityPickerSearch;
