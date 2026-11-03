@@ -330,9 +330,10 @@ export function startDiscoveryIndexing(options: {
       readiness = error;
     }
     const generations = await discoveryGenerations(options.pool, options.prefix);
-    delay = !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
-      ? 0
-      : (options.intervalMs ?? 100);
+    delay =
+      !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
+        ? 0
+        : (options.intervalMs ?? 100);
     for (const target of generations) {
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
       if (!relays.has(target.generation)) {
