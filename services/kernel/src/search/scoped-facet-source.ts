@@ -153,8 +153,7 @@ export function createScopedFacetSource(ports: ScopedFacetPorts) {
 
       const page = await ports.readCandidates(admission.request, after, inputLimit, context);
       cost = add(cost, page.cost);
-      if (page.status === 'changed' || page.status === 'unready' || page.status === 'unavailable')
-        return { status: page.status, cost };
+      if (!('identity' in page)) return { status: page.status, cost };
       if (
         !sameIdentity(page.identity, admission.identity) ||
         scopedFacetIdentityKey(page.identity) !== expected ||
@@ -178,7 +177,7 @@ export function createScopedFacetSource(ports: ScopedFacetPorts) {
 
       const membership = await ports.readMembership(admission.request, page.subjects, context);
       cost = add(cost, membership.cost);
-      if (membership.status !== 'matched') return { status: membership.status, cost };
+      if (!('subjects' in membership)) return { status: membership.status, cost };
       if (
         !sameIdentity(membership.identity, admission.identity) ||
         scopedFacetIdentityKey(membership.identity) !== expected ||
