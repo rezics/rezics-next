@@ -762,13 +762,25 @@ export function nativeHomeBinding(page: SpacePageData) {
     realmId: realm.id,
     presentation: realm.presentation,
     continuity: realm.continuity,
-    lifecycle: JSON.stringify(realm.continuity),
     observation,
     viewer: observation.viewer,
     actions: observation.actions,
     source: realm.nativeSource,
+    realmHead: realm.nativeSource?.realm,
+    spaceHead: realm.nativeSource?.space,
+    selection: realm.nativeSource?.realm.presentation,
     // References detect equal replacements; values also detect in-place changes.
-    values: JSON.stringify([realm.presentation, realm.continuity, observation, realm.nativeSource]),
+    values: JSON.stringify([
+      page.space,
+      realm.title,
+      realm.summary,
+      realm.visibility,
+      realm.credentialMode,
+      realm.presentation,
+      realm.continuity,
+      observation,
+      realm.nativeSource,
+    ]),
   };
 }
 

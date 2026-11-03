@@ -493,8 +493,14 @@ test('route admission retires native media and pending shelves on nested source 
 });
 
 test('standalone visits cannot lose native advice or reuse shelves on a fresh response', async () => {
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.querySelectorAll('a[href*="?realm="]')).toHaveLength(1);
+  native = fixture(0);
+  native.boards.next = native.publications.next = null;
   const page = await readNativeRealmHome(operations, input);
   await paint(page);
+  expect(host.querySelectorAll('a[href*="?realm="]')).toHaveLength(0);
+  expect(host.textContent).toContain(m.realm_published_empty());
   const observation = page.realm!.nativeObservation!;
   delete page.realm!.nativeObservation;
   await paint(page);
@@ -502,8 +508,6 @@ test('standalone visits cannot lose native advice or reuse shelves on a fresh re
   page.realm!.nativeObservation = observation;
   await paint(page);
   expect(host.textContent).toBe('');
-  native = fixture(0);
-  native.boards.next = native.publications.next = null;
   await paint(await readNativeRealmHome(operations, input));
   expect(host.querySelectorAll('a[href*="?realm="]')).toHaveLength(0);
   expect(host.textContent).toContain(m.realm_published_empty());
