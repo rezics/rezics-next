@@ -90,7 +90,10 @@ test('Kernel publishes bounded and authority-aware Realm claim review contracts'
   expect(reviewBody.claimRequests?.items?.required).toEqual(
     expect.arrayContaining(['claimant', 'approvalAdvice']),
   );
-  expect(Object.keys(properties(request.claimant)).sort()).toEqual(['href', 'label']);
+  const claimantPresentation = properties(request.claimant);
+  expect(Object.keys(claimantPresentation).sort()).toEqual(['href', 'label']);
+  expect(claimantPresentation.href?.maxLength).toBe(4096);
+  expect(claimantPresentation.label?.maxLength).toBe(4096);
   expect(Object.keys(properties(request.approvalAdvice)).sort()).toEqual([
     'destination',
     'method',
@@ -105,6 +108,11 @@ test('Kernel publishes bounded and authority-aware Realm claim review contracts'
   expect(hasNull(selected)).toBe(true);
   const selectedStates = alternatives(selected!).map((variant) => literal(properties(variant).state));
   expect(selectedStates).toEqual(expect.arrayContaining(['pending', 'approved']));
+  const pending = alternatives(selected!).find((variant) => literal(properties(variant).state) === 'pending');
+  expect(pending).toBeDefined();
+  expect(literal(properties(pending!).currentEpisode)).toBe(true);
+  expect(properties(pending!).claimant).toBeDefined();
+  expect(properties(pending!).approvalAdvice).toBeDefined();
   const approved = alternatives(selected!).find((variant) => literal(properties(variant).state) === 'approved');
   expect(approved).toBeDefined();
   expect(properties(approved!).currentEpisode).toMatchObject({ const: false });
@@ -143,14 +151,27 @@ test('Kernel publishes bounded and authority-aware Realm claim review contracts'
     expect(properties(ownRequestVariant).currentEpisode).toMatchObject({ type: 'boolean' });
     expect(properties(ownRequestVariant).claimant).toBeUndefined();
     expect(properties(ownRequestVariant).approvalAdvice).toBeUndefined();
-    expect(Object.keys(properties(body.requestAdvice)).sort()).toEqual([
+    const currentRealm = properties(body.currentRealm);
+    expect(Object.keys(currentRealm).sort()).toEqual(['claimEligibleAt', 'orphanedAt', 'ownershipState']);
+    expect(currentRealm.ownershipState?.enum).toEqual(['owned', 'orphaned']);
+    expect(currentRealm.orphanedAt?.type).toEqual(['string', 'null']);
+    expect(currentRealm.claimEligibleAt?.type).toEqual(['string', 'null']);
+
+    const requestAdvice = properties(body.requestAdvice);
+    expect(Object.keys(requestAdvice).sort()).toEqual([
+      'available',
+      'body',
       'destination',
       'method',
       'requiredAction',
       'requiredHeader',
     ]);
-    expect(literal(properties(body.requestAdvice).method)).toBe('POST');
-    expect(literal(properties(body.requestAdvice).requiredAction)).toBe('realm:participate');
-    expect(literal(properties(body.requestAdvice).requiredHeader)).toBe('Idempotency-Key');
+    expect(requestAdvice.available).toMatchObject({ type: 'boolean' });
+    expect(requestAdvice.destination?.maxLength).toBe(4096);
+    expect(Object.keys(properties(requestAdvice.body)).sort()).toEqual([]);
+    expect(requestAdvice.body?.required).toEqual([]);
+    expect(literal(requestAdvice.method)).toBe('POST');
+    expect(literal(requestAdvice.requiredAction)).toBe('realm:participate');
+    expect(literal(requestAdvice.requiredHeader)).toBe('Idempotency-Key');
   }
 });

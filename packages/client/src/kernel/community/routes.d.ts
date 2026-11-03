@@ -8103,9 +8103,16 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         approvedAt: string | null;
                                         currentEpisode: boolean;
                                     } | null;
+                                    currentRealm: {
+                                        claimEligibleAt: string | null;
+                                        orphanedAt: string | null;
+                                        ownershipState: "owned" | "orphaned";
+                                    };
                                     requestAdvice: {
-                                        method: "POST";
+                                        available: boolean;
+                                        body: {};
                                         destination: string;
+                                        method: "POST";
                                         requiredAction: "realm:participate";
                                         requiredHeader: "Idempotency-Key";
                                     };
@@ -8213,9 +8220,16 @@ export declare function communityRoutes(app: ReturnType<typeof definitionRoutes>
                                         approvedAt: string | null;
                                         currentEpisode: boolean;
                                     };
+                                    currentRealm: {
+                                        claimEligibleAt: string | null;
+                                        orphanedAt: string | null;
+                                        ownershipState: "owned" | "orphaned";
+                                    };
                                     requestAdvice: {
-                                        method: "POST";
+                                        available: boolean;
+                                        body: {};
                                         destination: string;
+                                        method: "POST";
                                         requiredAction: "realm:participate";
                                         requiredHeader: "Idempotency-Key";
                                     };
