@@ -712,6 +712,12 @@ allowances return readiness. No owner ordering/authority implementation is insta
 denied or unavailable evidence never means an empty or unscored population. HTTP passes its live Access and Actor
 to the provider; a standalone native composition owns equivalent authority, never a grant inferred from an account ID.
 
+Decision: retain the complete-population seam until native evidence covers both phases and catalogue ties.
+Rating's [protected Realm rank source](../rating/README.md#protected-realm-rank-source), `createRealmRankSource`,
+currently supplies scored-only, partition-local pages with descending UUID ties; it supplies neither the
+unscored population nor the name/filter traversal required here. Search cannot establish the requested order
+by sorting those returned pages, so that partial source alone does not make this selector ready.
+
 The separate native adapter validates population, standard question, prior epoch, disclosure threshold, figure
 revision, strict tuples and matching subject-home snapshot positions. Both phases
 use the same eligible-epoch conjunction as Global: a proven stale/missing score or known null prior belongs
