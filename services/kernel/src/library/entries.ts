@@ -290,8 +290,13 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
-  async function putEntry(actor: Actor, subjectId: string, input: unknown, requestKey: string,
-    reviewGuard?: import('./list-import-bangumi-model.ts').BangumiGuard) {
+  async function putEntry(
+    actor: Actor,
+    subjectId: string,
+    input: unknown,
+    requestKey: string,
+    reviewGuard?: import('./list-import-bangumi-model.ts').BangumiGuard,
+  ) {
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -336,9 +341,13 @@ export function createEntryCommands(config: Dependencies) {
               );
               const source = observation?.source;
               if (!source) throw new LibraryNotFoundError();
-              if (reviewGuard && (source.subjectId !== reviewGuard.subjectId ||
-                  source.kind !== 'supported' || source.pin.releaseDigest !== reviewGuard.releaseDigest ||
-                  String(observation!.anchor.identityEpoch) !== reviewGuard.identityEpoch))
+              if (
+                reviewGuard &&
+                (source.subjectId !== reviewGuard.subjectId ||
+                  source.kind !== 'supported' ||
+                  source.pin.releaseDigest !== reviewGuard.releaseDigest ||
+                  String(observation!.anchor.identityEpoch) !== reviewGuard.identityEpoch)
+              )
                 throw new LibraryConflictError();
               if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))
                 throw new ProblemError('unsupported_library_profile');

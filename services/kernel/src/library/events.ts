@@ -4,7 +4,10 @@ const id = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 /** Closed library events. Private updates identify the changed item without exposing its state. Collection events carry the collection id; a member fact also carries its member and subject ids. */
 export const LIBRARY_EVENTS = {
-  'com.rezics.library.bangumi.changed.v1': Type.Object({ operation: Type.String({ maxLength: 16 }) }, { additionalProperties: false }),
+  'com.rezics.library.bangumi.changed.v1': Type.Object(
+    { operation: Type.String({ maxLength: 16 }) },
+    { additionalProperties: false },
+  ),
   'com.rezics.library.bulk.confirmed.v1': Type.Object({ operationId: id }, { additionalProperties: false }),
   'com.rezics.library.bulk.changed.v1': Type.Object({ operationId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.order-repair.advanced.v1': Type.Object(

@@ -605,7 +605,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     },
   });
   const bangumi = bangumiImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
-    pool: dependencies.pool, routeKey: dependencies.routeKey, tokens, clock,
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
     access: () => resolveAccess({ actions: actionCatalogue(bangumi), realmRoleReader }),
   });
   const labels = personalLabelRoutes(bangumi as unknown as ReturnType<typeof definitionRoutes>, {
