@@ -34,6 +34,7 @@ test('board report pages retain their cursor, omit reporter identity, and resolv
     report(1, { kind: 'post', id: id(50) }),
     report(2, { kind: 'post', id: id(50) }),
     report(3, { kind: 'thread', id: id(51) }),
+    { ...report(4, { kind: 'post', id: id(52) }), target: { kind: 'subject', id: id(53) } },
   ];
   const page = await readModerationReports(
     {
@@ -63,9 +64,11 @@ test('board report pages retain their cursor, omit reporter identity, and resolv
   });
 
   expect(page.next).toBe('next+page==');
+  expect(page.reports.map((item) => item.target.kind)).toEqual(['post', 'post', 'thread']);
   expect(calls).toEqual([`board:${id(1)}:current/page==`, `post:${id(50)}`, `thread:${id(51)}`]);
   expect(targets).toHaveLength(2);
   expect(JSON.stringify(page)).not.toContain('private-reporter');
+  expect(JSON.stringify(page)).not.toContain(id(53));
   expect(JSON.stringify(targets)).toContain('Reported post text');
 });
 

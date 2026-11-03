@@ -23,7 +23,7 @@ export type ValueCompetition =
   | { kind: 'not-returned'; next: string | null }
   | {
       kind: 'returned';
-      decision: 'accepted' | 'rejected' | null;
+      decision: 'accepted' | 'rejected' | 'abstained' | null;
       revision: number;
       release: string;
       adoption: 'inherit' | 'replace' | 'suppress' | null;

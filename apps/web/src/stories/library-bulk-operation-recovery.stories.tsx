@@ -80,7 +80,16 @@ function operation(phase: BulkOperation['phase'], counts: BulkOperation['counts'
 }
 
 function outcome(state: LibraryBulkOutcome['state'], ordinal: string, subjectId: string): LibraryBulkOutcome {
-  return { ordinal, subjectId, memberId: null, resultingMemberId: null, state, reason: null };
+  return {
+    ordinal,
+    subjectId,
+    memberId: null,
+    resultingMemberId: null,
+    state,
+    reason: null,
+    deletion: null,
+    memberDeletion: null,
+  };
 }
 
 function fixture({

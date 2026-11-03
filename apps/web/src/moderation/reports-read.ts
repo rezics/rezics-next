@@ -75,7 +75,7 @@ class ReportReadFailure extends Error {
   }
 }
 function reportResult(result: {
-  data?: ReportPage | null;
+  data?: NativeReportList | null;
   error?: { status: number; value: unknown } | null;
 }): ReportPage {
   if (result.error) {
@@ -90,7 +90,7 @@ function reportResult(result: {
     throw new ReportReadFailure([401, 403, 404].includes(status) ? 'denied' : 'error');
   }
   if (!result.data) throw new ReportReadFailure('error');
-  return result.data;
+  return { next: result.data.next, reports: publishedReports(result.data.reports) };
 }
 export type Report = {
   id: string;
@@ -102,11 +102,16 @@ export type Report = {
   outcome: 'actioned' | 'dismissed' | null;
   resolvedAt: string | null;
 };
+type ReportRecord = Omit<Report, 'target'> & { target: { kind: string; id: string } };
 export type ReportPage = { reports: Report[]; next: string | null };
+type NativeReportList = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['boards']>['reports']['get']>>['data']
+>;
+type ReportSourcePage = { reports: readonly ReportRecord[]; next: string | null };
 export type ReportReadSource = {
-  boardReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportPage>;
-  threadReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportPage>;
-  postReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportPage>;
+  boardReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportSourcePage>;
+  threadReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportSourcePage>;
+  postReports: (id: string, cursor?: string, selection?: ReportSelection) => Promise<ReportSourcePage>;
 };
 export type ReportTargetReads = {
   post: (id: string) => Promise<ReportTargetValue | null>;
@@ -124,6 +129,15 @@ export type ReportTargetValue =
   | { readonly [key: string]: ReportTargetValue | undefined };
 export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: ReportTargetValue | null };
 
+/** Board/thread/post queues keep those kinds; subject reports stay on the catalogue reports surface. */
+function publishedReports(reports: readonly ReportRecord[]): Report[] {
+  return reports.flatMap(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) =>
+    target.kind === 'board' || target.kind === 'thread' || target.kind === 'post'
+      ? [{ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }]
+      : [],
+  );
+}
+
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
 export async function readModerationReports(source: ReportReadSource, input: ReportReadInput): Promise<ReportPage> {
   const selection = reportSelection(input);
@@ -132,19 +146,7 @@ export async function readModerationReports(source: ReportReadSource, input: Rep
     : input.threadId
       ? await source.threadReports(input.threadId, input.cursor, selection)
       : await source.boardReports(input.boardId, input.cursor, selection);
-  return {
-    next: page.next,
-    reports: page.reports.map(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) => ({
-      id,
-      target,
-      revisionId,
-      reason,
-      evidence,
-      createdAt,
-      outcome,
-      resolvedAt,
-    })),
-  };
+  return { next: page.next, reports: publishedReports(page.reports) };
 }
 
 export async function resolveReportTargets(
