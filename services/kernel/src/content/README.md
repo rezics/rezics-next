@@ -3347,8 +3347,9 @@ Its options are `{fetch?, headers?, session?, onSession?}`. Create one instance 
 session token and `onSession(token)` receives replacements. The package exports `WatchManagementKind`,
 `WatchManagementItem` and `WatchManagementPage` from its narrow source contract at
 `packages/client/src/kernel/content/watch-management-contract.ts`, mirrored from the closed Kernel schema above.
-Mounted route methods remain derived from the complete Kernel route type; replace the DTO seam only through supported
-complete-input generation, never by editing emitted declarations.
+Mounted route call types use a narrow source adapter for the paths above until the supported complete-input
+generator can publish the complete route type; replace that adapter only through supported generation, never by
+editing emitted declarations.
 Use `client.accounts({accountId}).watches.get({query:{kind,limit,cursor}})` to list and
 `client.accounts({accountId}).watches({watchId}).delete({expectedRevision},{query:{kind},headers:{'idempotency-key':key}})`
 to remove the personal row. Board state uses `client.boards({id}).watch.get()` and

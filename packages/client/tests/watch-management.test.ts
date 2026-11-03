@@ -28,10 +28,10 @@ expectTypeOf<Extract<WatchManagementItem, { state: 'unavailable' }>>().toEqualTy
   state: 'unavailable';
 }>();
 type BoardWatch = ReturnType<KernelClient['boards']>['watch'];
-expectTypeOf<Awaited<ReturnType<BoardWatch['get']>>['data']>().toMatchTypeOf<
+expectTypeOf<Awaited<ReturnType<BoardWatch['get']>>['data']>().toEqualTypeOf<
   { watching: boolean; revision: number } | null
 >();
-expectTypeOf<Parameters<BoardWatch['put']>[0]>().toMatchTypeOf<{
+expectTypeOf<Parameters<BoardWatch['put']>[0]>().toEqualTypeOf<{
   watching: boolean;
   expectedRevision: number;
 }>();

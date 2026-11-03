@@ -7,6 +7,7 @@ import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
 import type { PostHistoryPage as NativePostHistoryPage } from './kernel/content/history-page.ts';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
+import type { WatchManagementKind, WatchManagementPage } from './kernel/content/watch-management-contract';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export type {
@@ -135,6 +136,40 @@ type ClientApp = Elysia<
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+type GeneratedAccountPath = ReturnType<GeneratedKernelClient['accounts']>;
+type GeneratedAccountRead = GeneratedAccountPath['profile']['get'];
+type WatchRequestOptions = Omit<NonNullable<Parameters<GeneratedAccountRead>[0]>, 'query'>;
+type WatchListOptions = WatchRequestOptions & {
+  query: { kind: WatchManagementKind; limit?: number; cursor?: string };
+};
+type WatchManagementRead = PersonalEntryCall<WatchManagementPage>;
+type WatchRemovalPath = {
+  delete(
+    body: { expectedRevision: number },
+    options: WatchRequestOptions & {
+      query: { kind: WatchManagementKind };
+      headers: Record<string, string> & { 'idempotency-key': string };
+    },
+  ): PersonalEntryCall<{ removed: true }>;
+};
+type WatchManagementPath = ((params: { watchId: string }) => WatchRemovalPath) & {
+  get(options: WatchListOptions): WatchManagementRead;
+};
+type AccountsPath = Omit<GeneratedAccountPath, 'watches'> & { watches: WatchManagementPath };
+type AccountsClient = Omit<GeneratedKernelClient['accounts'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['accounts']>) => AccountsPath);
+type GeneratedBoardsPath = ReturnType<GeneratedKernelClient['boards']>;
+type BoardWatchState = { watching: boolean; revision: number };
+type BoardWatchPath = {
+  get(options?: WatchRequestOptions): PersonalEntryCall<BoardWatchState>;
+  put(
+    body: { watching: boolean; expectedRevision: number },
+    options: PersonalWriteOptions,
+  ): PersonalEntryCall<BoardWatchState>;
+};
+type BoardsPath = Omit<GeneratedBoardsPath, 'watch'> & { watch: BoardWatchPath };
+type BoardsClient = Omit<GeneratedKernelClient['boards'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['boards']>) => BoardsPath);
 type GeneratedBanReviewGet = ReturnType<GeneratedKernelClient['realms']>['bans']['get'];
 type GeneratedBanReviewRead = Awaited<ReturnType<GeneratedBanReviewGet>>;
 type BanReviewRead = Omit<GeneratedBanReviewRead, 'data'> & { data: BanReviewPage | null };
@@ -252,8 +287,10 @@ type SourceClassificationsClient = import('./kernel/rating/source-classification
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
+  'accounts' | 'boards' | 'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
 > & {
+  accounts: AccountsClient;
+  boards: BoardsClient;
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
