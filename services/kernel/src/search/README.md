@@ -696,8 +696,10 @@ alias-window and home-certificate remedies in evidence reports are superseded by
 ## Global rating order
 
 The first public rating sort is limited to the public aggregate for the Global population and standard question.
-[First public scope](../../../../docs/scope.md) defers Realm rating sorts; private Realm figures never enter the
-public Search index. [Rating](../rating/README.md) owns the score formula, disclosure thresholds and privacy rules.
+[Scope](../../../../docs/scope.md) includes Realm rating sorts in the adopted second scope; private Realm figures
+never enter the public Search index. Rating's [protected Realm rank source](../rating/README.md#protected-realm-rank-source)
+provides native partition-local standard-question candidate pages through `createRealmRankSource`; Search owns
+query/filter integration. [Rating](../rating/README.md) owns the score formula, disclosure thresholds and privacy rules.
 Search uses the published score and does not recompute or reinterpret that policy.
 
 The rating source is the current public figure for a subject, read with that subject from the same anchor partition

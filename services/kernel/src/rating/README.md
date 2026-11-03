@@ -242,6 +242,63 @@ Zero is a vote and clear is a separate DELETE. The own-vote read stays private a
 statistics follow native figures with their independent source, scale, count, as-of date, licence and attribution;
 they never supply or alter the native mean, vote count or ordering score.
 
+## Protected Realm rank source
+
+The adopted second scope includes Realm rating order. Private Realm numbers stay outside the common Search
+index. Search imports `createRealmRankSource` and `RealmRankSource` from [realm-rank.ts](realm-rank.ts), composes
+the factory with the production `{ pool, access, tokens }`, and calls
+`page(actor, { realmId, questionId, partition, sort: 'score_desc', limit, cursor? }, { deadline })`.
+The actor comes from native credential verification. The factory performs current Realm authorization itself,
+then checks every consumed candidate through native subject Access and current identity before release; an
+unreadable or redirected subject contributes no returned figure. Missing or denied Realm returns `not_found`.
+Unavailable authority, data or moved homes fail closed. Search owns predicate integration and any coordination
+of partition-local pages; Web owns selection controls. This port installs no additional search route or service.
+
+Decision: the first usable slice requires an explicitly selected standard question, one subject partition and
+descending Bayesian score; other questions return `invalid_request` until their separate private publication lands.
+Global is rejected as a Realm selection. The remaining question publication and lifecycle proof are described in
+the continuation brief; the Global source and public figure transport retain their existing contracts.
+
+The result is `{ candidates, next }`. Each candidate contains `{ subjectId, count, mean, score, priorEpoch,
+revision, asOf }`, with the standard question's display units. Only threshold-ready, actively scored figures in
+the selected population's current prior generation qualify. No unscored tail, suppressed counts, histogram,
+total, scanned count, raw position or readiness estimate is returned. Zero mean and score remain valid values.
+Equal scores use subject UUID descending. A full consumed batch may return a continuation followed by an empty
+terminal page. Disclosure filtering can shorten or empty a page; the reader never refills it.
+
+`rating.realm_rank` is a private, subject-home ordered projection of the existing standard-question publication.
+The publication transaction maintains it through `public_figure_realm_rank`; migration installs the trigger and
+backfills eligible retained figures under a write barrier. No external consumer, new queue or asynchronous copy
+lies between figure commit and rank visibility. Votes, eligibility and membership jobs, identity repair and erasure
+already reach that publication path and therefore update or remove the rank row in the same transaction. Rank
+freshness is exactly the existing figure freshness bound, rather than a new synchronous vote guarantee. A pending
+publication retains the last eligible published snapshot. Epoch changes exclude old-generation rows immediately;
+the existing durable republish pages admit new-generation rows as they converge. An inactive prior admits none.
+
+Every continuation is signed with the native token keyring and additionally encrypted so withheld candidate keys
+cannot appear in its payload. It expires after 15 minutes and binds Realm, question, partition, sort, limit,
+verified credential authority, home epoch, rank source generation and population prior generation. Rank generation
+changes atomically with eligible published rows, never with changes confined below threshold. Every request
+reauthorizes the Realm, observes the current prior, reads one candidate batch, checks disclosure, reauthorizes the
+Realm and reobserves prior and rank generation in fresh physical observations before release. Changed generations
+return `invalid_cursor`, including on the first page if publication races it. The reader does not claim an atomic
+snapshot of independently homed Access and rating data.
+
+Operation Cost:
+
+- Touches: exact population-home prior and subject-home generation keys; the equality prefix
+  `(partition_no, question_id, population_id, prior_generation)` of `realm_rank_score_idx`, then the strict
+  descending `(score, subject_id)` seek; native Realm and subject authority/identity probes.
+- Bound: `limit` is 1–100. One candidate query reads at most `limit` rows and releases at most that many figures.
+  At most `limit` current subject checks and two Realm checks run. Both prior reads and generation reads are
+  point operations. There is no candidate lookahead, refill, cross-partition candidate scan, aggregate read,
+  history replay or population expansion. B-tree descent grows logarithmically; authority retains its existing
+  bounded native cost. Publication adds one exact rank upsert/delete and at most one generation upsert per figure.
+- Focused outcome: `test/rating/realm-rank.test.ts` exercises native votes/default workers, threshold crossing,
+  signed continuation restart, current candidate withholding, clear and membership withdrawal, unauthorized
+  access and unchanged Global figures. These authored cases are distinct from measured runtime proof; broad
+  acceptance, physical growth measurements, repair and erasure outcomes remain integration work.
+
 ## Reviews
 
 A review is a content item about one target. It may cite the author's vote on that target; a review never requires a
