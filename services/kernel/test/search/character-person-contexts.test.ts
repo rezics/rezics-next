@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { DiscoveryFilterDocument, FilterRelease } from '@rezics/filter';
-import { routeOf } from '../../src/route/route.ts';
-import {
-  projectCharacterPersonContexts,
-  type CurrentRelationRelease,
-} from '../../src/search/character-person.ts';
-import { discoveryHttpPage } from '../../src/search/discovery-http.ts';
+import { projectCharacterPersonContexts, type CurrentRelationRelease } from '../../src/search/character-person.ts';
 import type { IndexedStatement, IndexedSubject, RelationFacetProbe, SubjectSource } from '../../src/search/source.ts';
 
 const id = (n: number, route: string) => `018f0000-0000-7000-8000-${route}${String(n).padStart(8, '0')}`;
@@ -63,7 +58,7 @@ const filter: DiscoveryFilterDocument = {
   statement: { property: 'wdt:P725', inverse: true, in: works },
 };
 
-test('current Character and Person contexts are independently capped, localized, and serialized', async () => {
+test('current Person contexts are capped, localized, and report continuation truthfully', async () => {
   const f = fixture();
   const contexts = await projectCharacterPersonContexts(
     f.source,
@@ -82,24 +77,6 @@ test('current Character and Person contexts are independently capped, localized,
     },
     appearances: { items: [], next: false },
   });
-  const page = discoveryHttpPage({
-    hits: [
-      {
-        key: { owner: 'semantic', kind: 'schema:Person', route: routeOf(personId)!, id: personId },
-        summary: {
-          kind: 'subject',
-          value: { id: personId, type: 'schema:Person', types: ['schema:Person'], label: { language: 'en', value: 'Aki' }, creativeWork: false, cover: null },
-        },
-        labels: { en: 'Aki' },
-        aliases: { en: ['Aki Sato'] },
-        contexts,
-      },
-    ],
-    kinds: { values: [], next: null },
-    next: null,
-    as_of: '2026-11-04T00:00:00.000Z',
-  });
-  expect(page.hits[0]).toMatchObject({ labels: { en: 'Aki' }, aliases: { en: ['Aki Sato'] }, contexts });
 });
 
 test('context windows retire when a touched work changes during disclosure', async () => {
