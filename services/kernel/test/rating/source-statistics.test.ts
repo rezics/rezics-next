@@ -249,6 +249,15 @@ test('the exact source statistic clear method is mounted under the existing writ
   expect(operation?.security).toEqual([{ bearerAuth: [] }]);
 });
 
+test('source observation inspection exposes a bounded importer-only contract', () => {
+  const operation =
+    openApiDocument(app).paths['/v1/subjects/{id}/source-statistics/{source}/observations']?.get;
+  expect(operation?.operationId).toBe('rating.source_observations_get');
+  expect(operation?.['x-action']).toBe('source_statistic:write');
+  expect(operation?.['x-exposure']).toBe('gate:personal_library');
+  expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+});
+
 test('positive source-statistic publication still requires a finite mean and a positive count', async () => {
   const subjectId = await createTarget();
   const path = `/v1/subjects/${subjectId}/source-statistics/vndb`;
