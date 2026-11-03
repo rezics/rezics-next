@@ -3373,6 +3373,14 @@ CREATE TABLE library.progress_session (
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
     additional_measures jsonb DEFAULT '[]'::jsonb NOT NULL,
+    journal_revision integer DEFAULT 0 NOT NULL,
+    journal_start_year integer,
+    journal_start_month smallint,
+    journal_start_day smallint,
+    journal_finish_year integer,
+    journal_finish_month smallint,
+    journal_finish_day smallint,
+    journal_reflection text,
     CONSTRAINT progress_session_additional_measures_check CHECK (
 CASE
     WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
@@ -3384,6 +3392,28 @@ END),
     CONSTRAINT progress_session_check3 CHECK (((state = 'completed'::text) = (completed_at IS NOT NULL))),
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
+    CONSTRAINT progress_session_journal_finish_date_check CHECK ((((journal_finish_year IS NULL) AND (journal_finish_month IS NULL) AND (journal_finish_day IS NULL)) OR ((journal_finish_year IS NOT NULL) AND ((journal_finish_year >= 1) AND (journal_finish_year <= 9999)) AND ((journal_finish_month IS NULL) OR ((journal_finish_month >= 1) AND (journal_finish_month <= 12))) AND ((journal_finish_day IS NULL) OR ((journal_finish_month IS NOT NULL) AND ((journal_finish_day >= 1) AND (journal_finish_day <=
+CASE
+    WHEN (journal_finish_month = 2) THEN
+    CASE
+        WHEN (((journal_finish_year % 400) = 0) OR (((journal_finish_year % 4) = 0) AND ((journal_finish_year % 100) <> 0))) THEN 29
+        ELSE 28
+    END
+    WHEN (journal_finish_month = ANY (ARRAY[4, 6, 9, 11])) THEN 30
+    ELSE 31
+END))))))),
+    CONSTRAINT progress_session_journal_reflection_check CHECK (((journal_reflection IS NULL) OR ((char_length(journal_reflection) <= 2000) AND (octet_length(journal_reflection) <= 4096)))),
+    CONSTRAINT progress_session_journal_revision_check CHECK (((journal_revision >= 0) AND (journal_revision <= 2147483646))),
+    CONSTRAINT progress_session_journal_start_date_check CHECK ((((journal_start_year IS NULL) AND (journal_start_month IS NULL) AND (journal_start_day IS NULL)) OR ((journal_start_year IS NOT NULL) AND ((journal_start_year >= 1) AND (journal_start_year <= 9999)) AND ((journal_start_month IS NULL) OR ((journal_start_month >= 1) AND (journal_start_month <= 12))) AND ((journal_start_day IS NULL) OR ((journal_start_month IS NOT NULL) AND ((journal_start_day >= 1) AND (journal_start_day <=
+CASE
+    WHEN (journal_start_month = 2) THEN
+    CASE
+        WHEN (((journal_start_year % 400) = 0) OR (((journal_start_year % 4) = 0) AND ((journal_start_year % 100) <> 0))) THEN 29
+        ELSE 28
+    END
+    WHEN (journal_start_month = ANY (ARRAY[4, 6, 9, 11])) THEN 30
+    ELSE 31
+END))))))),
     CONSTRAINT progress_session_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT progress_session_locator_check CHECK (((locator IS NULL) OR ((char_length(locator) >= 1) AND (char_length(locator) <= 256)))),
     CONSTRAINT progress_session_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
