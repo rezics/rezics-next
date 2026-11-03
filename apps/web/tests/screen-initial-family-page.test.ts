@@ -29,4 +29,3 @@ test('Screen creation complete, recovery and long review states use AppShell plu
   expect(independent).toContain("mode: 'independent'");
   expect(independent).not.toContain('<AppShell>');
 });
-
