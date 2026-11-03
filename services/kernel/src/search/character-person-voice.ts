@@ -260,8 +260,14 @@ export async function prepareCharacterPersonPage(
   const authorization = authorizeCharacterPersonPage(plan);
   const retained = [...cuts, ...appearances];
   let matched = false;
+  let retired = false;
   const revalidate = async () => {
-    for (const cut of retained) if (!(await cut.revalidate())) return false;
+    if (retired) return false;
+    for (const cut of retained)
+      if (!(await cut.revalidate())) {
+        retired = true;
+        return false;
+      }
     return true;
   };
   return {
