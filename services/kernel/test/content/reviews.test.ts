@@ -220,6 +220,35 @@ test('a review stores only the author’s cited vote revision and preserves prio
   ).rejects.toThrow();
 });
 
+test('a review accepts only citations on the exact bounded custom question scale', async () => {
+  const voterRoute = routeOf(author.accountId)!;
+  const realmId = newId(0x6b40);
+  const questionId = newId(0x6b40);
+  await fixture.reader.query(
+    `INSERT INTO rating.question
+      (id, owner_id, revision, label, grain, minimum_units, maximum_units, step_units, realm_id, meaning)
+     VALUES ($1, $2, 1, 'Bounded citation question', 'work', 10, 4096, 6, $3, 'Fixture question metadata')`,
+    [questionId, author.accountId, realmId],
+  );
+  await fixture.reader.query(
+    `INSERT INTO rating.vote(route, voter_id, question_id, target_id, units, revision, changed_at, transaction_id)
+     VALUES ($1, $2, $3, $4, 4096, 1, now(), $5)`,
+    [voterRoute, author.accountId, questionId, subjectId, newId(voterRoute)],
+  );
+  const citation = { questionId, units: 4096, revision: 1 };
+  const created = await createReview(reviewsBoard, subjectId, { voteCitation: citation });
+  expect(await reviewCitation(created.value.revisionId)).toEqual(citation);
+
+  await fixture.reader.query(
+    `UPDATE rating.vote SET units=4095, revision=2, changed_at=now(), transaction_id=$4
+     WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND target_id=$5`,
+    [voterRoute, author.accountId, questionId, newId(voterRoute), subjectId],
+  );
+  await expect(
+    createReview(reviewsBoard, subjectId, { voteCitation: { questionId, units: 4095, revision: 2 } }),
+  ).rejects.toThrow('Vote citation is outside its question scale');
+});
+
 test('a Realm can designate only one reviews board', async () => {
   const client = await fixture.reader.connect();
   const realmId = newId(0x6b40);

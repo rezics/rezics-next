@@ -1,4 +1,5 @@
 import type { CommandEvent } from '../command/command.ts';
+import { isStoredRatingUnit } from '../rating/question-scale.ts';
 
 export const IDENTITY_RATING_VOTE_EVENT = 'com.rezics.rating.vote.changed.v1';
 
@@ -19,6 +20,11 @@ export type IdentityRatingVoteChange = Readonly<{
  * cannot introduce another redirect lookup or use a caller-provided identity as its owner.
  */
 export function produceIdentityRatingVoteChange(input: IdentityRatingVoteChange): CommandEvent {
+  if (
+    (input.previous !== null && !isStoredRatingUnit(input.previous)) ||
+    (input.units !== null && !isStoredRatingUnit(input.units))
+  )
+    throw new TypeError('Invalid stored rating units');
   return {
     type: IDENTITY_RATING_VOTE_EVENT,
     subject: input.authenticatedVoterId,

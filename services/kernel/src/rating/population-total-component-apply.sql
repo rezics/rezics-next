@@ -5,10 +5,12 @@ WITH input AS (
          :check_epoch::boolean AS check_epoch
 )
 UPDATE rating.population_total_component AS total
-SET count = total.count + input.count_delta,
-    sum = total.sum + input.sum_delta,
+SET count = (total.count::numeric + input.count_delta::numeric)::bigint,
+    sum = (total.sum::numeric + input.sum_delta::numeric)::bigint,
     needs_epoch_check = total.needs_epoch_check OR (input.check_epoch AND input.count_delta <> 0)
 FROM input
 WHERE total.route = :population_route::integer AND total.question_id = :question_id::uuid
   AND total.population_id = :population_id::uuid AND total.shard = :shard::smallint
+  AND total.count::numeric + input.count_delta::numeric BETWEEN 0 AND 9223372036854775807
+  AND total.sum::numeric + input.sum_delta::numeric BETWEEN 0 AND 9223372036854775807
 RETURNING 1;

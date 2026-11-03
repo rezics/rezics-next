@@ -423,7 +423,7 @@ CREATE TABLE rating.population_vote (
     CONSTRAINT population_vote_counting_key_check CHECK ((counting_key ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT population_vote_revision_check CHECK ((revision >= 1)),
     CONSTRAINT population_vote_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT population_vote_units_check CHECK (((units IS NULL) OR ((units >= 0) AND (units <= 20))))
+    CONSTRAINT population_vote_units_check CHECK (((units IS NULL) OR ((units >= 0) AND (units <= 4096))))
 );
 
 
@@ -500,7 +500,7 @@ CREATE TABLE rating.question (
     CONSTRAINT question_check1 CHECK ((((maximum_units - minimum_units) % step_units) = 0)),
     CONSTRAINT question_grain_check CHECK ((grain = ANY (ARRAY['work'::text, 'release'::text, 'episode'::text, 'character'::text]))),
     CONSTRAINT question_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 200))),
-    CONSTRAINT question_realm_definition_check CHECK ((((realm_id IS NULL) AND (meaning IS NULL)) OR ((realm_id IS NOT NULL) AND (owner_id IS NOT NULL) AND (meaning IS NOT NULL) AND ((char_length(btrim(meaning)) >= 1) AND (char_length(btrim(meaning)) <= 2000)) AND ((char_length(btrim(label)) >= 1) AND (char_length(btrim(label)) <= 200)) AND (minimum_units >= 0) AND (maximum_units <= 20) AND (maximum_units > minimum_units) AND (get_byte(uuid_send(id), 10) = get_byte(uuid_send(realm_id), 10)) AND (get_byte(uuid_send(id), 11) = get_byte(uuid_send(realm_id), 11))))),
+    CONSTRAINT question_realm_definition_check CHECK ((((realm_id IS NULL) AND (meaning IS NULL)) OR ((realm_id IS NOT NULL) AND (owner_id IS NOT NULL) AND (meaning IS NOT NULL) AND ((char_length(btrim(meaning)) >= 1) AND (char_length(btrim(meaning)) <= 2000)) AND ((char_length(btrim(label)) >= 1) AND (char_length(btrim(label)) <= 200)) AND (minimum_units >= 0) AND (maximum_units <= 4096) AND (maximum_units > minimum_units) AND (get_byte(uuid_send(id), 10) = get_byte(uuid_send(realm_id), 10)) AND (get_byte(uuid_send(id), 11) = get_byte(uuid_send(realm_id), 11))))),
     CONSTRAINT question_revision_check CHECK ((revision >= 1))
 );
 
@@ -667,7 +667,7 @@ CREATE TABLE rating.vote (
     CONSTRAINT vote_counted_revision_check CHECK ((counted_revision >= 1)),
     CONSTRAINT vote_revision_check CHECK ((revision >= 1)),
     CONSTRAINT vote_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT vote_units_check CHECK (((units IS NULL) OR ((units >= 0) AND (units <= 20))))
+    CONSTRAINT vote_units_check CHECK (((units IS NULL) OR ((units >= 0) AND (units <= 4096))))
 );
 
 

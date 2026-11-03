@@ -3,30 +3,33 @@ WITH incoming AS (
          :target_id::uuid AS target_id, :shard::smallint AS shard, :count_delta::bigint AS count_delta,
          :sum_delta::bigint AS sum_delta, :histogram_delta::bigint[] AS histogram_delta,
          :at::timestamptz AS at
-), component_before AS (
-  SELECT component.count, component.sum, component.histogram, component.applied_at
-  FROM rating.aggregate_component AS component CROSS JOIN incoming
-  WHERE component.route = incoming.route AND component.question_id = incoming.question_id
-    AND component.population_id = incoming.population_id AND component.target_id = incoming.target_id
-    AND component.shard = incoming.shard
 )
-INSERT INTO rating.aggregate_component
-  (route, question_id, population_id, target_id, shard, count, sum, histogram, applied_at)
-SELECT incoming.route, incoming.question_id, incoming.population_id, incoming.target_id, incoming.shard,
-       COALESCE(component_before.count, 0) + incoming.count_delta,
-       COALESCE(component_before.sum, 0) + incoming.sum_delta,
-       ARRAY(
-         SELECT COALESCE(component_before.histogram[index], 0) + incoming.histogram_delta[index]
-         FROM generate_subscripts(incoming.histogram_delta, 1) AS bins(index)
-         ORDER BY index
-       ),
-       GREATEST(COALESCE(component_before.applied_at, '-infinity'::timestamptz), incoming.at)
-FROM incoming LEFT JOIN component_before ON true
-WHERE component_before.histogram IS NULL
-   OR cardinality(component_before.histogram) = cardinality(incoming.histogram_delta)
-ON CONFLICT (route, question_id, population_id, target_id, shard) DO UPDATE
-SET count = EXCLUDED.count,
-    sum = EXCLUDED.sum,
-    histogram = EXCLUDED.histogram,
-    applied_at = EXCLUDED.applied_at
+UPDATE rating.aggregate_component AS component
+SET count = (component.count::numeric + incoming.count_delta::numeric)::bigint,
+    sum = (component.sum::numeric + incoming.sum_delta::numeric)::bigint,
+    histogram = ARRAY(
+      SELECT (component.histogram[index]::numeric + incoming.histogram_delta[index]::numeric)::bigint
+      FROM generate_subscripts(component.histogram, 1) AS bins(index)
+      ORDER BY index
+    ),
+    applied_at = GREATEST(component.applied_at, incoming.at)
+FROM incoming
+WHERE component.route = incoming.route AND component.question_id = incoming.question_id
+  AND component.population_id = incoming.population_id AND component.target_id = incoming.target_id
+  AND component.shard = incoming.shard
+  AND cardinality(incoming.histogram_delta) BETWEEN 1 AND 4097
+  AND array_ndims(incoming.histogram_delta) = 1
+  AND array_lower(incoming.histogram_delta, 1) = 1
+  AND array_upper(incoming.histogram_delta, 1) = cardinality(incoming.histogram_delta)
+  AND cardinality(component.histogram) = cardinality(incoming.histogram_delta)
+  AND array_lower(component.histogram, 1) = 1
+  AND array_upper(component.histogram, 1) = cardinality(component.histogram)
+  AND component.count::numeric + incoming.count_delta::numeric BETWEEN 0 AND 9223372036854775807
+  AND component.sum::numeric + incoming.sum_delta::numeric BETWEEN 0 AND 9223372036854775807
+  AND NOT EXISTS (
+    SELECT 1
+    FROM generate_subscripts(component.histogram, 1) AS bins(index)
+    WHERE component.histogram[index]::numeric + incoming.histogram_delta[index]::numeric
+      NOT BETWEEN 0 AND 9223372036854775807
+  )
 RETURNING 1;

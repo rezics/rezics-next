@@ -11,6 +11,11 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
+import {
+  ratingQuestionHistogramIndex,
+  ratingQuestionHistogramSize,
+  type RatingQuestionScale,
+} from './question-scale.ts';
 import { readVotePopulations } from './voter-realms.ts';
 import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-producer.ts';
 import {
@@ -28,7 +33,7 @@ import voteUpdate from './vote-update.sql';
 export const STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001';
 export const VOTE_SCOPE = 'rating:vote';
 
-export type RatingQuestion = {
+export type RatingQuestion = RatingQuestionScale & {
   id: string;
   ownerId: string | null;
   realmId: string | null;
@@ -36,9 +41,6 @@ export type RatingQuestion = {
   revision: number;
   label: string;
   grain: 'work' | 'release' | 'episode' | 'character';
-  minimumUnits: number;
-  maximumUnits: number;
-  stepUnits: number;
 };
 
 export type Vote = {
@@ -143,14 +145,13 @@ async function findQuestion(config: Dependencies, actor: Actor, questionId: stri
 }
 
 function validateUnits(question: RatingQuestion, units: number | null): void {
+  ratingQuestionHistogramSize(question);
   if (units === null) return;
-  if (
-    !Number.isSafeInteger(units) ||
-    units < question.minimumUnits ||
-    units > question.maximumUnits ||
-    (units - question.minimumUnits) % question.stepUnits !== 0
-  )
+  try {
+    ratingQuestionHistogramIndex(question, units);
+  } catch {
     throw new VoteInvalidError('units');
+  }
 }
 
 function assertCurrentAccount(owner: AccountActor, current: Awaited<ReturnType<typeof readAccount>>): void {

@@ -16,10 +16,14 @@ import {
 import applyTotal from './population-total-component-apply.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import {
+  assertPopulationDeliveryDelta,
+  MAX_RATING_CHANGE_PAGE,
+  MAX_RATING_POPULATION_DELIVERY_DELTAS,
+} from './question-scale.ts';
 
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
 const MAX_SERIAL = 9223372036854775807n;
-const PAGE = 100;
 type Queryable = Pick<PoolClient, 'query'>;
 type Address = Pick<PopulationTotalEvent, 'sourcePartition' | 'populationId' | 'serial'>;
 type CountedDelta = { questionId: string; shard: number; count: bigint; sum: bigint };
@@ -42,6 +46,9 @@ function parse(event: CloudEvent): PopulationTotalEvent {
   if (event.type !== POPULATION_TOTAL_DELIVERY || !Value.Check(RATING_EVENTS[POPULATION_TOTAL_DELIVERY], event.data))
     throw new TypeError('Invalid rating population delivery');
   const data = event.data as PopulationTotalEvent;
+  if (data.action === 'deliver') {
+    for (const delta of data.deltas) assertPopulationDeliveryDelta(BigInt(delta.count), BigInt(delta.sum));
+  }
   const [route] = address(data);
   const source = /^urn:rezics:log:(\d+)\.([1-9][0-9]*)$/.exec(event.source);
   if (
@@ -65,13 +72,17 @@ export class PopulationTotalCapture {
       delta: { count: bigint; sum: bigint };
     }[],
   ): void {
+    for (const { delta } of entries) assertPopulationDeliveryDelta(delta.count, delta.sum);
     const shards = this.populations.get(change.populationId) ?? new Map<string, CountedDelta>();
     for (const { countingKey, delta } of entries) {
       const shard = Number.parseInt(countingKey.slice(0, 2), 16) % 16;
       const key = `${change.questionId}/${shard}`;
       const total = shards.get(key) ?? { questionId: change.questionId, shard, count: 0n, sum: 0n };
-      total.count += delta.count;
-      total.sum += delta.sum;
+      const count = total.count + delta.count;
+      const sum = total.sum + delta.sum;
+      assertPopulationDeliveryDelta(count, sum);
+      total.count = count;
+      total.sum = sum;
       shards.set(key, total);
     }
     this.populations.set(change.populationId, shards);
@@ -86,7 +97,9 @@ export class PopulationTotalCapture {
         .sort((a, b) => a.questionId.localeCompare(b.questionId) || a.shard - b.shard)
         .map(({ questionId, shard, count, sum }) => ({ questionId, shard, count: String(count), sum: String(sum) }));
       if (deltas.length === 0) continue;
-      if (deltas.length > 200) throw new RangeError('Rating population delivery exceeds its source page');
+      if (deltas.length > MAX_RATING_POPULATION_DELIVERY_DELTAS)
+        throw new RangeError('Rating population delivery exceeds its source page');
+      for (const delta of deltas) assertPopulationDeliveryDelta(BigInt(delta.count), BigInt(delta.sum));
       const sequence = await tx.query<{ serial: string }>(
         `INSERT INTO rating.population_total_source(partition_no,population_id,serial) VALUES($1,$2,1)
          ON CONFLICT(partition_no,population_id) DO UPDATE SET serial=rating.population_total_source.serial+1
@@ -177,7 +190,7 @@ async function receive(pool: Pool, item: Address): Promise<boolean> {
         sum_delta: delta.sum,
         check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
       });
-      if (!updated.length) throw new Error('Rating population total shard unavailable');
+      if (!updated.length) throw new Error('Rating population total shard unavailable or arithmetic exceeded its bound');
     }
     await tx.query(
       `UPDATE rating.population_total_inbox SET applied=true
@@ -250,8 +263,10 @@ export async function flushPopulationTotalDeliveries(
   partition: number,
   populations?: readonly string[],
 ): Promise<void> {
-  if (populations && (populations.length === 0 || populations.length > PAGE))
-    throw new RangeError('Rating population delivery selection must contain 1 to 100 populations');
+  if (populations && (populations.length === 0 || populations.length > MAX_RATING_CHANGE_PAGE))
+    throw new RangeError(
+      `Rating population delivery selection must contain 1 to ${MAX_RATING_CHANGE_PAGE} populations`,
+    );
   for (;;) {
     const page = await withReadTransaction(pool, async (client) => {
       await partitionReadClient(client, partition);
@@ -261,7 +276,7 @@ export async function flushPopulationTotalDeliveries(
              AND population_id=ANY($3::uuid[]) ORDER BY population_id,serial LIMIT $2`
           : `SELECT payload FROM rating.population_total_delivery WHERE partition_no=$1 AND pending
              ORDER BY population_id,serial LIMIT $2`,
-        populations ? [partition, PAGE, populations] : [partition, PAGE],
+        populations ? [partition, MAX_RATING_CHANGE_PAGE, populations] : [partition, MAX_RATING_CHANGE_PAGE],
       );
     });
     if (page.rows.length === 0) return;

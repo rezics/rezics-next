@@ -29,7 +29,10 @@ import { prepareRealmParticipationResult, type RealmParticipationCheck } from '.
 import membershipHistory from '../community/membership-history.sql';
 import { readPartition } from '../partition/partition.ts';
 import { withConnection } from '../database/pool.ts';
+import { partitionReadClient } from '../database/read-snapshot.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
+import { isStoredRatingUnit, ratingQuestionHistogramIndex } from '../rating/question-scale.ts';
+import questionScaleRead from '../rating/question-scale-read.sql';
 import { InvalidDocumentError, validateContentDocument, type ValidatedContentDocument } from './document.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { claimMedia, InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
@@ -153,9 +156,7 @@ function reviewCitation(value: unknown): ReviewVoteCitation | undefined {
     Object.keys(citation).some((key) => !['questionId', 'units', 'revision'].includes(key)) ||
     typeof citation.questionId !== 'string' ||
     routeOf(citation.questionId) === null ||
-    !Number.isSafeInteger(citation.units) ||
-    (citation.units as number) < 0 ||
-    (citation.units as number) > 20 ||
+    !isStoredRatingUnit(citation.units) ||
     !Number.isSafeInteger(citation.revision) ||
     (citation.revision as number) < 1
   )
@@ -182,6 +183,16 @@ async function currentReviewCitation(
   });
   if (!row || row.units === null || Number(row.units) !== citation.units || Number(row.revision) !== citation.revision)
     throw new InvalidDocumentError('Vote citation does not match the author’s current vote');
+  const questionRoute = routeOf(citation.questionId)!;
+  const scale = await questionScaleRead.run(await partitionReadClient(tx, partitionOf(questionRoute)), {
+    question_id: citation.questionId,
+  });
+  if (!scale) throw new InvalidDocumentError('Vote citation question is unavailable');
+  try {
+    ratingQuestionHistogramIndex(scale, citation.units);
+  } catch {
+    throw new InvalidDocumentError('Vote citation is outside its question scale');
+  }
   return citation;
 }
 function postgresConstraint(error: unknown): string | undefined {

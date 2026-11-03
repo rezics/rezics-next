@@ -13,6 +13,7 @@ import { Compile } from 'typebox/compile';
 import { CommunityPresentationSchema } from './community-presentation-model.ts';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
 import { REACTION_KINDS } from './events.ts';
+import { MAX_RATING_STORED_UNITS } from '../rating/question-scale.ts';
 import type { AuthorPostEntry } from './author-item-reads.ts';
 import type { BoardView } from './model.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
@@ -154,7 +155,7 @@ const media = t.Array(ContentIdSchema, { maxItems: 32, uniqueItems: true });
 const voteCitation = t.Object(
   {
     questionId: ContentIdSchema,
-    units: t.Integer({ minimum: 0, maximum: 20 }),
+    units: t.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }),
     revision: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
   },
   closed,

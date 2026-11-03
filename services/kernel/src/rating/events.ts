@@ -1,7 +1,12 @@
 import { Type, type Static } from 'typebox';
+import {
+  MAX_RATING_CHANGE_PAGE,
+  MAX_RATING_POPULATION_DELIVERY_DELTAS,
+  MAX_RATING_STORED_UNITS,
+} from './question-scale.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
-const units = Type.Union([Type.Integer({ minimum: 0, maximum: 20 }), Type.Null()]);
+const units = Type.Union([Type.Integer({ minimum: 0, maximum: MAX_RATING_STORED_UNITS }), Type.Null()]);
 
 export const POPULATION_TOTAL_DELIVERY = 'com.rezics.rating.population-total.delivery.v1';
 const serial = Type.String({ pattern: '^[1-9][0-9]{0,18}$' });
@@ -26,7 +31,7 @@ const populationTotalDelivery = Type.Union([
           },
           { additionalProperties: false },
         ),
-        { minItems: 1, maxItems: 200 },
+        { minItems: 1, maxItems: MAX_RATING_POPULATION_DELIVERY_DELTAS },
       ),
     },
     { additionalProperties: false },
@@ -167,7 +172,7 @@ export const RATING_EVENTS = {
             },
             { additionalProperties: false },
           ),
-          { maxItems: 100 },
+          { maxItems: MAX_RATING_CHANGE_PAGE },
         ),
       },
       { additionalProperties: false },
@@ -190,7 +195,7 @@ export const RATING_EVENTS = {
             },
             { additionalProperties: false },
           ),
-          { maxItems: 100 },
+          { maxItems: MAX_RATING_CHANGE_PAGE },
         ),
       },
       { additionalProperties: false },
@@ -212,7 +217,7 @@ export const RATING_EVENTS = {
             },
             { additionalProperties: false },
           ),
-          { maxItems: 100 },
+          { maxItems: MAX_RATING_CHANGE_PAGE },
         ),
       },
       { additionalProperties: false },

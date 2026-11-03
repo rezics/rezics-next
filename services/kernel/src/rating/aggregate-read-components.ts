@@ -6,6 +6,7 @@ import type { RatingAggregate } from './aggregate-effect.ts';
 import readComponents from './aggregate-read.sql';
 import readFreshness from './aggregate-read-freshness.sql';
 import readQuestion from './aggregate-read-question.sql';
+import { assertPostgresBigint, ratingQuestionHistogramSize } from './question-scale.ts';
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 
@@ -38,17 +39,7 @@ export async function readRatingAggregate(
     readQuestion.run(bound, { question_id: input.questionId }),
   );
   if (!question) return null;
-  const distance = question.maximumUnits - question.minimumUnits;
-  if (
-    !Number.isSafeInteger(question.minimumUnits) ||
-    !Number.isSafeInteger(question.maximumUnits) ||
-    !Number.isSafeInteger(question.stepUnits) ||
-    question.stepUnits < 1 ||
-    distance < 0 ||
-    distance % question.stepUnits !== 0
-  )
-    throw new Error('Invalid rating question scale');
-  const size = distance / question.stepUnits + 1;
+  const size = ratingQuestionHistogramSize(question);
 
   const freshness = await atHome(client, populationRoute, (bound) =>
     readFreshness.run(bound, { route: populationRoute, population_id: input.populationId }),
@@ -61,6 +52,7 @@ export async function readRatingAggregate(
       target_id: input.targetId,
     }),
   );
+  if (rows.length > 16) throw new Error('Rating aggregate exceeds its component bound');
   const histogram = Array<bigint>(size).fill(0n);
   let count = 0n;
   let sum = 0n;
@@ -68,8 +60,13 @@ export async function readRatingAggregate(
   for (const row of rows) {
     count += BigInt(row.count);
     sum += BigInt(row.sum);
+    assertPostgresBigint(count);
+    assertPostgresBigint(sum);
     if (row.histogram.length !== size) throw new Error('Rating aggregate histogram scale mismatch');
-    for (let index = 0; index < size; index++) histogram[index]! += BigInt(row.histogram[index]!);
+    for (let index = 0; index < size; index++) {
+      histogram[index]! += BigInt(row.histogram[index]!);
+      assertPostgresBigint(histogram[index]!);
+    }
     if (row.appliedAt !== null && (appliedAt === null || Date.parse(row.appliedAt) > Date.parse(appliedAt)))
       appliedAt = row.appliedAt;
   }

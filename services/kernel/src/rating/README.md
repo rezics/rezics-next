@@ -55,6 +55,29 @@ Different questions, scales or grains are never combined. Episode ratings do not
 ratings do not feed a work score. A roll-up over members (for example a series over its works) is a named metric
 with its formula, member count and coverage, and is shown only when it covers at least half its members.
 
+### Bounded scale delivery
+
+Decision: native delivery accepts integer units from 0 through 4096, at most 4097 histogram bins, and exact
+signed-BIGINT component arithmetic; Realm authoring and custom ranking remain on their current 0–20 contracts.
+
+The durable vote event keeps its existing type, fields, source position and receipt identity; units remain an integer
+or null, now bounded to 0..4096. Existing 0..20 event envelopes remain valid. Before target work, the worker reads the
+exact question scale at its encoded home and checks every incoming unit against that question's minimum, maximum and
+step. Supported scales have integer bounds with 0 <= minimum <= maximum <= 4096, a positive integer step that divides
+the range, and no more than 4097 bins. Stored units and aggregate means remain in the question's original units.
+Different questions keep separate revisions, scales, grains and populations; no scale conversion, mixed histogram,
+shared prior or public custom-question figure is produced. Review citations preserve the original question, vote
+revision and units, and accept only the author's current vote when its units match that question's exact scale.
+
+A target command page contains at most 100 changes. Each change updates one aggregate-component histogram, or two
+when a controller re-key moves winners. With at most 4097 bins, that bounds a page at 200 component-histogram
+updates, and at most two histogram working arrays are live for one re-key. Aggregate reads sum at most 16 components,
+costing at most 16 times the question's bin count. Signed population-total pages keep the existing limit of 200
+question/shard deltas; each count delta is bounded by 200 and each stored-unit sum delta by 819,200. Component totals
+are checked against PostgreSQL bigint limits before update. An invalid retained scale or off-step retained unit fails
+delivery and keeps its durable obligation; it is never skipped or partially applied. The population-total receipt and
+source identities and delivery order are unchanged.
+
 `readAggregate` reads the question scale at the question's encoded home, population freshness at the population
 home, and at most sixteen component shards at the target home, in three separate statements. Each home is bound
 through the ordinary partition reader, so a missing or moved home is unavailable rather than an empty aggregate.
@@ -269,13 +292,13 @@ Success, including an authorized exact replay, returns HTTP `201` with
 revision and scale persist together. A database trigger rejects changes to authored definitions. Existing
 legacy definitions retain their previous representation and the seeded standard question remains unchanged.
 
-Supported scales are integer stored units with `0 <= min < max <= 20`, positive integer `displayStep`, and
-`(max-min) % displayStep === 0`. Binary `0..1` and integer `0..10` questions are supported by the installed
-vote SQL, event validation and aggregate histogram path. Votes must lie on the exact selected scale. Display
-mapping is consumer-owned: custom `0..10` does not inherit the standard question's half-point display mapping.
-The separate scale-delivery owner removes the native `0..20` envelope across that delivery path; this command must consume its
-bounds only after that capability is delivered. A definition is never proof of ranked population readiness;
-custom-question rank publication remains with its separate owner.
+Supported authoring scales remain integer stored units with `0 <= min < max <= 20`, positive integer `displayStep`,
+and `(max-min) % displayStep === 0`. Binary `0..1` and integer `0..10` questions are supported by the installed
+vote path. Votes must lie on the exact selected scale. Display mapping is consumer-owned: custom `0..10` does not
+inherit the standard question's half-point display mapping. Native storage and event delivery now support the bounded
+0..4096 contract above, but this authoring command keeps its current 0..20 limit. A definition is never proof of
+ranked population readiness; custom-question ranking continues to admit only the released 0..20 integer range until
+its owner adopts a compatible publication contract.
 
 `GET /v1/rating-questions/{id}` refreshes the exact selected definition. Legacy definitions keep their exact wire
 shape; Realm definitions add `realmId`, `meaning`, `canonicalLabel` and `labelRevision`; `label` is the current caption. `GET /v1/rating-questions?realm={realmId}&limit=1..20`
@@ -308,8 +331,9 @@ that authority boundary on initial and continuation observations. Content point 
 an unreadable custom question's citation while retaining the ordinarily readable post; unavailable authority
 propagates. Standard citations retain their existing behavior. Content's `reads.ts` and
 `review-context-eligibility.ts`, plus Rating's internal aggregate metadata export, change outside the declared
-paths solely to close those provenance boundaries. Search controls, query/partition coordination, Web interfaces,
-membership repair and custom rank publication have separate owners; the latter integrates below.
+paths solely to close those provenance boundaries. Search owns question selection, rating-sort controls,
+query/partition coordination and Web interfaces. Content keeps the partition-local native producer contract;
+membership repair has its separate owner, and custom rank publication remains separately owned as described below.
 
 `test/kernel.test.ts` adds the new command to the exhaustive typed route contract while retaining every existing
 route assertion. This is outside the declared paths because the kernel contract must include every mounted route.

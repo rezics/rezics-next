@@ -9,6 +9,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { RATING_EVENTS } from './events.ts';
 import { acknowledgeRatingErasurePage } from './erasure-status.ts';
 import applyComponent from './aggregate-component-apply.sql';
+import insertComponent from './aggregate-component-insert.sql';
 import { readRatingAggregate } from './aggregate-read-components.ts';
 import readCountedVote from './population-vote-counted-read.sql';
 import readPopulationVotersSql from './population-voters-page.sql';
@@ -22,6 +23,14 @@ import { withReadTransaction } from '../semantic/read.ts';
 import readQuestionScale from './question-read.sql';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ratingQuestionIdentity, realmRankQuestionEligible } from './question-directory.ts';
+import {
+  assertPostgresBigint,
+  isStoredRatingUnit,
+  MAX_RATING_CHANGE_PAGE,
+  ratingQuestionHistogramIndex,
+  ratingQuestionHistogramSize,
+  type RatingQuestionScale,
+} from './question-scale.ts';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
@@ -57,7 +66,7 @@ export type RatingChange = RatingChangeFields &
   );
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
-type QuestionScale = { minimumUnits: number; maximumUnits: number; stepUnits: number; identity: string };
+type QuestionScale = RatingQuestionScale & { identity: string };
 type CountedVote = { voterId: string; units: number; at: string };
 
 export type RatingAggregate = {
@@ -99,9 +108,7 @@ function validateChange(change: RatingChange): { route: number; at: string; appl
     !Number.isSafeInteger(change.revision) ||
     change.revision < 1 ||
     (change.rekey === true && typeof change.rekeyAllowMissing !== 'boolean') ||
-    (!change.remove &&
-      change.units !== null &&
-      (!Number.isSafeInteger(change.units) || change.units < 0 || change.units > 20))
+    (!change.remove && change.units !== null && !isStoredRatingUnit(change.units))
   )
     throw new TypeError('Invalid rating aggregate change');
   const route = routeOf(change.targetId)!;
@@ -115,49 +122,33 @@ function validateChange(change: RatingChange): { route: number; at: string; appl
   };
 }
 
-function histogramSize(scale: Pick<QuestionScale, 'minimumUnits' | 'maximumUnits' | 'stepUnits'>): number {
-  const distance = scale.maximumUnits - scale.minimumUnits;
-  if (
-    !Number.isSafeInteger(scale.minimumUnits) ||
-    !Number.isSafeInteger(scale.maximumUnits) ||
-    !Number.isSafeInteger(scale.stepUnits) ||
-    scale.stepUnits < 1 ||
-    distance < 0 ||
-    distance % scale.stepUnits !== 0
-  )
-    throw new Error('Invalid rating question scale');
-  return distance / scale.stepUnits + 1;
-}
-
-function histogramIndex(scale: QuestionScale, units: number): number {
-  const offset = units - scale.minimumUnits;
-  if (offset < 0 || offset % scale.stepUnits !== 0 || units > scale.maximumUnits)
-    throw new TypeError('Rating vote is outside its question scale');
-  return offset / scale.stepUnits;
-}
-
 function deltaFor(
   before: CountedVote | null,
   after: CountedVote | null,
-  scale: QuestionScale,
+  scale: RatingQuestionScale,
 ): {
   count: bigint;
   sum: bigint;
   histogram: bigint[];
 } {
-  const histogram = Array<bigint>(histogramSize(scale)).fill(0n);
+  const histogram = Array<bigint>(ratingQuestionHistogramSize(scale)).fill(0n);
   let count = 0n;
   let sum = 0n;
   if (before) {
+    const index = ratingQuestionHistogramIndex(scale, before.units);
     count -= 1n;
     sum -= BigInt(before.units);
-    histogram[histogramIndex(scale, before.units)]! -= 1n;
+    histogram[index]! -= 1n;
   }
   if (after) {
+    const index = ratingQuestionHistogramIndex(scale, after.units);
     count += 1n;
     sum += BigInt(after.units);
-    histogram[histogramIndex(scale, after.units)]! += 1n;
+    histogram[index]! += 1n;
   }
+  assertPostgresBigint(count);
+  assertPostgresBigint(sum);
+  for (const value of histogram) assertPostgresBigint(value);
   return { count, sum, histogram };
 }
 
@@ -172,12 +163,12 @@ async function applyComponentDelta(
   countingKey: string,
   before: CountedVote | null,
   after: CountedVote | null,
-  scale: QuestionScale,
+  scale: RatingQuestionScale,
   at: string,
 ): Promise<ReturnType<typeof deltaFor>> {
   const keyByte = Number.parseInt(countingKey.slice(0, 2), 16);
   const delta = deltaFor(before, after, scale);
-  const rows = await applyComponent.run(tx, {
+  const parameters = {
     route: routeOf(change.targetId)!,
     question_id: change.questionId,
     population_id: change.populationId,
@@ -187,8 +178,11 @@ async function applyComponentDelta(
     sum_delta: delta.sum.toString(),
     histogram_delta: delta.histogram.map(String),
     at,
-  });
-  if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
+  };
+  const updated = await applyComponent.run(tx, parameters);
+  if (returnedRows(updated)) return delta;
+  const inserted = await insertComponent.run(tx, parameters);
+  if (!returnedRows(inserted)) throw new Error('Rating aggregate component is negative, overflowing or incompatible');
   return delta;
 }
 
@@ -227,7 +221,7 @@ async function applyPartition(
         if (!returnedRows(rows)) throw new Error('Rating public figure could not be marked pending');
       };
       for (const change of changes) {
-        const { route, at, appliedAt, shard } = validateChange(change);
+        const { route, at, appliedAt } = validateChange(change);
         const scale = scales.get(change.questionId);
         if (!scale) throw new Error('Rating question unavailable');
         const parameters = {
@@ -260,10 +254,12 @@ async function applyPartition(
           if (existing && Number(existing.revision) > change.revision) continue;
           const oldKey = existing?.countingKey ?? change.countingKey;
           const newBefore = await readCountedVote.run(tx, parameters);
+          if (newBefore) ratingQuestionHistogramIndex(scale, newBefore.units);
           const oldBefore =
             oldKey === change.countingKey
               ? newBefore
               : await readCountedVote.run(tx, { ...parameters, counting_key: oldKey });
+          if (oldBefore) ratingQuestionHistogramIndex(scale, oldBefore.units);
           const wroteVote = returnedRows(
             await rekeyPopulationVote.run(tx, {
               ...parameters,
@@ -301,6 +297,7 @@ async function applyPartition(
         }
 
         const before = await readCountedVote.run(tx, parameters);
+        if (before) ratingQuestionHistogramIndex(scale, before.units);
         let wroteVote = false;
         if (change.remove) {
           wroteVote = returnedRows(
@@ -323,18 +320,17 @@ async function applyPartition(
           );
         }
         const after = await readCountedVote.run(tx, parameters);
-        const delta = deltaFor(before, after, scale);
         if (!wroteVote) continue;
-        const rows = await applyComponent.run(tx, {
-          ...parameters,
-          shard,
-          count_delta: delta.count.toString(),
-          sum_delta: delta.sum.toString(),
-          histogram_delta: delta.histogram.map(String),
-          at: appliedAt,
-        });
-        if (!returnedRows(rows)) throw new Error('Rating aggregate component would be negative or incompatible');
-        totals.add(change, [{ countingKey: change.countingKey, delta }]);
+        const appliedDelta = await applyComponentDelta(
+          tx,
+          change,
+          change.countingKey,
+          before,
+          after,
+          scale,
+          appliedAt,
+        );
+        totals.add(change, [{ countingKey: change.countingKey, delta: appliedDelta }]);
         await markFigurePending(change, route);
         applied += 1;
       }
@@ -371,14 +367,19 @@ export async function applyRatingChanges(pool: Pool, input: readonly RatingChang
       return readQuestionScale.run(bound, { question_id: questionId });
     });
     if (!scale) throw new Error('Rating question unavailable');
-    histogramSize(scale);
+    ratingQuestionHistogramSize(scale);
     scales.set(questionId, { ...scale, identity: ratingQuestionIdentity(scale) });
+  }
+  for (const change of input) {
+    const scale = scales.get(change.questionId);
+    if (!scale) throw new Error('Rating question unavailable');
+    if (!change.remove && change.units !== null) ratingQuestionHistogramIndex(scale, change.units);
   }
   // A page has <=100 changes, <=100 destinations and <=200 counted shard deltas per destination.
   // Its aggregate event plus deliveries stays below the native 1000-event command cap.
   for (const [partition, changes] of grouped)
-    for (let offset = 0; offset < changes.length; offset += 100)
-      await applyPartition(pool, changes.slice(offset, offset + 100), partition, scales);
+    for (let offset = 0; offset < changes.length; offset += MAX_RATING_CHANGE_PAGE)
+      await applyPartition(pool, changes.slice(offset, offset + MAX_RATING_CHANGE_PAGE), partition, scales);
   // Also recover committed obligations on a vote replay: its old delta cannot be reconstructed.
   for (const [partition, changes] of grouped) {
     const populations = [...new Set(changes.map((change) => change.populationId))];
