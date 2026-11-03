@@ -1193,6 +1193,7 @@ export class WorkerTasks {
       startsFirst(task),
       taskId,
       task.currentAttempt + 1,
+      { policy: this.settings.policy?.capacity },
     );
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
@@ -1405,7 +1406,9 @@ export class WorkerTasks {
     const targetAttempt = plan && !plan.hold ? this.store.task(taskId).currentAttempt + 1 : undefined;
     const releaseCapacity =
       plan && !plan.hold
-        ? await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId, targetAttempt)
+        ? await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId, targetAttempt, {
+            policy: this.settings.policy?.capacity,
+          })
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
     try {
