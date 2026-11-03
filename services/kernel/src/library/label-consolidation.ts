@@ -29,7 +29,6 @@ import {
   type ConsolidationBinding,
   type ConsolidationEvidence,
   type ConsolidationGuard,
-  type ConsolidationItem,
 } from './label-consolidation-binding.ts';
 
 export const LABEL_CONSOLIDATION_LIMITS = Object.freeze({

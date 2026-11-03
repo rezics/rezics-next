@@ -541,4 +541,5 @@ per owner preserves exact parent/assignment identities, Subject security evidenc
 keys. Existing assignment readers reopen both labels, and shared label expiry/owner erasure remove retained roots.
 Focused native coverage: `services/kernel/test/library/label-consolidation.test.ts`; original pure review coverage
 remains `services/kernel/test/library/label-consolidation-review.test.ts`. Complete-caller native64/512/4096 growth,
-Web adoption and broader integration acceptance remain pending; authored code is not measurement evidence.
+generated client/schema artifacts, Web adoption and broader integration acceptance remain pending; authored code is
+not measurement evidence.
