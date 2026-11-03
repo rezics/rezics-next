@@ -37,22 +37,33 @@ function reasonText(reason: string | null): string | null {
 
 function outcomeText(state: string): string {
   switch (state) {
-    case 'applied': return m.library_archive_recovery_effect_applied();
-    case 'partial': return m.library_archive_recovery_partial_title();
-    case 'pending': return m.library_archive_recovery_effect_pending();
-    case 'failed': return m.library_archive_recovery_effect_failed();
-    case 'unresolved': return m.library_archive_recovery_effect_unresolved();
-    case 'unsupported': return m.library_archive_recovery_effect_unsupported();
-    default: return m.library_archive_recovery_effect_not_applicable();
+    case 'applied':
+      return m.library_archive_recovery_effect_applied();
+    case 'partial':
+      return m.library_archive_recovery_partial_title();
+    case 'pending':
+      return m.library_archive_recovery_effect_pending();
+    case 'failed':
+      return m.library_archive_recovery_effect_failed();
+    case 'unresolved':
+      return m.library_archive_recovery_effect_unresolved();
+    case 'unsupported':
+      return m.library_archive_recovery_effect_unsupported();
+    default:
+      return m.library_archive_recovery_effect_not_applicable();
   }
 }
 
 function pinText(state: string): string {
   switch (state) {
-    case 'applied': return m.library_archive_recovery_effect_applied();
-    case 'pending': return m.library_archive_recovery_effect_pending();
-    case 'unsupported': return m.library_archive_recovery_effect_unsupported();
-    default: return m.library_archive_recovery_effect_not_applicable();
+    case 'applied':
+      return m.library_archive_recovery_effect_applied();
+    case 'pending':
+      return m.library_archive_recovery_effect_pending();
+    case 'unsupported':
+      return m.library_archive_recovery_effect_unsupported();
+    default:
+      return m.library_archive_recovery_effect_not_applicable();
   }
 }
 
@@ -65,9 +76,18 @@ function OutcomeRow({ item }: { item: RecoveryOutcomesPage['outcomes'][number] }
       </p>
       <p className="text-sm font-medium">{outcomeText(item.outcome)}</p>
       <dl className="grid gap-1 text-sm sm:grid-cols-3">
-        <div><dt className="font-medium">{m.library_archive_recovery_add_label()}</dt><dd>{stateText(item.addState)}</dd></div>
-        <div><dt className="font-medium">{m.library_archive_recovery_note_label()}</dt><dd>{stateText(item.noteState)}</dd></div>
-        <div><dt className="font-medium">{m.library_archive_recovery_order_label()}</dt><dd>{stateText(item.orderState)}</dd></div>
+        <div>
+          <dt className="font-medium">{m.library_archive_recovery_add_label()}</dt>
+          <dd>{stateText(item.addState)}</dd>
+        </div>
+        <div>
+          <dt className="font-medium">{m.library_archive_recovery_note_label()}</dt>
+          <dd>{stateText(item.noteState)}</dd>
+        </div>
+        <div>
+          <dt className="font-medium">{m.library_archive_recovery_order_label()}</dt>
+          <dd>{stateText(item.orderState)}</dd>
+        </div>
       </dl>
       {reason ? <p className="text-sm text-muted-foreground">{reason}</p> : null}
     </li>
@@ -116,7 +136,9 @@ export function ArchiveRecoveryResults({
   return (
     <section className="grid gap-4" data-recovery-state={state} aria-labelledby="recovery-results-title">
       <div className="grid gap-3 rounded-xl border p-4 sm:p-6">
-        <h2 id="recovery-results-title" className="text-lg font-semibold">{heading}</h2>
+        <h2 id="recovery-results-title" className="text-lg font-semibold">
+          {heading}
+        </h2>
         <p role="status">
           {state === 'complete'
             ? m.library_archive_recovery_complete_help()
@@ -131,13 +153,19 @@ export function ArchiveRecoveryResults({
                     : m.library_archive_recovery_result_help()}
         </p>
         {collectionId ? (
-          <a className={`${actionClass} inline-flex w-fit items-center underline`} href={localizeHref(`/collections/${collectionId}`)}>
+          <a
+            className={`${actionClass} inline-flex w-fit items-center underline`}
+            href={localizeHref(`/collections/${collectionId}`)}
+          >
             {m.library_archive_recovery_open_collection()}
           </a>
         ) : null}
         <p className="text-sm text-muted-foreground">{m.library_archive_recovery_evidence_independence()}</p>
-        {status.pin.state === 'unsupported' ? <p>{m.library_archive_recovery_pin_unsupported()}</p>
-          : <p>{m.library_archive_recovery_pin_state({ state: pinText(status.pin.state) })}</p>}
+        {status.pin.state === 'unsupported' ? (
+          <p>{m.library_archive_recovery_pin_unsupported()}</p>
+        ) : (
+          <p>{m.library_archive_recovery_pin_state({ state: pinText(status.pin.state) })}</p>
+        )}
       </div>
       {state === 'applying' ? <p role="status">{m.library_archive_recovery_continue_apply_help()}</p> : null}
       <div className="flex flex-wrap gap-2">
@@ -157,10 +185,14 @@ export function ArchiveRecoveryResults({
       </div>
       {page?.outcomes.length ? (
         <ol className="grid gap-3">
-          {page.outcomes.map((item) => <OutcomeRow key={item.sourceOccurrenceId} item={item} />)}
+          {page.outcomes.map((item) => (
+            <OutcomeRow key={item.sourceOccurrenceId} item={item} />
+          ))}
         </ol>
       ) : page ? (
-        <p role="status" className="rounded-lg border p-4">{m.library_archive_recovery_no_outcomes()}</p>
+        <p role="status" className="rounded-lg border p-4">
+          {m.library_archive_recovery_no_outcomes()}
+        </p>
       ) : null}
     </section>
   );

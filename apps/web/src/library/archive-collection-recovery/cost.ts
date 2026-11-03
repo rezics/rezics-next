@@ -1,6 +1,14 @@
 import { RECOVERY_PAGE_ROWS, RECOVERY_SELECTED_OCCURRENCES } from './contract';
 
-export type RecoveryCallKind = 'upload' | 'status' | 'collections' | 'occurrences' | 'review' | 'apply' | 'outcomes' | 'cancel';
+export type RecoveryCallKind =
+  | 'upload'
+  | 'status'
+  | 'collections'
+  | 'occurrences'
+  | 'review'
+  | 'apply'
+  | 'outcomes'
+  | 'cancel';
 export type RecoveryCost = {
   calls: Record<RecoveryCallKind, number>;
   retries: number;

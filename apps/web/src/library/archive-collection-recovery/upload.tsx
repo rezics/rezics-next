@@ -61,7 +61,9 @@ export function ArchiveCollectionRecoveryUpload({
 
   return (
     <section className="grid gap-4 rounded-xl border p-4 sm:p-6" aria-labelledby="recovery-upload-title">
-      <h2 id="recovery-upload-title" className="text-lg font-semibold">{m.library_archive_recovery_upload_title()}</h2>
+      <h2 id="recovery-upload-title" className="text-lg font-semibold">
+        {m.library_archive_recovery_upload_title()}
+      </h2>
       <p>{m.library_archive_recovery_upload_help({ megabytes: 34 })}</p>
       <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
         <label className="grid gap-2">

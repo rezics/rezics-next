@@ -1,12 +1,7 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, useState } from 'react';
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRouter,
-  RouterProvider,
-} from '@tanstack/react-router';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
@@ -73,7 +68,9 @@ const globals = {
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
-const savedGlobals = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+const savedGlobals = new Map(
+  Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
+);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
@@ -82,10 +79,7 @@ const { PrivateArchiveCollectionRecoveryPage } = await import('../src/library/ar
 const previousLocale = getLocale();
 await setLocale('en', { reload: false });
 
-function status(
-  state: RecoveryStatus['state'],
-  overrides: Partial<RecoveryStatus> = {},
-): RecoveryStatus {
+function status(state: RecoveryStatus['state'], overrides: Partial<RecoveryStatus> = {}): RecoveryStatus {
   return {
     uploadId: sourceId,
     state,
@@ -93,7 +87,13 @@ function status(
     expiresAt: deadline,
     manifest: null,
     coverage: [
-      { section: 'collections', capture: 'present', treatment: 'requires-explicit-mapping', rows: 1, reason: 'private' },
+      {
+        section: 'collections',
+        capture: 'present',
+        treatment: 'requires-explicit-mapping',
+        rows: 1,
+        reason: 'private',
+      },
       { section: 'entries', capture: 'empty', treatment: 'retained-unsupported', rows: 0, reason: 'not captured' },
     ],
     sourceRecordCount: 64,
@@ -187,7 +187,11 @@ function reviewResult(): RecoveryReview {
 
 function outcomesPage(state: 'partial' | 'cancelled' = 'partial'): RecoveryOutcomesPage {
   return {
-    ...status(state, { selectedCollectionId: collectionId, selectedOccurrences: 2, collectionId: receivingCollectionId }),
+    ...status(state, {
+      selectedCollectionId: collectionId,
+      selectedOccurrences: 2,
+      collectionId: receivingCollectionId,
+    }),
     next: null,
     collection: { id: receivingCollectionId, visibility: 'private' },
     outcomes: [
@@ -241,8 +245,20 @@ function visit(subject = 'viewer-a', csrfToken = 'epoch-a'): RecoveryVisit {
 }
 
 function fakePort(options: { uncertainApply?: boolean; staleReview?: boolean; sourceRecordCount?: number } = {}) {
-  const calls: { upload: unknown[]; collections: unknown[]; occurrences: unknown[]; reviews: unknown[]; applies: unknown[]; cancels: unknown[] } = {
-    upload: [], collections: [], occurrences: [], reviews: [], applies: [], cancels: [],
+  const calls: {
+    upload: unknown[];
+    collections: unknown[];
+    occurrences: unknown[];
+    reviews: unknown[];
+    applies: unknown[];
+    cancels: unknown[];
+  } = {
+    upload: [],
+    collections: [],
+    occurrences: [],
+    reviews: [],
+    applies: [],
+    cancels: [],
   };
   let cancelled = false;
   const port: RecoveryPort = {
@@ -250,7 +266,9 @@ function fakePort(options: { uncertainApply?: boolean; staleReview?: boolean; so
       calls.upload.push(structuredClone(command));
       return { kind: 'ok', value: status('preview', { sourceRecordCount: options.sourceRecordCount ?? 64 }) };
     },
-    async status() { return { kind: 'ok', value: status('preview') }; },
+    async status() {
+      return { kind: 'ok', value: status('preview') };
+    },
     async collections(_id, query) {
       calls.collections.push(structuredClone(query));
       return { kind: 'ok', value: collectionsPage(options.sourceRecordCount ?? 64) };
@@ -268,13 +286,29 @@ function fakePort(options: { uncertainApply?: boolean; staleReview?: boolean; so
       calls.applies.push(structuredClone(command));
       if (options.uncertainApply && calls.applies.length === 1)
         return { kind: 'unknown', command: structuredClone(command) };
-      return { kind: 'ok', value: status('partial', { selectedCollectionId: collectionId, selectedOccurrences: 2, collectionId: receivingCollectionId }) };
+      return {
+        kind: 'ok',
+        value: status('partial', {
+          selectedCollectionId: collectionId,
+          selectedOccurrences: 2,
+          collectionId: receivingCollectionId,
+        }),
+      };
     },
-    async outcomes() { return { kind: 'ok', value: outcomesPage(cancelled ? 'cancelled' : 'partial') }; },
+    async outcomes() {
+      return { kind: 'ok', value: outcomesPage(cancelled ? 'cancelled' : 'partial') };
+    },
     async cancel(command) {
       calls.cancels.push(structuredClone(command));
       cancelled = true;
-      return { kind: 'ok', value: status('cancelled', { selectedCollectionId: collectionId, selectedOccurrences: 2, collectionId: receivingCollectionId }) };
+      return {
+        kind: 'ok',
+        value: status('cancelled', {
+          selectedCollectionId: collectionId,
+          selectedOccurrences: 2,
+          collectionId: receivingCollectionId,
+        }),
+      };
     },
   };
   return { port, calls };
@@ -339,13 +373,17 @@ async function uploadSmallFile(host: HTMLElement) {
 }
 
 async function chooseCurrentTarget(host: HTMLElement) {
-  const input = [...host.querySelectorAll('input')].find((item) => item.getAttribute('aria-label') === m.library_copy_edition());
+  const input = [...host.querySelectorAll('input')].find(
+    (item) => item.getAttribute('aria-label') === m.library_copy_edition(),
+  );
   expect(input).toBeTruthy();
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
   setter?.call(input, target.title);
   await act(async () => input!.dispatchEvent(new window.InputEvent('input', { bubbles: true, data: target.title })));
   await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
-  const option = [...window.document.querySelectorAll('[role=option]')].find((item) => item.textContent?.includes(target.title));
+  const option = [...window.document.querySelectorAll('[role=option]')].find((item) =>
+    item.textContent?.includes(target.title),
+  );
   expect(option).toBeTruthy();
   await click(option!);
 }
@@ -370,7 +408,12 @@ test('mounted visit preserves duplicate occurrences, refreshes a stale review, c
     expect(view.host.querySelector('[data-recovery-state="conflict"]')).toBeNull();
     await click(button(view.host, m.library_archive_recovery_open_review()));
     await click(button(view.host, m.library_archive_recovery_review_action()));
-    const reviewed = fake.calls.reviews[0] as { body: { selectedOccurrenceIds: string[]; mappings: { sourceSubjectId: string; targetSubjectId: string | null }[] } };
+    const reviewed = fake.calls.reviews[0] as {
+      body: {
+        selectedOccurrenceIds: string[];
+        mappings: { sourceSubjectId: string; targetSubjectId: string | null }[];
+      };
+    };
     expect(reviewed.body.selectedOccurrenceIds).toEqual([occurrenceOne, occurrenceTwo]);
     expect(reviewed.body.mappings).toEqual([{ sourceSubjectId: subjectId, targetSubjectId: targetId }]);
     expect(view.host.textContent).toContain(m.library_archive_recovery_new_private_destination());
@@ -412,7 +455,10 @@ test('mounted cancellation is explicit, preserves accepted effects, and a replac
 
   let resolveUpload!: (result: Awaited<ReturnType<RecoveryPort['upload']>>) => void;
   const latePort = fakePort().port;
-  latePort.upload = () => new Promise((resolve) => { resolveUpload = resolve; });
+  latePort.upload = () =>
+    new Promise((resolve) => {
+      resolveUpload = resolve;
+    });
   const replacement = await mount(latePort, visit('viewer-a', 'epoch-a'));
   try {
     await uploadSmallFile(replacement.host);
@@ -431,7 +477,11 @@ test('one native page and one bounded apply keep request counts constant as unre
   for (const sourceRecordCount of [64, 512, 4096]) {
     for (const rowCount of [1, 25, 50]) {
       const rows = Array.from({ length: rowCount }, (_, index) =>
-        occurrence(`00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`, `note-${index}`, String(index + 1)),
+        occurrence(
+          `00000000-0000-4000-8000-${String(index + 20).padStart(12, '0')}`,
+          `note-${index}`,
+          String(index + 1),
+        ),
       );
       const fake = fakePort({ sourceRecordCount });
       fake.port.occurrences = async (_id, _collectionId, query) => {
@@ -439,7 +489,8 @@ test('one native page and one bounded apply keep request counts constant as unre
         return { kind: 'ok', value: occurrencesPage(rows) };
       };
       const journeyVisit = visit();
-      const { createArchiveCollectionRecoveryJourney } = await import('../src/library/archive-collection-recovery/controller');
+      const { createArchiveCollectionRecoveryJourney } =
+        await import('../src/library/archive-collection-recovery/controller');
       const journey = createArchiveCollectionRecoveryJourney({ port: fake.port, visit: journeyVisit });
       try {
         await journey.upload('e30=');
@@ -457,8 +508,18 @@ test('one native page and one bounded apply keep request counts constant as unre
         expect(cost.calls.review).toBe(1);
         expect(cost.calls.apply).toBe(1);
         expect(fake.calls.occurrences.every((query) => query.limit === 50)).toBe(true);
-        expect(fake.calls.occurrences.map((query) => query.cursor ?? null)).toEqual([null, 'deep/native/cursor', 'terminal/native/cursor']);
-        measures.push([cost.calls.collections, cost.calls.occurrences, cost.calls.review, cost.calls.apply, cost.calls.outcomes]);
+        expect(fake.calls.occurrences.map((query) => query.cursor ?? null)).toEqual([
+          null,
+          'deep/native/cursor',
+          'terminal/native/cursor',
+        ]);
+        measures.push([
+          cost.calls.collections,
+          cost.calls.occurrences,
+          cost.calls.review,
+          cost.calls.apply,
+          cost.calls.outcomes,
+        ]);
       } finally {
         journey.retire();
       }

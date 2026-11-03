@@ -16,21 +16,34 @@ import { canSelectOccurrence, selectionLimitReached, type OccurrenceSelection } 
 
 function sectionLabel(section: string): string {
   switch (section) {
-    case 'entries': return m.library_export_section_entries();
-    case 'labels': return m.library_export_section_labels();
-    case 'assignments': return m.library_export_section_assignments();
-    case 'sessions': return m.library_export_section_sessions();
-    case 'units': return m.library_export_section_units();
-    case 'history': return m.library_export_section_history();
-    case 'holdings': return m.library_export_section_holdings();
-    case 'collections': return m.library_export_section_collections();
-    case 'collectionPins': return m.library_export_section_pins();
-    case 'occurrences': return m.library_export_section_occurrences();
+    case 'entries':
+      return m.library_export_section_entries();
+    case 'labels':
+      return m.library_export_section_labels();
+    case 'assignments':
+      return m.library_export_section_assignments();
+    case 'sessions':
+      return m.library_export_section_sessions();
+    case 'units':
+      return m.library_export_section_units();
+    case 'history':
+      return m.library_export_section_history();
+    case 'holdings':
+      return m.library_export_section_holdings();
+    case 'collections':
+      return m.library_export_section_collections();
+    case 'collectionPins':
+      return m.library_export_section_pins();
+    case 'occurrences':
+      return m.library_export_section_occurrences();
     case 'bangumiUploads':
-    case 'bangumiEvidence': return m.library_export_section_bangumi();
+    case 'bangumiEvidence':
+      return m.library_export_section_bangumi();
     case 'malImports':
-    case 'malEvidence': return m.library_export_section_mal();
-    default: return m.library_export_section_other({ section });
+    case 'malEvidence':
+      return m.library_export_section_mal();
+    default:
+      return m.library_export_section_other({ section });
   }
 }
 
@@ -42,9 +55,7 @@ function Coverage({ page }: { page: RecoveryCollectionsPage }) {
       </h2>
       <p>{m.library_archive_recovery_coverage_scope()}</p>
       {page.manifest ? (
-        <p className="text-sm">
-          {m.library_archive_recovery_manifest_rows({ rows: page.manifest.rows })}
-        </p>
+        <p className="text-sm">{m.library_archive_recovery_manifest_rows({ rows: page.manifest.rows })}</p>
       ) : null}
       <ul className="grid gap-2">
         {page.coverage.map((item) => (
@@ -219,7 +230,9 @@ function OccurrenceRow({
             ? m.library_archive_recovery_native_order()
             : m.library_archive_recovery_order_unsupported()}
         </p>
-        {unavailable ? <p className="text-sm text-destructive-foreground">{m.library_archive_recovery_note_cannot_preserve()}</p> : null}
+        {unavailable ? (
+          <p className="text-sm text-destructive-foreground">{m.library_archive_recovery_note_cannot_preserve()}</p>
+        ) : null}
       </div>
     </li>
   );
@@ -303,7 +316,9 @@ export function ArchiveOccurrenceChooser({
           ))}
         </ol>
       ) : (
-        <p role="status" className="rounded-lg border p-4">{m.library_archive_recovery_empty_occurrences()}</p>
+        <p role="status" className="rounded-lg border p-4">
+          {m.library_archive_recovery_empty_occurrences()}
+        </p>
       )}
     </section>
   );
@@ -359,11 +374,18 @@ export function ArchiveRecoveryReview({
           </div>
           <div className="grid gap-1 sm:col-span-2">
             <dt className="font-medium">{m.library_archive_recovery_description_label()}</dt>
-            <dd className="whitespace-pre-wrap break-words">{collection.description || m.library_archive_recovery_no_description()}</dd>
+            <dd className="whitespace-pre-wrap break-words">
+              {collection.description || m.library_archive_recovery_no_description()}
+            </dd>
           </div>
           <div className="grid gap-1">
             <dt className="font-medium">{m.library_archive_recovery_selected_label()}</dt>
-            <dd>{m.library_archive_recovery_selection_count({ count: selected.size, maximum: RECOVERY_SELECTED_OCCURRENCES })}</dd>
+            <dd>
+              {m.library_archive_recovery_selection_count({
+                count: selected.size,
+                maximum: RECOVERY_SELECTED_OCCURRENCES,
+              })}
+            </dd>
           </div>
           <div className="grid gap-1">
             <dt className="font-medium">{m.library_archive_recovery_order_label()}</dt>
@@ -417,18 +439,32 @@ export function ArchiveRecoveryReview({
       {review ? (
         <div className="grid gap-3 rounded-xl border border-primary/40 p-4" role="status">
           <h3 className="font-semibold">{m.library_archive_recovery_native_review_title()}</h3>
-          <p>{review.completeMembership ? m.library_archive_recovery_membership_complete() : m.library_archive_recovery_membership_partial()}</p>
-          <p>{review.completeOrder ? m.library_archive_recovery_order_complete() : m.library_archive_recovery_order_partial()}</p>
+          <p>
+            {review.completeMembership
+              ? m.library_archive_recovery_membership_complete()
+              : m.library_archive_recovery_membership_partial()}
+          </p>
+          <p>
+            {review.completeOrder
+              ? m.library_archive_recovery_order_complete()
+              : m.library_archive_recovery_order_partial()}
+          </p>
           {review.mappings.map((mapping) => (
             <p key={mapping.sourceSubjectId} className="break-all text-sm">
               {mapping.state === 'mapped'
-                ? m.library_archive_recovery_mapping_current({ id: mapping.currentSubjectId ?? mapping.sourceSubjectId })
+                ? m.library_archive_recovery_mapping_current({
+                    id: mapping.currentSubjectId ?? mapping.sourceSubjectId,
+                  })
                 : mapping.state === 'canonical-changed'
                   ? m.library_archive_recovery_mapping_changed()
                   : m.library_archive_recovery_mapping_unresolved()}
             </p>
           ))}
-          <p>{review.pin.state === 'unsupported' ? m.library_archive_recovery_pin_unsupported() : m.library_archive_recovery_pin_state({ state: review.pin.state })}</p>
+          <p>
+            {review.pin.state === 'unsupported'
+              ? m.library_archive_recovery_pin_unsupported()
+              : m.library_archive_recovery_pin_state({ state: review.pin.state })}
+          </p>
           <label className="flex min-h-11 items-start gap-3 rounded-md bg-muted/40 p-3">
             <input
               type="checkbox"

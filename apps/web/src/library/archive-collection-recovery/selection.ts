@@ -12,10 +12,7 @@ export function canSelectOccurrence(occurrence: RecoveryOccurrence): boolean {
   return !occurrence.notePresent || occurrence.noteValid;
 }
 
-export function toggleOccurrence(
-  selected: OccurrenceSelection,
-  occurrence: RecoveryOccurrence,
-): OccurrenceSelection {
+export function toggleOccurrence(selected: OccurrenceSelection, occurrence: RecoveryOccurrence): OccurrenceSelection {
   const next = new Map(selected);
   if (next.has(occurrence.sourceOccurrenceId)) {
     next.delete(occurrence.sourceOccurrenceId);
@@ -26,10 +23,7 @@ export function toggleOccurrence(
   return next;
 }
 
-export function togglePage(
-  selected: OccurrenceSelection,
-  page: readonly RecoveryOccurrence[],
-): OccurrenceSelection {
+export function togglePage(selected: OccurrenceSelection, page: readonly RecoveryOccurrence[]): OccurrenceSelection {
   const available = page.filter(canSelectOccurrence);
   const allSelected = available.every((row) => selected.has(row.sourceOccurrenceId));
   const next = new Map(selected);
@@ -52,20 +46,16 @@ export function makeReviewBody(input: {
   const occurrences = [...input.selected.values()];
   const subjectIds = new Set(
     occurrences.flatMap((row) =>
-      row.sourceSubjectId && RECOVERY_ID.test(row.sourceSubjectId)
-        ? [row.sourceSubjectId]
-        : [],
+      row.sourceSubjectId && RECOVERY_ID.test(row.sourceSubjectId) ? [row.sourceSubjectId] : [],
     ),
   );
   return {
     collectionId: input.collectionId,
     selectedOccurrenceIds: occurrences.map((row) => row.sourceOccurrenceId),
-    mappings: [...subjectIds]
-      .sort()
-      .map((sourceSubjectId) => ({
-        sourceSubjectId,
-        targetSubjectId: input.targets.get(sourceSubjectId) ?? null,
-      })),
+    mappings: [...subjectIds].sort().map((sourceSubjectId) => ({
+      sourceSubjectId,
+      targetSubjectId: input.targets.get(sourceSubjectId) ?? null,
+    })),
   };
 }
 

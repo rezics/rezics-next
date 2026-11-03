@@ -350,17 +350,27 @@ export function createArchiveCollectionRecoveryJourney(input: {
   async function dispatch(command: RecoveryEffectCommand, retry = false) {
     switch (command.kind) {
       case 'upload':
-        await mutation(command, () => port.upload(command), async (value) => {
-          acceptStatus(value);
-          await loadCollectionPage();
-        }, retry);
+        await mutation(
+          command,
+          () => port.upload(command),
+          async (value) => {
+            acceptStatus(value);
+            await loadCollectionPage();
+          },
+          retry,
+        );
         break;
       case 'review':
-        await mutation(command, () => port.review(command), (value) => {
-          review = value;
-          acceptStatus(value);
-          stage = 'review';
-        }, retry);
+        await mutation(
+          command,
+          () => port.review(command),
+          (value) => {
+            review = value;
+            acceptStatus(value);
+            stage = 'review';
+          },
+          retry,
+        );
         break;
       case 'apply':
         await mutation(command, () => port.apply(command), acceptedMutationStatus, retry);

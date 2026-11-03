@@ -30,7 +30,11 @@ function requireKey(value: unknown): string {
 }
 
 function validateUpload(value: unknown): { key: string; body: RecoveryUploadBody } {
-  if (!object(value) || typeof value.archiveBase64 !== 'string' || value.archiveBase64.length > RECOVERY_UPLOAD_BASE64_CHARS)
+  if (
+    !object(value) ||
+    typeof value.archiveBase64 !== 'string' ||
+    value.archiveBase64.length > RECOVERY_UPLOAD_BASE64_CHARS
+  )
     throw new Error('Invalid Collection recovery request');
   return {
     key: requireKey(value.key),
@@ -140,21 +144,15 @@ export const readArchiveRecoveryCollections = createServerFn({ method: 'GET' })
 
 export const readArchiveRecoveryOccurrences = createServerFn({ method: 'GET' })
   .validator(validateOccurrences)
-  .handler(({ data }) =>
-    port().occurrences(data.uploadId, data.collectionId, pageQuery(data.cursor)),
-  );
+  .handler(({ data }) => port().occurrences(data.uploadId, data.collectionId, pageQuery(data.cursor)));
 
 export const reviewArchiveCollectionRecovery = createServerFn({ method: 'POST' })
   .validator((input: unknown) => validateReview(input))
-  .handler(({ data }) =>
-    port().review({ kind: 'review', uploadId: data.uploadId, key: data.key, body: data.body }),
-  );
+  .handler(({ data }) => port().review({ kind: 'review', uploadId: data.uploadId, key: data.key, body: data.body }));
 
 export const applyArchiveCollectionRecovery = createServerFn({ method: 'POST' })
   .validator(validateApply)
-  .handler(({ data }) =>
-    port().apply({ kind: 'apply', uploadId: data.uploadId, body: data.body }),
-  );
+  .handler(({ data }) => port().apply({ kind: 'apply', uploadId: data.uploadId, body: data.body }));
 
 export const readArchiveCollectionRecoveryOutcomes = createServerFn({ method: 'GET' })
   .validator(validatePage)
@@ -166,4 +164,3 @@ export const cancelArchiveCollectionRecovery = createServerFn({ method: 'POST' }
     return { uploadId: requireId(input.uploadId) };
   })
   .handler(({ data }) => port().cancel({ kind: 'cancel', uploadId: data.uploadId }));
-

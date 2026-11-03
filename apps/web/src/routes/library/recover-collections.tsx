@@ -24,7 +24,10 @@ export const Route = createFileRoute('/library/recover-collections')({
   staleTime: 0,
   gcTime: 0,
   head: ({ match }) =>
-    pageHead({ title: m.library_archive_recovery_title(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+    pageHead(
+      { title: m.library_archive_recovery_title(), robots: 'noindex, nofollow' },
+      pageHeadContext(match.pathname),
+    ),
   component: RecoveryRoute,
 });
 

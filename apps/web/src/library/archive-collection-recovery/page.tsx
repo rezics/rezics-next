@@ -78,9 +78,7 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
     <div className="grid gap-3">
       <PageHeading>{m.library_archive_recovery_title()}</PageHeading>
       <p>{m.library_archive_recovery_intro()}</p>
-      <p className="rounded-lg border-l-4 border-primary p-3 text-sm">
-        {m.library_archive_recovery_scope_notice()}
-      </p>
+      <p className="rounded-lg border-l-4 border-primary p-3 text-sm">{m.library_archive_recovery_scope_notice()}</p>
     </div>
   );
 
@@ -95,7 +93,8 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
               (snapshot.stage === 'collections' && step === 'collections') ||
               (snapshot.stage === 'occurrences' && step === 'occurrences') ||
               (snapshot.stage === 'review' && step === 'review') ||
-              (['results', 'conflict', 'expired', 'denied', 'unavailable'].includes(snapshot.stage) && step === 'results');
+              (['results', 'conflict', 'expired', 'denied', 'unavailable'].includes(snapshot.stage) &&
+                step === 'results');
             const label =
               step === 'upload'
                 ? m.library_archive_recovery_step_upload()
@@ -108,7 +107,9 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
                       : m.library_archive_recovery_step_results();
             return (
               <li key={step} aria-current={current ? 'step' : undefined}>
-                <span className={`inline-flex min-h-11 items-center rounded-full border px-3 ${current ? 'border-primary bg-primary/10 font-semibold' : ''}`}>
+                <span
+                  className={`inline-flex min-h-11 items-center rounded-full border px-3 ${current ? 'border-primary bg-primary/10 font-semibold' : ''}`}
+                >
                   {index + 1}. {label}
                 </span>
               </li>
@@ -167,8 +168,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
 
       {snapshot.stage === 'review' && snapshot.selectedCollection ? (
         <div className="grid gap-4">
-          <button type="button" className="min-h-11 justify-self-start rounded-md border px-4" disabled={snapshot.busy || locked}
-            onClick={() => journey.editSelection()}>
+          <button
+            type="button"
+            className="min-h-11 justify-self-start rounded-md border px-4"
+            disabled={snapshot.busy || locked}
+            onClick={() => journey.editSelection()}
+          >
             {m.library_archive_recovery_edit_selection()}
           </button>
           <ArchiveRecoveryReview
@@ -191,8 +196,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
       {snapshot.stage === 'results' && snapshot.status ? (
         <div className="grid gap-4">
           {snapshot.status.state === 'applying' ? (
-            <button type="button" className="min-h-11 justify-self-start rounded-md border px-4" disabled={snapshot.busy || locked}
-              onClick={() => touch(journey.continueApply())}>
+            <button
+              type="button"
+              className="min-h-11 justify-self-start rounded-md border px-4"
+              disabled={snapshot.busy || locked}
+              onClick={() => touch(journey.continueApply())}
+            >
               {m.library_archive_recovery_apply_next({ commands: RECOVERY_APPLY_COMMANDS })}
             </button>
           ) : null}
@@ -204,8 +213,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
             onFirst={() => touch(journey.loadOutcomes())}
             onNext={(cursor) => touch(journey.loadOutcomes(cursor))}
           />
-          <button type="button" className="min-h-11 justify-self-start rounded-md border px-4" disabled={snapshot.busy || locked}
-            onClick={() => touch(journey.readStatus())}>
+          <button
+            type="button"
+            className="min-h-11 justify-self-start rounded-md border px-4"
+            disabled={snapshot.busy || locked}
+            onClick={() => touch(journey.readStatus())}
+          >
             {m.library_archive_recovery_read_status()}
           </button>
         </div>
@@ -221,8 +234,12 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
                 : m.library_archive_recovery_unavailable()}
           </p>
           {snapshot.stage !== 'denied' ? (
-            <button type="button" className="min-h-11 justify-self-start rounded-md border px-4" disabled={snapshot.busy}
-              onClick={() => journey.restart()}>
+            <button
+              type="button"
+              className="min-h-11 justify-self-start rounded-md border px-4"
+              disabled={snapshot.busy}
+              onClick={() => journey.restart()}
+            >
               {m.library_archive_recovery_restart()}
             </button>
           ) : null}
@@ -232,10 +249,21 @@ function RecoverySession({ visit }: { visit: RecoveryVisit }) {
 
       {!terminalStage && snapshot.stage !== 'upload' ? returnLink : null}
       <ArchiveRecoveryDeparture
-        active={Boolean(snapshot.uploadId) && !terminalStage && !(snapshot.status?.state === 'complete' || snapshot.status?.state === 'partial' || snapshot.status?.state === 'cancelled')}
+        active={
+          Boolean(snapshot.uploadId) &&
+          !terminalStage &&
+          !(
+            snapshot.status?.state === 'complete' ||
+            snapshot.status?.state === 'partial' ||
+            snapshot.status?.state === 'cancelled'
+          )
+        }
         locked={locked}
         busy={snapshot.busy}
-        canCancel={Boolean(snapshot.uploadId) && !['complete', 'partial', 'cancelled', 'expired'].includes(snapshot.status?.state ?? '')}
+        canCancel={
+          Boolean(snapshot.uploadId) &&
+          !['complete', 'partial', 'cancelled', 'expired'].includes(snapshot.status?.state ?? '')
+        }
         onLeave={() => journey.retire()}
         onCancel={() => touch(journey.cancel())}
       />

@@ -91,9 +91,7 @@ export function kernelArchiveCollectionRecoveryPort(
       return result.data === null ? { kind: 'unavailable' } : { kind: 'ok', value: result.data };
     } catch (error) {
       if (isPlatformClosedError(error)) return { kind: 'unavailable' };
-      return input.mutation
-        ? { kind: 'unknown', command: structuredClone(input.mutation) }
-        : { kind: 'unavailable' };
+      return input.mutation ? { kind: 'unknown', command: structuredClone(input.mutation) } : { kind: 'unavailable' };
     }
   }
 
@@ -107,12 +105,10 @@ export function kernelArchiveCollectionRecoveryPort(
 
   return {
     upload(command) {
-      if (command.body.archiveBase64.length > RECOVERY_UPLOAD_BASE64_CHARS)
-        return Promise.resolve({ kind: 'invalid' });
+      if (command.body.archiveBase64.length > RECOVERY_UPLOAD_BASE64_CHARS) return Promise.resolve({ kind: 'invalid' });
       return call({
         mutation: command,
-        send: (api, authorization) =>
-          api.post(command.body, { headers: writeHeaders(authorization, command.key) }),
+        send: (api, authorization) => api.post(command.body, { headers: writeHeaders(authorization, command.key) }),
       });
     },
     status(uploadId) {
@@ -126,8 +122,7 @@ export function kernelArchiveCollectionRecoveryPort(
       if (query.limit !== RECOVERY_PAGE_ROWS || (query.cursor && query.cursor.length > 4_096))
         return Promise.resolve({ kind: 'invalid' });
       return call({
-        send: (api, authorization) =>
-          api({ id }).collections.get({ query, headers: readHeaders(authorization) }),
+        send: (api, authorization) => api({ id }).collections.get({ query, headers: readHeaders(authorization) }),
       });
     },
     occurrences(uploadId, collectionId, query) {
@@ -137,7 +132,9 @@ export function kernelArchiveCollectionRecoveryPort(
         return Promise.resolve({ kind: 'invalid' });
       return call({
         send: (api, authorization) =>
-          api({ id }).collections({ collectionId }).occurrences.get({ query, headers: readHeaders(authorization) }),
+          api({ id })
+            .collections({ collectionId })
+            .occurrences.get({ query, headers: readHeaders(authorization) }),
       });
     },
     review(command) {

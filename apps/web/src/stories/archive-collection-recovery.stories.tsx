@@ -1,9 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
-import {
-  ArchiveCollectionChooser,
-  ArchiveRecoveryReview,
-} from '../library/archive-collection-recovery/review';
+import { ArchiveCollectionChooser, ArchiveRecoveryReview } from '../library/archive-collection-recovery/review';
 import { ArchiveRecoveryConflict, ArchiveRecoveryResults } from '../library/archive-collection-recovery/results';
 import { ArchiveCollectionRecoveryUpload } from '../library/archive-collection-recovery/upload';
 import type {
@@ -73,7 +70,13 @@ const status: RecoveryStatus = {
   expiresAt: '2099-01-01T00:00:00.000Z',
   manifest: null,
   coverage: [
-    { section: 'collections', capture: 'present', treatment: 'requires-explicit-mapping', rows: 1, reason: 'supported' },
+    {
+      section: 'collections',
+      capture: 'present',
+      treatment: 'requires-explicit-mapping',
+      rows: 1,
+      reason: 'supported',
+    },
     { section: 'entries', capture: 'empty', treatment: 'retained-unsupported', rows: 0, reason: 'not captured' },
   ],
   sourceRecordCount: 4,
@@ -95,9 +98,23 @@ const nativeReview: RecoveryReview = {
     completeOrder: false,
     completeMembership: true,
     selectedOccurrences: 2,
-    mappings: [{ sourceSubjectId: occurrenceRows[0]!.sourceSubjectId!, targetSubjectId: subject.id, currentSubjectId: subject.id, state: 'mapped' }],
+    mappings: [
+      {
+        sourceSubjectId: occurrenceRows[0]!.sourceSubjectId!,
+        targetSubjectId: subject.id,
+        currentSubjectId: subject.id,
+        state: 'mapped',
+      },
+    ],
   },
-  mappings: [{ sourceSubjectId: occurrenceRows[0]!.sourceSubjectId!, targetSubjectId: subject.id, currentSubjectId: subject.id, state: 'mapped' }],
+  mappings: [
+    {
+      sourceSubjectId: occurrenceRows[0]!.sourceSubjectId!,
+      targetSubjectId: subject.id,
+      currentSubjectId: subject.id,
+      state: 'mapped',
+    },
+  ],
   completeOrder: false,
   completeMembership: true,
   pin: { state: 'unsupported', reason: null, reviewedRevision: null },
@@ -199,7 +216,12 @@ export const UnsupportedCollectionsRemainVisible: Story = {
   render: () => (
     <div className="mx-auto max-w-4xl p-4">
       <ArchiveCollectionChooser
-        page={{ ...page, collections: [{ ...collection, id: '00000000-0000-4000-8000-000000000029', eligible: false, unsupported: 'dynamic' }] }}
+        page={{
+          ...page,
+          collections: [
+            { ...collection, id: '00000000-0000-4000-8000-000000000029', eligible: false, unsupported: 'dynamic' },
+          ],
+        }}
         busy={false}
         onChoose={() => undefined}
         onFirst={() => undefined}

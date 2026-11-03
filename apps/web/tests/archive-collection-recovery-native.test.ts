@@ -6,9 +6,8 @@ mock.module('../src/session/request', () => ({
   prepareSession: async () => true,
   viewerCredential: () => 'Bearer current-viewer',
 }));
-const { kernelArchiveCollectionRecoveryPort, nativeArchiveCollectionRecovery } = await import(
-  '../src/library/archive-collection-recovery/native'
-);
+const { kernelArchiveCollectionRecoveryPort, nativeArchiveCollectionRecovery } =
+  await import('../src/library/archive-collection-recovery/native');
 
 const uploadId = '00000000-0000-4000-8000-000000000011';
 const status: RecoveryStatus = {
