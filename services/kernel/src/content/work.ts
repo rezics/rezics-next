@@ -1,3 +1,4 @@
+import { registerReviewDiscoveryWork } from './review-discovery-work.ts';
 import { createDiscoveryMutationEffect, recoverDiscoveryMutations } from './discovery-mutation.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
@@ -130,6 +131,7 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
+  registerReviewDiscoveryWork(context);
   if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   for (const queue of Object.values(CONTENT_QUEUES)) {

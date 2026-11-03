@@ -488,8 +488,8 @@ Every source operation reads `core.partition.position` and its native rows in on
 `readSubjectThread` supplies the final current board, Realm/Space, placement, source-fence, review lifecycle,
 author-standing and opening-post checks. The separate Semantic reference read enforces current subject visibility and
 anonymous `subject:read`. Protected or stale candidates are omitted, so a hit that is no longer eligible becomes a
-native deletion when Search refreshes that thread ID. Content create, revision, restore, erasure and moderation events
-remain the incremental change inputs; external gate owners must refresh affected IDs on their own native changes.
+native deletion when Search refreshes that thread ID. The native lifecycle producer below supplies incremental
+identity invalidations; eligibility always comes from these current reads.
 
 `read` and `hydrate` accept at most 100 IDs from one partition. `page` accepts limits 1–25, examines at most four
 candidates per requested result (100 maximum), and advances its full `(route, thread ID)` key past every examined
@@ -500,6 +500,98 @@ protected population. Realm discussion-popularity counts continue to exclude rev
 
 Search owns the closed kind union, generation writer and query integration; its consumer maps unavailable review
 counts to its existing unavailable count evidence and hydrates author presentation through Accounts.
+
+### Review discovery lifecycle and Search handoff
+
+Decision: retain identity-only invalidations, including concealed and disappeared reviews, and require current
+native refresh before Search applies each receiving partition's ordered progress.
+
+The actual shared callsites are `createContentWork` → `registerReviewDiscoveryWork` and the default
+`registerContent` → `createContentWork`. They register `content_review_discovery_source` for the closed
+`REVIEW_DISCOVERY_SOURCE_TYPES` original-event list, `content_review_discovery_dispatch` for
+`com.rezics.content.review-discovery.opened.v1`, and the `content.review-discovery.invalidate` DBOS workflow.
+No Search source interface, registration, generation writer or query consumer is changed. No route is added.
+The existing post-revision HTTP handler spreads `RevisionInputSchema` into `revisePost`; that handler and native
+`revisePost` callers are the shared title-revision callsites. An optional `title` revises only a review's opening
+post, under its existing author, revision precondition and authorization, in the same transaction as the body revision.
+It emits the existing original revision event, so a title-only edit still supplies a fresh current body revision.
+
+Thread creation, opening title/body revisions, opening publication, soft deletion, restoration, takedown and
+erasure invalidate their retained review identities. Replies have no opening-post dependency and therefore produce
+empty source progress. Native subject lifecycle/identity events, account standing events, Realm/Space lifecycle,
+Realm bans, resource grants and source-fence takedowns feed the same pipeline. A gate event never supplies a public
+review document. Native reviews that began protected are present in the identity dependency directory and can become
+public on a later gate refresh. Withdrawn and physically missing reviews retain their directory entries so removal
+is delivered. Board, pinned subject, author, opening post and immutable Realm/Space ancestry supply dependency keys;
+old keys remain useful for removing stale hits after native identity changes. The migration backfills these keys,
+without a second public census or eligibility projection. Source tuples use the existing native
+`semantic.source_candidate` relation and an exact `(route,source,external_id,field_group,subject_id)` index.
+
+An original must match the retained `core.outbox` envelope, including data, subject and event index. An unavailable
+or minimized original throws; it does not acknowledge missing work. Source work stores original partition, epoch,
+position, event index, ID and type, plus identity scopes and a versioned continuation. It stores no old review text,
+permission snapshot or author presentation. Every page reads at most 101 dependency identities, delivers at most 100,
+then CASes its source continuation. Receiving commands are grouped by native review partition. Source, receiving
+and continuation transactions release their checkouts between operations, including with a one-connection Pool.
+A crash after any receiver commits repeats those identities before the source cursor moves. Unique original/review
+keys make that replay idempotent. Different original positions are all retained; reordered native events therefore
+request current hydration instead of restoring an older payload. Source-fence work additionally persists the subject
+cursor and never walks all records belonging to a provider. Public exposure changes conservatively invalidate the
+entire identity directory because a group may gate any ancestor; this is bounded identity work, with no review body scan.
+
+Search's exact consumer event is `com.rezics.content.review-discovery.changed.v1`, registered in `CONTENT_EVENTS`:
+`{partition, through, ids, origin:{partition,epoch,position,eventIndex,id,type}}`. `through` is the receiving journal
+position; `origin.position` is the lossless original native log position, never the receiving event's position.
+The event is a wakeup; replay/catch-up uses `readReviewDiscoveryChanges(pool, partition, after, limit, through?)`
+from `review-discovery-changes.ts`. Start `after` at `0n`; limits are 1–100. Continue with `next` and the returned
+fixed `through`. Empty and final pages advance `after` through that cut. Changes include every identity regardless
+of present eligibility. Positions from different original partitions are never compared. The append-only journal
+has no pruning or expiration that could silently lose an unacknowledged removal.
+
+`refreshReviewDiscoveryChanges(source, page)` calls the predecessor's existing `ReviewDiscoverySource.read` once
+for the deduplicated IDs. It returns current `reviews`, explicit `removed` IDs, the independent `nativePosition`,
+and receiving `after/through/next`. Missing rows and concealed rows both produce removals; dependency, disclosure
+or hydration errors throw without advancing consumer progress. Search must serialize or CAS application per receiving
+partition and commit the refresh and consumer frontier together. It must not apply a cached refresh after a newer one.
+Final result hydration continues to call the existing `hydrate`, even while the index is catching up. Accounts still
+owns current author presentation; Web owns reading surfaces.
+
+`readReviewDiscoveryProgress(pool, {route,id})` exposes source work's version, completion and explicit continuation,
+including empty source-fence subject ranges. Completion proves that original's current dependency keyset was
+invalidated. Concurrent reviews or new source references behind a cursor have their own native creation/revision
+events. Receiving journal completion does not prove that original-event dispatch is drained, nor that Search has
+applied its generation. Current hydration is immediate native disclosure; index convergence still requires Search's
+consumer and upstream effects progress. No collaborator query, indexing adapter, global convergence certificate or
+native/main promotion proof is fabricated. New external gate event types must be connected explicitly by their owner;
+raw SQL fixture changes and gate changes without a committed original event cannot wake a worker.
+
+#### Cost: original admission and dispatch
+
+- Touches: one exact retained outbox event, one source work key, one native command; dispatch adds one exact task read
+  and one durable enqueue with a stable workflow ID.
+- Bound: constant rows per original; at most eight identity scopes, no review scan or hydration.
+- Growth check: focused lifecycle tests replay the original and enqueue, retaining one source task and stable workflow
+  identity. No elapsed-time, native/main or broad growth result is inferred from this bound.
+
+#### Cost: cross-partition invalidation page
+
+- Touches: one source work key, one dependency index range (101 rows), at most 100 receiving identity writes and a
+  receiving frontier per affected partition, then one version CAS. Every committed mutation emits a registered event.
+- Bound: at most 100 receiving commands, 100 journal writes and one source command per page; receiver replay probes
+  at most 100 exact keys twice. Source tuples add at most one indexed subject probe per page. Resource-key duplicate
+  dependencies are bounded by the finite native ancestor keys. Work grows with affected identities, not all reviews
+  or provider history; global exposure changes affect the complete directory.
+- Growth check: the focused lifecycle test adds more than 100 disappeared identities across native partitions and
+  unrelated dependencies, checks bounded examined counts, continuation, replay and explicit removal. This is a focused
+  outcome/batch-bound check; physical block growth remains a dev-verifier measurement.
+
+#### Cost: changed-source catch-up and refresh
+
+- Touches: one active partition, one receiving frontier, at most 101 journal keys and at most 100 current review IDs.
+- Bound: one sparse index range and one existing native `read` batch; current owner reads retain
+  `REVIEW_DISCOVERY_BOUNDS`. No count, reply/history traversal, index query or extra public page reader is introduced.
+- Growth check: focused lifecycle tests pin a journal cut while newer invalidations arrive, advance sparse progress,
+  and distinguish current upserts from stale removals. Native hydration and index application remain separate costs.
 
 ## Review-backed question witnesses
 

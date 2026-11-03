@@ -959,6 +959,10 @@ export async function revisePost(
         throw new InvalidDocumentError('Board mismatch');
       const mediaIds = mediaReferences(body.mediaIds === undefined ? previous.media_ids : body.mediaIds, r);
       const isFirstPost = value.itemId === container.current.thread.first_post_id;
+      if (body.title !== undefined &&
+          (container.current.thread.kind !== 'review' || !isFirstPost || typeof body.title !== 'string' ||
+           body.title.trim().length === 0 || [...body.title].length > 1024))
+        throw new InvalidDocumentError('Only a review opening revision may change its title');
       const citation = reviewCitation(body.voteCitation);
       if (citation && (container.current.thread.kind !== 'review' || !isFirstPost)) throw new InvalidDocumentError();
       const revisedSubjectIdsInput = body.subjectIds === undefined ? previous.subject_ids : body.subjectIds;
@@ -1013,6 +1017,17 @@ export async function revisePost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
+      if (body.title !== undefined) {
+        const title = await tx.query(
+          `UPDATE content.thread SET title=$6,security_revision=security_revision+1
+           WHERE route=$1 AND thread_id=$2 AND first_post_id=$3 AND author_account_id=$4
+             AND security_revision=$5::bigint AND availability='available' AND kind='review'
+           RETURNING thread_id`,
+          [r, value.threadId, value.itemId, author.accountId,
+            (BigInt(threadSecurityRevision) + (firstPublication ? 1n : 0n)).toString(), body.title],
+        );
+        if (title.rowCount !== 1) throw new ContentNotFoundError();
+      }
       const indexSubjectIds = isFirstPost
         ? revisedSubjectIds
         : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
