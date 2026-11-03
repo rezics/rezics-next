@@ -91,6 +91,14 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   sourceStatisticClear?: ImportSourceStatisticClear;
 } & Extra;
 
+export type StagingMemberIdentity = Readonly<{
+  index: number;
+  family: 'author' | 'work' | 'edition' | null;
+  compression: 'none' | 'gzip' | 'zstd';
+  sha256: string;
+  bytes: number;
+}>;
+
 export type StagingCaptureIdentity = Readonly<{
   sha256: string;
   bytes: number;
@@ -100,6 +108,10 @@ export type StagingCaptureIdentity = Readonly<{
   decoderId: string;
   checkpointVersion: number;
   disappearanceThreshold: number;
+  decodeBudget?: number;
+  inputKind?: 'file' | 'dump-set';
+  manifestVersion?: 1 | 2;
+  members?: readonly StagingMemberIdentity[];
 }>;
 
 export type StagingCheckpointRequest = Readonly<{
@@ -161,6 +173,7 @@ export type ImportProgressPhase =
   | 'validating'
   | 'publishing'
   | 'materializing'
+  | 'verifying'
   | 'staging'
   | 'resuming'
   | 'reconciling'

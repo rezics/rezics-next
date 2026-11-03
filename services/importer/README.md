@@ -408,7 +408,7 @@ reported as a total import failure by itself. `sourceComplete` means the input w
 not mean the current catalogue was read. `selectedCatalogue` is always `not-read`: local commit does not prove
 candidate acceptance, public selection or readback.
 
-Phases are `acquiring`, `materializing`, `staging`, `resuming`, `reconciling`, `deferred-media` and `finalizing`;
+Phases are `acquiring`, `materializing`, `verifying`, `staging`, `resuming`, `reconciling`, `deferred-media` and `finalizing`;
 terminal phases identify committed, invalid, mass-disappearance, busy, interrupted, denied, failed or
 observation-conflict outcomes.
 Progress contains no account credentials, request bodies, raw record keys, provider text, URLs or private error
@@ -435,22 +435,30 @@ bun services/importer/src/cli.ts --source bangumi --dump /srv/imports/bangumi.js
 bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json --state .state/imports.sqlite \
   --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
   --checkpoint-staging
+bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json.gz --state .state/imports.sqlite \
+  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
+  --compression gzip --checkpoint-staging
+bun services/importer/src/cli.ts --source openlibrary --dump-set /srv/imports/open-library/manifest.json --state .state/imports.sqlite \
+  --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
+  --checkpoint-staging
 bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.json --state .state/imports.sqlite \
   --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> \
   --resume-staging --generation 1
 ```
 
-`--checkpoint-staging` and `--resume-staging` admit one uncompressed regular-file Bangumi, Open Library or Wikidata dump.
-VNDB archives, gzip, stdin and multi-file manifests are refused; those producers are not guessed from a byte offset.
-Help names full-file hashing, committed-prefix verification, remaining conversion and later native application as
-separate steps. Local conversion is not publication; Bangumi ratings stay omitted.
-Before a checkpointed generation starts, the CLI hashes every byte of the opened file. Path, inode, size, mtime and
-prefix hashes are not that identity. A failed hash creates no capture and does not contact Auth or the API. Resume
-re-hashes the same file, then re-decodes from the first record to verify the committed prefix, and converts only the
-remaining records. Changed bytes, a same-size rewrite, a different converter or alias, an old uncheckpointed staging
-row, a missing database and live ownership never resume. After a valid seal the checkpoint is deleted so it cannot
-compete with sealed recovery. An interruption after sealing uses `rezics-import resume` without the dump, or the
-ordinary import command with the original requests; `--resume-staging` does not replace that path.
+`--checkpoint-staging` and `--resume-staging` admit one uncompressed Bangumi regular file, one Open Library or Wikidata
+regular file (plain, gzip, or Wikidata zstd), or one Open Library dump-set manifest. VNDB archives and stdin stay
+non-resumable. Version 1 checkpoints remain one uncompressed file. Version 2 binds the ordered member family,
+compression, byte length and SHA-256 of every original file, the admitted manifest version, codec, whole-set
+`--decode-budget` (default 256 GiB) and the existing source/converter configuration. Paths, inode, size and mtime are
+not that identity. A failed hash creates no capture and does not contact Auth or the API. Resume re-hashes every
+original file, replays the production decoder from the start of each member, verifies the committed prefix without
+reconverting it, and converts only the remaining records. An incomplete final member is an input failure. Local
+conversion is not publication; Bangumi ratings stay omitted. Changed bytes, a same-size rewrite of an unread suffix,
+member replacement or reordering, a different budget/codec/converter, an old uncheckpointed staging row, a missing
+database and live ownership never resume and never rotate the stored checkpoint. After a valid seal the checkpoint is
+deleted so it cannot compete with sealed recovery. An interruption after sealing uses `rezics-import resume` without
+the dump, or the ordinary import command with the original requests; `--resume-staging` does not replace that path.
 
 ## Resume a sealed generation without its dump
 
@@ -765,9 +773,10 @@ lengths is a capture digest, not a source revision or licence.
 Decision: dump-set admission keeps version-1 family/path manifests as uncompressed complete sets and
 adds version 2 with explicit per-member none/gzip. Authors remain non-catalogue framing members.
 `--decode-budget` on `--dump-set` is the aggregate decoded-byte ceiling. `--compression` remains
-single-stream and is rejected with `--dump-set`. `--checkpoint-staging` and `--resume-staging` also
-refuse `--dump-set`; a complete dump set remains ordinary acquisition. Preview and import share one
-acquisition iterator; a completed preview plan reopens without member files.
+single-stream and is rejected with `--dump-set`. `--checkpoint-staging` and `--resume-staging` admit
+the same dump-set and compressed Wikidata producers; zstd is never an Open Library set-member codec.
+Preview, import and checkpoint identity share that whole-set budget. A completed preview plan reopens
+without member files.
 
 Ordinary rerun of the same `--dump-set` command first resolves prior sealed work under existing
 ready/finalizing recovery. Changing or deleting the manifest does not rewrite unknown native bodies.

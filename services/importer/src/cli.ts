@@ -66,6 +66,7 @@ import {
 } from './source-destination.ts';
 import {
   admitDumpCompression,
+  decodeBudgetLimit,
   decodeDumpBytes,
   parseDumpCompression,
   type DumpCompression,
@@ -83,12 +84,14 @@ import {
   type RawVndbEntry,
 } from './dump-input.ts';
 import { admitOpenLibraryDumpSet, OpenLibraryDumpSetError } from './open-library-dump-set.ts';
-import { readOpenLibraryDumpSet } from './open-library-dump-set-records.ts';
+import { fingerprintOpenLibraryDumpSet, readOpenLibraryDumpSet } from './open-library-dump-set-records.ts';
 import type { OpenLibraryDumpSetAdmission } from './open-library-dump-set.ts';
 import {
   STAGING_COST,
   STAGING_MISSING_STATE,
   STAGING_UNSUPPORTED_INPUT,
+  captureDumpSetIdentity,
+  captureFileIdentity,
   captureIdentity,
   isStagingCheckpointSource,
 } from './staging-checkpoint.ts';
@@ -181,6 +184,7 @@ function usage(): string {
     '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>] [--decode-budget <bytes>]',
+    '       [--checkpoint-staging] [--resume-staging --generation <id>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
     '       rezics-import disappearance-review --state <sqlite-path> --source <configured-source-id> --generation <id>',
@@ -202,7 +206,7 @@ function usage(): string {
     'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps, as one regular local file (not stdin). Default --compression none. A suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump, one zstd dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set. zstd uses /usr/bin/zstd or PATH zstd, or --zstd-executable, with a 128 MiB decoder window.',
     'Each exact source alias records its API origin on first use. A mistyped --api fails before credentials. Legacy unbound history needs rezics-import destination. Same-origin server replacement cannot be detected without a separately released deployment identity.',
-    '--checkpoint-staging and --resume-staging apply only to one uncompressed Bangumi, Open Library or Wikidata regular file. They re-hash the complete file before any capture or resume mutation, then verify previously committed records before converting the remainder. Default import still discards unsealed staging. After sealing, resume with the ordinary dump-free command; do not replace input. Local conversion is not publication, and Bangumi ratings stay omitted. Dump-set manifests are not a checkpointed capture.',
+    '--checkpoint-staging and --resume-staging admit one uncompressed Bangumi regular file, one Open Library or Wikidata regular file (plain, gzip, or Wikidata zstd), or one Open Library dump-set. They re-hash every original file before any capture or resume mutation, then replay the production decoder from the start of each member. Default import still discards unsealed staging. After sealing, resume with the ordinary dump-free command; do not replace input. Local conversion is not publication, and Bangumi ratings stay omitted. VNDB archives and stdin stay non-resumable.',
     STAGING_COST,
     '--checkpoint-acquisition and --resume-acquisition apply only to one regular local VNDB archive with plain tar or owned zstd decoding. They re-hash the complete original file before table mutation. Stdin cannot resume. Table acquisition IDs are distinct from source generation IDs. After tables are ready, resume publication with --resume-acquisition; after sealing, use the ordinary command.',
     VNDB_ACQUISITION_COST,
@@ -370,12 +374,13 @@ function parse(argv: readonly string[]): Config | 'help' {
     result.disappearanceThreshold = parsed;
   }
   if (result.mode === 'checkpoint-staging' || result.mode === 'resume-staging') {
-    if (
-      result.dumpSet !== undefined ||
-      result.dump === '-' ||
-      result.compression !== 'none' ||
-      !isStagingCheckpointSource(result.source)
-    )
+    if (result.dump === '-' || !isStagingCheckpointSource(result.source))
+      throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
+    if (result.dumpSet !== undefined && (result.source !== 'openlibrary' || result.compression !== 'none'))
+      throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
+    if (result.compression === 'zstd' && result.source !== 'wikidata')
+      throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
+    if (result.compression !== 'none' && result.source === 'bangumi')
       throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
   }
   if (result.mode === 'checkpoint-acquisition' || result.mode === 'resume-acquisition') {
@@ -624,12 +629,28 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         );
       } catch (error) {
         if (
+          config.mode === 'ordinary' &&
           error instanceof OpenLibraryDumpSetError &&
           error.reason === 'unavailable' &&
           sealedDumpSetResumePossible(config.state, config.sourceAlias ?? config.source)
         )
           resumeSealedDumpSet = true;
         else throw error;
+      }
+      if (dumpSet && config.mode !== 'ordinary') {
+        const members = await fingerprintOpenLibraryDumpSet(dumpSet, {
+          signal,
+          handleCount: handles,
+          ...(options.observer === undefined ? {} : { observer: options.observer }),
+        });
+        capture = captureDumpSetIdentity({
+          members,
+          sourceAlias: config.sourceAlias ?? config.source,
+          converterRevision: registration.converter_revision,
+          disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
+          decodeBudget: decodeBudgetLimit(config.decodeBudget),
+          manifestVersion: dumpSet.version,
+        });
       }
     } else {
       dumpHandle = await openDump(config.dump!, handles);
@@ -657,30 +678,42 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             decodeBudget: config.compression === 'zstd' ? (config.decodeBudget ?? DEFAULT_DECODED_ZSTD_BYTES) : 0,
           });
         } else {
-          capture = captureIdentity({
-            sha256: fingerprint.sha256,
-            bytes: fingerprint.bytes,
-            sourceAlias: config.sourceAlias ?? config.source,
-            sourceKind: config.source,
-            converterRevision: registration.converter_revision,
-            disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
-          });
-        }
-        if (config.mode === 'resume-staging' || config.mode === 'resume-acquisition') {
-          let stateStat: Awaited<ReturnType<typeof lstat>>;
-          try {
-            stateStat = await lstat(config.state);
-          } catch {
-            throw new DumpInputError(
-              config.mode === 'resume-acquisition' ? VNDB_ACQUISITION_MISSING_STATE : STAGING_MISSING_STATE,
-            );
-          }
-          if (!stateStat.isFile())
-            throw new DumpInputError(
-              config.mode === 'resume-acquisition' ? VNDB_ACQUISITION_MISSING_STATE : STAGING_MISSING_STATE,
-            );
+          capture =
+            config.compression === 'none'
+              ? captureIdentity({
+                  sha256: fingerprint.sha256,
+                  bytes: fingerprint.bytes,
+                  sourceAlias: config.sourceAlias ?? config.source,
+                  sourceKind: config.source,
+                  converterRevision: registration.converter_revision,
+                  disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
+                })
+              : captureFileIdentity({
+                  sha256: fingerprint.sha256,
+                  bytes: fingerprint.bytes,
+                  sourceAlias: config.sourceAlias ?? config.source,
+                  sourceKind: config.source,
+                  converterRevision: registration.converter_revision,
+                  disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
+                  compression: config.compression,
+                  decodeBudget: decodeBudgetLimit(config.decodeBudget),
+                });
         }
       }
+    }
+    if (config.mode === 'resume-staging' || config.mode === 'resume-acquisition') {
+      let stateStat: Awaited<ReturnType<typeof lstat>>;
+      try {
+        stateStat = await lstat(config.state);
+      } catch {
+        throw new DumpInputError(
+          config.mode === 'resume-acquisition' ? VNDB_ACQUISITION_MISSING_STATE : STAGING_MISSING_STATE,
+        );
+      }
+      if (!stateStat.isFile())
+        throw new DumpInputError(
+          config.mode === 'resume-acquisition' ? VNDB_ACQUISITION_MISSING_STATE : STAGING_MISSING_STATE,
+        );
     }
     const destinationSource = config.sourceAlias ?? config.source;
     const destinationPreflight = await preflightSourceDestination({
@@ -1094,14 +1127,19 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
           converterModule: converterModule(config.source),
           decoderModule,
         });
-        const records = dumpSet
+        const stream = dumpSet
           ? readOpenLibraryDumpSet(dumpSet, {
               signal,
               handleCount: handles,
               ...(options.observer === undefined ? {} : { observer: options.observer }),
               ...(progress === undefined ? {} : { progress }),
               ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
-            }).records
+            })
+          : undefined;
+        const records = stream
+          ? capture
+            ? stream.frames
+            : stream.records
           : (async function* () {})();
         const run = await importer.runDumpSet(registration, records, {
           ...(config.disappearanceThreshold === undefined
@@ -1109,6 +1147,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             : { disappearanceThreshold: config.disappearanceThreshold }),
           signal,
           ...(progressHooks ? { progress: progressHooks } : {}),
+          ...(checkpointRequest(config, capture) ? { checkpoint: checkpointRequest(config, capture)! } : {}),
         });
         output = resultFor(run, lastHttpStatus, signal);
       } finally {
@@ -1325,7 +1364,7 @@ function resultFor(
       stdout: '',
       stderr: diagnostic(
         run.checkpointed && run.runId
-          ? `Import interrupted; last valid staging checkpoint remains recoverable. Resume with --resume-staging --generation ${run.runId} and the original file.`
+          ? `Import interrupted; last valid staging checkpoint remains recoverable. Resume with --resume-staging --generation ${run.runId} and the original input.`
           : 'Import interrupted; durable state is retained for resume.',
         counts,
         run.skipped,

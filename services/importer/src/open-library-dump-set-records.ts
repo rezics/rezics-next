@@ -10,6 +10,7 @@ import {
 import {
   DumpInputError,
   fileChunks,
+  fingerprintDump,
   openLibraryMetadata,
   openRegularFile,
   ownedChunks,
@@ -20,6 +21,7 @@ import {
 import { createDumpCounters, type DumpCounters } from './dumps-bytes.ts';
 import { readDump } from './dumps.ts';
 import { OpenLibraryDumpSetError, type OpenLibraryDumpSetAdmission } from './open-library-dump-set.ts';
+import type { StagingMemberIdentity, StagingStreamEvent } from './staging-checkpoint.ts';
 
 export type OpenLibraryDumpSetStreamOptions = Readonly<{
   signal: AbortSignal;
@@ -35,6 +37,7 @@ export type OpenLibraryDumpSetStreamOptions = Readonly<{
 
 export type OpenLibraryDumpSetStream = Readonly<{
   records: AsyncIterable<SourceRecord>;
+  frames: AsyncIterable<StagingStreamEvent>;
   consumedBytes(): number;
   decodedBytes(): number;
   compressedBytes(): number;
@@ -92,6 +95,84 @@ async function closeHandle(handle: FileHandle | undefined, handleCount: { value:
   }
 }
 
+async function* iterateDumpSet(
+  admission: OpenLibraryDumpSetAdmission,
+  options: OpenLibraryDumpSetStreamOptions,
+  counters: ReturnType<typeof createDumpCounters>,
+  gzipCounters: GzipDumpCounters,
+  budget: number,
+  hash: ReturnType<typeof createHash>,
+  onConsumed: (bytes: number) => void,
+  onDigest: (digest: string) => void,
+): AsyncGenerator<StagingStreamEvent> {
+  throwIfAborted(options.signal);
+  let consumed = 0;
+  try {
+    for (const member of admission.members) {
+      throwIfAborted(options.signal);
+      let handle: FileHandle | undefined;
+      let memberBytes = 0;
+      try {
+        try {
+          handle = await openRegularFile(member.path, options.handleCount);
+        } catch (error) {
+          if (error instanceof OpenLibraryDumpSetError) throw error;
+          failMember(member.index, 'unavailable');
+        }
+        const hashed = (async function* (): AsyncGenerator<Uint8Array> {
+          for await (const chunk of ownedChunks(
+            fileChunks(handle!, options.signal),
+            options.signal,
+            'dump',
+            options.observer,
+            true,
+            options.progress,
+          )) {
+            hash.update(chunk);
+            memberBytes += chunk.byteLength;
+            consumed += chunk.byteLength;
+            onConsumed(consumed);
+            yield chunk;
+          }
+        })();
+        const decoded =
+          member.compression === 'gzip'
+            ? decodeDumpBytes(hashed, {
+                compression: 'gzip',
+                signal: options.signal,
+                decodeBudget: budget,
+                counters: gzipCounters,
+                ...(options.progress === undefined ? {} : { progress: options.progress }),
+              })
+            : countPlainDecoded(hashed, gzipCounters, budget, options.progress);
+        const native = openLibraryMetadata(decoded, options.signal);
+        try {
+          for await (const record of readDump('openlibrary', native, {
+            ...(options.maxRecordBytes === undefined ? {} : { maxRecordBytes: options.maxRecordBytes }),
+            ...(options.maxChunkBytes === undefined ? {} : { maxChunkBytes: options.maxChunkBytes }),
+            counters,
+            openLibraryFamily: member.family,
+          })) {
+            throwIfAborted(options.signal);
+            yield { kind: 'record', memberIndex: member.index, record };
+          }
+        } catch (error) {
+          failMemberFrom(member.index, error, options.signal);
+        }
+        hash.update(lengthPrefix(memberBytes));
+        yield { kind: 'member-end', memberIndex: member.index };
+      } finally {
+        await closeHandle(handle, options.handleCount);
+      }
+    }
+    onDigest(hash.digest('hex'));
+  } catch (error) {
+    if (error instanceof OpenLibraryDumpSetError) throw error;
+    if (options.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
+    throw error instanceof DumpInputError ? error : new OpenLibraryDumpSetError('unavailable');
+  }
+}
+
 /**
  * Compose one production decoder/metadata adapter per admitted member into a
  * single record iterator. Each member keeps its own line/UTF-8 decoder; EOF
@@ -107,76 +188,60 @@ export function readOpenLibraryDumpSet(
   const hash = createHash('sha256');
   let consumed = 0;
   let digest: string | null = null;
+  const frames = iterateDumpSet(
+    admission,
+    options,
+    counters,
+    gzipCounters,
+    budget,
+    hash,
+    (bytes) => {
+      consumed = bytes;
+    },
+    (value) => {
+      digest = value;
+    },
+  );
   const records = (async function* (): AsyncGenerator<SourceRecord> {
-    throwIfAborted(options.signal);
-    try {
-      for (const member of admission.members) {
-        throwIfAborted(options.signal);
-        let handle: FileHandle | undefined;
-        let memberBytes = 0;
-        try {
-          try {
-            handle = await openRegularFile(member.path, options.handleCount);
-          } catch (error) {
-            if (error instanceof OpenLibraryDumpSetError) throw error;
-            failMember(member.index, 'unavailable');
-          }
-          const hashed = (async function* (): AsyncGenerator<Uint8Array> {
-            for await (const chunk of ownedChunks(
-              fileChunks(handle!, options.signal),
-              options.signal,
-              'dump',
-              options.observer,
-              true,
-              options.progress,
-            )) {
-              hash.update(chunk);
-              memberBytes += chunk.byteLength;
-              consumed += chunk.byteLength;
-              yield chunk;
-            }
-          })();
-          const decoded =
-            member.compression === 'gzip'
-              ? decodeDumpBytes(hashed, {
-                  compression: 'gzip',
-                  signal: options.signal,
-                  decodeBudget: budget,
-                  counters: gzipCounters,
-                  ...(options.progress === undefined ? {} : { progress: options.progress }),
-                })
-              : countPlainDecoded(hashed, gzipCounters, budget, options.progress);
-          const native = openLibraryMetadata(decoded, options.signal);
-          try {
-            for await (const record of readDump('openlibrary', native, {
-              ...(options.maxRecordBytes === undefined ? {} : { maxRecordBytes: options.maxRecordBytes }),
-              ...(options.maxChunkBytes === undefined ? {} : { maxChunkBytes: options.maxChunkBytes }),
-              counters,
-              openLibraryFamily: member.family,
-            })) {
-              throwIfAborted(options.signal);
-              yield record;
-            }
-          } catch (error) {
-            failMemberFrom(member.index, error, options.signal);
-          }
-          hash.update(lengthPrefix(memberBytes));
-        } finally {
-          await closeHandle(handle, options.handleCount);
-        }
-      }
-      digest = hash.digest('hex');
-    } catch (error) {
-      if (error instanceof OpenLibraryDumpSetError) throw error;
-      if (options.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
-      throw error instanceof DumpInputError ? error : new OpenLibraryDumpSetError('unavailable');
-    }
+    for await (const frame of frames) if (frame.kind === 'record') yield frame.record;
   })();
   return {
     records,
+    frames,
     consumedBytes: () => consumed,
     decodedBytes: () => gzipCounters.decodedBytes,
     compressedBytes: () => gzipCounters.compressedBytes,
     digestHex: () => digest,
   };
+}
+
+/** Hash every original member file before a checkpointed capture or resume. */
+export async function fingerprintOpenLibraryDumpSet(
+  admission: OpenLibraryDumpSetAdmission,
+  options: { signal: AbortSignal; handleCount: { value: number }; observer?: DumpInputObserver },
+): Promise<readonly StagingMemberIdentity[]> {
+  const members: StagingMemberIdentity[] = [];
+  for (const member of admission.members) {
+    throwIfAborted(options.signal);
+    let handle: FileHandle | undefined;
+    try {
+      try {
+        handle = await openRegularFile(member.path, options.handleCount);
+      } catch (error) {
+        if (error instanceof OpenLibraryDumpSetError) throw error;
+        failMember(member.index, 'unavailable');
+      }
+      const fingerprint = await fingerprintDump(handle!, options.signal, options.observer);
+      members.push({
+        index: member.index,
+        family: member.family,
+        compression: member.compression,
+        sha256: fingerprint.sha256,
+        bytes: fingerprint.bytes,
+      });
+    } finally {
+      await closeHandle(handle, options.handleCount);
+    }
+  }
+  return members;
 }

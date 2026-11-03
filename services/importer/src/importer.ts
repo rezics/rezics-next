@@ -57,6 +57,8 @@ import {
   STAGING_MISSING_GENERATION,
   StagingCheckpointError,
   evaluateResume,
+  isStagingStreamEvent,
+  type StagingStreamEvent,
 } from './staging-checkpoint.ts';
 
 export type ImportMediaResolution =
@@ -231,7 +233,7 @@ export class Importer {
   /** One Open Library dump-set generation; callers compose members into `records`. */
   runDumpSet(
     registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
     options: ImportRunOptions = {},
   ): Promise<ImportRunResult> {
     if (registration.sourceKind !== 'openlibrary')
@@ -242,7 +244,7 @@ export class Importer {
   /** VNDB grouped loaders pass their actual SourceRecord stream here. */
   runRecords(
     registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
     options: ImportRunOptions = {},
   ): Promise<ImportRunResult> {
     if (this.closing) return Promise.reject(new Error('Importer is closing'));
@@ -295,7 +297,7 @@ export class Importer {
 
   private async stageCapture(
     registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
     run: Run,
     options: ImportRunOptions,
     signal: AbortSignal,
@@ -305,11 +307,23 @@ export class Importer {
   > {
     const store = this.session.store;
     const pageSize = state.checkpointed ? 1 : 100;
-    const buffered: { staged: Staged<SourceProjection>; conversion: ImportConversion; skipped: boolean }[] = [];
+    const buffered: {
+      staged: Staged<SourceProjection>;
+      conversion: ImportConversion;
+      skipped: boolean;
+      memberIndex: number;
+    }[] = [];
     let skipped = state.skipped;
     let ordinal = 0;
     let rolling = state.resume;
+    let memberIndex = 0;
     let stagingStarted = false;
+    let verifyingStarted = false;
+    const enterVerifying = () => {
+      if (verifyingStarted || state.action !== 'resume') return;
+      verifyingStarted = true;
+      return options.progress?.onPhase?.('verifying');
+    };
     const enterStaging = () => {
       if (stagingStarted) return;
       stagingStarted = true;
@@ -335,6 +349,7 @@ export class Importer {
                     ordinal: rolling,
                     recordKey: item.staged.row.recordKey,
                     digest: item.staged.row.digest,
+                    memberIndex: item.memberIndex,
                   },
                   item.skipped ? 1 : 0,
                 );
@@ -352,59 +367,81 @@ export class Importer {
       const phase = enterStaging();
       return phase !== undefined ? Promise.resolve(phase).then(commit) : commit();
     };
+    const acceptRecord = async (record: SourceRecord, recordMember: number) => {
+      if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
+      ordinal++;
+      if (state.checkpointed && ordinal <= state.resume) {
+        const verifying = enterVerifying();
+        if (verifying !== undefined) await verifying;
+        const prefix = store.prefixRecord(run, ordinal);
+        if (!prefix || prefix.recordKey !== record.key || (prefix.memberIndex ?? 0) !== recordMember)
+          throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+        const staged = store.stagedIdentity(run, record.key);
+        if (!staged || staged.digest !== prefix.digest || !staged.projection)
+          throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+        options.progress?.onVerifiedPrefix?.(1);
+        return;
+      }
+      this.options.observer?.onStagingConversion?.(record.key);
+      const conversion = registration.convert(
+        { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
+        { source: registration.source },
+      );
+      const ignored = 'outcome' in conversion && conversion.outcome === 'ignored';
+      if (ignored) {
+        if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
+        skipped++;
+        options.progress?.onSkipped?.(1);
+      }
+      buffered.push({
+        conversion,
+        skipped: ignored,
+        memberIndex: recordMember,
+        staged: {
+          row: {
+            source: registration.source,
+            recordKey: record.key,
+            recordRevision: conversion.record_revision ?? 'unversioned',
+            converter_revision: registration.converter_revision,
+            digest: conversion.digest,
+            state: 'present',
+          },
+          projection: {
+            sourceKind: registration.sourceKind,
+            normalizedRecord: conversion.normalized,
+            ...(ignored
+              ? {}
+              : registration.describeSourceRecord
+                ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
+                : {}),
+          },
+        },
+      });
+      if (buffered.length >= pageSize) {
+        const pending = flush();
+        if (pending !== undefined) await pending;
+      }
+    };
     try {
-      for await (const record of records) {
+      if (state.action === 'resume' && state.checkpointed) {
+        const verifying = enterVerifying();
+        if (verifying !== undefined) await verifying;
+      }
+      for await (const item of records) {
         if (signal.aborted) throw new Interrupted('Import was interrupted');
-        if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
-        ordinal++;
-        if (state.checkpointed && ordinal <= state.resume) {
-          const prefix = store.prefixRecord(run, ordinal);
-          if (!prefix || prefix.recordKey !== record.key)
-            throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-          const staged = store.stagedIdentity(run, record.key);
-          if (!staged || staged.digest !== prefix.digest || !staged.projection)
-            throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
-          options.progress?.onVerifiedPrefix?.(1);
+        if (isStagingStreamEvent(item)) {
+          if (item.kind === 'member-end') {
+            const pending = flush();
+            if (pending !== undefined) await pending;
+            if (state.checkpointed) store.commitStagingMember(run, item.memberIndex);
+            memberIndex = item.memberIndex + 1;
+            continue;
+          }
+          memberIndex = item.memberIndex;
+          await acceptRecord(item.record, item.memberIndex);
           continue;
         }
-        this.options.observer?.onStagingConversion?.(record.key);
-        const conversion = registration.convert(
-          { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
-          { source: registration.source },
-        );
-        const ignored = 'outcome' in conversion && conversion.outcome === 'ignored';
-        if (ignored) {
-          if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
-          skipped++;
-          options.progress?.onSkipped?.(1);
-        }
-        buffered.push({
-          conversion,
-          skipped: ignored,
-          staged: {
-            row: {
-              source: registration.source,
-              recordKey: record.key,
-              recordRevision: conversion.record_revision ?? 'unversioned',
-              converter_revision: registration.converter_revision,
-              digest: conversion.digest,
-              state: 'present',
-            },
-            projection: {
-              sourceKind: registration.sourceKind,
-              normalizedRecord: conversion.normalized,
-              ...(ignored
-                ? {}
-                : registration.describeSourceRecord
-                  ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
-                  : {}),
-            },
-          },
-        });
-        if (buffered.length >= pageSize) {
-          const pending = flush();
-          if (pending !== undefined) await pending;
-        }
+        await acceptRecord(item, memberIndex);
       }
       if (state.checkpointed && ordinal < state.resume)
         throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
@@ -1965,7 +2002,7 @@ export class Importer {
 
   private async run(
     registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
     options: ImportRunOptions,
   ): Promise<ImportRunResult> {
     const result: ImportRunResult = {

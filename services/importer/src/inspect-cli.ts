@@ -235,9 +235,10 @@ function resumeInvocation(
   const threshold = status === 'mass-disappearance' ? ' [--disappearance-threshold <reviewed-0..1>]' : '';
   if (status === 'staging' && checkpoint && generation) {
     return [
-      'Return to checkpointed staging with the original file; this does not replace input:',
+      'Return to checkpointed staging with the original files; this does not replace input:',
       `  bun services/importer/src/cli.ts --source <original-source-kind> --source-alias ${terminalString(source)} --dump <original-file> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> --resume-staging --generation ${terminalString(generation)}`,
-      'Resume re-hashes the complete file and re-decodes from the first record to verify the committed prefix. Inspection does not establish authorization or remote effect.',
+      `  bun services/importer/src/cli.ts --source openlibrary --source-alias ${terminalString(source)} --dump-set <original-manifest> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> --resume-staging --generation ${terminalString(generation)}`,
+      'Resume re-hashes every original file and replays the production decoder from the start of each member to verify the committed prefix. Inspection does not establish authorization or remote effect.',
     ];
   }
   if (status === 'ready' || status === 'finalizing') {
@@ -308,7 +309,11 @@ export function renderInspection(document: InspectionDocument): string {
     lines.push(`Resume behavior: ${generation.resume}`);
     if (generation.checkpoint)
       lines.push(
-        `Checkpoint: committed prefix ${generation.checkpoint.committedOrdinal} records, ${generation.checkpoint.bytes} hashed bytes, source kind ${generation.checkpoint.sourceKind}, converter ${generation.checkpoint.converterRevision}.`,
+        `Checkpoint: committed prefix ${generation.checkpoint.committedOrdinal} records${
+          generation.checkpoint.memberCount > 1 || generation.checkpoint.completedMembers > 0
+            ? `, ${generation.checkpoint.completedMembers} of ${generation.checkpoint.memberCount} members complete`
+            : ''
+        }, ${generation.checkpoint.bytes} hashed bytes, source kind ${generation.checkpoint.sourceKind}, converter ${generation.checkpoint.converterRevision}.`,
       );
   }
   lines.push(`Ownership row present: ${document.ownershipRow}; this is not a liveness or lease-capability check.`);
