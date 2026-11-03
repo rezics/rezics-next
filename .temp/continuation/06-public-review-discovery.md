@@ -1,28 +1,48 @@
 ---
 {
-  "goal": "content", "manager": "content", "kind": "implementation",
-  "paths": [
-    "services/kernel/src/content/review-discovery*.ts",
-    "services/kernel/src/content/review-discovery*.sql",
-    "services/kernel/src/content/register.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/src/search/discovery*.ts",
-    "services/kernel/src/search/default-discovery.ts",
-    "services/kernel/src/search/README.md",
-    "services/kernel/db/search/indices/discovery-second-scope-v1.json",
-    "services/kernel/src/content/feed*.ts",
-    "docs/feeds.md",
-    "apps/web/src/search/discovery*.tsx",
-    "apps/web/src/search/discovery.ts",
-    "apps/web/src/search/README.md",
-    "apps/web/src/stories/public-review-discovery.stories.tsx",
-    "services/kernel/test/search/public-review-discovery.test.ts",
-    "apps/web/tests/public-review-discovery.test.tsx"
-  ],
-  "riskAreas": ["authorization", "disclosure"],
-  "criticalPath": false, "after": [], "waiting": [],
-  "acceptance": {"command": ["sh", "-c", "bun run --cwd services/kernel check test/search/public-review-discovery.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/public-review-discovery.test.tsx"], "placement": "default", "tests": ["A visitor finds one review result per live review thread, sees current subject/author context and opens its canonical thread from Search/Home; ordinary discussions do not become reviews.", "Protected containers, hidden subject, deleted/withheld opening or erased author output cannot leak an ID/excerpt through a stale candidate or cursor; stored vote citations never become current rating figures."], "failing": true},
-  "estimate": {"lines": 450, "files": 16}
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/content/review-discovery*.ts',
+      'services/kernel/src/content/review-discovery*.sql',
+      'services/kernel/src/content/register.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/src/search/discovery*.ts',
+      'services/kernel/src/search/default-discovery.ts',
+      'services/kernel/src/search/README.md',
+      'services/kernel/db/search/indices/discovery-second-scope-v1.json',
+      'services/kernel/src/content/feed*.ts',
+      'docs/feeds.md',
+      'apps/web/src/search/discovery*.tsx',
+      'apps/web/src/search/discovery.ts',
+      'apps/web/src/search/README.md',
+      'apps/web/src/stories/public-review-discovery.stories.tsx',
+      'services/kernel/test/search/public-review-discovery.test.ts',
+      'apps/web/tests/public-review-discovery.test.tsx',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'sh',
+          '-c',
+          'bun run --cwd services/kernel check test/search/public-review-discovery.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/public-review-discovery.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'A visitor finds one review result per live review thread, sees current subject/author context and opens its canonical thread from Search/Home; ordinary discussions do not become reviews.',
+          'Protected containers, hidden subject, deleted/withheld opening or erased author output cannot leak an ID/excerpt through a stale candidate or cursor; stored vote citations never become current rating figures.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 450, 'files': 16 },
 }
 ---
 

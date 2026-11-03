@@ -1,25 +1,49 @@
 ---
 {
-  "goal": "content", "manager": "content", "kind": "interface",
-  "paths": [
-    "apps/web/src/routes/realms/$id_.moderation.tsx",
-    "apps/web/src/moderation/workbench*.ts",
-    "apps/web/src/moderation/workbench*.tsx",
-    "apps/web/src/moderation/workbench.md",
-    "apps/web/src/moderation/reports-read.ts",
-    "apps/web/src/moderation/appeals-read.ts",
-    "apps/web/src/routes/boards/$id_.moderation.tsx",
-    "apps/web/src/community/space-page.tsx",
-    "apps/web/src/community/space.ts",
-    "apps/web/src/stories/moderator-workbench.stories.tsx",
-    "apps/web/tests/moderator-workbench.test.tsx",
-    "services/kernel/src/content/README.md",
-    "services/kernel/src/community/README.md"
-  ],
-  "riskAreas": ["authorization", "disclosure"],
-  "criticalPath": false, "after": [], "waiting": [],
-  "acceptance": {"command": ["bun", "apps/web/scripts/focused.ts", "--private-network", "--", "bun", "test", "tests/moderator-workbench.test.tsx"], "placement": "default", "tests": ["A currently authorized Realm moderator opens the workspace, continues the native board directory, selects a board and reaches existing Reports/Appeals and ban management with retained return context.", "Session/CSRF replacement, role/read loss or navigation retires private queue content; sparse continuation, unavailable retry and denied access remain distinct, and no aggregate count or fabricated empty queue appears."], "failing": true},
-  "estimate": {"lines": 400, "files": 13}
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'interface',
+  'paths':
+    [
+      'apps/web/src/routes/realms/$id_.moderation.tsx',
+      'apps/web/src/moderation/workbench*.ts',
+      'apps/web/src/moderation/workbench*.tsx',
+      'apps/web/src/moderation/workbench.md',
+      'apps/web/src/moderation/reports-read.ts',
+      'apps/web/src/moderation/appeals-read.ts',
+      'apps/web/src/routes/boards/$id_.moderation.tsx',
+      'apps/web/src/community/space-page.tsx',
+      'apps/web/src/community/space.ts',
+      'apps/web/src/stories/moderator-workbench.stories.tsx',
+      'apps/web/tests/moderator-workbench.test.tsx',
+      'services/kernel/src/content/README.md',
+      'services/kernel/src/community/README.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'apps/web/scripts/focused.ts',
+          '--private-network',
+          '--',
+          'bun',
+          'test',
+          'tests/moderator-workbench.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'A currently authorized Realm moderator opens the workspace, continues the native board directory, selects a board and reaches existing Reports/Appeals and ban management with retained return context.',
+          'Session/CSRF replacement, role/read loss or navigation retires private queue content; sparse continuation, unavailable retry and denied access remain distinct, and no aggregate count or fabricated empty queue appears.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 400, 'files': 13 },
 }
 ---
 

@@ -1,26 +1,46 @@
 ---
 {
-  "goal": "content", "manager": "content", "kind": "implementation",
-  "paths": [
-    "services/kernel/src/content/board-pins*.ts",
-    "services/kernel/src/content/board-pins*.sql",
-    "services/kernel/src/content/routes.ts",
-    "services/kernel/src/content/schemas.ts",
-    "services/kernel/src/content/setup.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/db/content/migrations/*_board_pins.sql",
-    "services/kernel/db/content/schema.sql",
-    "apps/web/src/threads/board-pins*.tsx",
-    "apps/web/src/threads/board-feed.tsx",
-    "apps/web/src/routes/boards/$id.tsx",
-    "services/kernel/test/content/board-pins-http.test.ts",
-    "apps/web/tests/board-pins.test.tsx",
-    "apps/web/src/stories/board-pins.stories.tsx"
-  ],
-  "riskAreas": ["authorization", "disclosure"],
-  "criticalPath": false, "after": [], "waiting": [],
-  "acceptance": {"command": ["sh", "-c", "bun run --cwd services/kernel check test/content/board-pins-http.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/board-pins.test.tsx"], "placement": "default", "tests": ["A local moderator pins/unpins idempotently, readers see up to five pins on the first page, and ordinary sort/cursor continuation remains intact.", "Cross-board pins, a sixth pin and unauthorized writes are refused; takedown, Realm ban or read revocation removes a pin from disclosed results."], "failing": true},
-  "estimate": {"lines": 400, "files": 14}
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/content/board-pins*.ts',
+      'services/kernel/src/content/board-pins*.sql',
+      'services/kernel/src/content/routes.ts',
+      'services/kernel/src/content/schemas.ts',
+      'services/kernel/src/content/setup.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/db/content/migrations/*_board_pins.sql',
+      'services/kernel/db/content/schema.sql',
+      'apps/web/src/threads/board-pins*.tsx',
+      'apps/web/src/threads/board-feed.tsx',
+      'apps/web/src/routes/boards/$id.tsx',
+      'services/kernel/test/content/board-pins-http.test.ts',
+      'apps/web/tests/board-pins.test.tsx',
+      'apps/web/src/stories/board-pins.stories.tsx',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'sh',
+          '-c',
+          'bun run --cwd services/kernel check test/content/board-pins-http.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/board-pins.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'A local moderator pins/unpins idempotently, readers see up to five pins on the first page, and ordinary sort/cursor continuation remains intact.',
+          'Cross-board pins, a sixth pin and unauthorized writes are refused; takedown, Realm ban or read revocation removes a pin from disclosed results.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 400, 'files': 14 },
 }
 ---
 

@@ -1,30 +1,50 @@
 ---
 {
-  "goal": "content", "manager": "content", "kind": "implementation",
-  "paths": [
-    "services/kernel/src/content/board-watch*.ts",
-    "services/kernel/src/content/board-watch*.sql",
-    "services/kernel/src/content/notice-inbox.ts",
-    "services/kernel/src/content/notices.ts",
-    "services/kernel/src/content/events.ts",
-    "services/kernel/src/content/register.ts",
-    "services/kernel/src/content/work.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/src/access/notification-kinds.ts",
-    "services/kernel/src/access/README.md",
-    "services/kernel/db/content/migrations/*_board_watch.sql",
-    "services/kernel/db/content/schema.sql",
-    "apps/web/src/threads/board-watch*.tsx",
-    "apps/web/src/routes/boards/$id.tsx",
-    "apps/web/src/inbox/inbox-page.tsx",
-    "services/kernel/test/content/board-watch-http.test.ts",
-    "apps/web/tests/board-watch.test.tsx",
-    "apps/web/src/stories/board-watch.stories.tsx"
-  ],
-  "riskAreas": ["authorization", "disclosure", "deletion", "account"],
-  "criticalPath": false, "after": [], "waiting": [],
-  "acceptance": {"command": ["sh", "-c", "bun run --cwd services/kernel check test/content/board-watch-http.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/board-watch.test.tsx"], "placement": "default", "tests": ["Watch survives reload and creates one in-app board_activity notice per new published thread, including reviews; replay, own activity, replies, edits and historical threads create no extra notice.", "Unwatch, disabled preference, suspension, protected read loss or ban before delivery suppresses notices; workers page watchers and retries resume without duplicate delivery."], "failing": true},
-  "estimate": {"lines": 500, "files": 18}
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/content/board-watch*.ts',
+      'services/kernel/src/content/board-watch*.sql',
+      'services/kernel/src/content/notice-inbox.ts',
+      'services/kernel/src/content/notices.ts',
+      'services/kernel/src/content/events.ts',
+      'services/kernel/src/content/register.ts',
+      'services/kernel/src/content/work.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/src/access/notification-kinds.ts',
+      'services/kernel/src/access/README.md',
+      'services/kernel/db/content/migrations/*_board_watch.sql',
+      'services/kernel/db/content/schema.sql',
+      'apps/web/src/threads/board-watch*.tsx',
+      'apps/web/src/routes/boards/$id.tsx',
+      'apps/web/src/inbox/inbox-page.tsx',
+      'services/kernel/test/content/board-watch-http.test.ts',
+      'apps/web/tests/board-watch.test.tsx',
+      'apps/web/src/stories/board-watch.stories.tsx',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'sh',
+          '-c',
+          'bun run --cwd services/kernel check test/content/board-watch-http.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/board-watch.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'Watch survives reload and creates one in-app board_activity notice per new published thread, including reviews; replay, own activity, replies, edits and historical threads create no extra notice.',
+          'Unwatch, disabled preference, suspension, protected read loss or ban before delivery suppresses notices; workers page watchers and retries resume without duplicate delivery.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 500, 'files': 18 },
 }
 ---
 

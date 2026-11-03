@@ -1,28 +1,48 @@
 ---
 {
-  "goal": "content", "manager": "content", "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/collection-discovery*.ts",
-    "services/kernel/src/library/collection-discovery*.sql",
-    "services/kernel/src/library/README.md",
-    "docs/library-and-collections.md",
-    "services/kernel/src/search/discovery*.ts",
-    "services/kernel/src/search/default-discovery.ts",
-    "services/kernel/src/search/README.md",
-    "services/kernel/db/search/indices/discovery-second-scope-v1.json",
-    "services/kernel/src/content/feed*.ts",
-    "docs/feeds.md",
-    "apps/web/src/search/discovery*.tsx",
-    "apps/web/src/search/discovery.ts",
-    "apps/web/src/search/README.md",
-    "apps/web/src/stories/public-collection-discovery.stories.tsx",
-    "services/kernel/test/search/public-collection-discovery.test.ts",
-    "apps/web/tests/public-collection-discovery.test.tsx"
-  ],
-  "riskAreas": ["authorization", "disclosure"],
-  "criticalPath": false, "after": [], "waiting": [],
-  "acceptance": {"command": ["sh", "-c", "bun run --cwd services/kernel check test/search/public-collection-discovery.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/public-collection-discovery.test.tsx"], "placement": "default", "tests": ["A visitor finds a listed public Collection by its own metadata, selects its collection kind and opens the canonical Collection page from Search or Home.", "Private/unlisted/withdrawn/pending-only output is absent; pending B does not replace selected public A; current visibility reduction and terminal curator policy govern continuation without leaking rules or personal facts."], "failing": true},
-  "estimate": {"lines": 500, "files": 16}
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/collection-discovery*.ts',
+      'services/kernel/src/library/collection-discovery*.sql',
+      'services/kernel/src/library/README.md',
+      'docs/library-and-collections.md',
+      'services/kernel/src/search/discovery*.ts',
+      'services/kernel/src/search/default-discovery.ts',
+      'services/kernel/src/search/README.md',
+      'services/kernel/db/search/indices/discovery-second-scope-v1.json',
+      'services/kernel/src/content/feed*.ts',
+      'docs/feeds.md',
+      'apps/web/src/search/discovery*.tsx',
+      'apps/web/src/search/discovery.ts',
+      'apps/web/src/search/README.md',
+      'apps/web/src/stories/public-collection-discovery.stories.tsx',
+      'services/kernel/test/search/public-collection-discovery.test.ts',
+      'apps/web/tests/public-collection-discovery.test.tsx',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'command':
+        [
+          'sh',
+          '-c',
+          'bun run --cwd services/kernel check test/search/public-collection-discovery.test.ts && bun apps/web/scripts/focused.ts --private-network -- bun test tests/public-collection-discovery.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'A visitor finds a listed public Collection by its own metadata, selects its collection kind and opens the canonical Collection page from Search or Home.',
+          'Private/unlisted/withdrawn/pending-only output is absent; pending B does not replace selected public A; current visibility reduction and terminal curator policy govern continuation without leaking rules or personal facts.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 500, 'files': 16 },
 }
 ---
 
