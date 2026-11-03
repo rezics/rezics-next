@@ -42,7 +42,7 @@ function watchPreference(query: string, apply: (matches: boolean) => void) {
   return () => media.removeListener?.(update);
 }
 
-export function ThemeControl() {
+function useAppearancePreferences() {
   const hydrated = useHydrated();
   const [theme, setTheme] = useState<'system' | 'light' | 'dark' | null>(null);
   const [contrast, setContrast] = useState<'system' | 'standard' | 'more' | null>(null);
@@ -83,6 +83,17 @@ export function ThemeControl() {
     if (contrast === 'system') return watchPreference('(prefers-contrast: more)', apply);
     apply();
   }, [contrast]);
+  return { hydrated, theme, setTheme, contrast, setContrast };
+}
+
+/** Keep system preference listeners alive even while the account menu is closed. */
+export function AppearancePreferenceSync() {
+  useAppearancePreferences();
+  return null;
+}
+
+export function ThemeControl() {
+  const { hydrated, theme, setTheme, contrast, setContrast } = useAppearancePreferences();
   const icons = { system: Monitor, light: Sun, dark: Moon };
   const Icon = icons[theme ?? 'system'];
   const choose = (value: string) => {

@@ -45,6 +45,17 @@ test('the top bar keeps search and logo, offers Create and counted notifications
   expect(visitor).toContain('/auth/sign-in?return_to=%2Fen%2Finbox%3Fq%3Da');
   expect(visitor).not.toContain('Account controls');
   expect(visitor).not.toContain('99+ unread notifications');
+  expect(
+    html(
+      <ShellTopActions
+        session="signed-in"
+        pathname="/"
+        returnTo="/en"
+        account={null}
+        unread={{ signedIn: true, state: 'ready', count: 0, capped: false }}
+      />,
+    ),
+  ).not.toContain('unread notifications');
 });
 
 test('main and phone navigation mark the current page, and followed communities keep icons and locale-safe destinations', () => {
@@ -63,6 +74,13 @@ test('main and phone navigation mark the current page, and followed communities 
     );
     for (const label of ['Home', 'Library', 'Collections']) expect(rail).toContain(label);
     expect(rail).toContain('href="/en/library/collections" aria-current="page"');
+    const visitor = html(
+      <NavigationProvider>
+        <NavigationLinks context={{ locale: 'en', pathname: '/' }} session="signed-out" label="Main navigation" />
+      </NavigationProvider>,
+    );
+    expect(visitor).toContain('aria-disabled="true"');
+    for (const label of ['Library', 'Collections']) expect(visitor).toContain(label);
     const communities = html(
       <SideNav
         pathname="/en/realms/reading/claims"

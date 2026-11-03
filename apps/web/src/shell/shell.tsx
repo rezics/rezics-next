@@ -1,4 +1,4 @@
-import { AppearanceControls } from './appearance-controls';
+import { AppearanceControls, AppearancePreferenceSync } from './appearance-controls';
 import { TopBar, ShellTopActions } from './top-bar';
 import { SideNavProvider, useSideNavCommunities } from './side-nav';
 import { RezicsMark } from './mobile-mark';
@@ -458,6 +458,7 @@ export function AppShell({ children, navigation, subjectPurchase, search, commun
     <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
       <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
         <Toaster>
+          <AppearancePreferenceSync />
           <SideNavProvider communities={communities}>
             <ShellContent search={search} notifications={notifications}>
               {children}

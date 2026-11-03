@@ -138,12 +138,14 @@ export function NavigationEntries({
     () => false,
   );
   return resolveNavigation(entries, context).map((entry) => {
-    if (
-      (kind && entry.kind !== kind) ||
-      (entry.desktopOnly && !desktop) ||
-      (entry.signedIn && (!hydrated || session !== 'signed-in'))
-    )
-      return null;
+    if ((kind && entry.kind !== kind) || (entry.desktopOnly && !desktop)) return null;
+    if (entry.signedIn && (!hydrated || session !== 'signed-in')) {
+      return entry.retainWhenUnavailable ? (
+        <span key={entry.id} className="contents">
+          {children({ ...entry, unavailable: true })}
+        </span>
+      ) : null;
+    }
     return (
       <NavigationEntry key={entry.id} entry={entry}>
         {children}

@@ -9,6 +9,7 @@ import { PatternStory, pageReady } from './page';
 
 const meta = {
   title: 'Patterns/App Shell',
+  globals: { viewport: { value: 'desktop' } },
   parameters: {
     layout: 'fullscreen',
     viewport: {
@@ -83,9 +84,7 @@ export const SignedOut: Story = {
   render: () => <ShellPreview visitor="Signed Out" />,
   play: async (context) => {
     await pageReady(context);
-    await expect(
-      await within(context.canvasElement).findByRole('link', { name: m.account_sign_in(), exact: true }),
-    ).toBeVisible();
+    await expect(await within(context.canvasElement).findByRole('link', { name: m.account_sign_in() })).toBeVisible();
   },
 };
 export const NotificationCount: Story = {
