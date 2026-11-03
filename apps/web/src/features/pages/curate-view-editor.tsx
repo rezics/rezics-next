@@ -92,6 +92,8 @@ import { CurationCompanionViews } from './curation-companion-views';
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
 const editorControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const editorSelectClass = 'w-full min-w-0 max-w-full [&_select]:min-h-11';
+const editorInputClass = 'min-h-11';
 const editorDisclosureClass =
   'min-h-11 min-w-11 cursor-pointer rounded-md py-2 text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 // Scope consumer styling to editor-owned recovery, leaving the supplied preview and Puck untouched.
@@ -566,10 +568,36 @@ function AdmittedPresentationViewEditor({
   const [correction, setCorrection] = useState<CorrectionTarget | null>(null);
   const editorRegion = useRef<HTMLElement>(null);
   const pageRegion = useRef<HTMLElement>(null);
+  const confirmTrigger = useRef<HTMLElement | null>(null);
+  const restoreConfirm = useRef(true);
+  const confirmWasOpen = useRef(false);
+  const keepCancel = useRef<HTMLButtonElement>(null);
+  const removeTrigger = useRef<HTMLElement | null>(null);
+  const restoreRemove = useRef(true);
+  const removeWasOpen = useRef(false);
+  const removeCancel = useRef<HTMLButtonElement>(null);
   const [focusRegion, setFocusRegion] = useState(0);
   useEffect(() => {
     if (focusRegion && isCurrent()) editorRegion.current?.focus();
   }, [focusRegion]);
+  useLayoutEffect(() => {
+    if (confirm !== null) {
+      confirmWasOpen.current = true;
+      return;
+    }
+    if (!confirmWasOpen.current || !restoreConfirm.current) return;
+    confirmWasOpen.current = false;
+    confirmTrigger.current?.focus();
+  }, [confirm]);
+  useLayoutEffect(() => {
+    if (removeConfirm !== null) {
+      removeWasOpen.current = true;
+      return;
+    }
+    if (!removeWasOpen.current || !restoreRemove.current) return;
+    removeWasOpen.current = false;
+    removeTrigger.current?.focus();
+  }, [removeConfirm]);
   const dirty = useMemo(() => draft !== null && hasDraftChanges(draft), [draft]);
   const initialVersion = `${initial.reader}:${initial.digest}:${initial.head}`;
   const previousInitial = useRef(initialVersion);
@@ -968,7 +996,12 @@ function AdmittedPresentationViewEditor({
             className={editorControlClass}
             variant="outline"
             disabled={!dirty}
-            onClick={() => isCurrent() && setOwned(setConfirm, 'discard')}
+            onClick={(event) => {
+              if (!isCurrent()) return;
+              confirmTrigger.current = event.currentTarget;
+              restoreConfirm.current = true;
+              setOwned(setConfirm, 'discard');
+            }}
           >
             {m.curation_view_discard({}, options)}
           </Button>
@@ -976,9 +1009,16 @@ function AdmittedPresentationViewEditor({
             className={editorControlClass}
             variant="outline"
             disabled={waiting && !pendingPublication}
-            onClick={() =>
-              isCurrent() && (!pendingPublication && dirty ? setOwned(setConfirm, 'reload') : void reload())
-            }
+            onClick={(event) => {
+              if (!isCurrent()) return;
+              if (!pendingPublication && dirty) {
+                confirmTrigger.current = event.currentTarget;
+                restoreConfirm.current = true;
+                setOwned(setConfirm, 'reload');
+                return;
+              }
+              void reload();
+            }}
           >
             {m.curation_reload({}, options)}
           </Button>
@@ -992,7 +1032,7 @@ function AdmittedPresentationViewEditor({
               <FieldLabel htmlFor={`${formId}-template`}>{m.curation_template({}, options)}</FieldLabel>
               <NativeSelect
                 id={`${formId}-template`}
-                className="w-full min-w-0 max-w-full"
+                className={editorSelectClass}
                 aria-describedby={selection.template.key !== null ? `${formId}-template-value` : undefined}
                 value={JSON.stringify(selection.template)}
                 onChange={(event) => {
@@ -1023,10 +1063,13 @@ function AdmittedPresentationViewEditor({
                 <Button
                   className={editorControlClass}
                   variant="outline"
-                  onClick={() => {
+                  onClick={(event) => {
                     if (!isCurrent() || !visit || !removableTemplate) return;
                     const intention = reviewKeyedTemplateRemoval(draft, removableTemplate, visit);
-                    if (intention) setOwned(setRemoveConfirm, intention);
+                    if (!intention) return;
+                    removeTrigger.current = event.currentTarget;
+                    restoreRemove.current = true;
+                    setOwned(setRemoveConfirm, intention);
                   }}
                 >
                   {m.curation_remove({}, options)}
@@ -1037,7 +1080,7 @@ function AdmittedPresentationViewEditor({
               <FieldLabel htmlFor={`${formId}-view`}>{m.curation_view({}, options)}</FieldLabel>
               <NativeSelect
                 id={`${formId}-view`}
-                className="w-full min-w-0 max-w-full"
+                className={editorSelectClass}
                 value={selection.view}
                 onChange={(event) => {
                   if (!isCurrent()) return;
@@ -1145,7 +1188,7 @@ function AdmittedPresentationViewEditor({
               <FieldLabel htmlFor={`${formId}-scope`}>{m.curation_scope({}, options)}</FieldLabel>
               <NativeSelect
                 id={`${formId}-scope`}
-                className="w-full min-w-0 max-w-full"
+                className={editorSelectClass}
                 value={scope}
                 onChange={(event) => isCurrent() && setOwned(setScope, event.target.value as 'base' | 'type' | 'route')}
               >
@@ -1158,6 +1201,7 @@ function AdmittedPresentationViewEditor({
               <FieldLabel htmlFor={`${formId}-key`}>{m.curation_key({}, options)}</FieldLabel>
               <Input
                 id={`${formId}-key`}
+                className={editorInputClass}
                 aria-describedby={key ? `${formId}-add-hint ${formId}-key-value` : `${formId}-add-hint`}
                 value={key}
                 onChange={(event) => isCurrent() && setOwned(setKey, event.target.value)}
@@ -1183,7 +1227,12 @@ function AdmittedPresentationViewEditor({
         }}
       >
         {activeRemoval && (
-          <AlertDialogContent>
+          <AlertDialogContent
+            initialFocus={removeCancel}
+            finalFocus={() =>
+              restoreRemove.current && removeTrigger.current?.isConnected ? removeTrigger.current : false
+            }
+          >
             <AlertDialogHeader>
               <AlertDialogTitle>
                 {m.curation_remove_title({ template: templateLabel(activeRemoval.template) }, options)}
@@ -1191,10 +1240,13 @@ function AdmittedPresentationViewEditor({
               <AlertDialogDescription>{m.curation_remove_warning({}, options)}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className={editorControlClass}>{m.action_cancel({}, options)}</AlertDialogCancel>
+              <AlertDialogCancel ref={removeCancel} className={editorControlClass}>
+                {m.action_cancel({}, options)}
+              </AlertDialogCancel>
               <AlertDialogAction
                 className={editorControlClass}
                 onClick={() => {
+                  restoreRemove.current = false;
                   const intention = activeRemoval;
                   if (isCurrent() && intention) {
                     setOwned(setDraft, (value) => value && confirmKeyedTemplateRemoval(value, intention));
@@ -1216,7 +1268,12 @@ function AdmittedPresentationViewEditor({
           if (!open && isCurrent()) setOwned(setConfirm, null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          initialFocus={keepCancel}
+          finalFocus={() =>
+            restoreConfirm.current && confirmTrigger.current?.isConnected ? confirmTrigger.current : false
+          }
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.curation_discard_title({}, options)}</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1224,11 +1281,14 @@ function AdmittedPresentationViewEditor({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={editorControlClass}>{m.curation_keep({}, options)}</AlertDialogCancel>
+            <AlertDialogCancel ref={keepCancel} className={editorControlClass}>
+              {m.curation_keep({}, options)}
+            </AlertDialogCancel>
             <AlertDialogAction
               className={editorControlClass}
               onClick={() => {
                 if (!isCurrent()) return;
+                restoreConfirm.current = false;
                 if (confirm === 'reload') void reload();
                 else {
                   setOwned(setDraft, (value) => value && discardPresentationDraft(value));

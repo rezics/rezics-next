@@ -219,9 +219,14 @@ export const DiscardConfirmation: Story = {
   ...Authoring,
   play: async ({ canvasElement }) => {
     const canvas = await editDetails(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.curation_view_discard() }));
+    const discard = canvas.getByRole('button', { name: m.curation_view_discard() });
+    await userEvent.click(discard);
     const dialog = await within(document.body).findByRole('alertdialog');
     await expect(within(dialog).getByText(m.curation_discard_warning())).toBeVisible();
+    await userEvent.click(within(dialog).getByRole('button', { name: m.curation_keep() }));
+    await waitFor(() => expect(within(document.body).queryByRole('alertdialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(discard).toHaveFocus());
+    await expect(await headingTextField(canvasElement)).toHaveValue('Retained draft');
   },
 };
 

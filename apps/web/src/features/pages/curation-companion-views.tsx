@@ -1,5 +1,5 @@
 import type { PresentationProfile, View } from '@rezics/composition';
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,7 @@ import {
 } from './curation-companion-state';
 
 const controlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+const selectClass = 'w-full min-w-0 max-w-full [&_select]:min-h-11';
 
 type CompanionViewControlsProps = {
   profile: PresentationProfile;
@@ -53,6 +54,10 @@ export function CurationCompanionViews({
   const id = useId();
   const [choice, setChoice] = useState<CompanionAddChoice>(emptyCompanionAdd);
   const [resetting, setResetting] = useState<CompanionResetIntent | null>(null);
+  const resetTrigger = useRef<HTMLButtonElement>(null);
+  const restoreReset = useRef(true);
+  const resetWasOpen = useRef(false);
+  const resetCancel = useRef<HTMLButtonElement>(null);
   const template = selection.template;
   const availableViews = availableCompanionViews(profile, template);
   const hasOverview = overviewOf(profile, template) !== undefined;
@@ -60,6 +65,15 @@ export function CurationCompanionViews({
   const admitted = admitCompanionAdd(choice, profile, template);
   const admittedReset = admitCompanionReset(resetting, profile, template);
   if (resetting !== admittedReset) setResetting(admittedReset);
+  useLayoutEffect(() => {
+    if (admittedReset !== null) {
+      resetWasOpen.current = true;
+      return;
+    }
+    if (!resetWasOpen.current || !restoreReset.current) return;
+    resetWasOpen.current = false;
+    resetTrigger.current?.focus();
+  }, [admittedReset]);
 
   if (template.scope === 'route' || (availableViews.length === 0 && !canReset && admittedReset === null)) return null;
 
@@ -78,7 +92,7 @@ export function CurationCompanionViews({
             <FieldLabel htmlFor={`${id}-view`}>{m.curation_companion_view({}, options)}</FieldLabel>
             <NativeSelect
               id={`${id}-view`}
-              className="w-full min-w-0 max-w-full"
+              className={selectClass}
               value={admitted.view}
               disabled={disabled}
               onChange={(event) => {
@@ -100,7 +114,7 @@ export function CurationCompanionViews({
             <FieldLabel htmlFor={`${id}-source`}>{m.curation_companion_source({}, options)}</FieldLabel>
             <NativeSelect
               id={`${id}-source`}
-              className="w-full min-w-0 max-w-full"
+              className={selectClass}
               value={admitted.source}
               disabled={disabled}
               onChange={(event) => {
@@ -136,23 +150,30 @@ export function CurationCompanionViews({
       )}
       {canReset && (
         <Button
+          ref={resetTrigger}
           className={controlClass}
           type="button"
           variant="outline"
           disabled={disabled}
-          onClick={() => setResetting(companionResetIntent(profile, template, selection.view))}
+          onClick={() => {
+            restoreReset.current = true;
+            setResetting(companionResetIntent(profile, template, selection.view));
+          }}
         >
           {m.curation_companion_reset({}, options)}
         </Button>
       )}
       <AlertDialog open={admittedReset !== null} onOpenChange={(open) => !open && setResetting(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          initialFocus={resetCancel}
+          finalFocus={() => (restoreReset.current && resetTrigger.current?.isConnected ? resetTrigger.current : false)}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.curation_companion_reset_title({}, options)}</AlertDialogTitle>
             <AlertDialogDescription>{m.curation_companion_reset_description({}, options)}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className={controlClass}>
+            <AlertDialogCancel ref={resetCancel} className={controlClass}>
               {m.curation_companion_reset_cancel({}, options)}
             </AlertDialogCancel>
             <AlertDialogAction
@@ -161,6 +182,7 @@ export function CurationCompanionViews({
               disabled={disabled || admittedReset === null}
               onClick={() => {
                 if (!admittedReset) return;
+                restoreReset.current = false;
                 onReset(admittedReset.view);
                 setResetting(null);
                 setChoice(emptyCompanionAdd);

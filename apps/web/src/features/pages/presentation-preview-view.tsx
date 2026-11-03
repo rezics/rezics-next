@@ -117,6 +117,9 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
     'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm py-3 whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   const referenceClassName =
     'min-w-0 rounded-sm break-all select-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  const previewControlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
+  const previewSelectClass = 'w-full min-w-0 max-w-full [&_select]:min-h-11';
+  const previewInputClass = 'min-h-11';
   const [kind, setKind] = useState<'subject' | 'route'>(initial?.ok && 'route' in initial.target ? 'route' : 'subject');
   const [address, setAddress] = useState(
     initial?.ok ? ('subject' in initial.target ? initial.target.subject : initial.target.route) : '',
@@ -222,6 +225,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             <FieldLabel htmlFor={kindId}>{m.presentation_preview_target({}, o)}</FieldLabel>
             <NativeSelect
               id={kindId}
+              className={previewSelectClass}
               value={kind}
               onChange={(event) => {
                 clear();
@@ -238,6 +242,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             <FieldLabel htmlFor={addressId}>{m.presentation_preview_address({}, o)}</FieldLabel>
             <Input
               id={addressId}
+              className={previewInputClass}
               value={address}
               required
               autoComplete="off"
@@ -250,11 +255,16 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
               }}
             />
           </Field>
-          <Button type="submit" disabled={busy} ref={closeFocus.inspectRef}>
+          <Button type="submit" className={previewControlClass} disabled={busy} ref={closeFocus.inspectRef}>
             {busy ? m.presentation_preview_loading({}, o) : m.presentation_preview_inspect({}, o)}
           </Button>
           {busy && (
-            <Button type="button" variant="outline" onClick={(event) => closePreview(event.currentTarget)}>
+            <Button
+              type="button"
+              variant="outline"
+              className={previewControlClass}
+              onClick={(event) => closePreview(event.currentTarget)}
+            >
               {m.presentation_preview_close({}, o)}
             </Button>
           )}
@@ -267,6 +277,7 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
             <FieldLabel htmlFor={realmId}>{m.presentation_preview_realm({}, o)}</FieldLabel>
             <Input
               id={realmId}
+              className={previewInputClass}
               value={realm}
               autoComplete="off"
               spellCheck={false}
@@ -288,7 +299,12 @@ export function PresentationPreviewPanel({ locale, read, initial }: Presentation
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-semibold wrap-anywhere">{m.presentation_editor_preview_current({}, o)}</h3>
-            <Button type="button" variant="outline" onClick={(event) => closePreview(event.currentTarget)}>
+            <Button
+              type="button"
+              variant="outline"
+              className={previewControlClass}
+              onClick={(event) => closePreview(event.currentTarget)}
+            >
               {m.presentation_preview_close({}, o)}
             </Button>
           </div>

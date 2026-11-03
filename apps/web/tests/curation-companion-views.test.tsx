@@ -181,9 +181,16 @@ test('a curator adds, edits, publishes and confirms reset of one companion view'
     expect(publicationResult?.types[0]!.views?.relations?.content[0]!.props.text).toEqual({ en: 'edited companion' });
     expect(viewOf(profile, template, 'details')).toEqual(viewOf(initial, template, 'details'));
 
-    await click(button(m.curation_companion_reset(), companion));
+    const reset = button(m.curation_companion_reset(), companion);
+    await click(reset);
     let dialog = window.document.querySelector('[role="alertdialog"]')!;
     await click(button(m.curation_companion_reset_cancel(), dialog));
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    });
+    expect(window.document.activeElement).toBe(reset);
     expect(
       viewOf(
         JSON.parse(output.querySelector('[data-profile]')!.textContent!) as PresentationProfile,
