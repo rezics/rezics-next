@@ -66,6 +66,10 @@ test('all six label consolidation routes retain typed requests and results', () 
       options,
     );
     if (confirmation.error) throw confirmation.error;
+    const next: string | null = review.data.next;
+    const expiresAt: string = confirmation.data.expiresAt;
+    const itemCount: number = confirmation.data.itemCount;
+    void [next, expiresAt, itemCount];
     const body = { confirmationId: confirmation.data.confirmationId };
     const results = [
       await label.$applyConsolidation.post(body, options),
@@ -84,6 +88,8 @@ test('all six label consolidation routes retain typed requests and results', () 
     await label.$retryConsolidation.post(body, options);
     // @ts-expect-error apply requires an idempotency key
     await label.$applyConsolidation.post(body);
+    // @ts-expect-error review requires a numeric assignment revision
+    await label.$reviewConsolidation.post({ targetLabelId: ID, items: [{ ...selected, revision: '1' }] });
   };
   expect(typeof typed).toBe('function');
 });
