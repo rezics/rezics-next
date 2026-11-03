@@ -3326,6 +3326,9 @@ may have `next`; clients follow it until null. A page failure returns the ordina
 or a cursor beyond the failed frontier. The opaque encrypted cursor binds home, limit, actual actor, client,
 delegating principal, scopes, authentication epoch and home partition epoch.
 
+Decision: a changed source or Subject identity observation consumes its selected raw slot without advice;
+an exact resume changed during preparation returns 404 and requires an explicit reload.
+
 `state: preparing` means locator coverage is incomplete. The page may already contain usable acknowledged
 entries; an empty preparing page must not be rendered as no saved drafts. The source post's pending marker is
 written with each revision and cleared only after receiving locator commit for the exact head. A partial
@@ -3338,13 +3341,21 @@ Repair reads native source primary keys and opens each source/author home separa
 
 `GET /v1/accounts/:accountId/drafts/:id?threadId=...` returns `{post}` and an ETag containing its revision.
 It checks private account, native ancestry/board/Realm/Space and original Subject authority before the ordinary
-native body read, and repeats account and Subject admission before returning bytes. Concealed/unknown selections
+native body read, and repeats account and exact Subject identity observations before returning bytes. Retained
+native disclosure callbacks then qualify the original metadata and body against their original source rows,
+revision, board title/security episode and freshly evaluated Realm authority. A newer revision cannot become
+the baseline for the selected earlier bytes. Concealed/unknown selections
 both return 404. There is no new retained-private-data exception. Bodies, SHA, node languages, media claims and
 Subject references remain native. Root language in the locator is accepted only when its exact revision matches.
 Nested language marks remain in the selected document. Both routes use `private, no-store`.
 
 Resume/edit/publish/erase are navigation and current permission hints; commands independently authorize every
-attempt before receipts. Save uses `POST /v1/posts/:id/revisions`, `If-Match: "revisionId"` and the native
+attempt before receipts. The list retains its prepared revise/erase checks through bounded hydration, then
+evaluates them in the final retained draft snapshot after account and Subject observations. Account and board
+partition epochs stay pinned. `readOwnDraftMetadata` and `readPost` expose an optional `RetainContentRead<T>`
+callback in `reads.ts`; the callback's current reader preserves the initial native witness and accepts only
+already-prepared native checks in its source snapshot. Existing callers and mounted DTOs are unchanged.
+Save uses `POST /v1/posts/:id/revisions`, `If-Match: "revisionId"` and the native
 idempotency key. To publish, deliberately submit `visibility: published` through that same command. A 412 leaves
 the acknowledged server head available for explicit reload/recovery; it never overwrites the other device.
 An uncertain write retries the exact body, key and If-Match. Own erase uses the existing DELETE post command.
@@ -3355,23 +3366,34 @@ Examples: a populated ready page has native entries and action paths; a complete
 `{state:"ready",viewer,drafts:[],next:null}`. A withheld raw page may be empty with an opaque `next`.
 An unavailable page is the ordinary 503 problem and retains the client's selection; exact retry repeats its
 unconsumed cursor. Preparing is `{state:"preparing",viewer,drafts:[],next:null}` until coverage is repaired.
+Revoked account/session admission returns the ordinary authentication/authorization problem; discard private
+advice and keep unsent local text. A changed or concealed selected draft is the same 404 as an unknown ID;
+restart the inventory explicitly. An uncertain save retries its original key/body/If-Match, then reads that
+selected native post to recover the acknowledged result. These states preserve browser-local text recovery.
 Web retains the page/composer consumer and its phone/desktop recovery review; this API does not install a page.
 
 ### Cost: listOwnDrafts
 
 - Touches: two native account snapshots around one prepared account Access check; one actor-home selection
   snapshot with a partition point, two disjoint draft-index seeks, one progress point and one pending-prefix
-  probe. For each of L raw candidates, two ordinary metadata disclosures, one two-action Access snapshot and
-  original-Subject identity preparation plus three identity observations. Each metadata disclosure uses two
-  source snapshots, two board observations and one final board recheck; its ordinary resource checks retain
-  native account, ancestry, Realm/Space and ban work. All source/board/Subject/account checkouts release before
-  another home opens.
+  probe. For each of L raw candidates, one metadata disclosure (two source and three board snapshots), two
+  prepared command Access checks, original-Subject Access preparation and three identity observations, then
+  one retained source snapshot and one board recheck. Command checks evaluate in that final source snapshot,
+  without preparing authority there. The application pool serves these homes; native Access also participates
+  through its account/session/consent authority and Realm/Space/membership/ban producers, including Auth's
+  independently owned authority where invoked. Every source snapshot includes transaction begin, partition
+  point, commit or rollback; each Subject transaction includes partition admission and commit or rollback.
+  Checkout release precedes foreign preparation. Runner phases are private admission, raw selection, bounded
+  hydration, final account observation, per-item Subject comparison/native qualification, cursor/DTO serialization.
 - Bound: L <= 20, native ancestry H <= 33, Subjects S <= 128 and media IDs <= 32 per item. A metadata source
-  chain is one thread, H post/head/decision probes and one revision probe; two chains are observed per disclosure,
+  chain is one thread, H post/head/decision probes and one revision probe; three chains are observed per candidate,
   and each prepared thread/post eligibility rechecks its own exact row. Include the existing Access producers'
   permission, account, membership, Realm/Space and ban bounds for each invocation; these are not zero-cost
   callbacks. Each Subject observation uses its original partition and label/reference points and current Access,
-  with no redirect substitution. Body bytes are zero throughout list disclosure. Response strings are capped at
+  with no redirect substitution. Materialized Subject label maps participate in exact initial/final comparison;
+  their producer's full label/reference rows and nested authority bytes count even though no labels serialize.
+  Retained metadata/checks are O(L * (H + S)); raw locator rows stay <=20 and are not accumulated across pages.
+  Body bytes are zero throughout list disclosure. Response strings are capped at
   512 title characters, 256 root-language bytes, native SPDX/128 Subject/32 media limits and a 4096-byte cursor.
   Work is O(L * (H + S)) bounded native probes plus nested authority; no author-history residual scan.
 - Growth check: native outcome coverage is `test/content/own-drafts-http.test.ts`. Independent 256/1024/4096
@@ -3381,12 +3403,20 @@ Web retains the page/composer consumer and its phone/desktop recovery review; th
 
 ### Cost: resumeOwnDraft
 
-- Touches: initial/final account snapshots, one metadata disclosure, original-Subject identity preparation and
-  three identity observations, then the actual native post disclosure and its final body serialization. The
-  ordinary read repeats source signatures, ancestry, board/Realm/Space, account and resource Access checks.
+- Touches: initial/final account snapshots, one metadata and one native post disclosure (each two source and
+  three board snapshots), original-Subject Access preparation and three identity observations, then retained
+  metadata and post observations (each one source snapshot and one board recheck). The same application and
+  nested account/Auth/Realm/Space/membership/ban authority pools participate as in list; each native snapshot
+  includes begin, partition admission, commit or rollback. The post reader can additionally consult the native
+  rating-question authority for a citation, initially and finally. Runner phases are private admission, metadata,
+  Subject preparation, body hydration, final account/Subject comparison, retained metadata, retained exact body,
+  ETag/DTO serialization. No foreign checkout spans a native snapshot.
 - Bound: one selected identity, H <= 33, S <= 128, one current revision with at most 2 MiB canonical bytes.
-  Metadata disclosure reads no bytes; the selected native read loads only that exact current revision. Include
-  both disclosures' nested authorization and the native body JSON parse/response serialization. Denied private
+  Metadata disclosure reads no bytes; initial and final native post observations each load only the selected
+  revision's <=2 MiB canonical bytes, never history. Count both physical revision reads, materialized documents,
+  retained initial and final values, JSON parsing and response escaping (up to six output bytes per UTF-8 byte),
+  plus all metadata and Subject label/reference bytes. All six source-chain observations and nested eligibility,
+  account/membership/disclosure evaluations count; output limits do not bound their physical work. Denied private
   homes stop before source selection; concealed source/Subjects stop before body loading; stale heads return 404.
   The shared native reader may perform rating-question citation disclosure after body selection.
 - Growth check: focused coverage pins exact bytes/revision, account isolation and concurrency recovery.

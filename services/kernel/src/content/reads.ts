@@ -159,6 +159,13 @@ export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUnt
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+/** Retain the initial source and prepared native authority across foreign work.
+ * The optional qualifier evaluates already-prepared native checks in the same
+ * source snapshot; it must not prepare authority or open a foreign checkout.
+ */
+export type RetainContentRead<T> = (
+  current: (qualify?: (client: AccessClient) => Promise<void>) => Promise<Anchored<T | null>>,
+) => void;
 export type NativeDraftMetadata = Readonly<{
   id: string;
   threadId: string;
@@ -523,6 +530,7 @@ const signature = (row: Row) =>
     row.first_post_id,
     row.thread_kind,
     row.board_purpose,
+    row.title,
     row.visibility,
     row.security_revision,
     row.availability,
@@ -702,8 +710,10 @@ async function observeBoard(
     result,
     // Preserve the first row and its prepared Access check; never refresh the
     // baseline after a privacy reduction or share a proof across items.
-    recheck: async () =>
-      (await snapshot(dependencies, boardId, context, async (client) => !!(await checked(client)))).value,
+    recheck: async () => {
+      const final = await snapshot(dependencies, boardId, context, async (client) => !!(await checked(client)));
+      return final.anchor.epoch === observed.anchor.epoch && final.value;
+    },
   };
 }
 
@@ -1305,7 +1315,7 @@ async function disclose(
   threadReference = threadDetail,
   beforeFinal?: () => Promise<void>,
   metadataOnly = false,
-  retain?: (current: () => Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | null>>) => void,
+  retain?: RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata>,
 ): Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -1482,9 +1492,13 @@ async function disclose(
   // History retains the same original source rows and exact Access checks for
   // its final page observation. Each round prepares fresh Realm evidence;
   // cached associations from initial hydration cannot survive revalidation.
-  retain?.(() =>
+  retain?.((qualify) =>
     realmDisclosure.run({}, async () => {
-      let final = await snapshot(dependencies, threadId, context, discloseCurrent);
+      let final = await snapshot(dependencies, threadId, context, async (client) => {
+        const value = await discloseCurrent(client);
+        if (value) await qualify?.(client);
+        return value;
+      });
       if (final.anchor.epoch !== observed.anchor.epoch) return { ...final, value: null };
       if (final.value && !(await boardObservation!.recheck())) return { ...final, value: null };
       if (final.value && !('firstPostId' in final.value))
@@ -1944,6 +1958,7 @@ export async function readPost(
   postId: PostId,
   context: ReadContext,
   revisionId?: RevisionId,
+  retain?: RetainContentRead<PostEntry>,
 ): Promise<Anchored<PostEntry | null>> {
   // Captured before the first await so the command-response binding survives
   // later deadline hops. Absent on every ordinary read.
@@ -1965,6 +1980,11 @@ export async function readPost(
         revisionId,
         false,
         replayedRevisionId,
+        undefined,
+        false,
+        undefined,
+        false,
+        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
       )) as Anchored<PostEntry | null>,
   );
 }
@@ -1977,6 +1997,7 @@ export async function readOwnDraftMetadata(
   threadId: string,
   postId: string,
   context: ReadContext,
+  retain?: RetainContentRead<NativeDraftMetadata>,
 ): Promise<Anchored<NativeDraftMetadata | null>> {
   if (routeOf(threadId) === null || routeOf(postId) !== routeOf(threadId)) throw new ContentNotFoundError();
   return withRealmDisclosureScope(
@@ -1993,6 +2014,7 @@ export async function readOwnDraftMetadata(
         false,
         undefined,
         true,
+        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
       )) as Anchored<NativeDraftMetadata | null>,
   );
 }

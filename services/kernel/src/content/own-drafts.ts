@@ -1,4 +1,4 @@
-import { accessCheck, AuthenticationError, type AccessCheck } from '../request/access.ts';
+import { accessCheck, AuthenticationError, type AccessCheck, type AccessClient } from '../request/access.ts';
 import type { CursorBinding } from '../tokens/cursor.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -12,6 +12,8 @@ import {
   snapshot,
   type ContentReadDependencies,
   type NativeDraftMetadata,
+  type PostEntry,
+  type RetainContentRead,
 } from './reads.ts';
 import draftPage from './own-drafts-page.sql';
 
@@ -52,9 +54,11 @@ async function ownAccount(deps: ContentReadDependencies, accountId: string, cont
     { route, id: accountId },
     { pool: deps.pool, deadline: context.deadline },
   );
+  let epoch: number | undefined;
   const verify = async () => {
     const result = await snapshot(deps, accountId, context, (client) => check(client));
-    if (!result.value) throw new ContentNotFoundError();
+    if (!result.value || (epoch !== undefined && result.anchor.epoch !== epoch)) throw new ContentNotFoundError();
+    epoch ??= result.anchor.epoch;
     return result.anchor;
   };
   await verify();
@@ -79,11 +83,15 @@ function scope(accountId: string, context: ReadContext, limit: number): CursorBi
 
 async function subjects(deps: ContentReadDependencies, metadata: NativeDraftMetadata, context: ReadContext) {
   const read = await prepareEditionSubjectIdentities(deps, metadata.subjectIds, context);
+  const initial = await read();
   const verify = async () => {
     const values = await read();
-    return metadata.subjectIds.every((id) => values.get(id)?.kind === 'available');
+    return metadata.subjectIds.every(
+      (id) =>
+        values.get(id)?.kind === 'available' && JSON.stringify(values.get(id)) === JSON.stringify(initial.get(id)),
+    );
   };
-  return { verify, allowed: await verify() };
+  return { verify, allowed: metadata.subjectIds.every((id) => initial.get(id)?.kind === 'available') };
 }
 
 async function actions(
@@ -91,7 +99,7 @@ async function actions(
   metadata: NativeDraftMetadata,
   context: ReadContext,
   accountId: string,
-): Promise<OwnDraftActions> {
+) {
   const route = routeOf(metadata.id)!;
   const checks: AccessCheck[] = [];
   for (const action of ['post:revise', 'post:erase'])
@@ -104,17 +112,18 @@ async function actions(
         { pool: deps.pool, deadline: context.deadline },
       ),
     );
-  const allowed = await snapshot(deps, metadata.id, context, async (client) => {
+  // Keep the prepared command checks, not an earlier boolean. Their native
+  // evaluation runs with the retained exact draft after foreign hydration.
+  return async (client: AccessClient): Promise<OwnDraftActions> => {
     const result: boolean[] = [];
     for (const check of checks) result.push(await check(client));
-    return result;
-  });
-  const edit = `/v1/posts/${metadata.id}/revisions`;
-  return {
-    resume: `/v1/accounts/${accountId}/drafts/${metadata.id}?threadId=${metadata.threadId}`,
-    edit: allowed.value[0] ? edit : null,
-    publish: allowed.value[0] ? edit : null,
-    erase: allowed.value[1] ? `/v1/posts/${metadata.id}` : null,
+    const edit = `/v1/posts/${metadata.id}/revisions`;
+    return {
+      resume: `/v1/accounts/${accountId}/drafts/${metadata.id}?threadId=${metadata.threadId}`,
+      edit: result[0] ? edit : null,
+      publish: result[0] ? edit : null,
+      erase: result[1] ? `/v1/posts/${metadata.id}` : null,
+    };
   };
 }
 
@@ -164,11 +173,22 @@ export async function listOwnDrafts(
   });
   const entries: OwnDraftEntry[] = [];
   const anchors: AnchoredPosition[] = [selected.anchor];
+  const hydrated: Array<{
+    initial: NativeDraftMetadata;
+    current: Parameters<RetainContentRead<NativeDraftMetadata>>[0];
+    references: Awaited<ReturnType<typeof subjects>>;
+    applicable: Awaited<ReturnType<typeof actions>>;
+    language: string | null;
+  }> = [];
   for (const candidate of selected.value.candidates) {
-    const initial = await readOwnDraftMetadata(deps, candidate.thread_id, candidate.item_id, context);
+    let current: Parameters<RetainContentRead<NativeDraftMetadata>>[0] | undefined;
+    const initial = await readOwnDraftMetadata(deps, candidate.thread_id, candidate.item_id, context, (read) => {
+      current = read;
+    });
     anchors.push(initial.anchor);
     if (
       !initial.value ||
+      !current ||
       initial.value.authorId !== accountId ||
       initial.value.revisionId !== candidate.draft_revision_id
     )
@@ -176,18 +196,19 @@ export async function listOwnDrafts(
     const references = await subjects(deps, initial.value, context);
     if (!references.allowed) continue;
     const applicable = await actions(deps, initial.value, context, accountId);
-    const final = await readOwnDraftMetadata(deps, candidate.thread_id, candidate.item_id, context);
-    anchors.push(final.anchor);
-    if (
-      !final.value ||
-      final.value.revisionId !== initial.value.revisionId ||
-      JSON.stringify(final.value) !== JSON.stringify(initial.value) ||
-      !(await references.verify())
-    )
-      continue;
-    entries.push({ ...final.value, language: candidate.draft_language, actions: applicable });
+    hydrated.push({ initial: initial.value, current, references, applicable, language: candidate.draft_language });
   }
   anchors.push(await admission.verify());
+  for (const item of hydrated) {
+    if (!(await item.references.verify())) continue;
+    let applicable: OwnDraftActions | undefined;
+    const final = await item.current(async (client) => {
+      applicable = await item.applicable(client);
+    });
+    anchors.push(final.anchor);
+    if (!final.value || !applicable || JSON.stringify(final.value) !== JSON.stringify(item.initial)) continue;
+    entries.push({ ...final.value, language: item.language, actions: applicable });
+  }
   const last = selected.value.candidates.at(-1);
   return {
     entries,
@@ -218,11 +239,17 @@ export async function resumeOwnDraft(
   context: ReadContext,
 ) {
   const admission = await ownAccount(deps, accountId, context);
-  const metadata = await readOwnDraftMetadata(deps, threadId, postId, context);
-  if (!metadata.value || metadata.value.authorId !== accountId) throw new ContentNotFoundError();
+  let currentMetadata: Parameters<RetainContentRead<NativeDraftMetadata>>[0] | undefined;
+  const metadata = await readOwnDraftMetadata(deps, threadId, postId, context, (read) => {
+    currentMetadata = read;
+  });
+  if (!metadata.value || !currentMetadata || metadata.value.authorId !== accountId) throw new ContentNotFoundError();
   const references = await subjects(deps, metadata.value, context);
   if (!references.allowed) throw new ContentNotFoundError();
-  const post = await readPost(deps, threadId, postId, context);
+  let currentPost: Parameters<RetainContentRead<PostEntry>>[0] | undefined;
+  const post = await readPost(deps, threadId, postId, context, undefined, (read) => {
+    currentPost = read;
+  });
   if (
     !post.value ||
     !('revisionId' in post.value) ||
@@ -230,9 +257,23 @@ export async function resumeOwnDraft(
     post.value.authorId !== accountId ||
     post.value.visibility !== 'draft' ||
     post.value.revisionId !== metadata.value.revisionId ||
-    !(await references.verify())
+    !currentPost
   )
     throw new ContentNotFoundError();
   await admission.verify();
-  return post;
+  if (!(await references.verify())) throw new ContentNotFoundError();
+  const finalMetadata = await currentMetadata();
+  if (!finalMetadata.value || JSON.stringify(finalMetadata.value) !== JSON.stringify(metadata.value))
+    throw new ContentNotFoundError();
+  const final = await currentPost();
+  if (
+    !final.value ||
+    !('revisionId' in final.value) ||
+    final.value.availability !== 'available' ||
+    final.value.visibility !== 'draft' ||
+    final.value.authorId !== accountId ||
+    final.value.revisionId !== metadata.value.revisionId
+  )
+    throw new ContentNotFoundError();
+  return final;
 }

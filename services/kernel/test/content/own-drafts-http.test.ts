@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import type { Pool } from 'pg';
 import { createAuthorItemEffect } from '../../src/content/author-item-index.ts';
@@ -7,6 +7,8 @@ import { readBatch } from '../../src/events/log.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { postPublicationFixture } from './support/post-publication-fixture.ts';
 import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
+import * as reads from '../../src/content/reads.ts';
+import * as subjects from '../../src/content/edition-subject.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof postPublicationFixture>>;
@@ -39,6 +41,59 @@ async function deliver(id: string, pool: Pool = f.pool) {
 }
 
 const home = () => `/v1/accounts/${f.author.actor.accountId}/drafts`;
+// Inject a real command only after the final account snapshot has released its
+// checkout. All observations and command authorization still use native Access.
+async function duringFinalAdmission(path: string, change: () => Promise<void>) {
+  const snapshot = reads.snapshot;
+  let remaining = path === home() ? 3 : 2;
+  const observe: typeof snapshot = async (...args) => {
+    const result = await snapshot(...args);
+    if (args[1] === f.author.actor.accountId && --remaining === 0) await change();
+    return result;
+  };
+  const hook = spyOn(reads, 'snapshot').mockImplementation(observe);
+  try {
+    return await f.call('GET', path);
+  } finally {
+    hook.mockRestore();
+  }
+}
+
+test('final private admission cannot return an earlier head or self-certify a refreshed draft', async () => {
+  const thread = await f.thread('draft');
+  const post = thread.firstPost;
+  const path = `${home()}/${post.id}?threadId=${thread.id}`;
+  const stale = await duringFinalAdmission(path, async () => {
+    expect((await f.revise(post, { body: fromPlainText('Changed during return') })).status).toBe(200);
+  });
+  expect(stale.status).toBe(404);
+  const retry = await f.call('GET', path);
+  expect(retry.status).toBe(200);
+  expect(retry.value.post.body).toEqual(fromPlainText('Changed during return'));
+  await deliver(post.id);
+  const page = await duringFinalAdmission(home(), async () => {
+    expect((await f.revise(retry.value.post, { visibility: 'published' })).status).toBe(200);
+  });
+  expect(page.status).toBe(200);
+  expect(page.value.drafts.some((item: any) => item.id === post.id)).toBe(false);
+});
+
+test('erasure after body hydration conceals exact resume and its acknowledged bytes', async () => {
+  const thread = await f.thread('draft');
+  const path = `${home()}/${thread.firstPost.id}?threadId=${thread.id}`;
+  const result = await duringFinalAdmission(path, async () => {
+    const erased = await f.system.kernel.handle(
+      new Request(`https://content.test/v1/posts/${thread.firstPost.id}`, {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${f.author.bearer}`, 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+      }),
+    );
+    expect(erased.status).toBe(204);
+  });
+  expect(result.status).toBe(404);
+  expect(result.value).not.toHaveProperty('post');
+});
+
 test('acknowledged native draft returns privately, resumes exact bytes, conflicts, recovers and publishes once', async () => {
   const thread = await f.thread('draft');
   const post = thread.firstPost;
@@ -182,6 +237,37 @@ test('native review draft retains original Subject, root language, licence and c
     expect(selected.response.status, selected.text).toBe(200);
     expect(selected.value.post.body).toEqual(thread.firstPost.body);
     expect(selected.value.post.sha256).toBe(thread.firstPost.sha256);
+    // A still-readable Subject is not the same identity observation. Change its
+    // real producer while private list/resume are between their observations.
+    for (const mode of ['list', 'resume']) {
+      const prepare = subjects.prepareEditionSubjectIdentities;
+      const hook = spyOn(subjects, 'prepareEditionSubjectIdentities').mockImplementation(async (...args) => {
+        const read = await prepare(...args);
+        let observations = 0;
+        return async () => {
+          if (++observations === 2) {
+            const renamed = await r.call('PATCH', `/v1/subjects/${r.subjectId}/terms`, {
+              bearer: r.author.bearer,
+              body: { labels: { en: `Changed during ${mode}` } },
+            });
+            expect(renamed.response.status, renamed.text).toBe(200);
+          }
+          return read();
+        };
+      });
+      const target = mode === 'list' ? path : `${path}/${thread.firstPost.id}?threadId=${thread.id}`;
+      try {
+        const changed = await r.call('GET', target, { bearer: r.author.bearer });
+        expect(changed.response.status, changed.text).toBe(mode === 'list' ? 200 : 404);
+        if (mode === 'list') expect(changed.value.drafts).toEqual([]);
+      } finally {
+        hook.mockRestore();
+      }
+      const retry = await r.call('GET', target, { bearer: r.author.bearer });
+      expect(retry.response.status, retry.text).toBe(200);
+      if (mode === 'list') expect(retry.value.drafts).toHaveLength(1);
+      else expect(retry.value.post.body).toEqual(body);
+    }
   } finally {
     await r.close();
   }
