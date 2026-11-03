@@ -444,6 +444,9 @@ that image does not justify another hero rewrite. The current Realm-home source 
 the [Space page lifetime guide](../../apps/web/src/community/space-page-lifetime.md); its composed visit remains
 pending Content's current viewer observation and generated client declaration.
 
+Decision: retain the default Realm-home route until the composed viewer and generated operations arrive; keep the
+prepared native consumer injectable and unavailable-only in the meantime.
+
 Source-present provider choices, independent ratings, Spoiler Show/Hide, adjacent candidate confirmation, human
 curation guidance, Search filter entrance, creator offer titles, edition terminal recovery, shelf sorting, exact
 MyZones navigation, richer moderation and shared slotted 44px controls supersede their historical repair claims.

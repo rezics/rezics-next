@@ -79,3 +79,18 @@ first-render producer/SSR contract remains deferred.
 ## Realm home source boundary
 
 Decision: Web will not mark the composed Realm-home visit available until `RealmHomePage` carries the native current viewer observation and `@rezics/client` exposes the generated declaration for its mounted operation; the existing separate reads do not establish that assembly.
+
+The prepared consumer in `realm-home-native.ts` accepts one mounted home response and independent native shelf
+operations. It preserves disclosed publication summaries and raw cursors without Subject reads, refill or inferred
+unavailable-row counts. Its current protocol admits only the producer's anonymous/unavailable viewer states; the
+presentation's former join projection cannot admit commands. `SpacePage` renders this explicit native observation
+through the shared header and shelves without mounting the separate membership, claim or management readers.
+
+Decision: retain the default route until the composed viewer and generated operations arrive; keep the prepared
+native consumer injectable and unavailable-only in the meantime.
+
+A native page replacement remounts the entire presentation and both shelves. Credential, locale, route or prepared
+operation replacement permanently retires the old page, including pending continuations, until a new response is
+supplied. Returning to an earlier credential tuple does not restore that page. Existing route admission remains
+required for session-cache generations, lifecycle retirement and hydration; this local rendering boundary supplies
+neither native viewer currentness nor private first-paint proof.

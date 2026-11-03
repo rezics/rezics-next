@@ -9,6 +9,7 @@ import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
 import { nativeMembershipEffect, nativeRealmLeaveOwnerReason } from './realm-leave-recovery';
 import { formatMyRealmsInventory, type MyRealmsInventoryLink } from './my-realms-native';
+import type { NativeRealmHomePage } from './realm-home-native';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -58,6 +59,8 @@ export type RealmHome = {
   credentialMode?: ReadCredentialMode;
   /** Null when signed out. */
   viewer: { state: MemberState; idempotencyKey: string } | null;
+  /** The mounted home currently supplies only anonymous or unavailable viewer/actions. */
+  nativeObservation?: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
 };
 
 export type SpacePageData = {

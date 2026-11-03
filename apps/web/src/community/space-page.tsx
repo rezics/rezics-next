@@ -50,6 +50,8 @@ import { RealmCatalogueCurrent } from './realm-catalogue-current';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CommunityManagementContext, type CommunityManagementOperation } from './community-management';
 import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
+import { nativeRealmHomeShelves, type NativeRealmHomeOperations } from './realm-home-native';
+import { requestLanguages } from '../kernel/languages';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -341,19 +343,125 @@ export function SpacePage(props: {
   realmAppearance?: ReactNode;
   lifecycleAdapter?: ContainerLifecycleAdapter;
   realmClaimAdapter?: RealmClaimAdapter;
+  nativeOperations?: NativeRealmHomeOperations;
 }) {
-  const { state, subject } = useSession();
+  const { state, subject, csrfToken } = useSession();
+  const location = useLocation();
+  const locale = getLocale();
   const viewer = state === 'signed-in' && subject ? subject : null;
   const lifetime = useSpacePageLifetime();
+  const retired = useRef(new WeakSet<SpacePageData>());
+  const source = useRef({
+    page: props.page,
+    revision: 0,
+    state,
+    subject,
+    csrfToken,
+    locale,
+    route: location.publicHref,
+    operations: props.nativeOperations,
+  });
+  if (source.current.page !== props.page) {
+    retired.current.add(source.current.page);
+    source.current = {
+      page: props.page,
+      revision: source.current.revision + 1,
+      state,
+      subject,
+      csrfToken,
+      locale,
+      route: location.publicHref,
+      operations: props.nativeOperations,
+    };
+  }
+  const native = props.page.realm?.nativeObservation;
+  // A replacement credential/route cannot adopt the old native response, even with the same subject.
+  if (
+    native &&
+    (source.current.state !== state ||
+      source.current.subject !== subject ||
+      source.current.csrfToken !== csrfToken ||
+      source.current.locale !== locale ||
+      source.current.route !== location.publicHref ||
+      source.current.operations !== props.nativeOperations)
+  )
+    retired.current.add(props.page);
+  if (native && retired.current.has(props.page)) return null;
   return (
     <AuthoringDepartureBoundary>
-      <SpaceHome
-        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
-        {...props}
-        viewer={viewer}
-        signedOut={state === 'signed-out'}
-      />
+      {native && props.page.realm ? (
+        <NativeSpaceHome
+          key={`native:${source.current.revision}:${lifetime?.scopeKey ?? 'standalone'}`}
+          page={props.page as SpacePageData & { realm: RealmHome }}
+          operations={props.nativeOperations}
+          signedOut={state === 'signed-out'}
+        />
+      ) : (
+        <SpaceHome
+          key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
+          {...props}
+          viewer={viewer}
+          signedOut={state === 'signed-out'}
+        />
+      )}
     </AuthoringDepartureBoundary>
+  );
+}
+
+/** The current mounted producer never admits membership, claim, management or publication commands. */
+function NativeSpaceHome({
+  page,
+  operations,
+  signedOut,
+}: {
+  page: SpacePageData & { realm: RealmHome };
+  operations: NativeRealmHomeOperations | undefined;
+  signedOut: boolean;
+}) {
+  const location = useLocation();
+  const locale = getLocale();
+  const shelves = useMemo(
+    () =>
+      operations
+        ? nativeRealmHomeShelves(operations, { realmId: page.realm.id, languages: requestLanguages(locale) })
+        : {
+            boards: async () => ({ kind: 'unavailable' as const }),
+            publications: async () => ({ kind: 'unavailable' as const }),
+          },
+    [operations, page.realm.id, locale],
+  );
+  const transport = useMemo<RealmShelfTransport>(
+    () => ({ ...shelves, change: async () => ({ kind: 'denied' }) }),
+    [shelves],
+  );
+  const advice = page.realm.nativeObservation!;
+  return (
+    <article className="max-w-5xl space-y-10 text-foreground">
+      <RealmHomeHeader
+        realm={page.realm}
+        space={page.space}
+        participation={
+          <section aria-label={m.realm_membership_label()} className="flex min-w-0 flex-wrap gap-3">
+            {signedOut && advice.viewer.state === 'anonymous' && advice.actions.join === 'sign-in' ? (
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal"
+                render={
+                  <a href={`/auth/sign-in?return_to=${encodeURIComponent(location.publicHref.split(/[?#]/, 1)[0]!)}`} />
+                }
+              >
+                {m.realm_sign_in_to_join()}
+              </Button>
+            ) : (
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.realm_membership_unavailable()}
+              </p>
+            )}
+          </section>
+        }
+      />
+      {page.realm.continuity?.governanceReadOnly ? <p role="status">{m.container_lifecycle_orphaned()}</p> : null}
+      <RealmShelf realm={page.realm} transport={transport} frozen />
+    </article>
   );
 }
 
