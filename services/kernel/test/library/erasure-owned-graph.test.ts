@@ -119,6 +119,15 @@ test('default native worker removes private sessions/history, labels, archives, 
   const log = (
     await f.json(as, 'POST', '/v1/publishedLogs', 201, { sessionId: session.id, note: 'private progress snapshot' })
   ).publishedLog;
+  const retirementKey = crypto.randomUUID();
+  const retire = () => f.kernel.handle(new Request(`http://kernel.test/v1/progressSessions/${session.id}:retire`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${as.bearer}`, 'content-type': 'application/json',
+      'idempotency-key': JSON.stringify(retirementKey) },
+    body: JSON.stringify({ revision: 2 }),
+  }));
+  expect((await retire()).status).toBe(200);
+  expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(404);
   const owner = [routeOf(as.accountId), as.accountId];
   for (const table of [
     'entry_deleted',
@@ -142,6 +151,8 @@ test('default native worker removes private sessions/history, labels, archives, 
     ).rows,
   ).toHaveLength(1);
   await deletePersona(f.options, as);
+  expect((await retire()).status).toBe(401); // Terminal authority precedes the original receipt.
+  expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}:reopen`, { revision: 3 })).status).toBe(401);
   expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(401);
   await f.start();
   const results = await terminal(as.accountId);
