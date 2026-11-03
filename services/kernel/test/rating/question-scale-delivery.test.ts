@@ -22,6 +22,7 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
   const fixture = await createNativePublicationFixture();
   try {
     const { database, realmId, members, outsiders, target: subjectId } = fixture;
+    await fixture.joinMembers();
     const voter = members[0]!;
     const questionId = newId(routeOf(realmId)!);
     await database.admin.query(
