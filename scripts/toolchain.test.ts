@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { resolveBunCommand } from './gate.ts';
-import { runScript } from './remote-check.ts';
+import { repositoryBun, runScript } from './remote-check.ts';
 import { resolveTypecheckCommand } from './typecheck.ts';
 import { resolveRepositoryBun } from './worker-check.ts';
 
@@ -70,7 +70,14 @@ test('worker and remote checks select and verify the pinned repository Bun', asy
   expect(typecheckBun.code, typecheckBun.error).toBe(0);
   expect(typecheckBun.output.trim()).toBe(Bun.revision);
 
-  const remote = runScript('run-id', '/srv/rezics-check/runs/run-id', '.', ['bun', 'test'], 'host-a');
+  const remote = runScript(
+    'run-id',
+    '/srv/rezics-check/runs/run-id',
+    '.',
+    ['bun', 'test'],
+    'host-a',
+    repositoryBun(root),
+  );
   expect(remote).toContain(`expected_bun=${manifest.packageManager.slice(4)}`);
   expect(remote).toContain('Bun.revision === process.argv[1]');
   expect(remote).toContain('https://registry.npmjs.org/@oven/bun-linux-$build/-/bun-linux-$build-$expected_bun.tgz');

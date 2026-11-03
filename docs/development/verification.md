@@ -230,6 +230,10 @@ The check-host provisioner pins the same distribution and checks its full build 
 Provision hosts with `scripts/provision-check-host.sh` as described in
 [the check-host operations guide](../../scripts/README.md). No shared host runtime needs
 to be changed while evaluating a candidate checkout.
+Remote placement reads that pin from the candidate workspace `package.json` and the matching
+installed `node_modules/bun` from that workspace, or from the original candidate when
+`check-run` has frozen a snapshot without dependencies. The trusted driver's checkout is not
+the pin or artifact source.
 
 Run `bun scripts/gate.ts` for the landing gate and `bun run typecheck` for the root
 typecheck. The gate also runs `scripts/toolchain.test.ts` and `scripts/toolchain-workspaces.test.ts`, which check formatter

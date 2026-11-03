@@ -66,8 +66,31 @@ const kernel = join(repository, 'services/kernel');
 const remoteCheck = join(repository, 'scripts/remote-check.ts');
 const checkHost = join(repository, 'scripts/check-host');
 const kernelFiles = ['test/access-hook.test.ts', 'test/admission.test.ts'];
+const fixtureBunRevision = 'c'.repeat(40);
 
 setDefaultTimeout(60_000);
+
+function installPinnedBun(root: string, version = '1.2.3', revision = fixtureBunRevision) {
+  const installed = join(root, 'node_modules/bun');
+  mkdirSync(join(installed, 'bin'), { recursive: true });
+  writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'bun', version }));
+  writeFileSync(
+    join(installed, 'bin/bun.exe'),
+    `#!/bin/sh
+if [ "$1" = --eval ]; then
+  printf '%s\\n' '{"version":"${version.split(/[+-]/)[0]}","revision":"${revision}"}'
+  exit 0
+fi
+exit 1
+`,
+  );
+  chmodSync(join(installed, 'bin/bun.exe'), 0o755);
+  return { version, revision, pin: `bun@${version}` };
+}
+
+function hostRuntime() {
+  return repositoryBun(repository);
+}
 
 test('ledger command phases pair monotonic markers and report malformed or unpaired lines', () => {
   expect(
@@ -79,13 +102,13 @@ test('ledger command phases pair monotonic markers and report malformed or unpai
 });
 
 function generatedHostRun(): string {
-  return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a');
+  return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a', hostRuntime());
 }
 
-test('a frozen producer imports without launches and discovers its launch checkout pinned package without candidate dependencies', () => {
-  const checkout = mkdtempSync(join(root, 'import-without-deps-'));
-  mkdirSync(join(checkout, 'scripts/check-host'), { recursive: true });
-  copyFileSync(remoteCheck, join(checkout, 'scripts/remote-check.ts'));
+test('a trusted driver without a Bun pin binds a candidate runtime and frozen producer artifact', () => {
+  const driver = mkdtempSync(join(root, 'no-pin-driver-'));
+  mkdirSync(join(driver, 'scripts/check-host'), { recursive: true });
+  copyFileSync(remoteCheck, join(driver, 'scripts/remote-check.ts'));
   for (const file of [
     'check-artifacts.ts',
     'check-output-tree.ts',
@@ -93,34 +116,71 @@ test('a frozen producer imports without launches and discovers its launch checko
     'check-custody.ts',
     'check-lifecycle-child.ts',
   ])
-    copyFileSync(join(repository, 'scripts', file), join(checkout, 'scripts', file));
-  copyFileSync(join(repository, 'scripts/check-host/docker'), join(checkout, 'scripts/check-host/docker'));
-  copyFileSync(join(repository, 'package.json'), join(checkout, 'package.json'));
+    copyFileSync(join(repository, 'scripts', file), join(driver, 'scripts', file));
+  copyFileSync(join(repository, 'scripts/check-host/docker'), join(driver, 'scripts/check-host/docker'));
+  writeFileSync(join(driver, 'package.json'), JSON.stringify({ name: 'driver', private: true }));
+  const candidate = mkdtempSync(join(root, 'pinned-candidate-'));
+  const pin = installPinnedBun(candidate, '1.2.3', 'a'.repeat(40));
+  writeFileSync(join(candidate, 'package.json'), JSON.stringify({ packageManager: pin.pin }));
+  const frozen = mkdtempSync(join(root, 'frozen-candidate-'));
+  writeFileSync(join(frozen, 'package.json'), JSON.stringify({ packageManager: pin.pin }));
   const result = spawnSync(
     process.execPath,
     [
       '--eval',
       `const spawn = Bun.spawn, spawnSync = Bun.spawnSync;
        Bun.spawn = Bun.spawnSync = () => { throw new Error('import started a process'); };
-       const module = await import(${JSON.stringify(join(checkout, 'scripts/remote-check.ts'))});
+       const module = await import(${JSON.stringify(join(driver, 'scripts/remote-check.ts'))});
        Bun.spawn = spawn; Bun.spawnSync = spawnSync;
-       const script = module.runScript('test', '/run', '.', ['true'], 'host');
-       const expected = module.repositoryBun(${JSON.stringify(repository)});
-       if (!script.includes('expected_revision=' + expected.revision)) throw new Error('lost runtime binding');`,
+       const runtime = module.repositoryBun(${JSON.stringify(frozen)}, ${JSON.stringify(candidate)});
+       if (runtime.version !== ${JSON.stringify(pin.version)} || runtime.revision !== ${JSON.stringify(pin.revision)})
+         throw new Error('wrong candidate runtime');
+       const script = module.runScript('test', '/run', '.', ['true'], 'host', runtime);
+       if (!script.includes('expected_bun=' + ${JSON.stringify(pin.version)})) throw new Error('lost pin');
+       if (!script.includes('expected_revision=' + runtime.revision)) throw new Error('lost runtime binding');
+       try { module.repositoryBun(${JSON.stringify(driver)}); throw new Error('used driver pin'); }
+       catch (error) {
+         if (!(error instanceof Error) || !error.message.includes('packageManager must pin')) throw error;
+       }
+       try { module.repositoryBun(${JSON.stringify(frozen)}); throw new Error('used ancestor bun'); }
+       catch (error) {
+         if (!(error instanceof Error) || !error.message.includes('absent installed package')) throw error;
+       }`,
     ],
     {
-      cwd: checkout,
+      cwd: driver,
       encoding: 'utf8',
       timeout: 10_000,
     },
   );
   expect(result.status, result.stderr).toBe(0);
   expect(result.stderr).toBe('');
-  expect(existsSync(join(checkout, 'node_modules'))).toBe(false);
+  expect(existsSync(join(driver, 'node_modules'))).toBe(false);
+});
+
+test('one driver process admits independent candidate runtimes without inheriting the first pin', () => {
+  const first = mkdtempSync(join(root, 'runtime-a-'));
+  const second = mkdtempSync(join(root, 'runtime-b-'));
+  const pinA = installPinnedBun(first, '1.2.3', 'a'.repeat(40));
+  const pinB = installPinnedBun(second, '2.0.0', 'b'.repeat(40));
+  writeFileSync(join(first, 'package.json'), JSON.stringify({ packageManager: pinA.pin }));
+  writeFileSync(join(second, 'package.json'), JSON.stringify({ packageManager: pinB.pin }));
+  const runtimeA = repositoryBun(first);
+  const runtimeB = repositoryBun(second);
+  expect(runtimeA.revision).toBe(pinA.revision);
+  expect(runtimeB.revision).toBe(pinB.revision);
+  const scriptA = runScript('a', '/run/a', '.', ['true'], 'host', runtimeA);
+  const scriptB = runScript('b', '/run/b', '.', ['true'], 'host', runtimeB);
+  expect(scriptA).toContain(`expected_bun=${pinA.version}`);
+  expect(scriptA).toContain(`expected_revision=${pinA.revision}`);
+  expect(scriptB).toContain(`expected_bun=${pinB.version}`);
+  expect(scriptB).toContain(`expected_revision=${pinB.revision}`);
 });
 
 test('pinned runtime diagnostics distinguish absent, failed, malformed and mismatched identities', () => {
   const checkout = mkdtempSync(join(root, 'runtime-identity-'));
+  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'bare' }));
+  expect(() => repositoryBun(checkout)).toThrow('packageManager must pin an exact Bun version');
   writeFileSync(join(checkout, 'package.json'), JSON.stringify({ packageManager: 'bun@1.2.3' }));
   const installed = join(checkout, 'node_modules/bun');
   mkdirSync(join(installed, 'bin'), { recursive: true });
@@ -1704,6 +1764,10 @@ function workspace(tmpfs = false): string {
   writeFileSync(join(directory, '.gitignore'), 'ignored.txt\n');
   writeFileSync(join(directory, 'src/tracked.ts'), 'export {};\n');
   writeFileSync(join(directory, 'src/gone.ts'), 'export {};\n');
+  writeFileSync(
+    join(directory, 'package.json'),
+    JSON.stringify({ name: 'fixture', private: true, packageManager: 'bun@1.2.3' }) + '\n',
+  );
   git('add', '.');
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
   rmSync(join(directory, 'src/gone.ts'));
@@ -1711,6 +1775,7 @@ function workspace(tmpfs = false): string {
   writeFileSync(join(directory, 'ignored.txt'), 'x');
   writeFileSync(join(directory, 'node_modules/x/index.js'), 'x');
   writeFileSync(join(directory, '.temp/scratch'), 'x');
+  installPinnedBun(directory);
   return directory;
 }
 
@@ -4492,7 +4557,14 @@ test('the generated shell invocation preserves spaces, quotes and dollar text in
   const marker = 'should-not-exist';
   const argumentsToPreserve = ['two words', "single'quote", '"double quotes"', '$HOME', `$(touch ${marker})`];
   const command = ['sh', '-c', `printf '%s\\n' "$@" > ${output}`, 'sh', ...argumentsToPreserve];
-  const script = runScript('literal-arguments', '/srv/rezics-check/runs/literal-arguments', '.', command, 'a');
+  const script = runScript(
+    'literal-arguments',
+    '/srv/rezics-check/runs/literal-arguments',
+    '.',
+    command,
+    'a',
+    hostRuntime(),
+  );
   const result = fixture.execute(script);
 
   expect(result.status, result.stderr).toBe(0);
@@ -4509,7 +4581,7 @@ test('a supported quote-heavy command crosses every launch boundary without an o
   const args = Array.from({ length: 3 }, () => "'".repeat(4096));
   const command = ['sh', '-c', `printf '%s' "$@" > arguments; exit 23`, 'sh', ...args];
   expect(Buffer.byteLength(JSON.stringify(command))).toBeLessThan(16 * 1024);
-  const script = runScript('large-launch', '/srv/rezics-check/runs/large-launch', '.', command, 'a')
+  const script = runScript('large-launch', '/srv/rezics-check/runs/large-launch', '.', command, 'a', hostRuntime())
     .replaceAll('/srv/rezics-check', fixture.directory)
     .replaceAll('/sys/fs/cgroup', `${fixture.directory}/cgroup`)
     .replaceAll(':/usr/local/bin:', ':');
@@ -4577,6 +4649,7 @@ test('a quiet remote command reports CPU progress and the progress loop exits wi
     '.',
     ['/bin/sleep', '0.35'],
     'a',
+    hostRuntime(),
     10,
   );
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'a' });
@@ -4588,7 +4661,15 @@ test('a quiet remote command reports CPU progress and the progress loop exits wi
 
 test('a quiet remote command without CPU progress writes no progress line', () => {
   const fixture = runFixture();
-  const script = runScript('remote-idle', '/srv/rezics-check/runs/remote-idle', '.', ['/bin/sleep', '0.3'], 'a', 10);
+  const script = runScript(
+    'remote-idle',
+    '/srv/rezics-check/runs/remote-idle',
+    '.',
+    ['/bin/sleep', '0.3'],
+    'a',
+    hostRuntime(),
+    10,
+  );
   const result = fixture.execute(script, { REMOTE_CHECK_HOST: 'a' });
   expect(result.status).toBe(0);
   expect(result.stderr).not.toContain('remote-check: running on a');
@@ -4606,7 +4687,7 @@ test('a quiet remote command reports every interval with at least one CPU second
     '/srv/rezics-check/sleep-pids',
   ];
   const result = fixture.execute(
-    runScript('remote-each-interval', '/srv/rezics-check/runs/remote-each-interval', '.', command, 'a', 10),
+    runScript('remote-each-interval', '/srv/rezics-check/runs/remote-each-interval', '.', command, 'a', hostRuntime(), 10),
     { PROGRESS_INCREMENT: '1200000' },
   );
   expect(result.status, result.stderr).toBe(0);
@@ -4634,7 +4715,15 @@ test('remote CPU reports accumulate subsecond work across intervals', () => {
     'progress-command',
     '/srv/rezics-check/sleep-pids',
   ];
-  const script = runScript('remote-fractional', '/srv/rezics-check/runs/remote-fractional', '.', command, 'a', 10);
+  const script = runScript(
+    'remote-fractional',
+    '/srv/rezics-check/runs/remote-fractional',
+    '.',
+    command,
+    'a',
+    hostRuntime(),
+    10,
+  );
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '400000', REMOTE_CHECK_HOST: 'a' });
   expect(result.status, result.stderr).toBe(0);
   const reports = [...result.stderr.matchAll(/remote-check: running on a, (\d+) CPU seconds/g)].map((match) =>
@@ -4655,6 +4744,7 @@ test('a signal to the remote command wrapper reaps its progress loop and sleeper
     '.',
     ['sh', '-c', '/bin/sleep 0.15; kill -TERM "$PPID"; exec /bin/sleep 0.5'],
     'a',
+    hostRuntime(),
     10,
   );
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '1200000', REMOTE_CHECK_HOST: 'a' });
@@ -6783,6 +6873,7 @@ sys.exit(child.wait())
       '.',
       command,
       'a',
+      hostRuntime(),
       60_000,
       'ordinary',
       settings.bound ?? 5_000,

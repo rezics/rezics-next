@@ -27,6 +27,7 @@ import {
   parseRemotePhysicalRunReceipt,
   readHosts,
   remoteCheck,
+  repositoryBun,
   requestExecutionCancellation,
   type ExecutionCancellation,
   type RemoteCheck,
@@ -1256,6 +1257,7 @@ async function prepareFinalRun(
   try {
     const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
     const preparation = preparationCommands(snapshot.workspace, cwd, frozenArgs);
+    repositoryBun(snapshot.workspace, candidateRoot);
     const sourceManifest = await buildCandidateSourceManifest(snapshot, returns);
     const hostConfigurationHash = await hashFile(hostsFile);
     const producerClosureSha256 = await trustedProducerClosureHash(trustedRoot);
@@ -1376,6 +1378,7 @@ async function runCheckLegacy(
   try {
     const overlay = resolveEnvironmentFileSettings(originalEnvironment, candidateRoot, snapshot.workspace, cwd);
     const preparation = preparationCommands(snapshot.workspace, cwd, frozenArgs);
+    repositoryBun(snapshot.workspace, candidateRoot);
     const producerSourceHash = await hashFile(resolve(import.meta.path));
     const hostConfigurationHash = await hashFile(hostsFile);
     const preparationHash = createHash('sha256')
@@ -1412,6 +1415,7 @@ async function runCheckLegacy(
       cwd,
       command: ['env', ...Object.entries(overlay).map(([name, value]) => `${name}=${value}`), ...frozenArgs],
       returns,
+      runtimeProducer: candidateRoot,
       ...(preparation.length === 0 ? {} : { prepare: preparation }),
       expectedSourceSha256: snapshot.sourceHash,
       expectedSourceManifest: await buildCandidateSourceManifest(snapshot, returns),
@@ -1741,6 +1745,7 @@ async function runCheckWithFinalSettlement(
       throw error;
     }
     snapshotBound = true;
+    repositoryBun(snapshot.workspace, candidateRoot);
     // This fsynced transition is the admission linearization point. A cancellation that wins
     // while the record is queued prevents host probing and any later run identity allocation.
     try {
@@ -1759,6 +1764,7 @@ async function runCheckWithFinalSettlement(
       cwd,
       command: ['env', ...Object.entries(overlay).map(([name, value]) => `${name}=${value}`), ...frozenArgs],
       returns,
+      runtimeProducer: candidateRoot,
       ...(preparation.length === 0 ? {} : { prepare: preparation }),
       cancellation: establishedRegistration.cancellation,
       ...(requestedPriority == null ? {} : { priority: requestedPriority }),
