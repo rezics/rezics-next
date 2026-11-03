@@ -5,6 +5,7 @@ import {
   HeartIcon,
   LaughIcon,
   LightbulbIcon,
+  SmilePlusIcon,
   ThumbsUpIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -344,6 +345,18 @@ export const Reactions = (props: ReactionsProps) => {
     props.presentation !== 'chips' &&
     kinds.includes('upvote') &&
     kinds.includes('downvote');
+  const pickerClass = cn(
+    'rounded-full',
+    votes && 'min-h-11 min-w-11 px-0 sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11',
+  );
+  const pickerLabel = votes ? (
+    <>
+      <SmilePlusIcon aria-hidden className="size-4" />
+      <span className="sr-only">{labels.react}</span>
+    </>
+  ) : (
+    labels.react
+  );
   // Native count maps omit zero kinds. An admitted map is a complete projection, not a generic click count.
   const score = (shown.counts.upvote ?? 0) - (shown.counts.downvote ?? 0);
   const voteArrow = (kind: 'upvote' | 'downvote') => {
@@ -435,15 +448,15 @@ export const Reactions = (props: ReactionsProps) => {
         );
       })}
       {signedOut ? (
-        <a className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-full')} href={signInHref}>
-          {labels.react}
+        <a className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), pickerClass)} href={signInHref}>
+          {pickerLabel}
         </a>
       ) : (
         <Menu
           title={labels.choose}
           trigger={
-            <Button className="rounded-full" disabled={disabled} size="sm" variant="outline">
-              {labels.react}
+            <Button className={pickerClass} disabled={disabled} size="sm" variant="outline">
+              {pickerLabel}
             </Button>
           }
           content={

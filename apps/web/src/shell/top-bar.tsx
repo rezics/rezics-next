@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Bell, LogIn, Plus } from 'lucide-react';
 import { Menu } from '@rezics/ui/menu';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Skeleton } from '@rezics/ui/shadcn/skeleton';
 import { cn } from '@rezics/ui/utils';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
@@ -69,8 +70,9 @@ export function ShellTopActions({
         title={m.shell_create()}
         closeOnNavigation
         trigger={
-          <Button variant="ghost" size="icon-lg" className="rounded-full text-primary" aria-label={m.shell_create()}>
+          <Button size="lg" className="min-w-11 rounded-full px-3" aria-label={m.shell_create()}>
             <Plus aria-hidden="true" />
+            <span className="hidden lg:inline">{m.shell_create()}</span>
           </Button>
         }
         content={
@@ -111,8 +113,14 @@ export function ShellTopActions({
             <span className="sr-only sm:hidden">{m.account_sign_in()}</span>
           </a>
         </>
+      ) : session === 'unknown' ? (
+        <div role="status" aria-busy="true" className="flex items-center gap-1">
+          <span className="sr-only">{m.candidate_loading()}</span>
+          <Skeleton aria-hidden className="size-11 rounded-full motion-reduce:animate-none" />
+          <Skeleton aria-hidden className="hidden size-11 rounded-full motion-reduce:animate-none md:block" />
+        </div>
       ) : (
-        <span className="sr-only" role="status">
+        <span className="max-w-28 text-xs text-muted-foreground [overflow-wrap:anywhere]" role="status">
           {m.shell_account_unavailable()}
         </span>
       )}

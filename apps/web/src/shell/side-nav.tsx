@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Globe, Users } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
+import { ChevronDown, Globe, Users } from 'lucide-react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { useHistoryCurrentOrigin } from '../library/history-current-origin';
@@ -33,34 +34,44 @@ export function SideNav({
     <section aria-label={m.library_following_heading()} className="mt-3 min-w-0 border-t border-border/60 pt-3">
       {(['realm', 'space'] as const).map((kind) => (
         <section key={kind} aria-label={kind === 'realm' ? m.realms_heading() : m.library_following_spaces()}>
-          <h2 className="px-3 py-2 text-xs font-semibold text-muted-foreground">
-            {m.library_following_heading()} · {kind === 'realm' ? m.realms_heading() : m.library_following_spaces()}
-          </h2>
-          <ul className="grid min-w-0 gap-1">
-            {items
-              .filter((item) => item.kind === kind)
-              .map((item) => {
-                const Icon = kind === 'realm' ? Globe : Users;
-                const current =
-                  navigationPathMatches(context, item.path, 'prefix') ||
-                  (!!item.alternatePath && navigationPathMatches(context, item.alternatePath, 'prefix'));
-                return (
-                  <li key={item.id} className="min-w-0">
-                    <a
-                      href={`/${locale}${item.path}`}
-                      title={item.title}
-                      aria-current={current ? 'page' : undefined}
-                      className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-primary"
-                    >
-                      <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
-                      <span data-community-label className="truncate">
-                        {item.title}
-                      </span>
-                    </a>
-                  </li>
-                );
-              })}
-          </ul>
+          <Collapsible defaultOpen>
+            <h2>
+              <CollapsibleTrigger className="group/community flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-start text-xs font-semibold text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {m.library_following_heading()} · {kind === 'realm' ? m.realms_heading() : m.library_following_spaces()}
+                <ChevronDown
+                  aria-hidden
+                  className="size-4 shrink-0 transition-transform duration-150 group-aria-expanded/community:rotate-180 motion-reduce:transition-none"
+                />
+              </CollapsibleTrigger>
+            </h2>
+            <CollapsibleContent>
+              <ul className="grid min-w-0 gap-1">
+                {items
+                  .filter((item) => item.kind === kind)
+                  .map((item) => {
+                    const Icon = kind === 'realm' ? Globe : Users;
+                    const current =
+                      navigationPathMatches(context, item.path, 'prefix') ||
+                      (!!item.alternatePath && navigationPathMatches(context, item.alternatePath, 'prefix'));
+                    return (
+                      <li key={item.id} className="min-w-0">
+                        <a
+                          href={`/${locale}${item.path}`}
+                          title={item.title}
+                          aria-current={current ? 'page' : undefined}
+                          className="flex min-h-11 min-w-0 items-center gap-3 rounded-xl px-3 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:font-semibold aria-[current=page]:text-primary"
+                        >
+                          <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                          <span data-community-label className="truncate">
+                            {item.title}
+                          </span>
+                        </a>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </CollapsibleContent>
+          </Collapsible>
         </section>
       ))}
       <div data-community-footer>{footer}</div>

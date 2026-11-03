@@ -12,11 +12,15 @@ function PreparedCard({
   voted = false,
   refused = false,
   long = false,
+  plain = false,
+  unavailable = false,
 }: {
   signedIn?: boolean;
   voted?: boolean;
   refused?: boolean;
   long?: boolean;
+  plain?: boolean;
+  unavailable?: boolean;
 }) {
   const locale = getLocale();
   const [replies, setReplies] = useState(0);
@@ -68,7 +72,8 @@ function PreparedCard({
             title="Reading together"
             href={`/${locale}/threads/prepared/reading`}
             signedIn={signedIn}
-            reaction={reaction}
+            reaction={unavailable ? undefined : reaction}
+            plain={plain}
             reply={{ onReply: () => setReplies((n) => n + 1) }}
             library={{ href: `/${locale}/subjects/prepared/work?slot=collections` }}
           >
@@ -125,6 +130,27 @@ export const SignedOut: Story = {
   },
 };
 export const Voted: Story = { args: { voted: true } };
+export const PlainReply: Story = { args: { plain: true, voted: true }, globals: { viewport: { value: 'phone390' } } };
+export const UnavailableVotes: Story = { args: { unavailable: true }, globals: { viewport: { value: 'phone390' } } };
+export const CopiedLink: Story = {
+  play: async ({ canvasElement }) => {
+    const share = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    try {
+      Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => {} } });
+      const canvas = within(canvasElement);
+      await userEvent.click(canvas.getByRole('button', { name: m.thread_reading_share() }));
+      await expect(await canvas.findByRole('status')).toHaveTextContent(m.report_copy_success());
+      await expect(canvas.getByRole('button', { name: m.thread_reading_share() })).toBeEnabled();
+    } finally {
+      if (share) Object.defineProperty(navigator, 'share', share);
+      else Reflect.deleteProperty(navigator, 'share');
+      if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  },
+};
 export const Refused: Story = {
   args: { refused: true },
   play: async ({ canvasElement }) => {

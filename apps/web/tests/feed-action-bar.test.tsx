@@ -151,6 +151,26 @@ test('one-slot votes update immediately, settle from actual counts, and revert a
   expect(reads).toHaveLength(1);
 });
 
+test('compact actions retain their names and copy feedback keeps the share control reusable', async () => {
+  const copy = deferred<void>();
+  Object.defineProperty(browser.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: () => copy.promise },
+  });
+  await paint(<FeedActionBar {...props()} plain />);
+  expect(button(m.reaction_react())).not.toBeNull();
+  const share = button(m.thread_reading_share()) as HTMLButtonElement;
+  await click(share);
+  expect(share.disabled).toBe(true);
+  expect(share.getAttribute('aria-busy')).toBe('true');
+  await act(async () => copy.resolve());
+  expect(host.textContent).toContain(m.report_copy_success());
+  expect(button(m.thread_reading_share())).toBe(share);
+  expect(share.disabled).toBe(false);
+  expect(writes).toHaveLength(0);
+  expect(reads).toHaveLength(0);
+});
+
 test('unknown writes retain the exact current-visit key and reconcile once on explicit retry', async () => {
   await paint(<FeedActionBar {...props()} />);
   await click(button(m.reaction_downvote()));

@@ -64,7 +64,7 @@ export function PhoneUnreadDot({ session }: { session: Session }) {
   return session === 'signed-in' ? <PhoneUnreadDotView data={data} failed={isError} /> : null;
 }
 export const phoneTabClass =
-  'relative flex min-h-14 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:text-foreground';
+  'relative flex min-h-14 w-full min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium text-muted-foreground outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent aria-[current=page]:text-primary';
 const creationLinkClass =
   'flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring';
 export function PhoneCreationLinks({
@@ -152,8 +152,10 @@ export function PhoneNavigationView({
         title={m.shell_create()}
         closeOnNavigation
         trigger={
-          <button type="button" className={phoneTabClass}>
-            <Plus aria-hidden="true" className="size-6" />
+          <button type="button" className={`${phoneTabClass} group`}>
+            <span className="grid h-9 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground transition-transform duration-150 group-active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
+              <Plus aria-hidden="true" className="size-5" />
+            </span>
             {m.shell_create()}
           </button>
         }

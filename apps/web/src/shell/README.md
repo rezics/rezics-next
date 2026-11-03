@@ -7,3 +7,8 @@ Following a Realm means following its carrying Space; the shell reads at most 10
 Library and Collections stay visible as unavailable destinations while session or operation admission is absent.
 
 Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges.
+
+Decision: Create uses the primary color in both bars, phone destination selection uses ink blue, and followed-community
+groups start expanded with independent collapsible headings; group folding lasts for the mounted rail or drawer only.
+Unknown sessions reserve account-control space with reduced-motion-aware skeletons; failed sessions show a visible
+unavailable message rather than an indefinite loading placeholder.

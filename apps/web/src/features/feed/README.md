@@ -92,6 +92,9 @@ for manual copying and a Close action returning focus. Replacement visits retire
 
 ### Producer and board handoff
 
+Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,
+and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
+
 Content's generated `feedItems.get` summaries currently pick thread/post identity, title and creation metadata only;
 they supply neither reaction counts nor the viewer slot. Home deliberately renders unavailable voting until Content
 delivers those fields in the same bounded page, with source privacy and current-reader admission. No browser DTO or

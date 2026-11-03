@@ -107,6 +107,9 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 ## Content feedback
 
+Decision: vote presentations keep every admitted reaction in a compact smile-plus picker with the caller's accessible
+React label and 44px phone/coarse targets; chip presentations retain the text trigger and all pressed states use ink blue.
+
 `Reactions`, `ContentActions`, `ReportDialog` and the rating components use the shared `Menu` for choices and overflow actions, with shadcn primitives for buttons, confirmations, dialogs, fields, textareas, sliders and badges.
 
 - On a detail page the reaction cluster sits top right and reporting lives in the `ContentActions` overflow menu; there is no visible report button.

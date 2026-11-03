@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { EllipsisIcon, LibraryBigIcon, ReplyIcon, Share2Icon } from 'lucide-react';
+import { CheckIcon, EllipsisIcon, LibraryBigIcon, ReplyIcon, Share2Icon } from 'lucide-react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -193,6 +193,8 @@ function ActionVisit({
   const signIn = `/${locale}/auth/sign-in?return_to=${encodeURIComponent(href ?? `/${locale}/`)}`;
   const available = origin?.isCurrent() ?? true;
   const activeOverflow = signedIn ? overflow : undefined;
+  const shareLabel = <span className="sr-only sm:not-sr-only">{m.thread_reading_share({}, options)}</span>;
+  const shareClass = `${actionClass} min-w-11 px-2 sm:min-w-8`;
 
   async function share(native: boolean) {
     if (!href || !current() || running.current) return;
@@ -280,9 +282,9 @@ function ActionVisit({
         </Button>
       )}
       {!signedIn ? (
-        <a href={signIn} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}>
+        <a href={signIn} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${shareClass}`}>
           <Share2Icon aria-hidden />
-          {m.thread_reading_share({}, options)}
+          {shareLabel}
         </a>
       ) : (
         <Button
@@ -290,14 +292,15 @@ function ActionVisit({
           type="button"
           variant="ghost"
           size="sm"
-          className={actionClass}
+          className={shareClass}
           disabled={!href || !available || busy}
+          aria-busy={busy}
           onClick={() => {
             void share(true);
           }}
         >
-          <Share2Icon aria-hidden />
-          {m.thread_reading_share({}, options)}
+          {feedback === 'copied' ? <CheckIcon aria-hidden className="text-primary" /> : <Share2Icon aria-hidden />}
+          {shareLabel}
         </Button>
       )}
       {library ? (
