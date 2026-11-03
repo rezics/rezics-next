@@ -15,6 +15,7 @@ Consequently current consent and restoration SQL participates in the same physic
 No Content evaluator, Commerce entitlement, publication operation, receipt or selected resource is synthesized.
 The publisher is the natively bootstrapped governance account as well as the actual source/edition owner, so
 its resource-local actions and platform grant-management action admit ordinary grant commands.
+The mounted native write limiter has a fixture secret and unchanged production budgets.
 
 Premise correction: the focused `edition.test.ts` creates a protected thread using HTTP, but on the bound base
 `ThreadInputSchema` admits only `published | draft`. `PostInputSchema`, `RevisionInputSchema`, `createPost` and
@@ -65,7 +66,7 @@ Only the selected post is omitted from buyer source-post checks. Actual body sel
 
 Native outcomes cover edition-granted non-member refusal with an authorized owner/recipient control, missing caller
 edition grant, terminal unpublication, source takedown, deletion and physical source-byte erasure, and publisher
-source-role revocation. Conditional refusals must never produce unchecked 304 or body bytes. Calibrated SQL barriers
+edition-owner and source-owner role revocation. Conditional refusals must never produce unchecked 304 or body bytes. Calibrated SQL barriers
 revoke recipient edition, board and Realm grants before their last native guard snapshots. SQL faults exercise native
 source unavailability/deadline errors; holding the actual source boundary past 1,000 ms exercises the real deadline.
 Expected errors are 401 for anonymous access, 404 for unavailable/unauthorized content and 503 for unavailable native

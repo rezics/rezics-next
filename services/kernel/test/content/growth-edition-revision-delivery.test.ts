@@ -151,6 +151,19 @@ test('Edition bytes retain parent access, current grants and terminal native sou
     expect(stored.rows[0]!.body).toBeNull();
     await refused(f, erased);
 
+    const sellerRevoked = await f.selection();
+    await delivered(f, sellerRevoked);
+    const sellerRole = await f.db.admin.query<{ valid: string }>(
+      `SELECT valid::text FROM access.resource_role_grant
+       WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role='content.edition.owner'`,
+      [routeOf(sellerRevoked.editionId), sellerRevoked.editionId, f.publisher.accountId],
+    );
+    await f.value(f.wire(f.publisher, '/v1/roleGrants:revoke', 'POST', {
+      resource: { route: routeOf(sellerRevoked.editionId), id: sellerRevoked.editionId },
+      subject: { kind: 'account', id: f.publisher.accountId }, role: 'content.edition.owner', valid: sellerRole.rows[0]!.valid,
+    }), 200);
+    await refused(f, sellerRevoked, 503);
+
     const revoked = await f.selection();
     await delivered(f, revoked);
     const role = await f.db.admin.query<{ valid: string }>(

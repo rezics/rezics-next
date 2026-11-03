@@ -5,6 +5,7 @@ import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createHash, randomUUID } from 'node:crypto';
 import { bootstrapGovernance } from '../../../src/access/bootstrap-governance.ts';
 import { createGrantCommands } from '../../../src/access/grant-commands.ts';
+import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import permission from '../../../src/access/permission-check.sql';
 import { revisePost } from '../../../src/content/commands.ts';
 import type { ContentEditionRevisionView } from '../../../src/content/edition-model.ts';
@@ -58,10 +59,11 @@ export async function growthEditionRevisionDeliveryFixture() {
       readConsent: ({ actorAccountId, clientId }: { actorAccountId: string; clientId: string }) =>
         consent.readCurrentConsent({ actorAccountId, clientId }),
     };
-    const app = testKernel({ pool: db.pool, auth: authConfig, content });
+    const writeRate = createWriteRateLimiter({ secret: 'edition-delivery-native-write-rate-secret-32-bytes' });
+    const app = testKernel({ pool: db.pool, auth: authConfig, content, writeRate });
     // Mutations racing disclosure use a different checkout and observer, with ordinary Access.
     const mutationPool = db.openPool({ max: 2 });
-    const mutationApp = testKernel({ pool: mutationPool, auth: authConfig, content });
+    const mutationApp = testKernel({ pool: mutationPool, auth: authConfig, content, writeRate });
     const scopes = [...actionCatalogue(app).keys()].filter((action) => action !== 'media:complete').sort();
     const clientId = `edition_growth_${randomUUID()}`;
     await registerTestClient(native.host.service, { clientId, firstParty: true, scopes });
