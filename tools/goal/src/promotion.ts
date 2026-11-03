@@ -82,8 +82,8 @@ function workingFiles(cwd: string): string[] {
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
 
-async function regenerateDerivedHead(
-  options: PromotionOptions,
+export async function regenerateDerivedHead(
+  options: Pick<PromotionOptions, 'settings' | 'derivedFiles'>,
   expected: string,
   branch = sourceDevBranch(options.settings),
 ): Promise<{ head: string; retry: boolean }> {

@@ -512,30 +512,12 @@ routing attempt limits retain precedence. Width notifications use the configured
 | `policy.process.exitPollMs` | `50` | Fallback identity poll interval after a pidfd waiter fails (ms). |
 | `policy.process.signalDiagnosticCharacters` | `4096` | Maximum retained signal-helper stderr characters. |
 | `policy.process.resolverTerminationGraceMs` | `1000` | Termination grace for resolver recovery without a task runtime (ms). |
-| `policy.host.startupTimeoutMs` | `45000` | Host startup and startup-lease contention deadline (ms). |
-| `policy.host.supervisorStartupTimeoutMs` | `45000` | Detached supervisor readiness deadline (ms). |
-| `policy.host.socketTimeoutMs` | `250` | Deadline for each host socket readiness probe (ms). |
-| `policy.host.leasePollMs` | `25` | Pause between contended host startup lease probes (ms). |
-| `policy.host.pollMs` | `1000` | Supervisor host identity poll interval (ms). |
-| `policy.host.minBackoffMs` | `250` | Initial restart delay and exponential backoff base (ms). |
-| `policy.host.maxBackoffMs` | `30000` | Maximum restart backoff; at least the minimum (ms). |
-| `policy.host.retryFailures` | `30` | Saturation count for persisted host restart failures. |
-| `policy.host.healthResetMs` | `60000` | Healthy host time before clearing durable restart backoff (ms). |
-| `policy.host.startupLogBytes` | `4000` | Maximum current-launch stderr tail in startup failures (bytes). |
-| `policy.host.retryDiagnosticCharacters` | `160` | Maximum characters per retry-journal path or error excerpt. |
-| `policy.host.restartIntervalMs` | `600000` | Minimum interval between code-driven host restarts (ms). |
-| `policy.host.stateSweepIntervalMs` | `60000` | Host state-directory and code freshness sweep interval (ms). |
-| `policy.host.codePollMs` | `1000` | Fast code freshness poll interval (ms). |
+| `policy.host.stateSweepIntervalMs` | `60000` | Host state-directory sweep interval (ms). |
 | `policy.host.recoveryIntervalMs` | `60000` | Orphan recovery and host periodic work interval (ms). |
 | `policy.host.recoveryReadinessMs` | `100` | Recovery progress wait before publishing host readiness (ms). |
 | `policy.host.requestTimeoutMs` | `60000` | Default manager host RPC deadline (ms). |
 | `policy.host.requestRetryMs` | `25` | Pause between manager host socket connection retries (ms). |
 | `policy.host.decisionAuditTimeoutMs` | `500` | Isolated continuation decision audit delivery deadline (ms). |
-| `policy.host.flowReviewIntervalMs` | `3600000` | Minimum interval between host-triggered flow reviews (ms). |
-| `policy.host.reportTimeoutMs` | `150000` | Maximum hourly report child runtime (ms). |
-| `policy.host.reportOverheadMs` | `30000` | Extra report child budget beyond its notifier deadline (ms). |
-| `policy.host.reportTerminationGraceMs` | `250` | Hourly report child SIGTERM grace before SIGKILL (ms). |
-| `policy.host.reportOutputCharacters` | `512` | Maximum hourly report child output retained for its outcome. |
 | `policy.appServer.exitPollMs` | `20` | Identity poll interval while stopping recorded app-servers (ms). |
 | `policy.appServer.killWaitMs` | `5000` | Maximum recorded app-server wait after SIGKILL (ms). |
 | `policy.containers.cleanupIntervalMs` | `600000` | Minimum interval between opted-in stale-container sweeps (ms). |
@@ -2101,16 +2083,46 @@ notice and delivery acknowledgement commit together in the SQLite inbox, with fa
 later sweep. A new UTC day may dispatch again. The template grants only `tools/goal/reports/daily-step-audit-*.md`,
 which passes the existing risk ownership validator without granting product risk areas.
 
-The host also starts an independent supervisor, fenced by `manager-host-supervisor.lease`. It checks only its recorded
-host process identity (PID, start time, boot and process group); it never scans or kills workers. A dead host is
-relaunched through a shared startup lease and the existing host socket lease. Restart backoff starts at 250 ms,
-doubles on repeated failures up to 30 seconds, persists across supervisor replacement, and resets after 60 seconds of
-host survival. Detection polls once a second. Host startup errors remain in `manager-host.log`, supervisor errors in
-`manager-host-supervisor.log`. Graceful shutdown disables restart, state-directory removal ends supervision, and code
-handoff uses the same fenced launch path. Provider recovery and app-server cleanup remain owned by the host.
-Supervisor launch waits for fenced ownership before host readiness; a late launcher leaves removed state absent.
-Host startup, supervisor launch and code handoff remove inherited provider and task session markers through the same
-neutral environment sanitizer, preserving configured Goal paths and the invoking working directory.
+User systemd owns the resident control plane. Install it from the main checkout:
+
+```sh
+bun tools/goal/src/cli.ts service install
+bun tools/goal/src/cli.ts service status
+bun tools/goal/src/cli.ts service restart
+bun tools/goal/src/cli.ts service logs
+```
+
+Install renders the tracked `systemd/rezics-goal-*` units into `~/.config/systemd/user`, reloads the user manager,
+enables user linger with `loginctl`, and enables and starts the host, verifier and maintenance timer. Linger keeps
+these services running after the last login session exits. Installation fails visibly if user systemd or linger
+permissions are unavailable. No caller shell launches the resident processes.
+
+The private `.temp/goal/goal.env` is the single EnvironmentFile for all three services. It carries only
+`GOAL_MAIN_CHECKOUT`, `GOAL_LOCAL_CONFIG`, `KERNEL_CHECK_REMOTE`, `PATH` and `HOME`. Each ExecStart uses `env -i`
+and adds only the user bus transport and, for the host, systemd notification variables. Caller provider identities,
+including `CLAUDE_*` and `CODEX_THREAD_ID`, cannot reach the services. Re-run install after moving the checkout or
+changing its environment configuration.
+
+`rezics-goal-host.service` runs `_manager-host` with `Restart=always` and a 60-second watchdog. The host signals
+readiness after binding its socket and sends heartbeats from its event loop every half watchdog interval. A crash,
+kill or stopped event loop therefore causes systemd to restart it. `KillMode=process` limits host termination to the
+main PID; worker scopes in `rezics-workers.slice` beneath `rezics.slice` and the merge train survive. The host keeps
+socket leasing, worker adoption, manager recovery and owned app-server cleanup. Host liveness journals, startup
+leases, supervisor processes and code-polling self-restarts are removed. An ordinary CLI can ask systemd to start an
+absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
+
+The maintenance timer starts a bounded oneshot every minute. `goal maintenance reap` reaps recorded worker groups
+whose worktree has been deleted, checking process birth identity. `goal maintenance alarm` evaluates product-output
+and flow alarms and sends the completed UTC hour's report through its durable scheduled claim. `goal maintenance
+detect` runs stall and shared-incident detection. `goal maintenance regenerate` regenerates dev derived files at
+most hourly using the existing detached-worktree and compare-and-swap implementation. `goal maintenance all` runs
+every job and reports failures after attempting the others. Daily audit dispatch stays with manager recovery.
+
+Decision: cp-sync compares ten-minute mean live-worker width, successful gate-outcome counts and successful landing
+counts on each side of publication; any decrease restores the previous main control-plane tree in a forward commit.
+It restarts the host through systemd after publication and rollback. No ref rewinding is needed. Status, restart and
+logs show each unit's systemd state and result, including watchdog failure and timer health. Diagnostics live in the
+user journal; consult `systemd.service(5)` and `systemd.exec(5)` for service and environment semantics.
 
 Integration, cancellation and stopping explicitly close pending flow stages without fabricating successful stage
 completion or duration. Reporting also uses stored terminal task state to exclude legacy stale queue entries. An

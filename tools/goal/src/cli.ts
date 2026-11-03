@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
-import { checkSettings, createRuntime, settingsFile, type Runtime } from './config.ts';
+import { checkSettings, createRuntime, loadSettings, settingsFile, type Runtime } from './config.ts';
 import { runIntegration, type IntegrationRuntime, recordManagerCommand } from './integration-cli.ts';
 import { runWorkerCommand, READ_ONLY_WORKER_COMMANDS } from './worker-commands.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { installPrivate } from './shared-dependencies.ts';
+import { installService, reportServices } from './service.ts';
+import { MAINTENANCE_JOBS, runMaintenance, runResidentVerifier, type MaintenanceJob } from './maintenance.ts';
 import { runPublicationCommand } from './publication-command.ts';
 
 const workerCommands = [
@@ -32,9 +34,11 @@ const integrationCommands = [
   'publication',
   '_manager-host',
 ];
-export const commands = [...workerCommands, ...integrationCommands];
+export const commands = [...workerCommands, ...integrationCommands, 'service', 'maintenance'];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
 export const SWEEP_FREE_COMMANDS = new Set([
+  'service',
+  'maintenance',
   'train',
   'inbox',
   'backlog',
@@ -58,6 +62,21 @@ export async function run(
       return 0;
     } catch (error) {
       console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+      return 1;
+    }
+  }
+  if (command === 'service' && args[0] !== 'run-verifier') {
+    try {
+      if (args.length !== 1) throw new Error('usage: goal service install|status|restart|logs');
+      if (args[0] === 'install') {
+        const settings = loadSettings();
+        await installService({ mainCheckout: settings.mainCheckout, localConfig: settingsFile() });
+        return await reportServices('status');
+      }
+      if (args[0] === 'status' || args[0] === 'restart' || args[0] === 'logs') return await reportServices(args[0]);
+      throw new Error('usage: goal service install|status|restart|logs');
+    } catch (error) {
+      console.error(String(error));
       return 1;
     }
   }
@@ -88,6 +107,16 @@ export async function run(
   try {
     if (workerCommands.includes(command)) parsedWorkerArguments = parseWorkerCommandArguments(command, args);
     runtime = await factory({ trainMode });
+    if (command === 'service') {
+      if (args.length !== 1) throw new Error('usage: goal service run-verifier');
+      return await runResidentVerifier(runtime);
+    }
+    if (command === 'maintenance') {
+      if (args.length !== 1 || (args[0] !== 'all' && !MAINTENANCE_JOBS.includes(args[0] as MaintenanceJob)))
+        throw new Error('usage: goal maintenance all|reap|alarm|detect|regenerate');
+      if (!('settings' in runtime)) throw new Error('Maintenance requires the configured Goal runtime');
+      return await runMaintenance(args[0] as MaintenanceJob | 'all', runtime);
+    }
     // A command settles only orphans whose worker has exited; the host adopts the ones still running. The train and
     // the inbox leave that to the host's sweep: every settle spawns a train, and each spawned train swept the whole
     // store before finding the train lease held, so dozens swept at once (load 146 on 2026-10-28).

@@ -27,7 +27,7 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries } from './inbox-shared.ts';
 import { deliverDueReminders, parseNotes } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
-import { watch } from './watchdog.ts';
+import { watch, sshProbe } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
@@ -764,13 +764,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     handoffTrain: handOff,
     manager,
     pump,
-    hostCommand: command,
-    codeIsCurrent,
-    deliverReminders: () => {
+    deliverReminders: async () => {
+      const probes: Promise<void>[] = [];
       const deliver = (summary: string) =>
         inbox.deliver({ managerId: settings.integration.supermanager, kind: 'instruction', summary } as never);
       refreshCodexSchedule(settings.stateDirectory);
-      return (
+      const delivered =
         deliverDueReminders(settings.notes ?? [], settings.stateDirectory, deliver) +
         alertUnspentAllowances(settings.pools, (pool) => tasks.reader(pool), settings.stateDirectory, deliver) +
         watch(
@@ -785,13 +784,33 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
               summary,
             }),
           Date.now(),
-          undefined,
+          (host, complete) => {
+            probes.push(
+              new Promise<void>((resolve) => {
+                sshProbe(
+                  host,
+                  (result) => {
+                    try {
+                      complete(result);
+                    } finally {
+                      resolve();
+                    }
+                  },
+                  spawn,
+                  undefined,
+                  settings.policy,
+                );
+              }),
+            );
+          },
           (task) =>
             readRouting(settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>]
               .maxMs,
           settings.policy,
-        )
-      );
+        );
+      // A oneshot CLI exits after this method: persist every bounded probe before closing the runtime.
+      await Promise.all(probes);
+      return delivered;
     },
     sweepWidth: async () => {
       await sweepWidthGovernor(db, inbox, new Date(), { policy: settings.policy });
