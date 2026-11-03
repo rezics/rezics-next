@@ -126,7 +126,36 @@ marker is evidence in this importer journal, not a current selected/public read 
 source rights or cover permission. Other subsystem journals are outside this view.
 
 Decision: inspection accepts an exact configured source ID, defaults to the active generation or completed baseline,
-and selects pending-envelope or deferred-cover pages explicitly.
+and selects pending-envelope or deferred-cover pages explicitly. Inspection shows the recorded API origin and whether
+it was recorded on first use or declared for legacy state.
+
+## Keep source history at one API destination
+
+Each exact durable source alias records a normalized API origin in the same SQLite state. First use binds that origin
+before any generation or network effect. Continuing at that destination with ordinary renewed credentials is allowed.
+A mistyped `--api` fails before token retrieval or native replay and does not reuse another server's baseline.
+
+This is local configuration binding, not a server identity protocol. Same-origin server replacement cannot be detected
+without a separately released deployment identity. Account, client and key rotation remain allowed under current native
+authority.
+
+Old state has no trustworthy origin to infer. Ordinary import never adopts `--api` for unbound history. Review one
+source, then declare its original origin as the operator's statement, not verified historical evidence:
+
+```sh
+bun services/importer/src/cli.ts destination --state .state/imports.sqlite --source wikidata --api https://api.rezics.example
+bun services/importer/src/cli.ts destination --state .state/imports.sqlite --source wikidata --api https://api.rezics.example \
+  --review-revision <64-hex-from-review> --declare --acknowledge-unverified
+```
+
+Declaration changes only destination metadata. An already-bound source cannot be rebound. An operator who cannot
+establish the original destination leaves the history unbound and uses read-only inspect and backup. New destination
+use starts with a separate state file. Backups preserve binding and provenance; a restored legacy snapshot stays
+unbound until explicit declaration.
+
+Decision: destination binding is source-exact local configuration recorded on first use or by explicit operator
+declaration; mismatch and unbound history fail before credentials. Sealed resume uses the same origin guard and does
+not record a first-use binding on empty state. The `source_destinations` table is additive; legacy files stay readable.
 
 ## Compare two retained complete captures
 

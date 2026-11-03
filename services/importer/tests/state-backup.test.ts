@@ -9,6 +9,7 @@ import { backupStoppedState, restoreStoppedStateSnapshot, validateStoppedStateSn
 import { StateBackupFailure } from '../src/state-backup-errors.ts';
 import { SNAPSHOT_DATABASE_NAME, SNAPSHOT_MANIFEST_NAME } from '../src/state-backup-files.ts';
 import type { SourceProjection } from '../src/run-store.ts';
+import { insertSourceDestination, readSourceDestination } from '../src/source-destination.ts';
 
 function directory() {
   return mkdtempSync(join(tmpdir(), 'importer-backup-'));
@@ -251,6 +252,46 @@ test('corrupt and mismatched snapshots are refused without rewriting them', asyn
     parsed.content = { ...(parsed.content as object), sha256: 'a'.repeat(64) };
     writeFileSync(join(output, SNAPSHOT_MANIFEST_NAME), `${JSON.stringify(parsed)}\n`);
     await expect(validateStoppedStateSnapshot({ snapshot: output })).rejects.toMatchObject({ status: 'mismatched' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('backup preserves destination provenance; restored legacy snapshots stay unbound', async () => {
+  const dir = directory();
+  try {
+    const bound = stoppedState(dir);
+    const session = new ImportSession(bound.path);
+    insertSourceDestination(session.store.database, 'wikidata', 'https://api.a.example', 'first-use');
+    session.close();
+    const boundSnapshot = join(dir, 'bound-snapshot');
+    await backupStoppedState({ state: bound.path, output: boundSnapshot });
+    const boundRestored = join(dir, 'bound-restored.sqlite');
+    await restoreStoppedStateSnapshot({ snapshot: boundSnapshot, state: boundRestored });
+    const boundDb = new Database(boundRestored, { readonly: true, create: false });
+    expect(readSourceDestination(boundDb, 'wikidata')).toEqual({
+      origin: 'https://api.a.example',
+      provenance: 'first-use',
+      schemaVersion: 1,
+    });
+    boundDb.close();
+
+    const legacyDir = directory();
+    try {
+      const legacy = stoppedState(legacyDir);
+      const drop = new Database(legacy.path);
+      drop.exec('DROP TABLE IF EXISTS source_destinations');
+      drop.close();
+      const legacySnapshot = join(legacyDir, 'legacy-snapshot');
+      await backupStoppedState({ state: legacy.path, output: legacySnapshot });
+      const legacyRestored = join(legacyDir, 'legacy-restored.sqlite');
+      await restoreStoppedStateSnapshot({ snapshot: legacySnapshot, state: legacyRestored });
+      const restored = new Database(legacyRestored, { readonly: true, create: false });
+      expect(readSourceDestination(restored, 'wikidata')).toBeNull();
+      restored.close();
+    } finally {
+      rmSync(legacyDir, { recursive: true, force: true });
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

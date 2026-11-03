@@ -4,6 +4,12 @@ import { createImporter } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
 import { ImportSession } from './import-session.ts';
 import {
+  SourceDestinationError,
+  mismatchMessage,
+  preflightSourceDestination,
+  unboundMessage,
+} from './source-destination.ts';
+import {
   DIGEST,
   SOURCE_OBSERVATION_PAGE_MAX,
   nativeReason,
@@ -29,6 +35,7 @@ export const observationsUsage = () =>
     'Lists at most 20 unresolved source-observation operations per page. Detail and resolve use the stable operation id.',
     'A source figure is independent of a REZICS vote. Older dates cannot be forced with CAS; supply corrected input.',
     'Resume an uncertain delivery with the ordinary import command; it reuses the sealed body and key.',
+    'Resolve checks the source destination before credentials. A mistyped --api fails without contacting Auth.',
   ].join('\n');
 
 export type ObservationsCliResult = { code: number; stdout: string; stderr: string; openHandles: number };
@@ -286,6 +293,25 @@ async function runResolve(
   try {
     const api = origin(parsed.api!, options.testOrigin);
     const auth = origin(parsed.auth!);
+    const destinationPreflight = await preflightSourceDestination({
+      statePath: parsed.state,
+      source: parsed.source,
+      origin: api,
+      missingState: 'error',
+    });
+    if (destinationPreflight.status === 'mismatch')
+      throw new SourceDestinationError(
+        mismatchMessage(parsed.source, api, destinationPreflight.binding),
+        'mismatch',
+      );
+    if (destinationPreflight.status === 'unbound')
+      throw new SourceDestinationError(unboundMessage(parsed.source), 'unbound');
+    if (destinationPreflight.status === 'unavailable')
+      throw new SourceDestinationError(
+        destinationPreflight.message,
+        'unavailable',
+        destinationPreflight.exitCode,
+      );
     const tokenProvider = await createAccountTokenProvider({
       accountKeyPath: parsed.accountKey!,
       account: parsed.account!,
@@ -302,6 +328,7 @@ async function runResolve(
     });
     importer = createImporter({
       path: parsed.state,
+      destination: { origin: api },
       transport: {
         batchWrite: (request) => transport.batch(request, signal),
         readFence: (tuple) =>
@@ -360,8 +387,12 @@ async function runResolve(
       openHandles: 0,
     };
   } catch (error) {
+    if (error instanceof SourceDestinationError)
+      return { code: error.exitCode, stdout: '', stderr: `${error.message}\n`, openHandles: 0 };
     if (error instanceof CredentialInputError)
       return { code: 2, stdout: '', stderr: 'Input or account key is unavailable or invalid.\n', openHandles: 0 };
+    if (error instanceof InputFailure)
+      return { code: 2, stdout: '', stderr: `${error.message}\n`, openHandles: 0 };
     return {
       code: 1,
       stdout: '',

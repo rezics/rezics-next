@@ -114,6 +114,10 @@ export type RunOptions = Readonly<{
   disappearanceThreshold?: number;
 }>;
 
+export type SourceDestinationProvenance = 'first-use' | 'operator-declared';
+export type ImportDestination = Readonly<{ origin: string }>;
+export type { SourceDestinationBinding } from './source-destination.ts';
+
 export type { ConversionDiagnosticPhase, SanitizedConversionDiagnostic } from './conversion-diagnostics.ts';
 export type { OpenLibraryDumpSetAdmission, OpenLibraryDumpSetMember } from './open-library-dump-set.ts';
 export type { OpenLibraryDumpFamily } from './dumps.ts';

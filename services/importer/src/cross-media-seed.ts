@@ -921,9 +921,15 @@ function subjectRoute(read: ReviewedSubjectRead): string {
   return id ? `/subjects/${id}/${subjectSlug(label)}` : '/subjects';
 }
 
-export async function seedCrossMedia(plan: CrossMediaPlan, path: string, port: CrossMediaPort) {
+export async function seedCrossMedia(
+  plan: CrossMediaPlan,
+  path: string,
+  port: CrossMediaPort,
+  destination?: { origin: string },
+) {
   const importer = createImporter({
     path,
+    ...(destination ? { destination } : {}),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -1045,7 +1051,9 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     'Result must not overwrite importer state',
   );
   await mkdir(dirname(statePath), { recursive: true });
-  const result = await seedCrossMedia(plan, statePath, createImportTransport({ origin: api, tokenProvider }));
+  const result = await seedCrossMedia(plan, statePath, createImportTransport({ origin: api, tokenProvider }), {
+    origin: api,
+  });
   await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(
     resultPath,

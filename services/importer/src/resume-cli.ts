@@ -28,6 +28,12 @@ import { ImportSession } from './import-session.ts';
 import { ResumeStateError } from './resume-state.ts';
 import { throwIfAborted } from './dump-input.ts';
 import type { ImportCliOptions, ImportCliResult } from './cli.ts';
+import {
+  SourceDestinationError,
+  mismatchMessage,
+  preflightSourceDestination,
+  unboundMessage,
+} from './source-destination.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -322,7 +328,7 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
     const parsed = parseResumeArgs(argv);
     if (parsed === 'help') return { code: 0, stdout: `${resumeUsage()}\n`, stderr: '', openHandles: 0 };
     config = parsed;
-    validateOrigin(config.api, options.testOrigin);
+    config.api = validateOrigin(config.api, options.testOrigin);
     const auth = parseOrigin(config.auth);
     if (auth.protocol !== 'https:') throw new ResumeArgumentError();
     config.auth = auth.origin;
@@ -379,6 +385,43 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
       code: 2,
       stdout: '',
       stderr: diagnostic('Importer state is damaged or unavailable.'),
+      openHandles: 0,
+    };
+  }
+
+  const destinationSource = config.sourceAlias ?? config.source;
+  try {
+    const destinationPreflight = await preflightSourceDestination({
+      statePath: config.state,
+      source: destinationSource,
+      origin: config.api,
+      missingState: 'error',
+    });
+    if (destinationPreflight.status === 'mismatch')
+      throw new SourceDestinationError(
+        mismatchMessage(destinationSource, config.api, destinationPreflight.binding),
+        'mismatch',
+      );
+    if (destinationPreflight.status === 'unbound')
+      throw new SourceDestinationError(unboundMessage(destinationSource), 'unbound');
+    if (destinationPreflight.status === 'unavailable')
+      throw new SourceDestinationError(
+        destinationPreflight.message,
+        'unavailable',
+        destinationPreflight.exitCode,
+      );
+  } catch (error) {
+    try {
+      session.close();
+    } catch {
+      // Preserve the destination diagnostic.
+    }
+    return {
+      code: error instanceof SourceDestinationError ? error.exitCode : 2,
+      stdout: '',
+      stderr: diagnostic(
+        error instanceof SourceDestinationError ? error.message : 'Importer state is damaged or unavailable.',
+      ),
       openHandles: 0,
     };
   }
@@ -467,6 +510,7 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
     session,
     existing: true,
     transport: deferredTransport,
+    destination: { origin: config.api },
     now: () => clock.now(),
     ...(options.clock ? { sleep: (ms: number, sleepSignal: AbortSignal) => clockSleep(clock, ms, sleepSignal) } : {}),
     ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
@@ -554,14 +598,22 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
     output = {
-      code: interrupted ? 130 : error instanceof ResumeActivationError || error instanceof CredentialInputError ? 2 : 1,
+      code: interrupted
+        ? 130
+        : error instanceof SourceDestinationError
+          ? error.exitCode
+          : error instanceof ResumeActivationError || error instanceof CredentialInputError
+            ? 2
+            : 1,
       stdout: '',
       stderr: diagnostic(
         interrupted
           ? 'Import interrupted; durable state is retained for resume.'
-          : error instanceof CredentialInputError
-            ? 'Input or account key is unavailable or invalid.'
-            : 'Import failed safely.',
+          : error instanceof SourceDestinationError
+            ? error.message
+            : error instanceof CredentialInputError
+              ? 'Input or account key is unavailable or invalid.'
+              : 'Import failed safely.',
       ),
       openHandles: 0,
     };

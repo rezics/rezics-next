@@ -56,6 +56,14 @@ import { runCompareCli } from './compare-cli.ts';
 import { runBackupCli } from './backup-cli.ts';
 import { batchUsage, runBatchCli } from './batch-cli.ts';
 import { retentionUsage, runRetentionCli } from './retention-cli.ts';
+import { DESTINATION_USAGE, runDestinationCli } from './source-destination-cli.ts';
+import {
+  SourceDestinationError,
+  mismatchMessage,
+  preflightSourceDestination,
+  throwAdmissionRefusal,
+  unboundMessage,
+} from './source-destination.ts';
 import {
   admitDumpCompression,
   decodeDumpBytes,
@@ -187,9 +195,13 @@ function usage(): string {
     '       rezics-import batch --manifest <path> [--json]',
     '       rezics-import batch --manifest <path> --run --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--progress human|jsonl] [--json]',
+    '       rezics-import destination --state <sqlite-path> --source <configured-source-id> --api <https-origin> [--json]',
+    '       rezics-import destination --state <sqlite-path> --source <configured-source-id> --api <https-origin>',
+    '       --review-revision <64-hex> --declare --acknowledge-unverified [--json]',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
     'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --zstd-executable --checkpoint-staging --resume-staging --generation --checkpoint-acquisition --resume-acquisition --acquisition --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. zstd is admitted only for VNDB archives and Wikidata streamed dumps, as one regular local file (not stdin). Default --compression none. A suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump, one zstd dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set. zstd uses /usr/bin/zstd or PATH zstd, or --zstd-executable, with a 128 MiB decoder window.',
+    'Each exact source alias records its API origin on first use. A mistyped --api fails before credentials. Legacy unbound history needs rezics-import destination. Same-origin server replacement cannot be detected without a separately released deployment identity.',
     '--checkpoint-staging and --resume-staging apply only to one uncompressed Bangumi, Open Library or Wikidata regular file. They re-hash the complete file before any capture or resume mutation, then verify previously committed records before converting the remainder. Default import still discards unsealed staging. After sealing, resume with the ordinary dump-free command; do not replace input. Local conversion is not publication, and Bangumi ratings stay omitted. Dump-set manifests are not a checkpointed capture.',
     STAGING_COST,
     '--checkpoint-acquisition and --resume-acquisition apply only to one regular local VNDB archive with plain tar or owned zstd decoding. They re-hash the complete original file before table mutation. Stdin cannot resume. Table acquisition IDs are distinct from source generation IDs. After tables are ready, resume publication with --resume-acquisition; after sealing, use the ordinary command.',
@@ -516,6 +528,14 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   if (Array.isArray(argv) && argv[0] === 'batch') return runBatchCli(argv.slice(1), options);
   if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'batch')
     return { code: 0, stdout: `${batchUsage()}\n`, stderr: '', openHandles: 0 };
+  if (Array.isArray(argv) && argv[0] === 'destination')
+    return runDestinationCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.testOrigin ? { testOrigin: options.testOrigin } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'destination')
+    return { code: 0, stdout: `${DESTINATION_USAGE}\n`, stderr: '', openHandles: 0 };
   if (Array.isArray(argv) && argv[0] === 'retention')
     return runRetentionCli(argv.slice(1), {
       ...(options.signal ? { signal: options.signal } : {}),
@@ -536,7 +556,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     const parsed = parse(argv);
     if (parsed === 'help') return { code: 0, stdout: `${usage()}\n`, stderr: '', openHandles: 0 };
     config = parsed;
-    validateOrigin(config.api, options.testOrigin);
+    config.api = validateOrigin(config.api, options.testOrigin);
     const auth = parseOrigin(config.auth);
     if (auth.protocol !== 'https:') throw new InputFailure();
     config.auth = auth.origin;
@@ -662,6 +682,27 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         }
       }
     }
+    const destinationSource = config.sourceAlias ?? config.source;
+    const destinationPreflight = await preflightSourceDestination({
+      statePath: config.state,
+      source: destinationSource,
+      origin: config.api,
+      missingState:
+        config.mode === 'resume-staging' || config.mode === 'resume-acquisition' ? 'error' : 'first-use',
+    });
+    if (destinationPreflight.status === 'mismatch')
+      throw new SourceDestinationError(
+        mismatchMessage(destinationSource, config.api, destinationPreflight.binding),
+        'mismatch',
+      );
+    if (destinationPreflight.status === 'unbound')
+      throw new SourceDestinationError(unboundMessage(destinationSource), 'unbound');
+    if (destinationPreflight.status === 'unavailable')
+      throw new SourceDestinationError(
+        destinationPreflight.message,
+        'unavailable',
+        destinationPreflight.exitCode,
+      );
     if (config.mode !== 'checkpoint-acquisition' && config.mode !== 'resume-acquisition') {
       tokenProvider = await createAccountTokenProvider({
         accountKeyPath: config.accountKey,
@@ -696,16 +737,18 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       handles.value--;
     }
     return {
-      code: 2,
+      code: error instanceof SourceDestinationError ? error.exitCode : 2,
       stdout: '',
       stderr: diagnostic(
-        error instanceof CredentialInputError
-          ? 'Input or account key is unavailable or invalid.'
-          : error instanceof OpenLibraryDumpSetError
-            ? error.message
-            : error instanceof DumpInputError
+        error instanceof SourceDestinationError
+          ? error.message
+          : error instanceof CredentialInputError
+            ? 'Input or account key is unavailable or invalid.'
+            : error instanceof OpenLibraryDumpSetError
               ? error.message
-              : 'Input is unavailable or invalid.',
+              : error instanceof DumpInputError
+                ? error.message
+                : 'Input is unavailable or invalid.',
       ),
       openHandles: 0,
     };
@@ -847,6 +890,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     const importerOptions: ImporterOptions = {
       path: config.state,
       transport: signalTransport,
+      destination: { origin: config.api },
       now: () => clock.now(),
       // Keep Importer's cancellable native timer unless a clock was explicitly supplied.
       ...(options.clock ? { sleep: (ms: number, sleepSignal: AbortSignal) => clockSleep(clock, ms, sleepSignal) } : {}),
@@ -896,7 +940,10 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       const materialization = new VndbMaterialization(importer, registration);
       options.observer?.onVndbStore?.({ importer, store: materialization.tables });
       const tracked = config.mode === 'checkpoint-acquisition' || config.mode === 'resume-acquisition';
-      const ownership = tracked ? importer.session.acquire(registration.source) : undefined;
+      const admitted = tracked ? importer.session.admit(registration.source, config.api) : undefined;
+      if (admitted && typeof admitted === 'object' && 'kind' in admitted)
+        throwAdmissionRefusal(registration.source, config.api, admitted);
+      const ownership = admitted === 'busy' ? 'busy' : admitted;
       if (ownership === 'busy') {
         output = {
           code: 5,
@@ -1124,13 +1171,15 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     output = {
       code: interrupted
         ? 130
-        : error instanceof InputFailure ||
-            error instanceof VndbInputError ||
-            error instanceof VndbAcquisitionError ||
-            error instanceof DumpInputError ||
-            missingState
-          ? 2
-          : 1,
+        : error instanceof SourceDestinationError
+          ? error.exitCode
+          : error instanceof InputFailure ||
+              error instanceof VndbInputError ||
+              error instanceof VndbAcquisitionError ||
+              error instanceof DumpInputError ||
+              missingState
+            ? 2
+            : 1,
       stdout: '',
       stderr: diagnostic(
         interrupted
@@ -1143,7 +1192,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             ? config.mode === 'resume-acquisition'
               ? VNDB_ACQUISITION_MISSING_STATE
               : STAGING_MISSING_STATE
-            : error instanceof VndbAcquisitionError || error instanceof OpenLibraryDumpSetError
+            : error instanceof SourceDestinationError ||
+                error instanceof VndbAcquisitionError ||
+                error instanceof OpenLibraryDumpSetError
               ? error.message
               : error instanceof DumpInputError
                 ? error.message

@@ -15,5 +15,6 @@ test('inspection help is self-contained and rejects every import-only option', a
   const help = await runInspectCli(['--help']);
   expect(help.code).toBe(0);
   expect(help.stdout).toContain('local and read-only');
+  expect(help.stdout).toContain('recorded API origin');
   expect(help.openHandles).toBe(0);
 });

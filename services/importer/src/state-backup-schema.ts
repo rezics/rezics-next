@@ -77,6 +77,11 @@ const REQUIRED_INDEXES = [
   ['run_cover_pending', 'run_entries'],
 ] as const;
 
+/** Additive destination binding. Missing on legacy snapshots; present rows are preserved byte-for-byte. */
+const OPTIONAL_TABLES: Record<string, readonly string[]> = {
+  source_destinations: ['source', 'origin', 'provenance', 'schema_version'],
+};
+
 export type RunBaseline = Readonly<{
   source: string;
   activeGeneration: string | null;
@@ -121,6 +126,24 @@ export function validateImporterSchema(database: Database, observer?: SchemaObse
     ) as { found: number } | null;
     if (!found)
       throw new StateBackupFailure(`Unsupported importer state schema: table ${table} is missing.`, 'incompatible');
+    const actual = new Set(
+      sql(database, `PRAGMA table_info(${table})`, observer)
+        .all()
+        .map((row) => (row as { name: string }).name),
+    );
+    const missing = columns.find((column) => !actual.has(column));
+    if (missing)
+      throw new StateBackupFailure(
+        `Older unsupported importer schema: column ${table}.${missing} is missing.`,
+        'incompatible',
+      );
+  }
+  for (const [table, columns] of Object.entries(OPTIONAL_TABLES)) {
+    const found = sql(database, 'SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?', observer).get(
+      'table',
+      table,
+    ) as { found: number } | null;
+    if (!found) continue;
     const actual = new Set(
       sql(database, `PRAGMA table_info(${table})`, observer)
         .all()

@@ -335,3 +335,64 @@ test('changed dump after earlier success is refused and credentials stay off the
   expect(report.jobs[1]!.status).toBe('stopped');
   expect(report.jobs[1]!.diagnostic).toContain('changed between local preview and execution');
 });
+
+test('a wrong-origin job stops before credentials and later jobs without rolling back completed work', async () => {
+  const { directory, key, state } = await workspace();
+  const manifest = await writeManifest(directory, [
+    { source: 'bangumi', dump: 'bangumi.jsonl', state: 'state.sqlite' },
+    { source: 'openlibrary', sourceAlias: 'catalogue-ol', dump: 'openlibrary.tsv', state: 'state.sqlite' },
+  ]);
+  const first = await runImportCli(['batch', '--manifest', manifest, '--run', '--json', ...credentials(key)], {
+    fetch: importFetch() as unknown as typeof fetch,
+    testOrigin: origin,
+    clock,
+  });
+  expect(first.code, first.stderr + first.stdout).toBe(0);
+  const bangumiCount = inspect(state, 'bangumi').count;
+  expect(bangumiCount).toBeGreaterThan(0);
+
+  const other = 'http://127.0.0.1:43180';
+  const requests: string[] = [];
+  let keyRead = false;
+  const stopped = await runImportCli(
+    [
+      'batch',
+      '--manifest',
+      manifest,
+      '--run',
+      '--json',
+      '--api',
+      other,
+      '--account-key',
+      key,
+      '--account',
+      account,
+      '--client',
+      'batch-cli',
+      '--auth',
+      authOrigin,
+    ],
+    {
+      fetch: importFetch({ requests }) as unknown as typeof fetch,
+      testOrigin: other,
+      clock,
+      observer: {
+        onAccountKey() {
+          keyRead = true;
+        },
+      },
+    },
+  );
+  expect(stopped.code).toBe(2);
+  expect(keyRead).toBe(false);
+  expect(requests).toEqual([]);
+  const report = JSON.parse(stopped.stdout) as {
+    jobs: { status: string; sourceAlias: string; diagnostic: string | null }[];
+    notStarted: { name: string }[];
+  };
+  expect(report.jobs[0]!.status).toBe('stopped');
+  expect(report.jobs[0]!.diagnostic).toContain('does not match source');
+  expect(report.jobs[1]!.status).toBe('not-started');
+  expect(inspect(state, 'bangumi').count).toBe(bangumiCount);
+  expect(inspect(state, 'catalogue-ol').count).toBeGreaterThan(0);
+});

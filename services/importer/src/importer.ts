@@ -15,6 +15,7 @@ import type {
   ImportTransport,
   ImportSourceRecord,
   ImportSourceRecordMetadataCommand,
+  ImportDestination,
   ImportProgressObserver,
   ImportProgressKind,
   RunResultSink,
@@ -22,6 +23,7 @@ import type {
   SourceRegistration,
   StagingCheckpointRequest,
 } from './import-contract.ts';
+import { evaluateAdmission, insertSourceDestination, throwAdmissionRefusal } from './source-destination.ts';
 import { ImportTransportError } from './import-client.ts';
 import {
   DIGEST,
@@ -42,7 +44,7 @@ import {
 } from './source-observation.ts';
 import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
-import { ImportSession } from './import-session.ts';
+import { ImportSession, type ImportOwnership } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
 import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
@@ -112,6 +114,8 @@ export type ImporterOptions = {
   session?: ImportSession;
   existing?: boolean;
   transport: ImportTransport;
+  /** Normalized API origin for this coordinator. Production callers must supply it. */
+  destination?: ImportDestination;
   create?: boolean;
   recordConcurrency?: number;
   mediaDeadlineMs?: number;
@@ -187,6 +191,25 @@ export class Importer {
         ...(options.create === false ? { create: false } : {}),
         ...(options.existing ? { existing: true } : {}),
       });
+  }
+
+  private takeOwnership(source: string, recordFirstUse = true): ImportOwnership | 'busy' {
+    const existing = this.session.heldOwnership(source);
+    if (existing) {
+      if (this.options.destination) {
+        const origin = this.options.destination.origin;
+        const decision = evaluateAdmission(this.session.store.database, source, origin);
+        if (decision === 'first-use') {
+          if (recordFirstUse) insertSourceDestination(this.session.store.database, source, origin, 'first-use');
+        } else if (decision !== 'match') throwAdmissionRefusal(source, origin, decision);
+      }
+      return existing;
+    }
+    if (!this.options.destination) return this.session.acquire(source);
+    const ownership = this.session.admit(source, this.options.destination.origin, { recordFirstUse });
+    if (ownership === 'busy') return 'busy';
+    if ('kind' in ownership) throwAdmissionRefusal(source, this.options.destination.origin, ownership);
+    return ownership;
   }
 
   async runDump(
@@ -1078,7 +1101,7 @@ export class Importer {
   ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
     if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
       throw new TypeError('Observation resolution requires exact operation and reviewed digests');
-    const ownership = this.session.acquire(source);
+    const ownership = this.takeOwnership(source);
     if (ownership === 'busy') return { status: 'busy', operationId };
     const write: Write = (operation) => operation();
     try {
@@ -1873,7 +1896,7 @@ export class Importer {
     ]);
     this.runControllers.set(signal, runController);
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
-    const ownership = this.session.acquire(registration.source);
+    const ownership = this.takeOwnership(registration.source, false);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
@@ -1993,7 +2016,7 @@ export class Importer {
     this.runControllers.set(signal, runController);
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
     const existing = this.session.heldOwnership(registration.source);
-    const ownership = existing ?? this.session.acquire(registration.source);
+    const ownership = this.takeOwnership(registration.source);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
     if (options.progress) this.progressObservers.set(signal, options.progress);

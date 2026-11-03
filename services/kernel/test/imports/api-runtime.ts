@@ -590,6 +590,7 @@ export async function openApiRuntime(
     function openImporter(serial = false) {
       const next = new Importer({
         path,
+        destination: { origin },
         // Fault controls select one record so the chosen commit or one-request
         // rate window has a deterministic boundary within bounded retries.
         ...(serial || limited ? { recordConcurrency: 1 } : {}),

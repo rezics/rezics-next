@@ -35,6 +35,7 @@ import {
   sanitizeConversionDiagnostics,
   type ConversionDiagnosticPhase,
 } from './conversion-diagnostics.ts';
+import { SOURCE_DESTINATION_DDL } from './source-destination.ts';
 
 export type Run = { source: string; id: string; lease: string };
 /** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
@@ -660,6 +661,7 @@ export class RunStore<Projection = BatchStatement[]> {
         source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
         record_revision TEXT NOT NULL, digest TEXT NOT NULL, converter_revision TEXT NOT NULL,
         PRIMARY KEY(source, run_id, record_key)) WITHOUT ROWID`);
+      this.database.exec(SOURCE_DESTINATION_DDL);
     } catch (error) {
       db.close();
       throw error;

@@ -3,6 +3,7 @@ import type { FileHandle } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { admitStagingCheckpoint, stagingResumeGuidance, type StagingCheckpoint } from './staging-checkpoint.ts';
 import { InspectionFailure, openReadonlySqlite } from './inspection-open.ts';
+import { inspectDestination, type SourceDestinationProvenance } from './source-destination.ts';
 
 export { InspectionFailure } from './inspection-open.ts';
 
@@ -87,10 +88,18 @@ export type InspectionRecord = Readonly<{
   envelopes?: readonly InspectionEnvelope[];
 }>;
 
+export type InspectionDestination = Readonly<{
+  status: 'bound' | 'unbound' | 'unavailable';
+  origin: string | null;
+  provenance: SourceDestinationProvenance | null;
+  recorded: 'first-use' | 'operator-declared' | null;
+}>;
+
 export type InspectionDocument = Readonly<{
   version: 1;
   source: string;
   sourceState: 'absent' | 'active' | 'baseline' | 'uninitialized';
+  destination: InspectionDestination;
   baseline: null | Readonly<{ generation: string; presentCount: number; empty: boolean }>;
   ownershipRow: 'present' | 'absent' | 'unavailable';
   selection: null | Readonly<{ kind: 'active' | 'baseline' | 'explicit'; generation: string }>;
@@ -698,6 +707,7 @@ export class InspectionStore {
       version: 1,
       source: request.source,
       sourceState,
+      destination: inspectDestination(this.database, request.source),
       baseline,
       ownershipRow,
       selection,

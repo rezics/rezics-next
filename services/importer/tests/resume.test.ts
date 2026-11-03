@@ -12,6 +12,7 @@ import { ImportSession } from '../src/import-session.ts';
 import type { ImportProgressPhase } from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { insertSourceDestination } from '../src/source-destination.ts';
 import entity from '../../../specs/fixtures/imports/wikidata/entity.json';
 
 const account = '6b147e8d-1762-4717-9a65-aeb435cb843e';
@@ -162,6 +163,7 @@ test('absent, staging, busy, missing database and incompatible conversion never 
       projection: { sourceKind: 'wikidata', normalizedRecord: conversion.normalized },
     });
     const lease = begun.lease;
+    insertSourceDestination(session.store.database, 'wikidata', 'https://api.test', 'first-use');
     session.release(own);
     session.close();
 
@@ -284,6 +286,7 @@ test('resume finishes a sealed generation without dump input and retains identit
       id: importer.session.store.activeRun('wikidata')!.id,
     };
     const skipped = importer.session.store.skipped(importer.session.store.activeRun('wikidata')!);
+    insertSourceDestination(importer.session.store.database, 'wikidata', 'https://api.test', 'first-use');
     await importer.close();
     let cancelNext = true;
     importer = new Importer({

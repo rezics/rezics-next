@@ -18,6 +18,7 @@ const USAGE = [
   '       [--page pending|covers] [--limit 1..100] [--cursor <opaque-cursor>] [--json]',
   '       rezics-import inspect --help',
   'Pages default to 20 rows. Inspection is local and read-only; it never resumes a run.',
+  'The document includes the recorded API origin and whether it was recorded on first use or declared for legacy state.',
 ].join('\n');
 
 export type InspectCliResult = Readonly<{ code: number; stdout: string; stderr: string; openHandles: number }>;
@@ -253,8 +254,21 @@ function resumeInvocation(
   ];
 }
 
+function renderDestination(document: InspectionDocument): string {
+  if (document.destination.status === 'unavailable')
+    return 'API destination: unavailable or damaged. Use backup; do not invent an origin.';
+  if (document.destination.status === 'unbound')
+    return 'API destination: not recorded. This source history is unbound. Review and declare the original origin with rezics-import destination before importing. Same-origin server replacement cannot be detected without a separately released deployment identity.';
+  const recorded =
+    document.destination.recorded === 'operator-declared'
+      ? 'operator-declared for legacy state; this is local configuration, not verified historical destination evidence'
+      : 'recorded on first use';
+  return `API destination: ${document.destination.origin} (${recorded}).`;
+}
+
 export function renderInspection(document: InspectionDocument): string {
   const lines = [`Source: ${terminalString(document.source)}`, `Source state: ${document.sourceState}`];
+  lines.push(renderDestination(document));
   if (document.sourceState === 'absent') lines.push('No state exists for this source identifier.');
   if (document.sourceState === 'uninitialized')
     lines.push('State exists, but there is no active generation or completed baseline.');

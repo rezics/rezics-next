@@ -5,6 +5,11 @@ import type { FileHandle } from 'node:fs/promises';
 import { RecordBindings } from './record-bindings.ts';
 import { closeExistingImporterState, openExistingImporterState, ResumeStateError } from './resume-state.ts';
 import { RunStore, type Run, type SourceProjection } from './run-store.ts';
+import {
+  evaluateAdmission,
+  insertSourceDestination,
+  type SourceDestinationRefusal,
+} from './source-destination.ts';
 
 type Ownership = { pid: number; birth: string; capability: string };
 export type ImportOwnership = Readonly<{ source: string; capability: string }>;
@@ -135,6 +140,46 @@ export class ImportSession {
       })
       .immediate();
     if (ownership !== 'busy') this.held.set(source, ownership);
+    return ownership;
+  }
+
+  /**
+   * Bind or recheck one exact source destination under the same-source owner lock.
+   * Mismatch and unbound legacy history leave the owner row, staging and baseline unchanged.
+   */
+  admit(
+    source: string,
+    origin: string,
+    options: { recordFirstUse?: boolean } = {},
+  ): ImportOwnership | 'busy' | SourceDestinationRefusal {
+    if (this.closed) throw new Error('Import session is closed');
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');
+    if (this.held.has(source)) return 'busy';
+    const db = this.store.database;
+    const ownership = db
+      .transaction(() => {
+        const decision = evaluateAdmission(db, source, origin);
+        if (decision !== 'first-use' && decision !== 'match') return decision;
+        const prior = db
+          .prepare('SELECT pid,birth,capability FROM import_owners WHERE source=?')
+          .get(source) as Ownership | null;
+        if (prior && alive(prior)) return 'busy' as const;
+        const capability = randomBytes(24).toString('hex');
+        db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
+        ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(
+          source,
+          process.pid,
+          this.identity,
+          capability,
+        );
+        if (decision === 'first-use' && options.recordFirstUse !== false)
+          insertSourceDestination(db, source, origin, 'first-use');
+        return { source, capability };
+      })
+      .immediate();
+    if (ownership === 'busy') return 'busy';
+    if ('kind' in ownership) return ownership;
+    this.held.set(source, ownership);
     return ownership;
   }
 

@@ -33,7 +33,7 @@ export function batchUsage(): string {
     'Execution requires --run. There is no hidden approval loop, cached plan token, continue-on-error or parallel worker.',
     BATCH_PREFLIGHT_NOTE,
     'Credentials stay on this invocation. The manifest and report never embed keys, tokens or request bodies.',
-    'Stop before the next job on any non-success, cancellation, uncertain delivery, disappearance, incompatible input or observation-conflict exit 6.',
+    'Stop before the next job on any non-success, cancellation, uncertain delivery, disappearance, incompatible input, wrong-origin destination, or observation-conflict exit 6.',
     'Completed jobs stay completed. Later jobs are not started, not labelled failed and not rolled back.',
     'Rerun the same manifest through ordinary per-source recovery. A batch report cannot resume a request.',
   ].join('\n');
