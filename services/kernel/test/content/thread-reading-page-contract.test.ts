@@ -140,10 +140,7 @@ test('selected reading-card references keep exact keys and close raw and reactio
   expect(normalizeSelectedReadingCardReferences([postReference])).toEqual([postReference]);
   expect(() => normalizeSelectedReadingCardReferences([...selected, selected[0]!])).toThrow();
   expect(() =>
-    normalizeSelectedReadingCardReferences([
-      selected[0]!,
-      { ...selected[0]!, placeId: id('301') },
-    ]),
+    normalizeSelectedReadingCardReferences([selected[0]!, { ...selected[0]!, placeId: id('301') }]),
   ).toThrow();
   expect(readingPageReactionCoverageState(['thread', 'opening'], new Set(['thread']))).toBe('unavailable');
   expect(readingPageReactionCoverageState(['thread', 'opening'], new Set(['thread', 'opening']))).toBe('current');

@@ -490,7 +490,9 @@ function projectedReferences(
     if (!result || result.error === 'not_found') return { ...reference, state: 'withheld', operations: [] };
     const permitted = new Set((result.viewerActions ?? []).flatMap((entry) => entry.operations));
     const referenceWatch =
-      'state' in watch ? watch : (watch.get(reference.id) ?? { state: 'unavailable' as const, retryable: true as const });
+      'state' in watch
+        ? watch
+        : (watch.get(reference.id) ?? { state: 'unavailable' as const, retryable: true as const });
     const operations = applicableBindings(bindings, reference.type, reference.id).map((binding) => ({
       action: binding.action,
       operationId: binding.operationId,
@@ -610,7 +612,10 @@ export function normalizeSelectedReadingCardReferences(
     const threadId = selectedReferenceThreadId(reference);
     const threadRoute = routeOf(threadId);
     const placeRoute = routeOf(reference.placeId);
-    const revisionRoutes = [reference.sourceRevisionId, ...(reference.type === 'content.post' ? [reference.threadRevisionId] : [])]
+    const revisionRoutes = [
+      reference.sourceRevisionId,
+      ...(reference.type === 'content.post' ? [reference.threadRevisionId] : []),
+    ]
       .filter((revision): revision is string => revision !== null)
       .map((revision) => routeOf(revision));
     if (
@@ -644,7 +649,10 @@ export function readingPageReactionCoverageState(
 }
 
 function selectedCardUnavailable(error: unknown): boolean {
-  return classifyUnavailability(error) !== undefined || (error instanceof ProblemError && error.code === 'dependency_unavailable');
+  return (
+    classifyUnavailability(error) !== undefined ||
+    (error instanceof ProblemError && error.code === 'dependency_unavailable')
+  );
 }
 
 function sourceChanged(): ProblemError {
@@ -704,9 +712,7 @@ function selectedCardPreflight(
     watch: [],
   };
   if (
-    responseBytes(envelope) +
-      maxAuthors * MAX_AUTHOR_DISPLAY_BYTES +
-      maxReactionTargets * MAX_REACTION_BYTES >
+    responseBytes(envelope) + maxAuthors * MAX_AUTHOR_DISPLAY_BYTES + maxReactionTargets * MAX_REACTION_BYTES >
     READING_CARD_ENVELOPE_BYTES
   )
     throw new ProblemError('content_too_large');
@@ -720,8 +726,15 @@ function selectedCardMaximumPreflight(
   const threadCount = references.length;
   const postCount = references.length * 2;
   const possible = [
-    ...Array.from({ length: threadCount }, (_, index) => ({ type: 'content.thread' as const, id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}` })),
-    ...Array.from({ length: postCount }, (_, index) => ({ type: 'content.post' as const, id: `00000000-0000-4000-8000-${String(index + 101).padStart(12, '0')}`, sourceRevisionId: `00000000-0000-4000-8000-${String(index + 201).padStart(12, '0')}` })),
+    ...Array.from({ length: threadCount }, (_, index) => ({
+      type: 'content.thread' as const,
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    })),
+    ...Array.from({ length: postCount }, (_, index) => ({
+      type: 'content.post' as const,
+      id: `00000000-0000-4000-8000-${String(index + 101).padStart(12, '0')}`,
+      sourceRevisionId: `00000000-0000-4000-8000-${String(index + 201).padStart(12, '0')}`,
+    })),
   ];
   const operations = bindings
     ? possible.map((reference) => ({
@@ -745,9 +758,7 @@ function selectedCardMaximumPreflight(
     watch: [],
   };
   if (
-    responseBytes(envelope) +
-      maxAuthors * MAX_AUTHOR_DISPLAY_BYTES +
-      maxReactionTargets * MAX_REACTION_BYTES >
+    responseBytes(envelope) + maxAuthors * MAX_AUTHOR_DISPLAY_BYTES + maxReactionTargets * MAX_REACTION_BYTES >
     READING_CARD_ENVELOPE_BYTES
   )
     throw new ProblemError('content_too_large');
@@ -775,7 +786,8 @@ export async function createContentReadingCardBatch(
   for (const reference of references) {
     const threadId = selectedReferenceThreadId(reference);
     const subjectId = reference.type === 'content.thread' ? reference.subjectId : undefined;
-    const expectedOpeningRevisionId = reference.type === 'content.thread' ? reference.sourceRevisionId : reference.threadRevisionId;
+    const expectedOpeningRevisionId =
+      reference.type === 'content.thread' ? reference.sourceRevisionId : reference.threadRevisionId;
     const existing = groups.get(threadId);
     if (
       existing &&
@@ -873,7 +885,12 @@ export async function createContentReadingCardBatch(
 
   const actionRefs: Array<{ type: ReadingReference['type']; id: string; sourceRevisionId?: string }> = [];
   const actionSources = new Map<string, ReadingCardActionSource>();
-  const addAction = (type: ReadingReference['type'], id: string, source: ReadingCardActionSource, revisionId?: string | null) => {
+  const addAction = (
+    type: ReadingReference['type'],
+    id: string,
+    source: ReadingCardActionSource,
+    revisionId?: string | null,
+  ) => {
     const key = `${type}/${id}`;
     if (actionSources.has(key)) return;
     const reference = { type, id, ...(revisionId ? { sourceRevisionId: revisionId } : {}) };
@@ -895,13 +912,23 @@ export async function createContentReadingCardBatch(
     addAction('content.thread', group.threadId, { threadId: group.threadId });
     addReaction('content.thread', group.threadId);
     if (group.openingPostId && group.openingState === 'available' && group.openingRevisionId) {
-      addAction('content.post', group.openingPostId, { threadId: group.threadId, postId: group.openingPostId }, group.openingRevisionId);
+      addAction(
+        'content.post',
+        group.openingPostId,
+        { threadId: group.threadId, postId: group.openingPostId },
+        group.openingRevisionId,
+      );
       addReaction('content.post', group.openingPostId);
     }
   }
   for (const post of postSources) {
     if (post.state !== 'current' || !post.revisionId) continue;
-    addAction('content.post', post.reference.id, { threadId: post.reference.threadId, postId: post.reference.id }, post.revisionId);
+    addAction(
+      'content.post',
+      post.reference.id,
+      { threadId: post.reference.threadId, postId: post.reference.id },
+      post.revisionId,
+    );
     addReaction('content.post', post.reference.id);
   }
   if (actionRefs.length > READING_CARD_ACTION_REFERENCE_LIMIT) throw new ProblemError('dependency_unavailable');
@@ -922,7 +949,8 @@ export async function createContentReadingCardBatch(
         identityIds,
       );
       authorValues = identityAuthors(identityIds, summaries);
-      if (authorValues.some((author) => responseBytes(author) > MAX_AUTHOR_DISPLAY_BYTES)) throw new ProblemError('dependency_unavailable');
+      if (authorValues.some((author) => responseBytes(author) > MAX_AUTHOR_DISPLAY_BYTES))
+        throw new ProblemError('dependency_unavailable');
     } catch (error) {
       if (!selectedCardUnavailable(error)) throw error;
       authorState = 'unavailable';
@@ -939,7 +967,12 @@ export async function createContentReadingCardBatch(
       const personalized = await withViewerReactions(dependencies, actor, targetIds, deadline);
       const counted = await withReactionCountsAndCoverage(dependencies, personalized, deadline);
       const covered = new Set(counted.targetsWithRows);
-      if (readingPageReactionCoverageState(targetIds.map((target) => target.id), covered) !== 'current') {
+      if (
+        readingPageReactionCoverageState(
+          targetIds.map((target) => target.id),
+          covered,
+        ) !== 'current'
+      ) {
         reactionState = 'unavailable';
       } else {
         reactionsAsOf = counted.reactionsAsOf;
@@ -970,7 +1003,8 @@ export async function createContentReadingCardBatch(
 
   const initialWatch = new Map<string, ReadingWatchState>();
   if (actor.kind === 'anonymous') {
-    for (const group of groups.values()) if (group.state === 'current') initialWatch.set(group.threadId, { state: 'sign_in_required' });
+    for (const group of groups.values())
+      if (group.state === 'current') initialWatch.set(group.threadId, { state: 'sign_in_required' });
   } else {
     for (const group of groups.values()) {
       if (group.state !== 'current') continue;
@@ -988,7 +1022,12 @@ export async function createContentReadingCardBatch(
   let actionResults: Awaited<ReturnType<typeof readViewerActions>>['resources'] = [];
   if (catalogueReady && actionRefs.length) {
     try {
-      const result = await readViewerActions({ pool: dependencies.pool, ...actionRuntime! }, actor, actionRefs, deadline);
+      const result = await readViewerActions(
+        { pool: dependencies.pool, ...actionRuntime! },
+        actor,
+        actionRefs,
+        deadline,
+      );
       actionResults = result.resources;
     } catch (error) {
       if (!(error instanceof ProblemError) || error.code !== 'dependency_unavailable') throw error;
@@ -1013,7 +1052,11 @@ export async function createContentReadingCardBatch(
             actor,
             deadline,
           );
-          if (!thread.value || thread.value.firstPost.availability === 'withheld' || thread.value.boardId !== group.placeId) {
+          if (
+            !thread.value ||
+            thread.value.firstPost.availability === 'withheld' ||
+            thread.value.boardId !== group.placeId
+          ) {
             group.state = 'withheld';
             continue;
           }
@@ -1071,7 +1114,9 @@ export async function createContentReadingCardBatch(
             finalAnchors.push(current.anchor);
             finalWatch.set(
               group.threadId,
-              current.watching === before.watching ? { state: 'current', watching: current.watching } : { state: 'unavailable', retryable: true },
+              current.watching === before.watching
+                ? { state: 'current', watching: current.watching }
+                : { state: 'unavailable', retryable: true },
             );
           } catch (error) {
             if (!(error instanceof ContentNotFoundError) && !selectedCardUnavailable(error)) throw error;
@@ -1131,8 +1176,9 @@ export async function createContentReadingCardBatch(
           if (!reference) return 'unavailable';
           if (reference.state === 'withheld') return 'withheld';
           return (
-            (reference.operations.find((operation) => operation.operationId === 'post.create')?.state as ReplyState | undefined) ??
-            'unavailable'
+            (reference.operations.find((operation) => operation.operationId === 'post.create')?.state as
+              | ReplyState
+              | undefined) ?? 'unavailable'
           );
         };
         const selectedResults = references.map((reference) => {
@@ -1140,10 +1186,14 @@ export async function createContentReadingCardBatch(
           const group = groups.get(threadId);
           if (!group || group.state !== 'current')
             return { reference, state: 'withheld' as const, reply: { state: 'withheld' as const } };
-          const post = reference.type === 'content.post' ? postSources.find((item) => item.reference.id === reference.id) : undefined;
+          const post =
+            reference.type === 'content.post'
+              ? postSources.find((item) => item.reference.id === reference.id)
+              : undefined;
           if (post?.state === 'withheld')
             return { reference, state: 'withheld' as const, reply: { state: 'withheld' as const } };
-          const sourceRevisionId = reference.type === 'content.thread' ? group.openingRevisionId ?? null : (post?.revisionId ?? null);
+          const sourceRevisionId =
+            reference.type === 'content.thread' ? (group.openingRevisionId ?? null) : (post?.revisionId ?? null);
           const state =
             reference.type === 'content.post'
               ? (post?.state ?? 'withheld')
@@ -1160,7 +1210,9 @@ export async function createContentReadingCardBatch(
               sourceRevisionId,
               threadSecurityRevision: group.threadSecurityRevision!,
               sourceSecurityRevision:
-                reference.type === 'content.post' ? (post?.securityRevision ?? null) : (group.openingSecurityRevision ?? null),
+                reference.type === 'content.post'
+                  ? (post?.securityRevision ?? null)
+                  : (group.openingSecurityRevision ?? null),
               placeSecurityRevision: finalPlaces.get(group.placeId)?.securityRevision ?? group.placeSecurityRevision!,
             },
           };
@@ -1175,12 +1227,11 @@ export async function createContentReadingCardBatch(
               ...('watching' in value ? { watching: value.watching } : {}),
             };
           });
-        const watchState =
-          watchItems.some((item) => item.state === 'unavailable')
-            ? 'unavailable'
-            : actor.kind === 'anonymous' && watchItems.length > 0
-              ? 'sign_in_required'
-              : 'current';
+        const watchState = watchItems.some((item) => item.state === 'unavailable')
+          ? 'unavailable'
+          : actor.kind === 'anonymous' && watchItems.length > 0
+            ? 'sign_in_required'
+            : 'current';
         const result: SelectedReadingCardBatchResult = {
           viewer: actor.kind === 'account' ? { kind: 'account', id: actor.accountId } : { kind: 'anonymous' },
           selected: selectedResults,

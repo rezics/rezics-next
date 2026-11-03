@@ -1,29 +1,15 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "packages/client/src/kernel/**",
-    "contracts/openapi.json"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [
-    "f6639bfc-bae7-4c61-9133-9841067982c7"
-  ],
-  "estimate": {
-    "lines": 500,
-    "files": 6
-  },
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths': ['packages/client/src/kernel/**', 'contracts/openapi.json'],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': ['f6639bfc-bae7-4c61-9133-9841067982c7'],
+  'estimate': { 'lines': 500, 'files': 6 },
+  'inseparable': true,
 }
 ---
 
