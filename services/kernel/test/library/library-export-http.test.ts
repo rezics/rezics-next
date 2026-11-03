@@ -496,7 +496,8 @@ test('native owner export streams independent persisted facts, preserves dates, 
   ).then(json);
   expect(cancelledMembers.members).toHaveLength(1);
 
-  expect((await get(`/v1/libraryExports/${id}`)).state).toBe('ready');
+  // The accepted recovered Collection advances native owner source and invalidates this older export.
+  expect((await get(`/v1/libraryExports/${id}`)).state).toBe('stale');
   await sql`UPDATE library.collection_member SET note='edited' WHERE route=${route} AND collection_id=${collection}`;
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], manifest: null });
 });
