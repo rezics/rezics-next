@@ -66,11 +66,11 @@ No runtime assertion was reached: the current controller deferred the native acc
 In particular, the registered orphan prerequisite, rollback, denied/empty, approval/replay, and
 all measured-operation assertions remain unexecuted. The requested scale observations are:
 
-| Independent axis | 256 | 1024 | 4096 |
-| --- | --- | --- | --- |
-| Unrelated Realms and revisions | Not observed | Not observed | Not observed |
-| Unrelated claim requests | Not observed | Not observed | Not observed |
-| Native resource-role grants | Not observed | Not observed | Not observed |
+| Independent axis                            | 256          | 1024         | 4096         |
+| ------------------------------------------- | ------------ | ------------ | ------------ |
+| Unrelated Realms and revisions              | Not observed | Not observed | Not observed |
+| Unrelated claim requests                    | Not observed | Not observed | Not observed |
+| Native resource-role grants                 | Not observed | Not observed | Not observed |
 | Retained receipt/outbox/write-basis history | Not observed | Not observed | Not observed |
 
 `bun run --cwd services/kernel typecheck` ran at `999c789875a7c8b08d0245f19d4199b384100fb1`

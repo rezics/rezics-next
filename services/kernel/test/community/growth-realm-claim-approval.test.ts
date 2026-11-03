@@ -155,19 +155,14 @@ test('native orphan succession binds the original episode before real claim appr
           run.filter(({ statement }) => /\bcommunity\.(?:realm|realm_claim_request)\b/i.test(statement)),
         );
         const contentUpdates = run
-          .filter(({ statement }) =>
-            /^\s*update\s+community\.(?:realm|realm_claim_request)\b/i.test(statement),
-          )
+          .filter(({ statement }) => /^\s*update\s+community\.(?:realm|realm_claim_request)\b/i.test(statement))
           .reduce((total, { count }) => total + count, 0);
         const nativeOwnerRoleReads = run
           .filter(({ statement }) => ownerRoleRead(statement))
           .reduce((total, { count }) => total + count, 0);
         const ownerRole = statementWork(run.filter(({ statement }) => ownerRoleRead(statement)));
         const accounts = statementWork(
-          run.filter(
-            ({ statement }) =>
-              /\b(?:access|core|editorial)\./i.test(statement) && !ownerRoleRead(statement),
-          ),
+          run.filter(({ statement }) => /\b(?:access|core|editorial)\./i.test(statement) && !ownerRoleRead(statement)),
         );
         expect(content.statements).toBeGreaterThan(0);
         expect(content.rows).toBeGreaterThan(0);
