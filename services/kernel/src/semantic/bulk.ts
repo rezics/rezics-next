@@ -23,6 +23,7 @@ import { appendImportedField } from '../content/imported-fields.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { claimMedia } from '../content/media.ts';
 import { requestDigest } from '../http/request.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { EditorialConflictError, SubjectNotFoundError, writeProposal } from './candidates.ts';
@@ -46,6 +47,9 @@ export type BulkValue =
   | { candidate: string; revision: number }
   | { revision: number };
 type Value = { status: 200 | 201; value: BulkValue };
+
+// Permanent Semantic receipt codec ID; batch creation keeps its original command identity.
+registerCommandHistoryKind('subject.batch_create', 3021);
 
 export function batchRoute(routeKey: Uint8Array, command: BatchCommand): number | null {
   const tuple = tupleRoute(routeKey, command.source.source, command.source.external_id);
@@ -191,6 +195,10 @@ export async function batchCommand(
           if (id) {
             const subject = await visibleSubject(tx, route, id);
             if (subject.type !== command.subject.type) throw new EditorialConflictError();
+            await declareCommandHistory(tx, kind, {
+              response: { artifactType: 'command-receipt/v1', accounts: [] },
+              events: [],
+            });
             return resolve({ id, revision: subject.revision });
           }
           const target = { route, id: newId(route) };

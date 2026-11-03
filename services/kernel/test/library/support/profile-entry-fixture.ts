@@ -228,6 +228,7 @@ export async function createProfileEntryFixture(
     }
     const steward = await identity([
       'access:grant',
+      'subject:batch_write',
       'offer:create',
       'subject:create',
       'statement:propose',
