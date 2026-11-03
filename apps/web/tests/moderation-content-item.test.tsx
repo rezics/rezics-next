@@ -578,9 +578,16 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       );
     });
     setStage('review-flush-done');
+    setStage('review-query');
     const reviewGroup = host.querySelector('[role="group"][tabindex="-1"]') as HTMLElement;
-    expect(reviewGroup.textContent).toContain(m.moderation_bulk_confirmation({ count: 3 }));
-    expect(window.document.activeElement).toBe(reviewGroup);
+    setStage('review-text-read');
+    const reviewText = reviewGroup.textContent;
+    setStage('review-text-assert');
+    expect(reviewText).toContain(m.moderation_bulk_confirmation({ count: 3 }));
+    setStage('review-focus-read');
+    const activeElement = window.document.activeElement;
+    setStage('review-focus-assert');
+    expect(activeElement).toBe(reviewGroup);
     setStage('cancel');
     await clickButton(host, m.moderation_bulk_cancel(), flush);
     expect(window.document.activeElement).toBe(buttonByText(host, m.moderation_bulk_review()));
