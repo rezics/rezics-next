@@ -1,3 +1,4 @@
+import { REVIEW_DISCOVERY_EVENTS } from './review-discovery-events.ts';
 import { DISCOVERY_EVENTS, DISCOVERY_OPERATION_EVENTS } from './discovery-events.ts';
 import { Type, type Static } from 'typebox';
 import { BOARD_EVENTS } from './board-events.ts';
@@ -120,6 +121,7 @@ export const CONTENT_EVENTS = {
     { additionalProperties: false },
   ),
   ...SOURCE_FENCE_EVENTS,
+  ...REVIEW_DISCOVERY_EVENTS,
   ...DISCOVERY_EVENTS,
   ...DISCOVERY_OPERATION_EVENTS,
 } as const;

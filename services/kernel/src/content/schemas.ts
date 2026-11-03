@@ -316,6 +316,7 @@ export const PostInputSchema = t.Object(
 );
 export const RevisionInputSchema = t.Object(
   {
+    title: t.Optional(t.String({ minLength: 1, maxLength: 1024 })),
     visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft')])),
     body: document,
     licence: t.Optional(licence),

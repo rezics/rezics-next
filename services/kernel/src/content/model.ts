@@ -134,6 +134,8 @@ export type PostInput = Readonly<{
 }>;
 export type RevisionInput = Readonly<{
   threadId: ThreadId;
+  /** Review opening title, committed with this body revision. */
+  title?: string;
   visibility?: 'published' | 'draft';
   itemId: PostId;
   body: unknown;

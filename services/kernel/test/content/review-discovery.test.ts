@@ -1,6 +1,13 @@
 import { afterAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createThread, revisePost } from '../../src/content/commands.ts';
+import { runCommand, type CommandOutcome } from '../../src/command/command.ts';
+import type { CloudEvent } from '../../src/events/log.ts';
+import { softDeletePost } from '../../src/content/erase-post.ts';
+import { restorePost } from '../../src/content/restore-post.ts';
+import { createReviewDiscoveryDispatchEffect, createReviewDiscoveryEffect, processReviewDiscoveryPage, readReviewDiscoveryProgress } from '../../src/content/review-discovery-lifecycle.ts';
+import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from '../../src/content/review-discovery-changes.ts';
+import { REVIEW_DISCOVERY_OPENED, type ReviewDiscoveryWork } from '../../src/content/review-discovery-events.ts';
 import { erasePost } from '../../src/content/moderation.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
 import { routeOf, newId, partitionOf } from '../../src/route/route.ts';
@@ -16,6 +23,41 @@ const request = () => ({
   requestId: Bun.randomUUIDv7(),
 });
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
+
+async function original(outcome: Pick<CommandOutcome<unknown>, 'partition' | 'position' | 'epoch'>, type: string): Promise<CloudEvent> {
+  const row = (await fixture.reader.query(
+    'SELECT id,type,subject,data,recorded_at FROM core.outbox WHERE partition_no=$1 AND position=$2 AND epoch=$3 AND type=$4',
+    [outcome.partition, outcome.position.toString(), outcome.epoch, type],
+  )).rows[0]!;
+  return { specversion: '1.0', datacontenttype: 'application/json', id: row.id,
+    type: row.type, subject: row.subject ?? undefined, data: row.data, time: row.recorded_at.toISOString(),
+    source: `urn:rezics:log:${outcome.partition}.${outcome.epoch}`, sequence: outcome.position.toString().padStart(19, '0') };
+}
+
+const effect = createReviewDiscoveryEffect(fixture.pool);
+async function invalidate(outcome: Pick<CommandOutcome<unknown>, 'partition' | 'position' | 'epoch'>, type: string) {
+  const event = await original(outcome, type);
+  await effect.run(event);
+  const ref = { route: outcome.partition * 16, id: event.id };
+  for (let pages = 0; pages < 20; pages++) {
+    const page = await processReviewDiscoveryPage(fixture.pool, ref);
+    expect(page.examined).toBeLessThanOrEqual(100);
+    if (page.complete) return { event, ref };
+  }
+  throw new Error('Review discovery fixture exceeded its bounded continuation');
+}
+
+async function subjectGate(subject: string, visibility: 'hidden' | 'visible') {
+  return runCommand(fixture.pool, { partition: partitionOf(routeOf(subject)!), deadline: Date.now() + 30_000 }, async (tx) => {
+    const changed = (await tx.query(
+      'UPDATE semantic.subject SET visibility=$3,security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2 RETURNING security_revision::integer AS revision',
+      [routeOf(subject), subject, visibility],
+    )).rows[0]!;
+    return { value: null, events: [{ type: 'com.rezics.subject.revised.v1', subject,
+      data: { id: subject, revision: changed.revision, kind: 'identity' } }] };
+  });
+}
+
 
 test('public review discovery refreshes the same thread and omits protected or removed reviews', async () => {
   const author = (await fixture.context()).actor;
@@ -54,6 +96,12 @@ test('public review discovery refreshes the same thread and omits protected or r
     deadline: Date.now() + 30_000,
   }));
 
+  const admitted = await invalidate(published, 'com.rezics.content.thread.created.v1');
+  let changePage = await readReviewDiscoveryChanges(fixture.pool, partition);
+  expect(changePage.changes).toHaveLength(1);
+  expect(changePage.changes[0]!.origin).toMatchObject({ partition: published.partition, epoch: published.epoch,
+    position: published.position.toString(), id: admitted.event.id, type: admitted.event.type });
+  expect((await refreshReviewDiscoveryChanges(source, changePage)).reviews[0]?.id).toBe(published.value.threadId);
   const first = await source.read(partition, [published.value.threadId]);
   expect(first.reviews.map((item) => item.id)).toEqual([published.value.threadId]);
   expect(first.reviews[0]).toMatchObject({
@@ -89,26 +137,33 @@ test('public review discovery refreshes the same thread and omits protected or r
     await create(hiddenAuthor, hiddenSubject, `Hidden target ${ordinal}`);
   }
   const hiddenPartition = partitionOf(routeOf(hiddenAuthor.accountId)!);
-  await fixture.reader.query(
-    "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
-    [routeOf(subjectId), subjectId],
-  );
+  const closed = await subjectGate(subjectId, 'hidden');
+  await invalidate(closed, 'com.rezics.subject.revised.v1');
+  const closedPage = await readReviewDiscoveryChanges(fixture.pool, partition, changePage.after);
+  expect((await refreshReviewDiscoveryChanges(source, closedPage)).removed).toEqual([published.value.threadId]);
   const sparse = await source.page(hiddenPartition, null, 1);
   expect(sparse.reviews).toEqual([]);
   expect(sparse.next).not.toBeNull();
   const terminal = await source.page(hiddenPartition, sparse.next, 1);
   expect(terminal).toMatchObject({ reviews: [], next: null });
-  await fixture.reader.query(
-    "UPDATE semantic.subject SET visibility='visible',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
-    [routeOf(subjectId), subjectId],
-  );
+  const opened = await subjectGate(subjectId, 'visible');
+  await invalidate(opened, 'com.rezics.subject.revised.v1');
+  const publicPage = await readReviewDiscoveryChanges(fixture.pool, partition, closedPage.after);
+  expect((await refreshReviewDiscoveryChanges(source, publicPage)).reviews[0]?.id).toBe(published.value.threadId);
+  // Reordered originals and authorized native replay cannot put an old body back.
+  await effect.run(admitted.event);
+  await processReviewDiscoveryPage(fixture.pool, admitted.ref);
+  expect((await readReviewDiscoveryChanges(fixture.pool, partition)).through).toBe(publicPage.through);
+  expect((await readReviewDiscoveryProgress(fixture.pool, admitted.ref)).continuation).toBeNull();
+  changePage = publicPage;
 
-  await revisePost(
+  const revised = await revisePost(
     { pool: fixture.pool, access: fixture.access, routeKey },
     author,
     {
       threadId: published.value.threadId,
       itemId: published.value.itemId,
+      title: 'A revised review title',
       body: fromPlainText('Revised review excerpt.'),
     } as never,
     request(),
@@ -117,15 +172,88 @@ test('public review discovery refreshes the same thread and omits protected or r
     'Revised review excerpt.',
   );
 
+  await invalidate(revised, 'com.rezics.content.revision.created.v1');
+  const revisionPage = await readReviewDiscoveryChanges(fixture.pool, partition, changePage.after);
+  expect((await refreshReviewDiscoveryChanges(source, revisionPage)).reviews[0]).toMatchObject({
+    title: 'A revised review title', excerpt: 'Revised review excerpt.' });
   await fixture.grant(author.accountId, 'post:erase', {
     route: routeOf(published.value.itemId)!,
     id: published.value.itemId,
   });
-  await erasePost(
+  const deleted = await softDeletePost({ pool: fixture.pool, access: fixture.access, routeKey }, author,
+    { postId: published.value.itemId, reason: 'Withdraw' }, request());
+  const deletion = await invalidate(deleted, 'com.rezics.content.post.erased.v1');
+  const withdrawn = await readReviewDiscoveryChanges(fixture.pool, partition, revisionPage.after);
+  expect((await refreshReviewDiscoveryChanges(source, withdrawn)).removed).toEqual([published.value.threadId]);
+  const restored = await restorePost({ pool: fixture.pool, access: fixture.access, routeKey }, author,
+    published.value.itemId, request());
+  await invalidate(restored, 'com.rezics.content.post.restored.v1');
+  const restoredPage = await readReviewDiscoveryChanges(fixture.pool, partition, withdrawn.after);
+  expect((await refreshReviewDiscoveryChanges(source, restoredPage)).reviews[0]?.id).toBe(published.value.threadId);
+  // The old withdrawal arrives after restoration; current hydration still wins.
+  await effect.run(deletion.event);
+  expect((await refreshReviewDiscoveryChanges(source, withdrawn)).removed).toEqual([]);
+  const erased = await erasePost(
     { pool: fixture.pool, access: fixture.access, routeKey },
     author,
     { postId: published.value.itemId, reason: 'Author removed the review' },
     request(),
   );
   expect((await source.hydrate(partition, [published.value.threadId])).reviews).toEqual([]);
+  await invalidate(erased, 'com.rezics.content.post.erased.v1');
+  expect((await refreshReviewDiscoveryChanges(source,
+    await readReviewDiscoveryChanges(fixture.pool, partition, restoredPage.after))).removed).toEqual([published.value.threadId]);
+  await expect(effect.run({ ...admitted.event, data: { ...(admitted.event.data as object), title: 'Forged' } })).rejects.toThrow();
+});
+
+
+test('durable cross-partition gate pages retain disappearance, fixed catch-up cuts and retryable dispatch', async () => {
+  const subject = newId(0x6b36);
+  await fixture.reader.query(`INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
+    VALUES($1,$2,'schema:Book',$2,'visible',1)`, [routeOf(subject), subject]);
+  // Retained identity keys model native rows removed before delayed gate work arrives.
+  const ids = Array.from({ length: 103 }, (_, index) => newId(index < 101 ? 0x7310 : 0x7320));
+  const unrelated = Array.from({ length: 205 }, () => newId(0x7310));
+  await fixture.reader.query(`INSERT INTO content.review_discovery_dependency(route,thread_id,gate_kind,gate_key)
+    SELECT route,id,'subject',gate FROM jsonb_to_recordset($1::jsonb) AS k(route integer,id uuid,gate uuid)`,
+    [JSON.stringify([...ids.map((id) => ({ route: routeOf(id), id, gate: subject })),
+      ...unrelated.map((id) => ({ route: routeOf(id), id, gate: newId(0x6b37) }))])]);
+  const gate = await subjectGate(subject, 'hidden');
+  const event = await original(gate, 'com.rezics.subject.revised.v1');
+  await effect.run(event);
+  const ref = { route: gate.partition * 16, id: event.id };
+  const task = (await fixture.reader.query('SELECT position::text,epoch FROM core.outbox WHERE partition_no=$1 AND type=$2 AND subject=$3',
+    [gate.partition, REVIEW_DISCOVERY_OPENED, ref.id])).rows[0]!;
+  const opened = await original({ partition: gate.partition, position: BigInt(task.position), epoch: task.epoch }, REVIEW_DISCOVERY_OPENED);
+  const queued: ReviewDiscoveryWork[] = [];
+  const dispatch = createReviewDiscoveryDispatchEffect(fixture.pool, async (key) => { queued.push(key); });
+  await dispatch.run(opened);
+  await dispatch.run(opened);
+  expect(queued).toEqual([ref, ref]);
+  const first = await processReviewDiscoveryPage(fixture.pool, ref);
+  expect(first).toMatchObject({ complete: false, examined: 100, delivered: 100 });
+  expect((await readReviewDiscoveryProgress(fixture.pool, ref)).continuation).not.toBeNull();
+  const partition = partitionOf(routeOf(ids[0]!)!);
+  const cut = await readReviewDiscoveryChanges(fixture.pool, partition, 0n, 7);
+  expect(cut.through).toBe(100n);
+  expect(cut.next).not.toBeNull();
+  expect(await processReviewDiscoveryPage(fixture.pool, ref)).toMatchObject({ complete: true, examined: 3, delivered: 3 });
+  let page = cut;
+  const caught: string[] = [];
+  for (;;) {
+    caught.push(...page.changes.map((change) => change.id));
+    if (page.next === null) break;
+    page = await readReviewDiscoveryChanges(fixture.pool, partition, page.next, 7, cut.through);
+  }
+  expect(caught).toHaveLength(100);
+  expect(page.after).toBe(cut.through);
+  const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
+    actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }));
+  const late = await readReviewDiscoveryChanges(fixture.pool, partition, cut.through);
+  expect(late.changes).toHaveLength(1);
+  expect((await refreshReviewDiscoveryChanges(source, late)).removed).toEqual(late.changes.map((change) => change.id));
+  const current = late.through;
+  await effect.run(event);
+  expect(await processReviewDiscoveryPage(fixture.pool, ref)).toMatchObject({ complete: true, examined: 0, delivered: 0 });
+  expect((await readReviewDiscoveryChanges(fixture.pool, partition, current)).after).toBe(current);
 });
