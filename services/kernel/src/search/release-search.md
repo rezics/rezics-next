@@ -86,7 +86,35 @@ generations use the format-3 mapping, and population, replay, reconciliation and
 their codec from that physical mapping. Publication remains behind the existing complete population and replay
 lifecycle; old generations keep their original mapping and writer shape.
 
-The work grouping, bounded child/group continuations, active-release operand controls, mounted release page,
+## Grouping execution policy
+
+Decision: incomplete relation previews never establish work ownership or child completeness; only explicit native
+EOF ends a group, and a work with no proven matching child prepares within its own bounded continuation.
+
+`release-search-grouping.ts` supplies the source-independent group/child execution policy. Complete adopted work
+links distinguish absent, unknown, contradictory and unavailable targets. Repeated links to the same current
+canonical work form one ownership link; a hidden target never supplies an identity or disagreement count.
+Ungroupable current matching releases stay individual results, without a fabricated work or child enumeration.
+
+Groups and children have separate private continuation payloads. Each binds the entire admitted filter, query,
+ordered language chain, sort, spoiler threshold, page sizes, active release, physical generation identity and a
+source epoch. The native epoch must cover disclosure, redirects, dates, credits and order across every source
+pool. A before/after observation rejects concurrent change; every resume rehydrates current matching releases
+and canonical visible works. Precise ranges require readiness for the exact physical identity.
+
+The policy limits a response to 20 groups, 20 children or three preview children per group. Each invocation also
+caps candidate keys at 256 and logical source calls at 64, including initial/final observations and hydration.
+An exhausted work budget with no result produces preparation progress, never an empty terminal group. These
+are policy caps, not measured native seeks. Preview EOF comes only from the owner's complete child stream.
+
+`ReleaseGroupingSource` is an uninstalled native seam. Its distinct ordered group stream and per-work child
+stream must seek every required pool with native reservations; its bounded hydration must apply current
+matching, disclosure and canonical work selection from complete evidence, preserving existing viewer state and
+permitted actions. `SubjectSource.statements` and Search hit facts are sampled and cannot implement this seam.
+Before HTTP installation, authenticate/encrypt private payloads with the existing cursor lifecycle, binding the
+current viewer and expiry; never expose their raw source positions, work keys or epoch in response JSON.
+
+The native grouping source, HTTP cursor installation, active-release operand controls, mounted release page,
 eight-locale states and native all-pool growth measurements remain part of the same journey. There is no measured
 grouping seek count or native growth result yet; derive its seeks from real relation indexes, source caps and
 preparation plan before claiming a page bound.
