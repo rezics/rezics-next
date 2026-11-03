@@ -48,7 +48,7 @@ export type ConceptBrowseSource = Readonly<{
   ): Promise<ConceptBrowseRead>;
 }>;
 /** Derived storage beneath the existing retained-plan worker, not another capture or scheduler.
- * Operations are fenced by immutable definition and revision. create seeds the root; read retrieves
+ * Operations compare the entire supplied selection/binding to the retained definition and revision. create seeds the root; read retrieves
  * at most one frontier row. advance atomically advances that row, inserts distinct membership keys
  * and queues only newly inserted keys using indexed deduplication. seal requires an empty frontier.
  * Losing a CAS returns null. Retirement/expiry of the owning plan disables every operation.
@@ -57,18 +57,18 @@ export type ConceptBrowseSource = Readonly<{
 export type ConceptBrowseStore = Readonly<{
   create(selection: ConceptDescendantSelection, binding: ConceptBrowseBinding): Promise<ConceptBrowseLocator>;
   read(
-    locator: ConceptBrowseLocator,
+    state: ConceptBrowseState,
   ): Promise<
     Readonly<{ status: 'building'; next: ConceptBrowseFrontier | null }> | Readonly<{ status: 'complete' | 'retired' }>
   >;
   advance(
-    locator: ConceptBrowseLocator,
+    state: ConceptBrowseState,
     expected: ConceptBrowseFrontier,
     delta: Readonly<{ children: readonly string[]; after: string | null; exhausted: boolean }>,
   ): Promise<ConceptBrowseLocator | null>;
-  seal(locator: ConceptBrowseLocator): Promise<ConceptBrowseLocator | null>;
-  retire(locator: ConceptBrowseLocator): Promise<void>;
-  contains(locator: ConceptBrowseLocator, concept: string): Promise<boolean | null>;
+  seal(state: ConceptBrowseState): Promise<ConceptBrowseLocator | null>;
+  retire(state: ConceptBrowseState): Promise<void>;
+  contains(state: ConceptBrowseState, concept: string): Promise<boolean | null>;
 }>;
 /** Absolute working-set limits; total retained graph size is never a request-sized array. */
 export const CONCEPT_BROWSE_LIMITS = Object.freeze({ pages: 32, edges: 4096, pageSize: 256, keyBytes: 1024 });
@@ -166,7 +166,7 @@ export async function advanceConceptBrowse(
   let pages = 0,
     edges = 0;
   async function retire(status: 'restart' | 'unavailable' | 'rejected'): Promise<ConceptBrowseResult> {
-    await store.retire(state.retained);
+    await store.retire(state);
     return { status };
   }
   const first = await source.observe();
@@ -174,7 +174,7 @@ export async function advanceConceptBrowse(
     return first.status === 'preparing' ? { status: 'preparing', state, pages, edges } : retire(first.status);
   if (!sameBinding(first.binding, state.binding)) return retire('restart');
 
-  let retained = await store.read(state.retained);
+  let retained = await store.read(state);
   while (retained.status === 'building' && retained.next && pages < limits.pages && edges < limits.edges) {
     const current = Object.freeze({ ...retained.next });
     if (!key(current.parent) || (current.after !== null && !key(current.after))) return retire('restart');
@@ -199,14 +199,14 @@ export async function advanceConceptBrowse(
     )
       return retire('restart');
     edges += page.examined;
-    const next = await store.advance(state.retained, current, {
+    const next = await store.advance(state, current, {
       children: [...new Set(page.children)],
       after: page.after,
       exhausted: !page.hasMore,
     });
     if (!next || !validLocator(next)) return retire('restart');
     state = freezeState({ ...state, retained: next });
-    retained = await store.read(state.retained);
+    retained = await store.read(state);
   }
   if (retained.status === 'retired') return { status: 'restart' };
   const final = await source.observe();
@@ -215,7 +215,7 @@ export async function advanceConceptBrowse(
   if (!sameBinding(final.binding, state.binding)) return retire('restart');
   if (retained.status === 'building' && retained.next) return { status: 'preparing', state, pages, edges };
   if (retained.status !== 'complete') {
-    const sealed = await store.seal(state.retained);
+    const sealed = await store.seal(state);
     if (!sealed || !validLocator(sealed)) return retire('restart');
     state = freezeState({ ...state, retained: sealed });
   }
@@ -241,18 +241,18 @@ export async function currentConceptMembership(
   const snapshot = freezeState(state);
   const first = await source.observe();
   if (first.status !== 'current') {
-    if (first.status !== 'preparing') await store.retire(snapshot.retained);
+    if (first.status !== 'preparing') await store.retire(snapshot);
     return 'not_proven';
   }
   if (!sameBinding(first.binding, snapshot.binding)) {
-    await store.retire(snapshot.retained);
+    await store.retire(snapshot);
     return 'not_proven';
   }
-  const member = await store.contains(snapshot.retained, concept);
+  const member = await store.contains(snapshot, concept);
   if (member === null) return 'not_proven';
   const final = await source.observe();
   if (final.status !== 'current' || !sameBinding(final.binding, snapshot.binding)) {
-    if (final.status !== 'preparing') await store.retire(snapshot.retained);
+    if (final.status !== 'preparing') await store.retire(snapshot);
     return 'not_proven';
   }
   return member;

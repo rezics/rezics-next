@@ -16,7 +16,8 @@ An old version-one array state is rejected rather than imported as complete evid
 lifecycle. The owning plan supplies immutable identity, leases, expiry, cancellation and worker dispatch. No
 separate capture, scheduler, coverage record or public cursor is introduced. The store must persist membership
 and frontier rows with full-key indexes, seed the root once, and atomically apply each bounded delta with a
-revision CAS. A conflict must change no rows. A discovered key is enqueued only on its first insertion; cycles,
+revision CAS. Every operation compares the supplied selection and full binding with the retained definition;
+reusing a locator with a changed root, property or binding must fail. A conflict must change no rows. A discovered key is enqueued only on its first insertion; cycles,
 polyhierarchy, duplicate edges and interrupted-step replay must not expand it again. `read` returns at most one
 frontier row. `seal` requires an empty indexed frontier. `contains` returns null unless the same retained revision
 is sealed and usable; a membership Boolean includes the selected root but supplies no statement disclosure.
