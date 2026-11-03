@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, expectTypeOf, test } from 'bun:test';
 import {
   createKernelClient,
   SESSION_HEADER,
@@ -66,10 +66,12 @@ test('all six label consolidation routes retain typed requests and results', () 
       options,
     );
     if (confirmation.error) throw confirmation.error;
-    const next: string | null = review.data.next;
-    const expiresAt: string = confirmation.data.expiresAt;
-    const itemCount: number = confirmation.data.itemCount;
-    void [next, expiresAt, itemCount];
+    expectTypeOf(review.data.selection).toEqualTypeOf<string>();
+    expectTypeOf(review.data.next).toEqualTypeOf<string | null>();
+    expectTypeOf(confirmation.data.confirmationId).toEqualTypeOf<string>();
+    expectTypeOf(confirmation.data.expiresAt).toEqualTypeOf<string>();
+    expectTypeOf(confirmation.data.status).toEqualTypeOf<'active'>();
+    expectTypeOf(confirmation.data.itemCount).toEqualTypeOf<number>();
     const body = { confirmationId: confirmation.data.confirmationId };
     const results = [
       await label.$applyConsolidation.post(body, options),
@@ -79,10 +81,9 @@ test('all six label consolidation routes retain typed requests and results', () 
     ];
     for (const result of results) {
       if (result.error) throw result.error;
-      const status: 'active' | 'completed' | 'cancelled' = result.data.status;
-      const item: number | undefined = result.data.items[0]?.item;
-      const revision: number | undefined = result.data.items[0]?.selected?.revision;
-      void [status, item, revision];
+      expectTypeOf(result.data.status).toEqualTypeOf<'active' | 'completed' | 'cancelled'>();
+      expectTypeOf(result.data.items[0]?.item).toEqualTypeOf<number | undefined>();
+      expectTypeOf(result.data.items[0]?.selected?.revision).toEqualTypeOf<number | undefined>();
     }
     // @ts-expect-error retry requires the selected item index
     await label.$retryConsolidation.post(body, options);
