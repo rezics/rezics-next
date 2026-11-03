@@ -7,6 +7,8 @@ import {
   SECOND_SCOPE_PUBLIC_METADATA_KINDS,
 } from '../../src/search/generations.ts';
 import type { DiscoveryRegistry } from '../../src/search/discovery.ts';
+import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
+import { createDefaultDiscoveryOwnerAdapters } from '../../src/search/default-discovery.ts';
 
 test('a generation with missing public metadata producers is rejected before allocation', async () => {
   let connections = 0;
@@ -50,4 +52,34 @@ test('a registered kind from an owner without a generation producer remains expl
 
   expect(error).toBeInstanceOf(DiscoveryProducerCoverageError);
   expect(error).toMatchObject({ missingKinds: [], unsupportedKinds: ['collection', 'review', 'space'] });
+});
+
+test('default native owner readers register through the canonical slots without certifying population', async () => {
+  let connections = 0;
+  const pool = {
+    connect: async () => {
+      connections += 1;
+      throw new Error('owner reader binding reached allocation I/O');
+    },
+  } as unknown as Pool;
+  const routeKey = new Uint8Array(32);
+  const ownerAdapters = createDefaultDiscoveryOwnerAdapters({
+    pool,
+    routeKey,
+    access: {} as never,
+    keys: {} as never,
+    reviewSource: {} as never,
+  });
+  const registry = await nativeDiscoveryRegistry(pool, routeKey, {} as never, {
+    release: { types: {} } as never,
+    ownerAdapters,
+  });
+
+  expect(registry.getOwnerAdapter('collection').owner).toBe('commerce');
+  expect(registry.getOwnerAdapter('review').owner).toBe('content');
+  expect(registry.getOwnerAdapter('space').owner).toBe('content');
+  await expect(allocateDiscovery(pool, 'search', registry, SECOND_SCOPE_PUBLIC_METADATA_KINDS)).rejects.toBeInstanceOf(
+    DiscoveryProducerCoverageError,
+  );
+  expect(connections).toBe(0);
 });

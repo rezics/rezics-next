@@ -370,7 +370,7 @@ export const searchWorkModule: WorkModule = {
           listing,
           prefix: config.prefix,
           concurrency: 2,
-          discovery: { routeKey, reviewSource },
+          discovery: { routeKey, reviewSource, access, clock: context.clock },
           publicPreparation: preparation,
         });
       } catch (error) {

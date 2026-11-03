@@ -7,7 +7,12 @@ import type { Release } from '@rezics/definitions';
 import { readAccountDiscoveryBindings } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
 import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
-import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryRegistry } from './discovery.ts';
+import type {
+  DiscoveryIndexAction,
+  DiscoveryKey,
+  DiscoveryOwnerAdapterSlots,
+  DiscoveryRegistry,
+} from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
@@ -251,7 +256,7 @@ export async function nativeDiscoveryRegistry(
   pool: Pool,
   routeKey: Uint8Array,
   subjects: SubjectSource,
-  options?: { release: Release; languages?: readonly string[] },
+  options?: { release?: Release; languages?: readonly string[]; ownerAdapters?: DiscoveryOwnerAdapterSlots },
 ) {
   const release = options?.release ?? (await activeRelease(pool))?.release;
   if (!release) throw new Error('Discovery requires an active definition release');
@@ -268,6 +273,7 @@ export async function nativeDiscoveryRegistry(
       labels: { en: 'Accounts' },
       icon: 'user-round',
     },
+    ...(options?.ownerAdapters ? { ownerAdapters: options.ownerAdapters } : {}),
   });
 }
 

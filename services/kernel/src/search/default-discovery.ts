@@ -3,7 +3,13 @@ import { ProblemError } from '../http/problem.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
+import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
+import type { Pool } from 'pg';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
+import { createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
+import { createNativeReviewDiscoveryAdapter, createReviewDiscoveryAdapter } from './review-discovery.ts';
+import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
+import type { DiscoveryOwnerAdapterSlots, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import {
   createRetainedDiscoverySearch,
@@ -31,6 +37,69 @@ export type DefaultDiscoverySearch = Readonly<{
   close(): Promise<void>;
 }>;
 
+/** Bind the delivered Commerce and Content leaves to the canonical current-reader slots. */
+export function createDefaultDiscoveryOwnerAdapters(config: {
+  pool: Pool;
+  routeKey: Uint8Array;
+  access: DefaultPublicFilterRuntimeConfig['access'];
+  clock?: DefaultPublicFilterRuntimeConfig['clock'];
+  keys?: KeyRing;
+  reviewSource?: ReviewDiscoverySource;
+}): DiscoveryOwnerAdapterSlots {
+  const metadata = {
+    collection: { id: 'collection', labels: { en: 'Collections' }, icon: 'library' },
+    review: { id: 'review', labels: { en: 'Reviews' }, icon: 'message-square' },
+    space: { id: 'space', labels: { en: 'Spaces' }, icon: 'users' },
+  } as const;
+  const collection = createNativeCollectionDiscoveryAdapter(
+    { pool: config.pool, access: config.access, routeKey: config.routeKey, clock: config.clock },
+    metadata.collection,
+  );
+  const review = config.reviewSource
+    ? createReviewDiscoveryAdapter(config.reviewSource)
+    : config.keys
+      ? createNativeReviewDiscoveryAdapter(
+          { pool: config.pool, access: config.access, tokens: config.keys, clock: config.clock },
+          () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
+        )
+      : undefined;
+  const space = nativeSpaceDiscoveryAdapter({ pool: config.pool, access: config.access, clock: config.clock });
+  const ownerContext = (context: DiscoveryReadContext) => ({ deadline: context.deadline });
+  const reviewSlot = review
+    ? {
+        readiness: 'ready' as const,
+        adapter: {
+          owner: 'content' as const,
+          kind: 'review' as const,
+          metadata: metadata.review,
+          readCurrent: review.readCurrent,
+        },
+      }
+    : { readiness: 'unavailable' as const };
+  const spaceSlot = {
+    readiness: 'ready' as const,
+    adapter: {
+      owner: 'content' as const,
+      kind: 'space' as const,
+      metadata: metadata.space,
+      async readCurrent(
+        ids: readonly string[],
+        context: DiscoveryReadContext,
+      ): Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>> {
+        const summaries = await space.hydrate(ids, ownerContext(context));
+        return new Map(
+          [...summaries].map(([id, summary]) => [id, { id, title: summary.name, summary: summary.description || null }]),
+        );
+      },
+    },
+  };
+  return Object.freeze({
+    collection: collection.registration,
+    review: reviewSlot,
+    space: spaceSlot,
+  });
+}
+
 /** Default public catalogue/Account candidates, also consumed by the home feed with its current Actor.
  * Source owns whole-population readiness. Neither a local census nor returned summaries replace it.
  */
@@ -38,6 +107,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   const runtime = createDefaultPublicFilterRuntime(config);
   const source = publicFilterSource(config);
   const subjects = createRatedSubjectSource(config.pool, config.routeKey).source;
+  const ownerAdapters = createDefaultDiscoveryOwnerAdapters(config);
   let work: ReturnType<typeof createWorkClient> | undefined;
   const pending = new Set<Promise<unknown>>();
   const retained = new Set<RetainedDiscoveryRead>();
@@ -58,6 +128,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       const registry = await nativeDiscoveryRegistry(config.pool, config.routeKey, subjects, {
         release: current.release,
         languages: request.languages ?? [],
+        ownerAdapters,
       });
       const bound = () => {
         if (!operations) throw new Error('Discovery capture or retained resume must precede consumer work');
