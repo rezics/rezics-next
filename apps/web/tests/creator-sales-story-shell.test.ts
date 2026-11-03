@@ -7,6 +7,7 @@ const composedStates = {
   History: 'history',
   SecondPage: 'second-page',
   Empty: 'empty',
+  LaterEmpty: 'later-empty',
   Denied: 'denied',
   Unavailable: 'unavailable',
   Error: 'error',
@@ -47,6 +48,7 @@ test('Creator Sales Pages stories compose named constructed states in AppShell a
     'History',
     'SecondPage',
     'Empty',
+    'LaterEmpty',
     'Denied',
     'Preparing',
     'Incomplete',
@@ -60,6 +62,9 @@ test('Creator Sales Pages stories compose named constructed states in AppShell a
   expect(scenarios.SecondPage).toContain('m.creator_sales_restart()');
   expect(scenarios.Empty).toContain('m.creator_sales_empty()');
   expect(scenarios.Empty).toContain('m.creator_sales_preparing()');
+  expect(scenarios.LaterEmpty).toContain('m.creator_sales_page_empty()');
+  expect(scenarios.LaterEmpty).toContain('m.creator_sales_restart()');
+  expect(scenarios.LaterEmpty).toContain('m.creator_sales_preparing()');
   expect(scenarios.Preparing).toContain('m.creator_sales_preparing()');
   expect(scenarios.Preparing).toContain('m.creator_sales_empty()');
   expect(scenarios.Incomplete).toContain("getByRole('heading', { level: 2, name: creatorSaleFixture.title })");

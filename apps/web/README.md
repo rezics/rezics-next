@@ -3428,6 +3428,8 @@ The existing client transport uses a narrow consumer-local typed bridge until ca
 lands through dev integration; standalone ambient declarations are not another contract.
 Named Sales Storybook states remain constructed PatternStory plus AppShell examples; ActualRoute mounts the served
 path without claiming admitted producer-owned availability.
+Decision: the later-empty Sales ready projection keeps the original incoming cursor and supplied next, so a page with
+no visible rows is distinct from preparing or incomplete and does not mean zero revenue or finished history.
 
 Cost: current sales read
 

@@ -29,7 +29,7 @@ function render(state: CreatorSalesStory) {
         <CreatorSalesPage
           page={creatorSalesStoryPage(state)}
           locale={getLocale()}
-          {...(state === 'second-page' ? { cursor: 'story-signed-current' } : {})}
+          {...(state === 'second-page' || state === 'later-empty' ? { cursor: 'story-signed-current' } : {})}
         />
       </AppShell>
     </PatternStory>
@@ -75,6 +75,23 @@ export const Empty: Story = {
     const view = await salesMain(canvasElement);
     await expect(view.getByText(m.creator_sales_empty())).toBeVisible();
     await expect(view.queryByText(m.creator_sales_preparing())).toBeNull();
+  },
+};
+export const LaterEmpty: Story = {
+  render: () => render('later-empty'),
+  play: async ({ canvasElement }) => {
+    const view = await salesMain(canvasElement);
+    await expect(view.getByText(m.creator_sales_page_empty())).toBeVisible();
+    await expect(view.queryByText(m.creator_sales_empty())).toBeNull();
+    await expect(view.queryByText(m.creator_sales_preparing())).toBeNull();
+    await expect(view.getByRole('link', { name: m.creator_sales_restart() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/creator/sales`,
+    );
+    await expect(view.getByRole('link', { name: m.creator_sales_next() })).toHaveAttribute(
+      'href',
+      expect.stringContaining('cursor=story-signed%2Bnext%2F%3D'),
+    );
   },
 };
 export const Denied: Story = {

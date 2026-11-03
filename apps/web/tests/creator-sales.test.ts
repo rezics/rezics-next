@@ -43,6 +43,7 @@ describe("Creator's real private sales history page and statement navigation", (
       'History',
       'SecondPage',
       'Empty',
+      'LaterEmpty',
       'Denied',
       'Unavailable',
       'Error',

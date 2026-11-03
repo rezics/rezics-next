@@ -27,6 +27,7 @@ export type CreatorSalesStory =
   | 'history'
   | 'second-page'
   | 'empty'
+  | 'later-empty'
   | 'denied'
   | 'unavailable'
   | 'error'
@@ -46,7 +47,7 @@ export function creatorSalesStoryPage(state: CreatorSalesStory): CreatorSalesDat
     kind: 'ready',
     projectionState: preparing ? 'preparing' : 'ready',
     sales:
-      state === 'empty' || state === 'preparing'
+      state === 'empty' || state === 'later-empty' || state === 'preparing'
         ? []
         : state === 'other-creator'
           ? creatorSalesPersonas.otherCreator.sales
@@ -89,6 +90,6 @@ export function creatorSalesStoryPage(state: CreatorSalesStory): CreatorSalesDat
                     taxBehavior: null,
                   },
                 ],
-    next: ['history', 'long-title', 'incomplete'].includes(state) ? 'story-signed+next/=' : null,
+    next: ['history', 'long-title', 'incomplete', 'later-empty'].includes(state) ? 'story-signed+next/=' : null,
   };
 }
