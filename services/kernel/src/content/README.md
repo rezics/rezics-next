@@ -1023,6 +1023,42 @@ disclosure, then native request authentication and private account/principal ide
 after preparation, before final source/epoch and Access evaluation. No frontend reader lifetime or submission engine
 is implemented here. Rendered acceptance and connected physical cost evidence remain separate delivery work.
 
+#### Web consumer handoff
+
+Decision: generate this envelope with `bun run --cwd services/kernel typecheck --emit-client --emit-openapi` so both
+repository generators share the admitted compiler database and return their installed outputs to the worktree.
+
+The call is `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
+the source response contains the retained top-level decision, `viewer` and `targetContext`. Regenerate the
+installed declarations and OpenAPI before Web adopts the added fields. Narrow on
+`targetContext.state` before accessing navigation, and on `viewer.appeal.state` before presenting an appeal action.
+The existing `.$appeal.post({ statement }, { headers: { authorization, 'idempotency-key': key } })` command is
+unchanged. Keep the private-reader lifetime, departure and uncertain-submission engines in Web. A board response
+has `appealDeadline: null`; consumers must retain that nullable type and the `board` target kind.
+
+These envelope fragments share the original decision fields; current titles never replace `targetId`:
+
+```ts
+// Reversed post; current native header disclosure succeeds.
+const populated = {
+  viewer: { affectedAuthor: true, observedAt: '2026-11-04T00:00:00.000Z',
+    appeal: { state: 'unavailable', reason: 'already_appealed' } },
+  targetContext: { state: 'available', kind: 'thread', threadId: originalThreadId,
+    postId: originalPostId, boardId: currentBoardId,
+    threadTitle: 'Current context after reversal', boardTitle: 'Current board' },
+};
+// Taken-down post; author ownership does not disclose its ordinary header.
+const concealed = {
+  viewer: { affectedAuthor: true, observedAt: '2026-11-04T00:00:00.000Z', appeal: { state: 'permitted' } },
+  targetContext: { state: 'concealed' },
+};
+// Optional context dependency failed; the exact decision remains independently readable.
+const unavailable = { ...concealed, targetContext: { state: 'unavailable' } };
+```
+
+The focused source HTTP suite exercises these three states through mounted native commands and reads.
+This API handoff does not establish rendered acceptance or the all-pool physical growth proof.
+
 ### Cost: exact decision page envelope
 
 - Touches: the exact source engine above, two calls to one installed notice header context primitive, the native

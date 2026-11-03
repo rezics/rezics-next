@@ -25,6 +25,7 @@ function returnedPaths(
   env: NodeJS.ProcessEnv,
   emitClient: boolean,
   emitSchema: string | undefined,
+  emitOpenApi: boolean,
 ): string[] | undefined {
   // External projects cannot be represented by the workspace-relative placement contract.
   const projectDirectory = env.REYLO_CONFIG ? dirname(resolve(directory, env.REYLO_CONFIG)) : directory;
@@ -35,6 +36,7 @@ function returnedPaths(
   // requested generated outputs. Release analyses are generated separately by analyse.ts;
   // returning this cache would recursively include entries from unrelated databases/runs.
   const paths: string[] = emitClient ? [KERNEL_CLIENT_OUTPUT.transport] : [];
+  if (emitOpenApi) paths.push('contracts/openapi.json');
   if (emitSchema === 'core') paths.push('services/kernel/db/schema.sql');
   if (
     emitSchema !== undefined &&
@@ -67,11 +69,20 @@ async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
   return await child.exited;
 }
 
-async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean, emitSchema?: string): Promise<number> {
+async function typecheck(
+  env: NodeJS.ProcessEnv,
+  emitClient: boolean,
+  emitSchema?: string,
+  emitOpenApi = false,
+): Promise<number> {
   const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   if (tsc !== 0) return tsc;
   const constructed = await command(['bun', 'run', 'construct'], env);
   if (constructed !== 0) return constructed;
+  if (emitOpenApi) {
+    const contract = await command(['bun', 'scripts/openapi.ts'], env);
+    if (contract !== 0) return contract;
+  }
   // Migration work can refresh its own snapshot using this same compiler database.
   // No additional database, native check or change to other modules' snapshots is needed.
   if (emitSchema !== undefined) {
@@ -95,6 +106,7 @@ export async function runKernelTypecheck(
 ): Promise<number> {
   env = compilerEnvironment(env, args);
   const emitClient = args.includes('--emit-client');
+  const emitOpenApi = args.includes('--emit-openapi');
   const emitSchema = args.find((arg) => arg.startsWith('--emit-schema='))?.slice('--emit-schema='.length);
   const runCommands = dependencies.typecheck ?? typecheck;
   const withDatabase = dependencies.withThrowawayDatabase ?? withThrowawayDatabase;
@@ -102,11 +114,11 @@ export async function runKernelTypecheck(
     const compilerEnv =
       env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
     return emitSchema === undefined
-      ? runCommands(compilerEnv, emitClient)
-      : runCommands(compilerEnv, emitClient, emitSchema);
+      ? runCommands(compilerEnv, emitClient, undefined, emitOpenApi)
+      : runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi);
   };
   const config = compilerConfigArgs(env, repository, [directory]);
-  const returns = returnedPaths(env, emitClient, emitSchema);
+  const returns = returnedPaths(env, emitClient, emitSchema, emitOpenApi);
   const placed = await placeCompilerRun(
     {
       label: 'kernel typecheck',
@@ -116,10 +128,11 @@ export async function runKernelTypecheck(
         'bun',
         'scripts/typecheck.ts',
         ...(emitClient ? ['--emit-client'] : []),
+        ...(emitOpenApi ? ['--emit-openapi'] : []),
         ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
         ...config,
       ],
-      keepsFiles: emitClient || emitSchema !== undefined || returns === undefined,
+      keepsFiles: emitClient || emitOpenApi || emitSchema !== undefined || returns === undefined,
       ...(returns === undefined ? {} : { returns }),
     },
     directory,
