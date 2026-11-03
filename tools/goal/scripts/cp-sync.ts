@@ -959,8 +959,8 @@ export async function observeResident(
 export type ResidentCommand = (argv: string[], checkout: string) => Promise<{ code: number; output: string }>;
 export const residentCommand: ResidentCommand = async (argv, checkout) => {
   const env = Object.fromEntries(
-    ['HOME', 'PATH', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'KERNEL_CHECK_REMOTE'].flatMap((key) =>
-      process.env[key] === undefined ? [] : [[key, process.env[key]!]],
+    ['HOME', 'USER', 'LOGNAME', 'PATH', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'KERNEL_CHECK_REMOTE'].flatMap(
+      (key) => (process.env[key] === undefined ? [] : [[key, process.env[key]!]]),
     ),
   );
   const child = Bun.spawn(argv, {

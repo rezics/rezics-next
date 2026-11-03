@@ -98,7 +98,10 @@ export async function installService(options: ServiceInstall, run = serviceComma
     writeFileSync(join(directory, unit), content);
   }
   await checked(['systemctl', '--user', 'daemon-reload'], run);
-  await checked(['loginctl', 'enable-linger', options.user ?? userInfo().username], run);
+  // cp-sync runs the installer with a minimal environment, where Bun's userInfo() failed ("Failed to look up user
+  // unknown") and rolled back the 2026-11-03 bootstrap.
+  const user = options.user ?? process.env.USER ?? process.env.LOGNAME ?? userInfo().username;
+  await checked(['loginctl', 'enable-linger', user], run);
   await checked(['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
   await stopLegacySupervisor(join(main, '.temp/goal'), run);
   // Wait for the notify host only after the old supervisor and host have relinquished the socket.
