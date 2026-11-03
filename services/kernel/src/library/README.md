@@ -1,5 +1,12 @@
 # Library
 
+Private [consumption statistics](../../../../docs/library-consumption-statistics.md) are mounted
+at `GET /v1/libraryConsumptionSummary` through `progress-routes.ts`. The native session table
+maintains owner/subject counters transactionally for completion, corrections and retirement;
+the pure `consumption-statistics.ts` reader returns exact counts and explicit source coverage.
+Current shelf facts and publications remain independent. This interface belongs to the
+existing Web personal-statistics journey; its page and broader acceptance remain integration work.
+
 Library is the kernel module for a person's shelves and reading state, and for the public projection of public Collection membership.
 
 `shelf-contract.ts` re-exports the callable `createShelfReads` and `admitShelfRead`. The default kernel installs

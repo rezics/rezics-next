@@ -391,6 +391,7 @@ const typed = [
   'DELETE /v1/zones/:id',
   'POST /v1/zones/:id/$restore',
   'GET /v1/accounts/:accountId/notifications',
+  'GET /v1/libraryConsumptionSummary',
   'GET /v1/accounts/:accountId/notifications/count',
   'POST /v1/accounts/:accountId/notifications/$markSeen',
 ] as const satisfies readonly Routes[];

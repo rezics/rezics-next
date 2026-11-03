@@ -16,6 +16,7 @@ import { LibraryNotFoundError } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
+import { createConsumptionStatisticsReads, type ConsumptionSummary } from './consumption-statistics.ts';
 
 const MAX_JOURNAL_PATCH_BODY_BYTES = 16_384;
 
@@ -312,8 +313,51 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     (sessions ??= createSessionCommands({ pool, access: dependencies.access(), tokens, clock }));
   const publishedCommands = () =>
     (published ??= createPublishedLogCommands({ pool, access: dependencies.access(), tokens, clock }));
+  const statistics = createConsumptionStatisticsReads({ pool });
 
   return app
+    .get(
+      '/v1/libraryConsumptionSummary',
+      {
+        query: t.Object({}, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          if (new URL(request.url).searchParams.size) throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: t.Unsafe<ConsumptionSummary>(
+            t.Object(
+              {
+                scope: t.Literal('retained_native_sessions'),
+                completedOccurrences: t.String({ pattern: '^[0-9]+$' }),
+                distinctCompletedSubjects: t.String({ pattern: '^[0-9]+$' }),
+                repeatOccurrences: t.String({ pattern: '^[0-9]+$' }),
+                completedOccurrencesWithUnknownProfile: t.String({ pattern: '^[0-9]+$' }),
+                coverage: t.Object(
+                  {
+                    nativeSessions: t.Literal('complete'),
+                    otherHistory: t.Literal('unavailable'),
+                    unitMeaning: t.Literal('not_evaluated'),
+                  },
+                  closed,
+                ),
+                currentness: t.Object({ state: t.Literal('snapshot'), revision: t.String() }, closed),
+              },
+              closed,
+            ),
+          ),
+          400: invalid,
+          401: unauthorized,
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: unavailable,
+        },
+        detail: detail('library_consumption.summary', 'progress_session:list'),
+      },
+      async ({ actor, admission, job, request }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () => statistics.summary(actor, job.deadline, request.signal));
+      },
+    )
     .post(
       '/v1/progressSessions',
       {

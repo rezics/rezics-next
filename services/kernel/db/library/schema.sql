@@ -540,6 +540,88 @@ $$;
 
 
 --
+-- Name: consumption_statistics_apply(integer, uuid, uuid, integer, integer, integer); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.consumption_statistics_apply(r integer, a uuid, s uuid, retained_delta integer, completed_delta integer, unknown_delta integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE before_completed bigint; after_completed bigint; remaining bigint;
+BEGIN
+  INSERT INTO library.consumption_statistics_owner
+    VALUES (r, a, 0, 0, 0, 0, gen_random_uuid())
+    ON CONFLICT (route, account_id) DO UPDATE SET revision = EXCLUDED.revision;
+
+  SELECT completed_occurrences INTO before_completed
+    FROM library.consumption_statistics_subject
+    WHERE route=r AND account_id=a AND subject_id=s FOR UPDATE;
+  IF NOT FOUND THEN
+    before_completed := 0;
+    INSERT INTO library.consumption_statistics_subject
+      VALUES (r, a, s, retained_delta, completed_delta)
+      RETURNING completed_occurrences, retained_sessions INTO after_completed, remaining;
+  ELSE
+    UPDATE library.consumption_statistics_subject
+      SET retained_sessions=retained_sessions+retained_delta,
+          completed_occurrences=completed_occurrences+completed_delta
+      WHERE route=r AND account_id=a AND subject_id=s
+      RETURNING completed_occurrences, retained_sessions INTO after_completed, remaining;
+  END IF;
+
+  UPDATE library.consumption_statistics_owner
+    SET retained_sessions=retained_sessions+retained_delta,
+        completed_occurrences=completed_occurrences+completed_delta,
+        completed_subjects=completed_subjects+(after_completed>0)::integer-(before_completed>0)::integer,
+        unknown_profile_completed=unknown_profile_completed+unknown_delta
+    WHERE route=r AND account_id=a;
+  IF remaining=0 THEN
+    DELETE FROM library.consumption_statistics_subject WHERE route=r AND account_id=a AND subject_id=s;
+  END IF;
+  -- The existing session erasure participant removes the last header too. No second
+  -- account-deletion participant, job or retained owner tombstone is introduced.
+  DELETE FROM library.consumption_statistics_owner
+    WHERE route=r AND account_id=a AND retained_sessions=0;
+END $$;
+
+
+--
+-- Name: consumption_statistics_receive(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.consumption_statistics_receive() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  -- One source row remains one occurrence regardless of retries, scalar corrections,
+  -- sparse units, clear, publication or a change in the accepted profile vocabulary.
+  IF TG_OP <> 'INSERT' THEN
+    PERFORM library.consumption_statistics_apply(OLD.route, OLD.account_id, OLD.subject_id,
+      -1, -(OLD.state='completed')::integer,
+      -((OLD.state='completed') AND OLD.library_profile_pin IS NULL)::integer);
+  END IF;
+  IF TG_OP <> 'DELETE' THEN
+    PERFORM library.consumption_statistics_apply(NEW.route, NEW.account_id, NEW.subject_id,
+      1, (NEW.state='completed')::integer,
+      ((NEW.state='completed') AND NEW.library_profile_pin IS NULL)::integer);
+  END IF;
+  RETURN NULL;
+END $$;
+
+
+--
+-- Name: consumption_statistics_truncate(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.consumption_statistics_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  TRUNCATE library.consumption_statistics_subject, library.consumption_statistics_owner;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: fence_profile_migration_writer(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -2296,6 +2378,57 @@ CREATE TABLE library.collection_source_output_publication (
     CONSTRAINT collection_source_output_publication_incarnation_check CHECK (((octet_length(incarnation) >= 1) AND (octet_length(incarnation) <= 128))),
     CONSTRAINT collection_source_output_publication_member_fence_check CHECK ((member_fence >= 0)),
     CONSTRAINT collection_source_output_publication_source_generation_check CHECK ((source_generation > 0))
+);
+
+
+--
+-- Name: consumption_statistics_installation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.consumption_statistics_installation (
+    singleton boolean DEFAULT true NOT NULL,
+    version integer NOT NULL,
+    complete boolean NOT NULL,
+    CONSTRAINT consumption_statistics_installation_singleton_check CHECK (singleton),
+    CONSTRAINT consumption_statistics_installation_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: consumption_statistics_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.consumption_statistics_owner (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    retained_sessions bigint NOT NULL,
+    completed_occurrences bigint NOT NULL,
+    completed_subjects bigint NOT NULL,
+    unknown_profile_completed bigint NOT NULL,
+    revision uuid NOT NULL,
+    CONSTRAINT consumption_statistics_owner_check CHECK ((completed_subjects <= completed_occurrences)),
+    CONSTRAINT consumption_statistics_owner_check1 CHECK ((unknown_profile_completed <= completed_occurrences)),
+    CONSTRAINT consumption_statistics_owner_check2 CHECK ((completed_occurrences <= retained_sessions)),
+    CONSTRAINT consumption_statistics_owner_completed_occurrences_check CHECK ((completed_occurrences >= 0)),
+    CONSTRAINT consumption_statistics_owner_completed_subjects_check CHECK ((completed_subjects >= 0)),
+    CONSTRAINT consumption_statistics_owner_retained_sessions_check CHECK ((retained_sessions >= 0)),
+    CONSTRAINT consumption_statistics_owner_unknown_profile_completed_check CHECK ((unknown_profile_completed >= 0))
+);
+
+
+--
+-- Name: consumption_statistics_subject; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.consumption_statistics_subject (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    retained_sessions bigint NOT NULL,
+    completed_occurrences bigint NOT NULL,
+    CONSTRAINT consumption_statistics_subject_check CHECK ((completed_occurrences <= retained_sessions)),
+    CONSTRAINT consumption_statistics_subject_completed_occurrences_check CHECK ((completed_occurrences >= 0)),
+    CONSTRAINT consumption_statistics_subject_retained_sessions_check CHECK ((retained_sessions >= 0))
 );
 
 
@@ -4395,6 +4528,30 @@ ALTER TABLE ONLY library.collection_source_output_publication
 
 
 --
+-- Name: consumption_statistics_installation consumption_statistics_installation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.consumption_statistics_installation
+    ADD CONSTRAINT consumption_statistics_installation_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: consumption_statistics_owner consumption_statistics_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.consumption_statistics_owner
+    ADD CONSTRAINT consumption_statistics_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: consumption_statistics_subject consumption_statistics_subject_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.consumption_statistics_subject
+    ADD CONSTRAINT consumption_statistics_subject_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
 -- Name: copy copy_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6261,6 +6418,20 @@ CREATE TRIGGER collection_retained_output_insert BEFORE INSERT ON library.collec
 --
 
 CREATE TRIGGER collection_rule_minimization BEFORE UPDATE OF curator_account_id ON library.collection FOR EACH ROW EXECUTE FUNCTION library.minimize_collection_rule();
+
+
+--
+-- Name: progress_session consumption_statistics_receive; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER consumption_statistics_receive AFTER INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.consumption_statistics_receive();
+
+
+--
+-- Name: progress_session consumption_statistics_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER consumption_statistics_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.consumption_statistics_truncate();
 
 
 --

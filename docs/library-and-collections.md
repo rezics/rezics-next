@@ -1,5 +1,11 @@
 # Library and Collections
 
+The [personal consumption statistics contract](library-consumption-statistics.md) defines
+private completed occurrences, distinct stored subjects and repeats from retained native
+sessions, independently of current shelf state, holdings and published logs.
+Decision: use explicit native completion for all-time counts and preserve unknown historic
+profile coverage; date editing and canonical episode membership retain their existing owners.
+
 A person's library and their lists are one capability. Every vertical (books, anime, games, visual novels, recipes,
 records) configures it through definitions; no vertical has kernel code of its own. This document adopts required
 first-public behavior, not a claim of runtime completion. The [Library module](../services/kernel/src/library/README.md)
