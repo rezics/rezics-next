@@ -11,13 +11,13 @@ The closed registry supplies the kinds admitted to one `discovery-v1` request. T
 registered population through one common generation, one ordered engine sequence and one opaque continuation.
 New metadata kinds do not create endpoints or client-side federated searches.
 
-| Kind | Primary identity | Conditions |
-| --- | --- | --- |
-| Released Subject type | Subject UUID plus registered type | Text, kind, released type/subtype and applicable semantic conditions |
-| Public Collection | Existing Collection UUID | Text and kind |
-| Public review | Existing thread UUID plus review discriminator | Text and kind; ordinary discussions are outside this slice |
-| Space | Space UUID, with its carried Realm as context | Text and kind; the Realm does not create another hit |
-| Account | Account UUID | Text and kind |
+| Kind                  | Primary identity                               | Conditions                                                           |
+| --------------------- | ---------------------------------------------- | -------------------------------------------------------------------- |
+| Released Subject type | Subject UUID plus registered type              | Text, kind, released type/subtype and applicable semantic conditions |
+| Public Collection     | Existing Collection UUID                       | Text and kind                                                        |
+| Public review         | Existing thread UUID plus review discriminator | Text and kind; ordinary discussions are outside this slice           |
+| Space                 | Space UUID, with its carried Realm as context  | Text and kind; the Realm does not create another hit                 |
+| Account               | Account UUID                                   | Text and kind                                                        |
 
 Collection, review and Space text uses only each producer's approved public metadata or disclosed review opening
 text. Private membership, curator predicates, private producer fields and inaccessible parent text cannot affect
