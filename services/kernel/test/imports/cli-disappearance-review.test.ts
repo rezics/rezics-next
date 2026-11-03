@@ -84,10 +84,16 @@ test('an operator reviews a native mass-disappearance stop, repairs the capture,
     for (const [index, row] of after.records.entries()) {
       expect(row.claim?.state).toBe('bound');
       if (row.claim?.state !== 'bound') throw new Error('Corrected import lost a native binding');
-      expect(row.claim.subject).toBe(bound[index]);
+      const expected = bound[index];
+      if (expected === undefined) throw new Error('Missing expected native subject');
+      expect(row.claim.subject).toBe(expected);
     }
-    const selected = await f.editor.read('bangumi', String(records[0]!.id));
-    expect(selected.subject?.id).toBe(bound[0]);
+    const first = records[0];
+    if (!first) throw new Error('Missing corrected catalogue record');
+    const selected = await f.editor.read('bangumi', String(first.id));
+    const firstSubject = bound[0];
+    if (firstSubject === undefined) throw new Error('Missing expected native subject');
+    expect(selected.subject?.id).toBe(firstSubject);
   } finally {
     await f.close();
   }
