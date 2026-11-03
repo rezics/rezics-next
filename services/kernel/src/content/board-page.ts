@@ -25,6 +25,7 @@ import {
 import type { AnchoredPosition, BoardView, ReadContext } from './model.ts';
 import type { Actor } from '../request/access.ts';
 import type { RealmParticipationReadDecision } from '../community/participation.ts';
+import { createConversationActivityBatch, type ConversationActivitySelection } from './conversation-activity.ts';
 
 export type BoardOpeningSort = 'new' | 'active' | 'hot';
 export type BoardOpeningInput = Readonly<{ cursor?: string; sort?: BoardOpeningSort }>;
@@ -234,6 +235,46 @@ function imageProjection(
 
 const unavailableComments: BoardOpeningComments = { state: 'unavailable' };
 
+function projectConversationActivitySelection(
+  selected: readonly ConversationActivitySelection[],
+): BoardOpeningActivityRead {
+  return {
+    items: selected.map((item): BoardOpeningActivityWitness => {
+      if (item.status !== 'current') return { state: 'unavailable', threadId: item.threadId };
+      return {
+        state: 'current',
+        threadId: item.threadId,
+        cohort: { kind: 'public' },
+        count: { ...item.replyCount },
+        lastActivityAt: item.lastContributionAt,
+        source: {
+          epoch: item.witness.sourceHead.epoch,
+          position: item.witness.sourceHead.position.toString(),
+        },
+      };
+    }),
+    anchors: selected.flatMap((item) => (item.status === 'current' ? [item.witness.source] : [])),
+  };
+}
+
+/** Binds one selected producer cohort to the Board page's initial and final observations. */
+function createConversationActivityReader(dependencies: BoardOpeningDependencies): BoardOpeningActivityReader {
+  const activity = createConversationActivityBatch(dependencies.pool);
+  let observed = false;
+  let selectedIds: readonly string[] = [];
+  let selected: readonly ConversationActivitySelection[] = [];
+  return async (threadIds, { deadline }) => {
+    if (!observed) {
+      observed = true;
+      selectedIds = [...threadIds];
+      selected = await activity.select(threadIds, deadline);
+      return projectConversationActivitySelection(selected);
+    }
+    if (!isDeepStrictEqual(selectedIds, threadIds)) throw new BoardOpeningChangedError();
+    return projectConversationActivitySelection(await activity.confirm(selected, deadline));
+  };
+}
+
 export function projectBoardOpeningComments(
   threadId: string,
   witness: BoardOpeningActivityWitness | undefined,
@@ -366,6 +407,9 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     if (input.cursor !== undefined && (input.cursor.length < 1 || input.cursor.length > 4096))
       throw new TypeError('Invalid content cursor');
     const sort = nativeSort(input.sort);
+    const activityDependencies = dependencies.readConversationActivityBatch
+      ? dependencies
+      : { ...dependencies, readConversationActivityBatch: createConversationActivityReader(dependencies) };
     const selectedBoard = await readRealmBoard(dependencies, boardId, context);
     if (!selectedBoard.value) throw new ContentNotFoundError();
     const selectedPage = await listBoardOpeningThreads(dependencies, boardId, context, {
@@ -381,7 +425,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     const reads = readDependencies();
     const initialCounts = await withReactionCountsAndCoverage(reads, targets, context.deadline);
     const initialViewers = await withViewerReactions(reads, context.actor, targets, context.deadline);
-    const initialActivity = await readBoardActivity(dependencies, context.actor, uniqueThreads, context.deadline);
+    const initialActivity = await readBoardActivity(activityDependencies, context.actor, uniqueThreads, context.deadline);
     const authorIds = accountIdsFor(uniqueThreads);
     const authors = await readAuthors(dependencies, authorIds, context.deadline);
     const images = await readMedia(dependencies, context.actor, uniqueThreads, context.deadline);
@@ -400,7 +444,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     );
     const counted = await withReactionCountsAndCoverage(reads, targets, context.deadline);
     const viewers = await withViewerReactions(reads, context.actor, targets, context.deadline);
-    const finalActivity = await readBoardActivity(dependencies, context.actor, uniqueThreads, context.deadline);
+    const finalActivity = await readBoardActivity(activityDependencies, context.actor, uniqueThreads, context.deadline);
     if (
       !isDeepStrictEqual(reactionProjectionView(initialCounts), reactionProjectionView(counted)) ||
       !isDeepStrictEqual(viewerReactionView(initialViewers), viewerReactionView(viewers)) ||
