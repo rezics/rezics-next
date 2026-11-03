@@ -630,16 +630,20 @@ test('native takedown, report, appeal, and report-resolution runners stay classi
     });
     expect(reports.samples.map((sample) => sample.scale)).toEqual([...moderationScales]);
     for (const event of [...reportWarmups.values(), ...reportRuns.values()]) {
-      const data = event.data as { targetId: string };
+      const reportId = event.subject;
+      if (event.type !== reportCreatedEventType || typeof reportId !== 'string' || routeOf(reportId) === null)
+        throw new TypeError('Invalid native report event subject');
+      const data = event.data as { reportId: string; targetId: string };
+      expect(reportId).toBe(data.reportId);
       const targetRoute = routeOf(data.targetId);
       const reportRoute = routeOf(fixture.reporter.id);
       if (targetRoute === null || reportRoute === null) throw new TypeError('Invalid projected report route');
       const { rows } = await growthDb.admin.query<{ report_id: string }>(
         `SELECT report_id::text FROM content.report_target
          WHERE route=$1 AND target_kind='post' AND target_id=$2 AND report_route=$3 AND report_id=$4`,
-        [targetRoute, data.targetId, reportRoute, event.subject],
+        [targetRoute, data.targetId, reportRoute, reportId],
       );
-      expect(rows).toEqual([{ report_id: event.subject }]);
+      expect(rows).toEqual([{ report_id: reportId }]);
     }
     console.info(JSON.stringify(reports));
 
@@ -667,8 +671,13 @@ test('native takedown, report, appeal, and report-resolution runners stay classi
       },
     });
     expect(appeals.samples.map((sample) => sample.scale)).toEqual([...moderationScales]);
-    for (const event of [...appealWarmups.values(), ...appealRuns.values()])
-      await expectModerationNotice(growthDb, fixture.author.id, event.subject);
+    for (const event of [...appealWarmups.values(), ...appealRuns.values()]) {
+      const appealId = event.subject;
+      if (event.type !== appealResolvedEventType || typeof appealId !== 'string' || routeOf(appealId) === null)
+        throw new TypeError('Invalid native appeal-resolution event subject');
+      expect(appealId).toBe((event.data as { appealId: string }).appealId);
+      await expectModerationNotice(growthDb, fixture.author.id, appealId);
+    }
     console.info(JSON.stringify(appeals));
 
     const reportResolutionWarmups = new Map<number, { event: CloudEvent; reportIds: string[] }>();
