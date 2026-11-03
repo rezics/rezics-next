@@ -33,10 +33,7 @@ function ReadOnlyReactionCounts({
   const entries = (Object.keys(reactionLabels) as ReactionKind[])
     .map((kind) => [kind, thread.reactions?.[kind] ?? 0] as const)
     .filter(([, count]) => count > 0);
-  if (!entries.length)
-    return (
-      <p className="text-sm text-muted-foreground">{m.subject_community_reactions_none()}</p>
-    );
+  if (!entries.length) return <p className="text-sm text-muted-foreground">{m.subject_community_reactions_none()}</p>;
   return (
     <div data-slot="community-reaction-summary" className="space-y-1 text-sm text-muted-foreground">
       <ul aria-label={m.reaction_reactions()} className="flex flex-wrap gap-x-3 gap-y-1">

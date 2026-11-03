@@ -29,8 +29,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/subject-community-current.test.tsx
@@ -38,10 +38,10 @@ acceptance:
     - tests/subject-community-current-retirement.test.tsx
   placement: default
   tests:
-    - "A person opens Subject discussions or reviews in the exact Global or Realm place, recognizes current context and recorded citation scale, opens a readable conversation and chooses only native-admitted actions."
-    - "A readable card never grants reply, creation or reaction authority; exact historical zero, retired question and original target remain distinct from current personal vote and selected population."
-    - "Sparse continuation and same-cursor retry retain Subject/place/kind; source, viewer, credential and disclosure replacement retire private context, media, selected actions, mutation and delayed effects."
-    - "One bounded native page composes current cards at 1/5/20 rows with O(N) projection, no per-card native hydration, no refill and no local totals. Native raw80 and growth256/1024/4096 remain producer evidence."
+    - 'A person opens Subject discussions or reviews in the exact Global or Realm place, recognizes current context and recorded citation scale, opens a readable conversation and chooses only native-admitted actions.'
+    - 'A readable card never grants reply, creation or reaction authority; exact historical zero, retired question and original target remain distinct from current personal vote and selected population.'
+    - 'Sparse continuation and same-cursor retry retain Subject/place/kind; source, viewer, credential and disclosure replacement retire private context, media, selected actions, mutation and delayed effects.'
+    - 'One bounded native page composes current cards at 1/5/20 rows with O(N) projection, no per-card native hydration, no refill and no local totals. Native raw80 and growth256/1024/4096 remain producer evidence.'
   failing: true
 estimate:
   lines: 1750

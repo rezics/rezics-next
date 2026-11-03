@@ -201,10 +201,7 @@ test('Subject discussion and review summaries keep native read destinations and 
         expect(currentContext.dataset.contextSubjectId).toBe(subject.id);
         expect(currentContext.dataset.contextPlaceKind).toBe('global');
         expect(currentContext.textContent).toBe(
-          m.subject_community_context_current(
-            { subject: subject.label, place: m.prq_global({}, options) },
-            options,
-          ),
+          m.subject_community_context_current({ subject: subject.label, place: m.prq_global({}, options) }, options),
         );
         expect(slot('choose-board')).toBeNull();
         expect(slot('retry')).toBeNull();

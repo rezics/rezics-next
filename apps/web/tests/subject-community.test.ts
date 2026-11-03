@@ -131,9 +131,7 @@ test('current hidden, unavailable and closed reads are distinct from empty, and 
   }
   for (const next of ['opaque-native-cursor', 'x'.repeat(4096), null]) {
     const { client } = fixture((request) =>
-      isCommunity(request)
-        ? Response.json(communityThreadPage('discussion', communitySubject, [], next))
-        : undefined,
+      isCommunity(request) ? Response.json(communityThreadPage('discussion', communitySubject, [], next)) : undefined,
     );
     const data = await readSubjectCommunity(client, communitySubject.id, ['discussion'], true);
     const html = renderToStaticMarkup(
@@ -160,15 +158,24 @@ test('only public available summaries and one author batch leave the reader; cur
   const { client, requests } = fixture((request) =>
     isCommunity(request) && new URL(request.url).searchParams.get('kind') === 'review'
       ? Response.json({
-          ...communityThreadPage('review', communitySubject, [
-            communityThread('review'),
-            {
-              ...hidden,
-              id: 'hidden-review',
-              availability: 'withheld',
-              firstPost: { ...hidden.firstPost, body: fromPlainText('withheld body'), decisionId: 'private-decision' },
-            },
-          ], 'native-next'),
+          ...communityThreadPage(
+            'review',
+            communitySubject,
+            [
+              communityThread('review'),
+              {
+                ...hidden,
+                id: 'hidden-review',
+                availability: 'withheld',
+                firstPost: {
+                  ...hidden.firstPost,
+                  body: fromPlainText('withheld body'),
+                  decisionId: 'private-decision',
+                },
+              },
+            ],
+            'native-next',
+          ),
           privateCount: 1000,
         })
       : undefined,
@@ -187,9 +194,7 @@ test('only public available summaries and one author batch leave the reader; cur
   expect(requests).toHaveLength(0);
   for (const next of ['', 'x'.repeat(4097)]) {
     const invalid = fixture((request) =>
-      isCommunity(request)
-        ? Response.json(communityThreadPage('review', communitySubject, [], next))
-        : undefined,
+      isCommunity(request) ? Response.json(communityThreadPage('review', communitySubject, [], next)) : undefined,
     );
     expect((await readSubjectCommunity(invalid.client, communitySubject.id, ['review'])).regions.review?.state).toBe(
       'unavailable',

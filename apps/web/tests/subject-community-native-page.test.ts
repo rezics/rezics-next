@@ -19,12 +19,8 @@ import { GLOBAL } from '../src/features/pages/subject-ratings';
 
 const review = communityThread('review');
 const discussion = communityThread('discussion');
-const page = (
-  threads: unknown[],
-  next: unknown = null,
-  kind: 'discussion' | 'review' = 'review',
-  place = GLOBAL,
-) => communityThreadPage(kind, communitySubject, threads, next as string | null, place);
+const page = (threads: unknown[], next: unknown = null, kind: 'discussion' | 'review' = 'review', place = GLOBAL) =>
+  communityThreadPage(kind, communitySubject, threads, next as string | null, place);
 
 // Each bad row invalidates even the valid row before it.
 const malformed = [
@@ -86,9 +82,7 @@ test('native community windows fail malformed sources locally and retain honest 
         reads[key] = {
           status: 200,
           body:
-            descriptor.threadKind === 'review'
-              ? response
-              : page([discussion], null, 'discussion', descriptor.place),
+            descriptor.threadKind === 'review' ? response : page([discussion], null, 'discussion', descriptor.place),
         };
     requests.length = 0;
     const composed = await withComposedCommunity(client, {
@@ -227,7 +221,10 @@ test('native community windows fail malformed sources locally and retain honest 
   }
 
   const zeroCounts = composedCommunityRegion(
-    { status: 200, body: page([{ ...review, reactions: {}, viewerReaction: null }], null, expected.threadKind, expected.place) },
+    {
+      status: 200,
+      body: page([{ ...review, reactions: {}, viewerReaction: null }], null, expected.threadKind, expected.place),
+    },
     expected,
     true,
   );
