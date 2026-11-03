@@ -108,7 +108,11 @@ function asSession(row: SessionResult): ProgressSession {
   };
 }
 
-function readJournalDate(year: number | null, month: number | null, day: number | null): ProgressSessionJournalDate | null {
+function readJournalDate(
+  year: number | null,
+  month: number | null,
+  day: number | null,
+): ProgressSessionJournalDate | null {
   if (year === null) {
     if (month !== null || day !== null) throw new TypeError('Invalid stored progress journal date');
     return null;
@@ -250,7 +254,11 @@ export async function readSessionJournal(
   accountId: string,
   sessionId: string,
 ): Promise<ProgressSessionJournal | null> {
-  const row = await sessionJournalRead.run(queryClient(client), { route, account_id: accountId, session_id: sessionId });
+  const row = await sessionJournalRead.run(queryClient(client), {
+    route,
+    account_id: accountId,
+    session_id: sessionId,
+  });
   return row ? asJournal(row) : null;
 }
 
@@ -260,7 +268,11 @@ export async function lockSessionJournal(
   accountId: string,
   sessionId: string,
 ): Promise<ProgressSessionJournal | null> {
-  const row = await sessionJournalLock.run(queryClient(client), { route, account_id: accountId, session_id: sessionId });
+  const row = await sessionJournalLock.run(queryClient(client), {
+    route,
+    account_id: accountId,
+    session_id: sessionId,
+  });
   return row ? asJournal(row) : null;
 }
 

@@ -10,7 +10,13 @@ test('the typed client reads and edits a session journal by its existing session
       sent.push(request);
       return request.method === 'GET'
         ? Response.json({
-            journal: { sessionId, revision: 0, startDate: { year: 2022, month: 11 }, finishDate: null, reflection: null },
+            journal: {
+              sessionId,
+              revision: 0,
+              startDate: { year: 2022, month: 11 },
+              finishDate: null,
+              reflection: null,
+            },
           })
         : Response.json({ journal: { sessionId, revision: 1, changed: true } });
     }) as typeof fetch,
@@ -18,10 +24,12 @@ test('the typed client reads and edits a session journal by its existing session
 
   const read = await client.progressSessions({ sessionId }).journal.get();
   expect(read.data?.journal.startDate).toEqual({ year: 2022, month: 11 });
-  await client.progressSessions({ sessionId }).journal.patch(
-    { revision: 0, reflection: 'A private note' },
-    { headers: { 'idempotency-key': 'journal-write-1' } },
-  );
+  await client
+    .progressSessions({ sessionId })
+    .journal.patch(
+      { revision: 0, reflection: 'A private note' },
+      { headers: { 'idempotency-key': 'journal-write-1' } },
+    );
   expect(sent.map(({ method, url }) => `${method} ${new URL(url).pathname}`)).toEqual([
     `GET /v1/progressSessions/${sessionId}/journal`,
     `PATCH /v1/progressSessions/${sessionId}/journal`,

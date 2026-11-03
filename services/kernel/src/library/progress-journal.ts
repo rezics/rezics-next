@@ -3,9 +3,7 @@ import type { ProgressSessionJournalDate, ProgressSessionJournalPatch } from './
 export const MAX_JOURNAL_REFLECTION_CHARACTERS = 2_000;
 export const MAX_JOURNAL_REFLECTION_BYTES = 4_096;
 
-export type JournalPatchOutcome =
-  | { ok: true; value: ProgressSessionJournalPatch }
-  | { ok: false; field: string };
+export type JournalPatchOutcome = { ok: true; value: ProgressSessionJournalPatch } | { ok: false; field: string };
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -18,8 +16,7 @@ function validDate(value: unknown): ProgressSessionJournalDate | null {
   if (!source || Object.keys(source).some((key) => !['year', 'month', 'day'].includes(key))) return null;
   const { year, month, day } = source;
   if (!Number.isInteger(year) || (year as number) < 1 || (year as number) > 9_999) return null;
-  if (month !== undefined && (!Number.isInteger(month) || (month as number) < 1 || (month as number) > 12))
-    return null;
+  if (month !== undefined && (!Number.isInteger(month) || (month as number) < 1 || (month as number) > 12)) return null;
   if (day !== undefined && (month === undefined || !Number.isInteger(day) || (day as number) < 1)) return null;
   if (day !== undefined) {
     const leap = (year as number) % 400 === 0 || ((year as number) % 4 === 0 && (year as number) % 100 !== 0);
@@ -38,7 +35,9 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
   const source = record(input);
   if (!source) return { ok: false, field: 'journal' };
   const allowed = new Set(['revision', 'startDate', 'finishDate', 'reflection']);
-  const unexpected = Object.keys(source).filter((key) => !allowed.has(key)).sort()[0];
+  const unexpected = Object.keys(source)
+    .filter((key) => !allowed.has(key))
+    .sort()[0];
   if (unexpected) return { ok: false, field: unexpected };
   const revision = source.revision;
   if (!Number.isSafeInteger(revision) || (revision as number) < 0 || (revision as number) >= 2_147_483_647)
@@ -64,8 +63,7 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
     const reflection = source.reflection;
     if (reflection === null) patch.reflection = null;
     else if (typeof reflection === 'string') {
-      if (Array.from(reflection).length > MAX_JOURNAL_REFLECTION_CHARACTERS)
-        return { ok: false, field: 'reflection' };
+      if (Array.from(reflection).length > MAX_JOURNAL_REFLECTION_CHARACTERS) return { ok: false, field: 'reflection' };
       if (new TextEncoder().encode(reflection).byteLength > MAX_JOURNAL_REFLECTION_BYTES)
         return { ok: false, field: 'reflection' };
       patch.reflection = reflection;
