@@ -456,15 +456,23 @@ only their respective admitted fields.
 
 Kernel generation owns declarations and OpenAPI. `tools/goal/defaults.json` already lists
 `packages/client/src/kernel/**` and `contracts/openapi.json` as promotion outputs of
-`bun run --cwd services/kernel derived`, with `services/kernel/**` as inputs. No Web DTO is added.
+`bun run --cwd services/kernel derived`, with `services/kernel/**` as inputs. Home receives the generated response
+directly; no Web DTO is added.
+
+Home now renders the generated current review target and citation, including question and question revision,
+recorded units and vote revision. It renders only a disclosed immediate parent, its current author and exact post and
+revision destinations; concealed and removed parent states reveal no body or identity. Spoiler-marked excerpts require
+an explicit reveal tied to the current page origin. Reaction receiving uses the exact generated target, totals,
+viewer selection and page watermark through the existing shared action bar.
 
 Experience acceptance remains open until the existing Home owner reviews populated review/reply, concealed
-and removed parent, guest, retry, language/spoiler and account-switch states against native responses.
+and removed parent, guest, denied/unavailable/successful advice, retry, language/spoiler and account-switch states
+against native responses.
 Native lifecycle and three-scale acceptance, and the Performance review of complete nested source observations
 (rows, statements, body/serialization bytes, physical homes, transaction/pool/runner phases and retry),
 remain required. In particular, two Content/owner passes plus the selected post/parent readers are not
 a constant physical-row cost claim. The current native fixed-size regression remains in place.
 
-OpenAPI now publishes these closed native context shapes. Generated client declaration receiving and
-Home rendering remain unfinished; the declaration generator currently cannot complete on the retained Kernel
-source. No prepared Web card establishes native lifecycle, growth or experience acceptance.
+OpenAPI publishes these closed native context shapes. Generated client declarations and Home receiving are wired
+through the Kernel generator. Prepared Web cards and focused receiving tests do not establish native lifecycle,
+growth or full experience acceptance.

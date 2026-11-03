@@ -18,7 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { observeReactionSession } from '../../threads/thread-reactions';
 import { VoteControl, type FeedReaction } from './vote-control';
-import type { FeedItem } from '../pages/home-feed-read';
+import type { FeedItem, FeedPage } from '../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destination';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
@@ -62,6 +62,33 @@ export function feedFeedbackEntries(locale: string, signedIn: boolean, href: str
   );
 }
 
+/** Bind only the exact target, current viewer slot and page watermark supplied by Kernel. */
+export function homeFeedReaction(
+  item: FeedItem,
+  input: {
+    signedIn: boolean;
+    origin?: FeedActionBarProps['origin'];
+    reactionsAsOf?: FeedPage['reactionsAsOf'];
+    hasReactionFreshness?: boolean;
+  },
+): FeedReaction | undefined {
+  const summary = item.summary;
+  if (!('reactionTarget' in summary) || !summary.reactionTarget || !('reactions' in summary) || !summary.reactions)
+    return;
+  const target = summary.reactionTarget;
+  const destinationMatches =
+    (item.destination.kind === 'thread' && target.targetKind === 'thread' && target.targetId === item.destination.id) ||
+    (item.destination.kind === 'post' && target.targetKind === 'post' && target.targetId === item.destination.postId);
+  if (!destinationMatches || (input.signedIn && !Object.hasOwn(summary, 'viewerReaction'))) return;
+  return {
+    target: { kind: target.targetKind, id: target.targetId },
+    counts: summary.reactions,
+    value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
+    ...(input.origin ? { reactionOrigin: input.origin } : {}),
+    ...(input.hasReactionFreshness ? { sourceWatermark: input.reactionsAsOf ?? null } : {}),
+  };
+}
+
 /** Consume only the generated feed contract. No invented reaction fields and no per-row point reads. */
 export function HomeFeedActions({
   item,
@@ -70,6 +97,8 @@ export function HomeFeedActions({
   children,
   verification,
   origin,
+  reactionsAsOf,
+  hasReactionFreshness = false,
 }: {
   item: FeedItem;
   locale: string;
@@ -77,12 +106,15 @@ export function HomeFeedActions({
   children?: ReactNode;
   verification?: VerificationConfig | undefined;
   origin?: FeedActionBarProps['origin'];
+  reactionsAsOf?: FeedPage['reactionsAsOf'];
+  hasReactionFreshness?: boolean;
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
   const isWork = kind === 'subject' && 'creativeWork' in item.summary && item.summary.creativeWork;
   const destination = item.destination;
+  const reaction = homeFeedReaction(item, { signedIn, origin, reactionsAsOf, hasReactionFreshness });
   const target =
     destination.kind === 'thread' || destination.kind === 'subject'
       ? { kind: destination.kind, id: destination.id }
@@ -95,6 +127,7 @@ export function HomeFeedActions({
       href={href}
       title={homeFeedTitle(item, locale)}
       signedIn={signedIn}
+      reaction={reaction}
       plain={kind === 'post'}
       origin={origin}
       overflow={
