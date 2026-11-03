@@ -31,8 +31,11 @@ const editionEvent = Type.Object(
 
 export const CONTENT_EVENTS = {
   'com.rezics.content.conversation-activity.projected.v1': Type.Object(
-    { postIds: Type.Array(UUID, { maxItems: 100, minItems: 1, uniqueItems: true }),
-      sourceEpoch: Type.Integer({ minimum: 1 }), sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    {
+      postIds: Type.Array(UUID, { maxItems: 100, minItems: 1, uniqueItems: true }),
+      sourceEpoch: Type.Integer({ minimum: 1 }),
+      sourcePosition: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
     { additionalProperties: false },
   ),
   'com.rezics.content.board.slow-mode.changed.v1': Type.Object(

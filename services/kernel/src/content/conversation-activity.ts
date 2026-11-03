@@ -56,10 +56,18 @@ function source(event: CloudEvent, id: string) {
   const epoch = Number(match?.[2]);
   const partition = partitionOf(route(id));
   if (
-    !match || Number(match[1]) !== partition || !Number.isSafeInteger(epoch) || epoch > 2147483647 ||
-    !uuid.test(event.id) || event.specversion !== '1.0' || event.datacontenttype !== 'application/json' ||
-    !/^\d{19}$/.test(event.sequence) || BigInt(event.sequence) < 1n || BigInt(event.sequence) > 9223372036854775807n
-  ) throw new TypeError('Invalid conversation activity source envelope');
+    !match ||
+    Number(match[1]) !== partition ||
+    !Number.isSafeInteger(epoch) ||
+    epoch > 2147483647 ||
+    !uuid.test(event.id) ||
+    event.specversion !== '1.0' ||
+    event.datacontenttype !== 'application/json' ||
+    !/^\d{19}$/.test(event.sequence) ||
+    BigInt(event.sequence) < 1n ||
+    BigInt(event.sequence) > 9223372036854775807n
+  )
+    throw new TypeError('Invalid conversation activity source envelope');
   return { partition, epoch, position: BigInt(event.sequence) };
 }
 
@@ -76,8 +84,9 @@ function targets(event: CloudEvent): Targets {
     return { postIds: data.targetKind === 'post' ? [data.targetId as string] : [], contributedAt: null };
   if ('postId' in data) return { postIds: [data.postId as string], contributedAt: null };
   return {
-    postIds: [data.itemId as string], threadId: data.threadId as string,
-    contributedAt: type === publication ? data.activityAt as string : null,
+    postIds: [data.itemId as string],
+    threadId: data.threadId as string,
+    contributedAt: type === publication ? (data.activityAt as string) : null,
   };
 }
 
@@ -104,8 +113,13 @@ export function createConversationActivityEffect(pool: Pool): Effect {
           // Proof is the exact bounded outbox envelope, not a caller-supplied
           // timestamp or the current wording's revision time.
           const proof = await sourceEvent.run(tx, {
-            partition_no: identity.partition, epoch: identity.epoch, position: identity.position,
-            id: event.id, type: event.type, subject: event.subject ?? null, data: event.data,
+            partition_no: identity.partition,
+            epoch: identity.epoch,
+            position: identity.position,
+            id: event.id,
+            type: event.type,
+            subject: event.subject ?? null,
+            data: event.data,
           });
           if (proof.length !== 1 || proof[0]!.event_count > 1000)
             throw new TypeError('Conversation activity event has no native source');
@@ -113,7 +127,8 @@ export function createConversationActivityEffect(pool: Pool): Effect {
           for (const postId of input.postIds) {
             const postRoute = route(postId);
             const found = await tx.query<{ thread_id: string }>(
-              'SELECT thread_id FROM content.post WHERE route = $1 AND post_id = $2', [postRoute, postId],
+              'SELECT thread_id FROM content.post WHERE route = $1 AND post_id = $2',
+              [postRoute, postId],
             );
             const threadId = found.rows[0]?.thread_id;
             if (!threadId) {
@@ -126,28 +141,42 @@ export function createConversationActivityEffect(pool: Pool): Effect {
               if (retired.rowCount) changed.push(postId);
               continue;
             }
-            if (input.threadId && input.threadId !== threadId) throw new TypeError('Conversation activity thread mismatch');
+            if (input.threadId && input.threadId !== threadId)
+              throw new TypeError('Conversation activity thread mismatch');
             const current = await sourceActivity.run(tx, { route: postRoute, thread_id: threadId, post_id: postId });
             if (!current?.post_id || !current.author_account_id || !current.security_revision)
               throw new Error('Conversation activity source post is unavailable');
-            const eligible = current.post_availability === 'available' && current.head_availability === 'available' &&
-              !current.author_erased && ['published', 'protected'].includes(current.post_visibility!);
+            const eligible =
+              current.post_availability === 'available' &&
+              current.head_availability === 'available' &&
+              !current.author_erased &&
+              ['published', 'protected'].includes(current.post_visibility!);
             const parameters = {
-              route: postRoute, post_id: postId, thread_id: threadId,
-              opening: current.first_post_id === postId, contributed_at: input.contributedAt,
-              eligible, security_revision: BigInt(current.security_revision),
-              source_epoch: identity.epoch, source_position: identity.position,
+              route: postRoute,
+              post_id: postId,
+              thread_id: threadId,
+              opening: current.first_post_id === postId,
+              contributed_at: input.contributedAt,
+              eligible,
+              security_revision: BigInt(current.security_revision),
+              source_epoch: identity.epoch,
+              source_position: identity.position,
             };
-            const rows = await tx.query(upsert.sql, upsert.params.map((name) => parameters[name as keyof typeof parameters]));
+            const rows = await tx.query(
+              upsert.sql,
+              upsert.params.map((name) => parameters[name as keyof typeof parameters]),
+            );
             if (rows.rowCount) changed.push(postId);
           }
           if (!changed.length) throw new UnchangedActivity();
           return {
             value: null,
-            events: [{
-              type: 'com.rezics.content.conversation-activity.projected.v1',
-              data: { postIds: changed, sourceEpoch: identity.epoch, sourcePosition: identity.position.toString() },
-            }],
+            events: [
+              {
+                type: 'com.rezics.content.conversation-activity.projected.v1',
+                data: { postIds: changed, sourceEpoch: identity.epoch, sourcePosition: identity.position.toString() },
+              },
+            ],
           };
         });
       } catch (error) {
@@ -165,7 +194,8 @@ export async function readConversationActivitySources(
   deadline: number,
 ): Promise<readonly ConversationActivitySource[]> {
   // Bound raw input before deduplication, JSON encoding or pool work.
-  if (threadIds.length > CONVERSATION_ACTIVITY_BATCH_LIMIT) throw new RangeError('Conversation activity accepts at most 100 raw keys');
+  if (threadIds.length > CONVERSATION_ACTIVITY_BATCH_LIMIT)
+    throw new RangeError('Conversation activity accepts at most 100 raw keys');
   const groups = new Map<number, { route: number; thread_id: string }[]>();
   const unique = [...new Set(threadIds)];
   for (const id of unique) {
@@ -177,26 +207,37 @@ export async function readConversationActivitySources(
   }
   const result = new Map<string, ConversationActivitySource>();
   for (const [partitionNo, keys] of groups) {
-    const selected = await within(deadline, () => withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const partition = await readPartition(client, partitionNo);
-        if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-        if (partition.writeState === 'moved') throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
-        const rows = await page.run(client, { keys: JSON.stringify(keys), limit: CONVERSATION_ACTIVITY_SOURCE_LIMIT });
-        await client.query('COMMIT');
-        return { rows, anchor: { partition, epoch: partition.epoch, position: partition.position } };
-      } catch (error) {
-        try { await connection.query('ROLLBACK'); } catch (rollbackError) { discardConnection(connection, rollbackError as Error); }
-        throw error;
-      }
-    }));
+    const selected = await within(deadline, () =>
+      withConnection(pool, async (connection) => {
+        const client = deadlineClient(connection, deadline);
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const partition = await readPartition(client, partitionNo);
+          if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+          if (partition.writeState === 'moved')
+            throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
+          const rows = await page.run(client, {
+            keys: JSON.stringify(keys),
+            limit: CONVERSATION_ACTIVITY_SOURCE_LIMIT,
+          });
+          await client.query('COMMIT');
+          return { rows, anchor: { partition, epoch: partition.epoch, position: partition.position } };
+        } catch (error) {
+          try {
+            await connection.query('ROLLBACK');
+          } catch (rollbackError) {
+            discardConnection(connection, rollbackError as Error);
+          }
+          throw error;
+        }
+      }),
+    );
     const contributions = new Map<string, ConversationContributionSource[]>();
     for (const row of selected.rows) {
       const entries = contributions.get(row.thread_id) ?? [];
       entries.push({
-        postId: row.post_id, opening: row.opening,
+        postId: row.post_id,
+        opening: row.opening,
         contributedAt: row.contributed_at!.replace(/(\.\d{3})000Z$/, '$1Z'),
       });
       contributions.set(row.thread_id, entries);
@@ -204,8 +245,11 @@ export async function readConversationActivitySources(
     for (const key of keys) {
       const entries = contributions.get(key.thread_id) ?? [];
       result.set(key.thread_id, {
-        threadId: key.thread_id, coverage: 'unproven', contributions: entries,
-        more: entries.length === CONVERSATION_ACTIVITY_SOURCE_LIMIT, anchor: selected.anchor,
+        threadId: key.thread_id,
+        coverage: 'unproven',
+        contributions: entries,
+        more: entries.length === CONVERSATION_ACTIVITY_SOURCE_LIMIT,
+        anchor: selected.anchor,
       });
     }
   }
