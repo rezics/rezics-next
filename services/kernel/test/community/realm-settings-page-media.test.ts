@@ -78,7 +78,7 @@ test.serial(
         const bounded = await f.base.call('GET', `/v1/realms/${realm.realmId}/settings`, {
           bearer: f.base.governor.bearer,
         });
-        expect(bounded.response.status, bounded.text).toBe(200);
+        expect(bounded.response.status).toBe(200);
         expect(bounded.value.snapshot.avatar.state).toBe('available');
         expect(bounded.value.snapshot.avatar.value.placeholder).toEqual(
           size === 32 ? { thumbhash: raw!.thumbhash, color: '#ABCDEF' } : null,
