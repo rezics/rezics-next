@@ -78,6 +78,27 @@ test('Collection, review and Space snapshots share format 2 with exact native ke
     id: 'discovery-v1:collection:018f0000-0000-7000-8000-00a000000001',
     version: position,
   });
+  const collection = collectionActions[0];
+  if (!collection || collection.op !== 'index') throw new Error('Expected a Collection document');
+  expect(collection.document.revision).toBe(revision.toString());
+  expect(collection.document.names).toEqual(['Public Collection']);
+  expect(collection.document.descriptions).toEqual([]);
+  expect(Object.keys(collection.document).sort()).toEqual(
+    [
+      'document_format',
+      'identity',
+      'owner',
+      'kind',
+      'id',
+      'route',
+      'partition',
+      'source_position',
+      'revision',
+      'names',
+      'descriptions',
+      'name_sort',
+    ].sort(),
+  );
   expect(contentActions.map((action) => action.id)).toEqual([
     'discovery-v1:space:018f0000-0000-7000-8000-00a000000001',
     'discovery-v1:review:018f0000-0000-7000-8000-00a000000001',
@@ -126,9 +147,24 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
       [reviewKey],
     ),
   ).toThrow();
+  const pollutedObservation = {
+    ...contentObservation,
+    snapshot: {
+      ...contentObservation.snapshot,
+      records: contentObservation.snapshot.records.map((record, index) =>
+        index === 0 ? { ...record, currentAuthorVote: 5 } : record,
+      ),
+    },
+  } as unknown as SecondScopeDiscoveryObservation;
+  expect(() => secondScopeDiscoveryDocumentActions(registry, pollutedObservation, [spaceKey, reviewKey])).toThrow();
   expect(() =>
     secondScopeDiscoveryDocumentActions(registry, collectionObservation, [
       { ...reviewKey, owner: 'commerce' } as unknown as SecondScopeDiscoveryKey,
+    ]),
+  ).toThrow();
+  expect(() =>
+    secondScopeDiscoveryDocumentActions(registry, collectionObservation, [
+      { ...collectionKey, kind: 'space' } as unknown as SecondScopeDiscoveryKey,
     ]),
   ).toThrow();
   expect(() =>
@@ -138,9 +174,16 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
 
   const [spaceAction] = secondScopeDiscoveryDocumentActions(registry, contentObservation, [spaceKey, reviewKey]);
   if (!spaceAction || spaceAction.op !== 'index') throw new Error('Expected a Space document');
+  expect(spaceAction.document.revision).toBe(revision.toString());
+  expect(spaceAction.document.names).toEqual(['Public Space']);
+  expect(spaceAction.document.descriptions).toEqual(['Public summary']);
   const privateField = { ...spaceAction.document, realmVotes: [{ voter: nativeId, score: 5 }] };
   expect(() => validateDiscoveryDocumentFormat(registry, privateField)).toThrow();
   expect(() => parseDiscoveryHitKey(registry, { _id: spaceAction.id, _source: privateField })).toThrow();
+  expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, route: route + 1 })).toThrow();
+  expect(() =>
+    validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, revision: Number(revision) }),
+  ).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, document_format: 1 })).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'commerce' })).toThrow();
 });
