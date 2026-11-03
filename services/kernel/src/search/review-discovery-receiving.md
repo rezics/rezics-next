@@ -11,6 +11,8 @@ Decision: use a short durable claim before native refresh and validate it under 
 writer lock, so a one-connection pool releases its checkout during native refresh and expired work cannot
 apply after its successor. Recovery always refreshes current rows again instead of replaying a cached body.
 
+Decision: name the migration with its creation UTC timestamp; the brief's future timestamp is rejected by migration admission.
+
 ## Durable state and recovery
 
 `search.review_discovery_receiving` binds the prefix, generation, physical UUID, allocation incarnation,
