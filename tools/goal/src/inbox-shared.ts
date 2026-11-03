@@ -1,11 +1,10 @@
+import { defaultPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import type { InboxDocumentReference, InboxEscalation, ManagerEvent, ManagerEventKind } from './contracts.ts';
 import { migrate } from './db.ts';
 
-export const SHARED_INBOX_DEFAULT_PAGE_SIZE = 50;
-export const SHARED_INBOX_MAX_PAGE_SIZE = 100;
-const OPEN_QUESTION_AGE_MS = 30 * 60_000;
-const OLD_BLOCKER_AGE_MS = 60 * 60_000;
+export const SHARED_INBOX_DEFAULT_PAGE_SIZE = defaultPolicy.inbox.defaultPageSize;
+export const SHARED_INBOX_MAX_PAGE_SIZE = defaultPolicy.inbox.maxPageSize;
 
 const inboxMigrations = [
   {
@@ -204,6 +203,7 @@ function positiveInteger(value: number | undefined, label: string): number | und
   return value;
 }
 
+// Ten-digit epoch values select seconds; the threshold is input conversion, not a history window.
 export function parseInboxTime(value: string | number): number {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value < 0) throw new Error('invalid inbox time');
@@ -221,10 +221,10 @@ export function parseInboxTime(value: string | number): number {
   return timestamp;
 }
 
-function pageLimit(limit: number | undefined): number {
-  const selected = limit ?? SHARED_INBOX_DEFAULT_PAGE_SIZE;
-  if (!Number.isSafeInteger(selected) || selected < 1 || selected > SHARED_INBOX_MAX_PAGE_SIZE)
-    throw new Error(`inbox page limit must be between 1 and ${SHARED_INBOX_MAX_PAGE_SIZE}`);
+function pageLimit(limit: number | undefined, policy = defaultPolicy.inbox): number {
+  const selected = limit ?? policy.defaultPageSize;
+  if (!Number.isSafeInteger(selected) || selected < 1 || selected > policy.maxPageSize)
+    throw new Error(`inbox page limit must be between 1 and ${policy.maxPageSize}`);
   return selected;
 }
 
@@ -298,10 +298,13 @@ function answerJoin(questionId: string): string {
 
 /** Read-only, cross-recipient queries. This class never reads or updates delivery state. */
 export class SharedInboxQueries {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly policy = defaultPolicy.inbox,
+  ) {}
 
   log(filter: SharedInboxFilter = {}): InboxPage<SharedInboxMessage> {
-    const limit = pageLimit(filter.limit);
+    const limit = pageLimit(filter.limit, this.policy);
     const { clauses, values } = filterWhere(filter);
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.db
@@ -319,7 +322,7 @@ export class SharedInboxQueries {
     reference: string;
     rootId: number | null;
   } {
-    const limit = pageLimit(options.limit);
+    const limit = pageLimit(options.limit, this.policy);
     const cursor = positiveInteger(options.cursor, 'inbox cursor');
     const text = String(reference).trim();
     if (!text) throw new Error('inbox thread reference must be nonempty');
@@ -373,7 +376,7 @@ export class SharedInboxQueries {
     const since = parseInboxTime(sinceValue);
     const generatedAt = options.now ?? Date.now();
     if (!Number.isSafeInteger(generatedAt) || generatedAt < 0) throw new Error('invalid digest time');
-    const limit = pageLimit(options.limit);
+    const limit = pageLimit(options.limit, this.policy);
     const cursor = positiveInteger(options.cursor, 'inbox cursor');
     const openQuestion = answerJoin('manager_inbox.id');
     const validEscalation = validEscalationSql('escalation');
@@ -393,11 +396,11 @@ export class SharedInboxQueries {
         since,
         since,
         since,
-        generatedAt - OPEN_QUESTION_AGE_MS,
-        generatedAt - OLD_BLOCKER_AGE_MS,
+        generatedAt - this.policy.questionAgeMs,
+        generatedAt - this.policy.blockerAgeMs,
         since,
-        generatedAt - OPEN_QUESTION_AGE_MS,
-        generatedAt - OLD_BLOCKER_AGE_MS,
+        generatedAt - this.policy.questionAgeMs,
+        generatedAt - this.policy.blockerAgeMs,
       ) as {
       goal_id: string | null;
       decisions: number;
@@ -452,12 +455,12 @@ export class SharedInboxQueries {
         WHERE 1 = 1 ${cursorClause}
         ORDER BY event_row.id ASC LIMIT ?`)
       .all(
-        generatedAt - OLD_BLOCKER_AGE_MS,
+        generatedAt - this.policy.blockerAgeMs,
         since,
         since,
         since,
-        generatedAt - OPEN_QUESTION_AGE_MS,
-        generatedAt - OLD_BLOCKER_AGE_MS,
+        generatedAt - this.policy.questionAgeMs,
+        generatedAt - this.policy.blockerAgeMs,
         ...(cursor === undefined ? [] : [cursor]),
         limit + 1,
       ) as InboxRow[];

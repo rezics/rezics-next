@@ -1,16 +1,11 @@
+import { defaultPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { watchOrPoll } from './watch-or-poll.ts';
 import { join } from 'node:path';
 import type { ManagerEvent, ManagerEventKind, ManagerInbox } from './contracts.ts';
-import {
-  migrateSharedInbox,
-  sharedInboxFields,
-  SHARED_INBOX_DEFAULT_PAGE_SIZE,
-  SHARED_INBOX_MAX_PAGE_SIZE,
-  type InboxPage,
-} from './inbox-shared.ts';
+import { migrateSharedInbox, sharedInboxFields, type InboxPage } from './inbox-shared.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 
 const wakingKinds = new Set<ManagerEventKind>([
@@ -58,19 +53,18 @@ function inboxEntry(row: InboxRow): InboxEntry {
   };
 }
 
-function inboxReadLimit(limit: number | undefined): number {
-  const selected = limit ?? SHARED_INBOX_DEFAULT_PAGE_SIZE;
-  if (!Number.isSafeInteger(selected) || selected < 1 || selected > SHARED_INBOX_MAX_PAGE_SIZE)
-    throw new Error(`inbox page limit must be between 1 and ${SHARED_INBOX_MAX_PAGE_SIZE}`);
+function inboxReadLimit(limit: number | undefined, policy = defaultPolicy.inbox): number {
+  const selected = limit ?? policy.defaultPageSize;
+  if (!Number.isSafeInteger(selected) || selected < 1 || selected > policy.maxPageSize)
+    throw new Error(`inbox page limit must be between 1 and ${policy.maxPageSize}`);
   return selected;
 }
 /** Identical deliveries to one recipient within this window are stored once, with a count. */
-export const INBOX_DEDUPE_WINDOW_MS = 60 * 60_000;
+export const INBOX_DEDUPE_WINDOW_MS = defaultPolicy.inbox.dedupeWindowMs;
 /** A completion result answers the manager's own request, so a repeated result still wakes it. */
 const unfoldedKinds = new Set<string>(['goal-met', 'goal-unmet']);
-export const MANAGER_SENDS_PER_HOUR = 6;
-export const MANAGER_SEND_MAX_CHARACTERS = 600;
-const SEND_WINDOW_MS = 60 * 60_000;
+export const MANAGER_SENDS_PER_HOUR = defaultPolicy.inbox.managerSends;
+export const MANAGER_SEND_MAX_CHARACTERS = defaultPolicy.inbox.managerMessageCharacters;
 
 export class InboxSendRefusedError extends Error {
   override name = 'InboxSendRefusedError';
@@ -98,6 +92,7 @@ export class SqliteManagerInbox implements ManagerInbox {
     readonly db: Database,
     readonly stateDirectory: string,
     private readonly now: () => number = Date.now,
+    private readonly policy = defaultPolicy.inbox,
   ) {
     this.signalDirectory = join(stateDirectory, 'manager-signals');
     mkdirSync(this.signalDirectory, { recursive: true });
@@ -141,20 +136,20 @@ export class SqliteManagerInbox implements ManagerInbox {
    * send. Only a pending Codex continuation-renewal handshake is exempt from the hourly cap.
    */
   assertManagerSend(sender: string, summary: string, recipient?: string): void {
-    if (summary.length > MANAGER_SEND_MAX_CHARACTERS)
+    if (summary.length > this.policy.managerMessageCharacters)
       throw new InboxSendRefusedError(
-        `inbox send refused: the summary has ${summary.length} characters and a manager message may have at most ${MANAGER_SEND_MAX_CHARACTERS} (about 60 words). Send the decision, question or handoff; put details in the brief or owner document.`,
+        `inbox send refused: the summary has ${summary.length} characters and a manager message may have at most ${this.policy.managerMessageCharacters}${this.policy.managerMessageCharacters === defaultPolicy.inbox.managerMessageCharacters ? ' (about 60 words)' : ''}. Send the decision, question or handoff; put details in the brief or owner document.`,
       );
     if (recipient !== undefined && this.continuationHandshake(sender, summary, recipient)) return;
-    const since = this.now() - SEND_WINDOW_MS;
+    const since = this.now() - this.policy.sendWindowMs;
     const { count } = this.db
       .query(
         'SELECT count(*) AS count FROM manager_inbox WHERE sender = ? AND created_at > ? AND continuation_handshake = 0',
       )
       .get(sender, since) as { count: number };
-    if (count >= MANAGER_SENDS_PER_HOUR)
+    if (count >= this.policy.managerSends)
       throw new InboxSendRefusedError(
-        `inbox send refused: ${sender} has sent ${count} messages in the last hour and the limit is ${MANAGER_SENDS_PER_HOUR}. Send only decisions, blocking questions and handoffs; status, receipts and acknowledgements are not messages.`,
+        `inbox send refused: ${sender} has sent ${count} messages in the ${this.policy.sendWindowMs === defaultPolicy.inbox.sendWindowMs ? 'last hour' : `last ${this.policy.sendWindowMs} ms`} and the limit is ${this.policy.managerSends}. Send only decisions, blocking questions and handoffs; status, receipts and acknowledgements are not messages.`,
       );
   }
   private sessionState(id: string): unknown {
@@ -186,7 +181,7 @@ export class SqliteManagerInbox implements ManagerInbox {
           .query(
             'SELECT id FROM manager_inbox WHERE dedupe_key = ? AND created_at > ? ORDER BY created_at DESC, id DESC LIMIT 1',
           )
-          .get(key, createdAt - INBOX_DEDUPE_WINDOW_MS) as { id: number } | null;
+          .get(key, createdAt - this.policy.dedupeWindowMs) as { id: number } | null;
         if (repeat) {
           this.db
             .query('UPDATE manager_inbox SET delivery_count = delivery_count + 1, last_delivered_at = ? WHERE id = ?')
@@ -264,13 +259,13 @@ export class SqliteManagerInbox implements ManagerInbox {
       SELECT parent.id, parent.reply_to_id, chain.depth + 1, chain.path || parent.id || '/',
         instr(chain.path, printf('/%d/', parent.id)) > 0
       FROM chain JOIN manager_inbox AS parent ON parent.id = chain.reply_to_id
-      WHERE chain.reply_to_id IS NOT NULL AND chain.cycle = 0 AND chain.depth < 10000
+      WHERE chain.reply_to_id IS NOT NULL AND chain.cycle = 0 AND chain.depth < ?
     ) SELECT id, reply_to_id, depth, cycle FROM chain ORDER BY depth DESC`)
-      .all(id) as { id: number; reply_to_id: number | null; depth: number; cycle: number }[];
+      .all(id, this.policy.threadDepth) as { id: number; reply_to_id: number | null; depth: number; cycle: number }[];
     const oldest = ancestry[0];
     const newest = ancestry[ancestry.length - 1];
     if (!oldest || !newest) throw new Error(`inbox reply target does not exist: ${id}`);
-    if (ancestry.some((entry) => entry.cycle) || oldest.depth >= 10000 || oldest.reply_to_id !== null)
+    if (ancestry.some((entry) => entry.cycle) || oldest.depth >= this.policy.threadDepth || oldest.reply_to_id !== null)
       throw new Error(`inbox reply target has an invalid or cyclic thread: ${id}`);
     return oldest.id;
   }
@@ -320,7 +315,7 @@ export class SqliteManagerInbox implements ManagerInbox {
    * concurrent deliveries stay unread until selected. Continue with `cursor` set to `nextCursor`.
    */
   readPage(manager: string, options: InboxReadOptions = {}): InboxPage<InboxEntry> {
-    const limit = inboxReadLimit(options.limit);
+    const limit = inboxReadLimit(options.limit, this.policy);
     if (options.cursor !== undefined && (!Number.isSafeInteger(options.cursor) || options.cursor < 1))
       throw new Error('inbox cursor must be a positive integer');
     return this.db
@@ -418,7 +413,7 @@ export class SqliteManagerInbox implements ManagerInbox {
         close();
         reject(signal?.reason ?? new Error('Inbox wait aborted'));
       };
-      const watcher = watchOrPoll(this.signalDirectory, check, 2_000);
+      const watcher = watchOrPoll(this.signalDirectory, check, this.policy.pollMs);
       signal?.addEventListener('abort', abort, { once: true });
       if (signal?.aborted) abort();
       else check();

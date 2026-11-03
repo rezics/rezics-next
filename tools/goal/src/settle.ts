@@ -15,6 +15,7 @@ import { git } from './tasks.ts';
 import { completeWorkerSourceBaseline } from './conflict-progress.ts';
 import { harvestContinuations } from './continuation.ts';
 import type { Task } from './types.ts';
+import { defaultPolicy } from './policy.ts';
 
 function unchangedSource(task: Task, head: string): boolean {
   const frozen = new Set((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles?.map((file) => file.path));
@@ -46,7 +47,7 @@ export function finalReportPending(store: WorkerTasks['store'], ref: { taskId: s
   );
 }
 /** Pauses between settlement write tries; each try already waits the store's busy timeout. */
-export const SETTLEMENT_CONTENTION_BACKOFF_MS = [500, 1_000, 2_000, 4_000, 8_000];
+export const SETTLEMENT_CONTENTION_BACKOFF_MS = defaultPolicy.worker.settlementBackoffMs;
 
 /**
  * Await the worker's exit notification. No model, interval, or sleep loop participates in settlement. Git and other
@@ -60,6 +61,7 @@ export async function settle(
   startTrain: () => Promise<void> = async () => {},
 ): Promise<void> {
   const ref = worker.attempt;
+  const policy = tasks.settings.policy ?? defaultPolicy;
   let code: number | null;
   try {
     code = (await worker.exited).code;
@@ -72,8 +74,8 @@ export async function settle(
       try {
         return store.write(ref, action);
       } catch (error) {
-        if (!isSqliteContention(error) || index >= SETTLEMENT_CONTENTION_BACKOFF_MS.length) throw error;
-        await Bun.sleep(SETTLEMENT_CONTENTION_BACKOFF_MS[index]!);
+        if (!isSqliteContention(error) || index >= policy.worker.settlementBackoffMs.length) throw error;
+        await Bun.sleep(policy.worker.settlementBackoffMs[index]!);
       }
     }
   };
@@ -91,7 +93,7 @@ export async function settle(
   const resuming = worker.resuming ?? runMetadata.resuming === true;
   let lease;
   try {
-    lease = acquireDirectoryLease(`${store.attempt(ref).logPath}.settle`);
+    lease = acquireDirectoryLease(`${store.attempt(ref).logPath}.settle`, policy.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError) return; // A live settler will record checks and request landing.
     throw error;
@@ -102,8 +104,9 @@ export async function settle(
     const currentAttempt = store.attempt(ref);
     const poolForAttempt = tasks.settings.pools.find((p) => p.name === ref.pool);
     const pendingChecks = readMeasurement(currentAttempt, {
+      policy,
       configDirectory: poolForAttempt?.configDirectory,
-      maxLogBytes: 256 * 1024,
+      maxLogBytes: policy.worker.logTailBytes,
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
     }).waitingChecks;
     const proofTask = store.task(ref.taskId).brief.kind === 'verification';
@@ -113,12 +116,21 @@ export async function settle(
           pendingChecks?.length ? pendingChecks : currentAttempt.checks,
         )
       : undefined;
-    if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt);
+    if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt, policy.containers);
     store.assertCurrent(ref);
-    await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs);
+    await terminateProcessGroup(
+      store.attempt(ref).process,
+      tasks.settings.terminationGraceMs,
+      tasks.settings.policy?.process,
+    );
     if (!proofTask && !pendingChecks?.length) {
       if (!store.task(ref.taskId).workspace)
-        await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs);
+        await stopProcessesUnder(
+          store.task(ref.taskId).worktree,
+          tasks.settings.terminationGraceMs,
+          undefined,
+          tasks.settings.policy?.process,
+        );
     }
     let queued = false;
     let finished = false;
@@ -147,6 +159,7 @@ export async function settle(
       const measurement = readMeasurement(
         { ...current, endedAt },
         {
+          policy,
           configDirectory: pool?.configDirectory,
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         },
@@ -172,8 +185,8 @@ export async function settle(
           `Worker CLI exited with code ${code ?? 'unknown'} before starting a session`
         )
           .replace(/[\r\n]+/g, ' ')
-          .slice(0, 4000);
-        const errorLine = detail.split(/\r?\n/, 1)[0]!.slice(0, 1000);
+          .slice(0, policy.worker.diagnosticCharacters);
+        const errorLine = detail.split(/\r?\n/, 1)[0]!.slice(0, policy.worker.summaryCharacters);
         const failures = store
           .events(ref.taskId, ref.attempt)
           .filter((event) => event.kind === 'waiting-resume-launch-failed').length;
@@ -244,7 +257,9 @@ export async function settle(
           attempt.session = session;
           attempt.result = measurement.result;
         });
-        store.event(ref, FINAL_REPORT_REQUESTED, { result: measurement.result.slice(-2000) });
+        store.event(ref, FINAL_REPORT_REQUESTED, {
+          result: measurement.result.slice(-policy.worker.reportResultCharacters),
+        });
         return;
       }
       const attempt = store.updateAttempt(ref, (a) => {
@@ -255,13 +270,14 @@ export async function settle(
       });
       exited = true;
       const finalMeasurement = readMeasurement(attempt, {
+        policy,
         configDirectory: pool?.configDirectory,
-        maxLogBytes: 256 * 1024,
+        maxLogBytes: policy.worker.logTailBytes,
         ...(logStartOffset !== undefined ? { logStartOffset } : {}),
       });
       if (pool)
         try {
-          agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath));
+          agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath, policy.worker.logTailBytes));
         } catch {
           /* No log to read. */
         }
@@ -288,14 +304,16 @@ export async function settle(
         !reportsSuccess(finalMeasurement.result, agentAdapter(attempt.profile.cli))
       ) {
         finalMeasurement.failureKind = 'tool';
-        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${finalMeasurement.result.slice(-500)}`;
+        finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${finalMeasurement.result.slice(-policy.worker.failedResultCharacters)}`;
       }
       store.updateAttempt(ref, (a) => {
         a.session = finalMeasurement.session ?? a.session;
         a.result = finalMeasurement.result;
         a.blocker = finalMeasurement.blocker;
         a.failureKind = finalMeasurement.failureKind;
-        a.approaches.push(...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli)));
+        a.approaches.push(
+          ...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli), policy.records),
+        );
       });
       store.putRecord(makeRecord(task, attempt, finalMeasurement));
       bundle = true;
@@ -312,7 +330,7 @@ export async function settle(
           Array.isArray(exit.checks) &&
           exit.checks.length === 0,
         );
-        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch);
+        const unchanged = proofSourceUnchanged(task, tasks.settings.integrationBranch, tasks.settings.policy?.proof);
         const verified =
           !finalMeasurement.failureKind &&
           !finalMeasurement.blocker &&
@@ -342,7 +360,7 @@ export async function settle(
       }
       finished = true;
     });
-    if (bundle) evidenceBundle(store.task(ref.taskId), store.attempt(ref));
+    if (bundle) evidenceBundle(store.task(ref.taskId), store.attempt(ref), undefined, store.policy.evidence);
     if (finished) {
       store.assertCurrent(ref);
       const task = store.task(ref.taskId);
@@ -377,7 +395,7 @@ export async function settle(
       const unchangedClaim = !task.workspace && unchangedSource(task, workerCommit) && branchHead === workerCommit;
       const sourceDirtyAtSettlement =
         unchangedClaim && git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) !== '';
-      evidenceBundle(task, store.attempt(ref));
+      evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
       await write(() => {
         store.updateTask(ref, (t) => {
           t.state = 'landing';

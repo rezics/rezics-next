@@ -3,8 +3,6 @@
   "classes": {
     "implementation": {
       "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
-      "maxSteps": 300,
-      "maxMs": 7200000,
       "fallbacks": [
         { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
@@ -13,8 +11,6 @@
     },
     "interface": {
       "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "high", "poolClass": "codex" },
-      "maxSteps": 300,
-      "maxMs": 7200000,
       "fallbacks": [
         { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
@@ -23,8 +19,6 @@
     },
     "bulk-text": {
       "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
-      "maxSteps": 500,
-      "maxMs": 7200000,
       "fallbacks": [
         { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
@@ -33,8 +27,6 @@
     },
     "claim": {
       "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" },
-      "maxSteps": 300,
-      "maxMs": 7200000,
       "fallbacks": [
         { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" },
@@ -44,8 +36,6 @@
     },
     "specification": {
       "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "medium", "poolClass": "codex" },
-      "maxSteps": 200,
-      "maxMs": 3600000,
       "fallbacks": [
         { "cli": "cursor", "model": "gpt-5.6-sol", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }
@@ -53,8 +43,6 @@
     },
     "critical-path": {
       "first": { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
-      "maxSteps": 300,
-      "maxMs": 7200000,
       "fallbacks": [
         { "cli": "codex", "model": "gpt-6-luna", "effort": "max", "poolClass": "codex" },
         { "cli": "cursor", "model": "gpt-5.6-luna", "effort": "high", "poolClass": "cursor" },
@@ -63,8 +51,6 @@
     },
     "research": {
       "first": { "cli": "codex", "model": "gpt-6.1-sol", "effort": "high", "poolClass": "codex" },
-      "maxSteps": 200,
-      "maxMs": 3600000,
       "fallbacks": [
         { "cli": "cursor", "model": "gpt-5.6-sol", "effort": "high", "poolClass": "cursor" },
         { "cli": "grok", "model": "grok-4.7", "effort": "high", "poolClass": "grok" }

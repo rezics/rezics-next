@@ -3,10 +3,11 @@ import type { ManagerEvent, ManagerInbox } from './contracts.ts';
 import { agentReportingEvidence } from './agents.ts';
 import { migrate } from './db.ts';
 import { sameProcess, type ProcessIdentity } from './process.ts';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
-export const WIDTH_WORKER_THRESHOLD = 10;
-export const WIDTH_BUCKET_MS = 15 * 60_000;
-const WIDTH_PAGE_SIZE = 64;
+// Compatibility exports for synthetic callers; production reads its own loaded policy.
+export const WIDTH_WORKER_THRESHOLD = defaultPolicy.width.workerThreshold;
+export const WIDTH_BUCKET_MS = defaultPolicy.width.bucketMs;
 
 export const widthGovernorMigrations = [
   {
@@ -53,6 +54,7 @@ export type WidthSnapshot = {
 };
 
 export type WidthSnapshotOptions = {
+  policy?: ControlPolicy | undefined;
   /** Yield between indexed pages when called from the manager-host sweep. */
   yieldBetweenPages?: boolean;
   /** Test seam; production uses the existing process identity helper. */
@@ -215,11 +217,13 @@ function readSnapshotSync(
   const system = emptyCounts();
   const goals = new Map<string, MutableGoal>();
   const processIsLive = options.processIsLive ?? sameProcess;
+  const pageSize = (options.policy ?? defaultPolicy).width.pageSize;
+  // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, WIDTH_PAGE_SIZE, hasRetryIntents);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents);
     for (const row of rows) addRow(row, system, goals, processIsLive);
-    if (rows.length < WIDTH_PAGE_SIZE) break;
+    if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
   }
   const date = at instanceof Date ? at : new Date(at);
@@ -235,11 +239,13 @@ async function readSnapshotAsync(
   const system = emptyCounts();
   const goals = new Map<string, MutableGoal>();
   const processIsLive = options.processIsLive ?? sameProcess;
+  const pageSize = (options.policy ?? defaultPolicy).width.pageSize;
+  // The cursor precedes every persisted sequence; it is not a page-size policy.
   let cursor = -1;
   for (;;) {
-    const rows = pageQuery(db, cursor, WIDTH_PAGE_SIZE, hasRetryIntents);
+    const rows = pageQuery(db, cursor, pageSize, hasRetryIntents);
     for (const row of rows) addRow(row, system, goals, processIsLive);
-    if (rows.length < WIDTH_PAGE_SIZE) break;
+    if (rows.length < pageSize) break;
     cursor = rows[rows.length - 1]!.sequence;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
@@ -288,13 +294,18 @@ function hasUndispatchedWork(goal: WidthGoalSnapshot): boolean {
   return goal.ready > 0 || goal.pendingStarts > 0 || goal.held > 0 || goal.stopped > 0;
 }
 
-function widthEventSummary(goal: WidthGoalSnapshot): string {
+function widthEventSummary(goal: WidthGoalSnapshot, policy: ControlPolicy): string {
   const codexUnknown = goal.unknownCodexRunning + goal.unknownCodexClassification;
+  // One hour is a display unit here; the stopped-task deadline comes from policy.
+  const stoppedAge =
+    policy.backlog.stoppedTaskLimitMs === 60 * 60_000
+      ? 'an hour'
+      : `${policy.backlog.stoppedTaskLimitMs / 60_000} minutes`;
   return (
     `Width governor: this Goal has ${goal.running} confirmed live workers (${goal.unknownRunning} current running attempts have unknown process identity); ` +
     `Codex subset ${goal.codexRunning} confirmed live (${codexUnknown} Codex evidence unknown); ` +
     `current work counts: ready ${goal.ready}, durable pending starts ${goal.pendingStarts}, held ${goal.held}, stopped ${goal.stopped}, waiting ${goal.waiting}. ` +
-    'Recover, reshape, or dispatch real work. Act on each stopped task within an hour: retry with a rewritten brief, split it, or cancel it. Keep at least eight ready briefs in your backlog. ' +
+    `Recover, reshape, or dispatch real work. Act on each stopped task within ${stoppedAge}: retry with a rewritten brief, split it, or cancel it. Keep at least ${policy.backlog.lowWater} ready briefs in your backlog. ` +
     'Unsubmitted work is not observable from runtime metadata.'
   );
 }
@@ -306,27 +317,35 @@ export async function sweepWidthGovernor(
   db: Database,
   inbox: ManagerInbox,
   at: Date | number = new Date(),
-  options: { processIsLive?: (identity: ProcessIdentity) => boolean } = {},
+  options: WidthSnapshotOptions = {},
 ): Promise<WidthGovernorSweep> {
+  const policy = options.policy ?? defaultPolicy;
   migrate(db, widthGovernorMigrations);
   const snapshot = await readWidthSnapshot(db, at, {
     yieldBetweenPages: true,
+    policy,
     ...(options.processIsLive ? { processIsLive: options.processIsLive } : {}),
   });
   const date = at instanceof Date ? at : new Date(at);
-  const bucket = Math.floor(date.getTime() / WIDTH_BUCKET_MS);
+  const bucket = Math.floor(date.getTime() / policy.width.bucketMs);
   const deliveredGoals: string[] = [];
   for (let index = 0; index < snapshot.goals.length; index++) {
-    if (index > 0 && index % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+    if (index > 0 && index % policy.width.sweepYieldItems === 0)
+      await new Promise<void>((resolve) => setImmediate(resolve));
     const goal = snapshot.goals[index]!;
-    if (!goal.managerId || goal.managerConflict || goal.running >= WIDTH_WORKER_THRESHOLD || !hasUndispatchedWork(goal))
+    if (
+      !goal.managerId ||
+      goal.managerConflict ||
+      goal.running >= policy.width.workerThreshold ||
+      !hasUndispatchedWork(goal)
+    )
       continue;
 
     const event: ManagerEvent = {
       managerId: goal.managerId,
       goalId: goal.goal,
       kind: 'width',
-      summary: widthEventSummary(goal),
+      summary: widthEventSummary(goal, policy),
     };
     const delivered = db
       .transaction(() => {

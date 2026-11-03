@@ -21,8 +21,9 @@ import {
   watch,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
+import { temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
   processIdentity,
@@ -89,6 +90,7 @@ export function workerEnvironment(
     ...cleanAgentEnvironment(env),
     ...NO_COMPILE_CACHE,
     ...extra,
+    ...(worktree ? temporaryEnvironment(join(worktree, '.temp/worker-tmp')) : {}),
   });
   const wrapperDirectory = worktree && join(worktree, 'scripts', 'check-host');
   if (wrapperDirectory && existsSync(join(wrapperDirectory, 'docker')))
@@ -121,8 +123,9 @@ type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Brief
 /** How a worker runs the tests of the test files it changed: with the landing's own commands for them. */
 const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`; paths relative to that workspace), and fix failures you caused.";
-const LONG_WAIT =
-  'Wait for a long command, even one queued for a test slot, in its open session with one yield of at least 300 seconds (Codex: `write_stdin`, `yield_time_ms: 300000`); never start a duplicate, interrupt it, poll faster, or use sleep loops, `ps` or `pgrep`.';
+function longWait(policy: ControlPolicy['guidance']): string {
+  return `Wait for a long command, even one queued for a test slot, in its open session with one yield of at least ${policy.longCommandWaitMs / 1000} seconds (Codex: \`write_stdin\`, \`yield_time_ms: ${policy.longCommandWaitMs}\`); never start a duplicate, interrupt it, poll faster, or use sleep loops, \`ps\` or \`pgrep\`.`;
+}
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
 const UNFINISHED =
   'Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.';
@@ -151,6 +154,7 @@ export function workerCheckProtocol(
   stateDirectory?: string,
   proofRun?: ProofReservation,
   authorization?: ProofAuthorization,
+  policy: ControlPolicy = defaultPolicy,
 ): string {
   if (typeof briefOrContract !== 'string' && proofProtocolAuthorized(briefOrContract, proofRun))
     return [
@@ -186,7 +190,7 @@ export function workerCheckProtocol(
             'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy.',
           ]
         : []),
-      LONG_WAIT,
+      longWait(policy.guidance),
       OWN_TESTS,
       'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
       'This policy overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks.',
@@ -212,7 +216,7 @@ export function workerCheckProtocol(
         once,
         LOCAL_PLACEMENT,
         `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`,
-        LONG_WAIT,
+        longWait(policy.guidance),
         REGRESSION,
       ].join(' ');
     return [
@@ -220,7 +224,7 @@ export function workerCheckProtocol(
       LOCAL_PLACEMENT,
       `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`,
       WRAPPER_RESULT,
-      LONG_WAIT,
+      longWait(policy.guidance),
       REGRESSION,
     ].join(' ');
   }
@@ -231,14 +235,14 @@ export function workerCheckProtocol(
         ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
         : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
       ...(workerOwnedAcceptance ? ['Do not report success unless the chosen validation actually exits zero.'] : []),
-      LONG_WAIT,
+      longWait(policy.guidance),
       REGRESSION,
     ].join(' ');
   return [
     once,
     `Run it from the worktree root as \`${runner} -- <command...>\` with wrapper options the contract names.`,
     WRAPPER_RESULT,
-    LONG_WAIT,
+    longWait(policy.guidance),
     REGRESSION,
   ].join(' ');
 }
@@ -250,6 +254,7 @@ export function workerPrompt(
   mainCheckout: string,
   launchContext?: LaunchContext,
   stateDirectory = join(mainCheckout, '.temp', 'goal'),
+  policy: ControlPolicy = defaultPolicy,
 ): string {
   const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
   const contractMarkdown = launchContext
@@ -281,7 +286,7 @@ export function workerPrompt(
       `Work only in ${task.worktree}, at captured commit ${task.brief.proof?.sourceCommit}. The applicable AGENTS.md is already loaded.`,
       `The main checkout ${mainCheckout} is read-only.`,
       task.brief.markdown,
-      ...(launchContext ? [renderLaunchContext(launchContext)] : []),
+      ...(launchContext ? [renderLaunchContext(launchContext, policy.launchContext)] : []),
       'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
       workerCheckProtocol(
         task.worktree,
@@ -289,12 +294,13 @@ export function workerPrompt(
         stateDirectory,
         task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
         task.proofAuthorization,
+        policy,
       ),
     ].join('\n\n');
   const devProduct = devProductBrief(task.brief);
   const research = task.brief.kind === 'research';
   const manager = task.brief.manager ?? task.brief.goal ?? '<your manager>';
-  const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task), task.worktree);
+  const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task, policy), task.worktree);
   return [
     `AGENTS.md is already loaded. The main checkout ${mainCheckout} is read-only; write only inside ${task.worktree}${research ? ` and the reference clones under ${mainCheckout}/.reference/` : ''}.`,
     'The contract is self-sufficient: open the workflow skill, docs/development, architecture or scope only for a section it links. Batch reads, read line ranges of large files, read each file once. Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.',
@@ -315,7 +321,7 @@ export function workerPrompt(
         ? `, record it in one line in your summary${research ? '' : ' and the owning document'}, send it with \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
         : ', record it in one line in your summary, and continue.'
     }`,
-    `A blocker is only two requirements in existing specs or tests that cannot both hold (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after two retries: a \`tool\` blocker starting with the exact error line; never weaken a check instead.${devProductBrief(task.brief) ? ' On dev, when your change is complete and committed and only the shared check infrastructure fails, that is not a blocker: report success and name each check that could not run with its error line; dev is verified after the merge.' : ''} Code another Goal has not delivered is not a blocker: build against its documented contract or a minimal seam, and name it.${
+    `A blocker is only two requirements in existing specs or tests that cannot both hold (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after ${['zero', 'one', 'two'][policy.guidance.toolFailureRetries] ?? String(policy.guidance.toolFailureRetries)} retries: a \`tool\` blocker starting with the exact error line; never weaken a check instead.${devProductBrief(task.brief) ? ' On dev, when your change is complete and committed and only the shared check infrastructure fails, that is not a blocker: report success and name each check that could not run with its error line; dev is verified after the merge.' : ''} Code another Goal has not delivered is not a blocker: build against its documented contract or a minimal seam, and name it.${
       research
         ? ''
         : ` A question needing a large survey of products or sources is a \`spec-conflict\` blocker starting "Research needed:"; research the rest yourself in owner documents, primary sources and ${mainCheckout}/.reference/ (INDEX.md), read any reference source the contract names before designing, and list what you read.`
@@ -327,7 +333,7 @@ export function workerPrompt(
     continuesItself(task)
       ? `If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at \`${CONTINUATION_DIRECTORY}/<short-name>.md\` by copying your contract's front matter and changing only paths, acceptance and estimate (goal ${task.brief.goal}, manager ${manager}), followed by the remaining outcome in user terms. Unfinished work is not a blocker: return success and name the continuation.`
       : UNFINISHED,
-    'Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches. Summary at most 120 words: what changed, decisions, files outside declared paths, what was not run. Blocker detail at most 80 words. Commit no evidence or audit files.',
+    `Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches. Summary at most ${policy.guidance.summaryWords} words: what changed, decisions, files outside declared paths, what was not run. Blocker detail at most ${policy.guidance.blockerWords} words. Commit no evidence or audit files.`,
     task.brief.kind === 'bulk-text'
       ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.'
       : '',
@@ -342,22 +348,26 @@ export function workerPrompt(
     evidenceText
       ? 'The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.'
       : '',
-    renderLaunchContext(launchContext),
+    renderLaunchContext(launchContext, policy.launchContext),
     consultation ? `Read-only consultation:\n${consultation}` : '',
     storybookPrompt(task),
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
-    workerCheckProtocol(task.worktree, task.brief, stateDirectory),
+    workerCheckProtocol(task.worktree, task.brief, stateDirectory, undefined, undefined, policy),
   ]
     .filter(Boolean)
     .join('\n\n');
 }
 /** Paths this task's branch changes against its base, committed or not; empty when Git cannot tell. */
-function branchChangedPaths(task: Pick<Task, 'worktree' | 'base'>): string[] {
+function branchChangedPaths(task: Pick<Task, 'worktree' | 'base'>, policy: ControlPolicy): string[] {
   if (!task.worktree || !task.base || !existsSync(task.worktree)) return [];
   const run = (args: string[]) => {
-    const result = spawnSync('git', args, { cwd: task.worktree, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    const result = spawnSync('git', args, {
+      cwd: task.worktree,
+      encoding: 'utf8',
+      maxBuffer: policy.workerPrompt.gitBufferBytes,
+    });
     return result.status === 0 ? result.stdout : '';
   };
   const committed = run(['diff', '--name-only', '--no-renames', '-z', task.base, 'HEAD', '--']).split('\0');
@@ -482,7 +492,7 @@ except OSError:
 open(exit_path+'.tmp','w').write(json.dumps({'code':code,'signal':sig}))
 os.rename(exit_path+'.tmp',exit_path)
 `;
-export type HostCapacity = { maxWorkers: number; minAvailableMiB: number };
+export type HostCapacity = { maxWorkers: number; minAvailableMiB: number; urgentSlots?: number };
 export type CapacityRelease = () => void;
 
 /** Whether one more worker may start: below the worker cap and above the memory floor. */
@@ -508,7 +518,7 @@ export function capacityAvailable(
   } catch {
     /* Defaults. */
   }
-  const running = store.runningAttemptsCount() + admittedStarts(stateDirectory);
+  const running = store.capacityAttemptsCount(false) + admittedStarts(stateDirectory);
   return hasCapacity(running, availableMiB(), capacity);
 }
 /** Stabilize and critical-path starts receive a bounded queue head start while respecting host capacity. */
@@ -526,14 +536,22 @@ export async function awaitHostCapacity(
   first = false,
   taskId?: string,
   targetAttempt?: number,
-  options: { pollIntervalMs?: number; now?: () => number; policy?: ControlPolicy['capacity'] | undefined } = {},
+  options: {
+    pollIntervalMs?: number;
+    now?: () => number;
+    policy?: ControlPolicy['capacity'] | undefined;
+    leasePolicy?: ControlPolicy['leases'] | undefined;
+    urgent?: boolean | undefined;
+    availableMiB?: () => number;
+  } = {},
 ): Promise<CapacityRelease> {
   const policy = options.policy ?? defaultPolicy.capacity;
+  const urgent = options.urgent === true;
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
-  if (!existsSync(file)) return () => {};
+  if (!existsSync(file) && !urgent) return () => {};
   // Waiters hold tickets so the oldest starts first: polling alone let a start wait over an hour behind newer ones.
-  const queue = join(stateDirectory, 'capacity-queue');
+  const queue = join(stateDirectory, urgent ? 'urgent-capacity-queue' : 'capacity-queue');
   // The ticket names its task, so the host can tell a waiting start from a lost one. Critical-path starts used to skip
   // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
   // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
@@ -560,31 +578,35 @@ export async function awaitHostCapacity(
       });
       let admissionLease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'));
+        admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'), options.leasePolicy);
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
         await new Promise((resolve) => setTimeout(resolve, policy.admissionRetryMs));
         continue;
       }
       try {
-        if (!existsSync(file)) return () => {};
+        if (!existsSync(file) && !urgent) return () => {};
         let capacity = policy;
         try {
           capacity = { ...policy, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
         } catch {
           /* Defaults. */
         }
-        const admitted = admittedStarts(stateDirectory);
-        const running = store.runningAttemptsCount();
+        const admitted = admittedStarts(stateDirectory, urgent);
+        const running = store.capacityAttemptsCount(urgent, taskId, targetAttempt);
         const ahead = waitersAhead(queue, ticket);
-        if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
+        const limit = urgent ? capacity.urgentSlots : capacity.maxWorkers;
+        const memory = (options.availableMiB ?? availableMiB)();
+        if (running + admitted + ahead < limit && memory >= capacity.minAvailableMiB) {
           const reservation = join(queue, `${ticket}.admitted`);
           renameSync(join(queue, ticket), reservation);
           return releaseWhenStarted(store, reservation, taskId, targetAttempt, policy.reservationPollMs);
         }
         if (!reported)
           console.error(
-            `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
+            urgent
+              ? `Waiting for urgent host capacity (${running} urgent workers, ${ahead} urgent starts ahead, slots ${limit}; available memory ${Math.floor(memory)} MiB, floor ${capacity.minAvailableMiB} MiB).`
+              : `Waiting for host capacity (${running} workers running, ${ahead} starts ahead, cap ${capacity.maxWorkers}).`,
           );
         reported = true;
       } finally {
@@ -605,8 +627,8 @@ export async function awaitHostCapacity(
     rmSync(join(queue, ticket), { force: true });
   }
 }
-function admittedStarts(stateDirectory: string): number {
-  const queue = join(stateDirectory, 'capacity-queue');
+function admittedStarts(stateDirectory: string, urgent = false): number {
+  const queue = join(stateDirectory, urgent ? 'urgent-capacity-queue' : 'capacity-queue');
   try {
     return readdirSync(queue).filter((name) => name.endsWith('.admitted') && liveTicket(queue, name)).length;
   } catch {
@@ -657,7 +679,7 @@ function releaseWhenStarted(
   targetAttempt: number | undefined,
   pollIntervalMs: number,
 ): CapacityRelease {
-  const [, rawPid] = reservation.split('-');
+  const [, rawPid] = basename(reservation).split('-');
   const identity = processIdentity(Number(rawPid));
   let timer: ReturnType<typeof setInterval> | undefined;
   let released = false;
@@ -689,7 +711,11 @@ function releaseWhenStarted(
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
 export function capacityWaiters(stateDirectory: string): Set<string> {
-  const queue = join(stateDirectory, 'capacity-queue');
+  return new Set(
+    ['capacity-queue', 'urgent-capacity-queue'].flatMap((lane) => [...laneWaiters(join(stateDirectory, lane))]),
+  );
+}
+function laneWaiters(queue: string): Set<string> {
   let names: string[];
   try {
     names = readdirSync(queue);
@@ -725,13 +751,14 @@ export async function launch(
   prompt: string,
   codex?: Settings['codex'],
   resumeSession?: string,
+  policy: ControlPolicy = defaultPolicy,
 ): Promise<RunningWorker> {
   if (!agentAdapter(attempt.profile.cli).canResume) resumeSession = undefined;
   store.assertCurrent(attempt);
   if (
     task.brief.kind === 'verification' &&
     (!registeredProof(task.brief, task.proofAuthorization) ||
-      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? ''))
+      !proofSourceUnchanged(task, task.proofAuthorization?.integrationBranch ?? '', policy.proof))
   )
     throw new Error('Proof execution unavailable: authenticated exact read-only source registration required');
   recordFlow(store.db, {
@@ -749,7 +776,7 @@ export async function launch(
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
-  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt);
+  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt, policy);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
@@ -800,6 +827,7 @@ export async function launch(
         wrapperArgs,
         startOptions,
         () => existsSync(pidPath) || existsSync(exitPath),
+        policy.workerResources,
       );
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);
@@ -828,7 +856,7 @@ export async function launch(
   } catch (error) {
     if (unrecordedFixtureWorker) {
       try {
-        await terminateProcessGroup(unrecordedFixtureWorker, 250);
+        await terminateProcessGroup(unrecordedFixtureWorker, policy.worker.fixtureCleanupGraceMs, policy.process);
       } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], 'fixture ownership failed and its worker could not be reaped');
       }
@@ -839,7 +867,7 @@ export async function launch(
     closeSync(err);
   }
   const saved = store.attempt(attempt);
-  const exited = waitForWorkerExit(saved.process, attempt.logPath);
+  const exited = waitForWorkerExit(saved.process, attempt.logPath, policy.process);
   void exited.catch(() => {});
   return { exited, attempt: saved, logStartOffset, resuming };
 }
