@@ -91,6 +91,23 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   sourceStatisticClear?: ImportSourceStatisticClear;
 } & Extra;
 
+export type StagingCaptureIdentity = Readonly<{
+  sha256: string;
+  bytes: number;
+  sourceAlias: string;
+  sourceKind: SourceId;
+  converterRevision: string;
+  decoderId: string;
+  checkpointVersion: number;
+  disappearanceThreshold: number;
+}>;
+
+export type StagingCheckpointRequest = Readonly<{
+  action: 'acquire' | 'resume';
+  generation?: string;
+  identity: StagingCaptureIdentity;
+}>;
+
 export type RunOptions = Readonly<{
   source: string;
   converter_revision: string;
@@ -158,6 +175,7 @@ export type ImportProgressObserver = Readonly<{
   onPhase?(phase: ImportProgressPhase): void | Promise<void>;
   onRun?(runId: string, resumed: boolean): void;
   onStaged?(count: number): void;
+  onVerifiedPrefix?(count: number): void;
   onSourceCompleted?(): void;
   onAcknowledgedEffects?(count: number): void;
   onClassified?(kind: ImportProgressKind): void;

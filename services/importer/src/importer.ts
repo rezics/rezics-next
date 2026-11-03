@@ -20,6 +20,7 @@ import type {
   RunResultSink,
   RunStatus,
   SourceRegistration,
+  StagingCheckpointRequest,
 } from './import-contract.ts';
 import { ImportTransportError } from './import-client.ts';
 import {
@@ -48,6 +49,13 @@ import { createSourceRegistration } from './source-registry.ts';
 import { resolveOwnReferences } from './own-references.ts';
 import { ConversionDiagnosticError, type ConversionDiagnosticPhase } from './conversion-diagnostics.ts';
 import { OpenLibraryDumpSetError } from './open-library-dump-set.ts';
+import {
+  STAGING_ACTIVE_GENERATION,
+  STAGING_INCOMPATIBLE,
+  STAGING_MISSING_GENERATION,
+  StagingCheckpointError,
+  evaluateResume,
+} from './staging-checkpoint.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
@@ -81,6 +89,9 @@ export type ImportRunResult = {
   unchanged: string[];
   vanished: string[];
   diagnostic: string;
+  runId?: string;
+  committedPrefix?: number;
+  checkpointed?: boolean;
 };
 export type ImportRunOptions = {
   disappearanceThreshold?: number;
@@ -90,10 +101,12 @@ export type ImportRunOptions = {
   collectionLimit?: number;
   sink?: RunResultSink;
   progress?: ImportProgressObserver;
+  checkpoint?: StagingCheckpointRequest;
 };
 export type ImporterOptions = {
   path: string | Database;
   transport: ImportTransport;
+  create?: boolean;
   recordConcurrency?: number;
   mediaDeadlineMs?: number;
   mediaResolver?: ImportMediaResolver;
@@ -110,6 +123,7 @@ export type ImporterOptions = {
       records: readonly { recordKey: string; bytes: number }[],
     ): void;
     onAcknowledged?(recordKey: string): void;
+    onStagingConversion?(recordKey: string): void;
   };
 };
 
@@ -160,10 +174,10 @@ export class Importer {
       throw new TypeError('mediaDeadlineMs must be a non-negative finite number');
     this.recordConcurrency = concurrency;
     this.mediaDeadlineMs = mediaDeadlineMs;
-    this.session = new ImportSession(
-      options.path,
-      options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {},
-    );
+    this.session = new ImportSession(options.path, {
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      ...(options.create === false ? { create: false } : {}),
+    });
   }
 
   async runDump(
@@ -233,6 +247,159 @@ export class Importer {
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');
     return result;
+  }
+
+  private async stageCapture(
+    registration: SourceRegistration,
+    records: AsyncIterable<SourceRecord>,
+    run: Run,
+    options: ImportRunOptions,
+    signal: AbortSignal,
+    state: { resume: number; skipped: number; checkpointed: boolean; action: 'acquire' | 'resume' | 'ordinary' },
+  ): Promise<
+    | { skipped: number; committedPrefix: number }
+    | { status: RunStatus; diagnostic: string; committedPrefix: number }
+  > {
+    const store = this.session.store;
+    const pageSize = state.checkpointed ? 1 : 100;
+    const buffered: { staged: Staged<SourceProjection>; conversion: ImportConversion; skipped: boolean }[] = [];
+    let skipped = state.skipped;
+    let ordinal = 0;
+    let rolling = state.resume;
+    let stagingStarted = false;
+    const enterStaging = () => {
+      if (stagingStarted) return;
+      stagingStarted = true;
+      return options.progress?.onPhase?.('staging');
+    };
+    const flush = () => {
+      if (buffered.length === 0) return;
+      const commit = () => {
+        const page = buffered.splice(0);
+        let failure: unknown;
+        let stagedCount = 0;
+        this.atomic(() => {
+          for (const item of page) {
+            try {
+              store.stage(run, item.staged);
+              this.retainDiagnostics(run, item.staged, item.conversion, 'staging');
+              stagedCount++;
+              if (state.checkpointed) {
+                rolling++;
+                store.commitStagingRecord(
+                  run,
+                  {
+                    ordinal: rolling,
+                    recordKey: item.staged.row.recordKey,
+                    digest: item.staged.row.digest,
+                  },
+                  item.skipped ? 1 : 0,
+                );
+              }
+            } catch (error) {
+              if (error instanceof ConversionDiagnosticError) throw error;
+              failure = error;
+              return;
+            }
+          }
+        });
+        options.progress?.onStaged?.(stagedCount);
+        if (failure !== undefined) throw failure;
+      };
+      const phase = enterStaging();
+      return phase !== undefined ? Promise.resolve(phase).then(commit) : commit();
+    };
+    try {
+      for await (const record of records) {
+        if (signal.aborted) throw new Interrupted('Import was interrupted');
+        if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
+        ordinal++;
+        if (state.checkpointed && ordinal <= state.resume) {
+          const prefix = store.prefixRecord(run, ordinal);
+          if (!prefix || prefix.recordKey !== record.key)
+            throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+          const staged = store.stagedIdentity(run, record.key);
+          if (!staged || staged.digest !== prefix.digest || !staged.projection)
+            throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+          options.progress?.onVerifiedPrefix?.(1);
+          continue;
+        }
+        this.options.observer?.onStagingConversion?.(record.key);
+        const conversion = registration.convert(
+          { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
+          { source: registration.source },
+        );
+        const ignored = 'outcome' in conversion && conversion.outcome === 'ignored';
+        if (ignored) {
+          if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
+          skipped++;
+          options.progress?.onSkipped?.(1);
+        }
+        buffered.push({
+          conversion,
+          skipped: ignored,
+          staged: {
+            row: {
+              source: registration.source,
+              recordKey: record.key,
+              recordRevision: conversion.record_revision ?? 'unversioned',
+              converter_revision: registration.converter_revision,
+              digest: conversion.digest,
+              state: 'present',
+            },
+            projection: {
+              sourceKind: registration.sourceKind,
+              normalizedRecord: conversion.normalized,
+              ...(ignored
+                ? {}
+                : registration.describeSourceRecord
+                  ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
+                  : {}),
+            },
+          },
+        });
+        if (buffered.length >= pageSize) {
+          const pending = flush();
+          if (pending !== undefined) await pending;
+        }
+      }
+      if (state.checkpointed && ordinal < state.resume)
+        throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+      const phase = enterStaging();
+      if (phase !== undefined) await phase;
+      const pending = flush();
+      if (pending !== undefined) await pending;
+    } catch (error) {
+      const interrupted =
+        signal.aborted ||
+        error instanceof Interrupted ||
+        (error instanceof DOMException && error.name === 'AbortError');
+      const preserve = interrupted || state.action === 'resume';
+      if (!preserve) store.seal(run, { complete: false, reason: 'malformed' });
+      if (error instanceof StagingCheckpointError)
+        return { status: 'invalid-dump', diagnostic: error.message, committedPrefix: rolling };
+      const member =
+        error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
+          ? ` (member ${error.memberIndex})`
+          : '';
+      return {
+        status: interrupted ? 'interrupted' : 'invalid-dump',
+        diagnostic:
+          error instanceof OpenLibraryDumpSetError || !(error instanceof DumpInputError)
+            ? `Input is incomplete or invalid${member}`
+            : error.message,
+        committedPrefix: rolling,
+      };
+    }
+    const seal = store.seal(run, { complete: true, skipped });
+    options.progress?.onSourceCompleted?.();
+    if (seal.status !== 'ready')
+      return {
+        status: seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump',
+        diagnostic: seal.diagnostic,
+        committedPrefix: rolling,
+      };
+    return { skipped, committedPrefix: rolling };
   }
 
   private retainDiagnostics(
@@ -1484,7 +1651,17 @@ export class Importer {
       };
       sinks[kind]?.(key);
     };
-    const finish = (status: RunStatus, diagnostic: string) => Object.assign(result, { status, diagnostic });
+    const checkpoint = options.checkpoint;
+    let runId: string | undefined;
+    let committedPrefix: number | undefined;
+    const finish = (status: RunStatus, diagnostic: string) =>
+      Object.assign(result, {
+        status,
+        diagnostic,
+        ...(runId ? { runId } : {}),
+        ...(committedPrefix !== undefined ? { committedPrefix } : {}),
+        ...(checkpoint ? { checkpointed: true } : {}),
+      });
     const runController = new AbortController();
     const signal = AbortSignal.any([
       this.shutdown.signal,
@@ -1501,13 +1678,45 @@ export class Importer {
       let run = this.session.reopen(ownership);
       let resumed = !!run;
       let skipped = 0;
-      if (run) {
+      let checkpointed = false;
+      if (checkpoint?.action === 'resume') {
+        if (!run || run.id !== checkpoint.generation) return finish('invalid-dump', STAGING_MISSING_GENERATION);
+        options.progress?.onRun?.(run.id, true);
+        runId = run.id;
+        const state = store.stagingResumeState(run);
+        const compatibility = evaluateResume(
+          store.stagingCheckpoint(run.source, run.id),
+          checkpoint.identity,
+          state,
+        );
+        if (!compatibility.ok) return finish('invalid-dump', compatibility.message);
+        skipped = compatibility.checkpoint.skipped;
+        committedPrefix = compatibility.checkpoint.committedOrdinal;
+        result.skipped = skipped;
+        checkpointed = true;
+        const staged = await this.stageCapture(registration, records, run, options, signal, {
+          resume: compatibility.checkpoint.committedOrdinal,
+          skipped,
+          checkpointed: true,
+          action: 'resume',
+        });
+        if ('status' in staged) {
+          committedPrefix = staged.committedPrefix;
+          return finish(staged.status, staged.diagnostic);
+        }
+        skipped = staged.skipped;
+        committedPrefix = staged.committedPrefix;
+        result.skipped = skipped;
+        resumed = false;
+      } else if (run) {
         options.progress?.onRun?.(run.id, true);
         const resuming = options.progress?.onPhase?.('resuming');
         if (resuming !== undefined) await resuming;
         // Capture sealed accounting before finalization can mark or otherwise retire the run.
         skipped = store.skipped(run);
         result.skipped = skipped;
+        runId = run.id;
+        if (checkpoint?.action === 'acquire') return finish('invalid-dump', STAGING_ACTIVE_GENERATION);
         // A staging run has no permitted effects and can be discarded. A sealed
         // or finalizing run must finish its durable payload before newer input.
         let final: 'incomplete' | 'more' | 'complete' | null = null;
@@ -1520,6 +1729,7 @@ export class Importer {
           if (store.abandon(run) !== 'abandoned') throw new Error('Cannot discard uncertain import');
           run = null;
           resumed = false;
+          runId = undefined;
         } else {
           options.progress?.onSkipped?.(skipped);
           if (final !== 'incomplete') {
@@ -1532,110 +1742,32 @@ export class Importer {
         }
       }
       if (!run) {
-        const next = store.begin(
-          registration.source,
+        if (checkpoint?.action === 'resume') return finish('invalid-dump', STAGING_MISSING_GENERATION);
+        const beginOptions =
           options.disappearanceThreshold === undefined
             ? {}
-            : { disappearanceThreshold: options.disappearanceThreshold },
-        );
+            : { disappearanceThreshold: options.disappearanceThreshold };
+        const next =
+          checkpoint?.action === 'acquire'
+            ? store.beginCheckpointed(registration.source, checkpoint.identity, beginOptions)
+            : store.begin(registration.source, beginOptions);
         if (next === 'busy') return finish('busy', 'Source has active durable work');
         run = next;
+        runId = run.id;
         options.progress?.onRun?.(run.id, false);
-        try {
-          // Staged rows need no durability before the seal, so a page of them shares one commit. The
-          // result equals staging one by one: the rows before a failure and its invalid mark persist.
-          const buffered: { staged: Staged<SourceProjection>; conversion: ImportConversion }[] = [];
-          let stagingStarted = false;
-          const enterStaging = () => {
-            if (stagingStarted) return;
-            stagingStarted = true;
-            return options.progress?.onPhase?.('staging');
-          };
-          const flush = () => {
-            if (buffered.length === 0) return;
-            const commit = () => {
-              const page = buffered.splice(0);
-              let failure: unknown;
-              let stagedCount = 0;
-              this.atomic(() => {
-                for (const item of page) {
-                  try {
-                    store.stage(next, item.staged);
-                    this.retainDiagnostics(next, item.staged, item.conversion, 'staging');
-                    stagedCount++;
-                  } catch (error) {
-                    if (error instanceof ConversionDiagnosticError) throw error;
-                    failure = error;
-                    return;
-                  }
-                }
-              });
-              options.progress?.onStaged?.(stagedCount);
-              if (failure !== undefined) throw failure;
-            };
-            const phase = enterStaging();
-            return phase !== undefined ? Promise.resolve(phase).then(commit) : commit();
-          };
-          for await (const record of records) {
-            if (signal.aborted) throw new Interrupted('Import was interrupted');
-            if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
-            const conversion = registration.convert(
-              { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
-              { source: registration.source },
-            );
-            if ('outcome' in conversion && conversion.outcome === 'ignored') {
-              if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
-              skipped++;
-              options.progress?.onSkipped?.(1);
-            }
-            buffered.push({
-              conversion,
-              staged: {
-                row: {
-                  source: registration.source,
-                  recordKey: record.key,
-                  recordRevision: conversion.record_revision ?? 'unversioned',
-                  converter_revision: registration.converter_revision,
-                  digest: conversion.digest,
-                  state: 'present',
-                },
-                projection: {
-                  sourceKind: registration.sourceKind,
-                  normalizedRecord: conversion.normalized,
-                  ...('outcome' in conversion && conversion.outcome === 'ignored'
-                    ? {}
-                    : registration.describeSourceRecord
-                      ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
-                      : {}),
-                },
-              },
-            });
-            if (buffered.length >= 100) {
-              const pending = flush();
-              if (pending !== undefined) await pending;
-            }
-          }
-          const phase = enterStaging();
-          if (phase !== undefined) await phase;
-          const pending = flush();
-          if (pending !== undefined) await pending;
-        } catch (error) {
-          store.seal(run, { complete: false, reason: 'malformed' });
-          const member =
-            error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
-              ? ` (member ${error.memberIndex})`
-              : '';
-          return finish(
-            signal.aborted || error instanceof Interrupted ? 'interrupted' : 'invalid-dump',
-            error instanceof OpenLibraryDumpSetError || !(error instanceof DumpInputError)
-              ? `Input is incomplete or invalid${member}`
-              : error.message,
-          );
+        checkpointed = checkpoint?.action === 'acquire';
+        const staged = await this.stageCapture(registration, records, run, options, signal, {
+          resume: 0,
+          skipped: 0,
+          checkpointed,
+          action: checkpointed ? 'acquire' : 'ordinary',
+        });
+        if ('status' in staged) {
+          committedPrefix = staged.committedPrefix;
+          return finish(staged.status, staged.diagnostic);
         }
-        const seal = store.seal(run, { complete: true, skipped });
-        options.progress?.onSourceCompleted?.();
-        if (seal.status !== 'ready')
-          return finish(seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump', seal.diagnostic);
+        skipped = staged.skipped;
+        committedPrefix = staged.committedPrefix;
         result.skipped = skipped;
       }
       result.skipped = skipped;

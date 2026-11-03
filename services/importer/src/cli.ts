@@ -1,5 +1,5 @@
 import type { Database } from 'bun:sqlite';
-import type { FileHandle } from 'node:fs/promises';
+import { lstat, type FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
@@ -10,7 +10,13 @@ import { DEFAULT_DUMP_CHUNK_BYTES, observeDumpRetention } from './dumps-bytes.ts
 import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
 import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
-import type { ImportProgressObserver, ImportProgressPhase, SourceRegistration } from './import-contract.ts';
+import type {
+  ImportProgressObserver,
+  ImportProgressPhase,
+  SourceRegistration,
+  StagingCaptureIdentity,
+  StagingCheckpointRequest,
+} from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
 import {
@@ -43,6 +49,7 @@ import {
 import {
   DumpInputError,
   fileChunks,
+  fingerprintDump,
   observedEntries,
   openDump,
   openLibraryMetadata,
@@ -53,6 +60,13 @@ import {
 import { admitOpenLibraryDumpSet, OpenLibraryDumpSetError } from './open-library-dump-set.ts';
 import { readOpenLibraryDumpSet } from './open-library-dump-set-records.ts';
 import type { OpenLibraryDumpSetAdmission } from './open-library-dump-set.ts';
+import {
+  STAGING_COST,
+  STAGING_MISSING_STATE,
+  STAGING_UNSUPPORTED_INPUT,
+  captureIdentity,
+  isStagingCheckpointSource,
+} from './staging-checkpoint.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,6 +81,7 @@ export type ImportCliObserver = {
   onDatabaseOpen?(path: string): void;
   onInputPass?(kind: 'dump' | 'vndb-entries'): void;
   onInputChunk?(kind: 'dump' | 'vndb-entries', bytes: number, backingBytes: number): void;
+  onFingerprint?(bytes: number): void;
   onInputBuffer?(bytes: number): void;
   onPageRecords?(records: number): void;
   onCoordinator?(input: {
@@ -118,6 +133,8 @@ type Config = {
   progressMode?: ImportProgressMode;
   compression: DumpCompression;
   decodeBudget?: number;
+  mode: 'ordinary' | 'checkpoint-staging' | 'resume-staging';
+  generation?: string;
 };
 
 class InputFailure extends DumpInputError {}
@@ -128,6 +145,7 @@ function usage(): string {
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       [--compression none|gzip] [--decode-budget <bytes>]',
+    '       [--checkpoint-staging] [--resume-staging --generation <id>]',
     '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
@@ -138,8 +156,10 @@ function usage(): string {
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> --operation <operation-id>',
     '       --resolve --reviewed-observation <64-hex> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
-    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --help',
+    'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --checkpoint-staging --resume-staging --generation --help',
     'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. A .gz suffix is not a source identity. --decode-budget is a gzip decoded-byte ceiling (default 256 GiB). Dump-set members are decompressed local files.',
+    '--checkpoint-staging and --resume-staging apply only to one uncompressed Open Library or Wikidata regular file. They re-hash the complete file before any capture or resume mutation. Default import still discards unsealed staging. After sealing, resume with the ordinary command; do not replace input. Dump-set manifests are not a checkpointed capture.',
+    STAGING_COST,
   ].join('\n');
 }
 
@@ -154,6 +174,7 @@ function parse(argv: readonly string[]): Config | 'help' {
   if (argv.length === 1 && argv[0] === '--help') return 'help';
 
   const values = new Map<string, string>();
+  const flags = new Set<string>();
   const valueFlags = new Set([
     '--source',
     '--dump',
@@ -169,12 +190,25 @@ function parse(argv: readonly string[]): Config | 'help' {
     '--progress',
     '--compression',
     '--decode-budget',
+    '--generation',
   ]);
+  const booleanFlags = new Set(['--checkpoint-staging', '--resume-staging']);
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index]!;
+    if (booleanFlags.has(flag)) {
+      if (flags.has(flag) || values.has(flag)) throw new InputFailure();
+      flags.add(flag);
+      continue;
+    }
     if (!valueFlags.has(flag) || values.has(flag)) throw new InputFailure();
     const value = argv[++index];
-    if (value === undefined || valueFlags.has(value) || value === '--help' || value.length === 0)
+    if (
+      value === undefined ||
+      valueFlags.has(value) ||
+      booleanFlags.has(value) ||
+      value === '--help' ||
+      value.length === 0
+    )
       throw new InputFailure();
     values.set(flag, value);
   }
@@ -210,6 +244,15 @@ function parse(argv: readonly string[]): Config | 'help' {
   if (!state.trim() || state === '-') throw new InputFailure();
   if (!accountKey.trim()) throw new InputFailure();
 
+  const checkpointStaging = flags.has('--checkpoint-staging');
+  const resumeStaging = flags.has('--resume-staging');
+  if (checkpointStaging && resumeStaging) throw new InputFailure();
+  const generation = values.get('--generation');
+  if (resumeStaging) {
+    if (!generation || !/^[1-9][0-9]*$/.test(generation)) throw new InputFailure();
+  } else if (generation !== undefined && !checkpointStaging) {
+    throw new InputFailure();
+  } else if (checkpointStaging && generation !== undefined) throw new InputFailure();
   const result: Config = {
     source: source as SourceKind,
     ...(dump === undefined ? {} : { dump }),
@@ -221,6 +264,8 @@ function parse(argv: readonly string[]): Config | 'help' {
     client,
     auth,
     compression: 'none',
+    mode: resumeStaging ? 'resume-staging' : checkpointStaging ? 'checkpoint-staging' : 'ordinary',
+    ...(generation ? { generation } : {}),
   };
   const compression = values.get('--compression');
   if (compression !== undefined) result.compression = parseDumpCompression(compression);
@@ -245,6 +290,15 @@ function parse(argv: readonly string[]): Config | 'help' {
     const parsed = Number(threshold);
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new InputFailure();
     result.disappearanceThreshold = parsed;
+  }
+  if (result.mode !== 'ordinary') {
+    if (
+      result.dumpSet !== undefined ||
+      result.dump === '-' ||
+      result.compression !== 'none' ||
+      !isStagingCheckpointSource(result.source)
+    )
+      throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
   }
   return result;
 }
@@ -413,6 +467,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   let dumpSet: OpenLibraryDumpSetAdmission | undefined;
   let importer: Importer | undefined;
   let lastHttpStatus: number | undefined;
+  let capture: StagingCaptureIdentity | undefined;
   const clock = options.clock ?? {
     now: () => Date.now(),
     sleep: async (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
@@ -432,6 +487,27 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       );
     } else {
       dumpHandle = await openDump(config.dump!, handles);
+      if (config.mode !== 'ordinary') {
+        if (!dumpHandle) throw new DumpInputError(STAGING_UNSUPPORTED_INPUT, 'checkpoint-unsupported');
+        const fingerprint = await fingerprintDump(dumpHandle, signal, options.observer);
+        capture = captureIdentity({
+          sha256: fingerprint.sha256,
+          bytes: fingerprint.bytes,
+          sourceAlias: config.sourceAlias ?? config.source,
+          sourceKind: config.source,
+          converterRevision: registration.converter_revision,
+          disappearanceThreshold: config.disappearanceThreshold ?? 0.2,
+        });
+        if (config.mode === 'resume-staging') {
+          let stateStat: Awaited<ReturnType<typeof lstat>>;
+          try {
+            stateStat = await lstat(config.state);
+          } catch {
+            throw new DumpInputError(STAGING_MISSING_STATE);
+          }
+          if (!stateStat.isFile()) throw new DumpInputError(STAGING_MISSING_STATE);
+        }
+      }
     }
     tokenProvider = await createAccountTokenProvider({
       accountKeyPath: config.accountKey,
@@ -508,6 +584,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
         onPhase: (phase) => progress.setPhase(phase),
         onRun: (run, resumed) => progress.setRun(run, resumed),
         onStaged: (count) => progress.add('stagedRecords', count),
+        onVerifiedPrefix: (count) => progress.add('verifiedPrefix', count),
         onSourceCompleted: () => progress.setSourceComplete(),
         onAcknowledgedEffects: (count) => progress.add('acknowledgedEffects', count),
         onClassified: (kind) => progress.add(progressCounters[kind]),
@@ -576,6 +653,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   let output: ImportCliResult = { code: 1, stdout: '', stderr: diagnostic('Import failed safely.'), openHandles: 0 };
   try {
     await progress?.setPhase('acquiring');
+    if (capture) progress?.add('inputBytes', capture.bytes);
     options.observer?.onDatabaseOpen?.(config.state);
     const importerOptions: ImporterOptions = {
       path: config.state,
@@ -584,6 +662,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       // Keep Importer's cancellable native timer unless a clock was explicitly supplied.
       ...(options.clock ? { sleep: (ms: number, sleepSignal: AbortSignal) => clockSleep(clock, ms, sleepSignal) } : {}),
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      ...(config.mode === 'resume-staging' ? { create: false } : {}),
     };
     importer = (options.createImporter ?? createImporter)(importerOptions);
     const media = createMediaResolver({
@@ -778,6 +857,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             : { disappearanceThreshold: config.disappearanceThreshold }),
           signal,
           ...(progressHooks ? { progress: progressHooks } : {}),
+          ...(checkpointRequest(config, capture)
+            ? { checkpoint: checkpointRequest(config, capture)! }
+            : {}),
         });
         output = resultFor(run, lastHttpStatus, signal);
       } finally {
@@ -786,21 +868,29 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     }
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
+    const missingState =
+      config.mode === 'resume-staging' &&
+      error instanceof Error &&
+      /unable to open database|SQLITE_CANTOPEN|no such file/i.test(error.message);
     output = {
       code: interrupted
         ? 130
-        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError
+        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError || missingState
           ? 2
           : 1,
       stdout: '',
       stderr: diagnostic(
         interrupted
-          ? 'Import interrupted; durable state is retained for resume.'
-          : error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
-            ? `Input is unavailable or invalid (member ${error.memberIndex}).`
-            : error instanceof DumpInputError
-              ? error.message
-              : 'Import failed safely.',
+          ? config.mode !== 'ordinary'
+            ? 'Import interrupted; last valid staging checkpoint remains recoverable and no native batch was sent.'
+            : 'Import interrupted; durable state is retained for resume.'
+          : missingState
+            ? STAGING_MISSING_STATE
+            : error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
+              ? `Input is unavailable or invalid (member ${error.memberIndex}).`
+              : error instanceof DumpInputError
+                ? error.message
+                : 'Import failed safely.',
       ),
       openHandles: 0,
     };
@@ -863,6 +953,15 @@ function progressTerminal(
   return { phase: 'failed', outcome: 'failed' };
 }
 
+function checkpointRequest(config: Config, capture: StagingCaptureIdentity | undefined): StagingCheckpointRequest | undefined {
+  if (!capture || config.mode === 'ordinary') return undefined;
+  return {
+    action: config.mode === 'resume-staging' ? 'resume' : 'acquire',
+    ...(config.generation ? { generation: config.generation } : {}),
+    identity: capture,
+  };
+}
+
 function resultFor(
   run: Awaited<ReturnType<Importer['runRecords']>>,
   httpStatus: number | undefined,
@@ -870,8 +969,10 @@ function resultFor(
 ): ImportCliResult {
   const counts = run.counts;
   const summary = `new=${counts.new} changed=${counts.changed} unchanged=${counts.unchanged} vanished=${counts.vanished} skipped=${run.skipped}`;
+  const prefix =
+    run.committedPrefix !== undefined ? ` committedPrefix=${run.committedPrefix}` : '';
   if (run.status === 'committed')
-    return { code: 0, stdout: `Import complete: ${summary}\n`, stderr: '', openHandles: 0 };
+    return { code: 0, stdout: `Import complete: ${summary}${prefix}\n`, stderr: '', openHandles: 0 };
   if (run.status === 'invalid-dump')
     return {
       code: 2,
@@ -897,7 +998,13 @@ function resultFor(
     return {
       code: 130,
       stdout: '',
-      stderr: diagnostic('Import interrupted; durable state is retained for resume.', counts, run.skipped),
+      stderr: diagnostic(
+        run.checkpointed && run.runId
+          ? `Import interrupted; last valid staging checkpoint remains recoverable. Resume with --resume-staging --generation ${run.runId} and the original file.`
+          : 'Import interrupted; durable state is retained for resume.',
+        counts,
+        run.skipped,
+      ),
       openHandles: 0,
     };
   if (run.status === 'observation-conflict')

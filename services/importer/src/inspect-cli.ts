@@ -225,8 +225,27 @@ function renderPage(page: NonNullable<InspectionDocument['page']>): string[] {
   return lines;
 }
 
-function resumeInvocation(source: string, status: string): string[] {
+function resumeInvocation(
+  source: string,
+  status: string,
+  generation?: string,
+  checkpoint?: NonNullable<InspectionDocument['generation']>['checkpoint'],
+): string[] {
   const threshold = status === 'mass-disappearance' ? ' [--disappearance-threshold <reviewed-0..1>]' : '';
+  if (status === 'staging' && checkpoint && generation) {
+    return [
+      'Return to checkpointed staging with the original file; this does not replace input:',
+      `  bun services/importer/src/cli.ts --source <original-source-kind> --source-alias ${terminalString(source)} --dump <original-file> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> --resume-staging --generation ${terminalString(generation)}`,
+      'Resume re-hashes the complete file and re-decodes from the first record to verify the committed prefix. Inspection does not establish authorization or remote effect.',
+    ];
+  }
+  if (status === 'ready' || status === 'finalizing') {
+    return [
+      'This generation is already sealed. Resume with the ordinary import command; do not replace input or use --resume-staging:',
+      `  bun services/importer/src/cli.ts --source <original-source-kind> --source-alias ${terminalString(source)} --dump <complete-input-path> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
+      'Sealed recovery rechecks current authority and replays original requests. Inspection does not establish authorization or remote effect.',
+    ];
+  }
   return [
     'Return to the existing authorized importer after reviewing the retained context:',
     `  bun services/importer/src/cli.ts --source <original-source-kind> --source-alias ${terminalString(source)} --dump <complete-input-path> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>${threshold}`,
@@ -273,11 +292,23 @@ export function renderInspection(document: InspectionDocument): string {
         'Retained progress belongs to the viewed generation; it does not replace the completed baseline until ordinary finalization succeeds.',
       );
     lines.push(`Resume behavior: ${generation.resume}`);
+    if (generation.checkpoint)
+      lines.push(
+        `Checkpoint: committed prefix ${generation.checkpoint.committedOrdinal} records, ${generation.checkpoint.bytes} hashed bytes, source kind ${generation.checkpoint.sourceKind}, converter ${generation.checkpoint.converterRevision}.`,
+      );
   }
   lines.push(`Ownership row present: ${document.ownershipRow}; this is not a liveness or lease-capability check.`);
   if (document.record) lines.push(...renderRecord(document.record));
   if (document.page) lines.push(...renderPage(document.page));
-  if (document.generation) lines.push(...resumeInvocation(document.source, document.generation.status));
+  if (document.generation)
+    lines.push(
+      ...resumeInvocation(
+        document.source,
+        document.generation.status,
+        document.generation.id,
+        document.generation.checkpoint,
+      ),
+    );
   lines.push('Other subsystem journals are outside this source-dump view.');
   return `${lines.join('\n')}\n`;
 }

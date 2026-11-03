@@ -19,6 +19,15 @@ import {
 import type { RecordRow } from './record-store.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 import {
+  STAGING_CHECKPOINT_VERSION,
+  admitStagingCheckpoint,
+  emptyPrefixDigest,
+  extendPrefixDigest,
+  type StagingCaptureIdentity,
+  type StagingCheckpoint,
+  type StagingPrefixRecord,
+} from './staging-checkpoint.ts';
+import {
   ConversionDiagnosticError,
   admitDigest,
   admitRevision,
@@ -124,6 +133,8 @@ export const RUN_TABLES = [
   'run_conversion_diagnostic_records',
   'run_aggregate_operations',
   'run_aggregate_heads',
+  'run_staging_checkpoints',
+  'run_staging_prefix',
 ] as const;
 
 export type AggregateOperation = Readonly<{
@@ -342,11 +353,13 @@ export class RunStore<Projection = BatchStatement[]> {
     options: {
       instrumentDatabase?: (database: Database) => Database;
       projectionMode?: 'source-record';
+      create?: boolean;
     } = {},
   ) {
     if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
     this.projectionMode = options.projectionMode;
-    const db = typeof path === 'string' ? new Database(path, { create: true, strict: true }) : path;
+    const db =
+      typeof path === 'string' ? new Database(path, { create: options.create !== false, strict: true }) : path;
     try {
       this.database = options.instrumentDatabase?.(db) ?? db;
       this.database.exec('PRAGMA journal_mode=WAL');
@@ -445,6 +458,17 @@ export class RunStore<Projection = BatchStatement[]> {
         source TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
         digest TEXT NOT NULL, head_json TEXT NOT NULL,
         PRIMARY KEY(source, subject_id, provider)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_checkpoints (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL,
+        sha256 TEXT NOT NULL, bytes INTEGER NOT NULL, source_alias TEXT NOT NULL,
+        source_kind TEXT NOT NULL, converter_revision TEXT NOT NULL, decoder_id TEXT NOT NULL,
+        disappearance_threshold REAL NOT NULL, committed_ordinal INTEGER NOT NULL,
+        skipped INTEGER NOT NULL, rolling_digest TEXT NOT NULL,
+        PRIMARY KEY(source, run_id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_prefix (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+        record_key TEXT NOT NULL, digest TEXT NOT NULL,
+        PRIMARY KEY(source, run_id, ordinal)) WITHOUT ROWID`);
     } catch (error) {
       db.close();
       throw error;
@@ -532,6 +556,157 @@ export class RunStore<Projection = BatchStatement[]> {
         s?.present_count ?? 0,
       );
       return run;
+    });
+  }
+  beginCheckpointed(
+    source: string,
+    identity: StagingCaptureIdentity,
+    options: { disappearanceThreshold?: number } = {},
+  ): Run | 'busy' {
+    const threshold = options.disappearanceThreshold ?? identity.disappearanceThreshold;
+    if (threshold !== identity.disappearanceThreshold) fail();
+    return this.transaction(() => {
+      const run = this.begin(source, options);
+      if (run === 'busy') return 'busy';
+      this.write(
+        `INSERT INTO run_staging_checkpoints(
+          source,run_id,version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
+          disappearance_threshold,committed_ordinal,skipped,rolling_digest)
+        VALUES(?,?,?,?,?,?,?,?,?,?,0,0,?)`,
+        run.source,
+        run.id,
+        STAGING_CHECKPOINT_VERSION,
+        identity.sha256,
+        identity.bytes,
+        identity.sourceAlias,
+        identity.sourceKind,
+        identity.converterRevision,
+        identity.decoderId,
+        identity.disappearanceThreshold,
+        emptyPrefixDigest(),
+      );
+      return run;
+    });
+  }
+  stagingCheckpoint(source: string, id: string): StagingCheckpoint | null {
+    sourceId(source);
+    identifier(id, 32, /^[1-9][0-9]*$/u);
+    const row = this.get<{
+      version: number;
+      sha256: string;
+      bytes: number;
+      source_alias: string;
+      source_kind: string;
+      converter_revision: string;
+      decoder_id: string;
+      disappearance_threshold: number;
+      committed_ordinal: number;
+      skipped: number;
+      rolling_digest: string;
+    }>(
+      `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
+        disappearance_threshold,committed_ordinal,skipped,rolling_digest
+      FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
+      source,
+      id,
+    );
+    if (!row) return null;
+    return admitStagingCheckpoint({
+      version: row.version,
+      sha256: row.sha256,
+      bytes: row.bytes,
+      sourceAlias: row.source_alias,
+      sourceKind: row.source_kind,
+      converterRevision: row.converter_revision,
+      decoderId: row.decoder_id,
+      disappearanceThreshold: row.disappearance_threshold,
+      committedOrdinal: row.committed_ordinal,
+      skipped: row.skipped,
+      rollingDigest: row.rolling_digest,
+    });
+  }
+  stagingResumeState(run: Run): {
+    status: string;
+    prepared: number;
+    pending: boolean;
+    covers: boolean;
+  } {
+    const g = this.generation(run);
+    const pending = this.get<{ n: number }>(
+      'SELECT 1 AS n FROM run_envelopes WHERE source=? AND run_id=? AND pending=1 LIMIT 1',
+      run.source,
+      run.id,
+    );
+    const covers = this.get<{ n: number }>(
+      'SELECT 1 AS n FROM run_entries WHERE source=? AND run_id=? AND cover_pending=1 LIMIT 1',
+      run.source,
+      run.id,
+    );
+    return { status: g.status, prepared: g.prepared, pending: pending !== null, covers: covers !== null };
+  }
+  prefixRecord(run: Run, ordinal: number): StagingPrefixRecord | null {
+    validateRun(run);
+    if (!Number.isSafeInteger(ordinal) || ordinal < 1) fail();
+    const row = this.get<{ record_key: string; digest: string }>(
+      'SELECT record_key,digest FROM run_staging_prefix WHERE source=? AND run_id=? AND ordinal=?',
+      run.source,
+      run.id,
+      ordinal,
+    );
+    return row ? { ordinal, recordKey: row.record_key, digest: row.digest } : null;
+  }
+  stagedIdentity(run: Run, recordKey: string): { digest: string; projection: string } | null {
+    validateRun(run);
+    keyId(recordKey);
+    const row = this.get<{ row_json: string; projection_json: string }>(
+      'SELECT row_json,projection_json FROM run_entries WHERE source=? AND run_id=? AND record_key=?',
+      run.source,
+      run.id,
+      recordKey,
+    );
+    if (!row) return null;
+    const parsed = JSON.parse(row.row_json) as { digest?: string };
+    if (typeof parsed.digest !== 'string') fail();
+    return { digest: parsed.digest, projection: row.projection_json };
+  }
+  commitStagingRecord(run: Run, record: StagingPrefixRecord, skippedDelta = 0): StagingCheckpoint {
+    validateRun(run);
+    keyId(record.recordKey);
+    identifier(record.digest, 64, /^[a-f0-9]{64}$/u);
+    if (!Number.isSafeInteger(record.ordinal) || record.ordinal < 1) fail();
+    if (skippedDelta !== 0 && skippedDelta !== 1) fail();
+    return this.transaction(() => {
+      this.generation(run);
+      const current = this.stagingCheckpoint(run.source, run.id);
+      if (!current) throw new Error('Staging checkpoint is missing');
+      if (record.ordinal !== current.committedOrdinal + 1) throw new Error('Staging checkpoint ordinal jumped');
+      const rolling = extendPrefixDigest(current.rollingDigest, record);
+      this.write(
+        'INSERT INTO run_staging_prefix(source,run_id,ordinal,record_key,digest) VALUES(?,?,?,?,?)',
+        run.source,
+        run.id,
+        record.ordinal,
+        record.recordKey,
+        record.digest,
+      );
+      this.write(
+        `UPDATE run_staging_checkpoints SET committed_ordinal=?,skipped=skipped+?,rolling_digest=?
+        WHERE source=? AND run_id=?`,
+        record.ordinal,
+        skippedDelta,
+        rolling,
+        run.source,
+        run.id,
+      );
+      const next = this.stagingCheckpoint(run.source, run.id);
+      if (!next) throw new Error('Staging checkpoint is missing');
+      return next;
+    });
+  }
+  clearStagingCheckpoint(run: Run): void {
+    this.transaction(() => {
+      this.write('DELETE FROM run_staging_prefix WHERE source=? AND run_id=?', run.source, run.id);
+      this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
     });
   }
   activeRun(source: string): Run | null {
@@ -713,6 +888,8 @@ export class RunStore<Projection = BatchStatement[]> {
           run.source,
           run.id,
         );
+      this.write('DELETE FROM run_staging_prefix WHERE source=? AND run_id=?', run.source, run.id);
+      this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
       return {
         status,
         prior: g.prior,
