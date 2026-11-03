@@ -10,7 +10,7 @@ import {
   type ProofProducer,
   nativeCheckId,
 } from './verification.ts';
-import { remoteCheckEnvironment } from './merge.ts';
+import { gitOutputError, remoteCheckEnvironment } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
@@ -232,6 +232,8 @@ export function git(cwd: string, args: string[], policy = defaultPolicy.merge): 
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status !== 0) {
     const detail = result.stderr?.trim() || result.error?.message || `git exited ${result.status}`;
     throw new Error(`git ${args[0]}: ${detail}`);
@@ -788,6 +790,7 @@ export class WorkerTasks {
           submitted.brief.markdown,
           submitted.brief.paths,
           this.settings.policy?.brief,
+          this.settings.policy?.merge,
         );
         if (
           previousFrozen.length !== nextFrozen.length ||
@@ -1318,6 +1321,7 @@ export class WorkerTasks {
           this.settings.derivedFiles,
           task.brief.paths,
           this.settings.policy?.brief,
+          this.settings.policy?.merge,
         );
       } catch (error) {
         const conflicts = git(
@@ -1677,6 +1681,7 @@ export class WorkerTasks {
         readings,
         {
           history,
+          policy: this.settings.policy?.provider,
           ...(old && !switched ? { preferred: old.pool } : {}),
           ...(options.excludePools ? { exclude: options.excludePools } : {}),
         },
@@ -1930,6 +1935,7 @@ export class WorkerTasks {
                 this.settings.derivedFiles,
                 task.brief.paths,
                 this.settings.policy?.brief,
+                this.settings.policy?.merge,
               );
             } catch (error) {
               files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)

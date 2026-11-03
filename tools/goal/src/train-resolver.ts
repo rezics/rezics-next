@@ -579,7 +579,7 @@ export class TrainResolver {
     let pool;
     try {
       const { pools, readings } = this.tasks.resolverPools();
-      pool = choosePool(profile, pools, readings);
+      pool = choosePool(profile, pools, readings, { policy: this.tasks.settings.policy?.provider });
     } catch (error) {
       throw new TrainResolverInfrastructureError(String(error));
     }

@@ -1,5 +1,7 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Pool, PoolReading, Profile } from './types.ts';
 
+// Milliseconds per hour, minutes per day and percentages below are unit conversions, not admission policy.
 /** Recent same-window consumption, excluding resets. All reserve and pacing thresholds are local policy. */
 export function burnPerHour(current: PoolReading, previous?: PoolReading): number {
   if (!previous?.observedAt || !current.observedAt) return 0;
@@ -33,6 +35,7 @@ export function choosePool(
     exclude?: string[];
     history?: readonly PoolReading[];
     now?: number;
+    policy?: ControlPolicy['provider'];
   } = {},
 ): Pool {
   const now = options.now ?? Date.now();
@@ -47,7 +50,7 @@ export function choosePool(
         (r) =>
           r.observedAt &&
           now - Date.parse(r.observedAt) <= pool.policy.maxAgeMs &&
-          Date.parse(r.observedAt) <= now + 60000,
+          Date.parse(r.observedAt) <= now + (options.policy ?? defaultPolicy.provider).observationClockSkewMs,
       );
       if (
         fresh.some((r) => r.exhausted || r.windows.some((w) => w.usedPercent >= 100 - effectiveReserve(pool, w, now)))

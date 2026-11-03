@@ -13,6 +13,13 @@ import { WorkerStore } from './store.ts';
 import { recordToolBlockerFailure } from './tool-incidents.ts';
 import { CHECK_COMPATIBILITY_CONTRACT, checkScriptCompatibility } from './check-compatibility.ts';
 import { syncChecks } from '../scripts/cp-sync.ts';
+import { choosePool } from './allowance.ts';
+import { choosePoolWithFallback } from './pools.ts';
+import { changedPathsBetween, rebaseOnto, rebaseUpstream, stagePaths } from './merge-train.ts';
+import { ownerConflictGitConfig, policyOwnerConflictGit } from './owner-conflict.ts';
+import { git as taskGit } from './tasks.ts';
+import { isAncestor } from './workspace.ts';
+import type { Pool, PoolReading, Profile } from './types.ts';
 import type { Attempt, Task } from './types.ts';
 // Include the standalone entry points in workspace typing without starting their native probes.
 type ManagerSmoke = typeof import('../scripts/smoke-codex-manager.ts');
@@ -236,6 +243,90 @@ test('standalone compatibility diagnostics forward native bounds without launchi
     const start = report.checks.find((check) => check.field === 'workerCheck.start');
     expect(start?.status).toBe('incompatible');
     expect(String(start?.evidence?.stdout).length).toBeLessThanOrEqual(16);
+  } finally {
+    f.close();
+  }
+});
+
+test('pool selection and fallbacks share the caller future-skew boundary and pool freshness', () => {
+  const profile = { cli: 'codex', poolClass: 'worker' } as Profile;
+  const pool = {
+    name: 'fixture',
+    cli: 'codex',
+    classes: ['worker'],
+    allowanceKey: 'shared',
+    policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 10 },
+  } as Pool;
+  const reading = {
+    allowanceKey: 'shared',
+    observedAt: new Date(1040).toISOString(),
+    windows: [],
+  } as unknown as PoolReading;
+  const select = (now: number, skew: number) => ({
+    now,
+    policy: readControlPolicy({ provider: { observationClockSkewMs: skew } }).provider,
+  });
+  expect(choosePool(profile, [pool], [reading], select(1000, 40))).toBe(pool);
+  expect(() => choosePool(profile, [pool], [reading], select(1000, 39))).toThrow('no allowed pool');
+  expect(choosePool(profile, [pool], [reading], select(1050, 1))).toBe(pool);
+  expect(() => choosePool(profile, [pool], [reading], select(1051, 1))).toThrow('no allowed pool');
+  const unavailable = { ...profile, poolClass: 'missing' };
+  expect(choosePoolWithFallback(unavailable, [profile], [pool], [reading], select(1000, 40)).pool).toBe(pool);
+  expect(() => choosePoolWithFallback(unavailable, [profile], [pool], [reading], select(1000, 39), () => 1)).toThrow(
+    'no allowed pool',
+  );
+});
+
+test('result-returning Git helpers reject UTF-8 overflow and retain complete output and whitespace', () => {
+  const f = repository();
+  try {
+    const value = 'é'.repeat(32);
+    git(f.main, 'config', 'goal.fixture', value);
+    const args = ['config', '--get', 'goal.fixture'];
+    const exact = readControlPolicy({ merge: { gitBufferBytes: 65 } }).merge;
+    const small = { ...exact, gitBufferBytes: 64 };
+    expect(taskGit(f.main, args, exact)).toBe(value);
+    expect(() => taskGit(f.main, args, small)).toThrow('output exceeds');
+    expect(policyOwnerConflictGit(f.main, args, exact)).toMatchObject({ status: 0, stdout: value + '\n' });
+    expect(policyOwnerConflictGit(f.main, args, small)).toMatchObject({
+      status: null,
+      stdout: '',
+      error: expect.any(Error),
+    });
+    expect(() => ownerConflictGitConfig(f.main, { ...exact, gitBufferBytes: 1 })).toThrow();
+    const base = git(f.main, 'rev-parse', 'HEAD');
+    const path = ' leading and trailing ';
+    f.commit(path);
+    expect(changedPathsBetween(f.main, base, 'HEAD')).toEqual([path]);
+    expect(() => changedPathsBetween(f.main, base, 'HEAD', { ...exact, gitBufferBytes: 1 })).toThrow();
+    expect(() => stagePaths(f.main, ['base'], { ...exact, gitBufferBytes: 1 })).toThrow();
+    expect(() => rebaseUpstream(f.main, base, base, { ...exact, gitBufferBytes: 1 })).toThrow();
+    expect(() =>
+      rebaseOnto(f.main, base, base, join(f.path, 'rebase.log'), [], undefined, undefined, {
+        ...exact,
+        gitBufferBytes: 1,
+      }),
+    ).toThrow();
+    expect(isAncestor(f.main, base, 'HEAD', exact)).toBe(true);
+    expect(() => isAncestor(f.main, 'missing-ref', 'HEAD', { ...exact, gitBufferBytes: 1 })).toThrow();
+  } finally {
+    f.close();
+  }
+});
+
+test('evidence never publishes an oversized tracked or untracked patch as complete', () => {
+  const f = repository();
+  try {
+    const task = { worktree: f.main, base: git(f.main, 'rev-parse', 'HEAD'), brief: { markdown: 'contract' } } as Task;
+    const attempt = { evidencePath: join(f.path, 'evidence'), approaches: [], result: '' } as unknown as Attempt;
+    const policy = readControlPolicy({ evidence: { gitBufferBytes: 256 } }).evidence;
+    writeFileSync(join(f.main, 'base'), 'é'.repeat(1000));
+    expect(() => evidenceBundle(task, attempt, null, policy)).toThrow();
+    git(f.main, 'checkout', '--', 'base');
+    writeFileSync(join(f.main, 'new'), 'é'.repeat(1000));
+    expect(() => evidenceBundle(task, attempt, null, policy)).toThrow();
+    evidenceBundle(task, attempt);
+    expect(readFileSync(join(attempt.evidencePath, 'diff.patch'), 'utf8')).toContain('é'.repeat(1000));
   } finally {
     f.close();
   }

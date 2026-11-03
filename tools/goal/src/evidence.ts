@@ -1,3 +1,4 @@
+import { gitOutputError } from './merge.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,6 +13,8 @@ function git(cwd: string, args: string[], policy: ControlPolicy['evidence']): st
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || 'Cannot capture evidence');
   return result.stdout.trim();
 }
@@ -167,6 +170,8 @@ export function evidenceBundle(
       maxBuffer: policy.gitBufferBytes,
       timeout: policy.commandTimeoutMs,
     });
+    const overflow = gitOutputError(patch, policy.gitBufferBytes);
+    if (overflow) throw overflow;
     if (patch.status !== 0 && patch.status !== 1) throw new Error('could not capture untracked diff');
     diff += `\n${patch.stdout}`;
   }

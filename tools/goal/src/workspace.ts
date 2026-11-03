@@ -1,4 +1,4 @@
-import { policyGit } from './merge.ts';
+import { gitOutputError, policyGit } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -58,6 +58,8 @@ export function isAncestor(cwd: string, commit: string, head: string, policy = d
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status === 0) return true;
   if (result.status === 1) return false;
   const cause =

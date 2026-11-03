@@ -52,8 +52,8 @@ import {
   firstFailure,
   gateRunner,
   gateEnvironment,
-  git,
   policyGit,
+  gitOutputError,
   processGroupRunner,
   nonGeneratedFiles,
   outsideScope,
@@ -561,9 +561,21 @@ function markdownUnionFiles(logPath: string): string[] {
   ];
 }
 
-function changedWorkingFiles(cwd: string): string[] {
-  const tracked = spawnSync('git', ['diff', '--name-only', '-z', 'HEAD', '--'], { cwd, encoding: 'utf8' });
-  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], { cwd, encoding: 'utf8' });
+function mergeGit(cwd: string, args: string[], policy = defaultPolicy.merge) {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    timeout: policy.commandTimeoutMs,
+    maxBuffer: policy.gitBufferBytes,
+  });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
+  return result;
+}
+
+function changedWorkingFiles(cwd: string, policy = defaultPolicy.merge): string[] {
+  const tracked = mergeGit(cwd, ['diff', '--name-only', '-z', 'HEAD', '--'], policy);
+  const untracked = mergeGit(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], policy);
   if (tracked.status !== 0 || untracked.status !== 0) throw new Error('Cannot read generated file changes');
   return [...new Set([...tracked.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean))];
 }
@@ -594,8 +606,10 @@ function regenerateLandingDerivedFiles(
   files: readonly DerivedFile[],
   logPath: string,
   policy = defaultPolicy.brief,
+  mergePolicy = defaultPolicy.merge,
 ): void {
-  const changedSources = changedPathsBetween(cwd, base, git(cwd, 'rev-parse', 'HEAD'));
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, mergePolicy);
+  const changedSources = changedPathsBetween(cwd, base, git(cwd, 'rev-parse', 'HEAD'), mergePolicy);
   const triggered = files.filter(
     (file) =>
       file.stage === 'promotion' &&
@@ -615,19 +629,20 @@ function regenerateLandingDerivedFiles(
       throw new Error(`Failed to regenerate derived files: ${output || result.error?.message || 'command failed'}`);
   }
 
-  const changed = changedWorkingFiles(cwd);
+  const changed = changedWorkingFiles(cwd, mergePolicy);
   const outside = changed.filter((path) => !files.some((file) => matchesPath(path, [file.path], policy)));
   if (outside.length) throw new Error(`Derived generator changed non-derived files: ${outside.join(', ')}`);
   if (!changed.length) {
     appendFileSync(logPath, 'Derived outputs already match the dev landing; no regeneration commit added\n');
     return;
   }
-  stagePaths(cwd, changed);
+  stagePaths(cwd, changed, mergePolicy);
   git(cwd, 'commit', '--amend', '--no-edit');
 }
 
 /** A path gone from both the index and the worktree is an already staged deletion, and naming it fails `git add`. */
-export function stagePaths(cwd: string, paths: Iterable<string>): void {
+export function stagePaths(cwd: string, paths: Iterable<string>, policy = defaultPolicy.merge): void {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   const all = [...paths];
   if (!all.length) return;
   const indexed = new Set(git(cwd, 'ls-files', '-z', '--', ...all).split('\0'));
@@ -635,7 +650,8 @@ export function stagePaths(cwd: string, paths: Iterable<string>): void {
   if (present.length) git(cwd, 'add', '-A', '--', ...present);
 }
 
-function unmergedFiles(cwd: string): string[] {
+function unmergedFiles(cwd: string, policy = defaultPolicy.merge): string[] {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   return git(cwd, 'diff', '--name-only', '--diff-filter=U', '-z').split('\0').filter(Boolean);
 }
 
@@ -844,20 +860,11 @@ function controlPlaneBriefHash(markdown: string): string {
 }
 
 function isAncestor(cwd: string, ancestor: string, descendant: string, policy = defaultPolicy.merge): boolean {
-  return (
-    spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
-      cwd,
-      timeout: policy.commandTimeoutMs,
-      maxBuffer: policy.gitBufferBytes,
-    }).status === 0
-  );
+  return workspaceAncestor(cwd, ancestor, descendant, policy);
 }
 
-export function changedPathsBetween(cwd: string, base: string, head: string): string[] {
-  const changed = spawnSync('git', ['diff', '--no-renames', '--name-only', '-z', base, head, '--'], {
-    cwd,
-    encoding: 'utf8',
-  });
+export function changedPathsBetween(cwd: string, base: string, head: string, policy = defaultPolicy.merge): string[] {
+  const changed = mergeGit(cwd, ['diff', '--no-renames', '--name-only', '-z', base, head, '--'], policy);
   if (changed.status !== 0)
     throw new Error(changed.stderr?.trim() || changed.error?.message || 'Cannot read task changes');
   return changed.stdout.split('\0').filter(Boolean);
@@ -916,7 +923,14 @@ class WorkerConflictError extends Error {
 }
 
 /** Inspect the actual diff: an unchanged duplicate is not an addition, while a moved line is. */
-function assertTaskDeletionsAbsent(cwd: string, file: string, base: string, task: string, result: string): void {
+function assertTaskDeletionsAbsent(
+  cwd: string,
+  file: string,
+  base: string,
+  task: string,
+  result: string,
+  policy = defaultPolicy.merge,
+): void {
   mkdirSync(join(cwd, '.temp'), { recursive: true });
   const scratch = mkdtempSync(join(cwd, '.temp', 'union-deletions-'));
   try {
@@ -924,10 +938,10 @@ function assertTaskDeletionsAbsent(cwd: string, file: string, base: string, task
     const taskPath = join(scratch, 'task');
     writeFileSync(basePath, base);
     writeFileSync(taskPath, task);
-    const diff = spawnSync(
-      'git',
+    const diff = mergeGit(
+      cwd,
       ['diff', '--no-index', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', '--', basePath, taskPath],
-      { cwd, encoding: 'utf8' },
+      policy,
     );
     if (diff.status !== 0 && diff.status !== 1)
       throw new Error(diff.stderr.trim() || `Cannot read task diff for ${file}`);
@@ -1010,6 +1024,7 @@ export function resolveMechanicalConflicts(
   // Index stage holding the task; callers replaying it during a rebase must select stage 3.
   taskStage: 2 | 3 = 2,
   policy = defaultPolicy.brief,
+  mergePolicy = defaultPolicy.merge,
 ): string[] | false {
   const resolved = new Map<string, string>();
   const unionResolved: string[] = [];
@@ -1019,7 +1034,7 @@ export function resolveMechanicalConflicts(
     let text: string | undefined;
     if (file.endsWith('.md')) {
       const stages = ([1, 2, 3] as const).map((stage) => {
-        const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
+        const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
         if (stage === 1 && result.status !== 0) return '';
         if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
         return result.stdout;
@@ -1036,10 +1051,7 @@ export function resolveMechanicalConflicts(
         writeFileSync(theirsPath, theirs!);
         // Stabilize-to-dev merges retain their existing insertion-only policy. Rebases explicitly request union.
         if (markdown === 'insertions') {
-          const analysis = spawnSync('git', ['merge-file', '--diff3', '-p', oursPath, basePath, theirsPath], {
-            cwd,
-            encoding: 'utf8',
-          });
+          const analysis = mergeGit(cwd, ['merge-file', '--diff3', '-p', oursPath, basePath, theirsPath], mergePolicy);
           const bases = [...analysis.stdout.matchAll(/^\|{7} [^\n]*\n([\s\S]*?)^=======$/gm)];
           const conflicts = [...analysis.stdout.matchAll(/^<{7} /gm)].length;
           if (
@@ -1052,16 +1064,14 @@ export function resolveMechanicalConflicts(
           )
             return false;
         }
-        const merged = spawnSync('git', ['merge-file', '--union', '-p', oursPath, basePath, theirsPath], {
-          cwd,
-          encoding: 'utf8',
-        });
+        const merged = mergeGit(cwd, ['merge-file', '--union', '-p', oursPath, basePath, theirsPath], mergePolicy);
         // `--union` writes both sides' conflicting lines but still exits 1 to report that the inputs overlapped.
         // Treat that expected conflict status as a successful resolution; higher statuses indicate a tool error.
         if (merged.status === null || merged.status > 1) return false;
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
         text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
-        if (markdown === 'union') assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text);
+        if (markdown === 'union')
+          assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text, mergePolicy);
         if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
           throw new WorkerConflictError(file);
         unionResolved.push(file);
@@ -1070,7 +1080,7 @@ export function resolveMechanicalConflicts(
       }
     } else if (matchesPath(file, defaultJsonMessageConflicts, policy)) {
       const stages = ([1, 2, 3] as const).map((stage) => {
-        const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
+        const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
         if (stage === 1 && result.status !== 0) return '{}';
         if (result.status !== 0) throw new Error(`Cannot read conflict stage ${stage} for ${file}`);
         return result.stdout;
@@ -1081,7 +1091,7 @@ export function resolveMechanicalConflicts(
       const theirs = parseFlatJsonObject(stages[2]!);
       const base = parseFlatJsonObject(stages[0]!);
       text = `${JSON.stringify(merged.value, null, 2)}\n`;
-      assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text);
+      assertTaskDeletionsAbsent(cwd, file, stages[0]!, stages[taskStage - 1]!, text, mergePolicy);
       if (
         ours &&
         theirs &&
@@ -1151,10 +1161,11 @@ function jsonMessageConflictError(
   cwd: string,
   paths: readonly string[],
   policy = defaultPolicy.brief,
+  mergePolicy = defaultPolicy.merge,
 ): Error | undefined {
   for (const file of paths.filter((path) => matchesPath(path, defaultJsonMessageConflicts, policy))) {
     const stages = ([1, 2, 3] as const).map((stage) => {
-      const result = spawnSync('git', ['show', `:${stage}:${file}`], { cwd, encoding: 'utf8' });
+      const result = mergeGit(cwd, ['show', `:${stage}:${file}`], mergePolicy);
       return result.status === 0 ? result.stdout : '{}';
     });
     const result = mergeFlatJsonMessage(stages[0]!, stages[1]!, stages[2]!);
@@ -1170,14 +1181,16 @@ function rebaseWithDerivedFiles(
   logPath: string,
   files: readonly DerivedFile[],
   policy = defaultPolicy.brief,
+  mergePolicy = defaultPolicy.merge,
 ): unknown | boolean {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, mergePolicy);
   try {
     git(cwd, '-c', 'rebase.updateRefs=false', 'rebase', '--onto', base, originalBase);
     return false;
   } catch (initialError) {
     let rebaseError: unknown = initialError;
     for (;;) {
-      const conflicts = unmergedFiles(cwd);
+      const conflicts = unmergedFiles(cwd, mergePolicy);
       if (!conflicts.length) throw rebaseError;
       // bun.lock is an integration-stage derived file: keep the integration lockfile, regenerate from the
       // merged manifests, and commit that result as part of the rebased landing.
@@ -1185,11 +1198,19 @@ function rebaseWithDerivedFiles(
       const textConflicts = conflicts.filter((path) => !derivedForPath(path, files, policy).length);
       // Validate all ordinary conflicts before choosing a generated side or running a generator.
       if (textConflicts.length) {
-        const unionResolved = resolveMechanicalConflicts(cwd, textConflicts, undefined, 'union', 3, policy);
-        if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts, policy) ?? rebaseError;
+        const unionResolved = resolveMechanicalConflicts(
+          cwd,
+          textConflicts,
+          undefined,
+          'union',
+          3,
+          policy,
+          mergePolicy,
+        );
+        if (!unionResolved) return jsonMessageConflictError(cwd, textConflicts, policy, mergePolicy) ?? rebaseError;
         const markdownUnion = unionResolved.length ? `; Markdown union: ${unionResolved.join(', ')}` : '';
         appendFileSync(logPath, `Rebase resolved mechanical conflicts: ${textConflicts.join(', ')}${markdownUnion}\n`);
-        stagePaths(cwd, new Set(textConflicts));
+        stagePaths(cwd, new Set(textConflicts), mergePolicy);
       }
 
       for (const path of derivedConflicts) git(cwd, 'checkout', '--ours', '--', path);
@@ -1208,13 +1229,14 @@ function rebaseWithDerivedFiles(
       }
       const regeneratedLockfile = derivedConflicts.includes('bun.lock');
       const stageFiles = new Set(derivedConflicts);
-      for (const path of changedWorkingFiles(cwd)) if (derivedForPath(path, files, policy).length) stageFiles.add(path);
-      stagePaths(cwd, stageFiles);
+      for (const path of changedWorkingFiles(cwd, mergePolicy))
+        if (derivedForPath(path, files, policy).length) stageFiles.add(path);
+      stagePaths(cwd, stageFiles, mergePolicy);
       try {
         git(cwd, '-c', 'core.editor=true', 'rebase', '--continue');
         return regeneratedLockfile;
       } catch (continueError) {
-        if (!unmergedFiles(cwd).length) throw continueError;
+        if (!unmergedFiles(cwd, mergePolicy).length) throw continueError;
         rebaseError = continueError;
       }
     }
@@ -1225,10 +1247,10 @@ function rebaseWithDerivedFiles(
  * The commit the branch's own work starts from. A recorded base the branch has already moved past, or one it does not
  * descend from, would replay or squash other work: a squash from such a base once reverted hundreds of files.
  */
-export function rebaseUpstream(cwd: string, base: string, originalBase: string): string {
+export function rebaseUpstream(cwd: string, base: string, originalBase: string, policy = defaultPolicy.merge): string {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   const fork = git(cwd, 'merge-base', 'HEAD', base);
-  const ancestor = (older: string, newer: string) =>
-    spawnSync('git', ['merge-base', '--is-ancestor', older, newer], { cwd }).status === 0;
+  const ancestor = (older: string, newer: string) => workspaceAncestor(cwd, older, newer, policy);
   return ancestor(originalBase, 'HEAD') && ancestor(fork, originalBase) ? originalBase : fork;
 }
 
@@ -1240,14 +1262,16 @@ export function rebaseOnto(
   files: readonly DerivedFile[] = defaultDerivedFiles,
   allowedPaths?: readonly string[],
   policy = defaultPolicy.brief,
+  mergePolicy = defaultPolicy.merge,
 ): boolean {
-  const upstream = rebaseUpstream(cwd, base, originalBase);
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, mergePolicy);
+  const upstream = rebaseUpstream(cwd, base, originalBase, mergePolicy);
   const head = git(cwd, 'rev-parse', 'HEAD');
   // Files the worker's own commits touched: a squash may change these outside the allowed paths, never a file only
   // the target's history changed, which a wrong upstream would replay or revert.
   const own = new Set(git(cwd, 'log', '--name-only', '--format=', `${base}..${head}`).split('\n').filter(Boolean));
   const originalSubjects = git(cwd, 'log', '--format=%s', '--reverse', `${upstream}..HEAD`).split('\n').filter(Boolean);
-  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy);
+  const initialConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy, mergePolicy);
   if (typeof initialConflict === 'boolean') return initialConflict;
 
   git(cwd, 'rebase', '--abort');
@@ -1264,14 +1288,17 @@ export function rebaseOnto(
     const outside = outsideScope(
       changed.filter((path) => !derivedForPath(path, files, policy).length && !own.has(path)),
       allowedPaths,
+      policy,
     );
     if (outside.length) {
       git(cwd, 'reset', '--hard', head);
-      throw new Error(`A squash would change files outside the brief: ${outside.slice(0, 20).join(', ')}`);
+      throw new Error(
+        `A squash would change files outside the brief: ${outside.slice(0, mergePolicy.outsideScopePaths).join(', ')}`,
+      );
     }
   }
 
-  const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy);
+  const squashedConflict = rebaseWithDerivedFiles(cwd, base, upstream, logPath, files, policy, mergePolicy);
   if (squashedConflict !== undefined && typeof squashedConflict !== 'boolean') throw squashedConflict;
   return squashedConflict === true;
 }
@@ -1392,7 +1419,14 @@ mkdir -p ${quote(stateDirectory)}
 ) 9>${quote(join(stateDirectory, 'dev-origin-push.lock'))}`;
 }
 
-function pushDevInBackground(checkout: string, stateDirectory: string, branch: string, logPath: string): void {
+function pushDevInBackground(
+  checkout: string,
+  stateDirectory: string,
+  branch: string,
+  logPath: string,
+  policy = defaultPolicy.merge,
+): void {
+  const git = (cwd: string, ...args: string[]) => policyGit(cwd, args, policy);
   let descriptor: number | undefined;
   try {
     git(checkout, 'remote', 'get-url', '--push', 'origin');
@@ -1848,9 +1882,10 @@ export class MergeTrain {
               derivedFiles,
               request.declaredPaths,
               (this.options.policy ?? defaultPolicy).brief,
+              this.options.policy?.merge,
             );
           } catch (error) {
-            const conflicts = unmergedFiles(trainTree);
+            const conflicts = unmergedFiles(trainTree, this.options.policy?.merge);
             if (conflicts.length) {
               const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
               if (context) result.rebaseConflict = context;
@@ -1986,7 +2021,7 @@ export class MergeTrain {
           }
 
           const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
-          const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip);
+          const taskPaths = changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
           if (treeDiffIsEmpty(trainTree, previous, candidate)) {
             refuseNoEffect(result, taskPaths, logPath);
             localOutcomes.set(entry.id, result);
@@ -2173,7 +2208,13 @@ export class MergeTrain {
           continue;
         }
         committed = true;
-        pushDevInBackground(o.mainCheckout, o.stateDirectory, branch, logPaths.get(prepared[0]!.entry.id)!);
+        pushDevInBackground(
+          o.mainCheckout,
+          o.stateDirectory,
+          branch,
+          logPaths.get(prepared[0]!.entry.id)!,
+          this.options.policy?.merge,
+        );
         for (const [id, outcome] of localOutcomes) {
           outcome.hostMs = Date.now() - memberStarted.get(id)!;
           outcomes.set(id, outcome);
@@ -2704,7 +2745,7 @@ export class MergeTrain {
       let controlPlaneFork: string | undefined;
       if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
         const fork = this.git(o.mainCheckout, 'merge-base', tip, `refs/heads/${mainBranch}`);
-        const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip);
+        const taskChanges = changedPathsBetween(o.mainCheckout, fork, tip, this.options.policy?.merge);
         controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
         if (controlPlane) controlPlaneFork = fork;
       }
@@ -2902,6 +2943,7 @@ export class MergeTrain {
               derivedFiles,
               request.declaredPaths,
               (this.options.policy ?? defaultPolicy).brief,
+              this.options.policy?.merge,
             );
           } catch (error) {
             if (!(error instanceof WorkerConflictError)) throw error;
@@ -2916,6 +2958,7 @@ export class MergeTrain {
             derivedFiles,
             logPath,
             (this.options.policy ?? defaultPolicy).brief,
+            this.options.policy?.merge,
           );
         const frozen = workspace
           ? sharedStore!
@@ -3029,7 +3072,7 @@ export class MergeTrain {
         const candidate = this.git(trainTree, 'rev-parse', 'HEAD');
         const taskPaths = workspace
           ? taskChangedPaths(sharedStore!.task(request.taskId), tip, this.options.policy?.merge)
-          : changedPathsBetween(o.mainCheckout, originalBase, tip);
+          : changedPathsBetween(o.mainCheckout, originalBase, tip, this.options.policy?.merge);
         if (treeDiffIsEmpty(trainTree, base, candidate)) {
           refuseNoEffect(result, taskPaths, logPath);
           return finish();
@@ -3145,7 +3188,7 @@ export class MergeTrain {
             const tail = checked.output
               .split('\n')
               .filter((line) => line.trim())
-              .slice(-20);
+              .slice(-(this.options.policy ?? defaultPolicy).merge.affectedFailureLines);
             affectedFailures.push(
               `${checked.command.join(' ')} failed without naming a test file:\n${tail.join('\n')}`,
             );
@@ -3534,7 +3577,7 @@ export class MergeTrain {
           continue;
         }
         if (targetBranch === (o.integrationBranch ?? 'dev'))
-          pushDevInBackground(o.mainCheckout, o.stateDirectory, targetBranch, logPath);
+          pushDevInBackground(o.mainCheckout, o.stateDirectory, targetBranch, logPath, this.options.policy?.merge);
         if (workspace) {
           workspace.integrated(recorded.workspace!.module, candidate);
           try {
@@ -3579,7 +3622,7 @@ export class MergeTrain {
       appendFileSync(logPath, `${message}\n`);
       result.stage = stage;
       if (stage === 'rebase' && added) {
-        const conflicts = canonicalConflictPaths(unmergedFiles(trainTree));
+        const conflicts = canonicalConflictPaths(unmergedFiles(trainTree, this.options.policy?.merge));
         if (conflicts.length) {
           result.conflictedFiles = conflicts;
           const context = makeRebaseConflictContext(activeTargetHead, workerCommit, conflicts);
@@ -3778,7 +3821,13 @@ export class MergeTrain {
             );
           this.git(checkout, 'update-ref', targetRef, commit, targetHead);
           if (targetBranch === (this.options.integrationBranch ?? 'dev'))
-            pushDevInBackground(checkout, this.options.stateDirectory, targetBranch, logPath);
+            pushDevInBackground(
+              checkout,
+              this.options.stateDirectory,
+              targetBranch,
+              logPath,
+              this.options.policy?.merge,
+            );
           return { commit };
         } catch (error) {
           const current = spawnSync('git', ['rev-parse', '--verify', targetRef], {
@@ -3906,7 +3955,7 @@ export class MergeTrain {
         try {
           this.git(trainTree, 'merge', '--no-ff', '--no-edit', candidate);
         } catch (error) {
-          const files = unmergedFiles(trainTree);
+          const files = unmergedFiles(trainTree, this.options.policy?.merge);
           if (files.length && this.resolveGeneratedConflicts(trainTree, files, logPath)) {
             appendFileSync(
               logPath,
@@ -3962,7 +4011,13 @@ export class MergeTrain {
         }
         try {
           this.git(this.options.mainCheckout, 'update-ref', devRef, merged, expected);
-          pushDevInBackground(this.options.mainCheckout, this.options.stateDirectory, devBranch, logPath);
+          pushDevInBackground(
+            this.options.mainCheckout,
+            this.options.stateDirectory,
+            devBranch,
+            logPath,
+            this.options.policy?.merge,
+          );
           rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
           return;
         } catch (error) {
@@ -4024,6 +4079,7 @@ export class MergeTrain {
         'insertions',
         3,
         (this.options.policy ?? defaultPolicy).brief,
+        this.options.policy?.merge,
       )
     )
       return false;
@@ -4058,10 +4114,10 @@ export class MergeTrain {
       appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${tree})\n${output}`);
       if (result.status !== 0) return false;
     }
-    const changedGenerated = changedWorkingFiles(tree).filter(
+    const changedGenerated = changedWorkingFiles(tree, this.options.policy?.merge).filter(
       (path) => derivedForPath(path, files, (this.options.policy ?? defaultPolicy).brief).length > 0,
     );
-    stagePaths(tree, new Set([...conflicts, ...changedGenerated]));
+    stagePaths(tree, new Set([...conflicts, ...changedGenerated]), this.options.policy?.merge);
     this.git(tree, '-c', 'core.editor=true', 'commit', '--no-edit');
     return true;
   }
@@ -4668,7 +4724,9 @@ export class MergeTrain {
             failures.some((failure) =>
               isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate, this.options.policy?.merge),
             ) ||
-            !changedPathsBetween(o.mainCheckout, fork, member.acceptedCommit).includes(changed.path) ||
+            !changedPathsBetween(o.mainCheckout, fork, member.acceptedCommit, this.options.policy?.merge).includes(
+              changed.path,
+            ) ||
             failures.some(
               (failure) =>
                 spawnSync('git', ['diff', '--quiet', failure.candidate, member.acceptedCommit, '--', changed.path], {
@@ -5582,7 +5640,12 @@ export class MergeTrain {
               const task = store.task(member.taskId);
               const tip = member.acceptedCommit;
               const fork = this.git(tree, 'merge-base', snapshot.mainHead, tip);
-              const sourcePaths = changedPathsBetween(tree, fork === tip ? task.base : fork, tip);
+              const sourcePaths = changedPathsBetween(
+                tree,
+                fork === tip ? task.base : fork,
+                tip,
+                this.options.policy?.merge,
+              );
               const frozen = frozenFilesForTask(o.stateDirectory, task.id);
               const before = this.git(tree, 'rev-parse', 'HEAD');
               const risk = readRiskOwnership(
@@ -5655,7 +5718,7 @@ export class MergeTrain {
                     );
                   }
                 }
-                const changed = changedPathsBetween(tree, before, after);
+                const changed = changedPathsBetween(tree, before, after, this.options.policy?.merge);
                 this.checkControlPlaneScope(changed, guardedRequest, node.logPath);
                 const nonGenerated = nonGeneratedFiles(tree, changed, this.options.policy?.merge);
                 contributionBases.set(task.id, before);
@@ -5716,7 +5779,12 @@ export class MergeTrain {
             const frozen = node.indices.flatMap((index) =>
               frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId),
             );
-            const changed = changedPathsBetween(tree, snapshot.mainHead, this.git(tree, 'rev-parse', 'HEAD'));
+            const changed = changedPathsBetween(
+              tree,
+              snapshot.mainHead,
+              this.git(tree, 'rev-parse', 'HEAD'),
+              this.options.policy?.merge,
+            );
             this.formatControlPlaneCandidate(tree, changed, node.logPath);
             const allowed = preparedMembers.flatMap((member) => [
               ...member.request.declaredPaths,
@@ -5724,7 +5792,12 @@ export class MergeTrain {
                 []),
             ]);
             const outside = outsideScope(
-              changedPathsBetween(tree, snapshot.mainHead, this.git(tree, 'rev-parse', 'HEAD')),
+              changedPathsBetween(
+                tree,
+                snapshot.mainHead,
+                this.git(tree, 'rev-parse', 'HEAD'),
+                this.options.policy?.merge,
+              ),
               allowed,
             );
             if (outside.length) throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
@@ -5790,7 +5863,7 @@ export class MergeTrain {
                 if (frozenChanges.length)
                   throw new Error(`Typing repair changed frozen inputs: ${frozenChanges.join(', ')}`);
                 this.checkControlPlaneScope(
-                  changedPathsBetween(tree, candidate, repaired),
+                  changedPathsBetween(tree, candidate, repaired, this.options.policy?.merge),
                   resolved.request,
                   node.logPath,
                 );
@@ -5924,11 +5997,11 @@ export class MergeTrain {
     appendFileSync(logPath, `$ ${command.join(' ')}\n${formatted.stdout ?? ''}${formatted.stderr ?? ''}\n`);
     if (formatted.status !== 0)
       throw new Error(`Formatter failed: ${formatted.stderr || formatted.error || formatted.status}`);
-    const altered = changedWorkingFiles(tree);
+    const altered = changedWorkingFiles(tree, this.options.policy?.merge);
     if (altered.some((path) => !files.includes(path)))
       throw new Error(`Formatter changed unrelated files: ${altered.join(', ')}`);
     if (altered.length) {
-      stagePaths(tree, altered);
+      stagePaths(tree, altered, this.options.policy?.merge);
       this.git(tree, 'commit', '-m', 'style: format accepted control-plane cohort');
     }
   }
@@ -5969,9 +6042,9 @@ export class MergeTrain {
     const installs = await runIntegrationChecks(checks.slice(0, 2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane dependency installs');
     if (!installs.passed) return finish(installs);
-    // At most one bounded file probe inherited from the failed parent's actual full-suite output.
+    // Operator-bounded file probes inherited from the failed parent's actual full-suite output.
     // A green or inconclusive probe always falls through to every mandatory full-head check.
-    for (const command of negativeProbes.slice(0, 1)) {
+    for (const command of negativeProbes.slice(0, (o.policy ?? defaultPolicy).controlPlane.negativeProbeCommands)) {
       const files = command.slice(4);
       if (!files.length || files.some((file) => !existsSync(join(tree, file)))) continue;
       const probe = await runIntegrationChecks(
@@ -6339,6 +6412,7 @@ export class MergeTrain {
           this.options.stateDirectory,
           snapshot.devBranch,
           join(this.options.stateDirectory, 'dev-origin-push.log'),
+          this.options.policy?.merge,
         );
       rmSync(join(this.options.stateDirectory, 'control-plane-conflict.json'), { force: true });
       rmSync(this.controlPlaneConflictPath(record.taskId), { force: true });

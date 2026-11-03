@@ -657,7 +657,7 @@ manager-message limits use the caller policy. Brief estimate defaults remain gui
 | `policy.provider.claudeRequestTimeoutSeconds`         | `10`                        | Deadline for the native Claude OAuth usage request (seconds).                                   |
 | `policy.provider.codexAllowanceTailBytes`             | `1048576`                   | Session-log suffix inspected for Codex quota observations (bytes).                              |
 | `policy.provider.usageContextObjects`                 | `24`                        | Maximum nested event objects inspected for usage model, effort and tier.                        |
-| `policy.provider.observationClockSkewMs`              | `60000`                     | Future timestamp tolerance when assessing a usage-limit refusal (ms).                           |
+| `policy.provider.observationClockSkewMs`              | `60000`                     | Future timestamp tolerance for pool selection and usage-limit refusals (ms).                           |
 | `policy.pacing.scheduleRefreshMs`                     | `1800000`                   | Minimum interval between announced Codex reset schedule requests (ms).                          |
 | `policy.pacing.scheduleRequestTimeoutSeconds`         | `15`                        | Deadline for the native reset schedule request (seconds).                                       |
 | `policy.pacing.minimumResetMs`                        | `900000`                    | Minimum remaining reset duration used to calculate allowance urgency (ms).                      |
@@ -740,6 +740,7 @@ manager-message limits use the caller policy. Brief estimate defaults remain gui
 | `policy.controlPlane.negativeProbeTimeoutMs`          | `60000`                     | Negative-only control-plane bisection probe runner deadline (ms).                               |
 | `policy.controlPlane.testTimeoutMs`                   | `30000`                     | Per-test timeout in mandatory control-plane suite and negative probe commands (ms).             |
 | `policy.controlPlane.launchSmokeTimeoutMs`            | `300000`                    | Outer launch-smoke runner deadline (ms).                                                        |
+| `policy.controlPlane.negativeProbeCommands`           | `1`                         | Maximum negative-only probe commands attempted per bisection candidate.                        |
 | `policy.controlPlane.negativeProbeFiles`              | `3`                         | Maximum failing test files inherited by a negative-only bisection probe.                        |
 | `policy.controlPlane.diagnosticCharacters`            | `6000`                      | Maximum compiler output characters in a control-plane diagnostic.                               |
 | `policy.verifier.concurrency`                         | `3`                         | Maximum checks or existing-failure probes executed concurrently by one verifier.                |
@@ -789,6 +790,8 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.merge.killGraceMs`                      | `1000`     | Merge Git, gate cleanup and failure excerpt: kill grace ms.              |
 | `policy.merge.pollMs`                           | `50`       | Merge Git, gate cleanup and failure excerpt: poll ms.                    |
 | `policy.merge.gateTimeoutMs`                    | `600000`   | Merge Git, gate cleanup and failure excerpt: gate timeout ms.            |
+| `policy.merge.outsideScopePaths`                | `20`       | Maximum example paths reported when a squash exceeds brief scope.       |
+| `policy.merge.affectedFailureLines`             | `20`       | Output tail lines for an affected failure that names no test file.      |
 | `policy.merge.failureLines`                     | `60`       | Merge Git, gate cleanup and failure excerpt: failure lines.              |
 | `policy.merge.failureHeadCharacters`            | `4000`     | Merge Git, gate cleanup and failure excerpt: failure head characters.    |
 | `policy.merge.failureCharacters`                | `8000`     | Merge Git, gate cleanup and failure excerpt: failure characters.         |

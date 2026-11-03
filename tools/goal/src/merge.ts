@@ -32,6 +32,17 @@ export function git(cwd: string, ...args: string[]): string {
   return policyGit(cwd, args);
 }
 
+/** Enforce completed pipe results too: Bun can return a whole chunk beyond spawnSync's maxBuffer. */
+export function gitOutputError(
+  result: { stdout?: string | Buffer | null; stderr?: string | Buffer | null },
+  bytes: number,
+  command = 'git',
+): Error | undefined {
+  if (Buffer.byteLength(result.stdout ?? '') > bytes || Buffer.byteLength(result.stderr ?? '') > bytes)
+    return new Error(`${command} output exceeds ${bytes} bytes`);
+  return undefined;
+}
+
 /** A caller-bound Git helper; the variadic compatibility helper retains package defaults. */
 export function policyGit(cwd: string, args: string[], policy = defaultPolicy.merge): string {
   const result = spawnSync('git', args, {
@@ -40,12 +51,8 @@ export function policyGit(cwd: string, args: string[], policy = defaultPolicy.me
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
-  // Bun may read a complete pipe chunk beyond maxBuffer before returning; enforce the requested result bound too.
-  if (
-    Buffer.byteLength(result.stdout ?? '') > policy.gitBufferBytes ||
-    Buffer.byteLength(result.stderr ?? '') > policy.gitBufferBytes
-  )
-    throw new Error(`git ${args[0]} output exceeds ${policy.gitBufferBytes} bytes`);
+  const overflow = gitOutputError(result, policy.gitBufferBytes, `git ${args[0]}`);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
@@ -454,6 +461,8 @@ export function changedFiles(cwd: string, base: string, policy = defaultPolicy.m
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr || 'Cannot read changed paths');
   return result.stdout.split('\0').filter(Boolean);
 }
@@ -468,6 +477,8 @@ export function nonGeneratedFiles(cwd: string, files: readonly string[], policy 
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status !== 0) throw new Error(result.stderr || 'Cannot read linguist-generated attributes');
   const values = result.stdout.split('\0');
   const generated = new Set<string>();

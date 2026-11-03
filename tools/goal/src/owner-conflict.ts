@@ -1,3 +1,4 @@
+import { gitOutputError } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -124,6 +125,8 @@ export function ownerConflictGitConfig(cwd: string, policy = defaultPolicy.merge
     timeout: policy.commandTimeoutMs,
     maxBuffer: policy.gitBufferBytes,
   });
+  const overflow = gitOutputError(common, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (common.status !== 0)
     throw new Error(common.stderr?.trim() || common.error?.message || 'Cannot locate Git common directory');
   const rrCache = resolve(cwd, common.stdout.trim(), 'rr-cache');
@@ -190,6 +193,8 @@ export function policyOwnerConflictGit(
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) return { status: null, stdout: '', stderr: '', error: overflow };
   return {
     status: result.status,
     stdout: result.stdout ?? '',

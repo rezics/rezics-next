@@ -474,6 +474,7 @@
       "testTimeoutMs": 30000,
       "launchSmokeTimeoutMs": 300000,
       "negativeProbeFiles": 3,
+      "negativeProbeCommands": 1,
       "diagnosticCharacters": 6000
     },
     "history": {
@@ -595,6 +596,8 @@
       "killGraceMs": 1000,
       "pollMs": 50,
       "gateTimeoutMs": 600000,
+      "outsideScopePaths": 20,
+      "affectedFailureLines": 20,
       "failureLines": 60,
       "failureHeadCharacters": 4000,
       "failureCharacters": 8000

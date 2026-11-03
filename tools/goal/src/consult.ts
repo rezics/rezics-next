@@ -61,7 +61,7 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
   if (attempt.consulted) throw new Error('this task already used its one consultation');
   const profile = readRouting(tasks.settings.routingFile, tasks.settings.policy?.routing).consultation;
   const readings = tasks.settings.pools.map((p) => tasks.reader(p));
-  const pool = choosePool(profile, tasks.settings.pools, readings);
+  const pool = choosePool(profile, tasks.settings.pools, readings, { policy: policy.provider });
   const contract = readFileSync(join(directory, 'contract.md'), 'utf8');
   const prompt = [
     'Use only this evidence. Do not read the project, run tools, wait, or edit files. Give one answer: the root cause, the smallest correction, and whether the acceptance is inconsistent.',
