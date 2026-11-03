@@ -2,6 +2,16 @@ import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
+import {
   createElement,
   useContext,
   useEffect,
@@ -17,8 +27,10 @@ import type { useSession } from '../../session/query';
 import {
   BoardPinCommandCaller,
   joinBoardPinPage,
-  unavailableBoardPinProducer,
+  pinReadFromMembership,
+  pinnedIdentitySet,
   type BoardPinAction,
+  type BoardPinBoardRead,
   type BoardPinCommandInput,
   type BoardPinFeedState,
   type BoardPinProducer,
@@ -27,6 +39,7 @@ import {
   type BoardPinSender,
   type BoardPinThread,
 } from './contract';
+import { productionBoardPinProducer } from './producer';
 
 type SessionValue = ReturnType<typeof useSession>;
 
@@ -148,7 +161,8 @@ export function useBoardPinVisit(senderOverride?: BoardPinSender): BoardPinVisit
 
 export function boardPinVisitKey(input: {
   boardId: string;
-  threadIds: readonly string[];
+  sort?: 'active' | 'hot' | 'new';
+  cursor?: string;
   initial?: BoardPinReadResult;
   producer: BoardPinProducer;
   visit: BoardPinVisit;
@@ -156,7 +170,8 @@ export function boardPinVisitKey(input: {
   return JSON.stringify([
     input.visit.key,
     input.boardId,
-    input.threadIds,
+    input.sort ?? null,
+    input.cursor ?? null,
     input.initial ?? null,
     producerId(input.producer),
   ]);
@@ -174,25 +189,33 @@ export type BoardPinPageController = {
 export function useBoardPinPage(input: {
   boardId: string;
   threadIds: readonly string[];
+  pinnedIds?: ReadonlySet<string>;
+  sort?: 'active' | 'hot' | 'new';
+  cursor?: string;
   initial?: BoardPinReadResult;
   producer?: BoardPinProducer;
   visit: BoardPinVisit;
+  onBoardRead?: (result: Extract<BoardPinBoardRead, { state: 'ready' }>) => void;
 }): BoardPinPageController {
-  const producer = input.producer ?? unavailableBoardPinProducer;
+  const producer = input.producer ?? productionBoardPinProducer;
   const threadKey = JSON.stringify(input.threadIds);
   const threadIds = useMemo(() => [...input.threadIds], [threadKey]);
-  const [state, setState] = useState<BoardPinFeedState>(() =>
-    input.initial
-      ? joinBoardPinPage(input.boardId, threadIds, input.initial)
-      : threadIds.length === 0
-        ? { state: 'empty' }
-        : { state: 'preparing' },
-  );
+  const snapshot = (): BoardPinFeedState => {
+    if (input.initial) return joinBoardPinPage(input.boardId, threadIds, input.initial);
+    if (threadIds.length === 0) return { state: 'empty' };
+    return joinBoardPinPage(
+      input.boardId,
+      threadIds,
+      pinReadFromMembership(input.boardId, threadIds, input.pinnedIds ?? new Set(), 'denied'),
+    );
+  };
+  const [state, setState] = useState<BoardPinFeedState>(snapshot);
   const [rowStatuses, setRowStatuses] = useState<Record<string, BoardPinRowStatus | undefined>>({});
   const live = useRef(false);
   const readController = useRef<AbortController | null>(null);
   const busyRows = useRef(new Set<string>());
   const caller = useRef<BoardPinCommandCaller | null>(null);
+  const refreshRef = useRef(async () => {});
 
   const isCurrent = () => live.current && input.visit.observation.snapshot() === input.visit.revision;
   if (!caller.current) {
@@ -205,16 +228,57 @@ export function useBoardPinPage(input: {
         byThreadId.set(threadId, result.thread);
         return { ...current, byThreadId };
       });
+      if (producer.readBoard) queueMicrotask(() => void refreshRef.current());
     });
   }
 
+  const keepRetry = (current: Record<string, BoardPinRowStatus | undefined>) =>
+    Object.fromEntries(
+      Object.entries(current).filter(([, status]) => status?.state === 'unknown' || status?.state === 'unavailable'),
+    );
+
   const refresh = async () => {
-    if (!isCurrent() || threadIds.length === 0) return;
+    if (!isCurrent()) return;
+    if (!producer.readBoard && threadIds.length === 0) return;
     readController.current?.abort();
     const controller = new AbortController();
     readController.current = controller;
     setState({ state: 'preparing' });
     try {
+      if (producer.readBoard) {
+        const result = await producer.readBoard({
+          boardId: input.boardId,
+          ...(input.sort ? { sort: input.sort } : {}),
+          ...(input.cursor ? { cursor: input.cursor } : {}),
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted || !isCurrent()) return;
+        if (result.state !== 'ready') {
+          setState(result);
+          return;
+        }
+        input.onBoardRead?.(result);
+        const ids = [
+          ...[...pinnedIdentitySet(result.pinnedThreads)],
+          ...result.threads.flatMap((row) =>
+            row && typeof row === 'object' && 'id' in row && typeof row.id === 'string' ? [row.id] : [],
+          ),
+        ].filter((id, index, all) => all.indexOf(id) === index);
+        const next = joinBoardPinPage(
+          input.boardId,
+          ids,
+          pinReadFromMembership(
+            result.boardId,
+            ids,
+            pinnedIdentitySet(result.pinnedThreads),
+            result.management,
+            result.management === 'allowed' ? (_id, pinned) => (pinned ? ['unpin'] : ['pin']) : () => [],
+          ),
+        );
+        setState(next);
+        if (next.state === 'ready') setRowStatuses(keepRetry);
+        return;
+      }
       const result = await producer.readPage({
         boardId: input.boardId,
         threadIds: Object.freeze([...threadIds]),
@@ -223,25 +287,16 @@ export function useBoardPinPage(input: {
       if (controller.signal.aborted || !isCurrent()) return;
       const next = joinBoardPinPage(input.boardId, threadIds, result);
       setState(next);
-      if (next.state === 'ready') {
-        setRowStatuses((current) =>
-          Object.fromEntries(
-            Object.entries(current).filter(
-              ([, status]) => status?.state === 'unknown' || status?.state === 'unavailable',
-            ),
-          ),
-        );
-      }
+      if (next.state === 'ready') setRowStatuses(keepRetry);
     } catch {
       if (!controller.signal.aborted && isCurrent()) setState({ state: 'unavailable' });
     }
   };
+  refreshRef.current = refresh;
 
   useEffect(() => {
     live.current = true;
-    if (input.initial) setState(joinBoardPinPage(input.boardId, threadIds, input.initial));
-    else if (threadIds.length === 0) setState({ state: 'empty' });
-    else void refresh();
+    setState(snapshot());
     return () => {
       live.current = false;
       readController.current?.abort();
@@ -282,7 +337,6 @@ export function BoardPinPageStatus({ state, onRetry }: { state: BoardPinFeedStat
   if (state.state === 'preparing') message = m.board_pin_preparing();
   else if (state.state === 'denied') message = m.board_pin_read_denied();
   else if (state.state === 'unavailable') message = m.board_pin_unavailable();
-  else if (state.state === 'ready' && state.management === 'denied') message = m.board_pin_manager_denied();
   if (!message) return null;
   return createElement(
     'div',
@@ -326,9 +380,15 @@ export function BoardPinThreadControls({
   onRetry(): void;
   onRefresh(): void;
 }): ReactNode {
+  const [pending, setPending] = useState<BoardPinAction | null>(null);
   const action: BoardPinAction | null = row ? (row.pinned ? 'unpin' : 'pin') : null;
   const actionable = Boolean(row && action && management === 'allowed' && sender && row.actions.includes(action));
   const blocked = status !== undefined && status.state !== 'applied';
+  const confirmTitle = pending === 'unpin' ? m.board_pin_confirm_title_unpin() : m.board_pin_confirm_title_pin();
+  const confirmBody =
+    pending === 'unpin'
+      ? m.board_pin_confirm_unpin({ title: discussionTitle })
+      : m.board_pin_confirm_pin({ title: discussionTitle });
   const statusText = status
     ? status.state === 'submitting'
       ? m.board_pin_saving()
@@ -359,11 +419,53 @@ export function BoardPinThreadControls({
             type: 'button',
             variant: 'outline',
             className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
-            onClick: () => onChange(action),
+            onClick: () => setPending(action),
           },
           action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
         )
       : null,
+    createElement(
+      AlertDialog,
+      {
+        open: pending !== null,
+        onOpenChange: (open: boolean) => {
+          if (!open) setPending(null);
+        },
+      },
+      pending
+        ? createElement(
+            AlertDialogContent,
+            { className: 'min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] text-start' },
+            createElement(
+              AlertDialogHeader,
+              { className: 'min-w-0 place-items-stretch text-start' },
+              createElement(AlertDialogTitle, null, confirmTitle),
+              createElement(AlertDialogDescription, null, confirmBody),
+            ),
+            createElement(
+              AlertDialogFooter,
+              { className: 'grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2' },
+              createElement(
+                AlertDialogCancel,
+                { className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal' },
+                m.board_pin_cancel(),
+              ),
+              createElement(
+                AlertDialogAction,
+                {
+                  className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+                  onClick: () => {
+                    if (!pending) return;
+                    onChange(pending);
+                    setPending(null);
+                  },
+                },
+                m.board_pin_confirm(),
+              ),
+            ),
+          )
+        : null,
+    ),
     statusText
       ? createElement('span', { role: 'status', className: 'text-sm text-muted-foreground' }, statusText)
       : null,

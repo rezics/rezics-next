@@ -71,8 +71,12 @@ independent rather than making shared files or unfinished producer delivery into
 - **Rating order.** Keep the current Global standard-question order and add one explicitly selected readable Realm
   population at a time. Native order and privacy states remain authoritative. Realm population selection is private
   to the mounted visit and never enters public metadata or a public Search index.
-- **Board pins.** Readers recognize pins in the native board order; admitted moderators pin or unpin a currently
-  readable thread. The browser does not assemble a second pinned feed or reorder downloaded pages.
+- **Board pins.** The initial board page renders Content's disclosed `pinnedThreads` (at most five, native
+  newest-first order) above the existing active/hot/new continuation, excluding those identities from ordinary rows.
+  Concealed pins are omitted with no placeholder. Pin/unpin confirmation and exact-command retry bind
+  `boards({ id }).threads({ threadId }).pin` POST and the same board-threads GET; listing capability fields are still
+  absent, so controls appear only from explicit producer actions. Content owns cap (currently three), storage, order
+  and authorization. Details: [board pins](../../apps/web/src/threads/board-pins.md).
 - **Slow mode.** Show the native board posting interval (`off`, 30, 60 or 300 seconds) and the caller's next
   permitted attempt beside new-thread and reply writing. An admitted moderator inspects and changes that interval on
   the board. Waiting preserves the draft; countdown text is display guidance; Send and Retry stay explicit, so a

@@ -1,11 +1,29 @@
 # Board pins
 
-Decision: Pins decorate only the producer-ordered rows already returned by the board feed; controls appear only from Content's explicit per-thread capability. Until Content ships pin disclosure/capability and command APIs, the routed seam reports unavailable, with no second pinned list, sorting, invented endpoint, or membership inference.
+Decision: The initial board page renders Content's disclosed `pinnedThreads` (at most five, native newest-first
+order) above the existing active/hot/new continuation. Ordinary rows keep their supplied order. Identities already
+present in that native section are omitted from the continuation on the same page. Web never scans other pages to
+discover pins and never sorts downloaded threads into a second feed. Concealed pins are absent from the array and
+leave no title, placeholder or count.
 
-Readers see a localized pinned badge on each currently readable discussion in the existing paged board feed. The original thread link and feed continuation remain unchanged. Empty pages keep the feed's existing empty and sparse-page meanings; they do not claim that the whole board has no pins. Unavailable or denied pin reads do not hide ordinary discussion rows or expose a pin state.
+Readers see a localized pinned section and a pinned badge on those disclosed rows. Empty continuation keeps the
+feed's existing empty and sparse-page meanings and does not claim the board has no pins. Malformed native pin data
+is unavailable with an explicit refresh. Preparing, denied and unavailable pin reads do not hide ordinary discussion
+rows.
 
-Content owns pin scope, capacity limits, native ordering, disclosure, moderator authorization and commands. The Web consumer is `BoardPinProducer` in `board-pins/contract.ts`. It reads only the thread identities already present in one ordinary board page and returns one state and explicit `pin`/`unpin` actions per identity. The consumer joins by identity to decorate the existing rows, preserves their supplied order, and rejects incomplete, duplicate or mismatched pin data as unavailable. It never discovers or scans other board threads.
+Content owns pin scope, capacity, native ordering, disclosure, moderator authorization and commands. Web displays at
+most five native `pinnedThreads` in supplied order; Content remains the cap and currently returns at most three.
+Listing responses omit per-row pin actions, so controls appear only from explicit producer actions. Membership,
+Realm role names, signed-in state and client-side pin counts do not grant a control. A readable pin can be shown
+when management is denied.
 
-The producer's `management` and each row's allowed action list are authoritative. Membership, Realm role names, signed-in state and client-side pin counts do not grant a control. A readable pin status can be shown when management is denied. A command carries the original board, thread, action, sender, CSRF credential and idempotency key. The command caller retains that immutable envelope for explicit unknown-outcome recovery. A conflict or refusal offers an explicit current-state refresh; a viewer/session or page visit replacement retires local recovery without claiming to cancel a request already sent.
+The consumer is `BoardPinProducer` in `board-pins/contract.ts`. `readBoard` re-reads the same board-threads GET,
+including `pinnedThreads` and ordinary continuation, bound to the current sort and cursor. `change` binds
+`boards({ id }).threads({ threadId }).pin` POST `{ pinned }` with the original idempotency key. A missing generated
+method stays unavailable; no endpoint or successful native body is invented. Pin/unpin requires confirmation showing
+the discussion title. Unknown outcomes retry that same sender, CSRF credential, key and operands. Conflict or
+refusal offers an explicit current-state refresh. Viewer, session, target or reading replacement retires local
+recovery without claiming to cancel a request already sent. Private pin reads and commands are no-store and stay
+outside public metadata.
 
-The routed board page connects the complete read, badge, control, conflict and unknown-outcome caller through this seam. Its current production binding is `unavailableBoardPinProducer`: the Content contract and installed kernel client do not yet expose pin disclosure, per-row capability or pin/unpin commands. Until Content supplies those native methods, the route reports pin status as unavailable and cannot present native pinned rows or submit moderator changes. No endpoint or successful native response is fabricated here.
+Slow mode and watch keep their existing owners.

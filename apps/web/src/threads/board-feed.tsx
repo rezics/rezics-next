@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { MessageSquareIcon, HeartIcon } from 'lucide-react';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -18,12 +18,17 @@ import {
   useBoardPinPage,
   useBoardPinVisit,
 } from './board-pins/controller';
-import { unavailableBoardPinProducer } from './board-pins/contract';
+import { pinnedIdentitySet } from './board-pins/contract';
+import { productionBoardPinProducer } from './board-pins/producer';
 import type { BoardPinProducer, BoardPinReadResult, BoardPinSender, BoardPinThread } from './board-pins/contract';
 import {
+  boardPinThreadIds,
   boardThreadPreview,
   boardThreadReactionCount,
+  nativePinnedSection,
+  ordinaryBoardThreads,
   type BoardFeedThread,
+  type BoardThreadPage,
   type CommunityBoardPage,
 } from './board-feed-data';
 
@@ -132,24 +137,40 @@ type BoardFeedProps = {
   authors: CommunityBoardPage['authors'];
   now: string;
   actions?: ReactNode;
+  cursor?: string;
   /** Native-format seam inputs for a future Content binding and its focused stories. */
   initialPinRead?: BoardPinReadResult;
   pinProducer?: BoardPinProducer;
   pinSender?: BoardPinSender;
 };
 
+function applyBoardPinReading(page: BoardThreadPage, result: {
+  pinnedThreads: readonly unknown[];
+  threads: readonly unknown[];
+  next: string | null;
+  rankRefreshedAt: string | null;
+}): BoardThreadPage {
+  return {
+    ...page,
+    pinnedThreads: result.pinnedThreads as BoardThreadPage['pinnedThreads'],
+    threads: result.threads as BoardThreadPage['threads'],
+    next: result.next,
+    rankRefreshedAt: result.rankRefreshedAt,
+  };
+}
+
 export function BoardFeed(props: BoardFeedProps) {
-  const threadIds = useMemo(() => props.page.threads.map((thread) => thread.id), [props.page.threads]);
-  const pinProducer = props.pinProducer ?? unavailableBoardPinProducer;
+  const pinProducer = props.pinProducer ?? productionBoardPinProducer;
   const visit = useBoardPinVisit(props.pinSender);
   const key = boardPinVisitKey({
     boardId: props.boardId,
-    threadIds,
+    sort: props.sort,
+    ...(props.cursor === undefined ? {} : { cursor: props.cursor }),
     ...(props.initialPinRead === undefined ? {} : { initial: props.initialPinRead }),
     producer: pinProducer,
     visit,
   });
-  return <BoardFeedVisit key={key} {...props} pinProducer={pinProducer} threadIds={threadIds} visit={visit} />;
+  return <BoardFeedVisit key={key} {...props} pinProducer={pinProducer} visit={visit} />;
 }
 
 function BoardFeedVisit({
@@ -159,25 +180,34 @@ function BoardFeedVisit({
   authors,
   now,
   actions,
+  cursor,
   initialPinRead,
   pinProducer,
-  threadIds,
   visit,
 }: BoardFeedProps & {
   pinProducer: BoardPinProducer;
-  threadIds: readonly string[];
   visit: ReturnType<typeof useBoardPinVisit>;
 }) {
   const headingId = useId();
+  const pinHeadingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const locale = getLocale();
   const location = useLocation();
+  const [reading, setReading] = useState(page);
+  const section = nativePinnedSection(reading.pinnedThreads);
+  const ordinary = ordinaryBoardThreads(reading);
+  const threadIds = useMemo(() => boardPinThreadIds(reading), [reading]);
+  const pinnedIds = useMemo(() => pinnedIdentitySet(reading.pinnedThreads), [reading]);
   const pins = useBoardPinPage({
     boardId,
     threadIds,
+    pinnedIds,
+    sort,
+    ...(cursor === undefined ? {} : { cursor }),
     ...(initialPinRead === undefined ? {} : { initial: initialPinRead }),
     producer: pinProducer,
     visit,
+    onBoardRead: (result) => setReading(applyBoardPinReading(page, result)),
   });
   useLayoutEffect(() => {
     const state = location.state;
@@ -197,9 +227,40 @@ function BoardFeedVisit({
     }
   }, [location.state]);
   const refreshedAt =
-    sort !== 'new' && page.rankRefreshedAt && !Number.isNaN(Date.parse(page.rankRefreshedAt))
-      ? page.rankRefreshedAt
+    sort !== 'new' && reading.rankRefreshedAt && !Number.isNaN(Date.parse(reading.rankRefreshedAt))
+      ? reading.rankRefreshedAt
       : null;
+  const card = (thread: BoardFeedThread, pinnedRow?: BoardPinThread) => {
+    const row =
+      pinnedRow ??
+      (thread.availability === 'available' && pins.state.state === 'ready'
+        ? pins.state.byThreadId.get(thread.id)
+        : undefined);
+    const rowStatus = pins.rowStatuses[thread.id];
+    const pinControl =
+      row || rowStatus ? (
+        <BoardPinThreadControls
+          discussionTitle={thread.title ?? m.threads_untitled()}
+          {...(row === undefined ? {} : { row })}
+          management={pins.state.state === 'ready' ? pins.state.management : null}
+          sender={pins.sender}
+          {...(rowStatus === undefined ? {} : { status: rowStatus })}
+          onChange={(action) => pins.start(thread.id, action)}
+          onRetry={() => pins.retry(thread.id)}
+          onRefresh={pins.refresh}
+        />
+      ) : null;
+    return (
+      <ThreadCard
+        key={`${boardId}:${thread.id}:${thread.availability}`}
+        thread={thread}
+        authors={authors}
+        now={now}
+        {...(row === undefined ? {} : { pin: row })}
+        pinControl={pinControl}
+      />
+    );
+  };
   return (
     <section className="min-w-0 space-y-3 [overflow-wrap:anywhere]" aria-labelledby={headingId}>
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
@@ -224,53 +285,39 @@ function BoardFeedVisit({
         ) : null}
       </div>
       <BoardPinPageStatus state={pins.state} onRetry={pins.refresh} />
-      {page.threads.length ? (
+      {section.state === 'ready' ? (
+        <div role="region" aria-labelledby={pinHeadingId} data-slot="board-pin-section" className="min-w-0 space-y-2">
+          <p id={pinHeadingId} className="min-w-0 max-w-full text-base font-semibold">
+            {m.board_pin_section_heading()}
+          </p>
+          <ul className="space-y-2">
+            {section.threads.map((thread) => {
+              const fromProducer = pins.state.state === 'ready' ? pins.state.byThreadId.get(thread.id) : undefined;
+              return card(thread, fromProducer ?? { threadId: thread.id, pinned: true, actions: [] });
+            })}
+          </ul>
+        </div>
+      ) : section.state === 'unavailable' ? (
+        <BoardPinPageStatus state={{ state: 'unavailable' }} onRetry={pins.refresh} />
+      ) : null}
+      {ordinary.threads.length ? (
         <ul className="space-y-2">
-          {page.threads.map((thread) => {
-            const row =
-              thread.availability === 'available' && pins.state.state === 'ready'
-                ? pins.state.byThreadId.get(thread.id)
-                : undefined;
-            const rowStatus = pins.rowStatuses[thread.id];
-            const pinControl =
-              row || rowStatus ? (
-                <BoardPinThreadControls
-                  discussionTitle={thread.title ?? m.threads_untitled()}
-                  {...(row === undefined ? {} : { row })}
-                  management={pins.state.state === 'ready' ? pins.state.management : null}
-                  sender={pins.sender}
-                  {...(rowStatus === undefined ? {} : { status: rowStatus })}
-                  onChange={(action) => pins.start(thread.id, action)}
-                  onRetry={() => pins.retry(thread.id)}
-                  onRefresh={pins.refresh}
-                />
-              ) : null;
-            return (
-              <ThreadCard
-                key={`${boardId}:${thread.id}:${thread.availability}`}
-                thread={thread}
-                authors={authors}
-                now={now}
-                {...(row === undefined ? {} : { pin: row })}
-                pinControl={pinControl}
-              />
-            );
-          })}
+          {ordinary.threads.map((thread) => card(thread))}
         </ul>
-      ) : (
+      ) : section.state === 'ready' ? null : (
         <div className="rounded-2xl bg-muted/50 px-5 py-10 text-center">
           <MessageSquareIcon aria-hidden="true" className="mx-auto mb-4 size-8 text-muted-foreground" />
           <p className="mx-auto max-w-sm text-muted-foreground">
-            {page.next === null ? m.board_threads_empty() : m.board_threads_page_empty()}
+            {ordinary.next === null ? m.board_threads_empty() : m.board_threads_page_empty()}
           </p>
         </div>
       )}
-      {page.next !== null ? (
+      {ordinary.next !== null ? (
         <nav aria-label={m.board_threads_heading()} className="pt-3">
           <Link
             to="/boards/$id"
             params={{ id: boardId }}
-            search={{ cursor: page.next, ...(sort === 'active' ? {} : { sort }) }}
+            search={{ cursor: ordinary.next, ...(sort === 'active' ? {} : { sort }) }}
             state={{ __boardNextPage: true } as never}
             className={buttonVariants({
               variant: 'outline',

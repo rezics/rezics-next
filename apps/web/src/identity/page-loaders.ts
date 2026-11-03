@@ -61,10 +61,10 @@ export async function loadBoardPageWithAuthors(
   const board = checkRead<Board>(boardResult, 'board');
   const threads = checkRead<ThreadPage>(threadsResult, 'board threads');
   if (board.board.id !== data.id) throw notFound();
-  const authors = await readPageAuthors(
-    client,
-    threads.threads.map((thread) => thread.authorId),
-  );
+  const authors = await readPageAuthors(client, [
+    ...threads.threads.map((thread) => thread.authorId),
+    ...(threads.pinnedThreads ?? []).map((thread) => thread.authorId),
+  ]);
   return {
     board: board.board,
     community: boardCommunitySource(board.board),

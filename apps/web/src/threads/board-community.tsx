@@ -23,6 +23,7 @@ import type { BoardSort } from './board-sort';
 export function BoardCommunity({
   page,
   sort,
+  cursor,
   participation,
   start,
   overflow,
@@ -30,6 +31,7 @@ export function BoardCommunity({
 }: {
   page: CommunityBoardPage;
   sort: BoardSort;
+  cursor?: string;
   participation?: ReactNode;
   start?: ReactNode;
   overflow?: ReactNode;
@@ -71,7 +73,15 @@ export function BoardCommunity({
         </div>
       </header>
       <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <BoardFeed boardId={board.id} sort={sort} page={threads} authors={authors} now={now} actions={start} />
+        <BoardFeed
+          boardId={board.id}
+          sort={sort}
+          page={threads}
+          authors={authors}
+          now={now}
+          actions={start}
+          {...(cursor === undefined ? {} : { cursor })}
+        />
         <aside className="min-w-0" aria-labelledby={aboutHeadingId}>
           <ContentItemFrame
             as="div"

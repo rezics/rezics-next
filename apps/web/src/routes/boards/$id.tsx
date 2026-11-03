@@ -54,7 +54,7 @@ export const Route = createFileRoute('/boards/$id')({
       caller.assertLoadCurrent();
       const result = await caller.resultFor(read, deps.cursor === undefined && read.page.threads.threads.length > 0);
       caller.assertLoadCurrent();
-      for (const thread of read.page.threads.threads) {
+      for (const thread of [...(read.page.threads.pinnedThreads ?? []), ...read.page.threads.threads]) {
         caller.assertLoadCurrent();
         rememberThreadSlug(thread.id, threadTitle(thread));
       }
@@ -95,6 +95,7 @@ function BoardPage() {
         <BoardCommunity
           page={currentPage}
           sort={sort ?? 'active'}
+          {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
           participation={
             <BoardParticipation realm={currentPage.realm} community={currentPage.community} returnTo={returnTo} />
           }
