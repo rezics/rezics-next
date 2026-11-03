@@ -2,7 +2,7 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { act, createContext, useContext, useMemo, type ReactNode } from 'react';
+import { act, createContext, createElement, useContext, useMemo, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -46,12 +46,10 @@ function PatternStory({
     });
     return { router, queryClient };
   }, [entry]);
-  return (
-    <PatternChildren.Provider value={children}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </PatternChildren.Provider>
+  return createElement(
+    PatternChildren.Provider,
+    { value: children },
+    createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
   );
 }
 
