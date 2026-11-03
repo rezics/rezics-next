@@ -8,27 +8,21 @@ The empty case starts with a voter that has no votes and asserts its single `[0]
 
 **Decision:** Re-key stays bound to the existing `processRatingSegmentPage` page measurement in `growth-segment-job.test.ts`; this slice adds no re-key terminal or replay owner.
 
-## Verification record
+## Subject command serialization
 
-Current check source revision: `4db85aa196c9653b7b2f09ad83afaef9b0be85e1`.
-Contract SHA-256: `f440d63c2d57e30abf0fff9ed8a5b6a01c4022470ffc592a57e716cb61ea3b37`.
-Focused command: `bun run --cwd services/kernel check test/rating/growth-segment-terminal.test.ts`.
-The fixture now supplies dedicated receipt keys to the private kernel. Schema consistency passed and the test reached
-native subject creation, then failed with `TypeError: Record sources require native command history serialization`
-from `validateCommandHistoryScope` in `services/kernel/src/history/record.ts`. The owning product seam is the native
-Semantic subject command's serialization of the source set opened by `writeSubject` in
-`services/kernel/src/semantic/subject.ts`; no product code was changed. No named test assertion or growth measurement
-was reached, so unrelated-vote and retained-history observations at 256, 1024, and 4096 remain unmeasured.
+**Decision:** `subject.create` owns permanent History command kind 3020 and declares its receipt and every actual returned event using the identity evidence supplied by native Access admission; the growth fixture creates subjects through the existing private HTTP kernel with dedicated receipt keys.
 
-`bun run --cwd services/kernel typecheck` at this revision reached compilation and exited 2 on diagnostics in
-untouched kernel test files; it reported no diagnostics in the declared terminal-growth files.
+The declaration stays in `createSubject`, after `writeSubject` has sealed its source set and returned the complete event list, before the executor serializes History. The identity terminal wrapper retains its existing drain and replay behavior. Production receipt-key validation and native source-set validation remain strict. The fixture grants its owner `subject:create` on Global Context and uses native HTTP creation, vote, membership, workflow and aggregate-effect paths.
 
-Source revision: `c3105007c907b8063a565b2cfa68b47b90806701`.
+## Measurement status
 
-Authored fixture: four selected voters each receive 100 votes through native vote HTTP; two eligibility voters receive a native Realm membership; Realm transitions use the native HTTP membership command; eligibility transitions use the production suspension and reinstatement commands. Four independent growth checks specify unrelated votes and retained receipts at 256, 1024, and 4096. The test asserts `[100, 0]` terminal pages, an initially empty `[0]` page, registered aggregate completion, a settled checkpoint, and unchanged aggregates after replay. No three-scale observations or test assertions were reached.
+The clean base `10a74b6494213a0d72702c68e37dd17b17d6ad10` retains the source-set serializer failure reported at `4db85aa196c9653b7b2f09ad83afaef9b0be85e1`: `TypeError: Record sources require native command history serialization`. Its `createSubject` body opens and seals a source set without declaring command History. The previous focused check reached subject creation, before any named test assertions or growth observations.
 
-`bun run --cwd services/kernel typecheck` at this revision stopped during remote source-artifact publication with `absolute preparation deadline exceeded`. A prior typecheck identified two diagnostics in the authored files; both were fixed in `c3105007c907b8063a565b2cfa68b47b90806701`. The retry did not reach compilation. It also reported diagnostics in untouched kernel files.
+The current launch defers focused acceptance until integration for changed source. No new runtime assertions or cost observations have been reached in this attempt. Done-when 4 remains unmeasured pending `bun run --cwd services/kernel check test/rating/growth-segment-terminal.test.ts` on the integrated source.
 
-`bun run --cwd services/kernel check test/rating/growth-segment-terminal.test.ts` stopped before loading the test with `Schema dump differs from db/library/schema.sql.` The declared source changes do not touch schema files. The test's measurement assertions therefore remain unverified. Browser, native suite, root, worker, remote, and controller acceptance launches remain deferred by the current launch context. The frozen `growth-segment-job.test.ts` remains unchanged; no product, protocol, account, Access, or shared runtime contract code changed.
-
-Retry source revision: `24ab1a6eef2b7152121697d536cf03326fe7fb53`. At `5d40d179dc55d85fe80a02392323ddc1c9862da8`, the focused command passed schema consistency and reported a formatting error in the new test; formatting was corrected in the retry source revision. The focused command at `24ab1a6eef2b7152121697d536cf03326fe7fb53` and the kernel typecheck retry both stopped during remote source-artifact publication with `absolute preparation deadline exceeded`. No runtime assertions or three-scale observations were reached.
+| Independent population | 256 | 1024 | 4096 |
+| --- | --- | --- | --- |
+| Unrelated Realm-segment votes | Unmeasured | Unmeasured | Unmeasured |
+| Retained Realm-segment command history | Unmeasured | Unmeasured | Unmeasured |
+| Unrelated eligibility votes | Unmeasured | Unmeasured | Unmeasured |
+| Retained eligibility command history | Unmeasured | Unmeasured | Unmeasured |

@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { createInitiatorRestorer } from '../../../src/access/durable-initiator.ts';
 import { createAccountsWorkModule } from '../../../src/access/membership-work.ts';
 import { GLOBAL_CONTEXT } from '../../../src/access/gates/catalogue.ts';
@@ -13,7 +13,6 @@ import { createRatingWorkModule } from '../../../src/rating/work-module.ts';
 import { readAggregate } from '../../../src/rating/aggregate-effect.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../../src/semantic/subject.ts';
 import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createReinstatementCommands } from '../../../src/access/reinstatement.ts';
@@ -29,7 +28,7 @@ import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 const route = 0x3a19;
-const actorScopes = ['subject:read', 'rating:vote', 'realm:join'];
+const actorScopes = ['subject:create', 'subject:read', 'rating:vote', 'realm:join'];
 const at = '2026-10-27T10:00:00.000Z';
 const nilId = '00000000-0000-0000-0000-000000000000';
 export const id = (ordinal: number) => `00000000-0000-7000-8000-3a19${ordinal.toString(16).padStart(8, '0')}`;
@@ -145,6 +144,11 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
        SELECT $1, account_id, 'actor', 'active', account_id FROM unnest($2::uuid[]) AS account_id`,
       [route, Object.values(voters)],
+    );
+    await database.admin.query(
+      `INSERT INTO access.resource_grant (route, resource_id, subject_id, action, valid, transaction_id)
+       VALUES ($1, $2, $3, 'subject:create', '(,)', $3)`,
+      [GLOBAL_CONTEXT.route, GLOBAL_CONTEXT.id, voters.owner],
     );
     const staffId = newId(0xfffe);
     await database.admin.query(
@@ -446,7 +450,7 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       return aggregateSnapshot(database.admin, populationId, targetId);
     }
 
-    const targetIds = await makeNativeVoteNeighbourhood(database, production, routeKey);
+    const targetIds = await makeNativeVoteNeighbourhood(kernel, production);
     await drainEffects();
     await addRealmMembership(voters.eligibility);
     await addRealmMembership(voters.eligibilityWarmup);
@@ -489,37 +493,30 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
 }
 
 async function makeNativeVoteNeighbourhood(
-  database: GrowthDatabase,
+  kernel: ReturnType<typeof createKernel>,
   production: Awaited<ReturnType<typeof createProductionAccess>>,
-  routeKey: Uint8Array,
 ): Promise<string[]> {
   const owner = voters.owner;
-  const actor = await production.authenticate(database.pool, owner, actorScopes);
+  const ownerToken = await production.mint(owner, actorScopes);
   const nativeTargets: string[] = [];
   for (let ordinal = 1; ordinal <= 100; ordinal++) {
     const key = randomUUID();
-    const subject = await createSubject(database.pool, {
-      actor,
-      target: subjectTarget(routeKey, owner, key),
-      idempotencyKey: key,
-      digest: createHash('sha256').update(key).digest(),
-      item: { type: 'schema:Book', labels: { en: `terminal-growth-${ordinal}` } },
-      release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
-    });
-    nativeTargets.push(subject.subject.id);
+    const response = await kernel.handle(
+      new Request('http://kernel.test/v1/subjects', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${ownerToken}`,
+          [IDEMPOTENCY_HEADER]: JSON.stringify(key),
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ type: 'schema:Book', labels: { en: `terminal-growth-${ordinal}` } }),
+      }),
+    );
+    if (response.status !== 201)
+      throw new Error(`Native subject returned ${response.status}: ${await response.text()}`);
+    const body = (await response.json()) as { subject: { id: string } };
+    nativeTargets.push(body.subject.id);
   }
-  const kernel = createKernel({
-    pool: database.pool,
-    routeKey,
-    tokens: sessionKeys,
-    access: production.access,
-    writeRate: createWriteRateLimiter({
-      secret: 'rating-segment-terminal-vote-fixture-write-rate-secret',
-      overrides: JSON.stringify({ 'new-account': { write: { maximum: 10000, seconds: 60 } } }),
-    }),
-    ratePeer: () => '127.0.0.1',
-  });
   for (const voterId of [voters.segment, voters.segmentWarmup, voters.eligibility, voters.eligibilityWarmup]) {
     const token = await production.mint(voterId, actorScopes, 'rating-terminal-growth');
     for (const [index, targetId] of nativeTargets.entries()) {

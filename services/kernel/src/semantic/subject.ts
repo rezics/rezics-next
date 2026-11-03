@@ -82,6 +82,7 @@ import { initializeRevisionAuthorship, revisionResource } from './authorship.ts'
 import { creationDeclares } from '../access/index.ts';
 import { readSourceRecords } from './source-records.ts';
 import readSourceMembers from './source-records-members.sql';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -90,6 +91,8 @@ export { writeFacts } from './write-facts.ts';
 const BATCH_LIMIT = 256;
 
 export const CREATE_SUBJECT = 'subject.create';
+// Permanent Semantic owner-assigned receipt codec ID.
+registerCommandHistoryKind(CREATE_SUBJECT, 3020);
 const CONTEXT = GLOBAL_CONTEXT;
 
 /** Retries reach the partition holding their receipt while each attempt gets a new subject id. */
@@ -162,7 +165,13 @@ export async function createSubject(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeSubject(tx, transactionId, { ...options, item });
+      const result = await writeSubject(tx, transactionId, { ...options, item });
+      // Access supplies the admitted identity; bind every actual event, including publication events.
+      await declareCommandHistory(tx, CREATE_SUBJECT, {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: result.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
+      return result;
     },
   );
   return {
