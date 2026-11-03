@@ -139,7 +139,7 @@ export function rememberRecent(
   if (!isAdmittedRecentQuery(query)) return [...entries];
   if (!query.trim() && !scope) return [...entries];
   const safeScope = cleanScope(scope);
-  if (scope && !safeScope) return [...entries];
+  if (scope !== undefined && !safeScope) return [...entries];
   const safeLanguages = query.trim() && languages !== undefined ? cleanLanguages(languages) : undefined;
   if (query.trim() && languages !== undefined && safeLanguages === undefined) return [...entries];
   const id = recentId(query, safeScope, safeLanguages);

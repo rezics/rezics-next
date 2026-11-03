@@ -71,6 +71,7 @@ export function admitsRecentDestination(entry: RecentEntry, href: string): boole
 
 export function recentHistoryReference(entry: HistoryEntry): RecentEntry | undefined {
   const ref = entry.scope;
+  if (ref !== undefined && !ref) return;
   if (ref && ref.kind !== 'Library' && ref.kind !== 'Realm' && ref.kind !== 'Collection') return;
   if (ref && ref.kind !== 'Library' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref.id))
     return;

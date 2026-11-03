@@ -4,7 +4,12 @@ import { act, createElement } from 'react';
 import { admitRecentPage } from '../src/search/recent-response';
 import { recentHistoryDestination, recentReplayDestination } from '../src/search/recent-replay';
 import { localRecentEntry } from '../src/search/recent-sync';
-import { readRecentHistory, writeRecentHistory, type RecentHistory } from '../src/search/recent-history';
+import {
+  readRecentHistory,
+  writeRecentHistory,
+  rememberRecent,
+  type RecentHistory,
+} from '../src/search/recent-history';
 import { searchLoaderDeps } from '../src/search/search-params';
 import { discoveryRequest } from '../src/search/search-request';
 import { searchRequiresCurrentReader } from '../src/search/scoped-search-lifetime';
@@ -42,6 +47,8 @@ test('native admission and local replay preserve exactly the installed Search re
       const item = row(kind, languages);
       expect(admitRecentPage(page(item))).toBeDefined();
       const local = localRecentEntry(item);
+      expect(recentHistoryDestination({ ...local, scope: null as never })).toBeUndefined();
+      expect(rememberRecent([], text, null as never)).toEqual([]);
       const values = new Map<string, string>();
       const storage = {
         getItem: (key: string) => values.get(key) ?? null,
