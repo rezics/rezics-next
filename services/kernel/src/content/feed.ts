@@ -14,6 +14,7 @@ import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
+import { feedDiscoveryItem } from './feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
@@ -347,30 +348,7 @@ export function createFeedReads(deps: FeedDependencies) {
                 discoveryContext,
               );
               discoveryAsOf = page.as_of;
-              lanes.discovery = page.hits.map((hit) => ({
-                item:
-                  hit.summary.kind === 'subject'
-                    ? {
-                        id: `discovery:${hit.key.owner}:${hit.key.id}`,
-                        source: 'discovery',
-                        key: { ...hit.key, owner: 'semantic' },
-                        occurredAt: null,
-                        summary: hit.summary.value,
-                        destination: { kind: 'subject', id: hit.key.id, title: hit.summary.value.label?.value ?? null },
-                      }
-                    : {
-                        id: `discovery:${hit.key.owner}:${hit.key.id}`,
-                        source: 'discovery',
-                        key: { ...hit.key, owner: 'accounts', kind: 'account' },
-                        occurredAt: null,
-                        summary: hit.summary.value,
-                        destination: {
-                          kind: 'account',
-                          id: hit.key.id,
-                          title: hit.summary.value.displayName ?? hit.summary.value.handle,
-                        },
-                      },
-              }));
+              lanes.discovery = page.hits.map((hit) => ({ item: feedDiscoveryItem(hit) }));
               next.discovery = page.next ?? false;
             } else if (lane === 'continue') {
               const page = await continued.list(

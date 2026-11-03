@@ -5,6 +5,33 @@
 selects native summary languages. The response is `{feedItems,next,asOf,sources}`.
 The exported closed `FeedItemSchema` and `FeedPageSchema` define the client-inferred wire.
 
+## Public discovery variants
+
+The [adopted second scope](research/content-second-scope-plan.md#adopted-decisions) includes public
+Collection, review and Space cards in this same discovery lane. Search owns the mixed key/summary union,
+population, ranking, current owner hydration and final eligibility; Commerce owns selected-public-output
+Collection eligibility, and Content owns review and Space populations. Feed composition consumes those native
+summaries without point-read enrichment, private membership or Collection query contents as fallback data.
+Following Collection activity retains its existing meaning and does not establish discovery eligibility.
+
+The current dev Search union, registry and native hydration still supply only Subject and Account variants.
+Collection/review/Space activation therefore remains pending those producers; no successful empty variant or
+feed-local index substitutes for them. The delivered wire/schema has no new variants in this increment.
+Decision: retain the delivered Subject/Account wire until Search supplies the new native variants; unknown
+or mismatched summaries make discovery unavailable instead of becoming fallback Account cards.
+`feed-discovery.ts` dispatches exhaustively on Search's summary discriminator and requires the exact owner,
+kind and summary identity. A rejected mapping retains the incoming lane position for retry. Search-omitted
+removed or unauthorized candidates retain Search's native examined frontier, including empty pages with `next`.
+
+Web continues to receive, for example, `{source:'discovery', key:{owner:'semantic',kind:'schema:Book',route:0,id},
+summary:subjectSummary, destination:{kind:'subject',id,title:null}, occurredAt:null,
+id:'discovery:semantic:'+id}` or the corresponding `accounts/account` key, Account summary and
+`{kind:'account',id,title}` destination. The continuation must publish exact new closed schemas and examples
+for Collection, review-thread and Space destinations together with their mappings and native producer wiring.
+It must retain exact kind/selection cursor binding, `6D+3` discovery work, B=160 and one bounded mixed round.
+
+## Selection and native summaries
+
 Optional singular `kind` is the exact native kind ID, for example
 `GET /v1/feedItems?stream=home&limit=20&kind=schema%3ABook`. Omission retains all kinds.
 The native `kind.in` literal grammar permits a nonempty string of at most 256 UTF-8
@@ -119,7 +146,8 @@ partition, epoch, position and actual event index. Subject references retain the
 maximum of 128. Realm content additionally carries its actual Space. Activities contain
 only source/target/object locators and time, never bodies, titles, grants or permission
 flags. Semantic publication locators retain Realm and publication IDs so a withdrawal
-or replacement cannot revive an old event. Collection events never feed public discovery.
+or replacement cannot revive an old event. Following Collection events remain activity only; the adopted
+public Collection discovery variant uses Search's independently eligible public metadata source.
 
 `createFeedActivityStore({pool,clock?,tokens})` exports
 `pageTargetActivity(target,{cursor?,limit?},deadline)` returning `{activities,next}`, and
@@ -226,8 +254,8 @@ returns `dependency_unavailable` before enumeration until its original populatio
 is composed; point review witnesses do not activate it. Failed source lanes
 remain omitted; only a ready lane with a native frontier enables Next, while Retry may
 retry a failed lane. The available default sources remain catalogue/Account discovery,
-recent Following and Continue. Public Board/Realm/discussion/Collection discovery and Context
-membership remain pending their original producers.
+recent Following and Continue. Adopted public Collection/review/Space discovery awaits the native producers
+above. Public Board/Realm/discussion discovery and Context membership remain outside those delivered sources.
 
 Home Space choice reads retain the resolved Space identity on point-read failure so a failed
 revalidation disables that selection; platform closure remains distinct from access denial.

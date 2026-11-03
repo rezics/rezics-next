@@ -5,6 +5,10 @@ Content owns boards, threads, posts, immutable documents, media state and public
 ## Mixed Home summaries
 
 [The feed contract](../../../../docs/feeds.md) owns selection, source limits and sparse cursors.
+`feed-discovery.ts` maps Search's delivered native Subject/Account summaries with exhaustive dispatch and exact
+primary identity checks. Unsupported or inconsistent variants fail the discovery lane without rewriting their
+owner/kind or advancing its retry position. Public Collection/review/Space cards are adopted, but their Search
+union, registry and native hydrators have not landed on this base; no feed-local population replaces them.
 Thread and post summaries add optional `author` (Accounts display name, handle and avatar) and `excerpt`.
 Projection consumes only the opening/post revision that passed native disclosure; one deduplicated page-level
 Accounts summary batch supplies at most 20 current identities with its own final checks. A missing summary
