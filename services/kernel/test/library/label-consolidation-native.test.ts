@@ -22,7 +22,11 @@ const select = async (labelId: string, subjectId: string) => {
   return { subjectId, assignmentId: value.id, revision: value.revision };
 };
 
-async function review(source: { id: string }, target: { id: string }, items: Array<{ subjectId: string; assignmentId: string; revision: number }>) {
+async function review(
+  source: { id: string },
+  target: { id: string },
+  items: Array<{ subjectId: string; assignmentId: string; revision: number }>,
+) {
   const path = `/v1/libraryLabels/${source.id}:reviewConsolidation`;
   let cursor: string | null = null;
   let first: any;
@@ -55,7 +59,12 @@ async function confirm(sourceId: string, evidence: unknown) {
 async function readAssignments(labelId: string) {
   const response = await f.send('owner', 'GET', `/v1/libraryLabelAssignments?labelId=${labelId}`);
   expect(response.status).toBe(200);
-  return (await response.json()).assignments as Array<{ id: string; labelId: string; subjectId: string; revision: number }>;
+  return (await response.json()).assignments as Array<{
+    id: string;
+    labelId: string;
+    subjectId: string;
+    revision: number;
+  }>;
 }
 
 test('confirmed selected moves reopen through both native readers and preserve already-on-target identity', async () => {
@@ -155,10 +164,12 @@ test('changed evidence, renamed or recreated parents, and changed Subject exposu
   });
   expect((await hiddenApply.json()).items[0]).toMatchObject({ status: 'inaccessible' });
   expect(
-    (await f.pool.query(
-      `SELECT slot_no FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`,
-      [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, hiddenItem.subjectId, hiddenSource.id],
-    )).rows[0]?.slot_no,
+    (
+      await f.pool.query(
+        `SELECT slot_no FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`,
+        [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, hiddenItem.subjectId, hiddenSource.id],
+      )
+    ).rows[0]?.slot_no,
   ).not.toBeNull();
 }, 120_000);
 
@@ -171,8 +182,11 @@ test('native assignment admission refuses full capacity and reclaims only a dele
     fullConfirmation = await confirm(source.id, fullEvidence);
   expect(fullConfirmation.status).toBe(201);
   const fullId = (await fullConfirmation.json()).confirmationId;
-  for (let n = 0; n < 31; n++) await select((await label(`Full reservation ${n} ${crypto.randomUUID()}`)).id, fullSubject);
-  const refused = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:applyConsolidation`, { confirmationId: fullId });
+  for (let n = 0; n < 31; n++)
+    await select((await label(`Full reservation ${n} ${crypto.randomUUID()}`)).id, fullSubject);
+  const refused = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:applyConsolidation`, {
+    confirmationId: fullId,
+  });
   expect((await refused.json()).items[0].status).toBe('capacity_limited');
   expect((await readAssignments(source.id)).map((row) => row.subjectId)).toContain(fullSubject);
 
@@ -212,7 +226,12 @@ test('native assignment admission refuses full capacity and reclaims only a dele
       [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, reclaimSubject, deletedParent.id],
     )
   ).rows[0];
-  expect(after).toMatchObject({ revision: before.revision + 1, deleted_at: before.deleted_at, purge_after: before.purge_after, slot_no: null });
+  expect(after).toMatchObject({
+    revision: before.revision + 1,
+    deleted_at: before.deleted_at,
+    purge_after: before.purge_after,
+    slot_no: null,
+  });
   expect(liveParents).toHaveLength(30);
 }, 120_000);
 
@@ -271,14 +290,20 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
   });
   expect(await targetEventCount()).toBe(eventCount);
 
-  const cancelled = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:cancelConsolidation`, { confirmationId });
+  const cancelled = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:cancelConsolidation`, {
+    confirmationId,
+  });
   expect(cancelled.status).toBe(200);
   expect((await cancelled.json()).items.map((row: { status: string }) => row.status)).toEqual(['moved', 'pending']);
-  const stopped = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:applyConsolidation`, { confirmationId });
+  const stopped = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:applyConsolidation`, {
+    confirmationId,
+  });
   expect([404, 409]).toContain(stopped.status);
   expect((await readAssignments(target.id)).map((row) => row.subjectId)).toContain(first.subjectId);
   expect((await readAssignments(target.id)).map((row) => row.subjectId)).not.toContain(second.subjectId);
-  expect((await f.send('other', 'GET', `/v1/libraryLabels/${source.id}/consolidations/${confirmationId}`)).status).toBe(404);
+  expect((await f.send('other', 'GET', `/v1/libraryLabels/${source.id}/consolidations/${confirmationId}`)).status).toBe(
+    404,
+  );
 
   const sourceBefore = (
     await f.pool.query(
@@ -309,7 +334,10 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
     { subjectId: first.subjectId, assignmentId: first.assignmentId, revision: replayedSource.value.revision },
     entryKey(),
   );
-  expect(restored.value.assignment).toMatchObject({ id: first.assignmentId, revision: replayedSource.value.revision + 1 });
+  expect(restored.value.assignment).toMatchObject({
+    id: first.assignmentId,
+    revision: replayedSource.value.revision + 1,
+  });
 
   const guardedItem = await select(source.id, await f.createSubject('unprofiled')),
     guardedEvidence = await review(source, target, [guardedItem]),
@@ -332,14 +360,23 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
     target.id,
     { subjectId: guardedItem.subjectId },
     target.revision,
-    { labelId: source.id, assignmentId: guardedItem.assignmentId, revision: guardedItem.revision, labelRevision: source.revision },
+    {
+      labelId: source.id,
+      assignmentId: guardedItem.assignmentId,
+      revision: guardedItem.revision,
+      labelRevision: source.revision,
+    },
     null,
     guardedKeys.target_request_key,
   );
   await assignments().unassignLabel(
     f.owner.actor,
     target.id,
-    { subjectId: guardedItem.subjectId, assignmentId: guardedTarget.value.assignment.id, revision: guardedTarget.value.assignment.revision },
+    {
+      subjectId: guardedItem.subjectId,
+      assignmentId: guardedTarget.value.assignment.id,
+      revision: guardedTarget.value.assignment.revision,
+    },
     entryKey(),
   );
   const guardedRetry = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:retryConsolidation`, {
@@ -359,7 +396,9 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
     { partition: partitionOf(route), limit: 100, after: null },
   );
   expect(expired.removed).toBeGreaterThan(0);
-  expect((await f.send('owner', 'GET', `/v1/libraryLabels/${source.id}/consolidations/${confirmationId}`)).status).toBe(404);
+  expect((await f.send('owner', 'GET', `/v1/libraryLabels/${source.id}/consolidations/${confirmationId}`)).status).toBe(
+    404,
+  );
 
   const terminalSubject = await f.createSubject('unprofiled'),
     terminalItem = await select(source.id, terminalSubject),
@@ -373,7 +412,14 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
     );
   expect(erased.length).toBeGreaterThan(0);
   expect(
-    (await f.pool.query(`SELECT count(*)::int AS count FROM library.label_consolidation_item WHERE consolidation_id=$1`, [terminalId])).rows[0]!.count,
+    (
+      await f.pool.query(
+        `SELECT count(*)::int AS count FROM library.label_consolidation_item WHERE consolidation_id=$1`,
+        [terminalId],
+      )
+    ).rows[0]!.count,
   ).toBe(0);
-  expect((await f.send('owner', 'GET', `/v1/libraryLabels/${source.id}/consolidations/${terminalId}`)).status).toBe(404);
+  expect((await f.send('owner', 'GET', `/v1/libraryLabels/${source.id}/consolidations/${terminalId}`)).status).toBe(
+    404,
+  );
 }, 120_000);

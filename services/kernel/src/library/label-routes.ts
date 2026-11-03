@@ -437,7 +437,18 @@ export function personalLabelRoutes(
         headers,
         body: confirmationEvidence,
         transform: ({ request }) => queryFields(request, []),
-        response: { 201: t.Object({ confirmationId: id, expiresAt: t.String({ format: 'date-time' }), status: t.Literal('active'), itemCount: t.Integer({ minimum: 1, maximum: 16 }) }, closed), ...failures },
+        response: {
+          201: t.Object(
+            {
+              confirmationId: id,
+              expiresAt: t.String({ format: 'date-time' }),
+              status: t.Literal('active'),
+              itemCount: t.Integer({ minimum: 1, maximum: 16 }),
+            },
+            closed,
+          ),
+          ...failures,
+        },
         detail: detail('consolidation_confirm'),
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {

@@ -99,7 +99,13 @@ export async function setLabelAssignment(
   const locked = await parents.run(db, {
     route: input.route,
     account_id: input.accountId,
-    label_ids: [...new Set([...rows.map((row) => row.labelId), labelId, ...(input.expectedSource ? [input.expectedSource.labelId] : [])])],
+    label_ids: [
+      ...new Set([
+        ...rows.map((row) => row.labelId),
+        labelId,
+        ...(input.expectedSource ? [input.expectedSource.labelId] : []),
+      ]),
+    ],
   });
   const current = new Map(locked.map((parent) => [parent.labelId, parent]));
   const parent = current.get(labelId);
@@ -108,9 +114,18 @@ export async function setLabelAssignment(
     return { kind: 'changed' };
   if (input.expectedSource) {
     const sourceParent = current.get(input.expectedSource.labelId);
-    if (!sourceParent || sourceParent.deletedAt !== null || sourceParent.revision !== input.expectedSource.labelRevision)
+    if (
+      !sourceParent ||
+      sourceParent.deletedAt !== null ||
+      sourceParent.revision !== input.expectedSource.labelRevision
+    )
       return { kind: 'changed' };
-    const source = await client.query<{ assignmentId: string; revision: number; slotNo: number | null; deletedAt: string | null }>(
+    const source = await client.query<{
+      assignmentId: string;
+      revision: number;
+      slotNo: number | null;
+      deletedAt: string | null;
+    }>(
       `SELECT assignment_id AS "assignmentId",revision,slot_no AS "slotNo",deleted_at::text AS "deletedAt"
        FROM library.label_assignment
        WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`,
@@ -131,7 +146,11 @@ export async function setLabelAssignment(
     return { kind: 'migration_required' };
   if (input.expectedTarget !== undefined) {
     const observedTarget = desired
-      ? { id: desired.id!, revision: desired.revision, effective: desired.deletedAt === null && desired.slotNo !== null }
+      ? {
+          id: desired.id!,
+          revision: desired.revision,
+          effective: desired.deletedAt === null && desired.slotNo !== null,
+        }
       : null;
     if (JSON.stringify(observedTarget) !== JSON.stringify(input.expectedTarget)) return { kind: 'changed' };
   }

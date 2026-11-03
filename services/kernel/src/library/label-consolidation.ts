@@ -6,7 +6,13 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { admitGroup } from '../access/gates/admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { authoritativeTimeValue, mintReadTime, noEffect, releaseOperationalTime, runCommand } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  noEffect,
+  releaseOperationalTime,
+  runCommand,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -283,7 +289,11 @@ export function createLabelConsolidationCommands(deps: {
       clientAction: action,
     });
 
-  async function snapshot<T>(owner: AccountActor, deadline: number, body: (client: Client, route: number) => Promise<T>) {
+  async function snapshot<T>(
+    owner: AccountActor,
+    deadline: number,
+    body: (client: Client, route: number) => Promise<T>,
+  ) {
     return withConnection(pool, async (connection) => {
       const client = deadlineClient(connection, deadline),
         route = routeOf(owner.accountId)!;
@@ -314,7 +324,12 @@ export function createLabelConsolidationCommands(deps: {
     return snapshot(owner, deadline, (client) => mintReadTime(client, clock));
   }
 
-  async function resolveSelection(owner: AccountActor, items: EvidenceItem[], time: Awaited<ReturnType<typeof currentTime>>, deadline: number) {
+  async function resolveSelection(
+    owner: AccountActor,
+    items: EvidenceItem[],
+    time: Awaited<ReturnType<typeof currentTime>>,
+    deadline: number,
+  ) {
     for (const item of items) {
       const resolved = await withRequestDeadline(deadline, () =>
         resolveSubject(deps, owner, item.selected.subjectId, time),
@@ -341,7 +356,13 @@ export function createLabelConsolidationCommands(deps: {
     return row.rows[0] ? planRow(row.rows[0]) : null;
   }
 
-  async function readItems(client: Client, owner: AccountActor, sourceLabelId: string, confirmationId: string, lock = false) {
+  async function readItems(
+    client: Client,
+    owner: AccountActor,
+    sourceLabelId: string,
+    confirmationId: string,
+    lock = false,
+  ) {
     const route = sameAccountRoute(owner.accountId, sourceLabelId);
     const rows = await client.query<Record<string, unknown>>(
       `SELECT ${itemColumns} FROM library.label_consolidation_item
@@ -351,7 +372,14 @@ export function createLabelConsolidationCommands(deps: {
     return rows.rows.map(itemRow);
   }
 
-  async function reviewOutcome(client: Client, route: number, accountId: string, sourceLabelId: string, targetLabelId: string, item: EvidenceItem) {
+  async function reviewOutcome(
+    client: Client,
+    route: number,
+    accountId: string,
+    sourceLabelId: string,
+    targetLabelId: string,
+    item: EvidenceItem,
+  ) {
     const tuple = { route, accountId, subjectId: item.selected.subjectId },
       source = observation(await readStoredLabelAssignment(client, { ...tuple, labelId: sourceLabelId })),
       rows = await reservations.run(
@@ -361,7 +389,8 @@ export function createLabelConsolidationCommands(deps: {
       target = observation(rows.find((row) => row.desired));
     let outcome: EvidenceItem['outcome'] | 'changed' | 'capacity_limited' | 'missing';
     if (!source) outcome = 'missing';
-    else if (source.id !== item.selected.assignmentId || source.revision !== item.selected.revision) outcome = 'changed';
+    else if (source.id !== item.selected.assignmentId || source.revision !== item.selected.revision)
+      outcome = 'changed';
     else if (!source.effective) outcome = 'missing';
     else if (target?.effective) outcome = 'already_on_target';
     else {
@@ -378,7 +407,8 @@ export function createLabelConsolidationCommands(deps: {
   async function confirm(ownerActor: Actor, sourceValue: string, value: unknown, key: string) {
     const owner = actor(ownerActor, 'library_entry:update');
     actor(ownerActor, 'library_entry:read');
-    const sourceLabelId = id(sourceValue), evidenceValue = evidence(value, sourceLabelId),
+    const sourceLabelId = id(sourceValue),
+      evidenceValue = evidence(value, sourceLabelId),
       targetLabelId = evidenceValue.targetLabel.id;
     sameAccountRoute(owner.accountId, targetLabelId);
     const selectionHash = createHash('sha256')
@@ -426,7 +456,9 @@ export function createLabelConsolidationCommands(deps: {
               throw new LibraryConflictError();
           }
           const now = authoritativeTimeValue(command.time),
-            expiresAt = new Date(Date.parse(now) + LABEL_CONSOLIDATION_LIMITS.confirmationMinutes * 60_000).toISOString();
+            expiresAt = new Date(
+              Date.parse(now) + LABEL_CONSOLIDATION_LIMITS.confirmationMinutes * 60_000,
+            ).toISOString();
           const retained = await tx.query<{ count: string }>(
             `SELECT count(*)::text AS count FROM library.label_consolidation
              WHERE route=$1 AND account_id=$2 AND expires_at > $3::timestamptz`,
@@ -512,7 +544,13 @@ export function createLabelConsolidationCommands(deps: {
         action: 'library_entry:update',
         kind: 'library_label.consolidation_progress',
         requestKey: key,
-        input: { sourceLabelId: plan.sourceLabelId, confirmationId: plan.confirmationId, item: item.itemNo, stage, target },
+        input: {
+          sourceLabelId: plan.sourceLabelId,
+          confirmationId: plan.confirmationId,
+          item: item.itemNo,
+          stage,
+          target,
+        },
       },
       async (tx, command) => {
         const route = sameAccountRoute(owner.accountId, plan.sourceLabelId),
@@ -572,7 +610,14 @@ export function createLabelConsolidationCommands(deps: {
         action: 'library_entry:update',
         kind: 'library_label.consolidation_finish',
         requestKey: key,
-        input: { sourceLabelId: plan.sourceLabelId, confirmationId: plan.confirmationId, item: item.itemNo, status, target, sourceRevision },
+        input: {
+          sourceLabelId: plan.sourceLabelId,
+          confirmationId: plan.confirmationId,
+          item: item.itemNo,
+          status,
+          target,
+          sourceRevision,
+        },
       },
       async (tx, command) => {
         const route = sameAccountRoute(owner.accountId, plan.sourceLabelId),
@@ -619,7 +664,13 @@ export function createLabelConsolidationCommands(deps: {
     );
   }
 
-  async function currentBindings(owner: AccountActor, plan: Plan, item: PlanItem, time: Awaited<ReturnType<typeof currentTime>>, deadline: number) {
+  async function currentBindings(
+    owner: AccountActor,
+    plan: Plan,
+    item: PlanItem,
+    time: Awaited<ReturnType<typeof currentTime>>,
+    deadline: number,
+  ) {
     const readable = await withRequestDeadline(deadline, () => resolveSubject(deps, owner, item.subjectId, time));
     if (readable?.subjectId !== item.subjectId) return 'inaccessible' as const;
     return snapshot(owner, deadline, async (client, route) => {
@@ -687,13 +738,7 @@ export function createLabelConsolidationCommands(deps: {
       } finally {
         releaseOperationalTime(time);
       }
-      const started = await updateStage(
-        owner,
-        currentPlan,
-        item,
-        'target_started',
-        `${item.targetRequestKey}:start`,
-      );
+      const started = await updateStage(owner, currentPlan, item, 'target_started', `${item.targetRequestKey}:start`);
       if (!started.value.updated) return;
       item = { ...item, stage: 'target_started' };
     }
@@ -825,18 +870,11 @@ export function createLabelConsolidationCommands(deps: {
       } finally {
         releaseOperationalTime(time);
       }
-      const started = await updateStage(
-        owner,
-        currentPlan,
-        item,
-        'source_started',
-        `${item.sourceRequestKey}:start`,
-        {
-          id: item.targetResultId!,
-          revision: item.targetResultRevision!,
-          unchanged: item.targetUnchanged!,
-        },
-      );
+      const started = await updateStage(owner, currentPlan, item, 'source_started', `${item.sourceRequestKey}:start`, {
+        id: item.targetResultId!,
+        revision: item.targetResultRevision!,
+        unchanged: item.targetUnchanged!,
+      });
       if (!started.value.updated) {
         await finishItem(
           owner,
@@ -884,7 +922,11 @@ export function createLabelConsolidationCommands(deps: {
           outcome.value.revision,
         );
       } catch (error) {
-        if (error instanceof GrantDeniedError || error instanceof LibraryNotFoundError || error instanceof LibraryConflictError) {
+        if (
+          error instanceof GrantDeniedError ||
+          error instanceof LibraryNotFoundError ||
+          error instanceof LibraryConflictError
+        ) {
           await finishItem(
             owner,
             currentPlan,
@@ -931,7 +973,14 @@ export function createLabelConsolidationCommands(deps: {
           `UPDATE library.label_consolidation_item SET status='applying',stage='target_pending',
            updated_at=$5::timestamptz,transaction_id=$6
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3 AND item_no=$4 AND status='pending'`,
-          [sameAccountRoute(owner.accountId, sourceLabelId), owner.accountId, confirmationId, current.itemNo, now, command.transactionId],
+          [
+            sameAccountRoute(owner.accountId, sourceLabelId),
+            owner.accountId,
+            confirmationId,
+            current.itemNo,
+            now,
+            command.transactionId,
+          ],
         );
         return { value: { confirmationId, item: current.itemNo } };
       },
@@ -939,7 +988,13 @@ export function createLabelConsolidationCommands(deps: {
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, operation.value.item) };
   }
 
-  async function beginRetry(ownerActor: Actor, sourceLabelIdValue: string, confirmationIdValue: string, itemNoValue: number, key: string) {
+  async function beginRetry(
+    ownerActor: Actor,
+    sourceLabelIdValue: string,
+    confirmationIdValue: string,
+    itemNoValue: number,
+    key: string,
+  ) {
     const owner = actor(ownerActor, 'library_entry:update'),
       sourceLabelId = id(sourceLabelIdValue),
       confirmationId = id(confirmationIdValue, false),
@@ -957,7 +1012,14 @@ export function createLabelConsolidationCommands(deps: {
         input: { sourceLabelId, confirmationId, item: itemNo },
       },
       async (tx, command) => {
-        const plan = await readPlan(tx, owner, sourceLabelId, confirmationId, authoritativeTimeValue(command.time), true),
+        const plan = await readPlan(
+            tx,
+            owner,
+            sourceLabelId,
+            confirmationId,
+            authoritativeTimeValue(command.time),
+            true,
+          ),
           item = (await readItems(tx, owner, sourceLabelId, confirmationId, true))[itemNo];
         if (!plan || !item || item.status !== 'applying') throw new LibraryConflictError();
         return { value: { confirmationId, item: itemNo } };
@@ -1002,13 +1064,25 @@ export function createLabelConsolidationCommands(deps: {
           `UPDATE library.label_consolidation_item SET status='pending',stage=NULL,
              updated_at=$4::timestamptz,transaction_id=$5
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3 AND status='applying' AND stage='target_pending'`,
-          [sameAccountRoute(owner.accountId, sourceLabelId), owner.accountId, confirmationId, now, command.transactionId],
+          [
+            sameAccountRoute(owner.accountId, sourceLabelId),
+            owner.accountId,
+            confirmationId,
+            now,
+            command.transactionId,
+          ],
         );
         await tx.query(
           `UPDATE library.label_consolidation SET status='cancelled',terminal_at=$4::timestamptz,
            updated_at=$4::timestamptz,transaction_id=$5
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3 AND status='active'`,
-          [sameAccountRoute(owner.accountId, sourceLabelId), owner.accountId, confirmationId, now, command.transactionId],
+          [
+            sameAccountRoute(owner.accountId, sourceLabelId),
+            owner.accountId,
+            confirmationId,
+            now,
+            command.transactionId,
+          ],
         );
         return { value: { confirmationId, status: 'cancelled' as const } };
       },
@@ -1016,7 +1090,11 @@ export function createLabelConsolidationCommands(deps: {
     return { operation, result: await result(owner, sourceLabelId, confirmationId) };
   }
 
-  async function result(ownerActor: Actor, sourceLabelIdValue: string, confirmationIdValue: string): Promise<LabelConsolidationResult> {
+  async function result(
+    ownerActor: Actor,
+    sourceLabelIdValue: string,
+    confirmationIdValue: string,
+  ): Promise<LabelConsolidationResult> {
     const owner = actor(ownerActor, 'library_entry:read'),
       sourceLabelId = id(sourceLabelIdValue),
       confirmationId = id(confirmationIdValue, false),
@@ -1096,7 +1174,8 @@ export async function purgeExpiredLabelConsolidations(
         cutoff: (clock?.() ?? systemClock()).toISOString(),
         last: null,
       };
-    if (Buffer.byteLength(value) > 2048 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new TypeError('Invalid expiry cursor');
+    if (Buffer.byteLength(value) > 2048 || !/^[A-Za-z0-9_-]+$/.test(value))
+      throw new TypeError('Invalid expiry cursor');
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString()) as Cursor;
     if (
       parsed?.version !== 1 ||
@@ -1136,7 +1215,14 @@ export async function purgeExpiredLabelConsolidations(
        WHERE route=$1 AND expires_at <= $2::timestamptz
          AND ($3::timestamptz IS NULL OR (expires_at,account_id,consolidation_id) > ($3::timestamptz,$4::uuid,$5::uuid))
        ORDER BY expires_at,account_id,consolidation_id LIMIT $6`,
-      [cursor.route, cursor.cutoff, cursor.last?.expiresAt ?? null, cursor.last?.accountId ?? null, cursor.last?.confirmationId ?? null, requested],
+      [
+        cursor.route,
+        cursor.cutoff,
+        cursor.last?.expiresAt ?? null,
+        cursor.last?.accountId ?? null,
+        cursor.last?.confirmationId ?? null,
+        requested,
+      ],
     );
     if (page.rows.length === 0) {
       cursor.route++;
@@ -1190,10 +1276,8 @@ export async function purgeExpiredLabelConsolidations(
       cursor.last = null;
     }
   }
-  const next =
-    cursor.route >= (partition + 1) * 16
-      ? null
-      : Buffer.from(JSON.stringify(cursor)).toString('base64url');
-  if (next && Buffer.byteLength(next) > 2048) throw new RangeError('Label consolidation expiry cursor exceeds its bound');
+  const next = cursor.route >= (partition + 1) * 16 ? null : Buffer.from(JSON.stringify(cursor)).toString('base64url');
+  if (next && Buffer.byteLength(next) > 2048)
+    throw new RangeError('Label consolidation expiry cursor exceeds its bound');
   return { examined, removed, next };
 }

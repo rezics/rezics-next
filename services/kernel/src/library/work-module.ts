@@ -171,15 +171,13 @@ async function registerLabelConsolidationRetention({ pool, client, clock }: Work
       after = (await page(partition, after)).next;
       if (after === null) partition++;
     }
-    if (partition < 4096)
-      await continuation({ ...input, sequence: input.sequence + 1, partition, after });
+    if (partition < 4096) await continuation({ ...input, sequence: input.sequence + 1, partition, after });
     return { partition, after };
   };
   DBOS.registerWorkflow(segment, { name: 'library.labelConsolidationRetentionSegment' });
-  DBOS.registerWorkflow(
-    async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }),
-    { name: LABEL_CONSOLIDATION_RETENTION_SWEEP_WORKFLOW },
-  );
+  DBOS.registerWorkflow(async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }), {
+    name: LABEL_CONSOLIDATION_RETENTION_SWEEP_WORKFLOW,
+  });
   await client.applySchedules([
     {
       scheduleName: LABEL_CONSOLIDATION_RETENTION_SCHEDULE,

@@ -318,9 +318,15 @@ export function createLabelAssignmentCommands(deps: {
     expectedLabelRevision: number,
     key: string,
   ) {
-    return (await mutate(actor, labelId, value, key, 'assign', undefined, expectedLabelRevision)) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal> & { unchanged: boolean }
-    >;
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'assign',
+      undefined,
+      expectedLabelRevision,
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged: boolean }>;
   }
   async function assignLabelForConsolidation(
     actor: Actor,
@@ -357,7 +363,17 @@ export function createLabelAssignmentCommands(deps: {
     key: string,
     expectedTarget?: { labelId: string; assignmentId: string; revision: number; labelRevision: number },
   ) {
-    return (await mutate(actor, labelId, value, key, 'unassign', undefined, expectedLabelRevision, undefined, expectedTarget)) as import('../command/command.ts').CommandOutcome<{
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'unassign',
+      undefined,
+      expectedLabelRevision,
+      undefined,
+      expectedTarget,
+    )) as import('../command/command.ts').CommandOutcome<{
       deleted: true;
       revision: number;
     }>;

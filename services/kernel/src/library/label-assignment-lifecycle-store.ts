@@ -82,14 +82,16 @@ async function observe(client: Client, input: Expected, context: Context, expect
     );
     if (parent.rows[0]?.revision !== expectedLabelRevision) return { row: null, parentChanged: true as const };
   }
-  return read.run(
-    { query: client.query.bind(client) },
-    {
-      ...parameters(input),
-      assignment_id: input.assignmentId,
-      time: context.time,
-    },
-  ).then((row) => ({ row, parentChanged: false as const }));
+  return read
+    .run(
+      { query: client.query.bind(client) },
+      {
+        ...parameters(input),
+        assignment_id: input.assignmentId,
+        time: context.time,
+      },
+    )
+    .then((row) => ({ row, parentChanged: false as const }));
 }
 
 export async function unassignStoredLabelAssignment(
