@@ -40,16 +40,6 @@ candidates AS (
 )
 UNION ALL
 (
-  SELECT :route::integer AS route,
-         :account_id::uuid AS account_id,
-         :subject_id::uuid AS subject_id,
-         :after_started_at::timestamptz AS after_started_at,
-         :after_session_id::uuid AS after_session_id,
-         :has_cursor::boolean AS has_cursor,
-         :limit::integer AS page_limit
-),
-candidates AS (
-(
   SELECT session.route,
          session.session_id AS id,
          session.account_id AS "accountId",
