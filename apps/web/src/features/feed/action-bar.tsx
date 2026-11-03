@@ -70,6 +70,7 @@ export function HomeFeedActions({
   children,
   verification,
   origin,
+  reaction,
 }: {
   item: FeedItem;
   locale: string;
@@ -77,6 +78,7 @@ export function HomeFeedActions({
   children?: ReactNode;
   verification?: VerificationConfig | undefined;
   origin?: FeedActionBarProps['origin'];
+  reaction?: FeedReaction | undefined;
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
@@ -97,6 +99,7 @@ export function HomeFeedActions({
       signedIn={signedIn}
       plain={kind === 'post'}
       origin={origin}
+      reaction={reaction}
       overflow={
         target && verification && href ? (
           <PostActions

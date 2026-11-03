@@ -6,6 +6,9 @@ import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
 import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-empty-state';
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
+import { homeReactionAdmission } from '../feed/home-reaction-admission';
+import { useHomeReactionCurrentness } from '../feed/home-reaction-currentness';
+import type { FeedReaction } from '../feed/vote-control';
 import type { VerificationConfig } from '../../report/turnstile';
 import { createHomeKindChoices, homeKindChoice, type HomeKindsReader } from './home-feed-kinds';
 import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
@@ -57,6 +60,7 @@ export function HomeFeed({
   questionControl,
   catalogue,
   verification,
+  preparedReactionTransport,
   suppressResultMessage = false,
   onRetry,
   onNext,
@@ -79,6 +83,8 @@ export function HomeFeed({
   /** Native route TypeLists; the feed and Search retain their own adapters. */
   catalogue?: ReactNode;
   verification?: VerificationConfig | undefined;
+  /** Illustrative connected stories only; normal Home commands use the installed reaction transports. */
+  preparedReactionTransport?: FeedReaction['preparedTransport'];
   /** The selected metadata control already explains and recovers its own blocked selection. */
   suppressResultMessage?: boolean;
   onRetry?: () => void;
@@ -114,10 +120,7 @@ export function HomeFeed({
     focusFirstFilter();
   }, [filtersOpen]);
   const page = result.state === 'ready' ? result.page : undefined;
-  const [actionSource, setActionSource] = useState({ result, key: 0 });
-  if (actionSource.result !== result) setActionSource({ result, key: actionSource.key + 1 });
-  const currentActionResult = useRef(result);
-  currentActionResult.current = result;
+  const reactions = useHomeReactionCurrentness(result, input, stream, signedIn, busy);
   const hasPreparing = page ? Object.values(page.sources).includes('preparing') : false;
   const hasUnavailable = page ? Object.values(page.sources).includes('unavailable') : false;
   const results: FeedResultsResult<FeedItem> =
@@ -223,6 +226,7 @@ export function HomeFeed({
         getItemKey={(item) => item.id}
         itemPresentation={(item) => {
           const presentation = homeFeedItemPresentation(item, locale);
+          const reaction = reactions.available ? homeReactionAdmission(item, signedIn) : undefined;
           return {
             ...presentation,
             actions: (
@@ -232,7 +236,16 @@ export function HomeFeed({
                 locale={locale}
                 signedIn={signedIn}
                 verification={verification}
-                origin={{ key: String(actionSource.key), isCurrent: () => currentActionResult.current === result }}
+                origin={reactions.origin}
+                reaction={
+                  reaction
+                    ? {
+                        ...reaction,
+                        reactionOrigin: reactions.origin,
+                        ...(preparedReactionTransport ? { preparedTransport: preparedReactionTransport } : {}),
+                      }
+                    : undefined
+                }
               >
                 {presentation.actions}
               </HomeFeedActions>
