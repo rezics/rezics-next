@@ -16,7 +16,7 @@ import {
 import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
 import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
-import type { ImportProgressObserver, SourceRegistration } from './import-contract.ts';
+import type { ImportProgressObserver, ImportProgressPhase, SourceRegistration } from './import-contract.ts';
 import type { ImportMediaResolution } from './importer.ts';
 import type { Owner } from './record-bindings.ts';
 import {
@@ -24,7 +24,6 @@ import {
   ImportProgressReporter,
   type ImportProgressMode,
   type ImportProgressOutcome,
-  type ImportProgressPhase,
   type ImportProgressSink,
 } from './import-progress.ts';
 import {

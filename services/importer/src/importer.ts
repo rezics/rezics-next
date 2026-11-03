@@ -118,6 +118,7 @@ export class Importer {
   private readonly running = new Set<Promise<ImportRunResult>>();
   private readonly shutdown = new AbortController();
   private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
+  private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
   private readonly recordConcurrency: number;
   private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
   private readonly mediaDeadlineMs: number;
@@ -274,6 +275,10 @@ export class Importer {
       signal.addEventListener('abort', abort, { once: true });
       if (signal.aborted) abort();
     });
+  }
+
+  private progress(signal: AbortSignal): ImportProgressObserver | undefined {
+    return this.progressObservers.get(signal);
   }
 
   private retain(phase: Phase, rows: readonly { recordKey: string; value: unknown }[]): void {
@@ -474,7 +479,7 @@ export class Importer {
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
       bindings.acknowledgeMetadata(owner, pending.key, result);
-      if (result.effect !== 'noEffect') this.options.progress?.onAcknowledgedEffects?.(1);
+      if (result.effect !== 'noEffect') this.progress(signal)?.onAcknowledgedEffects?.(1);
     };
     // Never consume a new descriptor in place of a response-lost immutable intent.
     if (journal && !journal.result) {
@@ -523,7 +528,7 @@ export class Importer {
     const request = JSON.parse(journal.bytes) as BatchWriteRequest;
     const result = await this.send(request, signal, write);
     const acknowledgedEffects = this.acknowledge(owner, request, result);
-    this.options.progress?.onAcknowledgedEffects?.(acknowledgedEffects);
+    this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
     return bound?.state === 'bound' ? bound.subject : null;
   }
@@ -554,7 +559,7 @@ export class Importer {
       this.session.store.acknowledge(run, result, { recordKey: pending.recordKey });
       return count;
     });
-    this.options.progress?.onAcknowledgedEffects?.(acknowledgedEffects);
+    this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     if (this.session.store.key(run.source, pending.recordKey, run).acknowledged) this.acknowledged(pending.recordKey);
     return result.results.every(success);
   }
@@ -671,7 +676,7 @@ export class Importer {
           } else {
             skipCover = true;
             deferredCover = resolution.status === 'pending';
-            this.options.progress?.onMedia?.(resolution.status);
+            this.progress(signal)?.onMedia?.(resolution.status);
           }
         }
       }
@@ -696,7 +701,7 @@ export class Importer {
         ),
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
-      this.options.progress?.onAcknowledgedEffects?.(1);
+      this.progress(signal)?.onAcknowledgedEffects?.(1);
       statisticWritten = true;
     }
     // Removal addresses only this exact binding and remains permitted behind a facts fence.
@@ -720,7 +725,7 @@ export class Importer {
         ),
       );
       if (signal.aborted) throw new Interrupted('Import was interrupted');
-      this.options.progress?.onAcknowledgedEffects?.(1);
+      this.progress(signal)?.onAcknowledgedEffects?.(1);
       statisticWritten = true;
     }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
@@ -884,10 +889,10 @@ export class Importer {
     });
     if (resolution.status !== 'available') {
       if (resolution.status === 'pending') {
-        this.options.progress?.onMedia?.('deferred');
+        this.progress(signal)?.onMedia?.('deferred');
         return { outcome: 'pending', kind: deferred.kind };
       }
-      this.options.progress?.onMedia?.('rejected');
+      this.progress(signal)?.onMedia?.('rejected');
       const rejected = this.session.store.resolveDeferredCover(run, row.recordKey);
       if (rejected.resolved) this.acknowledged(row.recordKey);
       return { outcome: rejected.resolved ? 'resolved' : 'failed', kind: rejected.kind };
@@ -952,7 +957,7 @@ export class Importer {
       });
       const result = await this.send(request, signal, write);
       const acknowledgedEffects = this.acknowledge(owner, request, result);
-      this.options.progress?.onAcknowledgedEffects?.(acknowledgedEffects);
+      this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
       if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
     }
     const result = this.session.store.resolveDeferredCover(run, row.recordKey);
@@ -1060,6 +1065,7 @@ export class Importer {
     const ownership = this.session.acquire(registration.source);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
+    if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
       let run = this.session.reopen(ownership);
       let resumed = !!run;
@@ -1311,6 +1317,7 @@ export class Importer {
       );
     } finally {
       this.runControllers.delete(signal);
+      this.progressObservers.delete(signal);
       this.session.release(ownership);
     }
   }
