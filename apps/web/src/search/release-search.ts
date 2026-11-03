@@ -40,7 +40,7 @@ export type ReleaseSearch = {
   text: string;
   criteria: ReleaseSearchCriteria;
   languages: string[];
-  sort: 'name' | 'relevance' | 'rating';
+  sort: 'name' | 'relevance';
   threshold: 0 | 1 | 2;
   condition?: FilterDocument;
   cursor?: string;
@@ -133,7 +133,7 @@ export function parseReleaseSearch(
   if (!validTags(languages)) fail('language');
   const releaseLanguages = tags(form.releaseLanguage);
   if (form.releaseLanguage && !validTags(releaseLanguages)) fail('releaseLanguage');
-  if (!['name', 'relevance', 'rating'].includes(form.sort) || (form.sort === 'relevance' && !form.q.trim()))
+  if (!['name', 'relevance'].includes(form.sort) || (form.sort === 'relevance' && !form.q.trim()))
     fail('sort');
   if (!['0', '1', '2'].includes(form.threshold)) fail('threshold');
 
@@ -192,7 +192,7 @@ export function parseReleaseSearch(
     text: form.q,
     criteria,
     languages,
-    sort: form.sort === 'relevance' ? 'relevance' : form.sort === 'rating' ? 'rating' : 'name',
+    sort: form.sort === 'relevance' ? 'relevance' : 'name',
     threshold: form.threshold === '1' ? 1 : form.threshold === '2' ? 2 : 0,
     ...(condition ? { condition } : {}),
     ...(typeof cursor === 'string' ? { cursor } : {}),

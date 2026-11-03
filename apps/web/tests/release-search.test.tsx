@@ -177,6 +177,9 @@ test('malformed wire dates make the response unavailable instead of silently bec
 
 test('release URLs round-trip ordered display and same-platform languages, exact dates and independent credits', () => {
   for (const locale of locales) {
+    expect(parseReleaseSearch({ subtype: releaseType, sort: 'rating' }, bundledRelease, locale).invalid).toContain(
+      'sort',
+    );
     const raw = {
       subtype: releaseType,
       q: 'Edition',

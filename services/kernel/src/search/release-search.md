@@ -99,7 +99,7 @@ lifecycle; old generations keep their original mapping and writer shape.
 
 ## Grouping execution policy
 
-Decision: grouped release searches default to work-name order; readers may explicitly choose relevance order.
+Decision: grouped release searches expose work-name and relevance order, defaulting to work-name; rating order is not supported.
 
 Decision: incomplete relation previews never establish work ownership or child completeness; only explicit native
 EOF ends a group, and a work with no proven matching child prepares within its own bounded continuation.

@@ -310,10 +310,9 @@ export function ReleaseSearchFormView({
           defaultValue={form.sort}
           aria-invalid={invalid.includes('sort') || undefined}
         >
-          {!['name', 'relevance', 'rating'].includes(form.sort) && <option value={form.sort}>{form.sort}</option>}
+          {!['name', 'relevance'].includes(form.sort) && <option value={form.sort}>{form.sort}</option>}
           <option value="name">{m.release_search_sort_name({}, options)}</option>
           <option value="relevance">{m.release_search_sort_relevance({}, options)}</option>
-          <option value="rating">{m.release_search_sort_rating({}, options)}</option>
         </select>
       </label>
       <label className="grid gap-1 text-sm font-medium">
