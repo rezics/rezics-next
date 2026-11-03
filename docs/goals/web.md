@@ -112,6 +112,17 @@ independent rather than making shared files or unfinished producer delivery into
   delivery; existing notification preferences still govern in-app notices. Performance owns Settings watch
   inventory/removal and Inbox notice decoding/destinations; Web owns the thread-page entry point. Board-wide watching
   is a later extension.
+- **Following target reading.** One bounded twenty-row native page retains supplied order and exact follow identity.
+  Inspect a supplied Subject or Collection without extra reads, open its localized reader and return to current follow
+  controls. Deliberate inspection of one community uses the existing typed Space point read for its current title,
+  summary, address and admitted nullable Realm identity. An address routes to `/spaces/{address}`; otherwise an
+  admitted Realm routes to `/realms/{realmId}`. Missing identity, pending or refused reads and no destination remain
+  distinct from empty Following and never change the follow. Current-origin/session/exposure boundaries retire
+  selected responses, destinations, clipboard feedback and focus on replacement. Existing follow controls retain
+  removal, uncertain review, refresh and cursor recovery. Commerce's one-page admitted destination/action projection
+  is still missing; summary Space IDs are never used as Realm IDs or addresses. Native access cost stays producer-owned.
+  Decision: preserve native row order and request twenty rows, replacing the base's type grouping and hundred-row read.
+  Details: [Following reading](../../apps/web/src/library/following-reading/README.md).
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter
   and exact `kind` selection. Following Collections are delivered: title, description and `/collections/{id}` are
   used as supplied. Membership, rules, covers, authors and ratings stay omitted when absent. Public discovery

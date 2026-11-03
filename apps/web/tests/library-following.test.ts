@@ -64,7 +64,7 @@ test('Following reads only each requested FULL page and maps embedded targets wi
       expect(request.method).toBe('GET');
       expect(request.headers.get('authorization')).toBe('Bearer alice-page-token');
       expect(url.searchParams.get('view')).toBe('FULL');
-      expect(url.searchParams.get('limit')).toBe('100');
+      expect(url.searchParams.get('limit')).toBe('20');
 
       if (url.searchParams.get('cursor') === null)
         return Response.json({
@@ -243,7 +243,7 @@ test('Following management has a genuine discovery destination after the last un
       if (request.method === 'GET') {
         expect(url.pathname).toBe('/v1/follows');
         expect(url.searchParams.get('view')).toBe('FULL');
-        expect(url.searchParams.get('limit')).toBe('100');
+        expect(url.searchParams.get('limit')).toBe('20');
         return listStatus === 200
           ? Response.json(list)
           : Response.json({ code: listStatus === 403 ? 'forbidden' : 'unavailable' }, { status: listStatus });
@@ -488,7 +488,7 @@ test('a terminal later Following page is one bounded read without reset metadata
   expect(calls).toHaveLength(1);
   expect(Object.fromEntries(new URL(calls[0]!.url).searchParams)).toEqual({
     view: 'FULL',
-    limit: '100',
+    limit: '20',
     cursor: 'terminal/page+',
   });
   expect(calls[0]!.headers.get('authorization')).toBe('Bearer alice-page-token');
@@ -522,7 +522,7 @@ test('Following marks only a successful single stale-cursor fallback and never r
     expect(calls.map((call) => new URL(call.url).searchParams.get('cursor'))).toEqual(['expired/page+', null]);
     expect(calls.every((call) => call.headers.get('authorization') === 'Bearer alice-page-token')).toBe(true);
     expect(calls.every((call) => call.cache === 'no-store' && call.redirect === 'manual')).toBe(true);
-    expect(calls.every((call) => new URL(call.url).searchParams.get('limit') === '100')).toBe(true);
+    expect(calls.every((call) => new URL(call.url).searchParams.get('limit') === '20')).toBe(true);
   }
   for (const [cursor, status] of [
     [undefined, 409],

@@ -2,7 +2,6 @@ import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import {
-  LIBRARY_PAGE_LIMIT,
   libraryListQuery,
   readLibraryResult,
   StaleCursorError,
@@ -58,7 +57,7 @@ export async function loadMineFollowingPage(
     return { signedIn: true, follows: [], next: null, addressInvalid: true };
   const read = async (cursor?: string) => {
     const result = await client.follows.get({
-      query: libraryListQuery(cursor, LIBRARY_PAGE_LIMIT),
+      query: libraryListQuery(cursor, 20),
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });

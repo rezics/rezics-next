@@ -150,7 +150,10 @@ test('Following uses shared item headings and independent native actions while p
       admit(['personal_library', 'collections']);
       await tick();
     });
-    const rows = [...host.querySelectorAll<HTMLElement>('li[data-slot="list-row"]')];
+    const nativeRows = [...host.querySelectorAll<HTMLElement>('li[data-slot="list-row"]')];
+    // Native order replaces type grouping; the other assertions retain their target identities.
+    expect(nativeRows.map(row => row.dataset.followTargetType)).toEqual(['space', 'collection', 'subject', 'subject']);
+    const rows = [nativeRows[2]!, nativeRows[3]!, nativeRows[1]!, nativeRows[0]!];
     expect(host.textContent).not.toContain(m.library_directory_address_invalid());
     expect(rows).toHaveLength(4);
     expect(rows.map((row) => row.querySelector('h3')?.textContent)).toEqual([
@@ -159,11 +162,7 @@ test('Following uses shared item headings and independent native actions while p
       collection.target!.label,
       space.target!.label,
     ]);
-    expect([...host.querySelectorAll('section > h2')].map((heading) => heading.textContent)).toEqual([
-      m.library_following_subjects(),
-      m.library_following_collections(),
-      m.library_following_spaces(),
-    ]);
+    expect(host.querySelector('ul')?.getAttribute('aria-label')).toBe(m.library_following_heading());
     const primary = rows[0]!.querySelector<HTMLAnchorElement>('a')!;
     const heading = rows[0]!.querySelector<HTMLHeadingElement>('h3')!;
     expect(primary.getAttribute('href')).toBe(subjectHref({ id: 'canonical-subject', label: 'こころ' }, 'en').href);

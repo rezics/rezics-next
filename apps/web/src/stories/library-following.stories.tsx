@@ -165,7 +165,7 @@ export const RemoveUnavailableTarget: Story = {
   play: async ({ canvasElement, ...context }) => {
     await libraryHeadingReady({ canvasElement, ...context }, m.library_following_heading);
     const canvas = within(canvasElement);
-    const section = await canvas.findByRole('region', { name: m.library_following_collections() });
+    const section = canvasElement.querySelector<HTMLElement>('[data-follow-target-type="collection"]')!;
     const heading = await within(section).findByRole('heading', { level: 3, name: m.library_subject_unavailable() });
     const row = heading.closest<HTMLElement>('li[data-slot="list-row"]');
     if (!row) throw new globalThis.Error('Unavailable follow row is missing');
@@ -191,5 +191,59 @@ export const UnfollowMenuDesktop: Story = {
   play: async (context) => {
     await pageReady(context);
     await followMenu(context.canvasElement, 'Kokoro');
+  },
+};
+
+async function inspectCommunity(canvasElement: HTMLElement) {
+  await libraryHeadingReady({ canvasElement }, m.library_following_heading);
+  const row = canvasElement.querySelector<HTMLElement>('[data-follow-target-type="space"]')!;
+  await userEvent.click(within(row).getByRole('button', { name: m.following_reading_inspect_target({ title: row.querySelector('h3')!.textContent! }) }));
+}
+
+export const InspectionReady: Story = {
+  render: () => FollowingStory(),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    const panel = await within(canvasElement).findByRole('dialog');
+    await expect(await within(panel).findByText(m.following_reading_current_identity())).toBeVisible();
+  },
+};
+export const CommunityPreparing: Story = {
+  render: () => FollowingStory('reading-preparing'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByText(m.following_reading_preparing())).toBeVisible();
+  },
+};
+export const InspectionUnavailable: Story = {
+  render: () => FollowingStory('reading-unavailable'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByText(m.following_reading_unavailable())).toBeVisible();
+  },
+};
+export const NoDestination: Story = {
+  render: () => FollowingStory('reading-no-destination'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByText(m.following_reading_no_destination())).toBeVisible();
+  },
+};
+export const LongLocalizedInspection: Story = {
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  render: () => FollowingStory('reading-long'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByRole('dialog')).toBeVisible();
+  },
+};
+export const CurrentSourceInspection: Story = {
+  render: () => FollowingStory('reading-current-source'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await userEvent.click(within(canvasElement).getByRole('button', { name: m.following_reading_refresh() }));
+    await waitFor(() => expect(within(canvasElement).queryByRole('dialog')).toBeNull());
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByRole('dialog')).toBeVisible();
   },
 };
