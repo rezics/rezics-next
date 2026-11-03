@@ -337,7 +337,7 @@ export function WorkbenchView({
                 appeals: page.appeals ?? [],
                 selectedTarget: page.selectedTarget ?? null,
               }}
-              queueHref={localizeHref(workbenchQueueHref({ ...search, case: undefined }))}
+              queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
               {...(isCurrent ? { isCurrent } : {})}
               {...(onRetry ? { onRetry } : {})}
               {...(onRestart ? { onRestart } : {})}

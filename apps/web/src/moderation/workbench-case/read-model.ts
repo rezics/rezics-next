@@ -72,24 +72,25 @@ function caseParams(search: WorkbenchCaseSearch): URLSearchParams {
 }
 
 function asCaseSearch(input: WorkbenchCaseSearch | ReportReadInput): WorkbenchCaseSearch {
-  if ('threadId' in input || 'postId' in input) {
-    const selection = reportSelection(input);
-    return {
-      boardId: input.boardId,
-      ...selection,
-      ...(input.threadId ? { thread: input.threadId } : {}),
-      ...(input.postId ? { post: input.postId } : {}),
-      ...(input.cursor ? { cursor: input.cursor } : {}),
-      ...('realm' in input && typeof input.realm === 'string' && input.realm ? { realm: input.realm } : {}),
-      queue:
-        'queue' in input && (input.queue === 'reports' || input.queue === 'resolved')
-          ? input.queue
-          : selection.status === 'resolved'
-            ? 'resolved'
-            : 'reports',
-    };
-  }
-  return input;
+  const selection = reportSelection(input);
+  const thread = 'threadId' in input && input.threadId ? input.threadId : 'thread' in input ? input.thread : undefined;
+  const post = 'postId' in input && input.postId ? input.postId : 'post' in input ? input.post : undefined;
+  const realm = 'realm' in input && typeof input.realm === 'string' ? input.realm : undefined;
+  const queue =
+    'queue' in input && (input.queue === 'reports' || input.queue === 'resolved')
+      ? input.queue
+      : selection.status === 'resolved'
+        ? 'resolved'
+        : 'reports';
+  return {
+    boardId: input.boardId,
+    ...selection,
+    ...(thread ? { thread } : {}),
+    ...(post ? { post } : {}),
+    ...(input.cursor ? { cursor: input.cursor } : {}),
+    ...(realm ? { realm } : {}),
+    queue,
+  };
 }
 
 /** Stable case reference: the native report ID plus the exact scoped queue read that found it. */

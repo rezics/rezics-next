@@ -39,7 +39,12 @@ export function WorkbenchAppeal({
     );
   }
   return (
-    <WorkbenchAppealDetail appeal={result.appeal} target={result.target} queueHref={queueHref} isCurrent={isCurrent} />
+    <WorkbenchAppealDetail
+      appeal={result.appeal}
+      target={result.target}
+      queueHref={queueHref}
+      {...(isCurrent ? { isCurrent } : {})}
+    />
   );
 }
 
@@ -75,7 +80,7 @@ export function WorkbenchAppealDetail({
       <h2 className="text-xl font-semibold">
         {m.moderation_appeals_tab()} · {appealKind}
       </h2>
-      <ContentItemFrame as="section" className="space-y-5 p-4 sm:p-6">
+      <ContentItemFrame as="article" className="space-y-5 p-4 sm:p-6">
         <p className="text-sm text-muted-foreground">
           {m.moderation_queue_submitted()} <time dateTime={appeal.createdAt}>{date(appeal.createdAt)}</time>
         </p>
