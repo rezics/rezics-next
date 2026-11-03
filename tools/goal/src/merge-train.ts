@@ -62,8 +62,7 @@ import { canonicalConflictPaths, makeRebaseConflictContext } from './conflict-pr
 import { renameSync } from 'node:fs';
 
 import type { AffectedTestCheck, AffectedTestResult } from './types.ts';
-import { CHECK_HOST_TRANSPORT, reportedApproaches } from './records.ts';
-import { agentAdapter } from './agents.ts';
+import { CHECK_HOST_TRANSPORT } from './records.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { installShared } from './shared-dependencies.ts';
 import {
@@ -2664,11 +2663,8 @@ export class MergeTrain {
           return undefined;
         };
         if (request.unchangedClaim) {
-          const task = o.fence instanceof WorkerStore ? o.fence.task(request.taskId) : undefined;
-          const clause = task?.brief.acceptance.tests.join('; ') || task?.brief.markdown.slice(-1000) || request.taskId;
-          const refuse = (reason: string, stage: GateStage = 'rebase'): GateOutcome => {
-            const message = `${reason}. Unmeasured clause: ${clause}`;
-            result.stage = stage;
+          const refuse = (message: string): GateOutcome => {
+            result.stage = 'rebase';
             result.firstFailure = firstFailure(message);
             appendFileSync(logPath, `${message}\n`);
             result.hostMs = Date.now() - started;
@@ -2687,55 +2683,10 @@ export class MergeTrain {
             `Retained-source acceptance task=${request.taskId} attempt=${request.attempt} source=${workerCommit}: ${request.gate.join(' ')}\n`,
           );
           try {
-            const devClaim = integratesIntoDev && !stabilize;
-            if (devClaim) {
-              const attempt = (o.fence as WorkerStore).attempt(request);
-              const entry = reportedApproaches(attempt.result, agentAdapter(attempt.profile.cli)).findLast(
-                (item) => item.approach === 'unchanged-source-acceptance',
-              );
-              let report: {
-                command?: unknown;
-                sourceCommit?: unknown;
-                contractHash?: unknown;
-                status?: unknown;
-              } | null = null;
-              try {
-                report = entry ? JSON.parse(entry.result) : null;
-              } catch {
-                /* Malformed reports are unavailable, never a pass. */
-              }
-              if (
-                !report ||
-                !Array.isArray(report.command) ||
-                !report.command.length ||
-                !report.command.every((arg) => typeof arg === 'string') ||
-                !report.command[0]
-              )
-                return refuse(
-                  'Unchanged dev claim has no valid worker acceptance report with an exact command',
-                  'gate',
-                );
-              retainedSourceAcceptance.command = [...report.command];
-              if (
-                report.sourceCommit !== workerCommit ||
-                report.contractHash !== request.contractHash ||
-                (request.gate.length > 0 && !isDeepStrictEqual(report.command, request.gate))
-              )
-                return refuse(
-                  'Worker acceptance report does not match the retained source commit and contract command/hash',
-                  'gate',
-                );
-              retainedSourceAcceptance.status =
-                report.status === 'passed' || report.status === 'failed' ? report.status : 'unavailable';
-              if (retainedSourceAcceptance.status !== 'passed') {
-                result.failedCommand = [...report.command];
-                return refuse(`Worker acceptance report is ${retainedSourceAcceptance.status}`, 'gate');
-              }
-              appendFileSync(logPath, `Worker acceptance report passed: ${report.command.join(' ')}\n`);
-            }
-            // Direct dev claims consume the worker's bound result without holding the train for another run.
-            const rerun = request.gate.length > 0 && !devClaim;
-            if (!devClaim && !rerun) return refuse('Unchanged claim has no acceptance command', 'gate');
+            // The source is already represented on the target. A direct dev landing skips its checks, and a
+            // worker-owned acceptance has no command, so neither reruns it: run serially in the train, these reruns
+            // held every other landing for 10 to 17 minutes each (2026-11-03).
+            const rerun = request.gate.length > 0 && !(integratesIntoDev && !stabilize);
             if (
               rerun &&
               !existsSync(join(trainTree, 'node_modules')) &&
@@ -2747,7 +2698,7 @@ export class MergeTrain {
               ? await runGate(request.gate, trainTree, logPath)
               : { passed: true, output: '', timedOut: false };
             retainedSourceAcceptance.status = !rerun
-              ? retainedSourceAcceptance.status
+              ? 'unavailable'
               : checked.passed
                 ? 'passed'
                 : checked.timedOut

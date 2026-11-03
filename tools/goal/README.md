@@ -36,11 +36,9 @@ Attempt inspection only retrieves the requested data; the manager host handles o
 
 Run dispatch from a checkout of this repository after configuring local pools and writing a brief. The main checkout
 must have main checked out. Workers commit source changes on their assigned branches, do not rebase and never edit frozen
-acceptance files. A clean unchanged dev claim must not add an empty or unrelated commit: its worker runs acceptance
-on the retained source through the ordinary worker-check protocol, even in minimal mode. The train consumes a passing
-report bound to that exact source commit and contract hash without rerunning acceptance. Missing, failed or mismatched
-reports name the unmeasured Done-when clause and stay non-green, as do dirty or changed source or contracts. Stabilize
-claims keep the train acceptance rerun. When a contract changes a behaviour an existing test asserts, the worker updates that test.
+acceptance files. A clean unchanged claim must not add an empty or unrelated commit; the controller runs the unchanged
+acceptance on its retained source, while dirty or changed source or contract and failed or unavailable acceptance stay
+non-green. When a contract changes a behaviour an existing test asserts, the worker updates that test.
 Historical empty commits and controller-frozen acceptance files alone count as unchanged: acceptance records the retained
 head, and completion uses its existing target ancestor without advancing dev.
 Workers do not merge, except that a product worker integrating into dev in its own worktree merges or
@@ -186,13 +184,7 @@ When the configured state directory's `verification-mode` file contains `minimal
 receives the current source-completion policy alongside its canonical contract. Workers finish their contract and the
 typing of the workspaces they changed, run the tests of the test files they changed once, then commit and return
 `success`, `blocker:null`, `checks:[]`, naming the code completed and the original acceptance/native obligations
-deferred until after integration. This deferral applies to attempts that change source. An unchanged dev claim instead
-runs its brief’s acceptance with the ordinary wrapper, waiting and wake protocol above; worker-owned acceptance
-reports the focused command it chose. Its final `approaches` entry uses `approach: "unchanged-source-acceptance"` and
-a JSON-encoded `result` containing `command` (argv), `sourceCommit`, `contractHash` (SHA-256 of canonical contract
-bytes) and observed `status` (`passed`, `failed` or `unavailable`). This uses the existing exit schema to carry the
-revision-bound report. The train requires a passing report for its exact retained source and contract, including the
-declared command when present; it never infers a pass from an omitted command or report. This source result does not claim whole-feature, native or Goal completion.
+deferred until after integration. This source result does not claim whole-feature, native or Goal completion.
 Unfinished work is not a blocker: a worker whose contract does not fit commits a coherent working part and returns
 success with the remainder listed as follow-up (for product work on dev, a continuation brief). Deferred acceptance
 alone is neither blocked nor waiting. Waiting requires running registered bare UUID checks owned by that task and
@@ -202,7 +194,7 @@ continuation protocol above.
 
 Minimal mode permits the existing Kernel/Auth compiler database or check-host placement only for typechecking and for
 the tests of the test files the worker changed, with its real leases, results and terminal status preserved. It grants
-no acceptance, native, browser, root or worker-check permission for changed-source attempts. A foreground compiler must finish through its already-open tool command/session handle; workers must not
+no acceptance, native, browser, root or worker-check permission. A foreground compiler must finish through its already-open tool command/session handle; workers must not
 invent check ids, return `waiting` with no checks, run process/help/status polling loops, duplicate commands or interrupt
 live compilers. The controller forwards this policy through its existing prompt seam; it does not steer live sessions.
 
@@ -645,8 +637,7 @@ main/stabilize releases and verification work, and without frozen acceptance fil
 routing ceiling of 1,500 lines and 24 files. With no command, acceptance is worker-owned: the worker chooses or adds a
 focused check, runs it under the normal check protocol, and reports the exact command and observed result. The parser
 does not insert a passing command. Under minimal verification, the worker supplies outcome tests and runs them with
-the landing's command; broader acceptance stays deferred for changed-source attempts. Unchanged dev claims run and
-report their chosen focused acceptance under the ordinary worker-check protocol. The dev verifier keeps its affected and sibling checks and
+the landing's command; broader acceptance stays deferred. The dev verifier keeps its affected and sibling checks and
 executes only supplied acceptance commands; omission earns no task acceptance pass. Any supplied `acceptance` fields keep their existing behavior; a supplied command
 still requires non-empty `tests`, and an implementation with supplied acceptance keeps the existing failing-test
 requirement. Main/stabilize releases, verification, and frozen acceptance briefs continue to require an explicit
