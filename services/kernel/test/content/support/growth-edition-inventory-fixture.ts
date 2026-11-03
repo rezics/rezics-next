@@ -360,9 +360,9 @@ export async function createGrowthEditionInventoryFixture() {
             name: 'inventory-unrelated-creator-homes',
             hotPartition: partitionOf(routeOf(author.accountId)!),
             hotShare: 0.5,
-            rows: ({ route, ordinal }) => {
+            rows: ({ route, hot }) => {
               // Half share the selected creator's exact home, half use other partitions.
-              const home = ordinal % 2 === 0 ? routeOf(author.accountId)! : route;
+              const home = hot ? routeOf(author.accountId)! : route;
               return {
                 'content.creator_edition': [{ route: home, creator_account_id: newId(home), edition_id: newId(route) }],
               };
@@ -432,6 +432,11 @@ export async function createGrowthEditionInventoryFixture() {
           [author.accountId],
         );
         expect(unrelated.rows[0]!.n).toBe(scale);
+        const sameHome = await database.admin.query<{ n: number }>(
+          'SELECT count(*)::integer AS n FROM content.creator_edition WHERE creator_account_id<>$1 AND route=$2',
+          [author.accountId, routeOf(author.accountId)],
+        );
+        expect(sameHome.rows[0]!.n).toBe(scale / 2);
       } else if (axis === 'subject-history') {
         const revisions = await database.admin.query<{ n: number }>(
           'SELECT count(*)::integer AS n FROM semantic.revision WHERE route=$1 AND subject_id=$2',
