@@ -116,11 +116,6 @@ export type {
   OwnCountedVoteRow,
   StandardRatingMeasurement,
 } from './kernel/rating/own-votes-counted';
-export type {
-  SourceObservationPayload,
-  SourceObservationReadItem,
-  SourceObservationReadResponse,
-} from './kernel/rating/source-observation-read';
 type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
 
