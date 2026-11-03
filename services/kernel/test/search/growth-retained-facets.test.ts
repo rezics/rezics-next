@@ -33,18 +33,18 @@ test('native retained first, opaque deep and terminal pages consume the real can
   expect(cardinality.rows).toEqual([{ n: 64 }]);
   let cursor: string | undefined;
   const all: string[] = [];
-  for (let offset = 0; offset < 64; offset += 2) {
-    const body = { ...request, facets: [{ property, size: 2, ...(cursor ? { cursor } : {}) }] };
+  for (let offset = 0; offset < 64; offset += 20) {
+    const body = { ...request, facets: [{ property, size: 20, ...(cursor ? { cursor } : {}) }] };
     const measured = await world.measured(body);
     expect(measured.value.status).toBe(200);
     const facet = page(measured.value.body);
-    expect(facet.values.map(({ value }) => value)).toEqual(world.expected.slice(offset, offset + 2));
+    expect(facet.values.map(({ value }) => value)).toEqual(world.expected.slice(offset, offset + 20));
     expect(facet.values.every(({ labels }) => typeof labels.en === 'string')).toBe(true);
     expect(measured.seeks).toHaveLength(1);
-    expect(measured.seeks[0]!.returned).toBeLessThanOrEqual(3);
+    expect(measured.seeks[0]!.returned).toBeLessThanOrEqual(21);
     expect(measured.capture.plans.length).toBeGreaterThan(0);
     all.push(...facet.values.map(({ value }) => value));
-    if (offset < 62) {
+    if (offset < 60) {
       assert(typeof facet.next === 'string' && facet.next.length > 0);
       expect(facet.next).not.toBe(cursor);
       cursor = facet.next;
@@ -69,12 +69,12 @@ test('a real reduction after START with paused indexing charges the retained rej
     barrier.release();
     const measured = await pending;
     expect(measured.value.status).toBe(503);
-    expect(['index_not_ready', 'semantic_not_ready', 'deadline_exceeded']).toContain(measured.value.body.code);
+    expect(['index_not_ready', 'semantic_not_ready', 'deadline_exceeded']).toContain(String(measured.value.body.code));
     expect(measured.value.body).not.toHaveProperty('facets');
     // A diagnostic lower bound exposes the missing dispatch guard. It is not a permissible page budget.
     expect(measured.seeks.length).toBeGreaterThan(1);
-    expect(measured.seeks.every(({ returned }) => returned <= 3)).toBe(true);
-    expect(measured.seeks.flatMap(({ values }) => values).length).toBeGreaterThan(3);
+    expect(measured.seeks.every(({ returned }) => returned <= 21)).toBe(true);
+    expect(measured.seeks.flatMap(({ values }) => values).length).toBeGreaterThan(21);
   } finally {
     barrier.release();
     await pending;

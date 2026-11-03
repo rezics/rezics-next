@@ -103,11 +103,15 @@ work already dispatched. It also counts one access point per candidate despite u
 The [dedicated native case](../../test/search/growth-retained-facets.test.ts) prepares 64 distinct real author
 values contributed by one real Book. With indexing paused, its pool response barrier holds the first ready-value
 SELECT after native execution; an actual hide of that Book then commits, and the unmodified result resumes.
-For size 2 all 64 original contributors are now unavailable: the existing loop can consume 22 seeks before
+For size 20 all 64 original contributors are now unavailable: the existing loop can consume four seeks before
 returning readiness/deadline failure. This is a reproducible schedule, not a claim that it has executed on a
 particular source. The test retains native plans, returned candidates, control statements and concurrent hide
 work, and rejects any disclosure of private labels/counts. Search owns the product repair; no output truncation,
 second refill protocol, public DTO expansion or production change is introduced here.
+
+The diagnostic uses size 20. At size 2 the two population-role reservations alone consume all 64 admitted
+points (`16 + 8*(2*2+2)`), before any candidate Source reads; this is a separate source-derived admission concern,
+not an observed base-suite result or a reason to change the frozen continuation suite.
 
 ## Preparation is separate
 

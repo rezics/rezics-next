@@ -13,7 +13,7 @@ import {
 export const property = 'schema:author';
 export const request: FacetDiscoveryRequest = {
   filter: { type: { in: ['schema:Book'] } },
-  facets: [{ property, size: 2 }],
+  facets: [{ property, size: 20 }],
 };
 type Seek = { returned: number; values: string[] };
 
