@@ -68,11 +68,15 @@ export async function readCurrentClassificationAssociation(input: {
     id: input.subjectId,
     eligibility: subjectReadEligibility({ route: subjectRoute, id: input.subjectId }),
   };
+  const ballotResource: Resource = {
+    ...subject,
+    eligibility: subjectReadEligibility({ route: subjectRoute, id: input.subjectId }, input.action),
+  };
   const subjectRead = await accessCheck(input.access, input.actor, 'subject:read', subject, {
     pool: input.pool,
     deadline: input.deadline,
   });
-  const ballotAction = await accessCheck(input.access, input.actor, input.action, subject, {
+  const ballotAction = await accessCheck(input.access, input.actor, input.action, ballotResource, {
     pool: input.pool,
     deadline: input.deadline,
   });
