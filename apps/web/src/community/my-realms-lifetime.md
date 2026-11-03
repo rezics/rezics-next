@@ -38,3 +38,31 @@ Decision: offer first-page recovery only for cursor failures without an HTTP sta
 The installed `GET /v1/me/realms` response is a closed page of `items` containing `realmId`, `name`, and the literal `role: 'member'`, plus `next`. It supplies no current Realm address, readability state, presentation, media grant, membership episode, or management/leave advice. The Web view can render a description supplied to it, but the native response and generated client do not provide one; supplied-page descriptions are presentation examples only. The loader and fake response now preserve the installed shape rather than adding an undeclared description.
 
 Decision: Until Content publishes the expanded generated response and examples, Web consumes only the installed fields and does not treat `role: 'member'` as entry, management, or leave authority. Inventory rows now show localized unavailable entry instead of deriving a Realm link from membership. The current-entry continuation owns admitting a destination from the expanded native response.
+
+## Expanded entry and selected leave admission
+
+Activation requires both the mounted generated `KernelClient.me.realms.get` response and its recorded
+`my-realms.json` example to expose current entry, presentation, media, membership episode and independent
+enter/manage/leave advice. A newer service schema alone does not activate this receiver. Keep the installed
+projection until that boundary exists; do not introduce a browser response type, raw endpoint or cast to bridge it.
+
+Admit presentation and media only from that current page. Concealment retires prior labels and media; it never
+refills a sparse window. Image `none` and `unavailable` are independent of action admission. Membership does not
+admit a readable destination, manager status or leave authority. Supplied Realm actions go to the canonical Realm
+owner, which rereads its viewer and exposure. Owner leave remains `owner_invariant_observation_unavailable`
+until the native predicate is observable; no inferred last-holder check or browser preflight substitutes for it.
+
+One explicit leave selection captures the native command, immutable operands, original operation, exact Account
+and membership episode, credential/CSRF lifetime and current advice. Interval tokens are opaque within that
+Account; neither chronology nor uniqueness across Accounts is inferred. Confirmation and exact retry use only
+that selection while it remains admitted. Replacement advice or a new episode requires a new explicit selection.
+Null CSRF keeps the page read-only, and the existing native membership command authorizes every execution.
+
+Accepted execution stays pending until supported readback confirms the original operation's transition. Unknown
+and rejected outcomes stay distinct. Later matching membership alone cannot establish that the original command
+succeeded. Readback and retry remain attached to the original operation and episode, never a replacement row.
+
+The existing caller, Query object, page, session, source, locale and credential fences also govern the selected
+review, readback and retry. Exposure or presentation retirement discards the selection and fences late effects.
+Returning from entry or management obtains a fresh admitted inventory page; keyboard return restores focus only
+within that current visit. This extension preserves the reserved private SSR/hydration boundary above.

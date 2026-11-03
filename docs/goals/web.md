@@ -283,6 +283,12 @@ There is no selected leave action on the installed response. Accepted leave pend
 actual management advice and their episode binding remain the current-entry continuation's outcome, not delivered UI.
 Supplied descriptions remain presentation examples, not expanded native evidence.
 
+The [caller lifetime guide](../../apps/web/src/community/my-realms-lifetime.md#expanded-entry-and-selected-leave-admission)
+owns expanded-response activation and selected-leave admission: original-operation readback and exact retry,
+Account-scoped opaque episodes, independent advice, and retirement of selected reviews and late effects. These
+rules apply when both the generated operation and recording are mounted; the existing unavailable-entry receiver
+remains the integration seam until then.
+
 #### Current native cost
 
 - Touches: one existing `/v1/me/realms` page read with its normal session preparation; Web formats the returned rows
