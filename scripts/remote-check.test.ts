@@ -7921,7 +7921,9 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
     expect(script).not.toContain('--eval');
     expect(script).not.toContain(directory);
     await expect(lifecycleControlScript(randomUUID(), request)).rejects.toThrow('placement mismatch');
-    await expect(transportLifecycleControl({ ...host, performance: false }, run, request)).rejects.toThrow('unapproved');
+    await expect(transportLifecycleControl({ ...host, performance: false }, run, request)).rejects.toThrow(
+      'unapproved',
+    );
     expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(2);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -8074,27 +8076,53 @@ test('loopback c admission respects configured slots, memory and slice CPU capac
     { sliceProcessors: 48, cpuQuotaPercent: 200, expected: 2 },
   ]) {
     const { expected, ...slice } = limits;
-    const { env, events } = scenario({ c: {
-      available: 33 * 2 ** 30, memoryMax: 24 * 2 ** 30, slots: 10,
-      memoryMaxGiB: 20, cpuQuotaPercent: 3200, processorsPerSlot: 1, processors: 64, load: 0, ...slice,
-    } });
+    const { env, events } = scenario({
+      c: {
+        available: 33 * 2 ** 30,
+        memoryMax: 24 * 2 ** 30,
+        slots: 10,
+        memoryMaxGiB: 20,
+        cpuQuotaPercent: 3200,
+        processorsPerSlot: 1,
+        processors: 64,
+        load: 0,
+        ...slice,
+      },
+    });
     const result = await remote(env, workspace(), ['true'], ['--estimate-ms', '1000']);
     expect(result.code, result.stderr).toBe(0);
     const granted = events().find((event) => event.kind === 'slot' && event.granted)!;
     expect(granted.address).toBe('ops@c.test');
     expect(granted.script).toContain('# REMOTE_CHECK_SLOT_LIMIT ' + expected);
   }
-  const { env, events } = scenario({ c: {
-    available: 33 * 2 ** 30, memoryMax: 24 * 2 ** 30, slots: 10,
-    memoryMaxGiB: 20, cpuQuotaPercent: 3200, processorsPerSlot: 1,
-  } });
-  const child = Bun.spawn([process.execPath, '--eval', `
+  const { env, events } = scenario({
+    c: {
+      available: 33 * 2 ** 30,
+      memoryMax: 24 * 2 ** 30,
+      slots: 10,
+      memoryMaxGiB: 20,
+      cpuQuotaPercent: 3200,
+      processorsPerSlot: 1,
+    },
+  });
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--eval',
+      `
     import { readHosts, tryRemoteCheck } from ${JSON.stringify(remoteCheck)};
     const result = await tryRemoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE),
       workspace: ${JSON.stringify(workspace())}, command: ['true'], memoryGiB: 21 }, new AbortController().signal);
     console.log(result.status);
-  `], { env, stdout: 'pipe', stderr: 'pipe' });
-  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  `,
+    ],
+    { env, stdout: 'pipe', stderr: 'pipe' },
+  );
+  const [code, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
   expect(code, stderr).toBe(0);
   expect(stdout.trim()).toBe('no-slot');
   expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);

@@ -677,8 +677,7 @@ export async function transportLifecycleControl(
   run: string,
   request: LifecycleHostControl,
 ): Promise<string> {
-  if (performanceHosts([host]).length === 0)
-    throw new Error('lifecycle: unapproved control host');
+  if (performanceHosts([host]).length === 0) throw new Error('lifecycle: unapproved control host');
   const script = await lifecycleControlScript(run, request);
   const connection = randomUUID();
   try {
@@ -899,14 +898,14 @@ export function readHosts(file: string): Host[] {
     // An address starting with a dash would be read as an ssh option.
     if (typeof address !== 'string' || !/^[\w.-]+@[\w.:-]+$/.test(address))
       throw new Error(`host ${index}: bad address`);
-    if (typeof name !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(name)) throw new Error(`host ${index}: name is required`);
+    if (typeof name !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(name))
+      throw new Error(`host ${index}: name is required`);
     if (typeof identity !== 'string' || !identity) throw new Error(`host ${name}: identity is required`);
     if (typeof memoryMaxGiB !== 'number' || !(memoryMaxGiB > 0)) throw new Error(`host ${name}: bad memoryMaxGiB`);
     if (typeof cpuQuotaPercent !== 'number' || !(cpuQuotaPercent > 0))
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
-    if (performance !== undefined && typeof performance !== 'boolean')
-      throw new Error(`host ${name}: bad performance`);
+    if (performance !== undefined && typeof performance !== 'boolean') throw new Error(`host ${name}: bad performance`);
     if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
     if (typeof processorsPerSlot !== 'number' || !Number.isFinite(processorsPerSlot) || processorsPerSlot <= 0)
       throw new Error(`host ${name}: bad processorsPerSlot`);
@@ -3620,7 +3619,9 @@ type RankedHost = {
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
-  const processorSlots = Math.floor(Math.min(probe.sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot);
+  const processorSlots = Math.floor(
+    Math.min(probe.sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot,
+  );
   return Math.min(host.slots, processorSlots);
 }
 
@@ -4162,11 +4163,7 @@ type HostProvider = () => Host[];
 type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
 
 /** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
-function liveHosts(
-  initial: Host[],
-  file?: string,
-  requested?: readonly string[],
-): HostProvider {
+function liveHosts(initial: Host[], file?: string, requested?: readonly string[]): HostProvider {
   const allowed = requested === undefined ? undefined : new Set(requested);
   const eligible = (hosts: Host[]) => performanceHosts(hosts).filter(({ name }) => !allowed || allowed.has(name));
   let lastValid = eligible(initial);
@@ -6549,10 +6546,7 @@ function parse(argv: string[]): RemoteCheck {
       const value = rest.shift();
       if (!value) throw new Error('--allowed-hosts needs a comma-separated host list');
       allowedHosts = value.split(',');
-      if (
-        allowedHosts.length === 0 ||
-        allowedHosts.some((name) => !new RegExp(CHECK_HOST_NAME_PATTERN).test(name))
-      )
+      if (allowedHosts.length === 0 || allowedHosts.some((name) => !new RegExp(CHECK_HOST_NAME_PATTERN).test(name)))
         throw new Error('--allowed-hosts contains an invalid host name');
       continue;
     }

@@ -403,11 +403,21 @@ test('source mismatch, unflagged hosts, forbidden env values, and missing genera
     fixture.hosts,
     JSON.stringify({
       hosts: [
-        { name: 'c', performance: false, address: 'root@c.example', identity: '/keys/c', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 8 },
+        {
+          name: 'c',
+          performance: false,
+          address: 'root@c.example',
+          identity: '/keys/c',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 8,
+        },
       ],
     }),
   );
-  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow('no performance-approved host');
+  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow(
+    'no performance-approved host',
+  );
   expect(transports).toBe(0);
 
   writeFileSync(

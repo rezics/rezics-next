@@ -440,7 +440,8 @@ function validateCheckRunPreparationIntent(value: unknown): CheckRunPreparationI
 
 function validatePhysical(value: unknown): CheckRunPhysicalIdentity {
   const item = closedObject(value, ['host', 'run'], 'physical identity');
-  if (typeof item.host !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(item.host)) throw new Error('check-run-settlement: invalid physical host');
+  if (typeof item.host !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(item.host))
+    throw new Error('check-run-settlement: invalid physical host');
   const run = boundedText(item.run, 'physical run id', 96);
   if (!PHYSICAL_RUN.test(run)) throw new Error('check-run-settlement: invalid physical run id');
   return { host: item.host, run };

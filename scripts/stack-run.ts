@@ -236,7 +236,9 @@ export async function runOnCheckHost(
       return REMOTE_TRANSPORT_FAILURE;
     }
     if (hosts.length === 0) {
-      console.error(`stack-run: ${run.label} unavailable: hosts file ${reason.hostsFile} has no performance-approved host`);
+      console.error(
+        `stack-run: ${run.label} unavailable: hosts file ${reason.hostsFile} has no performance-approved host`,
+      );
       return REMOTE_TRANSPORT_FAILURE;
     }
     let outcome: number;

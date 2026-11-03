@@ -158,7 +158,15 @@ test('caller markers cannot convert heavy placement to local, and only performan
   try {
     expect(classifyCheck(['bun', 'test'], root).placement).toBe('remote');
     expect(workerCheckNeedsStack(['bun', 'test'], root)).toBe(true);
-    expect(performanceHosts([host('c'), { ...host('unflagged'), performance: false }, host('a'), host('b'), { name: 'missing' }]).map(({ name }) => name)).toEqual(['c', 'a', 'b']);
+    expect(
+      performanceHosts([
+        host('c'),
+        { ...host('unflagged'), performance: false },
+        host('a'),
+        host('b'),
+        { name: 'missing' },
+      ]).map(({ name }) => name),
+    ).toEqual(['c', 'a', 'b']);
     expect(onCheckHost(root)).toBe(false);
   } finally {
     for (const [key, value] of Object.entries(saved)) {
@@ -286,11 +294,13 @@ test('stack-heavy work never calls its local callback with absent hosts, unflagg
   ).toBe(75);
 
   const cOnly = hostsFile(root, ['c']);
-  expect(await stackRun(run, local, { KERNEL_CHECK_REMOTE: cOnly }, async (options) => {
-    expect(options.allowedHosts).toEqual(['c']);
-    expect(options.hosts.map(({ name }) => name)).toEqual(['c']);
-    return 23;
-  })).toBe(23);
+  expect(
+    await stackRun(run, local, { KERNEL_CHECK_REMOTE: cOnly }, async (options) => {
+      expect(options.allowedHosts).toEqual(['c']);
+      expect(options.hosts.map(({ name }) => name)).toEqual(['c']);
+      return 23;
+    }),
+  ).toBe(23);
   writeFileSync(cOnly, JSON.stringify({ hosts: [{ ...host('c'), performance: false }] }));
   expect(await stackRun(run, local, { KERNEL_CHECK_REMOTE: cOnly }, async () => 0)).toBe(75);
 

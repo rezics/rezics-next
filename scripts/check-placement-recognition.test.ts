@@ -416,6 +416,7 @@ test('pure TypeScript stays local while the database-backed kernel compiler stay
 test('a workstation worker outside a physical run is refused even with a valid c supervisor', () => {
   const fixture = producerFixture('c');
   expect(recognizeCheckHostRun('/home/worker/checkout', fixture.reader)).toEqual({
-    outcome: 'refused', reason: 'cwd-outside-runs',
+    outcome: 'refused',
+    reason: 'cwd-outside-runs',
   });
 });
