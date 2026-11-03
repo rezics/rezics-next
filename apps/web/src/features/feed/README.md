@@ -159,6 +159,10 @@ states and existing session-cache observation. Beginning a replacement read, cha
 session replacement retires the old action origin immediately, including equal session success. Only a new result
 can admit it again. This observer makes no reads and does not install a missing reaction baseline.
 
+Decision: Home renders the disclosed review target and cited question/vote revision plus at most the exact immediate
+parent preview. A withheld or unavailable context has no body, link or identity; reactions bind only the native
+target, current viewer slot and source watermark.
+
 The existing reaction engine accepts an optional native `sourceWatermark` operand. Its point-read settlement then
 requires a supplied projection watermark at least as recent as that baseline; an absent/null or older point-read
 watermark retains explicit recovery rather than claiming convergence. Known receipts retry only the point read.
