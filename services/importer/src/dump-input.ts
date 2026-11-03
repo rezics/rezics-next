@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
 import { DEFAULT_DUMP_CHUNK_BYTES, DEFAULT_DUMP_RECORD_BYTES, MAX_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
@@ -9,7 +10,16 @@ export type DumpInputFailureIdentity =
   | 'gzip-trailing-garbage'
   | 'decode-budget'
   | 'compression-unsupported'
-  | 'filesystem-changed';
+  | 'filesystem-changed'
+  | 'checkpoint-unsupported';
+
+export type DumpFileIdentity = Readonly<{
+  path: string;
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+}>;
 
 /** Bounded dump/path failure shared by import and offline preview. */
 export class DumpInputError extends Error {
@@ -24,6 +34,7 @@ export class DumpInputError extends Error {
 export type DumpInputObserver = {
   onInputPass?(kind: 'dump' | 'vndb-entries'): void;
   onInputChunk?(kind: 'dump' | 'vndb-entries', bytes: number, backingBytes: number): void;
+  onFingerprint?(bytes: number): void;
 };
 
 export type DumpByteProgress = {
@@ -116,6 +127,44 @@ async function assertDumpUnchanged(handle: FileHandle): Promise<void> {
     if (error instanceof DumpInputError) throw error;
     throw new DumpInputError('Dump file changed during read.', 'filesystem-changed');
   }
+}
+
+export function openedDumpIdentity(handle: FileHandle): DumpFileIdentity | undefined {
+  return openedDumps.get(handle);
+}
+
+/** Complete SHA-256 of the opened regular file. Path/inode/size/mtime and prefix hashes are not this identity. */
+export async function fingerprintDump(
+  handle: FileHandle,
+  signal: AbortSignal,
+  observer?: DumpInputObserver,
+  progress?: DumpByteProgress,
+): Promise<{ sha256: string; bytes: number }> {
+  await assertDumpUnchanged(handle);
+  const hash = createHash('sha256');
+  let bytes = 0;
+  let position = 0;
+  for (;;) {
+    throwIfAborted(signal);
+    const buffer = new Uint8Array(DEFAULT_DUMP_CHUNK_BYTES);
+    let result: { bytesRead: number };
+    try {
+      result = await handle.read(buffer, 0, buffer.byteLength, position);
+    } catch {
+      throw new DumpInputError();
+    }
+    throwIfAborted(signal);
+    if (!result.bytesRead) break;
+    hash.update(buffer.subarray(0, result.bytesRead));
+    position += result.bytesRead;
+    bytes += result.bytesRead;
+    observer?.onFingerprint?.(result.bytesRead);
+    progress?.add('inputBytes', result.bytesRead);
+  }
+  await assertDumpUnchanged(handle);
+  const opened = openedDumps.get(handle);
+  if (opened && opened.size !== bytes) throw new DumpInputError('Dump file changed during read.', 'filesystem-changed');
+  return { sha256: hash.digest('hex'), bytes };
 }
 
 export async function openDump(path: string, handleCount: { value: number }): Promise<FileHandle | undefined> {

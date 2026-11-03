@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { RecordBindings } from './record-bindings.ts';
 import { RunStore, type Run, type SourceProjection } from './run-store.ts';
 
@@ -54,7 +54,13 @@ export class ImportSession {
   private readonly held = new Map<string, ImportOwnership>();
   private closed = false;
 
-  constructor(path: string | Database, options: { instrumentDatabase?: (database: Database) => Database } = {}) {
+  constructor(
+    path: string | Database,
+    options: { instrumentDatabase?: (database: Database) => Database; create?: boolean } = {},
+  ) {
+    if (options.create === false && typeof path === 'string') {
+      if (!existsSync(path) || !statSync(path).isFile()) throw new Error('No importer state database exists at the given path.');
+    }
     this.store = new RunStore<SourceProjection>(path, { ...options, projectionMode: 'source-record' });
     try {
       this.bindings = new RecordBindings(this.store.database);

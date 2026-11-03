@@ -3,6 +3,11 @@ import { constants } from 'node:fs';
 import { open, stat, type FileHandle } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import {
+  admitStagingCheckpoint,
+  stagingResumeGuidance,
+  type StagingCheckpoint,
+} from './staging-checkpoint.ts';
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
@@ -109,6 +114,13 @@ export type InspectionDocument = Readonly<{
       prepared: number | null;
     }>;
     resume: string;
+    checkpoint: null | Readonly<{
+      committedOrdinal: number;
+      bytes: number;
+      sha256: string;
+      sourceKind: string;
+      converterRevision: string;
+    }>;
   }>;
   record: InspectionRecord | null;
   page: null | Readonly<{
@@ -439,17 +451,22 @@ function phaseFor(status: string): 'acquiring' | 'validated/sealed' | 'finalizin
   return 'unknown';
 }
 
-function resumeGuidance(status: string, activeWork: readonly ('applying' | 'deferred')[]): string {
-  if (status === 'staging')
-    return 'The existing importer requires a complete validated input before it can resume; incomplete acquisition is discarded by its ordinary workflow.';
+function resumeGuidance(
+  status: string,
+  activeWork: readonly ('applying' | 'deferred')[],
+  checkpoint: StagingCheckpoint | null,
+  source: string,
+  generation: string,
+): string {
+  if (status === 'staging') return stagingResumeGuidance({ status, checkpoint, source, generation });
   if (status === 'ready' && activeWork.includes('applying'))
     return `The existing importer rechecks current authority and replays each retained request with its original command keys and bytes${activeWork.includes('deferred') ? '; deferred covers also remain pending' : ''}; unresolved authority or ownership failures remain in force.`;
   if (status === 'ready' && activeWork.includes('deferred'))
     return 'Deferred covers remain pending; the existing importer rechecks current authority, fences and source registration before continuing.';
   if (status === 'ready')
-    return 'The existing importer rechecks current authority, input integrity, source registration and fences before ordinary continuation.';
+    return stagingResumeGuidance({ status, checkpoint: null, source, generation });
   if (status === 'finalizing')
-    return 'The existing importer continues the retained baseline finalization cursor after ordinary source ownership admission.';
+    return stagingResumeGuidance({ status, checkpoint: null, source, generation });
   if (status === 'mass-disappearance')
     return 'This generation did not advance the baseline; ordinary resume needs a complete input and deliberate review of the existing disappearance threshold.';
   if (status === 'invalid-input')
@@ -820,6 +837,7 @@ export class InspectionStore {
     if (work.covers === 1) activeWork.push('deferred');
     else if (work.covers !== 0)
       throw new InspectionFailure('Malformed journal row: deferred-cover indicator is not boolean.');
+    const checkpoint = this.readCheckpoint(source, id);
     return {
       id,
       status,
@@ -836,8 +854,63 @@ export class InspectionStore {
         expected,
         prepared,
       },
-      resume: resumeGuidance(status, activeWork),
+      checkpoint: checkpoint
+        ? {
+            committedOrdinal: checkpoint.committedOrdinal,
+            bytes: checkpoint.identity.bytes,
+            sha256: checkpoint.identity.sha256,
+            sourceKind: checkpoint.identity.sourceKind,
+            converterRevision: checkpoint.identity.converterRevision,
+          }
+        : null,
+      resume: resumeGuidance(status, activeWork, checkpoint, source, id),
     };
+  }
+
+  private readCheckpoint(source: string, id: string): StagingCheckpoint | null {
+    const present = this.database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
+      .get('table', 'run_staging_checkpoints') as { found: number } | null;
+    if (!present) return null;
+    const row = this.database
+      .query(
+        `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
+          disappearance_threshold,committed_ordinal,skipped,rolling_digest
+        FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
+      )
+      .get(source, id) as
+      | {
+          version: number;
+          sha256: string;
+          bytes: number;
+          source_alias: string;
+          source_kind: string;
+          converter_revision: string;
+          decoder_id: string;
+          disappearance_threshold: number;
+          committed_ordinal: number;
+          skipped: number;
+          rolling_digest: string;
+        }
+      | null;
+    if (!row) return null;
+    try {
+      return admitStagingCheckpoint({
+        version: row.version,
+        sha256: row.sha256,
+        bytes: row.bytes,
+        sourceAlias: row.source_alias,
+        sourceKind: row.source_kind,
+        converterRevision: row.converter_revision,
+        decoderId: row.decoder_id,
+        disappearanceThreshold: row.disappearance_threshold,
+        committedOrdinal: row.committed_ordinal,
+        skipped: row.skipped,
+        rollingDigest: row.rolling_digest,
+      });
+    } catch {
+      return null;
+    }
   }
 
   private readPage(
