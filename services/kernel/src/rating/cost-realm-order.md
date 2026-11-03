@@ -6,10 +6,10 @@ not a proxy for complete Search ordering.
 
 ## Native order primitives and complete Search readiness
 
-Search remains at `index_not_ready`: the delivered native primitives do not yet supply canonical-name ties,
-canonical population seeks, or complete predicate execution. The Semantic ID-key rebuild inventory cannot supply
-these request-time capabilities. The bounds below cover the delivered primitives, not successful complete Search
-pages or a consumer inferred from an interface.
+Search remains at `index_not_ready`: the delivered native primitives supply current canonical population/name seeks,
+but still lack scored canonical-name ties and complete predicate execution. The Semantic ID-key rebuild inventory
+is separate. The bounds below cover the delivered primitives, not successful complete Search pages or a consumer
+inferred from an interface.
 
 One `createRealmRankOrderSource.observe` capture performs current Realm authorization (`A_R` statements and
 `R_R` physical rows), selected-question metadata/provenance authority (`A_Q` statements and `R_Q` physical rows
@@ -20,9 +20,11 @@ for the authority alone), prior eligibility/freshness, and rank-publication obse
 - Population home: BEGIN, partition point read, pending EXISTS, prior point read, COMMIT: five statements/control
   statements and at most three physical rows. Pending EXISTS visits at most one exact population key.
 - Publication sequence point read: one statement and one returned observation, with no rank population scan.
+- Canonical population observation: one statement through `partition_subjects_canonical_frontier`, visiting at most
+  P occupied native population counter rows and P home point joins, where P <= 4,096. The 4,097th row fails closed.
 
-Thus each capture uses `11 + A_R + A_Q` statements/control statements. Its fixed relation reads visit at most
-seven physical table rows, plus the sequence observation and `R_R + R_Q`. The five transaction controls comprise
+Thus each capture uses `12 + A_R + A_Q` statements/control statements. Its fixed relation reads visit at most
+`7 + 2P` physical table rows, plus the sequence observation and `R_R + R_Q`. The five transaction controls comprise
 three from the question snapshot and two from the prior snapshot. Global/standard questions use current
 `definitions:read`; admitted custom questions use current owning-Realm readability. Their authority terms must
 remain distinct in growth evidence. Publication digest changes do not change measurement identity.
@@ -30,7 +32,7 @@ remain distinct in growth evidence. Publication digest changes do not change mea
 Each primitive now performs two complete captures, before and after its native read, including an empty figure
 proof. The captures bind selected population, question identity/revision/publication/provenance, prior
 identity/generation/eligibility, Realm authority/revision, rank-publication generation, and the population home's
-epoch/position. Pending population work refuses observation even if the scored set is empty. Retired questions
+epoch/position, plus the canonical population's committed per-home generation and epoch/position. Pending population work refuses observation even if the scored set is empty. Retired questions
 refuse observation. A changed capture restarts; current authority denial fails closed. Conservatively binding
 population position may restart for unrelated work in that home; it does not scan that work.
 
@@ -60,6 +62,32 @@ or turn an unavailable/partial figure read into an unscored proof. Missing nativ
 Performance must review these source-derived terms and the future complete producer terms before acceptance.
 The existing compatibility growth fixture's selected-question costs and transaction-control assertions still need
 reconciliation; no successful complete-order three-scale evidence is claimed here.
+
+## Native canonical names and figure proofs
+
+`subjectSource.canonicalNames.observe` performs the single finite-frontier statement described above. Its digest
+includes each occupied home's committed `canonical_generation`, epoch and position. Native Subject changes update
+that generation in the same transaction; an uncommitted sequence value cannot certify a published name. Names
+extend `semantic.subject`, and counts/generations extend its existing `partition_subjects` counters. No second
+catalogue or public Realm score projection is installed.
+
+One canonical name read performs two fresh frontier observations plus BEGIN, a home point, one ordered Subject
+seek and COMMIT: six statements/control statements, with two transaction controls, at most `4P + 1 + B` physical
+rows and O(P+B) retained memory. B <= 200. `subject_canonical_name_seek` has equality prefix `(route/16)` and strict
+ascending tuple `(canonical_name IS NULL, COALESCE(canonical_name,''), subject_id)` with C collation. The missing
+flag distinguishes an empty string from a missing label. Candidate index work is O(log N+B); request-time reads
+never reconstruct names from term history. The native label-head writer and privileged fact minimization/removal
+refresh the Subject key transactionally. Those write costs are separate from these read bounds.
+
+`createRealmRankOrderSource.readCanonicalPartition` performs four complete selected-question/Realm captures,
+one canonical name read, and one complete figure proof. There are six finite-frontier observations in total.
+For a nonempty B-row page the source bound is `58 + 4A_R + 4A_Q` statements/control statements, with 24 transaction
+controls, at most `30 + 12P + 3B + 4R_R + 4R_Q` physical table rows plus four sequence observations, and O(P+B)
+retained memory. An empty page omits the figure SQL, reducing that statement bound by one. Figure and canonical
+home observations must agree. An inactive prior still requires the complete successful figure read; zero remains
+scored, pending evidence fails closed, and below-threshold figures remain withheld. Raw scored candidates in this
+canonical walk are explicit proofs, not an unscored result or an exhaustion assertion. Current Subject disclosure
+and admitted predicate work remain required before any complete Search page can be released.
 
 ## Scored-only compatibility page
 

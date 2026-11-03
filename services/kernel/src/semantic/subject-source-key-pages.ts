@@ -1,4 +1,8 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
 import type { Access } from '../request/access.ts';
 import type {
   PublicFilterConsumerUnavailable,
@@ -14,6 +18,122 @@ import { GLOBAL_CONTEXT } from './definitions.ts';
 import { globalReadEligibility } from './eligibility.ts';
 import ownerStatement from './subject-source-key-pages-owner.sql';
 import pageStatement from './subject-source-key-pages-read.sql';
+
+export type SubjectCanonicalHome = Readonly<{
+  partition: number;
+  generation: string;
+  epoch: number;
+  position: string;
+}>;
+export type SubjectCanonicalPopulation = Readonly<{
+  generation: string;
+  homes: readonly SubjectCanonicalHome[];
+}>;
+export type SubjectCanonicalNameKey = Readonly<{ name: string | null; id: string }>;
+/** Internal canonical candidates, before Subject disclosure. Never a public read grant. */
+export interface SubjectCanonicalNames {
+  observe(context: { deadline: number }): Promise<SubjectCanonicalPopulation>;
+  read(
+    request: Readonly<{ partition: number; after: SubjectCanonicalNameKey | null; limit: number }>,
+    expected: SubjectCanonicalPopulation,
+    context: { deadline: number },
+  ): Promise<Readonly<{
+    home: SubjectCanonicalHome;
+    candidates: readonly (SubjectCanonicalNameKey & Readonly<{ securityRevision: number }>)[];
+  }>>;
+}
+
+/** Current native name order, separate from the fixed-cut ID-key rebuild inventory below.
+ * The finite frontier reads occupied native homes, never every partition's Subject rows.
+ * A committed per-home generation avoids treating an uncommitted sequence increment as publication.
+ */
+export function createSubjectCanonicalNames(pool: Pool): SubjectCanonicalNames {
+  const source: SubjectCanonicalNames = {
+    async observe({ deadline }) {
+      requireAccessDeadline(deadline);
+      const result = await withConnection(pool, (connection) => deadlineClient(connection, deadline).query<{
+        partition: number;
+        generation: string;
+        epoch: number | null;
+        position: string | null;
+        state: string | null;
+      }>(
+        `SELECT population.partition_no AS partition,population.canonical_generation::text AS generation,
+                home.epoch,home.position::text,home.write_state AS state
+         FROM semantic.partition_subjects population
+         LEFT JOIN core.partition home ON home.partition_no=population.partition_no
+         WHERE population.canonical_count>0 ORDER BY population.partition_no LIMIT 4097`,
+      ));
+      requireAccessDeadline(deadline);
+      if (result.rows.length > 4096) throw new ProblemError('index_not_ready');
+      const homes = result.rows.map((row, index): SubjectCanonicalHome => {
+        if (row.epoch === null || row.position === null || row.state === null || row.state === 'moved')
+          throw new ProblemError('partition_unavailable');
+        if (
+          !Number.isInteger(row.partition) || row.partition < 0 || row.partition > 4095 ||
+          (index > 0 && row.partition <= result.rows[index - 1]!.partition) ||
+          !Number.isSafeInteger(row.epoch) || row.epoch < 1 ||
+          !/^[1-9][0-9]*$/.test(row.generation) || !/^[0-9]+$/.test(row.position)
+        ) throw new ProblemError('index_not_ready');
+        return { partition: row.partition, generation: row.generation, epoch: row.epoch, position: row.position };
+      });
+      return { generation: createHash('sha256').update(JSON.stringify(homes)).digest('hex'), homes };
+    },
+    async read(request, expected, { deadline }) {
+      const { partition, limit } = request;
+      const after = request.after === null ? null : { ...request.after };
+      const expectedGeneration = expected.generation;
+      if (!Number.isInteger(partition) || partition < 0 || partition > 4095 ||
+          !Number.isInteger(limit) || limit < 1 || limit > 200)
+        throw new ProblemError('invalid_request');
+      if (after !== null && (routeOf(after.id) === null ||
+          !(after.name === null || (typeof after.name === 'string' && after.name.length <= 512 && after.name.isWellFormed()))))
+        throw new ProblemError('invalid_cursor');
+      const current = await source.observe({ deadline });
+      if (current.generation !== expectedGeneration) throw new ProblemError('search_restart_required');
+      const home = current.homes.find((home) => home.partition === partition);
+      if (!home) throw new ProblemError('search_restart_required');
+      const candidates = await withConnection(pool, async (connection) => {
+        const client = deadlineClient(connection, deadline);
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        try {
+          const owner = await ownerStatement.run(client, { partition_no: partition });
+          if (!owner || owner.write_state === 'moved') throw new ProblemError('partition_unavailable');
+          if (owner.epoch !== home.epoch || owner.position !== home.position)
+            throw new ProblemError('search_restart_required');
+          const parameters: unknown[] = [partition, limit];
+          if (after) parameters.push(after.name === null, after.name ?? '', after.id);
+          const result = await client.query<{ id: string; name: string | null; securityRevision: string }>(
+            `SELECT subject_id::text AS id,canonical_name AS name,security_revision::text AS "securityRevision"
+             FROM semantic.subject WHERE route/16=$1
+             ${after ? `AND ROW(canonical_name IS NULL,COALESCE(canonical_name,'') COLLATE "C",subject_id)
+               > ROW($3::boolean,$4::text COLLATE "C",$5::uuid)` : ''}
+             ORDER BY (canonical_name IS NULL),COALESCE(canonical_name,'') COLLATE "C",subject_id LIMIT $2`,
+            parameters,
+          );
+          const keys = result.rows.map((row) => {
+            const securityRevision = Number(row.securityRevision);
+            if (routeOf(row.id) === null || partitionOf(routeOf(row.id)!) !== partition ||
+                !Number.isSafeInteger(securityRevision) || securityRevision < 0 ||
+                !(row.name === null || (typeof row.name === 'string' && row.name.length <= 512 && row.name.isWellFormed())))
+              throw new ProblemError('index_not_ready');
+            return { ...row, securityRevision };
+          });
+          await client.query('COMMIT');
+          return keys;
+        } catch (error) {
+          try { await connection.query('ROLLBACK'); }
+          catch (rollback) { discardConnection(connection, rollback as Error); }
+          throw error;
+        }
+      });
+      if ((await source.observe({ deadline })).generation !== expectedGeneration)
+        throw new ProblemError('search_restart_required');
+      return { home, candidates };
+    },
+  };
+  return source;
+}
 
 /** Agreed background-only additive capability on subjectSource; never exposed to request capture. */
 export interface SubjectSourceKeyTraversal {
