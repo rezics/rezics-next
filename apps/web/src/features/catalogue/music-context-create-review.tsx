@@ -16,7 +16,7 @@ import type { Release } from '@rezics/definitions';
 const actionClass =
   'h-auto min-h-8 min-w-8 max-w-full whitespace-normal break-words py-2 [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
 
-function partLabel(part: SnakInput, release: Release, locale: string) {
+function partLabel(part: SnakInput, release: Pick<Release, 'properties'>, locale: string) {
   const definition = release.properties[part.property.id];
   return {
     text: pickText(definition?.labels ?? {}, locale).text || part.property.id,
