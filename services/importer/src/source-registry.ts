@@ -52,7 +52,7 @@ type VocabularySource = {
   readonly record_revision: string | null;
   readonly converter_revision: string;
   readonly proposals: NativeConversion['proposals'];
-  readonly sourceMetadata?: { recordUrl?: string };
+  readonly sourceMetadata?: unknown;
 };
 
 // This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
