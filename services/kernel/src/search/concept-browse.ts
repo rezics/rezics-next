@@ -48,8 +48,8 @@ export type ConceptBrowseSource = Readonly<{
   ): Promise<ConceptBrowseRead>;
 }>;
 /** Derived storage beneath the existing retained-plan worker, not another capture or scheduler.
- * Operations compare the entire supplied selection/binding to the retained definition and revision. create seeds the root; read retrieves
- * at most one frontier row. advance atomically advances that row, inserts distinct membership keys
+ * Operations compare the supplied selection/binding to the retained definition and revision.
+ * create seeds the root; read retrieves at most one frontier row. advance atomically advances that row, inserts distinct membership keys
  * and queues only newly inserted keys using indexed deduplication. seal requires an empty frontier.
  * Losing a CAS returns null. Retirement/expiry of the owning plan disables every operation.
  * contains returns a Boolean only for a sealed generation; root membership is included.

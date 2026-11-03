@@ -174,6 +174,27 @@ test('full native cursors cross duplicate and empty child pages independently of
   ]);
 });
 
+test('a locator cannot be rebound, and changes during a negative lookup retire its evidence', async () => {
+  const { store } = retention(),
+    graph = sourceFor({});
+  const result = await finish(graph.source, store, (await startConceptBrowse(selection, binding, store))!);
+  if (result.status !== 'complete') throw new Error('Expected completion');
+  for (const field of ['concept', 'property'] as const) {
+    const changed = { ...result.state, selection: { ...selection, [field]: 'other' } };
+    expect(await currentConceptMembership(graph.source, store, changed, 'missing')).toBe('not_proven');
+  }
+  let observations = 0;
+  const changing: ConceptBrowseSource = {
+    ...graph.source,
+    observe: async () => ({
+      status: 'current',
+      binding: ++observations === 1 ? binding : { ...binding, release: 'changed' },
+    }),
+  };
+  expect(await currentConceptMembership(changing, store, result.state, 'missing')).toBe('not_proven');
+  expect(await currentConceptMembership(graph.source, store, result.state, 'missing')).toBe('not_proven');
+});
+
 test('preparation interruption resumes the retained frontier and final currentness runs on partial steps', async () => {
   const graph = sourceFor({ root: ['a', 'b', 'c'] });
   const { store } = retention();
