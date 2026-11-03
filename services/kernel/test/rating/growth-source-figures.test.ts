@@ -147,10 +147,7 @@ async function inspectPage(id: string, query: string) {
       (total, item) => total + Buffer.byteLength(JSON.stringify(item.payload), 'utf8'),
       0,
     ),
-    retainedItemBytes: uniqueItems.reduce(
-      (total, item) => total + Buffer.byteLength(JSON.stringify(item), 'utf8'),
-      0,
-    ),
+    retainedItemBytes: uniqueItems.reduce((total, item) => total + Buffer.byteLength(JSON.stringify(item), 'utf8'), 0),
     responseBytes: Buffer.byteLength(text, 'utf8'),
   };
 }
@@ -165,7 +162,12 @@ test('source inspection keeps fixed physical and byte costs as source, Subject r
       fixture.request('PUT', `${path(id)}/${provider}`, { actor: fixture.actors.importer, key, body: value });
     await json(await write(selected, 'bangumi', body));
     let historyHead: string | undefined;
-    const dimensions = ['unrelated source heads', 'selected source history', 'Subject revision history', 'closed write denials'] as const;
+    const dimensions = [
+      'unrelated source heads',
+      'selected source history',
+      'Subject revision history',
+      'closed write denials',
+    ] as const;
     for (const dimension of dimensions) {
       const name = `source observation under ${dimension}`;
       const report = await checkGrowth(fixture.database, {
@@ -246,7 +248,9 @@ test('source inspection keeps fixed physical and byte costs as source, Subject r
           }
           return {
             pages: pages.length,
-            materializedPayloadBytes: Math.max(...pages.map(({ materializedPayloadBytes }) => materializedPayloadBytes)),
+            materializedPayloadBytes: Math.max(
+              ...pages.map(({ materializedPayloadBytes }) => materializedPayloadBytes),
+            ),
             retainedItemBytes: Math.max(...pages.map(({ retainedItemBytes }) => retainedItemBytes)),
             pageBytes: Math.max(...pages.map(({ responseBytes }) => responseBytes)),
             responseBytes: pages.reduce((total, { responseBytes }) => total + responseBytes, 0),
