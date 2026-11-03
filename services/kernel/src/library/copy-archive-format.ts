@@ -1,7 +1,7 @@
 import { ProblemError } from '../http/problem.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
 import { routeOf } from '../route/route.ts';
-import { exportSections } from './library-export-source.ts';
+import { exportSections, exportSectionsV2, LIBRARY_EXPORT_FORMAT } from './library-export-format.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProfilePin } from './profile.ts';
 
@@ -37,9 +37,8 @@ export type ArchivedHolding = {
   created_at: string;
   updated_at: string;
 };
-export type CopyArchiveManifest = {
-  format: 'https://rezics.com/formats/library-export';
-  version: 1;
+type CopyArchiveManifestBase = {
+  format: typeof LIBRARY_EXPORT_FORMAT;
   exportId: string;
   capturedAt: string;
   expiresAt: string;
@@ -51,9 +50,25 @@ export type CopyArchiveManifest = {
   rows: number;
   recordBytes: number;
 };
+/** V3 has the V2 inventory; its journal assessment is unsupported evidence here. */
+export type CopyArchiveManifest = CopyArchiveManifestBase &
+  (
+    | { version: 1 }
+    | {
+        version: 2;
+        coverage: 'private-library-owner-facts-v2';
+        sectionTotals: Record<string, { rows: number; recordBytes: number }>;
+      }
+    | {
+        version: 3;
+        coverage: 'private-library-owner-facts-v3';
+        sectionTotals: Record<string, { rows: number; recordBytes: number }>;
+      }
+  );
 export type ArchiveSectionCoverage = {
   section: string;
   records: number;
+  recordBytes: number;
   support: 'evidence-only' | 'unsupported';
 };
 export type ArchivedProgressMeasure = { unit: string; amount: string | null; total: string | null };
@@ -309,6 +324,111 @@ function progressUnit(value: Record<string, unknown>): ArchivedProgressUnit {
   return value as ArchivedProgressUnit;
 }
 
+/** Recognize current envelopes without retaining or adopting their private payloads. */
+function unsupportedCurrentRecord(value: Record<string, unknown>, version: 2 | 3) {
+  switch (value.section) {
+    case 'annotations':
+      exact(value, [
+        'section',
+        'accountId',
+        'subjectId',
+        'entryIncarnationId',
+        'libraryProfilePin',
+        'annotationRevision',
+        'note',
+        'priority',
+        'annotationUpdatedAt',
+      ]);
+      if (
+        !uuid(value.accountId) ||
+        !uuid(value.subjectId) ||
+        !(value.entryIncarnationId === null || uuid(value.entryIncarnationId)) ||
+        !Number.isSafeInteger(value.annotationRevision) ||
+        Number(value.annotationRevision) < 1 ||
+        !(value.note === null || text(value.note, 4096)) ||
+        !(
+          value.priority === null ||
+          (Number.isInteger(value.priority) && Number(value.priority) >= 1 && Number(value.priority) <= 100)
+        ) ||
+        !(value.annotationUpdatedAt === null || stamp(value.annotationUpdatedAt))
+      )
+        invalid();
+      break;
+    case 'provenance':
+      exact(value, ['section', 'accountId', 'subjectId', 'entryIncarnationId', 'libraryProfilePin', 'observation']);
+      exact(object(value.observation), [
+        'provider',
+        'recordId',
+        'revision',
+        'privacy',
+        'sourceCreated',
+        'sourceUpdated',
+        'recordedAt',
+      ]);
+      if (
+        !uuid(value.accountId) ||
+        !uuid(value.subjectId) ||
+        !(value.entryIncarnationId === null || uuid(value.entryIncarnationId))
+      )
+        invalid();
+      break;
+    case 'journals': {
+      exact(value, [
+        'section',
+        'accountId',
+        'sessionId',
+        'subjectId',
+        'versionSubjectId',
+        'state',
+        'progressRevision',
+        'libraryProfilePin',
+        'startedAt',
+        'completedAt',
+        'lastChangedAt',
+        'journal',
+      ]);
+      const journal = object(value.journal);
+      exact(journal, [
+        'sessionId',
+        'revision',
+        'startDate',
+        'finishDate',
+        'reflection',
+        ...(version === 3 ? ['assessment'] : []),
+      ]);
+      if (!uuid(value.sessionId) || journal.sessionId !== value.sessionId) invalid();
+      if (
+        !uuid(value.accountId) ||
+        !uuid(value.subjectId) ||
+        !(value.versionSubjectId === null || uuid(value.versionSubjectId)) ||
+        !text(value.state, 64) ||
+        !Number.isSafeInteger(value.progressRevision) ||
+        Number(value.progressRevision) < 1 ||
+        !Number.isSafeInteger(journal.revision) ||
+        Number(journal.revision) < 0 ||
+        !stamp(value.startedAt) ||
+        !(value.completedAt === null || stamp(value.completedAt)) ||
+        !(value.lastChangedAt === null || stamp(value.lastChangedAt)) ||
+        !(journal.reflection === null || text(journal.reflection, 4096))
+      )
+        invalid();
+      if (version === 3) {
+        const assessment = object(journal.assessment);
+        exact(assessment, ['meaningRevision', 'units']);
+        if (
+          assessment.meaningRevision !== 1 ||
+          !(
+            assessment.units === null ||
+            (Number.isInteger(assessment.units) && Number(assessment.units) >= 0 && Number(assessment.units) <= 20)
+          )
+        )
+          invalid();
+      }
+      break;
+    }
+  }
+}
+
 /** Parse the installed Web artifact, never a synthetic row-list or an unfinished page. */
 export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   if (bytes.byteLength > COPY_ARCHIVE_LIMITS.bytes) throw new ProblemError('content_too_large');
@@ -323,6 +443,9 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   const archive = object(raw);
   exact(archive, ['manifest', 'records']);
   const m = object(archive.manifest);
+  if (m.version !== 1 && m.version !== 2 && m.version !== 3) invalid();
+  const version = m.version as 1 | 2 | 3;
+  const installedSections: readonly string[] = version === 1 ? exportSections : exportSectionsV2;
   exact(m, [
     'format',
     'version',
@@ -336,10 +459,11 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
     'fullExport',
     'rows',
     'recordBytes',
+    ...(version === 1 ? [] : ['coverage', 'sectionTotals']),
   ]);
   if (
-    m.format !== 'https://rezics.com/formats/library-export' ||
-    m.version !== 1 ||
+    m.format !== LIBRARY_EXPORT_FORMAT ||
+    (version !== 1 && m.coverage !== `private-library-owner-facts-v${version}`) ||
     m.privacy !== 'private' ||
     m.completeness !== 'supported-native-facts' ||
     m.fullExport !== false ||
@@ -355,22 +479,41 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
     Number(m.recordBytes) > COPY_ARCHIVE_LIMITS.bytes
   )
     invalid();
-  // v1 has no section counters or availability flags: missing declared sections are incomplete captures.
+  // V1 keeps its fixed decoder; current versions preserve the producer's exact inventory order.
   const sections = m.sections;
   if (
     !Array.isArray(sections) ||
-    sections.length !== exportSections.length ||
-    new Set(sections).size !== exportSections.length ||
-    exportSections.some((s) => !sections.includes(s))
+    sections.length !== installedSections.length ||
+    new Set(sections).size !== installedSections.length ||
+    installedSections.some((s, index) => (version === 1 ? !sections.includes(s) : sections[index] !== s))
   )
     invalid();
   const omissions = object(m.omissions);
+  if (version !== 1)
+    exact(omissions, ['trash', 'providerIdentifiers', 'personalImportEvidence', 'commerce', 'publication', 'reimport']);
   if (Object.keys(omissions).length > 32 || Object.entries(omissions).some(([k, v]) => !text(k, 200) || !text(v, 2000)))
     invalid();
+  const totals = version === 1 ? null : object(m.sectionTotals);
+  if (totals) {
+    exact(totals, installedSections);
+    for (const section of installedSections) {
+      const total = object(totals[section]);
+      exact(total, ['rows', 'recordBytes']);
+      if (
+        !Number.isSafeInteger(total.rows) ||
+        Number(total.rows) < 0 ||
+        Number(total.rows) > Number(m.rows) ||
+        !Number.isSafeInteger(total.recordBytes) ||
+        Number(total.recordBytes) < 0 ||
+        Number(total.recordBytes) > Number(m.recordBytes)
+      )
+        invalid();
+    }
+  }
   const records = archive.records;
   if (!Array.isArray(records) || records.length !== m.rows) invalid();
   const archiveRecords = records as unknown[];
-  const coverage = new Map<string, number>(exportSections.map((section) => [section, 0]));
+  const coverage = new Map(installedSections.map((section) => [section, { records: 0, recordBytes: 0 }]));
   const holdings: ParsedCopyArchive['holdings'] = [];
   const progress: ParsedCopyArchive['progress'] = [];
   const sessions = new Set<string>();
@@ -381,12 +524,14 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
   for (let ordinal = 0; ordinal < archiveRecords.length; ordinal++) {
     const record = object(archiveRecords[ordinal]);
     const section = record.section;
-    if (typeof section !== 'string' || !exportSections.includes(section as (typeof exportSections)[number])) invalid();
-    const typedSection = section as (typeof exportSections)[number];
-    coverage.set(typedSection, coverage.get(typedSection)! + 1);
+    if (typeof section !== 'string' || !coverage.has(section)) invalid();
+    const typedSection = section as string;
     const size = Buffer.byteLength(JSON.stringify(record), 'utf8');
     if (size > COPY_ARCHIVE_LIMITS.recordBytes) invalid();
     recordBytes += size;
+    const sectionCoverage = coverage.get(typedSection)!;
+    sectionCoverage.records++;
+    sectionCoverage.recordBytes += size;
     if (typedSection === 'holdings') {
       const evidence = holding(record);
       if (ids.has(evidence.copy_id) || holdings.length >= COPY_ARCHIVE_LIMITS.holdings) invalid();
@@ -409,15 +554,22 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
       retainedBytes += size;
       if (retainedBytes > COPY_ARCHIVE_LIMITS.evidenceBytes) invalid();
       progress.push({ ordinal, evidence, sourceSessionId: evidence.session_id, sourceUnitId: evidence.unit_id });
+    } else if (version !== 1) {
+      unsupportedCurrentRecord(record, version);
     }
   }
   if (progress.some((row) => row.evidence.section === 'units' && !sessions.has(row.sourceSessionId))) invalid();
   if (recordBytes !== m.recordBytes) invalid();
+  if (totals)
+    for (const [section, actual] of coverage) {
+      const expected = object(totals[section]);
+      if (actual.records !== expected.rows || actual.recordBytes !== expected.recordBytes) invalid();
+    }
   return {
     manifest: m as CopyArchiveManifest,
-    coverage: [...coverage].map(([section, records]) => ({
+    coverage: [...coverage].map(([section, counts]) => ({
       section,
-      records,
+      ...counts,
       support:
         section === 'holdings' || section === 'sessions' || section === 'units' ? 'evidence-only' : 'unsupported',
     })),

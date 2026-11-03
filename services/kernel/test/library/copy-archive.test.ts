@@ -8,6 +8,7 @@ import {
 } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { parseCopyArchive, COPY_ARCHIVE_LIMITS } from '../../src/library/copy-archive-format.ts';
+import { exportSections, exportSectionsV2 } from '../../src/library/library-export-format.ts';
 import { createCopyArchive } from '../../src/library/copy-archive.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
@@ -194,6 +195,13 @@ beforeAll(async () => {
   });
   expect(hidden.status).toBe(200);
   archivedUnits = { sessionId: unitSession.id, memberId: member.id, detachedId: detached.id };
+  await json(
+    await f.send(owner.bearer, 'PATCH', `/v1/progressSessions/${sourceSessions[0]!.id}/journal`, {
+      revision: 0,
+      startDate: { year: 1999 },
+      reflection: 'unsupported private reflection',
+    }),
+  );
   currentDigest = await f.publish(await archiveRelease(['lent']));
   await f.activate(currentDigest); // Current profile drops the old progress vocabulary.
   const status = await json(await f.send(owner.bearer, 'POST', '/v1/libraryExports'));
@@ -261,6 +269,7 @@ test('actual installed export retains independent holdings, all pins and exact d
   expect(parsed.coverage.find((c) => c.section === 'entries')).toEqual({
     section: 'entries',
     records: 0,
+    recordBytes: 0,
     support: 'unsupported',
   });
 });
@@ -276,7 +285,7 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
     expect(() => parseCopyArchive(bytes(a))).toThrow('invalid_request');
   };
   reject((a) => {
-    a.manifest.version = 2;
+    a.manifest.version = 4;
   });
   reject((a) => {
     a.manifest = null as any;
@@ -317,6 +326,82 @@ test('installed final manifest, counts, envelopes and admission bounds are manda
   expect(() => parseCopyArchive(new TextEncoder().encode('['.repeat(17) + ']'.repeat(17)))).toThrow('invalid_request');
 });
 
+function artifactVersion(version: number) {
+  const a = structuredClone(artifact);
+  a.manifest.version = version;
+  a.manifest.sections = [...(version === 1 ? exportSections : exportSectionsV2)];
+  a.records = a.records.filter((row) => a.manifest.sections.includes(row.section));
+  if (version === 1) {
+    delete a.manifest.coverage;
+    delete a.manifest.sectionTotals;
+  } else {
+    a.manifest.coverage = `private-library-owner-facts-v${version}`;
+    a.records.push({
+      section: 'bangumiEvidence',
+      upload_id: a.manifest.exportId,
+      ordinal: 0,
+      evidence: { private_note: 'unsupported provider evidence' },
+    });
+    if (version === 3)
+      for (const row of a.records.filter((r) => r.section === 'journals'))
+        row.journal.assessment = { meaningRevision: 1, units: 17 };
+    a.manifest.sectionTotals = Object.fromEntries(
+      exportSectionsV2.map((section) => {
+        const rows = a.records.filter((row) => row.section === section);
+        return [section, { rows: rows.length, recordBytes: rows.reduce((n, row) => n + bytes(row).length, 0) }];
+      }),
+    );
+  }
+  a.manifest.rows = a.records.length;
+  a.manifest.recordBytes = a.records.reduce((n, row) => n + bytes(row).length, 0);
+  return a;
+}
+
+test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts stay unretained', () => {
+  expect(artifact.manifest.version).toBe(2); // Actual installed producer, not a synthetic upload format.
+  for (const version of [1, 2, 3]) {
+    const a = artifactVersion(version);
+    const parsed = parseCopyArchive(bytes(a));
+    expect(parsed.coverage.reduce((n, section) => n + section.recordBytes, 0)).toBe(a.manifest.recordBytes);
+    expect(parsed.holdings).toHaveLength(12);
+    expect(parsed.progress).toHaveLength(6);
+    expect(parsed.manifest).toEqual(a.manifest);
+    if (version !== 1) {
+      expect(parsed.coverage.find((row) => row.section === 'journals')).toMatchObject({
+        records: 1,
+        support: 'unsupported',
+      });
+      expect(parsed.coverage.find((row) => row.section === 'annotations')).toMatchObject({
+        records: 0,
+        support: 'unsupported',
+      });
+      for (const mutate of [
+        (m: any) => {
+          m.sectionTotals.journals.recordBytes++;
+        },
+        (m: any) => {
+          delete m.sectionTotals.annotations;
+        },
+        (m: any) => {
+          m.sectionTotals.journals.extra = 1;
+        },
+        (m: any) => {
+          m.coverage = 'private-library-owner-facts-v4';
+        },
+        (m: any) => {
+          m.sections.reverse();
+        },
+      ]) {
+        const malformed = structuredClone(a);
+        mutate(malformed.manifest);
+        expect(() => parseCopyArchive(bytes(malformed))).toThrow('invalid_request');
+      }
+      a.records.find((row) => row.section === 'journals')!.journal.extra = true;
+      expect(() => parseCopyArchive(bytes(a))).toThrow('invalid_request');
+    }
+  }
+});
+
 test('private paged inspection, original upload replay, cancellation, expiry and removal', async () => {
   expect((await f.send('anonymous', 'POST', path, artifact)).status).toBe(401);
   const key = entryKey(),
@@ -348,7 +433,7 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
   expect(uploaded.progressRecords).toBe(6);
   const suffix = `/${uploaded.uploadId}`;
   const page = await json(await send('GET', `${suffix}/progress`));
-  expect(page.occurrences).toHaveLength(6);
+  expect(page.occurrences).toHaveLength(4);
   expect(new Set(page.occurrences.map((row: any) => row.evidence.subject_id)).size).toBe(1);
   expect(page.occurrences.filter((row: any) => row.evidence.amount === '0')).toHaveLength(2);
   const source = sourceSessions[0]!;
@@ -647,6 +732,51 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
   expect(await json(await send('DELETE', `/${measureUpload.uploadId}`))).toMatchObject({ complete: true });
 }, 120000);
 
+test('V1 and declared V3 use the existing native upload/review/apply/result journey', async () => {
+  for (const version of [1, 3]) {
+    const a = artifactVersion(version);
+    const uploaded = await json(await send('POST', '', a, entryKey()));
+    const suffix = `/${uploaded.uploadId}`;
+    const page = await json(await send('GET', suffix));
+    expect(page).toMatchObject({ effectsSupported: false, fullRestoration: false, manifest: { version } });
+    const review = await json(
+      await send(
+        'POST',
+        `${suffix}/progressReviews`,
+        {
+          sessionId: sourceSessions[0]!.id,
+          subjectId,
+          mode: 'scalar_amount',
+          unit: 'chapter',
+          additionalMeasures: [],
+          unitIds: [],
+        },
+        entryKey(),
+      ),
+    );
+    const applied = await json(
+      await send('POST', `${suffix}/progressReviews/${review.reviewId}:apply`, undefined, entryKey()),
+    );
+    expect(applied).toMatchObject({ state: 'applied', acceptedSteps: 3 });
+    expect(applied.sessionId).not.toBe(sourceSessions[0]!.id);
+    const result = await json(await send('GET', `${suffix}/progressReviews/${review.reviewId}`));
+    expect(result.progressSession).toMatchObject({
+      id: applied.sessionId,
+      amount: '0',
+      total: '999999999999.999999',
+      state: 'completed',
+    });
+    const journal = await json(await f.send(owner.bearer, 'GET', `/v1/progressSessions/${applied.sessionId}/journal`));
+    expect(journal.journal).toMatchObject({ revision: 0, startDate: null, finishDate: null, reflection: null });
+    const retained = await f.pool.query(
+      'SELECT DISTINCT section FROM library.copy_archive_row WHERE route=$1 AND account_id=$2',
+      [routeOf(owner.actor.accountId), owner.actor.accountId],
+    );
+    expect(retained.rows.map((row) => row.section).sort()).toEqual(['holdings', 'sessions', 'units']);
+    expect(await json(await send('DELETE', suffix))).toMatchObject({ complete: true });
+  }
+}, 120000);
+
 test('terminal account fencing denies inspection and bounded owner erasure removes retained command operands', async () => {
   const uploaded = await json(await send('POST', '', artifact));
   const review = await json(
@@ -700,7 +830,7 @@ test('terminal account fencing denies inspection and bounded owner erasure remov
     ordinal: 0,
     segment: 0,
   });
-  expect(purged.removed).toBe(17);
+  expect(purged.removed).toBe(20);
   const count = await f.pool.query('SELECT 1 FROM library.copy_archive_row WHERE route=$1 AND account_id=$2', [
     routeOf(owner.actor.accountId),
     owner.actor.accountId,
