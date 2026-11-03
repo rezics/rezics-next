@@ -289,6 +289,7 @@ function parseArchiveTimestamp(value: unknown): { value?: TimestampFact; reason?
       if (!exactKeys(record, ['status', 'value', 'precision', 'zone']))
         return { reason: 'unsupported-timestamp-value' };
       const parsed = parseTimestampValue({ status: 'known', value: record.value });
+      if (parsed.status !== 'known') return { reason: 'unsupported-timestamp-value' };
       if (record.precision !== parsed.precision) return { reason: 'declared-timestamp-precision-mismatch' };
       if (record.zone !== parsed.zone) return { reason: 'declared-timestamp-zone-mismatch' };
       return { value: parsed };

@@ -89,8 +89,8 @@ function selectedFrom(records: any[], ordinals: number[]) {
     }),
   };
 }
-async function makeUpload(person: Identity) {
-  const status = await upload(person);
+async function makeUpload(person: Identity, value: unknown = artifact) {
+  const status = await upload(person, value);
   return { id: status.uploadId as string, status };
 }
 
@@ -1549,7 +1549,9 @@ test('a merged canonical target invalidates the reviewed observation identity', 
     expect(response.status).toBe(201);
     subjectIds.push(((await response.json()) as { subject: { id: string } }).subject.id);
   }
-  const [survivor, redirected] = [...subjectIds].sort();
+  const sortedSubjects = [...subjectIds].sort();
+  const survivor = sortedSubjects[0]!;
+  const redirected = sortedSubjects[1]!;
   const { id } = await makeUpload(identityOwner);
   const row = (await previewAll(identityOwner, id)).records.find(
     (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',

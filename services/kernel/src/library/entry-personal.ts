@@ -9,7 +9,7 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import { newId } from '../route/route.ts';
+import { newId, routeOf } from '../route/route.ts';
 import {
   createLibraryCommandRunner,
   LibraryNotFoundError,
@@ -272,11 +272,13 @@ function parseArchiveObservationGuard(value: unknown): PersonalEntryArchiveObser
   const uuid = (input: unknown) =>
     typeof input === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input);
   if (
+    typeof profile.subjectId !== 'string' ||
     !uuid(profile.subjectId) ||
     typeof profile.identityEpoch !== 'string' ||
     !/^\d+$/.test(profile.identityEpoch) ||
     typeof profile.acceptingType !== 'string' ||
-    (profile.requestedSubjectId !== null && !uuid(profile.requestedSubjectId)) ||
+    (profile.requestedSubjectId !== null &&
+      (typeof profile.requestedSubjectId !== 'string' || !uuid(profile.requestedSubjectId))) ||
     !profile.component ||
     typeof profile.component !== 'object' ||
     Array.isArray(profile.component) ||
