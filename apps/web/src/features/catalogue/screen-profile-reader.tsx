@@ -61,12 +61,12 @@ export function ScreenProfileReader({
 }) {
   const visit: ScreenReaderVisit = screenReaderVisit({
     locale,
-    release,
-    public: publicRead,
-    bounds,
-    reason,
-    loading,
-    type: publicRead?.subject.type,
+    ...(publicRead !== undefined ? { public: publicRead } : {}),
+    ...(release ? { release } : {}),
+    ...(bounds ? { bounds } : {}),
+    ...(reason ? { reason } : {}),
+    ...(loading ? { loading } : {}),
+    ...(publicRead?.subject.type ? { type: publicRead.subject.type } : {}),
   });
   const o = options(locale);
   if (publicRead && !isScreenType(publicRead.subject.type) && visit.state === 'invalid') return null;
@@ -138,11 +138,11 @@ export function ScreenProfileOverview({
   return (
     <ScreenProfileReader
       locale={locale}
-      release={release}
       public={publicRead}
-      bounds={bounds}
-      reason={reason}
-      loading={query.isPending}
+      {...(release ? { release } : {})}
+      {...(bounds ? { bounds } : {})}
+      {...(reason ? { reason } : {})}
+      {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
       link={link}
     />

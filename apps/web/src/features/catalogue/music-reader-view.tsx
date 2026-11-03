@@ -262,7 +262,14 @@ export function MusicAlbumReader({
   onRetry?: () => void;
   link?: PageLink;
 }) {
-  const visit: MusicReaderVisit = musicReaderVisit({ locale, release, public: publicRead, bounds, reason, loading });
+  const visit: MusicReaderVisit = musicReaderVisit({
+    locale,
+    ...(publicRead !== undefined ? { public: publicRead } : {}),
+    ...(release ? { release } : {}),
+    ...(bounds ? { bounds } : {}),
+    ...(reason ? { reason } : {}),
+    ...(loading ? { loading } : {}),
+  });
   const o = options(locale);
   return (
     <article data-slot="music-album-reader" className="min-w-0 space-y-6">
@@ -330,11 +337,11 @@ export function MusicAlbumOverview({
   return (
     <MusicAlbumReader
       locale={locale}
-      release={release}
       public={publicRead}
-      bounds={bounds}
-      reason={reason}
-      loading={query.isPending}
+      {...(release ? { release } : {})}
+      {...(bounds ? { bounds } : {})}
+      {...(reason ? { reason } : {})}
+      {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
       link={link}
     />

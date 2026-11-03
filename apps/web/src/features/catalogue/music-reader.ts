@@ -103,16 +103,17 @@ export function profileSourceRecords(subject: unknown): ProfileSourceRecord[] {
   if (!isRecord(subject) || !Array.isArray(subject.sourceRecords)) return [];
   return subject.sourceRecords.flatMap((record) => {
     if (!isRecord(record) || typeof record.name !== 'string' || typeof record.url !== 'string') return [];
-    const licence = isRecord(record.licence) && typeof record.licence.id === 'string' ? record.licence : undefined;
+    const licenceId = isRecord(record.licence) && typeof record.licence.id === 'string' ? record.licence.id : undefined;
+    const licenceUrl = isRecord(record.licence) && typeof record.licence.url === 'string' ? record.licence.url : undefined;
     return [
       {
         name: record.name,
         url: record.url,
-        ...(licence
+        ...(licenceId
           ? {
               licence: {
-                id: licence.id,
-                ...(typeof licence.url === 'string' ? { url: licence.url } : {}),
+                id: licenceId,
+                ...(licenceUrl ? { url: licenceUrl } : {}),
               },
             }
           : {}),
@@ -157,11 +158,11 @@ export function profileFieldValue(
   const roleId = qualifierContent(statement, 'wdt:P3831');
   const position = qualifierContent(statement, 'schema:position');
   const episodeNumber = qualifierContent(statement, 'schema:episodeNumber');
+  const roleLabel =
+    typeof roleId === 'string' ? pickText(related?.[roleId]?.labels ?? {}, locale).text : '';
   const credit = {
     ...(typeof creditedAs === 'string' && creditedAs ? { creditedAs } : {}),
-    ...(typeof roleId === 'string'
-      ? { roleLabel: pickText(related?.[roleId]?.labels ?? {}, locale).text || undefined }
-      : {}),
+    ...(roleLabel ? { roleLabel } : {}),
     ...(typeof position === 'string' ? { position } : {}),
   };
   const extras = {
@@ -170,12 +171,12 @@ export function profileFieldValue(
   };
   const content = value.content;
   if (typeof content === 'string') {
-    const target = related?.[content];
+    const targetLabel = pickText(related?.[content]?.labels ?? {}, locale).text;
     return {
       id,
       state: 'value',
       targetId: content,
-      targetLabel: pickText(target?.labels ?? {}, locale).text || undefined,
+      ...(targetLabel ? { targetLabel } : {}),
       ...extras,
     };
   }
