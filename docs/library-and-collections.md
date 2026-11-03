@@ -129,6 +129,10 @@ so this totally orders that owner's state writes and confines counter contention
 cross-partition coordinator, clock/UUID sorting, maximum of unrelated per-slot revisions or executor hook supplies
 the order. This ordering rule supersedes those alternatives.
 
+Private state-change history and explicit recovery are specified in [Library entry state history and recovery](library-entry-state-history.md).
+Decision: retain at most 64 state-change rows per account and subject across entry incarnations; pruning marks affected
+retained history partial, and entries already present at installation remain unknown until a real transition is captured.
+
 Undo is a new state write and obtains a fresh higher `owner_write_seq`, even when native state, subject IDs,
 accepted pin, source stamps and user dates are restored exactly. Existing native new-transaction and revision
 rules still apply. The archive retains the original state snapshot, including its original sequence; archived or

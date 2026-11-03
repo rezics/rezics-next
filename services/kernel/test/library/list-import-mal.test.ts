@@ -99,8 +99,9 @@ test('native HTTP own preview, explicit unmatched resolution, supported status, 
   await json('GET', page.sourcePath, undefined, randomUUID(), 'other', 404);
   expect(page.rows[0]).toMatchObject({ match: 'matched', notes: { value: 'private note' }, review: null });
   expect((await native.inspect()).entries.some((e) => e.row.subject_id === target)).toBe(false);
+  await json('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' }, randomUUID(), 'owner', 201);
   expect(page.rows[1].match).toBe('unmatched');
-  const version = await review(id, 0, null);
+  const version = await review(id, 0, null, true);
   const skip = await review(id, 1, null, false, true);
   const retained = await review(id, 2, target);
   expect((await json('GET', `${base}/${id}`)).rows[2].target).toBe(target);
@@ -117,6 +118,10 @@ test('native HTTP own preview, explicit unmatched resolution, supported status, 
   expect((await apply(id, 3, resolvedVersion)).outcomes[0].status).toBe('applied');
   expect(result.outcomes[0]).toMatchObject({ status: 'applied', applied: ['status'] });
   expect(result.outcomes[0].retained).toContain('my_comments');
+  const history = await json('GET', `/v1/libraryEntries/${target}/state-history`);
+  expect(history.changes).toContainEqual(
+    expect.objectContaining({ beforeState: 'planned', afterState: 'completed', commandKind: 'library.entry.put' }),
+  );
   expect((await apply(id, 0, version, ['status', 'score', 'notes'])).outcomes[0]).toEqual(result.outcomes[0]);
   const beforeRetry = await json('GET', `/v1/libraryEntries/${target}`);
   // Fault injection: native effects committed, but the import acknowledgement was lost.
@@ -127,6 +132,7 @@ test('native HTTP own preview, explicit unmatched resolution, supported status, 
   );
   expect((await apply(id, 0, version, ['status', 'score', 'notes'])).outcomes[0]).toEqual(result.outcomes[0]);
   expect((await json('GET', `/v1/libraryEntries/${target}`)).libraryEntry).toEqual(beforeRetry.libraryEntry);
+  expect(await json('GET', `/v1/libraryEntries/${target}/state-history`)).toEqual(history);
   expect((await apply(id, 1, skip)).outcomes[0].status).toBe('skipped');
   expect((await apply(id, 2, retained, ['score'])).outcomes[0].status).toBe('unsupported');
   const facts = (await native.inspect()).entries.filter((e) => e.row.subject_id === target);

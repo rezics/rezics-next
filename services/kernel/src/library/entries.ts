@@ -5,6 +5,8 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
+  mintReadTime,
+  releaseOperationalTime,
   type CommandEvent,
   type CommandTransaction,
   type AuthoritativeTime,
@@ -48,6 +50,12 @@ import stampLegacyIncarnation from './entry-legacy-incarnation-stamp.sql';
 import restoreState from './entry-restore-state.sql';
 import mutationState from './entry-mutation-state.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
+import {
+  captureEntryStateChange,
+  pageEntryStateChanges,
+  readEntryStateChange,
+  type EntryStateChangeRow,
+} from './entry-state-history.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -67,14 +75,17 @@ export type ReviewedEntrySource = {
 
 type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
 type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
+type EntryStateHistoryOptions = { cursor?: string; limit?: number };
 type QueryClient = Pick<PoolClient, 'query'>;
 type EntryPageRow = Awaited<ReturnType<typeof entryPage.run>>[number];
+type StoredEntryStateChange = NonNullable<EntryStateChangeRow>;
 
 const STATE_ID = /^[a-z][a-z0-9_.-]{0,63}$/;
 const UPDATED_EVENT = 'com.rezics.library.entry.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.entry.deleted.v1';
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+const MAX_STATE_HISTORY_PAGE_SIZE = 50;
 
 export class LibraryEntryInvalidError extends TypeError {
   constructor(message = 'Unknown library entry state') {
@@ -96,6 +107,13 @@ export class LibraryConflictError extends Error {
 export class LibraryEntryLifecycleConflictError extends LibraryConflictError {
   constructor(readonly reason: 'stale' | 'occupied' | 'expired') {
     super();
+  }
+}
+
+export class LibraryEntryStateRestoreConflictError extends LibraryConflictError {
+  constructor(readonly reason: 'stale' | 'unavailable' | 'unchanged') {
+    super();
+    this.name = 'LibraryEntryStateRestoreConflictError';
   }
 }
 
@@ -186,6 +204,47 @@ function binding(owner: AccountActor, selectedState: EntryState | null): CursorB
   return {
     operation: 'library_entry.list',
     parameters: { accountId: owner.accountId, state: selectedState },
+  };
+}
+
+function stateHistoryBinding(
+  owner: AccountActor,
+  subjectId: string,
+  incarnation: string,
+  limit: number,
+): CursorBinding {
+  return {
+    operation: 'library_entry.state_history',
+    parameters: { accountId: owner.accountId, subjectId, incarnation, limit },
+  };
+}
+
+function validStateHistoryAfter(keys: CursorKey[]): keys is [string, string, string] {
+  return (
+    keys.length === 3 &&
+    typeof keys[0] === 'string' &&
+    /^[1-9][0-9]*$/.test(keys[0]) &&
+    Number(keys[0]) < 2_147_483_647 &&
+    typeof keys[1] === 'string' &&
+    /^[1-9][0-9]*$/.test(keys[1]) &&
+    Number(keys[1]) < 2_147_483_647 &&
+    (keys[2] === 'complete' || keys[2] === 'partial')
+  );
+}
+
+type EntryStateCommandKind = 'library.entry.put' | 'library.entry.state.restore';
+
+function stateChangeView(
+  change: Pick<StoredEntryStateChange, 'revision' | 'priorRevision' | 'beforeState' | 'afterState' | 'commandId' | 'commandKind' | 'changedAt'>,
+) {
+  return {
+    revision: change.revision,
+    priorRevision: change.priorRevision,
+    beforeState: change.beforeState,
+    afterState: change.afterState,
+    commandId: change.commandId,
+    commandKind: change.commandKind as EntryStateCommandKind,
+    changedAt: new Date(change.changedAt).toISOString(),
   };
 }
 
@@ -298,6 +357,26 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
+  async function historicalStateAdmitted(owner: AccountActor, subjectId: string, historicalState: string) {
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    const time = await withConnection(pool, (client) => mintReadTime(client, clock));
+    try {
+      const observation = await readLibraryProfileSourceObservation(
+        { pool, access, actor: owner, at: time, deadline },
+        subjectId,
+      );
+      const source = observation?.source;
+      return Boolean(
+        source &&
+          source.kind === 'supported' &&
+          source.subjectId === subjectId &&
+          hasEntryState(source.profile, historicalState),
+      );
+    } finally {
+      releaseOperationalTime(time);
+    }
+  }
+
   async function putEntry(
     actor: Actor,
     subjectId: string,
@@ -407,6 +486,8 @@ export function createEntryCommands(config: Dependencies) {
             account_id: owner.accountId,
             subject_id: resolved.subjectId,
           });
+          let previous: Awaited<ReturnType<typeof mutationState.run>> = null;
+          let updateIncarnationId = parsed.incarnationId;
           if (expectedRevision !== undefined) {
             // This exact locked row is the cutover evidence. Receipt replay has
             // already returned, and a concurrent stamp/replacement cannot race admission.
@@ -422,6 +503,21 @@ export function createEntryCommands(config: Dependencies) {
               (parsed.incarnationId !== undefined && current.incarnationId !== parsed.incarnationId)
             )
               throw new LibraryConflictError();
+            let currentIncarnation = current.incarnationId;
+            if (currentIncarnation == null) {
+              currentIncarnation = newId(route);
+              const stamped = await stampLegacyIncarnation.run(tx, {
+                route,
+                account_id: owner.accountId,
+                subject_id: resolved.subjectId,
+                revision: expectedRevision,
+                transaction_id: current.transactionId,
+                incarnation_id: currentIncarnation,
+              });
+              if (stamped?.incarnationId !== currentIncarnation) throw new LibraryConflictError();
+            }
+            previous = { ...current, incarnationId: currentIncarnation };
+            updateIncarnationId = currentIncarnation;
           }
           if (reviewedSource?.importFence) {
             const fence = reviewedSource.importFence;
@@ -477,11 +573,32 @@ export function createEntryCommands(config: Dependencies) {
               parsed.state,
               context,
               source.pin,
-              parsed.incarnationId,
+              updateIncarnationId,
             );
             if (!changed) throw new LibraryConflictError();
             entry = changed;
           }
+
+          if (
+            !previous ||
+            previous.state !== entry.state ||
+            canonicalize(previous.libraryProfilePin) !== canonicalize(source.pin)
+          )
+            await captureEntryStateChange(tx, {
+              route,
+              accountId: owner.accountId,
+              subjectId: entry.subjectId,
+              incarnationId: entry.incarnationId,
+              priorRevision: previous?.revision ?? null,
+              revision: entry.revision,
+              beforeState: previous?.state ?? null,
+              beforeProfilePin: previous?.libraryProfilePin ?? null,
+              afterState: entry.state,
+              afterProfilePin: source.pin,
+              commandId: command.transactionId,
+              commandKind: 'library.entry.put',
+              changedAt: context.time,
+            });
 
           const typeId = acceptedType?.status === 'ready' ? acceptedType.typeId : before?.typeId;
           if (gate.ready && (!typeId || (before && !before.typeId)))
@@ -528,6 +645,265 @@ export function createEntryCommands(config: Dependencies) {
       if (parsed.revision === undefined && isDuplicateEntry(error)) throw new LibraryConflictError();
       throw error;
     }
+  }
+
+  async function listEntryStateHistory(
+    actor: Actor,
+    subjectId: string,
+    options: EntryStateHistoryOptions = {},
+  ) {
+    const owner = account(actor, 'library_entry:read');
+    requireRoute(subjectId);
+    if (typeof options !== 'object' || options === null || Array.isArray(options))
+      throw new TypeError('Entry state history options must be an object');
+    if (Object.keys(options).some((key) => key !== 'cursor' && key !== 'limit'))
+      throw new TypeError('Entry state history options contain an unknown field');
+    const limit = options.limit ?? DEFAULT_PAGE_SIZE;
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_STATE_HISTORY_PAGE_SIZE)
+      throw new RangeError(`History page limit must be an integer from 1 to ${MAX_STATE_HISTORY_PAGE_SIZE}`);
+    if (options.cursor !== undefined && (typeof options.cursor !== 'string' || options.cursor.length > 4096))
+      throw new ProblemError('invalid_cursor');
+
+    return snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
+      const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
+      if (!current) throw new LibraryNotFoundError();
+      if (!current.incarnationId) {
+        if (options.cursor !== undefined) throw new ProblemError('stale_cursor');
+        return {
+          incarnationId: null,
+          currentRevision: current.revision,
+          changes: [],
+          coverage: 'unknown' as const,
+          next: null,
+        };
+      }
+      const partition = await readPartition(client as PoolClient, partitionOf(route));
+      const cursorBinding = stateHistoryBinding(accountOwner, subjectId, current.incarnationId, limit);
+      let afterRevision: number | null = null;
+      let cursorCoverage: 'complete' | 'partial' | null = null;
+      if (options.cursor !== undefined) {
+        const cursor = decodeCursor(tokens, cursorBinding, options.cursor);
+        if (!cursor.ok || !validStateHistoryAfter(cursor.after)) throw new ProblemError('invalid_cursor');
+        if (!partition || cursor.epoch !== partition.epoch) throw new ProblemError('stale_cursor');
+        afterRevision = Number(cursor.after[0]);
+        if (Number(cursor.after[1]) !== current.revision) throw new ProblemError('stale_cursor');
+        cursorCoverage = cursor.after[2] as 'complete' | 'partial';
+      }
+      const rows = await pageEntryStateChanges(client, {
+        route,
+        accountId: accountOwner.accountId,
+        subjectId,
+        incarnationId: current.incarnationId,
+        afterRevision,
+        limit: limit + 1,
+      });
+      const changes = rows.slice(0, limit);
+      const hasMore = rows.length > limit;
+      const last = changes.at(-1);
+      const coverage = changes.length
+        ? changes[0]!.coverageComplete
+          ? ('complete' as const)
+          : ('partial' as const)
+        : (cursorCoverage ?? 'unknown');
+      if (hasMore && !partition) throw new CommandUnavailableError('fenced', partitionOf(route));
+      return {
+        incarnationId: current.incarnationId,
+        currentRevision: current.revision,
+        changes: changes.map(stateChangeView),
+        coverage,
+        next:
+          hasMore && last && partition
+            ? encodeCursor(tokens, cursorBinding, {
+                epoch: partition.epoch,
+                after: [String(last.revision), String(current.revision), coverage],
+              })
+            : null,
+      };
+    });
+  }
+
+  async function reviewEntryStateChange(actor: Actor, subjectId: string, selectedRevision: number) {
+    const owner = account(actor, 'library_entry:read');
+    requireRoute(subjectId);
+    const selected = revision(selectedRevision);
+    const reviewed = await snapshot(actor, 'library_entry:read', async (client, accountOwner, route) => {
+      const current = await store.readEntry(client, route, accountOwner.accountId, subjectId);
+      if (!current) throw new LibraryNotFoundError();
+      if (!current.incarnationId) throw new LibraryNotFoundError();
+      const change = await readEntryStateChange(client, {
+        route,
+        accountId: accountOwner.accountId,
+        subjectId,
+        incarnationId: current.incarnationId,
+        revision: selected,
+      });
+      if (!change) throw new LibraryNotFoundError();
+      return { current, change };
+    });
+    let availability: 'available' | 'no_prior_state' | 'state_unavailable';
+    if (reviewed.change.beforeState === null) availability = 'no_prior_state';
+    else
+      availability = (await historicalStateAdmitted(owner, subjectId, reviewed.change.beforeState))
+        ? 'available'
+        : 'state_unavailable';
+    return {
+      change: stateChangeView(reviewed.change),
+      current: {
+        incarnationId: reviewed.current.incarnationId ?? null,
+        revision: reviewed.current.revision,
+        state: reviewed.current.state,
+      },
+      availability,
+    };
+  }
+
+  async function restoreEntryState(actor: Actor, subjectId: string, selectedRevision: number, input: unknown, requestKey: string) {
+    const owner = account(actor, 'library_entry:update');
+    requireRoute(subjectId);
+    const selected = revision(selectedRevision);
+    if (typeof input !== 'object' || input === null || Array.isArray(input))
+      throw new TypeError('Entry state restore input must be an object');
+    const value = input as Record<string, unknown>;
+    if (Object.keys(value).some((key) => key !== 'incarnationId' && key !== 'currentRevision'))
+      throw new TypeError('Entry state restore input contains an unknown field');
+    const request = {
+      subjectId,
+      changeRevision: selected,
+      incarnationId: incarnationId(value.incarnationId),
+      currentRevision: revision(value.currentRevision),
+    };
+    const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+    return runner.ownAccountPrepared(
+      actor,
+      {
+        action: 'library_entry:update',
+        kind: 'library.entry.state.restore',
+        requestKey,
+        input: request,
+        async prepare(attempt) {
+          try {
+            const change = await withConnection(pool, (client) =>
+              readEntryStateChange(client, {
+                route: requireRoute(owner.accountId),
+                accountId: owner.accountId,
+                subjectId,
+                incarnationId: request.incarnationId,
+                revision: request.changeRevision,
+              }),
+            );
+            if (!change) throw new LibraryNotFoundError();
+            if (change.beforeState === null)
+              throw new LibraryEntryStateRestoreConflictError('unavailable');
+            const observation = await readLibraryProfileSourceObservation(
+              { pool, access, actor: owner, at: attempt.time, deadline },
+              subjectId,
+            );
+            const source = observation?.source;
+            if (
+              !source ||
+              source.kind !== 'supported' ||
+              source.subjectId !== subjectId ||
+              !hasEntryState(source.profile, change.beforeState)
+            )
+              throw new LibraryEntryStateRestoreConflictError('unavailable');
+            return { change, source };
+          } catch (error) {
+            return { error };
+          }
+        },
+      },
+      async (tx, command, prepared) => {
+        if ('error' in prepared) throw prepared.error;
+        const route = requireRoute(owner.accountId);
+        const write = { client: tx, route, accountId: owner.accountId };
+        const gate = await enterShelfWrite(write);
+        const head = await heads.ensure(write, subjectId);
+        const before = await placement.run(tx, { route, account_id: owner.accountId, subject_id: subjectId });
+        const current = await mutationState.run(tx, {
+          route,
+          account_id: owner.accountId,
+          subject_id: subjectId,
+        });
+        if (!current) throw new LibraryNotFoundError();
+        if (
+          current.revision !== request.currentRevision ||
+          current.incarnationId !== request.incarnationId
+        )
+          throw new LibraryEntryStateRestoreConflictError('stale');
+        const change = await readEntryStateChange(tx, {
+          route,
+          accountId: owner.accountId,
+          subjectId,
+          incarnationId: request.incarnationId,
+          revision: request.changeRevision,
+          lock: true,
+        });
+        if (!change) throw new LibraryNotFoundError();
+        if (change.beforeState === null || change.beforeState !== prepared.change.beforeState)
+          throw new LibraryEntryStateRestoreConflictError('unavailable');
+        if (
+          prepared.source.subjectId !== subjectId ||
+          prepared.source.kind !== 'supported' ||
+          !hasEntryState(prepared.source.profile, change.beforeState)
+        )
+          throw new LibraryEntryStateRestoreConflictError('unavailable');
+        if (
+          current.state === change.beforeState &&
+          canonicalize(current.libraryProfilePin) === canonicalize(prepared.source.pin)
+        )
+          throw new LibraryEntryStateRestoreConflictError('unchanged');
+        const sequence = await allocateOwnerWriteSeq(tx, owner.accountId);
+        const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
+        const entry = await store.updateEntryState(
+          tx,
+          route,
+          owner.accountId,
+          subjectId,
+          request.currentRevision,
+          state(change.beforeState),
+          context,
+          prepared.source.pin,
+          request.incarnationId,
+        );
+        if (!entry) throw new LibraryEntryStateRestoreConflictError('stale');
+        const typeId = before?.typeId;
+        if (gate.ready && !typeId) throw new Error('Complete shelf placement is missing a type');
+        await counters.transition(
+          write,
+          before?.typeId ? { state: before.state, typeId: before.typeId } : null,
+          typeId ? { state: entry.state, typeId } : null,
+        );
+        const stamped = await stampOwnerSequence.run(tx, {
+          route,
+          account_id: owner.accountId,
+          subject_id: entry.subjectId,
+          revision: entry.revision,
+          transaction_id: command.transactionId,
+          seq: sequence,
+        });
+        if (stamped.length !== 1) throw new Error('Library entry owner sequence stamp failed');
+        if (
+          current.state !== entry.state ||
+          canonicalize(current.libraryProfilePin) !== canonicalize(prepared.source.pin)
+        )
+          await captureEntryStateChange(tx, {
+            route,
+            accountId: owner.accountId,
+            subjectId: entry.subjectId,
+            incarnationId: request.incarnationId,
+            priorRevision: current.revision,
+            revision: entry.revision,
+            beforeState: current.state,
+            beforeProfilePin: current.libraryProfilePin,
+            afterState: entry.state,
+            afterProfilePin: prepared.source.pin,
+            commandId: command.transactionId,
+            commandKind: 'library.entry.state.restore',
+            changedAt: context.time,
+          });
+        return { value: { entry }, events: [entryEvent(UPDATED_EVENT, owner.accountId, entry.subjectId)] };
+      },
+    );
   }
 
   async function deleteEntry(
@@ -717,6 +1093,9 @@ export function createEntryCommands(config: Dependencies) {
   return {
     putEntry: (...args: Parameters<typeof putEntry>) =>
       withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => putEntry(...args)),
+    listEntryStateHistory,
+    reviewEntryStateChange,
+    restoreEntryState,
     deleteEntry,
     restoreEntry,
     readEntry,
