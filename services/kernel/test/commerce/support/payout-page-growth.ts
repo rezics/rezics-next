@@ -494,5 +494,3 @@ export function assertPayoutPageEvidence(raw: Capture, job: PayoutPageJob, surfa
     else expect(actual).toBe(PAGE + 1);
   }
 }
-
-export { checkGrowth, cookies, password };
