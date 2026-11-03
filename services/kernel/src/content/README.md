@@ -3625,6 +3625,8 @@ cursor. It never concatenates pages or accepts a client-selected post-ID batch. 
 security revision, and each available post action reference carries the exact disclosed source revision.
 The installed composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`, mounted as
 operation `thread.reading_page`.
+The Web thread-page loader consumes the generated response and maps its opening and replies into the existing thread
+and post interface. The controller retains rendered and broader native acceptance.
 
 Personal data is bounded to the current actor and this page. One deduplicated Accounts summary call admits at most 21
 author identities. Existing viewer-reaction and reaction-count readers receive at most 22 targets (thread, opening,
