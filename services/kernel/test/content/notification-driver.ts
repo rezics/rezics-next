@@ -15,6 +15,7 @@ import type {
 } from '../../../../specs/content-notification-driver.ts';
 import { createNotificationEffectHost } from './support/notification-effect-host.ts';
 import { createNotificationFixture } from './support/notification-fixtures.ts';
+import type { GrowthDatabase } from '../support/growth.ts';
 
 const AUDIENCE = 'https://content.test';
 type Raw = Record<string, unknown>;
@@ -107,15 +108,35 @@ function documentOf(value: unknown): unknown {
   return { ...snapshot, doc: withDocumentIds(doc as DocumentNode) };
 }
 
+export type ContentNotificationGrowthDriver = ContentNotificationDriver & { growthDatabase: GrowthDatabase };
+
 export async function createContentNotificationDriver(): Promise<ContentNotificationDriver> {
-  const setup = await createNotificationFixture();
+  return (await buildContentNotificationDriver(false)).driver;
+}
+
+export async function createContentNotificationGrowthDriver(): Promise<ContentNotificationGrowthDriver> {
+  const { driver, growthDatabase } = await buildContentNotificationDriver(true);
+  if (!growthDatabase) {
+    await driver.close();
+    throw new Error('Notification growth fixture did not open its instrumented database');
+  }
+  return Object.assign(driver, { growthDatabase });
+}
+
+async function buildContentNotificationDriver(growth: boolean): Promise<{
+  driver: ContentNotificationDriver;
+  growthDatabase?: GrowthDatabase;
+}> {
+  const setup = await createNotificationFixture({ growth });
   const { system, fixture } = setup;
-  let effectHost: Awaited<ReturnType<typeof createNotificationEffectHost>>;
-  try {
-    effectHost = await createNotificationEffectHost(setup.appDatabaseUrl, setup.workClock);
-  } catch (error) {
-    await setup.close();
-    throw error;
+  let effectHost: Awaited<ReturnType<typeof createNotificationEffectHost>> | undefined;
+  if (!growth) {
+    try {
+      effectHost = await createNotificationEffectHost(setup.appDatabaseUrl, setup.workClock);
+    } catch (error) {
+      await setup.close();
+      throw error;
+    }
   }
   const threadIds: string[] = [];
   let fixtureValue: Fixture | undefined;
@@ -190,12 +211,12 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
     };
   }
 
-  return {
+  const driver: ContentNotificationDriver = {
     async close() {
       if (closed) return;
       closed = true;
       try {
-        await effectHost.close();
+        await effectHost?.close();
       } finally {
         await setup.close();
       }
@@ -230,7 +251,12 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
         return thread;
       });
       if (mapped.value) {
-        await setup.grantModerationTarget(mapped.value.id);
+        if (growth) {
+          await setup.grantModerationTarget(mapped.value.id);
+          await setup.grantModerationTarget(mapped.value.firstPost.id, mapped.value.id);
+          await setup.grantReportTarget(mapped.value.id, fixture.reporter.id);
+          await setup.grantReportTarget(mapped.value.firstPost.id, fixture.reporter.id);
+        }
         for (const account of [fixture.author, fixture.replier, fixture.mentioned])
           await setup.grantPostTarget(mapped.value.id, account.id);
       }
@@ -253,6 +279,12 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
         remember(post.id);
         return post;
       });
+      if (mapped.value) {
+        if (growth) {
+          await setup.grantModerationTarget(mapped.value.id, input.threadId);
+          await setup.grantReportTarget(mapped.value.id, fixture.reporter.id);
+        }
+      }
       return mapped;
     },
     async revise(input, options) {
@@ -325,7 +357,7 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
       );
     },
     async takedown(target, reason, options) {
-      await setup.grantModerationTarget(target.id);
+      if (!growth) await setup.grantModerationTarget(target.id);
       const result = await request(
         'POST',
         `/v1/${target.kind === 'thread' ? 'threads' : 'posts'}/${target.id}:takeDown`,
@@ -343,8 +375,10 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
       return resultMap(result, decisionOf);
     },
     async report(target, options) {
-      await setup.grantModerationTarget(target.id);
-      await setup.grantReportTarget(target.id, options.actor.id);
+      if (!growth) {
+        await setup.grantModerationTarget(target.id);
+        await setup.grantReportTarget(target.id, options.actor.id);
+      }
       const result = await request('POST', '/v1/reports', options.actor, { target, reason: 'spam' }, options.key);
       const mapped = resultMap(result, (body) => ({
         reportId: string(object(body, 'Report create').reportId, 'reportId'),
@@ -409,6 +443,7 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
       return { response: result.response, value: appeals };
     },
     async effects(mode) {
+      if (!effectHost) throw new Error('Notification effect host is unavailable in a growth fixture');
       const consumer =
         mode === 'drain' ? 'notification_drain' : `notification_replay_${crypto.randomUUID().replaceAll('-', '')}`;
       await effectHost.deliver(consumer, [...setup.contentPartitions]);
@@ -428,4 +463,5 @@ export async function createContentNotificationDriver(): Promise<ContentNotifica
       },
     },
   };
+  return { driver, ...(setup.growthDatabase ? { growthDatabase: setup.growthDatabase } : {}) };
 }

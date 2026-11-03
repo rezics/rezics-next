@@ -4,9 +4,11 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { createCurrentConsentReader } from '@rezics/auth/current-consent';
 import { Pool } from 'pg';
 import { notificationAllowed } from '../../src/access/index.ts';
+import { readErasureStatus } from '../../src/access/erasure.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createContentWorkAccess, contentWorkDependencies } from '../../src/content/register.ts';
 import { createContentWork } from '../../src/content/work.ts';
+import { createAccountErasureEffect } from '../../src/content/account-erasure.ts';
 import { contentEffects, contentNoticeEffects } from '../../src/content/relays.ts';
 import { postReadableByAccount } from '../../src/content/reads.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -19,7 +21,7 @@ import { effectsRelay } from '../../src/events/effects.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona, drainEffects } from '../support/account-deletion.ts';
-import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createPersonas } from '../support/personas.ts';
 import { testKernel, testRouteKey } from '../support/test-kernel.ts';
 import { observeSql } from './support/sql-observer.ts';
@@ -40,7 +42,8 @@ beforeAll(async () => {
   pagePool = new Pool({ connectionString: db.url, max: 1 });
   auth = await nativeFixture(db.pool);
   const service = auth.host.service;
-  client = await createWorkClient(db.url);
+  workPool = db.openPool({ max: 10 });
+  client = await createWorkClient(db.url, workPool);
   kernel = testKernel({
     pool: db.pool,
     workClient: client,
@@ -51,12 +54,11 @@ beforeAll(async () => {
   await bootstrapRelease(db.pool, bundledRelease);
   // The same production Access instance is used for direct delivery before Auth
   // hands the DBOS SDK to Content, and for the registered Content worker effects.
-  workPool = new Pool({ connectionString: db.url, max: 10 });
   workAccess = createContentWorkAccess(() => new Date(), workPool);
   noticeEffects = contentNoticeEffects(workPool, workAccess);
 }, 360000);
 
-async function startContentWork() {
+async function startContentWork(options: { relays?: boolean } = {}) {
   // Account deletion finishes with Auth's executor. Content then owns the SDK;
   // its consent reader and the HTTP verifier keep using the open Auth database.
   await auth.host.workflows.close();
@@ -85,7 +87,9 @@ async function startContentWork() {
     { databaseUrl: db.url, pool: workPool, client },
   );
   await work.launch();
-  relays = startRelays(workPool, [effectsRelay(workPool, work.effects)], { intervalMs: 5 });
+  if (options.relays ?? true) {
+    relays = startRelays(workPool, [effectsRelay(workPool, work.effects)], { intervalMs: 5 });
+  }
 }
 
 async function grant(accountId: string, action: string, resourceId: string): Promise<void> {
@@ -143,6 +147,120 @@ async function postCreatedEvent(postId: string): Promise<CloudEvent> {
   };
 }
 
+async function accountTombstoneEvent(accountId: string): Promise<CloudEvent> {
+  const { rows } = await db.admin.query<{
+    partition_no: number;
+    position: string;
+    epoch: number;
+    id: string;
+    type: string;
+    subject: string;
+    data: unknown;
+    recorded_at: Date;
+  }>(
+    `SELECT partition_no,position::text,epoch,id::text,type,subject::text,data,recorded_at
+     FROM core.outbox
+     WHERE type='com.rezics.access.account-tombstoned.v1' AND data->>'accountId'=$1
+     ORDER BY position DESC,event_seq LIMIT 1`,
+    [accountId],
+  );
+  const row = rows[0];
+  if (!row) throw new Error(`Missing native account tombstone for ${accountId}`);
+  return {
+    specversion: '1.0',
+    id: row.id,
+    source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+    type: row.type,
+    subject: row.subject,
+    time: new Date(row.recorded_at).toISOString(),
+    datacontenttype: 'application/json',
+    sequence: BigInt(row.position).toString().padStart(19, '0'),
+    data: row.data,
+  };
+}
+
+type ErasureWorkerSubject = { accountId: string; bearer: string; scale: number; event: CloudEvent };
+
+async function waitForErasureWorker(accountId: string): Promise<void> {
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    const status = await readErasureStatus(db.admin, accountId);
+    const progress = await db.admin.query<{ phase: string; step: string }>(
+      'SELECT phase,step::text FROM content.account_erasure_progress WHERE route=$1 AND account_id=$2',
+      [routeOf(accountId), accountId],
+    );
+    const current = progress.rows[0];
+    if (status?.participants.content?.outcome === 'erased' && current?.phase === 'complete') {
+      expect(status.participants.delivery?.outcome).toBe('none');
+      const workflowId = `content-account-erasure:${accountId}:proof:${Number(current.step) - 1}`;
+      const workflow = await db.admin.query<{ status: string }>(
+        'SELECT status FROM dbos.workflow_status WHERE workflow_uuid=$1',
+        [workflowId],
+      );
+      if (workflow.rows[0]?.status === 'SUCCESS') return;
+    }
+    if (Date.now() >= deadline) throw new Error(`Native account-erasure worker did not finish for ${accountId}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+async function measureAccountErasureWorker(subjects: readonly ErasureWorkerSubject[], threadId: string) {
+  const scales = [64, 256, 1024] as const;
+  const itemRoute = routeOf(threadId);
+  if (itemRoute === null) throw new TypeError('Account-erasure worker fixture thread has no route');
+  const byScale = new Map<number, ErasureWorkerSubject[]>();
+  for (const subject of subjects) byScale.set(subject.scale, [...(byScale.get(subject.scale) ?? []), subject]);
+  const effect = createAccountErasureEffect({ client });
+  const run = async (subject: ErasureWorkerSubject) => {
+    await effect.run(subject.event);
+    await waitForErasureWorker(subject.accountId);
+    return subject.accountId;
+  };
+  const report = await checkGrowth(db, {
+    name: 'Complete native account-erasure worker',
+    scales,
+    bounds: { rows: 'linear', blocks: 'linear', statements: 'linear' },
+    repetitions: 1,
+    warmups: 1,
+    async grow(growthDb, scale) {
+      const ids = Array.from({ length: scale }, () => newId(itemRoute));
+      for (const subject of byScale.get(scale) ?? []) {
+        const authorRoute = routeOf(subject.accountId);
+        if (authorRoute === null) throw new TypeError('Account-erasure worker fixture account has no route');
+        await growthDb.admin.query(
+          `INSERT INTO content.author_item
+             (route,author_account_id,item_kind,item_id,thread_id,thread_kind,created_at,source_epoch,source_position)
+           SELECT $1,$2,'post',row.item_id,$3,'discussion',clock_timestamp(),1,1
+           FROM unnest($4::uuid[]) AS row(item_id)`,
+          [authorRoute, subject.accountId, threadId, ids],
+        );
+      }
+    },
+    async warmup(_growthDb, scale) {
+      const warmup = byScale.get(scale)?.[0];
+      if (!warmup) throw new Error(`Missing account-erasure worker warmup at scale ${scale}`);
+      await run(warmup);
+    },
+    async operation(_growthDb, scale) {
+      const operation = byScale.get(scale)?.[1];
+      if (!operation) throw new Error(`Missing account-erasure worker sample at scale ${scale}`);
+      return run(operation);
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  for (const subject of subjects) {
+    expect(
+      (
+        await db.admin.query('SELECT 1 FROM content.author_item WHERE route=$1 AND author_account_id=$2', [
+          routeOf(subject.accountId),
+          subject.accountId,
+        ])
+      ).rows,
+    ).toHaveLength(0);
+  }
+  console.info(JSON.stringify(report));
+}
+
 async function deliverNoticeEffects(postId: string): Promise<void> {
   const event = await postCreatedEvent(postId);
   for (const effect of noticeEffects) if (effect.types.includes(event.type)) await effect.run(event);
@@ -173,7 +291,6 @@ afterAll(async () => {
   await relays?.stop();
   await work?.shutdown();
   await client?.close();
-  await workPool?.end();
   await pagePool?.end();
   await auth?.close();
   await db?.close();
@@ -416,8 +533,26 @@ test("account notice erasure deletes the account's inbox and seen marker in boun
     }),
   );
   expect(marked.status).toBe(204);
+  const workerPeopleA = await createPersonas(kernel, { version: 1, pool: db.pool, auth, governance: people.staff });
+  const workerPeopleB = await createPersonas(kernel, { version: 1, pool: db.pool, auth, governance: people.staff });
+  const workerAccounts = [
+    workerPeopleA.alice,
+    workerPeopleA.bob,
+    workerPeopleA.staff,
+    await workerPeopleA.unscoped('account:manage'),
+    workerPeopleB.alice,
+    workerPeopleB.bob,
+  ];
+  const workerSubjects: ErasureWorkerSubject[] = [];
+  for (const [index, subject] of workerAccounts.entries()) {
+    const scale = [64, 64, 256, 256, 1024, 1024][index]!;
+    await deletePersona({ version: 1, pool: db.pool, auth }, subject);
+    workerSubjects.push({ ...subject, scale, event: await accountTombstoneEvent(subject.accountId) });
+  }
   await deletePersona({ version: 1, pool: db.pool, auth }, account);
-  await startContentWork();
+  await startContentWork({ relays: false });
+  await measureAccountErasureWorker(workerSubjects, otherThread.id);
+  relays = startRelays(workPool, [effectsRelay(workPool, work.effects)], { intervalMs: 5 });
   await drainEffects(db.pool, partitionOf(route));
   const sizes: number[] = [];
   let after: string | null = null;
@@ -484,7 +619,7 @@ test("account notice erasure deletes the account's inbox and seen marker in boun
     found: 0,
     pending: 0,
   });
-});
+}, 600_000);
 
 test("a per-thread author erasure through its route leaves the author's inbox intact", async () => {
   const author = people.staff;

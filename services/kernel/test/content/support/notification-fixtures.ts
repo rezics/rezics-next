@@ -4,6 +4,8 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definiti
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { threadTarget } from '../../../src/content/commands.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import type { Pool } from 'pg';
 import {
   createNativeContentSystemWithWriteRateOverrides,
   registerNativeContentAccount,
@@ -25,6 +27,7 @@ function personaScopes(...actions: string[]): string[] {
 export type NotificationFixture = {
   system: NativeContentSystem;
   appDatabaseUrl: string;
+  growthDatabase?: GrowthDatabase;
   workClock: () => Date;
   fixture: Fixture;
   protectedRealmId: string;
@@ -299,7 +302,7 @@ async function installGrant(
   );
 }
 
-export async function createNotificationFixture(): Promise<NotificationFixture> {
+export async function createNotificationFixture(options: { growth?: boolean } = {}): Promise<NotificationFixture> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required for native notification outcomes');
   const namespace = `notify_${randomUUID().replaceAll('-', '')}`;
@@ -307,6 +310,7 @@ export async function createNotificationFixture(): Promise<NotificationFixture> 
     { databaseUrl, namespace },
     WRITE_RATE_OVERRIDES,
   );
+  let growthDatabase: GrowthDatabase | undefined;
   try {
     let replier = accountPersona(system.actors.other);
     let author = accountPersona(system.actors.author);
@@ -433,20 +437,30 @@ export async function createNotificationFixture(): Promise<NotificationFixture> 
     fixture.author = author;
     fixture.replier = replier;
     fixture.moderator = moderator;
+    const appDatabaseUrl = (() => {
+      const url = new URL(databaseUrl);
+      url.pathname = `/${namespace}_app`;
+      return url.href;
+    })();
+    if (options.growth) {
+      growthDatabase = await openGrowthDatabase(appDatabaseUrl);
+      instrumentNativePool(system.database.pool, growthDatabase);
+    }
     return {
       system,
-      appDatabaseUrl: (() => {
-        const url = new URL(databaseUrl);
-        url.pathname = `/${namespace}_app`;
-        return url.href;
-      })(),
+      appDatabaseUrl,
+      ...(growthDatabase ? { growthDatabase } : {}),
       workClock: () => new Date(currentNow),
       fixture,
       protectedRealmId: protectedBoard.realmId,
       accountPartitions,
       contentPartitions,
       async close() {
-        await system.close();
+        try {
+          await growthDatabase?.close();
+        } finally {
+          await system.close();
+        }
       },
       remember(id) {
         contentPartitions.add(partitionOf(route(id)));
@@ -501,9 +515,19 @@ export async function createNotificationFixture(): Promise<NotificationFixture> 
       },
     };
   } catch (error) {
-    await system.close();
+    try {
+      await growthDatabase?.close();
+    } finally {
+      await system.close();
+    }
     throw error;
   }
+}
+
+function instrumentNativePool(pool: Pool, database: GrowthDatabase): void {
+  const target = pool as unknown as { query: Pool['query']; connect: Pool['connect'] };
+  target.query = database.pool.query.bind(database.pool) as Pool['query'];
+  target.connect = database.pool.connect.bind(database.pool) as Pool['connect'];
 }
 
 async function setMemberRecord(
