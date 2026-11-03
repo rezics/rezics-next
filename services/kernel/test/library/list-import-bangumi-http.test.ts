@@ -193,12 +193,7 @@ test('score review retains source scale and native vote while requiring separate
       });
       reviews.push((await ok(response)).review);
     }
-    expect(reviews.map((review) => review.score.source.state)).toEqual([
-      'score',
-      'unrated',
-      'absent',
-      'unsupported',
-    ]);
+    expect(reviews.map((review) => review.score.source.state)).toEqual(['score', 'unrated', 'absent', 'unsupported']);
     expect(reviews[0].score).toMatchObject({
       source: { state: 'score', value: 8, scale: { minimum: 1, maximum: 10 } },
       native: {
@@ -213,7 +208,15 @@ test('score review retains source scale and native vote while requiring separate
     expect(reviews[3].score.source.reason).toContain('integer');
 
     const missingConsent = await score.send('owner', 'POST', `/${uploadId}:apply`, {
-      rows: [{ ordinal: 0, reviewToken: reviews[0].token, state: 'preserve', skip: false, score: { action: 'set', units: 13 } }],
+      rows: [
+        {
+          ordinal: 0,
+          reviewToken: reviews[0].token,
+          state: 'preserve',
+          skip: false,
+          score: { action: 'set', units: 13 },
+        },
+      ],
     });
     expect(missingConsent.status).toBe(400);
     const preserved = await score.send('owner', 'POST', `/${uploadId}:apply`, {

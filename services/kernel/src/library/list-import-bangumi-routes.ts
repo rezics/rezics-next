@@ -49,7 +49,10 @@ const metadataSelection = t.Object(
 );
 const scoreChoice = t.Union([
   t.Object({ action: t.Literal('preserve') }, closed),
-  t.Object({ action: t.Literal('set'), units: t.Integer({ minimum: 0, maximum: 20 }), consent: t.Literal(true) }, closed),
+  t.Object(
+    { action: t.Literal('set'), units: t.Integer({ minimum: 0, maximum: 20 }), consent: t.Literal(true) },
+    closed,
+  ),
   t.Object({ action: t.Literal('clear'), consent: t.Literal(true) }, closed),
 ]);
 const scoreSelection = t.Union([

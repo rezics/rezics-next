@@ -92,7 +92,10 @@ function scoreSource(evidence: BangumiRow['evidence']): BangumiScoreReview['sour
     return { state: 'score', value: field.value, scale, reason: field.reason };
   return {
     state: 'unsupported',
-    ...(field.value === null || typeof field.value === 'string' || typeof field.value === 'number' || typeof field.value === 'boolean'
+    ...(field.value === null ||
+    typeof field.value === 'string' ||
+    typeof field.value === 'number' ||
+    typeof field.value === 'boolean'
       ? { value: field.value }
       : {}),
     scale,

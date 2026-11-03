@@ -43,10 +43,7 @@ export type BangumiScoreQuestion = {
   lifecycleState: 'active' | 'retired';
   scale: { minimum: number; maximum: number; step: number };
 };
-export type BangumiScoreSelection =
-  | { action: 'preserve' }
-  | { action: 'set'; units: number }
-  | { action: 'clear' };
+export type BangumiScoreSelection = { action: 'preserve' } | { action: 'set'; units: number } | { action: 'clear' };
 export type BangumiScoreReview = {
   source: BangumiScoreSource;
   native: {
