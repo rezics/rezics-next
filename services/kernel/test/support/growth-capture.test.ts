@@ -150,6 +150,20 @@ async function duplicateThenRetry(client: PoolClient): Promise<void> {
   await client.query('COMMIT');
 }
 
+test('parameterized SELECT plans retain their occurrence across transaction portal cleanup', async () => {
+  const result = await capture(db!, () =>
+    withConnection(db!.pool, async (client) => {
+      await client.query('BEGIN READ ONLY');
+      await client.query("SET LOCAL statement_timeout = '200ms'");
+      await client.query('SELECT $1::integer AS answer', [11]);
+      await client.query('SELECT $1::integer AS answer', [12]);
+      await client.query('COMMIT');
+    }),
+  );
+  expect(nativePlanEntries(result.capture).map(({ owner }) => owner)).toEqual([2, 3]);
+  expect(nativePlanEntries(result.capture).map(({ plan }) => plan['Actual Rows'])).toEqual([1, 1]);
+});
+
 test('a failed statement counts as executed work and carries its SQLSTATE', async () => {
   const database = db!;
   const result = await capture(database, () => withConnection(database.pool, duplicateThenRetry));
