@@ -263,9 +263,17 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
     const fact = await facts.readEntryFact(f.pool, routeOf(accountId)!, accountId, old.subject_id as string);
     expect(fact?.pin).toEqual({ provenance: 'legacy', releaseDigest: f.originalDigest, acceptingType: null, profileId: 'legacy-fixed-v1' });
     const original = stored.findIndex((row) => row.commandKind === 'library.entry.put');
-    const accepted = stored[original]!.response as { entry: { subjectId: string; state: string } };
+    const accepted = stored[original]!.response as { entry: { subjectId: string; state: string; [key: string]: unknown } };
     const replay = await f.send(owner.bearer, 'PUT', `/v1/libraryEntries/${accepted.entry.subjectId}`, { state: accepted.entry.state }, observed[original]!.requestKey);
     expect(replay.status).toBe(observed[original]!.status);
+    expect(await replay.json()).toEqual({
+      libraryEntry: Object.fromEntries(
+        ['subjectId', 'incarnationId', 'state', 'revision', 'createdAt', 'updatedAt'].map((key) => [key, accepted.entry[key]]),
+      ),
+    });
+    const originalKeys = new Set(stored.map((row) => row.storageKey));
+    const originalReceipts = (state: typeof seeded) => state.receipts.filter(({ row }) => originalKeys.has(row.idempotency_key as string));
+    expect(originalReceipts(await snapshot(f, accountId))).toEqual(originalReceipts(seeded));
     await expect(legacy.copy(old.subject_id as string, 'owned')).rejects.toThrow('Library owner no longer admits unpinned facts');
   } finally {
     await client.close();
