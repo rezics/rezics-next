@@ -277,19 +277,16 @@ test('interrupted Open Library import reopens staging diagnostics without creden
     expect(body.records[0]!.diagnostics.map((d) => d.code)).toContain('unsupported_publication_date_format');
     const importer = new Importer({ path: state, transport: transport() });
     try {
-      const resumed = await importer.runDump(createSourceRegistration('openlibrary'), (async function* () {
+      const resumed = await importer.runDump(createSourceRegistration('openlibrary', { source }), (async function* () {
         yield new TextEncoder().encode(dump([record]));
       })());
       expect(resumed.status, resumed.diagnostic).toBe('committed');
       const pointer = importer.session.store.source(source);
-      const rows = importer.session.store.database
-        .query('SELECT run_id,phase FROM run_conversion_diagnostics WHERE record_key=? ORDER BY run_id,phase')
-        .all(record.key) as { run_id: string; phase: string }[];
-      expect(pointer.generation, JSON.stringify({ pointer, rows })).toBeString();
-      expect(
-        rows.filter((row) => row.run_id === pointer.generation).map((row) => row.phase),
-        JSON.stringify(rows),
-      ).toEqual(['application', 'staging']);
+      const phases = importer.session.store.database
+        .query('SELECT phase FROM run_conversion_diagnostics WHERE source=? AND run_id=? AND record_key=? ORDER BY phase')
+        .all(source, pointer.generation, record.key) as { phase: string }[];
+      expect(pointer.generation).toBeString();
+      expect(phases.map((row) => row.phase)).toEqual(['application', 'staging']);
     } finally {
       await importer.close();
     }
