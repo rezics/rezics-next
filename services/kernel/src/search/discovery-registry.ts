@@ -4,6 +4,10 @@ import type {
   DiscoveryCondition,
   DiscoveryDomain,
   DiscoveryKey,
+  DiscoveryOwnerAdapter,
+  DiscoveryOwnerAdapterSlots,
+  DiscoveryOwnerKind,
+  DiscoveryOwnerRegistration,
   DiscoveryRegistration,
   DiscoveryRegistry,
   DiscoveryRegistryOptions,
@@ -22,6 +26,12 @@ const SUBJECT_DOMAINS: readonly DiscoveryDomain[] = Object.freeze([
   'realm',
 ]);
 const ACCOUNT_DOMAINS: readonly DiscoveryDomain[] = Object.freeze(['text', 'kind']);
+const OWNER_DOMAINS = Object.freeze(['text', 'kind'] as const);
+const UNAVAILABLE_OWNER_ADAPTERS: DiscoveryOwnerAdapterSlots = Object.freeze({
+  collection: Object.freeze({ readiness: 'unavailable' }),
+  review: Object.freeze({ readiness: 'unavailable' }),
+  space: Object.freeze({ readiness: 'unavailable' }),
+});
 
 function metadata(id: string, labels: Record<string, string>, icon: string) {
   if (
@@ -43,8 +53,10 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
   const types = Object.entries(options.release.types);
   if (types.length > RELEASE_LIMITS.types) throw new RangeError('Discovery catalogue exceeds the release limit');
   const byKind = new Map<string, DiscoveryRegistration>();
+  const ownerByKind = new Map<DiscoveryOwnerKind, DiscoveryOwnerRegistration>();
   for (const [kind, type] of types) {
-    if (kind === 'account') throw new TypeError('The account kind is reserved for Accounts');
+    if (kind === 'account' || kind === 'collection' || kind === 'review' || kind === 'space')
+      throw new TypeError(`The ${kind} kind is reserved for its discovery owner`);
     byKind.set(
       kind,
       Object.freeze({
@@ -58,6 +70,51 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
       }),
     );
   }
+
+  function ownerAdapter<K extends DiscoveryOwnerKind, O extends 'commerce' | 'content'>(
+    kind: K,
+    owner: O,
+    slot: DiscoveryOwnerAdapterSlots[K],
+  ): DiscoveryOwnerAdapterSlots[K] {
+    if (!slot || typeof slot !== 'object') throw new TypeError(`Invalid ${kind} discovery adapter slot`);
+    if (slot.readiness === 'unavailable') {
+      if (Object.keys(slot).some((key) => key !== 'readiness'))
+        throw new TypeError(`Unavailable ${kind} discovery adapter has a payload`);
+      return Object.freeze({ readiness: 'unavailable' }) as DiscoveryOwnerAdapterSlots[K];
+    }
+    if (slot.readiness !== 'ready' || Object.keys(slot).some((key) => !['readiness', 'adapter'].includes(key)))
+      throw new TypeError(`Invalid ${kind} discovery adapter readiness`);
+    const adapter = slot.adapter as DiscoveryOwnerAdapter<K, O>;
+    if (
+      !adapter ||
+      adapter.owner !== owner ||
+      adapter.kind !== kind ||
+      typeof adapter.readCurrent !== 'function' ||
+      !adapter.metadata ||
+      typeof adapter.metadata !== 'object' ||
+      adapter.metadata.id !== kind
+    )
+      throw new TypeError(`Invalid ${kind} discovery owner adapter`);
+    if (Object.keys(adapter).some((key) => !['owner', 'kind', 'metadata', 'readCurrent'].includes(key)))
+      throw new TypeError(`Unsupported ${kind} discovery adapter field`);
+    if (Object.keys(adapter.metadata).some((key) => !['id', 'labels', 'icon'].includes(key)))
+      throw new TypeError(`Unsupported ${kind} discovery metadata field`);
+    const normalized: DiscoveryOwnerAdapter<K, O> = Object.freeze({
+      owner,
+      kind,
+      metadata: metadata(kind, adapter.metadata.labels, adapter.metadata.icon),
+      readCurrent: adapter.readCurrent,
+    });
+    ownerByKind.set(kind, Object.freeze({ ...normalized, domains: OWNER_DOMAINS }) as DiscoveryOwnerRegistration);
+    return Object.freeze({ readiness: 'ready', adapter: normalized }) as DiscoveryOwnerAdapterSlots[K];
+  }
+  const supplied = options.ownerAdapters ?? UNAVAILABLE_OWNER_ADAPTERS;
+  const ownerAdapters: DiscoveryOwnerAdapterSlots = Object.freeze({
+    collection: ownerAdapter('collection', 'commerce', supplied.collection),
+    review: ownerAdapter('review', 'content', supplied.review),
+    space: ownerAdapter('space', 'content', supplied.space),
+  });
+
   byKind.set(
     'account',
     Object.freeze({
@@ -78,16 +135,28 @@ export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): Disc
   return Object.freeze({
     entries: Object.freeze([...byKind.values()]),
     get,
+    ownerAdapters,
+    getOwnerAdapter(kind) {
+      const entry = ownerByKind.get(kind);
+      if (!entry) throw new RangeError('Unregistered discovery kind');
+      return entry;
+    },
+    domains(kind) {
+      const entry = byKind.get(kind) ?? ownerByKind.get(kind as DiscoveryOwnerKind);
+      if (!entry) throw new RangeError('Unregistered discovery kind');
+      return entry.domains;
+    },
     key(value: DiscoveryKey): DiscoveryKey {
-      const entry = get(value.kind);
+      const entry = byKind.get(value.kind) ?? ownerByKind.get(value.kind as DiscoveryOwnerKind);
+      if (!entry) return get(value.kind);
       const route = routeOf(value.id);
       if (entry.owner !== value.owner) throw new TypeError('Discovery owner does not own this kind');
       if (route === null || route !== value.route)
         throw new RangeError('Discovery key has an invalid or foreign route');
       // Copy only the canonical identity; do not retain caller-added profile/authority fields.
-      return entry.owner === 'accounts'
-        ? { owner: 'accounts', kind: 'account', route, id: value.id }
-        : { owner: 'semantic', kind: entry.kind, route, id: value.id };
+      if (entry.owner === 'accounts') return { owner: 'accounts', kind: 'account', route, id: value.id };
+      if (entry.owner === 'semantic') return { owner: 'semantic', kind: entry.kind, route, id: value.id };
+      return { owner: entry.owner, kind: entry.kind, route, id: value.id };
     },
   });
 }
@@ -99,7 +168,7 @@ export function discoveryDomain(
   domain: DiscoveryDomain,
 ): 'applicable' | 'not_applicable' {
   if (!SUBJECT_DOMAINS.includes(domain)) throw new TypeError('Unsupported discovery condition domain');
-  return registry.get(kind).domains.includes(domain) ? 'applicable' : 'not_applicable';
+  return registry.domains(kind).includes(domain) ? 'applicable' : 'not_applicable';
 }
 
 /**
@@ -113,7 +182,7 @@ export function evaluateDiscoveryCondition(
   condition: DiscoveryCondition,
   evidence: (leaf: Extract<DiscoveryCondition, { domain: DiscoveryDomain }>) => DiscoveryTruth,
 ): DiscoveryTruth {
-  registry.get(kind);
+  registry.domains(kind);
   function evaluate(node: DiscoveryCondition): DiscoveryTruth {
     if ('not' in node) {
       const value = evaluate(node.not);

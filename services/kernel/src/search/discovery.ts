@@ -21,7 +21,10 @@ export const MAX_ACCOUNT_DISCOVERY_BATCH = ACCOUNT_DISCOVERY_BATCH_SIZE;
 
 export type DiscoveryKey =
   | { owner: 'semantic'; kind: string; route: number; id: string }
-  | { owner: 'accounts'; kind: 'account'; route: number; id: string };
+  | { owner: 'accounts'; kind: 'account'; route: number; id: string }
+  | { owner: 'commerce'; kind: 'collection'; route: number; id: string }
+  | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
+export type DiscoveryOwnerKind = 'collection' | 'review' | 'space';
 
 /** Already eligible native projection. Only the producer can establish eligibility and exact claims at T. */
 export type IndexedAccount = {
@@ -75,7 +78,10 @@ export type AccountDiscoverySummary = {
 };
 export type DiscoverySummary =
   | { kind: 'subject'; value: SubjectSummary }
-  | { kind: 'account'; value: AccountDiscoverySummary };
+  | { kind: 'account'; value: AccountDiscoverySummary }
+  | { kind: 'collection'; value: DiscoveryOwnerMetadataSummary }
+  | { kind: 'review'; value: DiscoveryOwnerMetadataSummary }
+  | { kind: 'space'; value: DiscoveryOwnerMetadataSummary };
 export type DiscoveryHit = { key: DiscoveryKey; summary: DiscoverySummary };
 export type KindCountEvidence =
   | { kind: string; value: number; exact: true }
@@ -105,6 +111,30 @@ export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'a
 export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';
+/** The closed public metadata envelope returned by owner-native current reads. */
+export type DiscoveryOwnerMetadataSummary = Readonly<{ id: string; title: string; summary: string | null }>;
+export type DiscoveryOwnerAdapter<K extends DiscoveryOwnerKind, O extends 'commerce' | 'content'> = Readonly<{
+  owner: O;
+  kind: K;
+  metadata: Readonly<Omit<DiscoveryKindMetadata, 'count'>>;
+  /** The owner validates current eligibility and returns only the public metadata summary at this read. */
+  readCurrent: (
+    ids: readonly string[],
+    context: DiscoveryReadContext,
+  ) => Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>>;
+}>;
+export type DiscoveryAdapterSlot<T> =
+  | Readonly<{ readiness: 'unavailable' }>
+  | Readonly<{ readiness: 'ready'; adapter: T }>;
+export type DiscoveryOwnerAdapterSlots = Readonly<{
+  collection: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'collection', 'commerce'>>;
+  review: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'review', 'content'>>;
+  space: DiscoveryAdapterSlot<DiscoveryOwnerAdapter<'space', 'content'>>;
+}>;
+export type DiscoveryOwnerRegistration =
+  | (DiscoveryOwnerAdapter<'collection', 'commerce'> & { domains: readonly ['text', 'kind'] })
+  | (DiscoveryOwnerAdapter<'review', 'content'> & { domains: readonly ['text', 'kind'] })
+  | (DiscoveryOwnerAdapter<'space', 'content'> & { domains: readonly ['text', 'kind'] });
 export type DiscoveryCondition =
   | { and: readonly DiscoveryCondition[] }
   | { or: readonly DiscoveryCondition[] }
@@ -152,10 +182,15 @@ export type DiscoveryRegistryOptions = {
     labels: Record<string, string>;
     icon: string;
   };
+  /** Missing ports default to typed-unavailable slots and do not register a searchable kind. */
+  ownerAdapters?: DiscoveryOwnerAdapterSlots;
 };
 export interface DiscoveryRegistry {
   readonly entries: readonly DiscoveryRegistration[];
+  readonly ownerAdapters: DiscoveryOwnerAdapterSlots;
   get(kind: string): DiscoveryRegistration;
+  getOwnerAdapter(kind: DiscoveryOwnerKind): DiscoveryOwnerRegistration;
+  domains(kind: string): readonly DiscoveryDomain[];
   key(value: DiscoveryKey): DiscoveryKey;
 }
 

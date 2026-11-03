@@ -28,6 +28,7 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 Includes the public index tier, admitted catalogue plans and preparation, presentation profiles, compositions and
 page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Private library facts remain in their
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
+Second-scope public discovery admits Collections from Commerce and reviews/Spaces from Content, with current summaries limited to `id`, `title` and `summary`; Review identity is its thread UUID under kind `review`, and each Realm-backed Space is keyed once by its Space UUID under kind `space`.
 Realm browsing advances one explicit page at a time: successful More replaces the visible window (up to 20 rows), pending and failed reads preserve it, and broken cursors offer a first-page restart.
 Second-scope mixed discovery adds public Collection, review and Space metadata to the existing native query and
 continuation. Their owners supply the closed registry, complete common-generation projection and current public
