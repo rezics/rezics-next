@@ -1150,8 +1150,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         response: {
           200: discoveryResponseSchema,
           ...readFailures,
-          400: problemSchema('invalid_request', 'invalid_cursor'),
-          409: problemSchema('stale_cursor'),
+          400: problemSchema('invalid_request', 'invalid_cursor', 'stale_cursor'),
         },
         detail: {
           operationId: 'realms.discovery',
@@ -1639,7 +1638,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
-          operationId: 'realm.board_shelf',
+          operationId: 'realm.boardShelf',
           'x-exposure': 'public',
           'x-action': 'realm:read',
           'x-resource-types': ['community.realm'],
