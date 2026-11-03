@@ -190,11 +190,12 @@ function render(operation: {
   recordKey: string;
   subjectId: string;
   sourceAlias: string;
-  intended: IntendedObservation;
-  reviewedHead: RetainedObservationHead | null;
+  intended: unknown;
+  reviewedHead: unknown;
   status: AggregateOperationStatus;
   nativeReason: string | null;
 }): string {
+  if (isIntendedClassification(operation.intended)) throw new InputFailure('Not an observation operation.');
   const reason = parseObservationReason(operation.nativeReason);
   return `${JSON.stringify(
     safeObservationSummary({
@@ -203,8 +204,8 @@ function render(operation: {
       subjectId: operation.subjectId,
       provider: 'vndb',
       sourceAlias: operation.sourceAlias,
-      intended: operation.intended,
-      head: operation.reviewedHead,
+      intended: operation.intended as IntendedObservation,
+      head: (operation.reviewedHead as RetainedObservationHead | null) ?? null,
       status: operation.status,
       ...(reason ? { reason } : {}),
     }),
