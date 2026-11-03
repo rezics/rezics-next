@@ -110,6 +110,8 @@ Mounted UI: `apps/web/src/library/independent-measures/` with the session page c
 `apps/web/src/library/progress-session.tsx`. Navigation to session history uses the existing progress session
 route. Commerce remains the native producer (task `2125f5c8-528e-4852-be3e-b95d928f0b38`).
 
+Decision: The installed native `retired` state stays unavailable at the Web read/receipt adapter until its owner delivers a retired-session presentation; existing lifecycle states retain their meaning.
+
 ## Cost
 
 Operation: independent-measure session inspect and guarded record.

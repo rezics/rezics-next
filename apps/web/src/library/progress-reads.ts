@@ -32,6 +32,11 @@ export type ProgressState = 'active' | 'completed' | 'abandoned';
 export type NativeProgressSession = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['get']>>['data']
 >['progressSession'];
+/** The current page has no retired-session state; never relabel native retirement as active. */
+export function supportedProgressState(state: NativeProgressSession['state']): ProgressState {
+  if (state === 'retired') throw new Error('Retired progress sessions are unavailable in this consumer');
+  return state;
+}
 export type NativeProgressPresentation = NonNullable<NativeProgressSession['presentation']>;
 type NativeProgressInputRules = Extract<NativeProgressPresentation['recording'], { state: 'supported' }>['inputRules'];
 type ProgressInputRules = ProfileProgressInputRules | NativeProgressInputRules;
@@ -283,7 +288,8 @@ type RawIntent =
   | { add: string[]; remove?: string[] }
   | { remove: string[]; add?: string[] }
   | { action: 'complete' | 'abandon' };
-type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject' | 'measures'> & {
+type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject' | 'measures' | 'state'> & {
+  state: NativeProgressSession['state'];
   subject?: RawSubject;
   versionSubject?: RawSubject;
   measures?: unknown;
@@ -368,7 +374,7 @@ function presentSession(
     locator: session.locator,
     position: session.position,
     completedUnitCount: session.completedUnitCount,
-    state: session.state,
+    state: supportedProgressState(session.state),
     revision: session.revision,
     startedAt: session.startedAt,
     completedAt: session.completedAt,
@@ -404,7 +410,7 @@ function snapshotOf(session: RawSession): ProgressSnapshot {
     locator: session.locator,
     position: session.position,
     completedUnitCount: session.completedUnitCount,
-    state: session.state,
+    state: supportedProgressState(session.state),
     completedAt: session.completedAt,
     total: session.total,
     ...(measures

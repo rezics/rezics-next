@@ -1,6 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import {
   nativeProgressPresentation,
+  supportedProgressState,
   nativeProgressPresentationQuery,
   type NativeProgressSession,
   type ProgressRecorded,
@@ -174,7 +175,7 @@ export function snapshotFromNative(session: NativeProgressSession): ProgressReco
     locator: session.locator,
     position: session.position,
     completedUnitCount: session.completedUnitCount,
-    state: session.state,
+    state: supportedProgressState(session.state),
     completedAt: session.completedAt,
     total: session.total,
     ...(measures?.length ? { measures } : {}),

@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { supportedProgressState } from '../src/library/progress-reads';
 import type {
   ProgressFailure,
   ProgressRecorded,
@@ -318,4 +319,10 @@ test('wrapping actions stay 44px and historical descriptors stay unlabeled guess
   expect(historical[0]?.recording).toBe('historical');
   expect(historical[0]?.label).toBe('chapter');
   expect(historical[1]?.recording).toBe('historical');
+});
+
+// The installed native union also contains retirement; the existing consumer cannot present it as active.
+test('native retirement remains unavailable while existing progress states retain their meaning', () => {
+  for (const state of ['active', 'completed', 'abandoned'] as const) expect(supportedProgressState(state)).toBe(state);
+  expect(() => supportedProgressState('retired')).toThrow('Retired progress sessions are unavailable');
 });
