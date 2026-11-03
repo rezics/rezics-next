@@ -88,7 +88,9 @@ newer Restart or Retry replaces an older request, and any other focus movement, 
 ## Dependencies
 
 Requires semantic public projections and current native disclosure, content's rating projection, kernel relays and
-checkpoints, Access and the web shell/client. Semantic first adopts shared filtered-list owner contracts; search
+checkpoints, Access and the web shell/client. Access resource-role compilation and Commerce offer anchors must finish
+module initialization without importing HTTP request catalogues or Semantic definitions, so the Search supervisor can
+start. Semantic first adopts shared filtered-list owner contracts; search
 then implements admitted plans, preparation and freshness. Performance derives per-plan work budgets. Composition
 slots and read descriptors are agreed with web before interface consumption.
 

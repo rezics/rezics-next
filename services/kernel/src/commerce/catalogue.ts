@@ -5,11 +5,12 @@ import { routeOf } from '../route/route.ts';
 import type { Offer } from './model.ts';
 import { readOffer } from './store.ts';
 
+/** Same Global Context id as Access; this module must not import Semantic definitions at load. */
 const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 
 /** Offers are created under the platform's Global Context. */
 export const platformRootAnchor: ParentAnchor = Object.freeze({
-  resource: Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' }),
+  resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
   async validate(_client, time) {
     authoritativeTimeValue(time);
     return true;

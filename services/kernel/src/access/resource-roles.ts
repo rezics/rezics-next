@@ -1,4 +1,3 @@
-import { actionCatalogue } from '../http/request.ts';
 import type { Access, ActionCatalogue, ActionMetadata } from '../request/access.ts';
 import { accessRoot } from './derived-access.ts';
 import defaults from './resource-roles.json';
@@ -170,9 +169,9 @@ export function explainUnresolvedResourceType(
 
 /** Refuses composition when a mounted command declares a resource type that does not resolve. */
 export function assertDeclaredResourceTypes(
-  app: Parameters<typeof actionCatalogue>[0],
-  extension?: ResourceRoleCatalogue,
-  actions: ActionCatalogue = actionCatalogue(app),
+  _app: object,
+  extension: ResourceRoleCatalogue | undefined,
+  actions: ActionCatalogue,
 ): void {
   const declared = new Set<string>();
   for (const metadata of actions.values()) {
