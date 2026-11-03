@@ -985,13 +985,14 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         if (Number(latest.review_epoch) !== root.reviewEpoch) throw conflict();
         if (latest.review_id && latest.review_id === reviewId) throw conflict();
         await connection.query(
-          `UPDATE library.collection_archive_recovery_record SET review_id=$4,selected=true,
+          `UPDATE library.collection_archive_recovery_record AS recovery_record SET review_id=$4,selected=true,
              target_subject_id=u.target_subject_id,add_state=u.add_state,note_state=u.note_state,
              order_state=u.order_state,outcome_reason=u.outcome_reason,native_member_id=NULL
            FROM jsonb_to_recordset($5::jsonb) AS u(source_id uuid,target_subject_id text,add_state text,
              note_state text,order_state text,outcome_reason text)
-           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-             AND collection_id=$6 AND source_id=u.source_id`,
+           WHERE recovery_record.route=$1 AND recovery_record.account_id=$2 AND recovery_record.upload_id=$3
+             AND recovery_record.record_kind='occurrence' AND recovery_record.collection_id=$6
+             AND recovery_record.source_id=u.source_id`,
           [root.route, owner.accountId, uploadId, reviewId, JSON.stringify(occurrenceUpdates), input.collectionId],
         );
         await connection.query(
