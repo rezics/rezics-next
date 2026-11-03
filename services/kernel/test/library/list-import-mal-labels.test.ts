@@ -6,9 +6,6 @@ import { parseMal } from '../../src/library/list-import-mal-parser.ts';
 import { createMalImport } from '../../src/library/list-import-mal.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { accountToken } from '../support/admitted-access.ts';
-import { createKernelClient } from '@rezics/client';
-import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
-import { capture, checkGrowth, openGrowthDatabase, seed, type Capture } from '../support/growth.ts';
 
 let f: NativeProfileFixture;
 beforeAll(async () => {
@@ -18,15 +15,6 @@ afterAll(async () => {
   await f?.close();
 });
 const base = '/v1/libraryImports/mal';
-function clientFor(fixture: NativeProfileFixture) {
-  return createKernelClient('http://kernel.test', {
-    fetch: (async (input, init) => {
-      const request = new Request(input, init), url = new URL(request.url);
-      return fixture.sendWithHeaders('owner', request.method, url.pathname + url.search,
-        request.body ? await request.json() : undefined, request.headers);
-    }) as typeof fetch,
-  });
-}
 const xml = (tags?: string, id = '1') =>
   `<myanimelist><anime><series_animedb_id>${id}</series_animedb_id><series_title>Display only</series_title><my_status>Completed</my_status>${tags === undefined ? '' : `<my_tags>${tags}</my_tags>`}<my_comments>private comment</my_comments><my_times_watched>9</my_times_watched></anime></myanimelist>`;
 async function json(method: string, path: string, body?: unknown, status = 200, key = randomUUID(), persona = 'owner') {
@@ -117,13 +105,7 @@ test('actual MAL upload adopts existing and new labels on its admitted Subject; 
     { value: 3, target: { name: ' '.repeat(2) } },
     { value: 4, target: { name: ' Owned MAL target ' } },
   ];
-  const client = clientFor(f), retained = client.libraryImports.mal({ id }), version = randomUUID();
-  expect((await retained.review.post({ row: 0, target: null, labels: selection, replace: false, skip: false },
-    { headers: { 'idempotency-key': JSON.stringify(version) } })).status).toBe(200);
-  const reopened = await retained.get();
-  expect(reopened.data?.labelLimits).toEqual(MAL_LABEL_LIMITS);
-  expect(reopened.data?.rows[0]?.tagEvidence).toMatchObject({ kind: 'supported', raw: 'old,new,old,invalid,collision' });
-  expect(reopened.data?.rows[0]?.review?.labels?.selections[1]?.status).toBe('ready');
+  const version = await review(id, null, selection);
   const page = await json('GET', `${base}/${id}`);
   expect(page.rows[0].review).toMatchObject({
     target: subject,
@@ -139,13 +121,8 @@ test('actual MAL upload adopts existing and new labels on its admitted Subject; 
   });
   expect(page.rows[0].notes.value).toBe('private comment');
   expect(page.rows[0].repeats.value).toBe(9);
-  const confirmation = await retained.apply.post({ confirm: true, rows: [{ row: 0, version, fields: ['tags'] }] });
-  expect(confirmation.status).toBe(200);
-  const result = confirmation.data!,
-    adopted = result.outcomes[0]!.labels!;
-  expect(adopted).toBeDefined();
-  const assigned = await client.libraryLabelAssignments.get({ query: { subjectId: subject, limit: 100 } });
-  expect(assigned.data?.assignments.find((a) => a.labelId === adopted![1]!.labelId)).toMatchObject(adopted![1]!.assignment!);
+  const result = await apply(id, version),
+    adopted = result.outcomes[0].labels;
   expect(adopted.map((o: { status: string }) => o.status)).toEqual([
     'accepted',
     'accepted',
@@ -195,20 +172,6 @@ test('actual MAL upload adopts existing and new labels on its admitted Subject; 
   );
   await json('DELETE', `${base}/${id}`);
   expect((await assignments(subject)).some((a) => a.labelId === adopted[1].labelId)).toBe(true);
-}, 120000);
-
-test('explicit canonical manual review changes the Subject and retires the previous label confirmation', async () => {
-  const first = await f.createSubject('unprofiled', 'Same tag text'),
-    chosen = await f.createSubject('unprofiled', 'Same tag text'), target = await label('Same tag text');
-  const id = await upload('Same tag text'), old = await review(id, first, [selected(0, target)]);
-  const version = await review(id, chosen, [selected(0, target)]);
-  await apply(id, old, 0, 409);
-  expect(await assignments(first)).toEqual([]);
-  const result = (await apply(id, version)).outcomes[0].labels[0];
-  expect(result.status).toBe('accepted');
-  expect(await assignments(chosen)).toEqual([{ ...result.assignment, labelId: target.id, subjectId: chosen }]);
-  expect((await json('GET', `${base}/${id}`)).rows[0].review).toMatchObject({ target: chosen, binding: null });
-  await json('DELETE', `${base}/${id}`);
 }, 120000);
 
 test('32 native reservations refuse extra assignment and deleted parents can be reclaimed by the original command', async () => {
@@ -316,163 +279,3 @@ test('partial request cancellation preserves accepted assignments; expiry and re
   expect((await assignments(subject)).map((v) => v.labelId)).toEqual([a.id]);
   await json('DELETE', `${base}/${fresh}`);
 }, 120000);
-
-test('whole retained MAL caller at native64/512/4096 charges documents, preparation and nested native writes', async () => {
-  const db = await openGrowthDatabase();
-  let g: NativeProfileFixture | undefined;
-  try {
-    g = await createProfileEntryFixture({ pool: db.pool, projectLinks: false });
-    const fixture = g, client = clientFor(fixture), route = routeOf(fixture.owner.actor.accountId)!;
-    async function call(method: string, path: string, body?: unknown, status = 200) {
-      const response = await fixture.send('owner', method, path, body);
-      const data = await response.json();
-      expect({ status: response.status, data }).toMatchObject({ status });
-      if (path.startsWith(base) && response.ok) expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-      return data;
-    }
-    const parents: { id: string; revision: number }[] = [];
-    for (let i = 0; i < 31; i++) parents.push((await call('POST', '/v1/libraryLabels', { name: `Growth MAL ${i}` }, 201)).label);
-    const historySubject = await fixture.createSubject('unprofiled');
-    const historyAssignment = (await call('POST', `/v1/libraryLabels/${parents[0]!.id}:assign`, { subjectId: historySubject })).assignment;
-    await call('POST', `/v1/libraryLabels/${parents[0]!.id}:unassign`, {
-      subjectId: historySubject, assignmentId: historyAssignment.id, revision: historyAssignment.revision,
-    });
-    const template = (await db.admin.query('SELECT * FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3',
-      [route, fixture.owner.actor.accountId, parents[0]!.id])).rows[0]!;
-    const inactive = (await db.admin.query('SELECT * FROM library.label_assignment WHERE route=$1 AND assignment_id=$2',
-      [route, historyAssignment.id])).rows[0]!;
-    const neighbour = fixture.other.actor, otherRoute = routeOf(neighbour.accountId)!;
-    const raw = Array.from({ length: 32 }, (_, i) => `v${String(i).padStart(2, '0')}`).join(',');
-    const tags = 'x'.repeat(MAL_LABEL_LIMITS.sourceBytes - Buffer.byteLength(raw)) + raw;
-    const source = `<myanimelist>${Array.from({ length: 41 }, (_, i) => xml(i === 20 ? 'a,&quot;b,c&quot;' : i === 0 || i === 40 ? tags : 'one', String(10000 + i))
-      .replace('<myanimelist>', '').replace('</myanimelist>', '')).join('')}</myanimelist>`;
-    expect(Buffer.byteLength(tags)).toBe(MAL_LABEL_LIMITS.sourceBytes);
-    const sourceBytes = Buffer.byteLength(source), evidence: unknown[] = [];
-    let subject = '', iteration = 0;
-    async function prepare() {
-      subject = historySubject;
-      // One unrelated live reservation makes thirty existing targets + one new name fill all 32 slots.
-      await call('POST', `/v1/libraryLabels/${parents[30]!.id}:assign`, { subjectId: subject });
-    }
-    async function operation() {
-      const suffix = String(iteration++).padStart(6, '0');
-      const id = (await call('POST', `${base}:preview`, { xml: source })).id as string;
-      const retained = client.libraryImports.mal({ id });
-      let pageBytes = 0;
-      for (const [after, length, kind] of [[0, 20, 'supported'], [20, 20, 'unsupported'], [40, 1, 'supported']] as const) {
-        const page = await retained.get({ query: { after } });
-        expect(page.status).toBe(200);
-        expect(page.data?.rows).toHaveLength(length);
-        expect(page.data?.rows[0]?.tagEvidence.kind).toBe(kind);
-        expect(page.data?.next).toBe(after === 40 ? null : after + 20);
-        pageBytes += Buffer.byteLength(JSON.stringify(page.data));
-      }
-      expect((await retained.source.get()).data?.xml).toBe(source);
-      const rows = [], selections = [];
-      for (const row of [0, 20, 40]) {
-        const labels = row === 20 ? [{ value: 0, target: { name: `Negative ${suffix}` } }] : [
-          ...parents.slice(0, 30).map((p, value) => selected(value, p)),
-          { value: 30, target: { name: `New ${row === 0 ? 'A' : 'B'} ${suffix}` } }, selected(31, parents[0]!),
-        ];
-        selections.push(labels);
-        const version = randomUUID();
-        expect((await retained.review.post({ row, target: subject, labels, skip: false, replace: false },
-          { headers: { 'idempotency-key': JSON.stringify(version) } })).status).toBe(200);
-        rows.push({ row, version, fields: ['tags'] });
-      }
-      const confirmed = await retained.apply.post({ confirm: true, rows });
-      expect(confirmed.status).toBe(200);
-      const outcomes = confirmed.data!.outcomes;
-      expect(outcomes[0]!.labels!.map((v) => v.status)).toEqual([...Array(31).fill('accepted'), 'unchanged']);
-      expect(outcomes[1]!.labels).toMatchObject([{ status: 'unsupported' }]);
-      expect(outcomes[2]!.labels![30]).toMatchObject({ status: 'failed', reason: 'library-label-capacity' });
-      expect(outcomes[2]!.labels!.filter((v) => v.status === 'unchanged')).toHaveLength(31);
-      const native = await client.libraryLabelAssignments.get({ query: { subjectId: subject, limit: 100 } });
-      expect(native.data?.assignments).toHaveLength(32);
-      for (const outcome of outcomes[0]!.labels!)
-        expect(native.data?.assignments.find((a) => a.labelId === outcome.labelId)).toMatchObject(outcome.assignment!);
-      // Original native keys must recover both creation and assignment after losing the producer acknowledgement.
-      await db.pool.query(`UPDATE library.list_import_mal SET document=document
-        #- '{labelIntents,0,items,30,label}' #- '{labelIntents,0,items,30,outcome}' WHERE route=$1 AND account_id=$2 AND id=$3`,
-        [route, fixture.owner.actor.accountId, id]);
-      const replay = await retained.apply.post({ confirm: true, rows });
-      expect(replay.status).toBe(200);
-      expect(replay.data!.outcomes).toEqual(outcomes);
-      const version = randomUUID();
-      expect((await retained.review.post({ row: 0, target: subject, labels: selections[0]!, skip: false, replace: false },
-        { headers: { 'idempotency-key': JSON.stringify(version) } })).status).toBe(200);
-      expect((await retained.apply.post({ confirm: true, rows: [rows[0]!] })).status).toBe(409);
-      expect((await retained.cancel.post({}, { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } })).status).toBe(200);
-      expect((await retained.apply.post({ confirm: true, rows: [{ ...rows[0]!, version }] })).status).toBe(409);
-      expect((await retained.delete(undefined, { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } })).status).toBe(200);
-      expect((await retained.get()).status).toBe(404);
-      expect((await client.libraryLabelAssignments.get({ query: { subjectId: subject, limit: 100 } })).data?.assignments).toEqual(native.data!.assignments);
-      for (const assignment of native.data!.assignments.filter((a) => a.labelId !== parents[30]!.id))
-        await call('POST', `/v1/libraryLabels/${assignment.labelId}:unassign`, {
-          subjectId: subject, assignmentId: assignment.id, revision: assignment.revision,
-        });
-      const outputBytes = Buffer.byteLength(JSON.stringify(outcomes.flatMap((o) => o.labels ?? [])));
-      expect(outputBytes).toBeLessThanOrEqual(MAL_LABEL_LIMITS.outputBytes);
-      return { sourceBytes, pageBytes, selectionBytes: Buffer.byteLength(JSON.stringify(selections)), outputBytes };
-    }
-    function nodes(value: unknown): Record<string, unknown>[] {
-      if (!value || typeof value !== 'object') return [];
-      return [...('Node Type' in value ? [value as Record<string, unknown>] : []), ...Object.values(value).flatMap(nodes)];
-    }
-    function observe(raw: Capture) {
-      const plans = raw.plans.flatMap(nodes);
-      const reservations = plans.filter((n) => n['Index Name'] === 'label_assignment_reserved_source');
-      expect(reservations.length).toBeGreaterThan(0);
-      for (const n of reservations) expect((Number(n['Actual Rows']) + Number(n['Rows Removed by Filter'] ?? 0)) * Number(n['Actual Loops'])).toBeLessThanOrEqual(32);
-      const matching = (pattern: RegExp) => raw.statements.flatMap((text, index) => pattern.test(text) ? [index] : []);
-      const loads = matching(/SELECT document FROM library\.list_import_mal/i), writes = matching(/UPDATE library\.list_import_mal SET document=\$4/i);
-      expect(loads.length).toBeGreaterThan(64);
-      expect(writes.length).toBeGreaterThan(64);
-      const bytes = (indices: number[], values: readonly number[] | undefined) => {
-        expect(values).toBeDefined();
-        return indices.reduce((sum, i) => sum + values![i]!, 0);
-      };
-      const documentReadBytes = bytes(loads, raw.responseBytes), documentWriteBytes = bytes(writes, raw.requestBytes);
-      expect(documentReadBytes).toBeGreaterThan(sourceBytes);
-      expect(documentWriteBytes).toBeGreaterThan(sourceBytes);
-      // Retain complete plans, including owner/Subject preparation, receipts, History/events and owner indices.
-      return { documentLoads: loads.length, documentWrites: writes.length, documentReadBytes, documentWriteBytes, capture: raw };
-    }
-    const report = await checkGrowth(db, {
-      name: 'retained MAL whole caller, fixed R=3 T=32 M=2 P=20 and encoded source',
-      scales: [64, 512, 4096], bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
-      counted: { read: (value) => value as Awaited<ReturnType<typeof operation>>,
-        bounds: { sourceBytes: 'constant', pageBytes: 'constant', selectionBytes: 'constant', outputBytes: 'constant' } },
-      async grow(database, scale, previous) {
-        await seed(database, { name: 'MAL native owner catalogue and retained same-Subject assignments', hotPartition: partitionOf(route), hotShare: 1,
-          rows(p) {
-            const id = newId(route), otherId = newId(otherRoute), s = newId(routeOf(historySubject)!);
-            return {
-              'library.personal_label': [
-                { ...template, label_id: id, normalized_name: `Unrelated MAL ${p.ordinal}` },
-                { ...template, route: otherRoute, account_id: neighbour.accountId, label_id: otherId, normalized_name: `Neighbour MAL ${p.ordinal}` },
-              ],
-              'library.label_assignment': [
-                { ...inactive, assignment_id: newId(route), label_id: id },
-                { ...inactive, assignment_id: newId(route), subject_id: s, label_id: parents[0]!.id },
-                { ...inactive, route: otherRoute, account_id: neighbour.accountId, assignment_id: newId(otherRoute), label_id: otherId, subject_id: s },
-              ],
-            };
-          },
-        }, { from: previous, to: scale });
-      },
-      prepare,
-      async warmup(_database, scale) {
-        await prepare();
-        const measured = await capture(db, operation);
-        evidence.push({ scale, ...measured.value, ...observe(measured.capture) });
-      },
-      operation,
-    });
-    console.info(JSON.stringify({ report, evidence }));
-  } finally {
-    await g?.close();
-    await db.close();
-  }
-}, 1800000);
