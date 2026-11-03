@@ -429,8 +429,8 @@ function AdvancedScope({
   locale,
   onRemove,
 }: {
-  filter?: string;
-  scope?: SearchResourceScope;
+  filter: string | undefined;
+  scope: SearchResourceScope | undefined;
   locale: string;
   onRemove: () => void;
 }) {
