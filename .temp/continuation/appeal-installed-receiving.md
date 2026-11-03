@@ -55,6 +55,10 @@ Consume the established complete-input generator closure with its owner; do not 
 root index or OpenAPI, filter inputs, add a generator or suppress diagnostics. Route remaining source diagnostics to
 their owners. The Library schema consistency change is already in the base; have its owner restore agreement
 between migrations and the expected schema snapshot before attempting native outcomes. Do not bypass that check.
+Finish the existing Board/thread appeal GET handler response typing in `services/kernel/src/content/appeal-routes.ts`
+under the complete-input compiler before emitting the installed contract. Route the client root's missing
+`./kernel/content/schemas`, missing `./kernel/rating/own-votes-counted` and undeclared `home` diagnostics to the supported
+declaration/root-export producer; do not add handwritten declarations or casts to bypass them.
 
 Use the existing growth fixture without changing its handles or evidence; coordinate any fixture changes with its
 owner. Retain fixed selected keys/homes/depth/bytes, page budget and independent 256/1024/4096 histories. Full growth,
