@@ -460,7 +460,8 @@ export const IndependentHistoryRecovery: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.library_progress_history_reader_changes_page_empty());
     for (const [field, heading] of [
-      ['changes', m.library_progress_changes()], ['units', m.library_progress_units()],
+      ['changes', m.library_progress_changes()],
+      ['units', m.library_progress_units()],
     ] as const) {
       const section = canvas.getByRole('region', { name: heading });
       const first = within(section).getByRole('link', { name: m.library_collections_first_page() });
@@ -473,7 +474,8 @@ export const IndependentHistoryRecovery: Story = {
     const url = new URL(firstLogs.getAttribute('href')!, 'https://rezics.test');
     expect(url.pathname).toBe(`/${getLocale()}${pagePaths['library-progress-session']}`);
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      changes: originalHistoryCursors.changes, units: originalHistoryCursors.units,
+      changes: originalHistoryCursors.changes,
+      units: originalHistoryCursors.units,
     });
   },
 };
