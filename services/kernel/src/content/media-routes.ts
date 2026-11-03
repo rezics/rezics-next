@@ -119,7 +119,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         },
         detail: {
           operationId: 'media.own',
-          'x-exposure': 'private',
+          'x-exposure': 'public',
           'x-action': 'media:read_reservation',
           security: secured,
         },

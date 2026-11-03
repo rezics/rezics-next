@@ -1972,6 +1972,9 @@ actual stored derivative ladder in batches of at most two. Imported covers stay 
 inventory never exposes their source provenance or browser resume action. This page does not authorize a public
 download and does not replace the document-media presentation or image transport owners.
 
+Decision: uploader inventory declares the ordinary `public` route exposure, with its existing secured owner authority
+and `private, no-store` response policy; exposure metadata describes platform admission rather than data visibility.
+
 ### Cost: uploader locator maintenance
 
 - Touches: one actor-home command, the exact account erasure fence read/lock and one idempotent insert into the existing `(route, account_id, phase, id)` primary key.
