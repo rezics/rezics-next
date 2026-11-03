@@ -3586,7 +3586,7 @@ CREATE TABLE library.library_archive_merge_item (
     CONSTRAINT library_archive_merge_item_result_check CHECK (((result IS NULL) OR (octet_length((result)::text) <= 8192))),
     CONSTRAINT library_archive_merge_item_review_check CHECK (((review IS NULL) OR (octet_length((review)::text) <= 16384))),
     CONSTRAINT library_archive_merge_item_review_revision_check CHECK ((review_revision >= 0)),
-    CONSTRAINT library_archive_merge_item_section_check CHECK ((section = ANY (ARRAY['entries'::text, 'labels'::text, 'assignments'::text, 'sessions'::text, 'holdings'::text, 'collections'::text, 'collectionPins'::text, 'bangumiUploads'::text, 'bangumiEvidence'::text, 'malImports'::text, 'units'::text, 'history'::text, 'occurrences'::text, 'malEvidence'::text]))),
+    CONSTRAINT library_archive_merge_item_section_check CHECK ((section = ANY (ARRAY['entries'::text, 'labels'::text, 'assignments'::text, 'sessions'::text, 'holdings'::text, 'collections'::text, 'collectionPins'::text, 'bangumiUploads'::text, 'bangumiEvidence'::text, 'malImports'::text, 'units'::text, 'history'::text, 'occurrences'::text, 'malEvidence'::text, 'annotations'::text, 'journals'::text]))),
     CONSTRAINT library_archive_merge_item_status_check CHECK ((status = ANY (ARRAY['unresolved'::text, 'unsupported'::text, 'create'::text, 'already_equal'::text, 'current_conflict'::text, 'mapped'::text, 'preserved'::text, 'applying'::text, 'acknowledged'::text])))
 );
 

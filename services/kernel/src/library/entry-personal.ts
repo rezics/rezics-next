@@ -1,9 +1,11 @@
 import type { Pool, PoolClient } from 'pg';
+import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, type AuthoritativeTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId } from '../route/route.ts';
@@ -15,6 +17,7 @@ import {
 } from './command-support.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import { EntryAnnotationReviewStoppedError, LibraryConflictError } from './entry-errors.ts';
+import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
   MAX_SOURCE_OBSERVATIONS,
   applyFieldChange,
@@ -89,6 +92,14 @@ function parseAnnotationInput(value: unknown) {
         incarnationId: string;
         currentRevision: number;
         reviewGuard?: { reviewId: string; epoch: string; position: number };
+        profileGuard?: {
+          subjectId: string;
+          identityEpoch: string;
+          acceptingType: string;
+          requestedSubjectId: string | null;
+          component: Record<string, unknown>;
+          pin: Record<string, unknown>;
+        };
       }
     | undefined;
   if (input.entryGuard !== undefined) {
@@ -97,7 +108,7 @@ function parseAnnotationInput(value: unknown) {
     const guardFields = Object.keys(input.entryGuard);
     if (
       !['incarnationId', 'currentRevision'].every((field) => guardFields.includes(field)) ||
-      guardFields.some((field) => !['incarnationId', 'currentRevision', 'reviewGuard'].includes(field))
+      guardFields.some((field) => !['incarnationId', 'currentRevision', 'reviewGuard', 'profileGuard'].includes(field))
     )
       throw new TypeError('Invalid entry guard');
     const guard = input.entryGuard as Record<string, unknown>;
@@ -110,6 +121,43 @@ function parseAnnotationInput(value: unknown) {
       incarnationId: guard.incarnationId,
       currentRevision: parsePersonalRevision(guard.currentRevision, false),
     };
+    if (guard.profileGuard !== undefined) {
+      if (typeof guard.profileGuard !== 'object' || guard.profileGuard === null || Array.isArray(guard.profileGuard))
+        throw new TypeError('Invalid profile guard');
+      const profile = guard.profileGuard as Record<string, unknown>;
+      if (
+        Object.keys(profile).length !== 6 ||
+        !Object.hasOwn(profile, 'subjectId') ||
+        !Object.hasOwn(profile, 'identityEpoch') ||
+        !Object.hasOwn(profile, 'acceptingType') ||
+        !Object.hasOwn(profile, 'requestedSubjectId') ||
+        !Object.hasOwn(profile, 'component') ||
+        !Object.hasOwn(profile, 'pin') ||
+        typeof profile.subjectId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.subjectId) ||
+        typeof profile.identityEpoch !== 'string' ||
+        !/^\d+$/.test(profile.identityEpoch) ||
+        typeof profile.acceptingType !== 'string' ||
+        (profile.requestedSubjectId !== null &&
+          (typeof profile.requestedSubjectId !== 'string' ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.requestedSubjectId))) ||
+        !profile.component ||
+        typeof profile.component !== 'object' ||
+        Array.isArray(profile.component) ||
+        !profile.pin ||
+        typeof profile.pin !== 'object' ||
+        Array.isArray(profile.pin)
+      )
+        throw new TypeError('Invalid profile guard');
+      entryGuard.profileGuard = {
+        subjectId: profile.subjectId,
+        identityEpoch: profile.identityEpoch,
+        acceptingType: profile.acceptingType,
+        requestedSubjectId: profile.requestedSubjectId as string | null,
+        component: profile.component as Record<string, unknown>,
+        pin: profile.pin as Record<string, unknown>,
+      };
+    }
     if (guard.reviewGuard !== undefined) {
       const review = closed(guard.reviewGuard, ['reviewId', 'epoch', 'position'], 'review guard');
       if (
@@ -425,6 +473,30 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
             currentEntry.revision !== parsed.entryGuard.currentRevision
           )
             throw new LibraryConflictError();
+          const profileGuard = parsed.entryGuard.profileGuard;
+          if (profileGuard) {
+            const observation = await readLibraryProfileSourceObservation(
+              {
+                pool,
+                access,
+                actor: account,
+                at: command.time,
+                deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+              },
+              profileGuard.subjectId,
+            );
+            if (!observation || observation.source?.kind !== 'supported')
+              throw new ProblemError('unsupported_library_profile');
+            if (
+              observation.source.subjectId !== prepared.subjectId ||
+              observation.anchor.identityEpoch.toString() !== profileGuard.identityEpoch ||
+              observation.anchor.acceptingType !== profileGuard.acceptingType ||
+              observation.anchor.requestedSubjectId !== profileGuard.requestedSubjectId ||
+              canonicalize(observation.anchor.component) !== canonicalize(profileGuard.component) ||
+              canonicalize(observation.source.pin) !== canonicalize(profileGuard.pin)
+            )
+              throw new LibraryConflictError();
+          }
         } else {
           // Existing entries serialize annotation no-op checks with other addressed writes.
           await tx.query(

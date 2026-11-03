@@ -1,9 +1,11 @@
 import {
-  exportSections,
+  exportSectionsV2,
   LIBRARY_EXPORT_FORMAT,
   LIBRARY_EXPORT_LIMITS,
+  sectionsForVersion,
   type LibraryArchiveManifest,
   type LibraryExportSection,
+  type LibraryExportVersion,
 } from './library-export-format.ts';
 
 /** Consumer bounds, fixed before parsing. No upload, permission or effect is admitted here. */
@@ -12,7 +14,7 @@ export const LIBRARY_ARCHIVE_LIMITS = {
   // Compact producer records plus commas, the final manifest and bounded formatting whitespace.
   uploadBytes: 34 * 1024 * 1024,
   depth: 32,
-  sections: exportSections.length,
+  sections: exportSectionsV2.length,
 } as const;
 /** Installed private Collection recovery bounds; these are independent of each native command's own cap. */
 export const LIBRARY_ARCHIVE_RECOVERY_LIMITS = {
@@ -24,7 +26,7 @@ export const LIBRARY_ARCHIVE_RECOVERY_LIMITS = {
   applyCommands: 25,
   cleanupRows: 100,
 } as const;
-export const archiveMergeSections = ['entries', 'labels', 'assignments'] as const;
+export const archiveMergeSections = ['entries', 'labels', 'assignments', 'annotations', 'journals'] as const;
 type MergeSection = (typeof archiveMergeSections)[number];
 type ObjectValue = Record<string, unknown>;
 export type ArchiveRecord = ObjectValue & { section: LibraryExportSection };
@@ -150,38 +152,42 @@ function parse(bytes: Uint8Array): unknown {
 function manifestOf(value: unknown): LibraryArchiveManifest {
   if (value === null || value === undefined) fail('incomplete_capture');
   const m = object(value, 'invalid_envelope');
-  if (m.format !== LIBRARY_EXPORT_FORMAT || m.version !== 1) fail('unsupported_version');
+  if (m.format !== LIBRARY_EXPORT_FORMAT || (m.version !== 1 && m.version !== 2)) fail('unsupported_version');
+  const version = m.version as LibraryExportVersion;
+  const installedSections: readonly string[] = sectionsForVersion(version);
   if (m.rows === undefined || m.recordBytes === undefined || m.sections === undefined) fail('incomplete_capture');
+  const required = [
+    'format',
+    'version',
+    'exportId',
+    'capturedAt',
+    'expiresAt',
+    'privacy',
+    'completeness',
+    'sections',
+    'omissions',
+    'fullExport',
+    'rows',
+    'recordBytes',
+    ...(version === 2 ? ['coverage', 'sectionTotals'] : []),
+  ];
   if (
-    !exactKeys(m, [
-      'format',
-      'version',
-      'exportId',
-      'capturedAt',
-      'expiresAt',
-      'privacy',
-      'completeness',
-      'sections',
-      'omissions',
-      'fullExport',
-      'rows',
-      'recordBytes',
-    ]) ||
+    !exactKeys(m, required) ||
     !uuid(m.exportId) ||
     !timestamp(m.capturedAt) ||
     !timestamp(m.expiresAt) ||
     Date.parse(m.expiresAt) - Date.parse(m.capturedAt) !== 15 * 60_000 ||
     m.privacy !== 'private' ||
     m.completeness !== 'supported-native-facts' ||
-    m.fullExport !== false
+    m.fullExport !== false ||
+    (version === 2 && m.coverage !== 'private-library-owner-facts-v2')
   )
     fail('invalid_envelope');
-  // V1 always declares every installed section; omission is not an empty section or success.
   const sections = m.sections;
   if (
     !Array.isArray(sections) ||
-    sections.length !== exportSections.length ||
-    exportSections.some((section, index) => sections[index] !== section)
+    sections.length !== installedSections.length ||
+    installedSections.some((section, index) => sections[index] !== section)
   )
     fail('incomplete_capture');
   const omissions = object(m.omissions, 'invalid_envelope');
@@ -209,6 +215,29 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     (m.recordBytes as number) > LIBRARY_EXPORT_LIMITS.recordBytes
   )
     fail('bounds');
+  if (version === 2) {
+    const totals = object(m.sectionTotals, 'invalid_envelope');
+    if (
+      !exactKeys(totals, installedSections) ||
+      installedSections.some((section) => {
+        const value = object(totals[section], 'invalid_envelope');
+        return (
+          !exactKeys(value, ['rows', 'recordBytes']) ||
+          !Number.isSafeInteger(value.rows) ||
+          (value.rows as number) < 0 ||
+          !Number.isSafeInteger(value.recordBytes) ||
+          (value.recordBytes as number) < 0
+        );
+      }) ||
+      installedSections.reduce((sum, section) => sum + (totals[section] as ObjectValue).rows as number, 0) !==
+        m.rows ||
+      installedSections.reduce(
+        (sum, section) => sum + (totals[section] as ObjectValue).recordBytes as number,
+        0,
+      ) !== m.recordBytes
+    )
+      fail('inconsistent_manifest');
+  }
   // Expiry fences the producer's page stream. An already completed file remains readable after expiry.
   return m as LibraryArchiveManifest;
 }
@@ -225,7 +254,99 @@ function reference(row: ObjectValue, key: string) {
   if (!exactKeys(r, ['id', 'href']) || r.id !== value || r.href !== `https://rezics.com/subjects/${value}`)
     fail('invalid_record');
 }
+
+function validJournalDate(value: unknown): boolean {
+  if (value === null) return true;
+  const date = object(value, 'invalid_record');
+  if (
+    !exactKeys(date, ['year'], ['month', 'day']) ||
+    !Number.isInteger(date.year) ||
+    (date.year as number) < 1 ||
+    (date.year as number) > 9_999 ||
+    (Object.hasOwn(date, 'month') &&
+      (!Number.isInteger(date.month) || (date.month as number) < 1 || (date.month as number) > 12)) ||
+    (Object.hasOwn(date, 'day') &&
+      (!Object.hasOwn(date, 'month') || !Number.isInteger(date.day) || (date.day as number) < 1))
+  )
+    return false;
+  if (!Object.hasOwn(date, 'day')) return true;
+  const year = date.year as number;
+  const month = date.month as number;
+  const day = date.day as number;
+  const leap = year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
+  const days = month === 2 ? (leap ? 29 : 28) : [4, 6, 9, 11].includes(month) ? 30 : 31;
+  return day <= days;
+}
+
 function supportedRecord(row: ObjectValue, section: MergeSection) {
+  if (section === 'annotations') {
+    if (
+      !exactKeys(row, [
+        'section',
+        'accountId',
+        'subjectId',
+        'entryIncarnationId',
+        'libraryProfilePin',
+        'annotationRevision',
+        'annotationUpdatedAt',
+      ], ['note', 'priority']) ||
+      !uuid(row.accountId) ||
+      !uuid(row.subjectId) ||
+      (row.entryIncarnationId !== null && !uuid(row.entryIncarnationId)) ||
+      (row.libraryProfilePin !== null &&
+        (!row.libraryProfilePin || typeof row.libraryProfilePin !== 'object' || Array.isArray(row.libraryProfilePin))) ||
+      !revision(row.annotationRevision) ||
+      (Object.hasOwn(row, 'note') && row.note !== null &&
+        (typeof row.note !== 'string' ||
+          row.note.length === 0 ||
+          row.note.includes('\u0000') ||
+          Buffer.byteLength(row.note, 'utf8') > 4_096)) ||
+      (Object.hasOwn(row, 'priority') && row.priority !== null &&
+        (!Number.isInteger(row.priority) || (row.priority as number) < 1 || (row.priority as number) > 100)) ||
+      (row.annotationUpdatedAt !== null && !timestamp(row.annotationUpdatedAt))
+    )
+      fail('invalid_record');
+    return;
+  }
+  if (section === 'journals') {
+    const journal = object(row.journal, 'invalid_record');
+    if (
+      !exactKeys(row, [
+        'section',
+        'accountId',
+        'sessionId',
+        'subjectId',
+        'versionSubjectId',
+        'state',
+        'progressRevision',
+        'libraryProfilePin',
+        'startedAt',
+        'completedAt',
+        'lastChangedAt',
+        'journal',
+      ]) ||
+      !exactKeys(journal, ['sessionId', 'revision', 'reflection'], ['startDate', 'finishDate']) ||
+      !uuid(row.accountId) ||
+      !uuid(row.sessionId) ||
+      !uuid(row.subjectId) ||
+      (row.versionSubjectId !== null && !uuid(row.versionSubjectId)) ||
+      typeof row.state !== 'string' ||
+      !revision(row.progressRevision) ||
+      (row.libraryProfilePin !== null &&
+        (!row.libraryProfilePin || typeof row.libraryProfilePin !== 'object' || Array.isArray(row.libraryProfilePin))) ||
+      !timestamp(row.startedAt) ||
+      (row.completedAt !== null && !timestamp(row.completedAt)) ||
+      (row.lastChangedAt !== null && !timestamp(row.lastChangedAt)) ||
+      journal.sessionId !== row.sessionId ||
+      !Number.isSafeInteger(journal.revision) ||
+      (journal.revision as number) < 0 ||
+      (Object.hasOwn(journal, 'startDate') && journal.startDate !== null && !validJournalDate(journal.startDate)) ||
+      (Object.hasOwn(journal, 'finishDate') && journal.finishDate !== null && !validJournalDate(journal.finishDate)) ||
+      (journal.reflection !== null && typeof journal.reflection !== 'string')
+    )
+      fail('invalid_record');
+    return;
+  }
   const common = ['section', 'revision', 'created_at', 'updated_at'];
   const fields =
     section === 'entries'
@@ -288,6 +409,9 @@ const identityFields: Record<LibraryExportSection, readonly string[]> = {
   history: ['session_id', 'change_no'],
   occurrences: ['member_id'],
   malEvidence: ['upload_id', 'ordinal'],
+  annotations: ['subjectId'],
+  provenance: ['subjectId'],
+  journals: ['sessionId'],
 };
 function recordKey(row: ObjectValue, section: LibraryExportSection) {
   const values = identityFields[section].map((key) => {
@@ -299,6 +423,11 @@ function recordKey(row: ObjectValue, section: LibraryExportSection) {
     } else if (!uuid(value)) fail('invalid_record');
     return value;
   });
+  if (section === 'provenance') {
+    const observation = object(row.observation, 'invalid_record');
+    if (typeof observation.provider !== 'string' || typeof observation.recordId !== 'string') fail('invalid_record');
+    values.push(observation.provider, observation.recordId);
+  }
   return JSON.stringify([section, ...values]);
 }
 
@@ -312,7 +441,11 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
   if (!Array.isArray(envelope.records)) fail('invalid_envelope');
   if (envelope.records.length > LIBRARY_ARCHIVE_LIMITS.records) fail('bounds');
   if (envelope.records.length !== manifest.rows) fail('inconsistent_manifest');
-  const counts = new Map<LibraryExportSection, number>(exportSections.map((s) => [s, 0]));
+  const manifestSections: readonly string[] = sectionsForVersion(manifest.version);
+  const counts = new Map<LibraryExportSection, number>(exportSectionsV2.map((s) => [s, 0]));
+  const totals = new Map<LibraryExportSection, { rows: number; recordBytes: number }>(
+    exportSectionsV2.map((s) => [s, { rows: 0, recordBytes: 0 }]),
+  );
   const seen = new Set<string>(),
     labelIds = new Set<string>(),
     names = new Set<string>();
@@ -321,7 +454,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
   for (const value of envelope.records) {
     const row = object(value, 'invalid_record'),
       section = row.section as LibraryExportSection;
-    const index = exportSections.indexOf(section);
+    const index = manifestSections.indexOf(section);
     if (index < previousSection || index === -1) fail('invalid_record');
     previousSection = index;
     const size = Buffer.byteLength(JSON.stringify(row));
@@ -333,6 +466,9 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (seen.has(key)) fail('duplicate_record');
     seen.add(key);
     counts.set(section, counts.get(section)! + 1);
+    const sectionTotal = totals.get(section)!;
+    sectionTotal.rows++;
+    sectionTotal.recordBytes += size;
     if (section === 'labels') {
       if (names.has(row.normalized_name as string)) fail('duplicate_label');
       names.add(row.normalized_name as string);
@@ -342,15 +478,23 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (section === 'assignments' && !labelIds.has(row.label_id as string)) fail('incomplete_capture');
   }
   if (recordBytes !== manifest.recordBytes) fail('inconsistent_manifest');
+  if (manifest.version === 2) {
+    for (const section of exportSectionsV2) {
+      const expected = manifest.sectionTotals[section];
+      const actual = totals.get(section)!;
+      if (expected.rows !== actual.rows || expected.recordBytes !== actual.recordBytes) fail('inconsistent_manifest');
+    }
+  }
   return {
     manifest,
     records: envelope.records as ArchiveRecord[],
     fullRestoration: false,
-    coverage: exportSections.map((section) => ({
+    coverage: exportSectionsV2.map((section) => ({
       section,
       rows: counts.get(section)!,
       capture: counts.get(section) ? 'present' : 'empty',
-      treatment: (archiveMergeSections as readonly string[]).includes(section)
+      treatment:
+        manifestSections.includes(section) && (archiveMergeSections as readonly string[]).includes(section)
         ? 'requires-explicit-mapping'
         : 'retained-unsupported',
     })),

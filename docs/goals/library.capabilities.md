@@ -534,13 +534,15 @@ and distinct empty/cleared/missing note outcomes while creating fresh private na
 Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
 the adjacent Web recovery interface remain deferred to integration; Web323 still owns export UI.
 
-[Personal archive review and merge](../library-archive-merge.md) share the installed v1 producer vocabulary and
+[Personal archive review and merge](../library-archive-merge.md) shares the installed V1/V2 producer vocabulary and
 bounds. The bounded decoder checks completed artifacts; private consumer methods page evidence and coverage,
-require explicit current subject/state/label review, and delegate selected entry/label/assignment effects to native
-commands with a per-item replay journal, cancellation, seven-day retention and owned-graph erasure. Focused native
-scenarios cover actual producer compatibility and consumer review/apply/denial paths. Web UI adoption, frozen
-acceptance and measured native64/512/4096 cost evidence remain deferred; the existing export evidence status is
-unchanged.
+require explicit current subject/state/label or Entry/Session review, and delegate selected entry, label, assignment,
+annotation and journal-date effects to native commands with a per-item replay journal, cancellation, seven-day
+retention and owned-graph erasure. V2 provenance remains retained unsupported evidence. Focused native scenarios
+cover actual V2 producer compatibility, private fact recovery, stale targets, replay, cancellation and denial paths.
+Web adoption, frozen acceptance and measured native64/512/4096 cost evidence remain deferred; the existing export
+evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
+supported fields, native methods and visibility decision.
 
 ## Evidence stage
 

@@ -378,7 +378,8 @@ Web assembles the versioned artifact after the final manifest. Native edits requ
 immediately denies delivery. Installed Bangumi and unexpired MAL source rows preserve personal evidence and provider identifiers;
 this is neither a full account export nor an automatic restore. The separate [archive review and merge](library-archive-merge.md)
 consumer accepts a completed file, keeps unsupported sections as private evidence and requires current explicit
-mapping before selected entry, label or assignment effects.
+mapping before selected entry, label or assignment effects. Reviewed V2 annotation and journal-date adoption is
+specified in [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
 ## Indexed filtering and disclosure
 

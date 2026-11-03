@@ -44,7 +44,8 @@ they never adopt later edits or silently create a replacement.
 Version 1 retains its original fixed sections and has no annotation, provenance or journal coverage. Version 2 adds
 those three independently counted sections while keeping `fullExport:false`: other private account families and
 Commerce data remain unavailable. It does not claim public permission from source privacy. The version 1
-archive-entry/label merge remains version 1 only and does not accept the new records.
+existing archive recovery accepts V2 annotation and journal-date evidence through the native personal-fact journey;
+provenance remains unsupported. See [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
 The final version 2 manifest reports row and UTF-8 record-byte totals for every declared section, including empty
 sections. It appears only after the complete bounded traversal. Each returned page carries no more than 16 records;

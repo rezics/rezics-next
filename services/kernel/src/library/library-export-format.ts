@@ -1,4 +1,4 @@
-/** Installed v1 archive vocabulary, shared by the producer and its inert decoder. */
+/** Installed Library export vocabulary, shared by the producer and its inert decoder. */
 export const LIBRARY_EXPORT_FORMAT = 'https://rezics.com/formats/library-export' as const;
 export const LIBRARY_EXPORT_LIMITS = {
   records: 100_000,
@@ -27,8 +27,8 @@ export const exportSectionsV2 = [...exportSections, 'annotations', 'provenance',
 export type LibraryExportVersion = 1 | 2;
 export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
-/** The archive recovery consumer intentionally remains version 1. */
-export type LibraryExportSection = LibraryExportSectionV1;
+/** The archive recovery consumer shares the installed V1 and V2 section vocabulary. */
+export type LibraryExportSection = LibraryExportSectionV2;
 
 export function sectionsForVersion(version: LibraryExportVersion) {
   return version === 1 ? exportSections : exportSectionsV2;
@@ -55,7 +55,8 @@ const v2Omissions = {
     'retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded',
   commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
   publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
-  reimport: 'version 1 archive recovery only; version 2 annotations, provenance and journals are not imported',
+  reimport:
+    'version 1 archive recovery plus reviewed version 2 annotations and journal dates; provenance remains unsupported',
 } as const;
 
 export type LibraryExportManifestV1 = {
@@ -130,5 +131,5 @@ export function libraryExportManifest(
   };
 }
 
-/** The existing archive-entry/label merge consumes exactly the installed v1 vocabulary. */
-export type LibraryArchiveManifest = LibraryExportFinalManifestV1;
+/** The native archive decoder recognizes both installed export vocabularies. */
+export type LibraryArchiveManifest = LibraryExportFinalManifest;

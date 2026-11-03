@@ -4,8 +4,8 @@ The authenticated native API exports current owner facts independently of public
 Decision: use a fifteen-minute fenced, replayable page stream with no retained private artifact; a source change
 requires a new request identity, including after a completed stream or a failed local download. Installed import
 evidence joins this fence; expiring MAL evidence makes the original capture stale.
-Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 and the
-archive-entry/label merge retain their original version 1 coverage.
+Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 retains its
+original coverage, and reviewed V2 annotation/journal-date recovery is owned by the existing archive consumer.
 
 ## Mounted methods and Web handoff
 
@@ -54,7 +54,9 @@ Return uses locale-aware `/library` with no shelf or filter operands.
 Version 1 is the fixed historical coverage set below and never implies annotation, provenance or journal coverage.
 New captures use version 2. A stored version 1 capture and its epoch 1 cursors keep their original sections,
 manifest fields and byte accounting; version 2 cursors use epoch 2 and carry per-section counters. Unsupported
-versions and cursor shapes are refused. The archive-entry/label merge continues to accept version 1 only.
+versions and cursor shapes are refused. The existing archive consumer accepts both V1 and V2 manifests; its
+supported annotation and journal operations are specified in
+[Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
 ## Version matrix and section additions
 
@@ -70,7 +72,7 @@ versions and cursor shapes are refused. The archive-entry/label merge continues 
 | `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded |
 | `commerce`               | Excluded; orders and financial evidence use Commerce retention/export policy                                          | Same                                                                                                                      |
 | `publication`            | Excluded; stored rules only, no dynamic evaluation or working publication output                                      | Same                                                                                                                      |
-| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | Version 1 archive recovery only; version 2 annotations, provenance and journals are not imported                          |
+| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates; provenance remains unsupported                               |
 
 Version 2 additions use independent owner-indexed selections. An annotation record preserves the account and Subject,
 the current entry incarnation and profile pin when an entry row exists, `annotationRevision`, note, priority and
