@@ -59,6 +59,10 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
       { idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 },
     );
   const written = await create(subject);
+  await fixture.grant(author.accountId, 'post:erase', {
+    route: routeOf(written.value.itemId)!,
+    id: written.value.itemId,
+  });
   for (let index = 1; index < 26; index++) {
     const target = newId(0x6bd0);
     await fixture.reader.query(
@@ -153,10 +157,10 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
       )
     ).rows[0]?.count,
   ).toBe(26);
+  const beforeRestoration = await source.censusCoverage(partition);
   const before = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
   const deps = { pool: fixture.pool, access: fixture.access, routeKey };
   const request = () => ({ idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 });
-  await fixture.grant(author.accountId, 'post:erase', { route: routeOf(written.value.itemId)!, id: written.value.itemId });
   await softDeletePost(deps, author, { postId: written.value.itemId, reason: 'Withdraw review' }, request());
   await restorePost(deps, author, written.value.itemId, request());
   const restored = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
@@ -164,7 +168,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   expect(restored.sourceVersion).not.toBe(before.sourceVersion);
   expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
   expect(await maintainReviewCensusBatch(partition, resumed.maintainCensus)).toMatchObject({ state: 'exhausted' });
-  expect((await source.censusCoverage(partition)).generation).not.toBe(installed.generation);
+  expect((await source.censusCoverage(partition)).generation).not.toBe(beforeRestoration.generation);
   expect(await source.count(partition)).toMatchObject({ unavailable: true });
 
   // A native projection repair need not publish a new domain position. Its source
