@@ -7,6 +7,7 @@ create holdings, labels or sessions, admit local votes, or publish notes/reviews
 Decision: compose explicit released entry-state commands with private source evidence; role suggestions never
 grant an import mapping or invent state IDs, and every other field stays retained until its native owner admits it.
 Profiles with no entry state set cannot receive a state. There is no separately released VNDB field mapping.
+Integration preserves AniList label adoption and existing erasure phase numbers; VNDB evidence cleanup appends after diary navigation.
 
 Matching uses the admitted native `semantic.external_claim` tuple `(source="vndb", external_id="v123")`,
 its tuple home, current canonical identity and subject readability. Alternate source namespaces are unavailable
