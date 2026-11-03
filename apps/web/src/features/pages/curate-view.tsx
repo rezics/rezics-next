@@ -49,8 +49,7 @@ function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: stri
       lifecycle={{
         change: (command, work) =>
           changeOwnContribution({ data: editorRequest(command, work), headers: csrfHeaders() }),
-        read: (address, work) =>
-          rereadOwnContribution({ data: editorRequest(address, work), headers: csrfHeaders() }),
+        read: (address, work) => rereadOwnContribution({ data: editorRequest(address, work), headers: csrfHeaders() }),
       }}
     />
   );

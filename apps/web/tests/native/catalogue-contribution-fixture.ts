@@ -29,7 +29,8 @@ export type NativeCatalogueContributionFixture = {
 
 async function expectStatus(response: Response, expected: number, action: string): Promise<string> {
   const text = await response.text();
-  if (response.status !== expected) throw new Error(`${action}: expected HTTP ${expected}, got ${response.status}: ${text}`);
+  if (response.status !== expected)
+    throw new Error(`${action}: expected HTTP ${expected}, got ${response.status}: ${text}`);
   return text;
 }
 
@@ -42,7 +43,11 @@ function cited(property: string, content: string) {
   return {
     property: { id: property },
     value: { type: 'value', content },
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/evidence' } }] }],
+    references: [
+      {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/evidence' } }],
+      },
+    ],
   };
 }
 

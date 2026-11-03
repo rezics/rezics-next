@@ -809,9 +809,7 @@ function CandidateReviewLive({
                   locale={locale}
                   transport={{
                     change: (command) =>
-                      work.live()
-                        ? lifecycle.change(command, work)
-                        : Promise.resolve({ ok: false, reason: 'denied' }),
+                      work.live() ? lifecycle.change(command, work) : Promise.resolve({ ok: false, reason: 'denied' }),
                     read: (address) =>
                       work.live()
                         ? lifecycle.read(address, work)

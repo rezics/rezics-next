@@ -36,7 +36,10 @@ async function openReviewedContribution(page: Page, record: CatalogueContributio
   await browserExpect(review.getByRole('button', { name: 'Withdraw contribution', exact: true })).toBeVisible();
 }
 
-async function confirmContribution(page: Page, action: 'Withdraw contribution' | 'Restore contribution'): Promise<void> {
+async function confirmContribution(
+  page: Page,
+  action: 'Withdraw contribution' | 'Restore contribution',
+): Promise<void> {
   const review = page.getByRole('region', { name: 'Proposals' });
   const response = page.waitForResponse(
     (result) => result.request().method() === 'POST' && result.url().includes('_serverFn'),
@@ -49,11 +52,12 @@ async function confirmContribution(page: Page, action: 'Withdraw contribution' |
 }
 
 function userLifecycleRequests(from: number) {
-  return fixture.stack.kernelRequests().slice(from).filter(
-    (request) =>
-      !request.fixtureRequest &&
-      (request.method === 'DELETE' || request.url.includes('restoreDeleted')),
-  );
+  return fixture.stack
+    .kernelRequests()
+    .slice(from)
+    .filter(
+      (request) => !request.fixtureRequest && (request.method === 'DELETE' || request.url.includes('restoreDeleted')),
+    );
 }
 
 nativeTest(
@@ -99,10 +103,15 @@ nativeTest(
     expect(await fixture.candidates(record.subject, 'alice')).toContainEqual(
       expect.objectContaining({ id: record.candidate }),
     );
-    expect((await fixture.candidates(record.subject, 'alice')).find((item) => item.id === record.candidate)?.deleted).toBeUndefined();
+    expect(
+      (await fixture.candidates(record.subject, 'alice')).find((item) => item.id === record.candidate)?.deleted,
+    ).toBeUndefined();
     expect(
       userLifecycleRequests(beforeRestore).some(
-        (request) => request.method === 'POST' && request.url.includes(`${record.candidate}`) && request.url.includes('restoreDeleted'),
+        (request) =>
+          request.method === 'POST' &&
+          request.url.includes(`${record.candidate}`) &&
+          request.url.includes('restoreDeleted'),
       ),
     ).toBe(true);
     await alicePage.close();
