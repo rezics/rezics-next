@@ -7,7 +7,7 @@ import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-em
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
 import type { VerificationConfig } from '../../report/turnstile';
-import { createHomeKindChoices, type HomeKindsReader } from './home-feed-kinds';
+import { createHomeKindChoices, homeKindChoice, type HomeKindsReader } from './home-feed-kinds';
 import { createHomeSpaceSelection, type HomeSpaceReader } from './home-feed-spaces';
 import { HomeFeedSpaceControl } from './home-feed-space-control';
 import { HomeFeedKindControl } from './home-feed-kind-control';
@@ -380,7 +380,10 @@ export function HomeFeedConsumer({
       return true;
     }
     const question = questions.snapshot();
-    if (input.ratingQuestionId && question.selection !== 'ready') {
+    if (
+      input.ratingQuestionId &&
+      (question.selection !== 'ready' || question.selected?.id !== input.ratingQuestionId)
+    ) {
       window.retire(
         question.selection === 'loading'
           ? undefined
@@ -404,8 +407,12 @@ export function HomeFeedConsumer({
     if (!spaces.snapshot().available) {
       if (spaces.snapshot().selected) void spaces.refresh();
       else void spaces.retry();
-    } else if (window.snapshot().input.ratingQuestionId && questions.snapshot().selection !== 'ready') {
-      if (questions.snapshot().selected) void questions.refresh();
+    } else if (
+      window.snapshot().input.ratingQuestionId &&
+      (questions.snapshot().selection !== 'ready' ||
+        questions.snapshot().selected?.id !== window.snapshot().input.ratingQuestionId)
+    ) {
+      if (questions.snapshot().selected?.id === window.snapshot().input.ratingQuestionId) void questions.refresh();
       else void restoreSelection(window.snapshot().input);
     } else void window.load(window.snapshot().input);
   };
@@ -443,12 +450,14 @@ export function HomeFeedConsumer({
     loadSelection({ stream });
   };
   const filterSelections: HomeFeedFilterSummary[] = [];
+  const suppliedKind = kinds.kinds?.values.find((kind) => kind.id === snapshot.input.kind);
+  const selectedKind = suppliedKind ? homeKindChoice(suppliedKind, locale) : kinds.selected;
   if (snapshot.input.kind) {
     filterSelections.push({
       key: 'kind',
       label: m.home_kind_label({}, options),
-      value: kinds.selected?.text || m.home_kind_unnamed({}, options),
-      lang: kinds.selected?.lang,
+      value: selectedKind?.text || m.home_kind_unnamed({}, options),
+      lang: selectedKind?.lang,
       onRemove: removeKind,
     });
   }
@@ -540,6 +549,8 @@ export function HomeFeedConsumer({
     questions.retire();
     window.retire({ state: 'loading', code: 'loading' }, input);
     choices.select(input.kind ? { id: input.kind, text: '' } : undefined);
+    // Retire the previous question meaning before a Space refusal can stop restoration.
+    void questions.restore(undefined);
     const space = await spaces.restore(input.spaceId);
     if (current !== restoreGeneration.current) return;
     if (input.spaceId && space === undefined) return;

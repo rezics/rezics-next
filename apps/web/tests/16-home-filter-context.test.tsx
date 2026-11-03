@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { HomeFeedConsumer } from '../src/features/pages/home-feed';
@@ -54,6 +55,10 @@ async function surface(locale: Locale, phone = false, size = 1) {
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  const require = createRequire(import.meta.url);
+  const storybook = createRequire(require.resolve('storybook/test'));
+  const { default: userEvent } = await import(storybook.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: browser.document });
   const { createRoot } = await import('react-dom/client');
   const host = browser.document.createElement('div') as unknown as HTMLElement;
   browser.document.body.append(host);
@@ -149,12 +154,7 @@ async function surface(locale: Locale, phone = false, size = 1) {
     async chooseAll() {
       await click(m.home_kinds_load({}, options));
       await select(m.home_kind_label({}, options), 'schema:Prepared0');
-      await act(async () => {
-        const input = panel().querySelector('input')!;
-        const setter = Object.getOwnPropertyDescriptor(browser.HTMLInputElement.prototype, 'value')!.set!;
-        setter.call(input, homeStorySpace.address);
-        input.dispatchEvent(new browser.Event('input', { bubbles: true }));
-      });
+      await act(async () => user.type(panel().querySelector('input')!, homeStorySpace.address));
       // Submit the admitted address; React owns the input, lookup and subsequent explicit selection.
       await act(async () =>
         panel()
@@ -255,9 +255,12 @@ test('clear-all retires pending metadata and replaces once; history, cursor and 
     await view.open();
     await view.chooseAll();
     const admitted = { ...view.calls.at(-1)! };
+    await view.click(m.search_close_filters(), view.panel());
     await view.click(m.library_next_page());
+    expect(view.browser.document.activeElement?.getAttribute('role')).toBe('region');
     expect(view.calls.at(-1)).toEqual({ ...admitted, cursor: 'prepared-next' });
     await view.click(m.home_feed_following());
+    await view.open();
     const following = { ...view.calls.at(-1)! };
     expect(following.cursor).toBeUndefined();
     view.hold();

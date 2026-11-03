@@ -176,19 +176,22 @@ async function journey({ canvasElement }: { canvasElement: HTMLElement }) {
   await expect(within(canvas.getByRole('dialog')).queryByRole('list', { name: m.refinement_selected() })).toBeNull();
   await userEvent.keyboard('{Escape}');
 }
-export const DesktopJourney: Story = { globals: { viewport: { value: 'desktop', isRotated: false } }, play: journey };
-export const PhoneJourney: Story = { globals: { viewport: { value: 'phone', isRotated: false } }, play: journey };
+export const DesktopJourney: Story = {
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+  play: journey,
+};
+export const PhoneJourney: Story = { globals: { viewport: { value: 'phone390', isRotated: false } }, play: journey };
 export const DarkPhone: Story = {
-  globals: { viewport: { value: 'phone', isRotated: false }, theme: 'dark' },
+  globals: { viewport: { value: 'phone390', isRotated: false }, theme: 'dark' },
   play: journey,
 };
 export const DarkDesktop: Story = {
-  globals: { viewport: { value: 'desktop', isRotated: false }, theme: 'dark' },
+  globals: { viewport: { value: 'desktop1280', isRotated: false }, theme: 'dark' },
   play: journey,
 };
 export const LongStrings: Story = {
   args: { long: true },
-  globals: { viewport: { value: 'phone', isRotated: false } },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
@@ -236,7 +239,7 @@ export const UnavailableRetainedChoice: Story = {
   },
 };
 export const OpenSheetAccountReplacement: Story = {
-  globals: { viewport: { value: 'phone', isRotated: false } },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
