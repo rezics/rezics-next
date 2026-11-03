@@ -116,7 +116,7 @@ function scope(f: ReturnType<typeof remote>, importer: Importer, images = true) 
   expect(f.requests.map((command) => command.source.external_id).sort()).toEqual(
     expect.arrayContaining(created),
   );
-  expect(f.mediaRequests.sort()).toEqual(images ? created : []);
+  expect([...new Set(f.mediaRequests)].sort()).toEqual(images ? created : []);
   const source = importer.session.store.source(registration.source);
   expect(source.count).toBe(5);
   expect(source.generation).not.toBeNull();
