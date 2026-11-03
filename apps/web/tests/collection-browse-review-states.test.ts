@@ -1,10 +1,7 @@
 import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
-import {
-  collectionLongNotesSparse,
-  setCollectionStoryMode,
-} from '../src/kernel/fake/collection-page-stories';
+import { collectionLongNotesSparse, setCollectionStoryMode } from '../src/kernel/fake/collection-page-stories';
 import collection from '../src/kernel/recorded/library-collection.json' with { type: 'json' };
 
 const storiesPath = join(import.meta.dir, '../src/stories/library-collection.stories.tsx');

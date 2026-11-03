@@ -39,8 +39,7 @@ export type CollectionStoryMode =
 
 /** Contract-shaped member notes derived from structural documents; native notes remain strings. */
 export const collectionLongNotesSparse = {
-  identity:
-    '雪国 Snow Country — 川端康成 Yasunari Kawabata, a long attached identity that stays with this occurrence',
+  identity: '雪国 Snow Country — 川端康成 Yasunari Kawabata, a long attached identity that stays with this occurrence',
   notes: [
     documentText(
       fromPlainText(
