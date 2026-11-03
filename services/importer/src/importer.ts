@@ -29,6 +29,7 @@ import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } 
 import { createSourceRegistration } from './source-registry.ts';
 import { resolveOwnReferences } from './own-references.ts';
 import { ConversionDiagnosticError, type ConversionDiagnosticPhase } from './conversion-diagnostics.ts';
+import { OpenLibraryDumpSetError } from './open-library-dump-set.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
@@ -122,6 +123,8 @@ export class Importer {
   private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
   private readonly recordConcurrency: number;
   private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
+  private readonly planInflight = new WeakMap<AbortSignal, Map<string, Promise<Planned | 'failed' | null>>>();
+  private readonly planningStack = new WeakMap<AbortSignal, Set<string>>();
   private readonly mediaDeadlineMs: number;
   private closing = false;
 
@@ -154,6 +157,17 @@ export class Importer {
       }),
       options,
     );
+  }
+
+  /** One Open Library dump-set generation; callers compose members into `records`. */
+  runDumpSet(
+    registration: SourceRegistration,
+    records: AsyncIterable<SourceRecord>,
+    options: ImportRunOptions = {},
+  ): Promise<ImportRunResult> {
+    if (registration.sourceKind !== 'openlibrary')
+      return Promise.reject(new TypeError('Dump-set import requires Open Library'));
+    return this.runRecords(registration, records, options);
   }
 
   /** VNDB grouped loaders pass their actual SourceRecord stream here. */
@@ -610,6 +624,74 @@ export class Importer {
     }
   }
 
+  private openLibraryRelationKeys(projection: SourceProjection): string[] {
+    if (projection.sourceKind !== 'openlibrary') return [];
+    const normalized = projection.normalizedRecord as {
+      authors?: { key?: string }[];
+      works?: { key?: string }[];
+    };
+    const keys = [...(normalized.authors ?? []), ...(normalized.works ?? [])].flatMap((relation) =>
+      relation.key ? [relation.key] : [],
+    );
+    if (keys.length > 64) throw new Error('Open Library relation bound exceeded');
+    return keys;
+  }
+
+  private planOnce(
+    registration: SourceRegistration,
+    run: Run,
+    staged: Staged<SourceProjection>,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<Planned | 'failed' | null> {
+    let inflight = this.planInflight.get(signal);
+    if (!inflight) {
+      inflight = new Map();
+      this.planInflight.set(signal, inflight);
+    }
+    const existing = inflight.get(staged.row.recordKey);
+    if (existing) return existing;
+    const task = Promise.resolve().then(async () => {
+      let stack = this.planningStack.get(signal);
+      if (!stack) {
+        stack = new Set();
+        this.planningStack.set(signal, stack);
+      }
+      stack.add(staged.row.recordKey);
+      try {
+        return await this.plan(registration, run, staged, signal, write);
+      } catch (error) {
+        if (error instanceof Interrupted) throw error;
+        return 'failed';
+      } finally {
+        stack.delete(staged.row.recordKey);
+      }
+    });
+    inflight.set(staged.row.recordKey, task);
+    return task;
+  }
+
+  /** Bind staged same-run Open Library relations (at most 64 point reads) before converting. */
+  private async bindOwnDependencies(
+    registration: SourceRegistration,
+    run: Run,
+    staged: Staged<SourceProjection>,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<void> {
+    if (this.options.identifierLookup || staged.row.state !== 'present') return;
+    const stack = this.planningStack.get(signal);
+    for (const key of this.openLibraryRelationKeys(staged.projection)) {
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      if (stack?.has(key)) continue;
+      const claim = this.session.bindings.claim({ source: staged.row.source, external_id: key });
+      if (claim?.state === 'bound' || claim?.state === 'taken-down') continue;
+      const dependency = this.session.store.key(staged.row.source, key, run).staged;
+      if (!dependency || dependency.row.state !== 'present') continue;
+      await this.planOnce(registration, run, dependency, signal, write);
+    }
+  }
+
   private async plan(
     registration: SourceRegistration,
     run: Run,
@@ -618,6 +700,7 @@ export class Importer {
     write: Write,
   ): Promise<Planned | null> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
+    await this.bindOwnDependencies(registration, run, staged, signal, write);
     const store = this.session.store;
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };
@@ -1209,9 +1292,13 @@ export class Importer {
           if (pending !== undefined) await pending;
         } catch (error) {
           store.seal(run, { complete: false, reason: 'malformed' });
+          const member =
+            error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
+              ? ` (member ${error.memberIndex})`
+              : '';
           return finish(
             signal.aborted || error instanceof Interrupted ? 'interrupted' : 'invalid-dump',
-            'Input is incomplete or invalid',
+            `Input is incomplete or invalid${member}`,
           );
         }
         const seal = store.seal(run, { complete: true, skipped });
@@ -1254,8 +1341,8 @@ export class Importer {
                       source: row.source,
                       converterRevision: row.converter_revision,
                     });
-              const planned = await this.plan(configured, run, staged, signal, write);
-              if (!planned) return 'failed';
+              const planned = await this.planOnce(configured, run, staged, signal, write);
+              if (!planned || planned === 'failed') return planned === 'failed' ? 'failed' : null;
               for (const pending of store.pendingRecord(run, row.recordKey))
                 if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
               return planned;
@@ -1342,6 +1429,8 @@ export class Importer {
     } finally {
       this.runControllers.delete(signal);
       this.progressObservers.delete(signal);
+      this.planInflight.delete(signal);
+      this.planningStack.delete(signal);
       this.session.release(ownership);
     }
   }

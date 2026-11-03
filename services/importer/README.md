@@ -286,6 +286,49 @@ bun services/importer/src/cli.ts \
 
 `--source` accepts `bangumi`, `vndb`, `openlibrary`, or `wikidata`. `--dump -` reads standard input. `--source-alias` selects a configured source identifier, and `--disappearance-threshold` accepts a number from 0 through 1. `--api` and `--auth` must be HTTPS origins with no path, query, fragment, or credentials. `--account-key` names the private JWK, `--account` is its account UUID, and `--client` is the registered first-party client ID. The CLI has no switch for weakening the origin rules. `--help` prints usage without reading the key, opening SQLite, or contacting Auth or the API.
 
+### Open Library dump set
+
+Open Library publishes author, work and edition dumps as separate files. `--dump-set` names one version-1
+local JSON manifest that lists those files as one complete capture for the configured source alias. It is
+mutually exclusive with `--dump` and is accepted only for `--source openlibrary`. The set is the entire
+alias generation, not a patch, append, native-profile choice or disappearance override.
+
+```json
+{
+  "version": 1,
+  "source": "openlibrary",
+  "members": [
+    { "family": "author", "path": "ol_dump_authors.txt" },
+    { "family": "work", "path": "ol_dump_works.txt" },
+    { "family": "edition", "path": "ol_dump_editions.txt" }
+  ]
+}
+```
+
+```sh
+bun services/importer/src/cli.ts --source openlibrary --dump-set /srv/imports/open-library/manifest.json \
+  --state /var/lib/rezics/importer.sqlite --api https://api.rezics.example \
+  --account-key /run/secrets/rezics-importer-account.jwk --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
+  --client rezics-importer --auth https://auth.rezics.example
+```
+
+The manifest may list at most 64 members and is at most 64 KiB. Paths are at most 4096 bytes. Relative
+member paths resolve from the manifest directory. All three families must appear; an explicitly empty
+member file is an empty family under the ordinary complete-input and disappearance rules. A member's
+declared family must match decoded TSV framing. Author members are admitted for completeness and skipped
+as catalogue records, matching the work/edition converter. Duplicate keys, family mismatch, missing
+members, malformed late input and cancellation invalidate the whole capture. One generation, one seal
+and one coordinator run cover every member. A local SHA-256 of consumed member bytes and per-member
+lengths is a capture digest, not a source revision or licence.
+
+Decision: dump-set admission uses a version-1 JSON manifest with required `source` and ordered
+`family`/`path` members; authors remain non-catalogue framing members.
+
+Ordinary rerun of the same `--dump-set` command first resolves prior sealed work under existing
+ready/finalizing recovery. Changing or deleting the manifest does not rewrite unknown native bodies.
+Keep the same state path and current credentials. Explicit no-input resume remains the sealed dump-free
+resume command.
+
 Wikidata input accepts the decompressed native mixed Item/Property JSON dump directly, with one entity per
 line inside its JSON array; existing item-only JSONL input also works. No item extraction or caller-side filter
 is needed. The [official JSON dump guidance](<https://www.wikidata.org/w/index.php?title=Wikidata:Database_download&oldid=2479770906#JSON_dumps_(recommended)>)

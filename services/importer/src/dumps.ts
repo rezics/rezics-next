@@ -8,6 +8,9 @@ import {
   type DumpCounters,
 } from './dumps-bytes';
 
+/** Declared Open Library dump-set family; unset keeps mixed single-dump skipping. */
+export type OpenLibraryDumpFamily = 'author' | 'work' | 'edition';
+
 function invalid(): never {
   throw new Error('Invalid dump record or framing');
 }
@@ -110,6 +113,7 @@ export async function* readDump(
     maxRecordBytes?: number | undefined;
     maxChunkBytes?: number;
     counters?: DumpCounters;
+    openLibraryFamily?: OpenLibraryDumpFamily;
   } = {},
 ): AsyncGenerator<SourceRecord> {
   const chunkCap = dumpChunkLimit(options.maxChunkBytes);
@@ -266,11 +270,27 @@ export async function* readDump(
             (payload.type as Record<string, unknown>).key !== type
           )
             return invalid();
-          if (type !== '/type/work' && type !== '/type/edition') continue;
-          if (!(type === '/type/work' ? /^\/works\/OL[1-9]\d*W$/ : /^\/books\/OL[1-9]\d*M$/).test(id!))
-            return invalid();
-          key = id!;
-          revision = rev!;
+          const family = options.openLibraryFamily;
+          if (family) {
+            const expectedType =
+              family === 'author' ? '/type/author' : family === 'work' ? '/type/work' : '/type/edition';
+            const identity =
+              family === 'author'
+                ? /^\/authors\/OL[1-9]\d*A$/
+                : family === 'work'
+                  ? /^\/works\/OL[1-9]\d*W$/
+                  : /^\/books\/OL[1-9]\d*M$/;
+            if (type !== expectedType || !identity.test(id!)) return invalid();
+            if (family === 'author') continue;
+            key = id!;
+            revision = rev!;
+          } else {
+            if (type !== '/type/work' && type !== '/type/edition') continue;
+            if (!(type === '/type/work' ? /^\/works\/OL[1-9]\d*W$/ : /^\/books\/OL[1-9]\d*M$/).test(id!))
+              return invalid();
+            key = id!;
+            revision = rev!;
+          }
         } else {
           payload = object(text);
           if (source === 'bangumi') {
