@@ -1,9 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-const contract = JSON.parse(
-  readFileSync(new URL('../../../../contracts/openapi.json', import.meta.url), 'utf8'),
-);
+const contract = JSON.parse(readFileSync(new URL('../../../../contracts/openapi.json', import.meta.url), 'utf8'));
 
 test('Subject thread OpenAPI exposes the closed contextual card envelope', () => {
   const operation = contract.paths['/v1/subjects/{id}/threads'].get;
