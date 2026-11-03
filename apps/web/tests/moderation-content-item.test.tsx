@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, createElement, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
@@ -14,6 +14,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadModerationReportsRequest, prepareModerationReportRead } = await import('../src/moderation/reports-read');
 
 const reportId = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
+const moderationMountResources = { windows: 0, roots: 0, peakWindows: 0, peakRoots: 0 };
 const longEvidence = `Full submitted evidence starts here.\n${'The evidence remains complete across its original paragraph. '.repeat(80)}End of submitted evidence.`;
 const longRevision = `Historical reported revision starts here.\n${'The historic revision is kept separately from the current target. '.repeat(50)}End of historical revision.`;
 const longCurrent = `Current target starts here.\n${'The current target is independently supplied and disclosed. '.repeat(50)}End of current target.`;
@@ -125,10 +126,17 @@ async function withDom(
   }) => Promise<void>,
 ) {
   const { window, restore } = await makeWindow();
+  moderationMountResources.windows++;
+  moderationMountResources.peakWindows = Math.max(
+    moderationMountResources.peakWindows,
+    moderationMountResources.windows,
+  );
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  moderationMountResources.roots++;
+  moderationMountResources.peakRoots = Math.max(moderationMountResources.peakRoots, moderationMountResources.roots);
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   cache.setQueryData(['session'], currentSession);
   const flush = async () =>
@@ -143,10 +151,18 @@ async function withDom(
     await setLocale('en', { reload: false });
     await run({ window, host: host as unknown as HTMLDivElement, root, cache, render, flush });
   } finally {
-    await act(async () => root.unmount());
-    cache.clear();
-    await window.happyDOM.close();
-    restore();
+    try {
+      await act(async () => root.unmount());
+    } finally {
+      moderationMountResources.roots--;
+      cache.clear();
+      try {
+        await window.happyDOM.close();
+      } finally {
+        moderationMountResources.windows--;
+        restore();
+      }
+    }
   }
 }
 
@@ -533,6 +549,96 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(host.textContent).toContain(m.moderation_bulk_unattempted());
     expect(host.textContent).not.toContain('Bulk row 1');
   });
+});
+
+test('moderation queue mount, subscriptions and cleanup plateau across 1, 10 and 50 visits', async () => {
+  const bulkModule = await import('../src/moderation/reports-bulk-action');
+  const originalFactory = bulkModule.createReportsBulkAction;
+  const { AuthoringDepartureState } = await import('../src/threads/authoring-departure');
+  const prototype = AuthoringDepartureState.prototype;
+  const originalRegister = prototype.register;
+  const diagnosticPrototype = prototype as unknown as { notify: () => void };
+  const originalNotify = diagnosticPrototype.notify;
+  let currentOwners = new Set<AuthoringDepartureState>();
+  let renderCount = 0;
+  let notifications = 0;
+  let controllerSubscriptions = 0;
+  let controllerUnsubscriptions = 0;
+  let activeControllerListeners = 0;
+  let peakControllerListeners = 0;
+  const factorySpy = spyOn(bulkModule, 'createReportsBulkAction').mockImplementation((...args) => {
+    const controller = originalFactory(...args);
+    const subscribe = controller.subscribe;
+    controller.subscribe = (listener) => {
+      const unsubscribe = subscribe(listener);
+      controllerSubscriptions++;
+      activeControllerListeners++;
+      peakControllerListeners = Math.max(peakControllerListeners, activeControllerListeners);
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        controllerUnsubscriptions++;
+        activeControllerListeners--;
+        unsubscribe();
+      };
+    };
+    return controller;
+  });
+  prototype.register = function (draft) {
+    currentOwners.add(this);
+    return originalRegister.call(this, draft);
+  };
+  diagnosticPrototype.notify = function (this: InstanceType<typeof AuthoringDepartureState>) {
+    notifications++;
+    originalNotify.call(this);
+  };
+  const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
+  const onAction: ReportQueueAction = async () => ({ ok: true });
+  try {
+    for (const cycles of [1, 10, 50]) {
+      const priorRenders = renderCount;
+      const priorNotifications = notifications;
+      for (let cycle = 0; cycle < cycles; cycle++) {
+        currentOwners = new Set();
+        await withDom(async ({ render }) => {
+          function CountedQueue() {
+            renderCount++;
+            return createElement(BoardReportQueue, {
+              reports: [reportRows[1]!],
+              targets: [],
+              onAction,
+            });
+          }
+          await render(createElement(CountedQueue));
+          expect(moderationMountResources.roots).toBe(1);
+          expect(moderationMountResources.windows).toBe(1);
+          expect(activeControllerListeners).toBe(1);
+          expect(currentOwners.size).toBe(1);
+          for (const owner of currentOwners)
+            expect((owner as unknown as { listeners: Set<unknown> }).listeners.size).toBe(1);
+        });
+        expect(moderationMountResources.roots).toBe(0);
+        expect(moderationMountResources.windows).toBe(0);
+        expect(activeControllerListeners).toBe(0);
+        expect(currentOwners.size).toBe(1);
+        for (const owner of currentOwners)
+          expect((owner as unknown as { listeners: Set<unknown> }).listeners.size).toBe(0);
+      }
+      expect(renderCount - priorRenders).toBe(cycles);
+      expect(notifications - priorNotifications).toBeLessThanOrEqual(cycles * 8);
+    }
+    expect(moderationMountResources.peakRoots).toBe(1);
+    expect(moderationMountResources.peakWindows).toBe(1);
+    expect(peakControllerListeners).toBe(1);
+    expect(activeControllerListeners).toBe(0);
+    expect(controllerSubscriptions).toBe(61);
+    expect(controllerUnsubscriptions).toBe(controllerSubscriptions);
+  } finally {
+    factorySpy.mockRestore();
+    prototype.register = originalRegister;
+    diagnosticPrototype.notify = originalNotify;
+  }
 });
 
 test('the default Reports visit hides its private case when the same account receives a replacement session', async () => {

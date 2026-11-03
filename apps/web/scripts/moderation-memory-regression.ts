@@ -14,6 +14,7 @@ const contentCases = [
   'Reports and Appeals compose complete, independently labelled case frames around real evidence and review controls',
   'report and appeal sparse, loading, denied, stale, unavailable and closed states disclose no case content',
   'loaded bulk reports keep the page bound, restore review and cancel focus, and retry only the exact uncertain item',
+  'moderation queue mount, subscriptions and cleanup plateau across 1, 10 and 50 visits',
   'the default Reports visit hides its private case when the same account receives a replacement session',
 ];
 
