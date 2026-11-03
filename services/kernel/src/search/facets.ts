@@ -97,7 +97,10 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
   if (scope.kind !== 'realm' && scope.kind !== 'collection') invalid('/scope/kind', 'invalid_format');
   if (typeof scope.id !== 'string' || !scope.id || !scope.id.isWellFormed()) invalid('/scope/id', 'invalid_format');
   if (body.text !== undefined && typeof body.text !== 'string') invalid('/text', 'invalid_type');
-  if (body.languages !== undefined && (!Array.isArray(body.languages) || body.languages.some((v) => typeof v !== 'string')))
+  if (
+    body.languages !== undefined &&
+    (!Array.isArray(body.languages) || body.languages.some((v) => typeof v !== 'string'))
+  )
     invalid('/languages', 'invalid_type');
   const facets = validateFacets({
     ...(body.text === undefined ? {} : { text: body.text as string }),

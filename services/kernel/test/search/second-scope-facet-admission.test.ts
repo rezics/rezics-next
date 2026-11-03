@@ -149,16 +149,20 @@ test('opaque continuations bind scope, principal, conditions and dynamic admissi
     fixture().admit,
   );
   const changedConditions = await admitScopedFacetRequest(
-    { scope: { kind: 'realm', id: 'r-1' }, conditions: { not: { or: [{ subject: { realm: 'r-2' } }, { true: true }] } }, facets: [{ property: 'type' }] },
+    {
+      scope: { kind: 'realm', id: 'r-1' },
+      conditions: { not: { or: [{ subject: { realm: 'r-2' } }, { true: true }] } },
+      facets: [{ property: 'type' }],
+    },
     fixture().admit,
   );
   expect(admitted.scopeBinding?.request).not.toEqual(changedConditions.scopeBinding?.request);
   expect(() =>
     validateFacetCursorRelease([position], release, { request: 'b'.repeat(64), admission: 'e'.repeat(64) }),
   ).toThrow(expect.objectContaining({ code: 'search_restart_required' }));
-  expect(() => validateFacetCursorRelease([position], { changed: true } as unknown as FilterRelease, input.scopeBinding)).toThrow(
-    expect.objectContaining({ code: 'search_restart_required' }),
-  );
+  expect(() =>
+    validateFacetCursorRelease([position], { changed: true } as unknown as FilterRelease, input.scopeBinding),
+  ).toThrow(expect.objectContaining({ code: 'search_restart_required' }));
   expect(facetCursorBinding(input, facet).request).not.toEqual(
     facetCursorBinding({ ...input, languages: ['zh-Hant'] }, facet).request,
   );

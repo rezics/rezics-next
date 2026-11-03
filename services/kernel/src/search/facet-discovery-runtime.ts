@@ -148,13 +148,7 @@ export function validateFacetCursorRelease(
   release: FilterRelease,
   scopeBinding?: FacetScopeCursorBinding,
 ) {
-  if (
-    positions.some(
-      (previous) =>
-        previous &&
-        previous.release !== facetCursorReleaseBinding(release, scopeBinding),
-    )
-  )
+  if (positions.some((previous) => previous && previous.release !== facetCursorReleaseBinding(release, scopeBinding)))
     throw restart();
 }
 
