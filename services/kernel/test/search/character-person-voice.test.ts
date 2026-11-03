@@ -253,7 +253,7 @@ test('first next and final retained pages stay ordered through dense current voi
   const subjects: IndexedSubject[] = Array.from({ length: 20 }, (_, n) => ({
     id: id(n + 100),
     type: 'schema:Movie',
-    visibility: 'visible',
+    visibility: accepted.has(id(n + 100)) ? 'visible' : 'hidden',
     redirect: null,
     securityRevision: 1,
     labels: [],

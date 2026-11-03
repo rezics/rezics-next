@@ -113,10 +113,8 @@ export async function checkHits(
           return { position: snapshot.position, subjects: validateRequestSourceSnapshot(snapshot, partition, chunk) };
         });
         if (!read.ok) return;
-        for (const [id, subject] of read.value.subjects) {
-          subjects.set(id, subject);
-          positions.set(id, read.value.position);
-        }
+        for (const id of chunk) positions.set(id, read.value.position);
+        for (const [id, subject] of read.value.subjects) subjects.set(id, subject);
       }
       const points = new Map<string, Point>();
       const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
@@ -277,13 +275,11 @@ export async function checkHits(
               const before = subjects.get(id);
               const after = read.value.subjects.get(id);
               if (
-                !before ||
-                !after ||
                 positions.get(id) !== read.value.position ||
-                after.visibility !== 'visible' ||
-                after.redirect !== null ||
-                after.type !== before.type ||
-                after.securityRevision !== before.securityRevision
+                after?.visibility !== before?.visibility ||
+                after?.redirect !== before?.redirect ||
+                after?.type !== before?.type ||
+                after?.securityRevision !== before?.securityRevision
               )
                 retired.add(id);
             }
