@@ -119,7 +119,14 @@ export function ConversationBranches({
   }, [hash, scope, model]);
 
   function follow(event: MouseEvent, origin: ConversationRow) {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
       return;
     if (!ownsVisit()) return;
     const constructor = event.currentTarget.ownerDocument.defaultView?.Element;
@@ -240,7 +247,10 @@ export function ConversationBranches({
                     <ol className="flex min-w-0 flex-wrap items-center gap-1">
                       {row.ancestors.map((index) => (
                         <li key={index} className="min-w-0">
-                          <a href={`#${model.rows[index]!.anchorId}`} className={`${controlClass} inline-flex items-center underline underline-offset-4`}>
+                          <a
+                            href={`#${model.rows[index]!.anchorId}`}
+                            className={`${controlClass} inline-flex items-center underline underline-offset-4`}
+                          >
                             {m.thread_branch_position({ position: index + 1 })}
                           </a>
                         </li>
@@ -250,7 +260,11 @@ export function ConversationBranches({
                 ) : null}
                 {row.continuation ? (
                   <a
-                    href={model.byId.has(row.continuation) ? `#post-${row.continuation}` : navigation.exactHref(row.continuation)}
+                    href={
+                      model.byId.has(row.continuation)
+                        ? `#post-${row.continuation}`
+                        : navigation.exactHref(row.continuation)
+                    }
                     className={`${controlClass} inline-flex items-center underline underline-offset-4`}
                   >
                     {m.thread_branch_continue()}

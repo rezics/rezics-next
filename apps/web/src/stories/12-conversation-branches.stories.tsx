@@ -16,6 +16,7 @@ const rows = Array.from({ length: 12 }, (_, index) => ({
   threadId: recording.thread.id,
   parentId: index === 0 || index === 2 ? null : index === 1 ? first.id : id(299 + index),
   availability: 'available' as const,
+  visibility: 'public' as const,
   authorId: author.id,
   mediaIds: [],
   body: fromPlainText(
@@ -27,44 +28,75 @@ const rows = Array.from({ length: 12 }, (_, index) => ({
 const page: ThreadReadingPage = {
   thread: { ...recording.thread, firstPost: rows[0]! },
   posts: { posts: rows, next: 'prepared-opaque-page-cursor' },
-  authors: { [author.id]: { ...author, kind: 'actor', state: 'active', displayName: 'A reader with a deliberately long name '.repeat(3) } },
-  subjects: [], provenanceSubjects: [], mentions: {},
-  verification: { sitekey: '', scriptUrl: '' }, now: first.createdAt,
+  authors: {
+    [author.id]: {
+      ...author,
+      kind: 'actor',
+      state: 'active',
+      displayName: 'A reader with a deliberately long name '.repeat(3),
+    },
+  },
+  subjects: [],
+  provenanceSubjects: [],
+  mentions: {},
+  verification: { sitekey: '', scriptUrl: '' },
+  now: first.createdAt,
 };
 const boundaries: ThreadReadingPage = {
   ...page,
-  posts: { ...page.posts, posts: [
-    ...rows,
-    { ...rows[1]!, id: id(400), parentId: id(401) },
-    { ...rows[1]!, id: id(401), parentId: id(400) },
-    { ...rows[1]!, id: id(402), parentId: id(402) },
-    { ...rows[1]!, id: id(403), parentId: id(999) },
-    { ...rows[1]!, id: id(404), parentId: null, availability: 'withheld', body: null, sha256: null, removed: true },
-    { ...rows[1]!, id: id(405), parentId: id(404) },
-  ] },
+  posts: {
+    ...page.posts,
+    posts: [
+      ...rows,
+      { ...rows[1]!, id: id(400), parentId: id(401) },
+      { ...rows[1]!, id: id(401), parentId: id(400) },
+      { ...rows[1]!, id: id(402), parentId: id(402) },
+      { ...rows[1]!, id: id(403), parentId: id(999) },
+      { ...rows[1]!, id: id(404), parentId: null, availability: 'withheld', body: null, sha256: null, removed: true },
+      { ...rows[1]!, id: id(405), parentId: id(404) },
+    ],
+  },
 };
 
 /** Prepared page projection: no fixture implies native hierarchy or additional read authority. */
 function Journey({ boundaryStates = false }: { boundaryStates?: boolean }) {
   const supplied = boundaryStates ? boundaries : page;
-  return <div className="min-h-screen bg-background p-3 text-foreground sm:p-6">
-    <p className="mx-auto mb-4 max-w-3xl rounded-lg border p-3 text-sm">Prepared reply-branch fixture — supplied rows only</p>
-    <ThreadReading page={supplied} Post={ThreadReadingPost} session="signed-in"
-      personal={{ viewerId: author.id, idempotencyKey: id(800), reactions: {}, reviewVotes: {} }}
-      returnTo="/" signedOut={null}
-      renderHeader={() => <h1 className="text-2xl font-semibold">Prepared bounded conversation</h1>}
-      onMutation={async () => {}} onPageRefresh={async () => supplied} />
-  </div>;
+  return (
+    <div className="min-h-screen bg-background p-3 text-foreground sm:p-6">
+      <p className="mx-auto mb-4 max-w-3xl rounded-lg border p-3 text-sm">
+        Prepared reply-branch fixture — supplied rows only
+      </p>
+      <ThreadReading
+        page={supplied}
+        Post={ThreadReadingPost}
+        session="signed-in"
+        personal={{ viewerId: author.id, idempotencyKey: id(800), reactions: {}, reviewVotes: {} }}
+        returnTo="/"
+        signedOut={null}
+        renderHeader={() => <h1 className="text-2xl font-semibold">Prepared bounded conversation</h1>}
+        onMutation={async () => {}}
+        onPageRefresh={async () => supplied}
+      />
+    </div>
+  );
 }
 const meta = {
-  title: 'Pages/Community/Bounded conversation branches', component: Journey,
+  title: 'Pages/Community/Bounded conversation branches',
+  component: Journey,
   parameters: {
     layout: 'fullscreen',
-    viewport: { options: {
-      phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-      desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-    } },
-    docs: { description: { component: 'Prepared interactions compose the real ThreadReading, passed Post and reply composer. Long bylines and wrapping controls are intentional. These stories make no native or rendered acceptance claim. Existing Thread reading / ExistingReplyRelationship and SelectedParent remain companion scenarios.' } },
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+    docs: {
+      description: {
+        component:
+          'Prepared interactions compose the real ThreadReading, passed Post and reply composer. Long bylines and wrapping controls are intentional. These stories make no native or rendered acceptance claim. Existing Thread reading / ExistingReplyRelationship and SelectedParent remain companion scenarios.',
+      },
+    },
   },
 } satisfies Meta<typeof Journey>;
 export default meta;
@@ -116,12 +148,16 @@ export const PhoneDark: Story = { globals: { viewport: { value: 'phone390' }, th
 export const DesktopLight: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'light' }, play: journey };
 export const DesktopDark: Story = { globals: { viewport: { value: 'desktop1280' }, theme: 'dark' }, play: journey };
 export const BoundedAndUnavailable: Story = {
-  args: { boundaryStates: true }, globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+  args: { boundaryStates: true },
+  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getAllByRole('link', { name: m.thread_branch_continue() }).length).toBeGreaterThan(0);
     const missing = canvasElement.querySelector<HTMLElement>(`#post-${id(403)}`)!;
-    await expect(within(missing).getByRole('link', { name: m.thread_branch_parent_destination() })).toHaveAttribute('href', expect.stringContaining(`post=${id(999)}`));
+    await expect(within(missing).getByRole('link', { name: m.thread_branch_parent_destination() })).toHaveAttribute(
+      'href',
+      expect.stringContaining(`post=${id(999)}`),
+    );
     const withheld = canvasElement.querySelector<HTMLElement>(`#post-${id(405)}`)!;
     await expect(within(withheld).getByRole('link', { name: m.thread_reply_parent_unavailable() })).toBeVisible();
     await expect(canvasElement.querySelectorAll('[data-relationship-stop="cycle"]')).toHaveLength(3);
