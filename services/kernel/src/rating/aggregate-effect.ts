@@ -23,6 +23,7 @@ import readQuestionScale from './question-scale-read.sql';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
+import { advanceRatingSource, ratingSourcePosition, type RatingSourcePosition } from './realm-rank-delivery.ts';
 
 const VOTE_CHANGED = 'com.rezics.rating.vote.changed.v1';
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
@@ -36,6 +37,8 @@ type RatingChangeFields = {
   targetId: string;
   revision: number;
   at: string | Date;
+  source?: RatingSourcePosition;
+  appliedAt?: string;
 };
 export type RatingChange = RatingChangeFields &
   (
@@ -104,7 +107,7 @@ function validateChange(change: RatingChange): { route: number; at: string; appl
   return {
     route,
     at,
-    appliedAt: change.rekey ? normalizeInstant(change.rekeyAt) : at,
+    appliedAt: change.rekey ? normalizeInstant(change.rekeyAt) : normalizeInstant(change.appliedAt ?? at),
     shard: keyByte % 16,
   };
 }
@@ -196,6 +199,7 @@ async function applyPartition(
     await runCommand(pool, { partition }, async (tx, command) => {
       const totals = new PopulationTotalCapture();
       let applied = 0;
+      let received = 0;
       let figurePosition: string | undefined;
       const markFigurePending = async (change: RatingChange, route: number): Promise<void> => {
         if (change.questionId !== STANDARD_QUESTION_ID) return;
@@ -225,6 +229,12 @@ async function applyPartition(
           target_id: change.targetId,
           counting_key: change.countingKey,
         };
+
+        if (change.source) {
+          if (!(await advanceRatingSource(tx, route, 'aggregate',
+            [change.voterId, change.questionId, change.populationId, change.targetId], change.source))) continue;
+          received += 1;
+        }
 
         if (change.rekey) {
           const existing = await readPopulationVoteForRekey.run(tx, {
@@ -307,10 +317,10 @@ async function applyPartition(
         await markFigurePending(change, route);
         applied += 1;
       }
-      if (applied === 0) throw new NoAggregateChange();
+      if (applied === 0 && received === 0) throw new NoAggregateChange();
       return {
         value: undefined,
-        events: [{ type: AGGREGATE_APPLIED, data: { applied } }, ...(await totals.commit(tx))],
+        events: [{ type: AGGREGATE_APPLIED, data: { applied: Math.max(applied, received) } }, ...(await totals.commit(tx))],
       };
     });
   } catch (error) {
@@ -380,6 +390,7 @@ export async function applyRatingVoteEvent(pool: Pool, ratingCounter: RatingCoun
     units: data.units,
     revision: data.revision,
     at: event.time,
+    source: ratingSourcePosition(event, data.voterId, data.revision),
   }));
   await applyRatingChanges(pool, changes);
 }
@@ -432,6 +443,7 @@ export async function applyRatingSegmentPageEvent(
           questionId: string;
           targetId: string;
           countedTargetId?: string | null;
+          changedAt?: string;
           units: number | null;
           revision: number;
           populations: string[];
@@ -445,6 +457,7 @@ export async function applyRatingSegmentPageEvent(
           questionId: string;
           targetId: string;
           countedTargetId?: string | null;
+          changedAt?: string;
           units: number | null;
           revision: number;
         }>;
@@ -467,6 +480,7 @@ export async function applyRatingSegmentPageEvent(
             rekey: true as const,
             rekeyAt: data.at,
             rekeyAllowMissing: data.allowMissing,
+            source: ratingSourcePosition(event, data.voterId, vote.revision),
           })),
     );
     await applyRatingChanges(pool, changes);
@@ -478,6 +492,7 @@ export async function applyRatingSegmentPageEvent(
       questionId: string;
       targetId: string;
       countedTargetId?: string | null;
+          changedAt?: string;
       units: number | null;
       revision: number;
     },
@@ -491,7 +506,9 @@ export async function applyRatingSegmentPageEvent(
       populationId,
       targetId: vote.countedTargetId ?? vote.targetId,
       revision: vote.revision,
-      at: event.time,
+      at: vote.changedAt ?? event.time,
+      appliedAt: event.time,
+      source: ratingSourcePosition(event, data.voterId, vote.revision),
       ...(data.direction === 'removing' ? { remove: true as const } : { units: vote.units }),
     };
   };

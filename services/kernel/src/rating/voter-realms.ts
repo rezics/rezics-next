@@ -15,6 +15,7 @@ import deleteRealm from './voter-realm-delete.sql';
 import promoteRealm from './voter-realm-promote.sql';
 import ensureVoterState from './voter-state-ensure.sql';
 import readVoterState from './voter-state-read.sql';
+import { advanceRatingSource, ratingSourcePosition } from './realm-rank-delivery.ts';
 
 export const VOTER_REALM_CAP = 100;
 const MEMBERSHIP = 'com.rezics.community.realm.membership.v1';
@@ -99,6 +100,8 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
           },
         },
         async (tx, { transactionId }) => {
+          if (!(await advanceRatingSource(tx, route, 'membership', [voterId, realmId], ratingSourcePosition(event, realmId))))
+            return { value: null, events: [] };
           const row = await readRealm.run(tx, parameters(address));
           const changedRealms = new Set<string>([realmId]);
           if (!row && role === 'member') {

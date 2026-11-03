@@ -38,7 +38,7 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
       ]);
       // The direct module-registration test uses a minimal context; composed workers always provide a DBOS client.
       if (context.client) {
-        registerRatingSegmentWork(context);
+        registerRatingSegmentWork(context, counter);
         registerRatingSubjectMergeWork(context);
       }
     },

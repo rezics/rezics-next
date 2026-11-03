@@ -275,6 +275,26 @@ freshness is exactly the existing figure freshness bound, rather than a new sync
 publication retains the last eligible published snapshot. Epoch changes exclude old-generation rows immediately;
 the existing durable republish pages admit new-generation rows as they converge. An inactive prior admits none.
 
+Decision: retain native source epoch/position frontiers for membership, eligibility and vote/segment delivery;
+finish a population transition only after its committed pages have reached the shared aggregate consumer.
+
+Membership frontiers live in the voter home, keyed by voter and Realm, and eligibility frontiers by voter. They
+survive removal of the membership row. A delayed old join, leave, suspension or reinstatement cannot reset a newer
+transition. Target homes retain a frontier per voter/question/population/target, including after a removal; native
+source epoch and position order lifecycle changes independently of the vote revision. Within one source command,
+counted revision orders replacements. Delayed additions cannot resurrect departed votes, and old removals cannot
+undo a rejoin or reinstatement. Segment additions preserve original vote times for controller winner selection.
+
+The default worker receipts each source page by transition and cursor, replaying its exact committed data and
+source position after a crash. After releasing the voter command it invokes the same aggregate consumer used by
+the durable relay, including population-total receipt/acknowledgment. A page cannot complete its workflow step
+until this delivery succeeds. Terminal settlement therefore follows every page's component/total delivery; replaced
+jobs retain the existing begin-before-finish pending accounting. Figure/prior publication remains asynchronous.
+Search must preserve each candidate's published `asOf`, revision and prior epoch during convergence: an eligible
+published snapshot can remain visible while updating. `population_pending`/aggregate `updating` describes segment
+work, not a completed rank publication or an atomic Access/rank snapshot. An ended prior immediately admits no
+candidates. A denied viewer loses access independently of this work and cannot use a saved continuation.
+
 Every continuation is signed with the native token keyring and additionally encrypted so withheld candidate keys
 cannot appear in its payload. It expires after 15 minutes and binds Realm, question, partition, sort, limit,
 verified credential authority, home epoch, rank source generation and population prior generation. Rank generation
@@ -294,6 +314,14 @@ Operation Cost:
   point operations. There is no candidate lookahead, refill, cross-partition candidate scan, aggregate read,
   history replay or population expansion. B-tree descent grows logarithmically; authority retains its existing
   bounded native cost. Publication adds one exact rank upsert/delete and at most one generation upsert per figure.
+- Membership/eligibility delivery adds one indexed frontier upsert per source event and per changed target key,
+  with no population, membership or history scan. Pages remain at most 100 votes and 101 populations; aggregate
+  commands remain at most 100 changes, 16 component shards per figure and the existing population-total bounds.
+  Source page replay uses one exact native receipt; terminal settlement uses the existing exact population receipts.
+  Retained frontier storage grows with distinct delivered keys, including withdrawn keys; delivery cost does not
+  grow with their unrelated history. These are declared bounds, not measured physical growth proof.
+- `test/rating/realm-rank-membership.test.ts` covers existing votes joining, leaving, rejoining, prior/threshold and
+  rank-generation changes, terminal pending, unchanged Global, immediate denial and replayed native old pages/votes.
 - Focused outcome: `test/rating/realm-rank.test.ts` exercises native votes/default workers, threshold crossing,
   signed continuation restart, current candidate withholding, clear and membership withdrawal, unauthorized
   access and unchanged Global figures. These authored cases are distinct from measured runtime proof; broad

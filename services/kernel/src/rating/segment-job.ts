@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { runCommand, type CommandEvent } from '../command/command.ts';
+import { authoritativeTimeValue, runCommand, type CommandEvent } from '../command/command.ts';
+import type { RatingCounter } from '../access/rating-counter.ts';
+import { applyRatingSegmentPageEvent } from './aggregate-effect.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -68,6 +70,7 @@ export type SegmentPageEventData = {
   votes: SegmentVote[];
 };
 export type SegmentPageResult = {
+  eventTime?: string;
   cursor: SegmentCursor | null;
   done: boolean;
   eventData: SegmentPageEventData;
@@ -275,6 +278,7 @@ export async function finishRatingPopulationJob(
 export async function processRatingSegmentPage(
   pool: Pool,
   input: RatingSegmentJob & { after: SegmentCursor | null },
+  ratingCounter?: RatingCounter,
 ): Promise<SegmentPageResult> {
   const { voterRoute } = validateJob(input);
   validateCursor(input.after);
@@ -282,7 +286,20 @@ export async function processRatingSegmentPage(
     isRatingRekeyJob(input)
       ? { voterId: input.voterId, direction: 'rekey', at: input.at, allowMissing, votes }
       : { voterId: input.voterId, direction: input.direction, votes };
-  const outcome = await runCommand(pool, { partition: partitionOf(voterRoute) }, async (tx, command) => {
+  const outcome = await runCommand(pool, {
+    partition: partitionOf(voterRoute),
+    ...(ratingCounter ? { receipt: {
+      actorAccountId: input.voterId,
+      kind: 'rating.segment.page',
+      key: `${input.transitionId}:${input.after?.questionId ?? ''}:${input.after?.targetId ?? ''}`,
+      digest: createHash('sha256').update(JSON.stringify(input)).digest(),
+    } } : {}),
+  }, async (tx, command) => {
+    // The receipt replays the exact committed page, including after a crash before foreground delivery.
+    const result = await producePage();
+    return { ...result, value: { ...result.value, eventTime: authoritativeTimeValue(command.time) } };
+
+    async function producePage(): Promise<{ value: SegmentPageResult; events: CommandEvent[] }> {
     if (isRatingEligibilityJob(input)) {
       const row = await readVoterState.run(tx, { route: voterRoute, voter_id: input.voterId });
       const activeState = input.direction === 'removing' ? 'leaving' : 'returning';
@@ -317,7 +334,7 @@ export async function processRatingSegmentPage(
         const mergeEvents: CommandEvent[] = [];
         const page: SegmentVote[] = [];
         const resolvedTargets = new Map<string, string>();
-        for (const { changedAt: _changedAt, ...vote } of votes) {
+        for (const vote of votes) {
           if (input.direction === 'adding') {
             let resolvedTarget = resolvedTargets.get(vote.targetId);
             if (resolvedTarget === undefined) {
@@ -503,7 +520,7 @@ export async function processRatingSegmentPage(
       const eligibility = await readVoterState.run(tx, { route: voterRoute, voter_id: input.voterId });
       const allowAdding = eligibility?.state === 'eligible' || eligibility?.state === 'returning';
       const eventData = data(
-        votes.map(({ changedAt: _changedAt, ...vote }) => ({
+        votes.map((vote) => ({
           ...vote,
           populations: input.direction === 'removing' || allowAdding ? [input.realmId] : [],
         })),
@@ -553,8 +570,22 @@ export async function processRatingSegmentPage(
         })),
       ],
     };
+    }
   });
   if (!outcome) throw new Error('Voter partition is unavailable while paging rating votes');
+  if (ratingCounter) {
+    await applyRatingSegmentPageEvent(pool, ratingCounter, {
+      specversion: '1.0',
+      id: outcome.transactionId,
+      source: `urn:rezics:log:${outcome.partition}.${outcome.epoch}`,
+      sequence: outcome.position.toString().padStart(19, '0'),
+      type: SEGMENT_PAGE,
+      subject: input.voterId,
+      time: outcome.value.eventTime!,
+      datacontenttype: 'application/json',
+      data: outcome.value.eventData,
+    });
+  }
   return outcome.value;
 }
 
@@ -621,10 +652,10 @@ export function ratingSegmentWorkflowId(job: RatingSegmentJob): string {
 }
 
 /** Register page and finish steps plus the membership-change starter effect. */
-export function registerRatingSegmentWork(context: WorkContext): void {
+export function registerRatingSegmentWork(context: WorkContext, ratingCounter?: RatingCounter): void {
   const processPage = DBOS.registerStep(
     async (job: RatingSegmentJob, after: SegmentCursor | null) =>
-      processRatingSegmentPage(context.pool, { ...job, after }),
+      processRatingSegmentPage(context.pool, { ...job, after }, ratingCounter),
     { name: 'rating.processSegmentPage', ...COMMAND_STEP_RETRIES },
   );
   const finishJob = DBOS.registerStep(
