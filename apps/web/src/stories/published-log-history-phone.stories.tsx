@@ -16,7 +16,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The real history route uses the existing setMyLogsStory recording/admission protocol for Owner → later page → Newest and explicit retry. Empty/refused/restart outcomes are existing constructed consumer examples. Restarted empty and signed-out recovery use the real MyLogsPageView in PatternStory/AppShell because the recorded route cannot combine those outcomes. Long uses the existing native-supported 1,000-character note fixture. Review these same exports with global phone390/desktop1280 viewports, all locales, and a 320px receiving browser. Plays are authored coverage, not executed layout or native proof.',
+          'The real history route uses the existing setMyLogsStory recording/admission protocol for Owner → later page → Newest and explicit retry. Empty/refused/restart and restart-empty outcomes are constructed consumer examples derived from the FULL recording. Restarted empty enters the guarded route with that stale cursor. Signed-out recovery is a supplemental PatternStory of MyLogsPageView when no admitted live auth transition exists; manual view props do not prove a route guard or session change. Long uses the existing native-supported 1,000-character note fixture. Review these same exports with global phone390/desktop1280 viewports, all locales, and a 320px receiving browser. Plays are authored coverage, not executed layout or native proof.',
       },
     },
   },
@@ -241,27 +241,26 @@ export const RestartedHistory: Story = {
 };
 
 export const RestartedEmpty: Story = {
-  render: () => (
-    <PatternStory visitor="Signed In" path="/library/logs?cursor=expired-epoch">
-      <AppShell navigation={myLogsNavigation}>
-        <MyLogsPageView page={{ state: 'loaded', logs: [], next: null, restarted: true }} cursor="expired-epoch" />
-      </AppShell>
-    </PatternStory>
-  ),
+  beforeEach: scenario('restart-empty'),
+  render: () => <PageStory visitor="Signed In" path="/library/logs?cursor=expired-epoch" />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText(m.library_my_logs_restarted());
     expect(canvas.getByText(m.library_logs_empty())).toBeVisible();
     expect(canvas.queryByText(m.library_my_logs_no_visible())).toBeNull();
+    expect(canvas.queryByRole('list', { name: m.library_logs_heading() })).toBeNull();
+    expect(canvas.queryByRole('link', { name: m.library_logs_more() })).toBeNull();
     const newest = canvas.getByRole('link', { name: m.library_my_logs_newest() });
     exactHistoryLink(newest, null);
     target(newest, canvasElement);
     await focus(newest);
+    expect(myLogsStoryActivity().detailReads).toBe(0);
     fits(canvasElement);
   },
 };
 
 export const SignedOutRecovery: Story = {
+  name: 'Signed-out recovery (supplemental view)',
   render: () => (
     <PatternStory visitor="Signed Out" path={`/library/logs?${new URLSearchParams({ cursor: laterCursor })}`}>
       <AppShell navigation={myLogsNavigation}>

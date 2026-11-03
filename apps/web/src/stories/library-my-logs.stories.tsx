@@ -1,11 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import { setMyLogsStory, type MyLogsScenario } from '../kernel/fake/my-logs';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { myLogsStoryActivity, setMyLogsStory, type MyLogsScenario } from '../kernel/fake/my-logs';
 import { m } from '../paraglide/messages.js';
-import { MyLogsPageView } from '../library/my-logs-page';
-import { myLogsNavigation } from '../library/my-logs';
-import { AppShell } from '../shell/shell';
-import { PageStory, PatternStory } from './page';
+import { getLocale } from '../paraglide/runtime.js';
+import { PageStory } from './page';
 import { logPreviewJourney } from '../../tests/log-preview-journey.test';
 
 const meta = {
@@ -91,11 +89,21 @@ export const Restarted: Story = {
   render: () => <PageStory visitor="Signed In" path="/library/logs?cursor=expired-epoch" />,
 };
 export const SignedOut: Story = {
-  render: () => (
-    <PatternStory visitor="Signed Out" path="/library/logs">
-      <AppShell navigation={myLogsNavigation}>
-        <MyLogsPageView page={{ state: 'signed-out' }} />
-      </AppShell>
-    </PatternStory>
-  ),
+  render: () => <PageStory visitor="Signed Out" path="/library/logs" />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const destination = `/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/library/logs`)}`;
+    await waitFor(() => expect(myLogsStoryActivity().listReads).toBe(0));
+    expect(canvas.queryByText('Kokoro', { exact: true })).toBeNull();
+    expect(canvas.queryByRole('list', { name: m.library_logs_heading() })).toBeNull();
+    expect(canvas.queryByText(m.library_logs_empty())).toBeNull();
+    const signIn =
+      canvas.queryByRole('link', { name: m.library_my_logs_sign_in() }) ??
+      canvas.queryByRole('link', { name: m.account_sign_in() });
+    if (signIn) expect(signIn).toHaveAttribute('href', destination);
+    else {
+      const url = new URL(window.location.href);
+      expect(`${url.pathname}${url.search}`).toBe(destination);
+    }
+  },
 };

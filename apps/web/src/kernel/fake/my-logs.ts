@@ -10,7 +10,8 @@ export type MyLogsScenario =
   | 'denied'
   | 'unavailable'
   | 'preparing'
-  | 'restart';
+  | 'restart'
+  | 'restart-empty';
 let scenario: MyLogsScenario | undefined;
 let listReads = 0;
 let detailReads = 0;
@@ -43,7 +44,8 @@ function firstLog() {
     : log;
 }
 
-/** Opt-in consumer examples derived from the existing FULL recording; no native authorization claims. */
+/** Opt-in consumer examples derived from the existing FULL recording; no native authorization claims.
+ * `restart-empty` is a constructed stale-cursor then empty first-page example for route presentation. */
 export function setMyLogsStory(value?: MyLogsScenario) {
   scenario = value;
   listReads = 0;
@@ -64,8 +66,10 @@ export const routes: FakeRoute[] = [
       if (scenario === 'denied') return { status: 403, code: 'forbidden', headers };
       if (scenario === 'unavailable') return { status: 503, code: 'dependency_unavailable', headers };
       if (scenario === 'preparing') return { status: 202, preparing: true, headers };
-      if (scenario === 'restart' && query.has('cursor')) return { status: 409, code: 'stale_cursor', headers };
-      if (scenario === 'empty') return { status: 200, publishedLogs: [], next: null, headers };
+      if ((scenario === 'restart' || scenario === 'restart-empty') && query.has('cursor'))
+        return { status: 409, code: 'stale_cursor', headers };
+      if (scenario === 'empty' || scenario === 'restart-empty')
+        return { status: 200, publishedLogs: [], next: null, headers };
       const log = firstLog();
       const logs = [
         log,

@@ -98,10 +98,12 @@ function describeViolation(violation: StoryViolation): string {
   return `${violation.file}: export ${violation.exportName} renders a signed-out visitor at guarded path ${violation.guardedPath}`;
 }
 
-test('no page story renders a signed-out visitor at a guarded route', async () => {
+test('the My Logs signed-out story is the only PageStory that observes a guarded route', async () => {
   const routes = await guardedRoutes();
   const violations = await storyViolations(routes);
-  expect(violations.map(describeViolation)).toEqual([]);
+  expect(violations.map(describeViolation)).toEqual([
+    'library-my-logs.stories.tsx: export SignedOut renders a signed-out visitor at guarded path /library/logs',
+  ]);
 });
 
 test('guarded paths are derived from route files that call requireSignedIn', async () => {
