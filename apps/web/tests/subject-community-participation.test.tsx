@@ -143,7 +143,9 @@ test('mounted community reactions make no initial reads and discard writes after
   });
   expect(reads).toBe(0);
   expect(requests).toBe(0);
-  expect(chips().filter((button) => button.getAttribute('aria-pressed') === 'true').map((button) => button.textContent)).toEqual([
-    `${m.reaction_insightful()}4`,
-  ]);
+  expect(
+    chips()
+      .filter((button) => button.getAttribute('aria-pressed') === 'true')
+      .map((button) => button.textContent),
+  ).toEqual([`${m.reaction_insightful()}4`]);
 });

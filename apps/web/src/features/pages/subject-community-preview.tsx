@@ -66,7 +66,9 @@ export function SubjectCommunityPreview({
       {kind === 'review' ? (
         <div
           data-slot="review-citation"
-          data-state={thread.voteCitation === undefined ? 'unavailable' : thread.voteCitation === null ? 'unscored' : 'cited'}
+          data-state={
+            thread.voteCitation === undefined ? 'unavailable' : thread.voteCitation === null ? 'unscored' : 'cited'
+          }
         >
           {thread.voteCitation === undefined ? (
             <p role="status" className="text-sm text-muted-foreground">

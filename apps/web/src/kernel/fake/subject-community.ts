@@ -78,8 +78,7 @@ export function communityThread(
       createdAt,
       revisedAt: null,
       mediaIds: [],
-      voteCitation:
-        kind === 'review' ? { questionId: id('85'), units: 14, revision: 2 } : null,
+      voteCitation: kind === 'review' ? { questionId: id('85'), units: 14, revision: 2 } : null,
       revisionId: id(kind === 'review' ? '83' : '93'),
       body: fromPlainText(
         kind === 'review'

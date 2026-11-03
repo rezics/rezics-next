@@ -100,8 +100,8 @@ test('native community windows fail malformed sources locally and retain honest 
   expect(composedCommunityRegion(undefined, expected).state).toBe('unavailable');
   expect(composedCommunityRegion({ status: 200, body: page([]) }).state).toBe('unavailable');
 
-  const reviewKey = Object.entries(plan.reads).find(([, descriptor]) =>
-    descriptor.kind === 'subjectThreads' && descriptor.threadKind === 'review',
+  const reviewKey = Object.entries(plan.reads).find(
+    ([, descriptor]) => descriptor.kind === 'subjectThreads' && descriptor.threadKind === 'review',
   )![0];
   const privateRow = {
     ...review,
@@ -114,9 +114,10 @@ test('native community windows fail malformed sources locally and retain honest 
     page: { ...loaded.page, reads, requestedReader: null },
   });
   if (publicPage.kind !== 'page') throw new Error('Expected public Subject page');
-  const publicThread = publicPage.page.community!.regions.review!.state === 'ready'
-    ? publicPage.page.community!.regions.review!.threads[0]!
-    : undefined;
+  const publicThread =
+    publicPage.page.community!.regions.review!.state === 'ready'
+      ? publicPage.page.community!.regions.review!.threads[0]!
+      : undefined;
   expect(publicThread?.voteCitation).toEqual(review.firstPost.voteCitation);
   expect(publicThread?.reactions).toEqual(review.reactions);
   expect(publicThread).not.toHaveProperty('viewerReaction');
@@ -134,8 +135,9 @@ test('native community windows fail malformed sources locally and retain honest 
     state: 'ready',
     threads: [{ viewerReaction: 'love', voteCitation: review.firstPost.voteCitation, reactions: review.reactions }],
   });
-  expect((privatePage.page.reads[reviewKey]!.body as { threads: Record<string, unknown>[] }).threads[0]!.firstPost)
-    .toHaveProperty('viewerReaction', 'sad');
+  expect(
+    (privatePage.page.reads[reviewKey]!.body as { threads: Record<string, unknown>[] }).threads[0]!.firstPost,
+  ).toHaveProperty('viewerReaction', 'sad');
 
   for (const count of [1, 5, COMMUNITY_PAGE_LIMIT]) {
     const rows = Array.from({ length: count }, (_, index) => {
@@ -143,11 +145,7 @@ test('native community windows fail malformed sources locally and retain honest 
       const postId = '01a1a000-0000-7000-8000-' + String(index + 200).padStart(12, '0');
       return { ...review, id: threadId, firstPost: { ...review.firstPost, id: postId, threadId } };
     });
-    const projected = composedCommunityRegion(
-      { status: 200, body: page(rows) },
-      { ...expected, limit: count },
-      true,
-    );
+    const projected = composedCommunityRegion({ status: 200, body: page(rows) }, { ...expected, limit: count }, true);
     expect(projected.state).toBe('ready');
     if (projected.state === 'ready') {
       expect(projected.threads).toHaveLength(count);

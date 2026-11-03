@@ -27,7 +27,11 @@ const preparedTransport = {
   async change() {
     return { ok: true as const };
   },
-  async read({ data }: { data: { kind: 'upvote' | 'downvote' | 'like' | 'love' | 'laugh' | 'insightful' | 'sad' | null } }) {
+  async read({
+    data,
+  }: {
+    data: { kind: 'upvote' | 'downvote' | 'like' | 'love' | 'laugh' | 'insightful' | 'sad' | null };
+  }) {
     return { ok: true as const, counts: { upvote: 3, like: 2, insightful: 1 }, value: data.kind };
   },
 };

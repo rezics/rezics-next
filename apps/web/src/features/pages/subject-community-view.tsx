@@ -132,77 +132,77 @@ export function SubjectCommunityRegion({
               reader !== null && thread.reactions !== undefined && thread.viewerReaction !== undefined;
             return (
               <li key={thread.id} className="min-w-0">
-              <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
-                <ContentItemHeading
-                  level={3}
-                  className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
-                >
-                  <ContentItemTitleLink
-                    className={`${linkClass} block min-h-11 content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
-                    href={threadHref}
+                <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                  <ContentItemHeading
+                    level={3}
+                    className="min-w-0 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] sm:text-lg md:text-xl"
                   >
-                    {thread.title || m.threads_untitled({}, options)}
-                  </ContentItemTitleLink>
-                </ContentItemHeading>
-                <ListRowControl
-                  data-content-item-slot="metadata"
-                  className="min-w-0 [overflow-wrap:anywhere] [&_.truncate]:overflow-visible [&_.truncate]:whitespace-normal [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
-                >
-                  <Byline
-                    author={authors?.[thread.authorId]}
-                    createdAt={thread.createdAt}
-                    now={now}
-                    showAuthor
-                    size="sm"
-                  />
-                </ListRowControl>
-                {thread.summary && (
-                  <p
-                    data-content-item-slot="preview"
-                    className="text-sm break-words text-muted-foreground [overflow-wrap:anywhere]"
-                  >
-                    {thread.summary}
-                  </p>
-                )}
-                <SubjectCommunityPreview
-                  kind={kind}
-                  thread={thread}
-                  subject={subject}
-                  locale={locale}
-                  reader={reader}
-                  interactionReady={interactionReady}
-                />
-                <ListRowControl
-                  data-content-item-slot="actions"
-                  className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
-                >
-                  <a
-                    className={actionClass}
-                    href={`/${encodeURIComponent(locale)}/boards/${encodeURIComponent(thread.boardId)}`}
-                  >
-                    {m.subject_community_board({}, options)}
-                  </a>
-                  <a
-                    data-slot="create-thread"
-                    className={actionClass}
-                    href={reviewThreadHref(locale, thread.boardId, subject.id, subject.label)}
-                  >
-                    {review ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options)}
-                  </a>
-                  {community ? (
-                    <SubjectCommunityInteractions
-                      thread={thread}
-                      subject={subject}
-                      locale={locale}
+                    <ContentItemTitleLink
+                      className={`${linkClass} block min-h-11 content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
                       href={threadHref}
-                      contextId={community.contextId ?? null}
-                      reader={reader}
-                      source={community.sourceKey ?? community.now}
-                      preparedTransport={preparedTransport}
+                    >
+                      {thread.title || m.threads_untitled({}, options)}
+                    </ContentItemTitleLink>
+                  </ContentItemHeading>
+                  <ListRowControl
+                    data-content-item-slot="metadata"
+                    className="min-w-0 [overflow-wrap:anywhere] [&_.truncate]:overflow-visible [&_.truncate]:whitespace-normal [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                  >
+                    <Byline
+                      author={authors?.[thread.authorId]}
+                      createdAt={thread.createdAt}
+                      now={now}
+                      showAuthor
+                      size="sm"
                     />
-                  ) : null}
-                </ListRowControl>
-              </ContentItemFrame>
+                  </ListRowControl>
+                  {thread.summary && (
+                    <p
+                      data-content-item-slot="preview"
+                      className="text-sm break-words text-muted-foreground [overflow-wrap:anywhere]"
+                    >
+                      {thread.summary}
+                    </p>
+                  )}
+                  <SubjectCommunityPreview
+                    kind={kind}
+                    thread={thread}
+                    subject={subject}
+                    locale={locale}
+                    reader={reader}
+                    interactionReady={interactionReady}
+                  />
+                  <ListRowControl
+                    data-content-item-slot="actions"
+                    className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
+                  >
+                    <a
+                      className={actionClass}
+                      href={`/${encodeURIComponent(locale)}/boards/${encodeURIComponent(thread.boardId)}`}
+                    >
+                      {m.subject_community_board({}, options)}
+                    </a>
+                    <a
+                      data-slot="create-thread"
+                      className={actionClass}
+                      href={reviewThreadHref(locale, thread.boardId, subject.id, subject.label)}
+                    >
+                      {review ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options)}
+                    </a>
+                    {community ? (
+                      <SubjectCommunityInteractions
+                        thread={thread}
+                        subject={subject}
+                        locale={locale}
+                        href={threadHref}
+                        contextId={community.contextId ?? null}
+                        reader={reader}
+                        source={community.sourceKey ?? community.now}
+                        preparedTransport={preparedTransport}
+                      />
+                    ) : null}
+                  </ListRowControl>
+                </ContentItemFrame>
               </li>
             );
           })}

@@ -244,7 +244,9 @@ test('Subject discussion and review summaries share semantic rows with exact ind
           const citation = first.querySelector<HTMLElement>('[data-slot="review-citation"]')!;
           expect(citation.dataset.state).toBe('cited');
           expect(citation.textContent).toContain(m.thread_provenance_rating({}, options));
-          expect(citation.textContent).toContain(m.discussion_provenance_details_rating_units({ units: '14' }, options));
+          expect(citation.textContent).toContain(
+            m.discussion_provenance_details_rating_units({ units: '14' }, options),
+          );
           expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
           expect(citation.querySelector('details')?.textContent).toContain('01a17a3b-0884-721b-91ef-d7ffd7bb58e5');
           expect(first.querySelector('[data-slot="community-reaction-summary"]')?.textContent).toContain(

@@ -75,8 +75,7 @@ function communityReactionCounts(value: unknown): CommunityReactionCounts | null
   if (!isRecord(value)) return null;
   const counts: CommunityReactionCounts = {};
   for (const [kind, count] of Object.entries(value)) {
-    if (!reactionKinds.has(kind as ReactionKind) || !Number.isSafeInteger(count) || (count as number) < 1)
-      return null;
+    if (!reactionKinds.has(kind as ReactionKind) || !Number.isSafeInteger(count) || (count as number) < 1) return null;
     counts[kind as ReactionKind] = count as number;
   }
   return counts;
@@ -277,7 +276,11 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
         now: new Date().toISOString(),
         reader,
         contextId: loaded.page.context?.id ?? null,
-        sourceKey: JSON.stringify([loaded.page.subject, loaded.page.context?.id ?? null, loaded.page.requestedRealm ?? null]),
+        sourceKey: JSON.stringify([
+          loaded.page.subject,
+          loaded.page.context?.id ?? null,
+          loaded.page.requestedRealm ?? null,
+        ]),
       },
     },
   };
@@ -309,6 +312,10 @@ export async function withSubjectCommunity(
     loaded.page.requestedReader ?? null,
   );
   community.contextId = loaded.page.context?.id ?? null;
-  community.sourceKey = JSON.stringify([loaded.page.subject, loaded.page.context?.id ?? null, loaded.page.requestedRealm ?? null]);
+  community.sourceKey = JSON.stringify([
+    loaded.page.subject,
+    loaded.page.context?.id ?? null,
+    loaded.page.requestedRealm ?? null,
+  ]);
   return { ...loaded, page: { ...loaded.page, community } };
 }
