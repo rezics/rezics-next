@@ -52,11 +52,57 @@ type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['l
 
 export type QuestionLabel = QuestionLabelHistoryResponse['labels'][number];
 export type QuestionLabelHistory = QuestionLabelHistoryResponse;
-type BanReviewGetRoute = Routes['realms'][':realmId']['bans'] extends { get: infer Get } ? Get : never;
-export type BanReviewPageQuery = BanReviewGetRoute extends { query: infer Query } ? Query : never;
-export type BanReviewPage = BanReviewGetRoute extends { response: { 200: infer Page } } ? Page : never;
-export type BanReviewPageItem = BanReviewPage extends { items: readonly (infer Item)[] } ? Item : never;
-export type BanReviewIdentity = BanReviewPageItem extends { account: infer Identity } ? Identity : never;
+export type BanReviewPageQuery = { limit?: number; cursor?: string; selectedAccountId?: string };
+export type BanReviewIdentity =
+  | {
+      state: 'available';
+      accountId: string;
+      displayName: string | null;
+      handle: string | null;
+      label: string;
+      destination: string | null;
+    }
+  | { state: 'concealed'; accountId: string; label: 'Account'; destination: null };
+export type BanReviewPageItem = {
+  accountId: string;
+  reason: string;
+  actor: string | null;
+  at: string;
+  account: BanReviewIdentity;
+  moderator: BanReviewIdentity | null;
+  unban: {
+    state: 'permitted';
+    realmId: string;
+    accountId: string;
+    observedAt: string;
+    membershipRestored: false;
+  };
+  removal: { state: 'unavailable' };
+};
+export type BanReviewPage = {
+  items: BanReviewPageItem[];
+  next: string | null;
+  context:
+    | { state: 'available'; realmTitle: string; spaceId: string; spaceTitle: string }
+    | { state: 'concealed' };
+  viewer: {
+    accountId: string;
+    clientId: string;
+    requestedBy: string | null;
+    authnEpoch: number;
+    unban: {
+      state: 'permitted';
+      operationId: 'realm.unban';
+      action: 'realm:ban';
+      resource: { route: number; id: string };
+      reauthorizes: true;
+    };
+  };
+  selected:
+    | { state: 'not-requested' }
+    | { state: 'current'; ban: BanReviewPageItem }
+    | { state: 'absent'; accountId: string; account: BanReviewIdentity };
+};
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }
@@ -87,6 +133,19 @@ type ClientApp = Elysia<
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+type GeneratedBanReviewGet = ReturnType<GeneratedKernelClient['realms']>['bans']['get'];
+type GeneratedBanReviewRead = Awaited<ReturnType<GeneratedBanReviewGet>>;
+type BanReviewRead = Omit<GeneratedBanReviewRead, 'data'> & { data: BanReviewPage | null };
+type BanReviewGetOptions = Omit<NonNullable<Parameters<GeneratedBanReviewGet>[0]>, 'query'> & {
+  query?: BanReviewPageQuery;
+};
+type BanReviewEndpoints = Omit<ReturnType<GeneratedKernelClient['realms']>['bans'], 'get'> & {
+  get(options?: BanReviewGetOptions): Promise<BanReviewRead>;
+};
+type GeneratedRealmPath = ReturnType<GeneratedKernelClient['realms']>;
+type RealmPath = Omit<GeneratedRealmPath, 'bans'> & { bans: BanReviewEndpoints };
+type RealmsClient = Omit<GeneratedKernelClient['realms'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['realms']>) => RealmPath);
 type GeneratedPostPath = ReturnType<GeneratedKernelClient['posts']>;
 type GeneratedPostHistoryPath = GeneratedPostPath['revisions'];
 type GeneratedPostHistoryRead = Awaited<ReturnType<GeneratedPostHistoryPath['get']>>;
@@ -191,13 +250,14 @@ type SourceClassificationsClient = import('./kernel/rating/source-classification
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions'
+  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
 > & {
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
   subjects: KernelSubjectsClient;
   'moderation-decisions': DecisionPages;
+  realms: RealmsClient;
 };
 export type { PostHistoryPage } from './kernel/content/history-page.ts';
 export type {

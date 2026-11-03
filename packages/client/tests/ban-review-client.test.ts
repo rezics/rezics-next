@@ -1,6 +1,7 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import {
   createKernelClient,
+  type BanReviewIdentity,
   type BanReviewPage,
   type BanReviewPageItem,
   type BanReviewPageQuery,
@@ -16,17 +17,18 @@ test('ban review GET carries pagination and exact selection and preserves the co
   const accountId = '019a1b2c-3d4e-7f00-8a00-000000000002';
   const viewerId = '019a1b2c-3d4e-7f00-8a00-000000000003';
   const at = '2026-11-04T00:00:00.000Z';
+  const account: BanReviewIdentity = { state: 'concealed', accountId, label: 'Account', destination: null };
   const item = {
     accountId,
     reason: 'Current reason',
     actor: null,
     at,
-    account: { state: 'concealed', accountId, label: 'Account', destination: null },
+    account,
     moderator: null,
     unban: { state: 'permitted', realmId, accountId, observedAt: at, membershipRestored: false },
     removal: { state: 'unavailable' },
   };
-  const page = {
+  const page: BanReviewPage = {
     items: [item],
     next: 'next/page+token',
     context: { state: 'concealed' },
@@ -59,12 +61,11 @@ test('ban review GET carries pagination and exact selection and preserves the co
       return Response.json(page);
     }) as typeof fetch,
   });
-  // The shared declaration publication still owes the selectedAccountId query member.
   const query = {
     limit: 20,
     cursor: 'page/token+with spaces',
     selectedAccountId: accountId,
-  } satisfies BanReviewPageQuery & { selectedAccountId: string };
+  } satisfies BanReviewPageQuery;
   const result = await client.realms({ realmId }).bans.get({ query });
   expect(result.error).toBeNull();
   expect(result.data).toEqual(page);
