@@ -37,7 +37,7 @@ export function CatalogueFileStatementSummary({
 }) {
   const o = { locale: locale as never };
   const property = partLabel(statement, read.release, locale);
-  const notice = catalogueFileCreateHashNotice(read.release, read.public.subject?.type ?? '', statement.property.id);
+  const notice = catalogueFileCreateHashNotice(read.release, read.public.subject.type, statement.property.id);
   return (
     <div className="min-w-0 space-y-3 text-sm">
       <dl className="min-w-0 space-y-2">

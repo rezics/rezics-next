@@ -11,8 +11,8 @@ import {
   type CreatedReader,
   type InitialSubject,
 } from './create-subject';
+import { admittedProperty } from './release-fidelity/model';
 import {
-  admittedProperty,
   codecProperty,
   fileGroups,
   hashProperty,
@@ -165,7 +165,7 @@ export function catalogueFileCreateFieldGroups(
 }
 
 export function catalogueFileCreateHashNotice(
-  release: Release,
+  release: Pick<Release, 'types' | 'properties'>,
   type: string,
   property: string,
 ): 'hash' | 'codec' | undefined {
