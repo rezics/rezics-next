@@ -32,7 +32,11 @@ async function json<T>(response: Response, expectedStatus: number, label: string
   return JSON.parse(body) as T;
 }
 
-async function createSubject(stack: NativeWebStack, type: string, label: string): Promise<NativeCatalogueSubject> {
+export async function createSubject(
+  stack: NativeWebStack,
+  type: string,
+  label: string,
+): Promise<NativeCatalogueSubject> {
   const result = await json<{ subject: { id: string; type: string } }>(
     await stack.kernel(
       '/v1/subjects',
@@ -49,7 +53,7 @@ async function createSubject(stack: NativeWebStack, type: string, label: string)
   return { id: result.subject.id, type: result.subject.type, label };
 }
 
-async function waitForSuggestion(stack: NativeWebStack, subject: NativeCatalogueSubject): Promise<void> {
+export async function waitForSuggestion(stack: NativeWebStack, subject: NativeCatalogueSubject): Promise<void> {
   const until = Date.now() + 60_000;
   const query = `/v1/subjects:suggest?q=${encodeURIComponent(subject.label)}&limit=10&languages=en`;
   while (Date.now() < until) {
@@ -133,15 +137,15 @@ export async function readPublicStatements(
 export async function readSlotCandidates(
   stack: NativeWebStack,
   id: string,
-  slot: { property: string; target: string; key: string },
+  slot: { property: string; target: string; key?: string },
 ): Promise<{ id: string }[]> {
   const query = new URLSearchParams({
     property: slot.property,
     target: slot.target,
-    key: slot.key,
     context: candidateContext,
     limit: '20',
   });
+  if (slot.key) query.set('key', slot.key);
   const body = await json<{ candidates: { id: string; deleted?: true }[] }>(
     await stack.kernel(`/v1/subjects/${id}/candidates?${query}`, undefined, 'alice'),
     200,
