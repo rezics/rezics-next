@@ -51,7 +51,10 @@ must be attributed separately. Include stale-source rollback and denied/empty br
 requester, member or history enumeration. Existing claim-review listing costs are separate.
 
 Three-scale observations for every axis are unavailable: no measured operation or assertion has
-been executed in this attempt. The eventual command is
+been executed in this attempt. `bun run --cwd services/kernel typecheck` checked the authored
+source at `3236753758` and exited 2 with diagnostics exclusively in files unchanged from the
+bound base, including `src/access/shared-history.ts(247,35): error TS2304: Cannot find name 'commandHistoryKind'.`
+There were no diagnostics in the added test or private fixture. The eventual native command is
 `bun run --cwd services/kernel check test/community/growth-realm-claim-approval.test.ts`.
 Native, browser and acceptance launches are deferred by the current controller instruction;
 type checking does not substitute for that command. The remaining measurement work is specified
