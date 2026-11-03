@@ -76,7 +76,12 @@ export type JournalExportRecord = {
 export type ProviderExportRecord = Record<string, unknown> & {
   section: 'vndbUploads' | 'vndbEvidence' | 'anilistUploads' | 'anilistEvidence';
 };
-export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord | ProviderExportRecord;
+export type ExportRecord =
+  | ExistingExportRecord
+  | AnnotationExportRecord
+  | ProvenanceExportRecord
+  | JournalExportRecord
+  | ProviderExportRecord;
 type SourceRow = Record<string, unknown> & { key: string };
 export type ExportSeek = {
   section: number;
@@ -241,8 +246,10 @@ export async function readExportSourcePage(
     // The assessment producer owns this nullable column and its journal-local revision.
     // The JSON lookup allows the documented seam before its column migration is installed.
     if (version === 3 && section === 'journals')
-      sourceSql = sourceSql.replace("'reflection',p.journal_reflection)",
-        "'reflection',p.journal_reflection,'assessment',jsonb_build_object('meaningRevision',1,'units',to_jsonb(p)->'journal_assessment_units'))");
+      sourceSql = sourceSql.replace(
+        "'reflection',p.journal_reflection)",
+        "'reflection',p.journal_reflection,'assessment',jsonb_build_object('meaningRevision',1,'units',to_jsonb(p)->'journal_assessment_units'))",
+      );
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
       seek.after ||
@@ -256,7 +263,9 @@ export async function readExportSourcePage(
     rows = await bounded(
       client,
       sql,
-      section === 'malImports' || section === 'vndbUploads' ? [route, accountId, after, capturedAt] : [route, accountId, after],
+      section === 'malImports' || section === 'vndbUploads'
+        ? [route, accountId, after, capturedAt]
+        : [route, accountId, after],
       LIBRARY_EXPORT_LIMITS.maxRecordBytes,
     );
   } else {
@@ -270,15 +279,15 @@ export async function readExportSourcePage(
         ? `SELECT upload_id AS id FROM library.vndb_import WHERE route=$1 AND account_id=$2
              AND expires_at>$4::timestamptz AND upload_id>$3::uuid ORDER BY upload_id LIMIT 1`
         : anilist
-        ? `SELECT import_id AS id FROM library.list_import_anilist WHERE route=$1 AND account_id=$2
+          ? `SELECT import_id AS id FROM library.list_import_anilist WHERE route=$1 AND account_id=$2
              AND ordinal=-1 AND import_id>$3::uuid ORDER BY import_id LIMIT 1`
-        : mal
-        ? `SELECT id FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+          : mal
+            ? `SELECT id FROM library.list_import_mal WHERE route=$1 AND account_id=$2
              AND expires_at>$4::timestamptz AND id>$3::uuid ORDER BY id LIMIT 1`
-        : occurrences
-          ? `SELECT collection_id AS id FROM library.collection WHERE route=$1 AND curator_account_id=$2
+            : occurrences
+              ? `SELECT collection_id AS id FROM library.collection WHERE route=$1 AND curator_account_id=$2
              AND state='active' AND membership_kind='curated' AND collection_id>$3::uuid ORDER BY collection_id LIMIT 1`
-          : `SELECT session_id AS id FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2
+              : `SELECT session_id AS id FROM library.progress_session WHERE state <> 'retired' AND route=$1 AND account_id=$2
              AND session_id>$3::uuid ORDER BY session_id LIMIT 1`;
       seek.parent =
         (
@@ -297,23 +306,23 @@ export async function readExportSourcePage(
       ? `SELECT ordinal::text AS key,upload_id,ordinal,evidence FROM library.vndb_import_row
            WHERE route=$1 AND upload_id=$2 AND account_id=$4 AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
       : anilist
-      ? `SELECT ordinal::text AS key,import_id AS upload_id,ordinal,export_source AS evidence
+        ? `SELECT ordinal::text AS key,import_id AS upload_id,ordinal,export_source AS evidence
            FROM library.list_import_anilist WHERE route=$1 AND import_id=$2 AND account_id=$4
              AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
-      : mal
-      ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
+        : mal
+          ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
            FROM library.list_import_mal CROSS JOIN LATERAL generate_series($3::integer+1,
              least(jsonb_array_length(document->'rows')-1,$3::integer+${fetchRows})) i
            WHERE route=$1 AND id=$2 AND account_id=$4 ORDER BY i LIMIT ${fetchRows}`
-      : section === 'units'
-        ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
+          : section === 'units'
+            ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
            WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
              AND p.session_id=$2 AND p.state <> 'retired') AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT ${fetchRows}`
-        : section === 'history'
-          ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
+            : section === 'history'
+              ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
              WHERE route=$1 AND session_id=$2 AND EXISTS (SELECT 1 FROM library.progress_session p WHERE p.route=$1 AND p.account_id=$4
                AND p.session_id=$2 AND p.state <> 'retired') AND change_no>$3::integer ORDER BY change_no LIMIT ${fetchRows}`
-          : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
+              : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
              FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL
              AND member_id>$3::uuid ORDER BY member_id LIMIT ${fetchRows}`;
     rows = await bounded(

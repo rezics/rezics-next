@@ -24,7 +24,13 @@ export const exportSections = [
   'malEvidence',
 ] as const;
 export const exportSectionsV2 = [...exportSections, 'annotations', 'provenance', 'journals'] as const;
-export const exportSectionsV3 = [...exportSectionsV2, 'vndbUploads', 'vndbEvidence', 'anilistUploads', 'anilistEvidence'] as const;
+export const exportSectionsV3 = [
+  ...exportSectionsV2,
+  'vndbUploads',
+  'vndbEvidence',
+  'anilistUploads',
+  'anilistEvidence',
+] as const;
 export type LibraryExportVersion = 1 | 2 | 3;
 export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
 export type LibraryExportSectionV1 = (typeof exportSections)[number];
@@ -65,7 +71,8 @@ const v3Omissions = {
   ...v2Omissions,
   personalImportEvidence:
     'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
-  reimport: 'version 3 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+  reimport:
+    'version 3 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
 } as const;
 
 export type LibraryExportManifestV1 = {
@@ -93,7 +100,10 @@ export type LibraryExportManifestV2 = {
   omissions: typeof v2Omissions;
 };
 
-export type LibraryExportManifestV3 = Omit<LibraryExportManifestV2, 'version' | 'coverage' | 'sections' | 'omissions'> & {
+export type LibraryExportManifestV3 = Omit<
+  LibraryExportManifestV2,
+  'version' | 'coverage' | 'sections' | 'omissions'
+> & {
   version: 3;
   coverage: 'private-library-owner-facts-v3';
   sections: LibraryExportSectionV3[];
@@ -117,7 +127,10 @@ export type LibraryExportFinalManifestV3 = LibraryExportManifestV3 & {
   recordBytes: number;
   sectionTotals: Record<LibraryExportSectionV3, { rows: number; recordBytes: number }>;
 };
-export type LibraryExportFinalManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2 | LibraryExportFinalManifestV3;
+export type LibraryExportFinalManifest =
+  | LibraryExportFinalManifestV1
+  | LibraryExportFinalManifestV2
+  | LibraryExportFinalManifestV3;
 
 export function libraryExportManifest(capture: Capture & { format_version?: 1 }): LibraryExportManifestV1;
 export function libraryExportManifest(capture: Capture & { format_version: 2 }): LibraryExportManifestV2;
@@ -144,13 +157,14 @@ export function libraryExportManifest(
       sections: [...exportSections],
       omissions: v1Omissions,
     };
-  if (capture.format_version === 3) return {
-    ...common,
-    version: 3,
-    coverage: 'private-library-owner-facts-v3',
-    sections: [...exportSectionsV3],
-    omissions: v3Omissions,
-  };
+  if (capture.format_version === 3)
+    return {
+      ...common,
+      version: 3,
+      coverage: 'private-library-owner-facts-v3',
+      sections: [...exportSectionsV3],
+      omissions: v3Omissions,
+    };
   return {
     ...common,
     version: 2,

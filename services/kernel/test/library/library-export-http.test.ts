@@ -159,8 +159,28 @@ beforeAll(async () => {
   await sql`INSERT INTO library.bangumi_upload(route,account_id,upload_id) VALUES(${route},${owner},${copy}),(${route},${other},${copy})`;
   await sql`INSERT INTO library.bangumi_upload_row(route,account_id,upload_id,ordinal,evidence,review) VALUES(${route},${owner},${copy},0,${parseBangumiUpload('{"format":"rezics.bangumi-collection.v1","collections":[{"subject_id":42,"notes":"source note","type":99}]}')[0]},'{"token":"never-export-review"}')`;
   await sql`INSERT INTO library.list_import_mal(route,account_id,id,document,expires_at) VALUES(${route},${owner},${copy},${{ rows: parseMal('<myanimelist><anime><series_animedb_id>17</series_animedb_id><series_title>Original title</series_title><my_start_date>2020-00-00</my_start_date><my_password>never-export-secret</my_password></anime></myanimelist>'), canceled: false, xml: 'never-export-raw-xml' }},now()+interval '1 day')`;
-  const vndbRows = parseVndb('<vndb-export version="1.0"><vns>' + Array.from({ length: 35 }, (_, i) => `<vn id="v${i + 1}"><vote>0</vote><started>2004-02-00</started><progress>0</progress><label>Unfamiliar</label><secret>never-export-xml-secret</secret></vn>`).join('') + '</vns></vndb-export>');
-  const anilist = parseAniList(JSON.stringify(Array.from({ length: 35 }, (_, i) => ({ mediaId: i + 1, score: 0, status: 'FUTURE_STATUS', startedAt: { year: 2004, month: null, day: 0 }, notes: null, unfamiliar: { nested: [{ password: 'never-export-password', value: 'original unknown' }] } }))), 'POINT_10_DECIMAL');
+  const vndbRows = parseVndb(
+    '<vndb-export version="1.0"><vns>' +
+      Array.from(
+        { length: 35 },
+        (_, i) =>
+          `<vn id="v${i + 1}"><vote>0</vote><started>2004-02-00</started><progress>0</progress><label>Unfamiliar</label><secret>never-export-xml-secret</secret></vn>`,
+      ).join('') +
+      '</vns></vndb-export>',
+  );
+  const anilist = parseAniList(
+    JSON.stringify(
+      Array.from({ length: 35 }, (_, i) => ({
+        mediaId: i + 1,
+        score: 0,
+        status: 'FUTURE_STATUS',
+        startedAt: { year: 2004, month: null, day: 0 },
+        notes: null,
+        unfamiliar: { nested: [{ password: 'never-export-password', value: 'original unknown' }] },
+      })),
+    ),
+    'POINT_10_DECIMAL',
+  );
   await sql`INSERT INTO library.vndb_import(route,account_id,upload_id,expires_at,xml,rows) VALUES(${route},${owner},${copy},now()+interval '1 day','never-export-raw-vndb',${vndbRows})`;
   await sql`INSERT INTO library.list_import_anilist(route,account_id,import_id,ordinal,payload) VALUES(${route},${owner},${copy},-1,${{ rawUpload: 'never-export-raw-anilist', document: { secret: 'never-export-wrapper' }, scoreFormat: anilist.scoreFormat, cancelled: true, count: anilist.rows.length }})`;
   for (const [ordinal, source] of anilist.rows.entries())
@@ -202,13 +222,41 @@ test('native owner export streams independent persisted facts, preserves dates, 
   );
   expect(sections.entries).toHaveLength(18);
   const providerRows = records as Record<string, any>[];
-  expect(providerRows.filter(r => r.section === 'vndbEvidence').map(r => r.ordinal)).toEqual(Array.from({length:36},(_,i)=>i));
-  expect(providerRows.find(r => r.section === 'vndbEvidence')).toMatchObject({ evidence: { identifier: {provider:'vndb',value:'v1'}, fields: { score:{kind:'invalid',raw:'0'}, started:{value:'2004-02',precision:'month'}, progress:{raw:'0'} } } });
-  expect(providerRows.filter(r => r.section === 'anilistEvidence').map(r => r.ordinal)).toEqual(Array.from({length:35},(_,i)=>i));
-  expect(providerRows.find(r => r.section === 'anilistUploads')).toMatchObject({score_format:'POINT_10_DECIMAL',cancelled:true,row_count:35});
-  expect(providerRows.find(r => r.section === 'anilistEvidence')).toMatchObject({evidence:{identifiers:[{source:'anilist',externalId:'1'}],evidence:{score:0,status:'FUTURE_STATUS',notes:null,startedAt:{year:2004,month:null,day:0},unfamiliar:{nested:[{value:'original unknown'}]}}}});
-  for (const section of ['vndbUploads','vndbEvidence','anilistUploads','anilistEvidence'])
-    expect(final.manifest.sectionTotals[section].rows).toBe(providerRows.filter(r=>r.section===section).length);
+  expect(providerRows.filter((r) => r.section === 'vndbEvidence').map((r) => r.ordinal)).toEqual(
+    Array.from({ length: 36 }, (_, i) => i),
+  );
+  expect(providerRows.find((r) => r.section === 'vndbEvidence')).toMatchObject({
+    evidence: {
+      identifier: { provider: 'vndb', value: 'v1' },
+      fields: {
+        score: { kind: 'invalid', raw: '0' },
+        started: { value: '2004-02', precision: 'month' },
+        progress: { raw: '0' },
+      },
+    },
+  });
+  expect(providerRows.filter((r) => r.section === 'anilistEvidence').map((r) => r.ordinal)).toEqual(
+    Array.from({ length: 35 }, (_, i) => i),
+  );
+  expect(providerRows.find((r) => r.section === 'anilistUploads')).toMatchObject({
+    score_format: 'POINT_10_DECIMAL',
+    cancelled: true,
+    row_count: 35,
+  });
+  expect(providerRows.find((r) => r.section === 'anilistEvidence')).toMatchObject({
+    evidence: {
+      identifiers: [{ source: 'anilist', externalId: '1' }],
+      evidence: {
+        score: 0,
+        status: 'FUTURE_STATUS',
+        notes: null,
+        startedAt: { year: 2004, month: null, day: 0 },
+        unfamiliar: { nested: [{ value: 'original unknown' }] },
+      },
+    },
+  });
+  for (const section of ['vndbUploads', 'vndbEvidence', 'anilistUploads', 'anilistEvidence'])
+    expect(final.manifest.sectionTotals[section].rows).toBe(providerRows.filter((r) => r.section === section).length);
 
   expect(records.find((r) => r.state === 'old-unknown-state')).toMatchObject({
     library_profile_pin: legacyPin,
@@ -581,42 +629,63 @@ test('native owner export streams independent persisted facts, preserves dates, 
 test('provider changes, expiry and completed-request replay cannot deliver a different population', async () => {
   for (const mutation of [
     () => sql`UPDATE library.vndb_import SET state='cancelled' WHERE route=${route} AND account_id=${owner}`,
-    () => sql`UPDATE library.vndb_import_row SET evidence=evidence||'{"extra":0}' WHERE route=${route} AND account_id=${owner} AND ordinal=0`,
-    () => sql`UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{cancelled}','false') WHERE route=${route} AND account_id=${owner} AND ordinal=-1`,
+    () =>
+      sql`UPDATE library.vndb_import_row SET evidence=evidence||'{"extra":0}' WHERE route=${route} AND account_id=${owner} AND ordinal=0`,
+    () =>
+      sql`UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{cancelled}','false') WHERE route=${route} AND account_id=${owner} AND ordinal=-1`,
     () => sql`DELETE FROM library.list_import_anilist WHERE route=${route} AND account_id=${owner} AND ordinal=34`,
   ]) {
     await sql`UPDATE library.library_export SET state='stale' WHERE route=${route} AND account_id=${owner}`;
-    const key = randomUUID(), original = await capture(key);
+    const key = randomUUID(),
+      original = await capture(key);
     const path = `/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(original.first)}`;
     expect((await get(path)).next).toBeString();
     await mutation();
-    expect(await capture(key)).toMatchObject({exportId:original.exportId,state:'stale',first:null});
-    expect(await get(path)).toMatchObject({state:'stale',records:[],manifest:null,next:null});
+    expect(await capture(key)).toMatchObject({ exportId: original.exportId, state: 'stale', first: null });
+    expect(await get(path)).toMatchObject({ state: 'stale', records: [], manifest: null, next: null });
   }
-  await sql`UPDATE library.vndb_import SET expires_at=${new Date(now+1000).toISOString()} WHERE route=${route} AND account_id=${owner}`;
-  const key = randomUUID(), original = await capture(key);
+  await sql`UPDATE library.vndb_import SET expires_at=${new Date(now + 1000).toISOString()} WHERE route=${route} AND account_id=${owner}`;
+  const key = randomUUID(),
+    original = await capture(key);
   let cursor = original.first;
-  while(cursor) { const page = await get(`/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(cursor)}`); cursor=page.next; }
+  while (cursor) {
+    const page = await get(`/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(cursor)}`);
+    cursor = page.next;
+  }
   now += 2000;
-  expect(await capture(key)).toMatchObject({exportId:original.exportId,state:'stale',first:null});
-  expect(await get(`/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(original.first)}`)).toMatchObject({state:'stale',records:[],manifest:null});
+  expect(await capture(key)).toMatchObject({ exportId: original.exportId, state: 'stale', first: null });
+  expect(
+    await get(`/v1/libraryExports/${original.exportId}/pages?cursor=${encodeURIComponent(original.first)}`),
+  ).toMatchObject({ state: 'stale', records: [], manifest: null });
   now -= 2000;
   await sql`DELETE FROM library.vndb_import WHERE route=${route} AND account_id=${owner}`;
-  expect((await sql`SELECT 1 FROM library.vndb_import_row WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(0);
+  expect((await sql`SELECT 1 FROM library.vndb_import_row WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(
+    0,
+  );
   // A fresh capture declares exhausted, empty VNDB sections explicitly.
   const empty = await capture();
-  let page:any, next=empty.first;
-  do { page=await get(`/v1/libraryExports/${empty.exportId}/pages?cursor=${encodeURIComponent(next)}`); next=page.next; } while(next);
-  expect(page.manifest.sectionTotals.vndbEvidence).toEqual({rows:0,recordBytes:0});
+  let page: any,
+    next = empty.first;
+  do {
+    page = await get(`/v1/libraryExports/${empty.exportId}/pages?cursor=${encodeURIComponent(next)}`);
+    next = page.next;
+  } while (next);
+  expect(page.manifest.sectionTotals.vndbEvidence).toEqual({ rows: 0, recordBytes: 0 });
   await json(await request('DELETE', `/v1/libraryExports/${empty.exportId}`));
 });
 
 test('provider encoded-row limits include nested evidence and escaped UTF-8', async () => {
   const section = exportSectionsV3.indexOf('anilistEvidence');
-  const seek = {...initialExportSeek(3),section,parent:copy};
-  const client = { query: async () => ({rows:[{value:{key:'0',upload_id:copy,ordinal:0,evidence:{evidence:{notes:'\u0001'.repeat(11000)}}}}]}) };
-  const page = await readExportSourcePage(client as any,route,owner,seek,new Date(now).toISOString(),3);
-  expect(page).toMatchObject({records:[],oversized:true});
+  const seek = { ...initialExportSeek(3), section, parent: copy };
+  const client = {
+    query: async () => ({
+      rows: [
+        { value: { key: '0', upload_id: copy, ordinal: 0, evidence: { evidence: { notes: '\u0001'.repeat(11000) } } } },
+      ],
+    }),
+  };
+  const page = await readExportSourcePage(client as any, route, owner, seek, new Date(now).toISOString(), 3);
+  expect(page).toMatchObject({ records: [], oversized: true });
 });
 
 test('cancellation, changed revisions, expiry and terminal deletion never yield success artifacts', async () => {
@@ -749,7 +818,7 @@ test('version 3 streams annotations, accepted provenance and addressed live jour
   const requestKey = randomUUID();
   const captureStatus = await capture(requestKey);
   expect(captureStatus).toMatchObject({ version: 3, fullExport: false });
-  expect(captureStatus.sections.slice(14,17)).toEqual(['annotations', 'provenance', 'journals']);
+  expect(captureStatus.sections.slice(14, 17)).toEqual(['annotations', 'provenance', 'journals']);
   const firstPath = `/v1/libraryExports/${captureStatus.exportId}/pages?cursor=${encodeURIComponent(captureStatus.first)}`;
   const first = await get(firstPath);
   expect(await get(firstPath)).toEqual(first);

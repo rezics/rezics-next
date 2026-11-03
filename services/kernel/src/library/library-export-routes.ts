@@ -186,17 +186,48 @@ const journalRecord = t.Object(
   },
   closed,
 );
-const journalV3Record = t.Object({
-  ...journalRecord.properties,
-  journal: t.Object({
-    ...journalRecord.properties.journal.properties,
-    assessment: t.Object({ meaningRevision: t.Literal(1), units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]) }, closed),
-  }, closed),
-}, closed);
+const journalV3Record = t.Object(
+  {
+    ...journalRecord.properties,
+    journal: t.Object(
+      {
+        ...journalRecord.properties.journal.properties,
+        assessment: t.Object(
+          { meaningRevision: t.Literal(1), units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]) },
+          closed,
+        ),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
 const providerRecords = [
-  t.Object({ section: t.Literal('vndbUploads'), upload_id: text, state: t.Union([t.Literal('active'), t.Literal('cancelled')]), expires_at: text }, closed),
-  t.Object({ section: t.Literal('anilistUploads'), upload_id: text, cancelled: t.Union([t.Boolean(), t.Null()]), score_format: nullable, row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]) }, closed),
-  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) => t.Object({ section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() }, closed)),
+  t.Object(
+    {
+      section: t.Literal('vndbUploads'),
+      upload_id: text,
+      state: t.Union([t.Literal('active'), t.Literal('cancelled')]),
+      expires_at: text,
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      section: t.Literal('anilistUploads'),
+      upload_id: text,
+      cancelled: t.Union([t.Boolean(), t.Null()]),
+      score_format: nullable,
+      row_count: t.Union([t.Integer({ minimum: 0 }), t.Null()]),
+    },
+    closed,
+  ),
+  ...(['vndbEvidence', 'anilistEvidence'] as const).map((section) =>
+    t.Object(
+      { section: t.Literal(section), upload_id: text, ordinal: t.Integer({ minimum: 0 }), evidence: t.Unknown() },
+      closed,
+    ),
+  ),
 ];
 const finalManifest = t.Union([
   t.Object({ ...manifestV1Fields, rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
@@ -209,12 +240,15 @@ const finalManifest = t.Union([
     },
     closed,
   ),
-  t.Object({
-    ...manifestV3Fields,
-    rows: t.Integer({ minimum: 0 }),
-    recordBytes: t.Integer({ minimum: 0 }),
-    sectionTotals: t.Object(Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])), closed),
-  }, closed),
+  t.Object(
+    {
+      ...manifestV3Fields,
+      rows: t.Integer({ minimum: 0 }),
+      recordBytes: t.Integer({ minimum: 0 }),
+      sectionTotals: t.Object(Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])), closed),
+    },
+    closed,
+  ),
 ]);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
@@ -288,9 +322,19 @@ export function libraryExportRoutes(
             {
               exportId: text,
               state,
-              records: t.Array(t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecord, journalV3Record, ...providerRecords]), {
-                maxItems: 16,
-              }),
+              records: t.Array(
+                t.Union([
+                  legacyRecord,
+                  annotationRecord,
+                  provenanceRecord,
+                  journalRecord,
+                  journalV3Record,
+                  ...providerRecords,
+                ]),
+                {
+                  maxItems: 16,
+                },
+              ),
               next: nullable,
               manifest: t.Union([finalManifest, t.Null()]),
             },
