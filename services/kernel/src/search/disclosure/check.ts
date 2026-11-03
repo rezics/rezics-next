@@ -150,10 +150,17 @@ export async function checkHits(
             const passed = plan.evaluate(resolved) === true;
             return {
               passed,
-              // Rejection after live positive-leaf evaluation invalidates the candidate total.
-              // A shared leaf's true proof can also reject its negative occurrence.
+              // Live rejection invalidates the indexed candidate total. Qualified negatives
+              // also need this: bounded uncertainty cannot certify final exhaustion.
               relationRejected:
-                !passed && values.some((value, leaf) => Array.isArray(value) && plan.positive.has(leaf)),
+                !passed &&
+                values.some((value, leaf) => {
+                  const clause = plan.leaves[leaf]!;
+                  return (
+                    Array.isArray(value) &&
+                    (plan.positive.has(leaf) || (clause.facet === 'statement' && !!clause.qualifiers?.length))
+                  );
+                }),
             };
           });
           continue;

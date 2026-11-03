@@ -81,8 +81,11 @@ test('uncertain qualified credits remain unknown under NOT even without a sample
     },
   };
   const type = { type: { in: [subject.type] } };
-  for (const filter of [{ and: [type, { not: qualified }] }, { and: [type, qualified] }])
-    expect((await checkHits(source, [hit], new Map(), options(filter))).passed).toEqual([]);
+  for (const filter of [{ and: [type, { not: qualified }] }, { and: [type, qualified] }]) {
+    const result = await checkHits(source, [hit], new Map(), options(filter));
+    expect(result.passed).toEqual([]);
+    expect(result.relationRejected).toBe(true);
+  }
   const filter = { or: [type, { not: qualified }] };
   expect((await checkHits(source, [hit], new Map(), options(filter))).passed).toHaveLength(1);
   expect(calls).toBe(3);
