@@ -4,6 +4,7 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 import { MAL_LABEL_LIMITS, malTagEvidence } from '../../src/library/list-import-mal-tags.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
 import { createMalImport } from '../../src/library/list-import-mal.ts';
+import { createSessionCommands } from '../../src/library/sessions.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { accountToken } from '../support/admitted-access.ts';
 
@@ -244,7 +245,13 @@ test('partial request cancellation preserves accepted assignments; expiry and re
     b = await label('MAL partial B');
   const id = await upload('first,second'),
     version = await review(id, subject, [selected(0, a), selected(1, b)]);
-  const service = createMalImport({ pool: f.pool, access: f.access, tokens: f.tokens, routeKey: testRouteKey() });
+  const service = createMalImport({
+    pool: f.pool,
+    access: f.access,
+    tokens: f.tokens,
+    routeKey: testRouteKey(),
+    journal: createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens }),
+  });
   const cancel = new AbortController();
   const result = await service.apply(
     f.owner.actor,
