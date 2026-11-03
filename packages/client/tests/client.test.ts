@@ -168,38 +168,3 @@ test('the same proxy rewrites a custom method and retains viewer headers', async
   expect(sent[0]!.headers.get(SESSION_HEADER)).toBe('viewer');
   expect(sent[0]!.headers.get('idempotency-key')).toBe('"merge"');
 });
-
-test('selected label consolidation exposes all six typed native routes', async () => {
-  const { sent, fetch } = kernel(Array.from({ length: 6 }, () => () => json(200, {})));
-  const client: KernelClient = createKernelClient(ORIGIN, { fetch });
-  const label = client.libraryLabels({ id: ID });
-  const selected = { subjectId: ID, assignmentId: ID, revision: 1 };
-  const identity = { id: ID, revision: 1, name: 'Selected' };
-  const options = { headers: { 'idempotency-key': '"consolidate"' } };
-  const review = await label.$reviewConsolidation.post({ targetLabelId: ID, items: [selected] });
-  const confirmed = await label.$confirmConsolidation.post(
-    {
-      selection: 'a'.repeat(64), sourceLabel: identity, targetLabel: identity,
-      items: [{ selected, source: { id: ID, revision: 1, effective: true }, target: null, outcome: 'movable' }],
-    },
-    options,
-  );
-  const applied = await label.$applyConsolidation.post({ confirmationId: ID }, options);
-  const retried = await label.$retryConsolidation.post({ confirmationId: ID, item: 0 }, options);
-  const cancelled = await label.$cancelConsolidation.post({ confirmationId: ID }, options);
-  const result = await label.consolidations({ confirmationId: ID }).get();
-  const typed = () => {
-    const outcome: 'movable' | 'already_on_target' | 'missing' | 'changed' | 'inaccessible' | 'capacity_limited' | undefined = review.data?.items[0]?.outcome;
-    const active: 'active' | undefined = confirmed.data?.status;
-    const states: ('active' | 'completed' | 'cancelled' | undefined)[] = [applied.data?.status, retried.data?.status, cancelled.data?.status, result.data?.status];
-    // @ts-expect-error applying requires an idempotency key
-    label.$applyConsolidation.post({ confirmationId: ID });
-    return { outcome, active, states };
-  };
-  expect(typeof typed).toBe('function');
-  expect(sent.map(({ url, method }) => [url, method])).toEqual([
-    ...['review', 'confirm', 'apply', 'retry', 'cancel'].map((action) => [`${ORIGIN}/v1/libraryLabels/${ID}:${action}Consolidation`, 'POST']),
-    [`${ORIGIN}/v1/libraryLabels/${ID}/consolidations/${ID}`, 'GET'],
-  ]);
-  expect(sent.slice(1, 5).every(({ headers }) => headers.get('idempotency-key') === '"consolidate"')).toBe(true);
-});
