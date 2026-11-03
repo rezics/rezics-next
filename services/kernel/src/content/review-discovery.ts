@@ -675,6 +675,7 @@ export function createReviewDiscoverySource(
     after: ReviewDiscoveryPageKey | ReviewDiscoveryContinuation | null,
     limit: number,
     retainEpisodes = false,
+    censusDeadline?: number,
   ): Promise<ReviewDiscoveryPopulationPage & { census?: { cut: ReviewCensusCut; episodes: ReviewCensusEpisode[] } }> {
     assertPartition(partition);
     if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_LIMIT)
@@ -690,7 +691,10 @@ export function createReviewDiscoverySource(
       if (!signed) return failedPopulationPage(partition, 'unavailable', 'invalid-population-cut');
       previousCut = cutFromToken(signed);
     }
-    const context = checkedContext(makeAnonymousContext);
+    const currentContext = checkedContext(makeAnonymousContext);
+    const context = censusDeadline === undefined ? currentContext : {
+      ...currentContext, deadline: Math.min(currentContext.deadline, censusDeadline),
+    };
     const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
     type NativePage =
       | Readonly<{
@@ -798,8 +802,8 @@ export function createReviewDiscoverySource(
   }
 
   const census = createReviewCensus(dependencies.pool, {
-    async page(partition, after) {
-      const page = await coherentPage(partition, after, REVIEW_CENSUS_PAGE_SIZE, true);
+    async page(partition, after, deadline) {
+      const page = await coherentPage(partition, after, REVIEW_CENSUS_PAGE_SIZE, true, deadline);
       if (page.state !== 'ready') return page;
       if (!page.census) throw new Error('Review census native observation unavailable');
       return { state: 'ready', position: page.position, cut: page.census.cut,

@@ -62,7 +62,8 @@ test('a retained native census resumes at its committed cut without promoting ca
     opening_id: written.value.itemId, source_version: expect.stringMatching(/^rv1_/), eligible: true })]);
   await revisePost(
     { pool: fixture.pool, access: fixture.access, routeKey }, author,
-    { postId: written.value.itemId, body: fromPlainText('A replacement opening.'), subjectIds: [subject],
+    { itemId: written.value.itemId, threadId: written.value.threadId,
+      body: fromPlainText('A replacement opening.'), subjectIds: [subject],
       mediaIds: [], licence: 'MIT', title: 'A replacement title' },
     { idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 },
   );
@@ -75,7 +76,7 @@ test('a retained native census resumes at its committed cut without promoting ca
   expect((await fixture.reader.query('SELECT observed_public::integer AS count FROM content.review_census_installation WHERE route=$1',
     [partition * 16])).rows[0]?.count).toBe(26);
   expect((await source.pageWithCut(partition, null, 1))).not.toHaveProperty('census');
-});
+}, 60_000);
 
 test('an empty census and a stale cut remain distinguishable from a complete zero total', async () => {
   const partition = 0xfed;

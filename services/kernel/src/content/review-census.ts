@@ -48,7 +48,7 @@ export type ReviewCensusStep = Readonly<{
   examined: number;
 }>;
 type Reader = Readonly<{
-  page(partition: number, after: ReviewDiscoveryContinuation | null): Promise<ReviewCensusPage>;
+  page(partition: number, after: ReviewDiscoveryContinuation | null, deadline: number): Promise<ReviewCensusPage>;
   observe(client: Pick<PoolClient, 'query'>, partition: number, cut: ReviewCensusCut | null): Promise<ReviewCensusObservation>;
 }>;
 type Installation = {
@@ -140,7 +140,7 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
       const after = state.after_id === null ? null : {
         route: state.after_route!, id: state.after_id, token: state.after_token!,
       };
-      const page = await reader.page(partition, after);
+      const page = await reader.page(partition, after, deadline);
       if (page.state === 'changed') return reset(partition, state, deadline);
       if (page.state !== 'ready') return { state: page.state, generation: state.generation, examined: 0 };
       if (page.episodes.length > REVIEW_CENSUS_EPISODE_LIMIT)
