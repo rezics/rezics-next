@@ -1,30 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import { CollectionPublicationPageView } from '../library/collection-publication-page';
-import { publicationExample, publicationRefusal } from '../kernel/fake/collection-publication';
-import type { PublicationInput } from '../library/collection-publication';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { publicationStoryIds } from '../kernel/fake/collection-publication';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { AppShell } from '../shell/shell';
-import { PatternStory } from './page';
+import { PageStory, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Library/Collection publication',
-  decorators: [
-    (Story) => (
-      <PatternStory visitor="Signed In" path={`/collections/${publicationExample.address.id}/publish`}>
-        <AppShell>
-          <Story />
-        </AppShell>
-      </PatternStory>
-    ),
-  ],
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'Illustrative selection/refusal examples in the existing app shell using recorded subject summaries and supplied page props. No positive publication provider. Ordinary 390/1280 Web review, native publication and promoted-main proof remain pending.',
+          'Actual `/collections/$id/publish` PageStory coverage using the existing reader, session and story kernel refusals. Named SelectedEmpty, SelectedNonempty, Denied, Stale, SourceUnavailable and Retry stories enter that route. No positive publication provider. Ordinary 390/1280 Web review, native publication and promoted-main proof remain pending.',
       },
     },
   },
@@ -32,20 +20,26 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const example = (reason: Parameters<typeof publicationRefusal>[0]) => (
-  <CollectionPublicationPageView
-    page={publicationExample}
-    submit={async () => publicationRefusal(reason)}
-    onReload={() => {}}
-  />
-);
+function publishRoute(id: string) {
+  return <PageStory visitor="Signed In" path={`/collections/${id}/publish`} />;
+}
 
 async function publicationCanvas(canvasElement: HTMLElement) {
-  return within(await within(canvasElement).findByRole('main'));
+  await pageReady({ canvasElement });
+  const canvas = within(within(canvasElement).getByRole('main'));
+  await canvas.findByRole('heading', { name: m.library_publication_heading() });
+  await waitFor(() => expect(canvas.queryByText(m.library_publication_loading())).toBeNull());
+  return canvas;
+}
+
+async function readyPublication(canvasElement: HTMLElement) {
+  const canvas = await publicationCanvas(canvasElement);
+  await canvas.findByText('Selected reading');
+  return canvas;
 }
 
 async function chooseAndConfirm(canvasElement: HTMLElement) {
-  const canvas = await publicationCanvas(canvasElement);
+  const canvas = await readyPublication(canvasElement);
   const checkboxes = canvas.getAllByRole('checkbox');
   await userEvent.click(checkboxes[0]!);
   await userEvent.click(checkboxes[checkboxes.length - 1]!);
@@ -53,9 +47,9 @@ async function chooseAndConfirm(canvasElement: HTMLElement) {
 }
 
 export const SelectedEmpty: Story = {
-  render: () => example('unavailable'),
+  render: () => publishRoute(publicationStoryIds.ready),
   play: async ({ canvasElement }) => {
-    const canvas = await publicationCanvas(canvasElement);
+    const canvas = await readyPublication(canvasElement);
     const publish = canvas.getByRole('button', { name: m.library_publication_publish() });
     const zero =
       new Intl.PluralRules(getLocale()).select(0) === 'one'
@@ -76,7 +70,7 @@ export const SelectedEmpty: Story = {
 };
 
 export const SelectedNonempty: Story = {
-  render: () => example('unavailable'),
+  render: () => publishRoute(publicationStoryIds.ready),
   play: async ({ canvasElement }) => {
     const canvas = await chooseAndConfirm(canvasElement);
     await expect(canvas.getByText(m.library_publication_count_one({ count: '1' }))).toBeVisible();
@@ -101,7 +95,7 @@ export const SelectedNonempty: Story = {
 };
 
 export const Denied: Story = {
-  render: () => example('denied'),
+  render: () => publishRoute(publicationStoryIds.denied),
   play: async ({ canvasElement }) => {
     const canvas = await chooseAndConfirm(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_publication_publish() }));
@@ -111,7 +105,7 @@ export const Denied: Story = {
 };
 
 export const Stale: Story = {
-  render: () => example('stale'),
+  render: () => publishRoute(publicationStoryIds.stale),
   play: async ({ canvasElement }) => {
     const canvas = await chooseAndConfirm(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_publication_publish() }));
@@ -121,12 +115,7 @@ export const Stale: Story = {
 };
 
 export const SourceUnavailable: Story = {
-  render: () => (
-    <CollectionPublicationPageView
-      page={{ ...publicationExample, source: { state: 'unavailable' } }}
-      submit={async () => publicationRefusal('unavailable')}
-    />
-  ),
+  render: () => publishRoute(publicationStoryIds.unavailable),
   play: async ({ canvasElement }) => {
     const canvas = await publicationCanvas(canvasElement);
     await expect(canvas.getByRole('alert')).toHaveTextContent(m.library_publication_unavailable());
@@ -137,19 +126,7 @@ export const SourceUnavailable: Story = {
 };
 
 export const Retry: Story = {
-  render: () => {
-    let previous: PublicationInput | undefined;
-    return (
-      <CollectionPublicationPageView
-        page={publicationExample}
-        submit={async (input) => {
-          if (previous) await expect(input).toEqual(previous);
-          previous = input;
-          return publicationRefusal('unknown');
-        }}
-      />
-    );
-  },
+  render: () => publishRoute(publicationStoryIds.retry),
   play: async ({ canvasElement }) => {
     const canvas = await chooseAndConfirm(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: m.library_publication_publish() }));
