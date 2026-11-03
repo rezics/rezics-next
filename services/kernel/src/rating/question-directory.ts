@@ -13,9 +13,20 @@ import { withReadTransaction } from '../semantic/read.ts';
 import directory from './question-directory.sql';
 import realmDirectory from './question-directory-realm.sql';
 import questionRead from './question-read.sql';
+import type { QuestionGrain } from './question-authoring.ts';
 
 type Dependencies = { pool: Pool; access: Access };
 export type QuestionMetadata = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
+
+export type RatingQuestionView = {
+  id: string;
+  revision: number;
+  label: string;
+  grain: QuestionGrain;
+  scale: { min: number; max: number; displayStep: number };
+  realmId?: string;
+  meaning?: string;
+};
 
 /** Keep the legacy wire shape exact. Realm definitions add explicit provenance and
  * meaning; ownerId is the authoring account and is never used as a Realm selector. */
@@ -23,7 +34,7 @@ export function ratingQuestionView(row: {
   id: string; revision: number; label: string; grain: string;
   minimumUnits: number; maximumUnits: number; stepUnits: number;
   realmId?: string | null; meaning?: string | null;
-}) {
+}): RatingQuestionView {
   const grain = row.grain;
   if (grain !== 'work' && grain !== 'release' && grain !== 'episode' && grain !== 'character')
     throw new Error('Unknown rating question grain');
