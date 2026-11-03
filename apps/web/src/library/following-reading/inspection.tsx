@@ -3,11 +3,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { SubjectCover } from '../subject-row';
 import type { FollowingSelection } from './current-selection';
-import {
-  currentSpaceDestination,
-  suppliedRealmMembershipHref,
-  type FollowingDestination,
-} from './destinations';
+import { currentSpaceDestination, suppliedRealmMembershipHref, type FollowingDestination } from './destinations';
 import { FollowingReference } from './reference';
 import { readFollowingSpace } from './space-actions';
 import type { SpaceReading, SpaceReadInput, SpaceRead } from './space-reader';
@@ -108,9 +104,7 @@ export function FollowingInspection({
     : supplied?.kind === 'collection' && !canReadCollection
       ? null
       : supplied;
-  const actionHref = ready
-    ? suppliedRealmMembershipHref(follow, ready, locale)
-    : null;
+  const actionHref = ready ? suppliedRealmMembershipHref(follow, ready, locale) : null;
   const stateText = !follow.target
     ? m.following_reading_identity_unavailable()
     : !isSpace

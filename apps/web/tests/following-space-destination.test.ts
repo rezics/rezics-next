@@ -19,17 +19,11 @@ test('only admitted address or actual Realm identity builds the localized commun
   expect(
     suppliedDestination({ ...follow('space'), destination: { kind: 'realm', realmId } }, 'Community', 'de')?.href,
   ).toBe(`/de/realms/${realmId}`);
-  expect(suppliedDestination(addressTarget, 'Community', 'ja')?.href).toBe(
-    '/ja/spaces/quiet%20%2F%20reading',
-  );
+  expect(suppliedDestination(addressTarget, 'Community', 'ja')?.href).toBe('/ja/spaces/quiet%20%2F%20reading');
   expect(realmId).not.toBe(spaceId);
   expect(suppliedDestination({ ...addressTarget, destination: { kind: 'unavailable' } }, 'Community', 'en')).toBeNull();
   expect(
-    suppliedDestination(
-      { ...addressTarget, destination: { kind: 'space', spaceId, address: '' } },
-      'Community',
-      'en',
-    ),
+    suppliedDestination({ ...addressTarget, destination: { kind: 'space', spaceId, address: '' } }, 'Community', 'en'),
   ).toBeNull();
 });
 
@@ -70,12 +64,8 @@ test('FULL Space operands keep address, Space identity and admitted Realm action
       'ja',
     ),
   ).toBeNull();
-  expect(
-    suppliedRealmMembershipHref({ ...supplied, actions: { status: 'unavailable' } }, current, 'en'),
-  ).toBeNull();
-  expect(
-    suppliedRealmMembershipHref({ ...supplied, destination: { kind: 'unavailable' } }, current, 'en'),
-  ).toBeNull();
+  expect(suppliedRealmMembershipHref({ ...supplied, actions: { status: 'unavailable' } }, current, 'en')).toBeNull();
+  expect(suppliedRealmMembershipHref({ ...supplied, destination: { kind: 'unavailable' } }, current, 'en')).toBeNull();
 });
 
 test('one typed selected Space read uses the prepared credential and returns bounded current identity or a truthful refusal', async () => {

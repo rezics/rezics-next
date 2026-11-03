@@ -104,9 +104,7 @@ test('same-ID fresh observations discard old address/admission; replacement, exp
   const pending = deferred<SpaceRead>();
   let reads = 0;
   const accountPending = deferred<SpaceRead>();
-  const h = await mountFollowing(
-    page(projectedSpace({ kind: 'space', spaceId, address: 'old-address' })),
-    async () =>
+  const h = await mountFollowing(page(projectedSpace({ kind: 'space', spaceId, address: 'old-address' })), async () =>
     ++reads === 1
       ? ready('old-address')
       : reads === 2
@@ -132,9 +130,9 @@ test('same-ID fresh observations discard old address/admission; replacement, exp
     expect(h.host.textContent).not.toContain('late-address');
     await h.replace(page(projectedSpace({ kind: 'realm', realmId })));
     await h.inspect(spaceId);
-    expect([...h.host.querySelectorAll<HTMLAnchorElement>('[role="dialog"] a')].map((link) => link.getAttribute('href'))).toContain(
-      `/en/realms/${realmId}`,
-    );
+    expect(
+      [...h.host.querySelectorAll<HTMLAnchorElement>('[role="dialog"] a')].map((link) => link.getAttribute('href')),
+    ).toContain(`/en/realms/${realmId}`);
     await h.admit([]);
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     await h.admit();

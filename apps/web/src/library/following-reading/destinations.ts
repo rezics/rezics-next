@@ -48,11 +48,7 @@ export function currentSpaceDestination(
 }
 
 /** Realm membership actions stay with their existing Realm page owner and use only its native Realm operand. */
-export function suppliedRealmMembershipHref(
-  follow: MineFollow,
-  current: SelectedSpace,
-  locale: string,
-): string | null {
+export function suppliedRealmMembershipHref(follow: MineFollow, current: SelectedSpace, locale: string): string | null {
   const actions = follow.actions;
   if (
     !follow.target ||
@@ -67,9 +63,7 @@ export function suppliedRealmMembershipHref(
     return null;
   const admitted = actions.viewerActions.some(
     ({ action, operations }) =>
-      action === 'realm:join' &&
-      (operations.includes('realm.join') || operations.includes('realm.leave')),
+      action === 'realm:join' && (operations.includes('realm.join') || operations.includes('realm.leave')),
   );
   return admitted ? `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(actions.resourceId)}` : null;
 }
-

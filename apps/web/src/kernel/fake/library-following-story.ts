@@ -67,16 +67,17 @@ function list() {
     return {
       status: 200,
       follows: base
-        .map((follow) =>
-          follow.targetType === 'space' ? { ...follow, target: { ...follow.target, label } } : follow,
-        )
+        .map((follow) => (follow.targetType === 'space' ? { ...follow, target: { ...follow.target, label } } : follow))
         .map(fullFollowingProjection),
       next: null,
     };
   }
   if (mode === 'none') return { status: 200, follows: [], next: null };
   if (mode === 'inactive-page')
-    return page(base.map((follow) => ({ ...follow, state: 'unfollowed' as const })), 'next-page');
+    return page(
+      base.map((follow) => ({ ...follow, state: 'unfollowed' as const })),
+      'next-page',
+    );
   if (mode === 'last-follow') return page(base.slice(-1), null);
   if (mode === 'hidden') {
     const hidden = base.map((follow, index) => (index < 2 ? { ...follow, target: null } : follow));
