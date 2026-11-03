@@ -1624,6 +1624,21 @@ or repeated subjects until refresh. Use the accounts-owned `src/tokens/list-curs
 Bind route, viewer and the entire effective query, including page size, as associated data, and retain partition
 epoch validation. Library owns no cursor cryptography.
 
+## FULL personal shelf row facts
+
+Both the compatibility `/v1/libraryEntries` page and native ordered shelf pages use the shared
+`attachCollectionListFacts` boundary for FULL rows. It receives only the returned original rows (at most 100),
+forwards `Accept-Language`, batches current Type-selected Semantic facts and the shared summary/cover projection, then
+rereads the same native page before disclosure. Equality covers the ordered returned rows and lookahead presence;
+opaque expiring next-cursor bytes are intentionally not compared. Missing or denied identity removes that row;
+visible subjects without configured values retain `facts: {}`. BASIC remains unchanged.
+
+The optional `viewerFacts` page is assembled afterward for the authenticated caller. Its `current` form preserves
+present zero, clear/absence, and row-level unavailable values. Its value-free page-level `unavailable` form reports
+`identity`, `currentness`, or `response_limit`. This overlay does not make public score ordering current: the default
+personal-score order still returns `503 dependency_unavailable` until Content supplies the whole-owner fence described
+in [personal-score shelf ordering](../../../../docs/library-personal-score-order.md).
+
 ## Sitemap feeds
 
 The [partitioned-sitemap research](../../../../docs/research/partitioned-sitemap-feeds.md) supplies the adopted
@@ -2797,6 +2812,28 @@ rows, statements, blocks and bytes remain independent inclusive bounds; no nativ
 `collection-list-facts.test.ts` supplies native API/persona, configuration, concealment, tuple/identity/source-race and
 raw-width cases. `collection-list-facts-growth.test.ts` measures the whole fixed native page and its actual helpers at
 64/512/4096 unrelated fact/history populations, including failed and private/source-change work.
+
+### FULL shelf facts and viewer overlay cost
+
+Let `K<=100` be the returned page and `U<=K` its distinct valid original Subject IDs. The native shelf/Entry page
+examines at most `K+1` keys; the lookahead contributes only to `next`. The Semantic facts helper receives at most `K`
+raw occurrences, including duplicate occurrences, and the shared summary receives at most `U` distinct terminal IDs.
+Before and after Semantic disclosure, identity mappings cover at most `U` originals; the Semantic producer also
+re-observes each admitted source/terminal, active release, account and source tuple, and checks up to `4*3*K` selected
+fact values. At the maximum page this is at most 1,200 related item references, handled by at most 12 batches of 100
+IDs; source observations, SQL statements and blocks depend on the actual homes and indexes touched, not shelf
+population. The existing 64/512/4096 Collection growth scenario measures the shared facts/summary helpers, not the
+additional shelf and viewer composition.
+
+FULL reauthorization repeats the same native page query once after foreign reads; it compares the ordered rows,
+score descriptor and whether lookahead exists, while expiring cursor bytes may differ. The caller overlay then admits
+at most `K` returned rows: one bounded preparation/currentness path, one owner repeatable-read transaction and a final
+identity/account/question check. Viewer output serialization remains capped at 65,536 bytes. The fact attachment adds
+no command receipt, write lock, retry loop, cleanup phase or background job. If the ordinary shelf read first needs
+generation initialization, its existing maintenance command, receipt, partition deadline, retries and any cleanup
+remain additional costs under the shelf-maintenance contract. Every acquired pool/source connection and repeated
+authority statement remains in the inclusive cost. Personal-score ordering aborts unavailable by default, so this is
+not a source for whole-owner currentness or an available score order.
 
 ### Native identity scope planning and current seals
 

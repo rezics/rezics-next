@@ -215,4 +215,12 @@ test('late Subject disclosure loss refuses currentness and never exposes a conce
     reason: 'identity',
     retryable: true,
   });
+  const concealed = await createCollectionReads(deps()).withViewerFacts(
+    owner,
+    { members: [{ id: 'concealed', subjectId: id }] },
+    deadline(),
+  );
+  expect(concealed).toMatchObject({
+    viewerFacts: { state: 'unavailable', reason: 'identity', retryable: true },
+  });
 }, 180_000);

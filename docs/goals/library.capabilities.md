@@ -304,6 +304,20 @@ unchanged; the reports' historical fixture limitations are not failing exits.
 **Commands:** Use the frozen wrappers in the Native acceptance register. They are evidence entry points only; none
 ran in this inventory.
 
+FULL personal shelf and static curated Collection pages now attach Type-specific key facts from one bounded Semantic
+list-presentation batch. The selected Type and active release govern facts; Collection presentation overrides do not.
+The shared subject summary keeps language and cover handling, duplicate original Collection occurrences remain ordered,
+and page lookahead is excluded from Semantic and viewer authority. After foreign reads, the exact native page is
+reauthorized before disclosure. A visible subject with no configured keys returns `{}`; missing/denied identity or a
+changed page withholds the row. Page-level viewer-fact failures (`identity`, `currentness`, `response_limit`) are
+returned as value-free `unavailable`; row-level zero, absence and scope/question-unavailable states remain distinct.
+Personal-score ordering remains `503 dependency_unavailable` until Content supplies the owner-wide currentness fence;
+the bounded viewer overlay does not satisfy it.
+
+Deferred to controller integration: frozen A06 acceptance, full-Kernel/root checks, native growth/placement evidence,
+browser stories and the heavy acceptance suite. This worker runs only changed-workspace typechecking and the changed
+focused tests under the landing policy.
+
 ### 3. Definition-driven profiles, release changes and historic reads
 
 **Done-when:** Definition-driven Library profiles work consistently across compatible subject types, release

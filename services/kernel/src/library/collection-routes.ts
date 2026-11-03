@@ -10,6 +10,7 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { languageRanges } from '../semantic/language.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { FactSchema } from '../search/http/routes.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
@@ -875,13 +876,19 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
         },
         detail: detail('collection_member.list', 'collection:read', true),
       },
-      async ({ params, query, actor, admission, job, set }) => {
+      async ({ params, query, actor, admission, job, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
         let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
             ? read().readMembers(actor, params.collectionId, query, job.deadline)
             : query.view === 'FULL'
-              ? fullMembers(viewDependencies(), actor, params.collectionId, basicQuery(query), job.deadline)
+              ? fullMembers(
+                  viewDependencies(),
+                  actor,
+                  params.collectionId,
+                  { ...basicQuery(query), languages: languageRanges(request.headers.get('accept-language')) },
+                  job.deadline,
+                )
               : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
         if ('members' in result) result = await read().withViewerFacts(actor, result, job.deadline);

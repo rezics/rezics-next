@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { attachCollectionListFacts } from '../../src/library/collection-list-facts.ts';
 import { fullMembers } from '../../src/library/views.ts';
 import { testTokens } from '../support/test-kernel.ts';
@@ -53,6 +55,111 @@ test('FULL Collection members carry genuine Type-selected key facts in one nativ
     expect(basic.next).toBe(result.next);
     expect(basic.members).toEqual(result.members.map(({ subject, facts, ...member }) => member));
     expect(f.maximumHeldBackends()).toBeLessThanOrEqual(1);
+  } finally {
+    await f.close();
+  }
+}, 180_000);
+
+test('FULL shelf and Collection rows keep Type facts and the caller current state and zero score separate', async () => {
+  const f = await createCollectionListFactsFixture();
+  try {
+    const release = structuredClone(bundledRelease);
+    release.types['schema:Book']!.listPresentation = {
+      imageAspect: 'portrait',
+      keyFacts: ['schema:author', 'schema:wordCount'],
+    };
+    await f.publish(release);
+    const author = await f.create('schema:Person', {}, { en: 'Author', fr: 'Auteur' });
+    const book = await f.create(
+      'schema:Book',
+      { 'schema:author': author, 'schema:wordCount': quantity('+40') },
+      { en: 'Book', fr: 'Livre' },
+    );
+    const collection = await f.collection([book], 'public', 'schema:Movie');
+
+    for (const persona of ['editor', 'reader'] as const)
+      for (const action of ['library_entry:update', 'library_entry:list', 'library_entry:read', 'rating:vote'])
+        await f.grant(persona, action);
+    await f.grant('reader', 'progress_session:list');
+    await f.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
+    await f.checked('PUT', `/v1/subjects/${book}/ratings/${STANDARD_QUESTION_ID}/vote`, { units: 12 }, 'editor');
+    await f.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'planned' }, 'reader');
+    await f.checked('PUT', `/v1/subjects/${book}/ratings/${STANDARD_QUESTION_ID}/vote`, { units: 0 }, 'reader');
+    await f.db.admin.query(
+      `INSERT INTO access.exposure_opening ("group",valid,transaction_id)
+       VALUES ('personal_library',tstzrange('2020-01-01T00:00:00Z',NULL,'[)'),$1),
+              ('reading_progress',tstzrange('2020-01-01T00:00:00Z',NULL,'[)'),$2)`,
+      [randomUUID(), randomUUID()],
+    );
+
+    const shelf = await f.call(
+      'GET',
+      '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=1',
+      undefined,
+      'reader',
+      { 'accept-language': 'fr' },
+    );
+    expect(shelf.status).toBe(200);
+    expect(shelf.body.libraryEntries).toHaveLength(1);
+    expect(shelf.body.libraryEntries[0]).toMatchObject({
+      subjectId: book,
+      facts: {
+        'schema:author': [{ kind: 'item', id: author, labels: { fr: 'Auteur' } }],
+        'schema:wordCount': [{ kind: 'quantity', amount: 40, unit: '1' }],
+      },
+    });
+    expect(shelf.body.viewerFacts).toMatchObject({
+      state: 'current',
+      rows: [
+        {
+          subjectId: book,
+          entry: { state: 'present', entryState: 'planned' },
+          vote: { state: 'present', units: 0 },
+        },
+      ],
+    });
+    const compatible = await f.call(
+      'GET',
+      '/v1/libraryEntries?view=FULL&limit=1',
+      undefined,
+      'reader',
+      { 'accept-language': 'fr' },
+    );
+    expect(compatible.body.libraryEntries[0]!.facts).toEqual(shelf.body.libraryEntries[0]!.facts);
+
+    const members = await f.call(
+      'GET',
+      `/v1/collections/${collection.id}/members?view=FULL`,
+      undefined,
+      'reader',
+      { 'accept-language': 'fr' },
+    );
+    expect(members.status).toBe(200);
+    expect(members.body.members[0]).toMatchObject({ subjectId: book, facts: shelf.body.libraryEntries[0].facts });
+    expect(members.body.viewerFacts).toMatchObject({
+      state: 'current',
+      rows: [
+        {
+          subjectId: book,
+          entry: { state: 'present', entryState: 'planned' },
+          vote: { state: 'present', units: 0 },
+        },
+      ],
+    });
+
+    const nextRelease = structuredClone(release);
+    nextRelease.types['schema:Book']!.listPresentation!.keyFacts = ['schema:wordCount'];
+    await f.publish(nextRelease);
+    const refreshed = await f.call(
+      'GET',
+      '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=1',
+      undefined,
+      'reader',
+      { 'accept-language': 'fr' },
+    );
+    expect(refreshed.body.libraryEntries[0]!.facts).toEqual({
+      'schema:wordCount': [{ kind: 'quantity', amount: 40, unit: '1' }],
+    });
   } finally {
     await f.close();
   }

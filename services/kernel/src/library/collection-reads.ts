@@ -674,7 +674,6 @@ export function createCollectionReads(
       subjectId: member.subjectId,
     }));
     const facts = await readViewerFactsPage({ pool, access }, viewer, rows, STANDARD_QUESTION_ID, deadline);
-    if (facts.state !== 'current') return result;
     return { ...result, viewerFacts: facts };
   }
 
