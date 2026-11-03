@@ -12,6 +12,23 @@ expectTypeOf<Awaited<ReturnType<Inventory['get']>>['data']>().toEqualTypeOf<Watc
 expectTypeOf<WatchManagementPage['items'][number]>().toEqualTypeOf<WatchManagementItem>();
 expectTypeOf<WatchManagementKind>().toEqualTypeOf<'thread' | 'board'>();
 
+test('generated mounted inventory keeps bounded closed disclosure variants', async () => {
+  const contract = await Bun.file(new URL('../../../contracts/openapi.json', import.meta.url)).json();
+  const page =
+    contract.paths['/v1/accounts/{accountId}/watches'].get.responses['200'].content['application/json'].schema;
+  expect(page.additionalProperties).toBe(false);
+  expect(page.properties.items.maxItems).toBe(20);
+  const variants = page.properties.items.items.anyOf;
+  expect(variants).toHaveLength(2);
+  for (const variant of variants) {
+    expect(variant.additionalProperties).toBe(false);
+    expect(variant.properties.revision.minimum).toBe(1);
+    expect(variant.properties.createdAt.format).toBe('date-time');
+    expect(variant.properties.id.pattern).toBeString();
+  }
+  expect(Object.keys(variants[1].properties).sort()).toEqual(['createdAt', 'id', 'kind', 'revision', 'state']);
+});
+
 test('installed watch inventory preserves sparse cursors, unavailable retry and private removal metadata', async () => {
   const accountId = '019a1b2c-3d4e-7f00-8a00-000000000001';
   const watchId = '019a1b2c-3d4e-7f00-8a00-000000000002';
