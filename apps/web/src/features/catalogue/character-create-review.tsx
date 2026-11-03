@@ -114,6 +114,8 @@ export function CharacterCreateReview({
 }) {
   const o = { locale: locale as never };
   const languages = Object.keys(item.labels);
+  const descriptions = item.descriptions ?? {};
+  const aliases = item.aliases ?? {};
   return (
     <section
       data-slot="character-create-review"
@@ -141,14 +143,14 @@ export function CharacterCreateReview({
                   {item.labels[language]}
                 </p>
                 <p className="text-sm text-muted-foreground">{language}</p>
-                {item.descriptions[language] && (
+                {descriptions[language] && (
                   <p className="text-sm" lang={language}>
-                    {item.descriptions[language]}
+                    {descriptions[language]}
                   </p>
                 )}
-                {(item.aliases[language] ?? []).length > 0 && (
+                {(aliases[language] ?? []).length > 0 && (
                   <ul className="list-disc ps-5 text-sm">
-                    {item.aliases[language]!.map((alias) => (
+                    {aliases[language]!.map((alias) => (
                       <li key={alias} lang={language}>
                         {alias}
                       </li>

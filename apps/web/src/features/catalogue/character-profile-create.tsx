@@ -363,7 +363,9 @@ function CharacterProfileCreateLive({
   const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number } | null>(null);
   const fingerprint = characterCreateFingerprint(release, terms, facts);
   if (review.status === 'current' && review.fingerprint !== fingerprint)
-    setReview({ status: 'stale', fingerprint: review.fingerprint });
+    setReview(
+      review.fingerprint ? { status: 'stale', fingerprint: review.fingerprint } : { status: 'stale' },
+    );
   const termEditIsAdmitted = () => isCurrent() && !running.current && !refreshRunning.current && !pending.current;
   const changeTerm = (id: number, key: keyof TermDraft, value: string) => {
     if (!termEditIsAdmitted()) return;
@@ -709,12 +711,13 @@ function CharacterProfileCreateLive({
                             !refreshRunning.current &&
                             !pending.current;
                           if (!admitted()) return;
-                          const rank = event.target.value === 'preferred' ? 'preferred' : 'normal';
+                          const rank: 'normal' | 'preferred' =
+                            event.target.value === 'preferred' ? 'preferred' : 'normal';
                           setFacts((previous) => {
                             if (!admitted() || !previous.includes(fact)) return previous;
                             return previous.map((row) => {
                               if (row !== fact) return row;
-                              const next = { ...row, rank };
+                              const next: StatementInput = { ...row, rank };
                               factIds.current.set(next, factId(row));
                               return next;
                             });
@@ -747,9 +750,9 @@ function CharacterProfileCreateLive({
                       }}
                       guideReturn={`/${locale}/catalogue/character`}
                       heading="h4"
-                      partControl={
-                        search
-                          ? (part, change) =>
+                      {...(search
+                        ? {
+                            partControl: (part: SnakInput, change: (value: SnakInput['value']) => void) =>
                               release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
                                 <CharacterItemValue
                                   id={address}
@@ -761,9 +764,9 @@ function CharacterProfileCreateLive({
                                   disabled={locked}
                                   change={change}
                                 />
-                              ) : undefined
-                          : undefined
-                      }
+                              ) : undefined,
+                          }
+                        : {})}
                       reuse={{
                         disabled: locked,
                         onReuse: (index) => {
