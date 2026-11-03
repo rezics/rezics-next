@@ -26,6 +26,7 @@ const resolveAppeal: ResolveAppeal = (data) => actionOnAppeal({ data, headers: c
 type AppealResolutionProps = {
   appealId: string;
   mayResolve: boolean;
+  nativeSession?: string;
   resolution?: Resolution | null;
   onResolve?: ResolveAppeal;
   isCurrent?: () => boolean;
@@ -44,18 +45,21 @@ function ResolutionForm({
   appealId,
   mayResolve,
   resolution,
+  nativeSession,
   onResolve = resolveAppeal,
   isCurrent,
   onUnresolvedChange,
 }: AppealResolutionProps) {
-  const [intent] = useState(() => createAppealResolutionIntent(appealId));
+  const [intent] = useState(() => createAppealResolutionIntent(appealId, nativeSession));
   const [, redraw] = useReducer((version: number) => version + 1, 0);
   const mounted = useRef(true);
   const session = useSession();
   const viewer =
-    session.state === 'unknown' ? null : JSON.stringify([session.state, session.subject, session.csrfToken]);
+    session.state === 'unknown'
+      ? null
+      : JSON.stringify([session.state, session.subject, session.csrfToken, nativeSession]);
   const admitted =
-    mayResolve &&
+    (mayResolve || intent.unresolved) &&
     ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
       (session.state === 'unknown' && onResolve !== resolveAppeal));
   const focusAttempt = useRef(0);

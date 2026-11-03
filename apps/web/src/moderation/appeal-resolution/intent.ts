@@ -5,6 +5,7 @@ export type ResolutionCommand = Readonly<{
   outcome: 'uphold' | 'reverse';
   statement: string;
   idempotencyKey: string;
+  nativeSession?: string;
 }>;
 export type ResolutionSender = (command: ResolutionCommand) => Promise<AppealResolutionResult>;
 
@@ -20,7 +21,7 @@ export function appealResolutionObservation(
 }
 
 /** Memory belongs to one mounted private view. Retirement is irreversible; retries never create intent. */
-export function createAppealResolutionIntent(appealId: string) {
+export function createAppealResolutionIntent(appealId: string, nativeSession?: string) {
   let viewer: string | null = null;
   let admitted = false;
   let statement = '';
@@ -78,7 +79,13 @@ export function createAppealResolutionIntent(appealId: string) {
       const trimmed = statement.trim();
       const count = Array.from(trimmed).length;
       if (phase !== 'draft' || !admitted || count < 1 || count > 2000) return null;
-      command = Object.freeze({ id: appealId, outcome, statement: trimmed, idempotencyKey: crypto.randomUUID() });
+      command = Object.freeze({
+        id: appealId,
+        outcome,
+        statement: trimmed,
+        idempotencyKey: crypto.randomUUID(),
+        ...(nativeSession ? { nativeSession } : {}),
+      });
       sender = originalSender ?? null;
       phase = 'pending'; // Lock synchronously, before React renders or the transport starts.
       return command;

@@ -26,7 +26,10 @@ const control =
 export type WorkbenchViewProps = {
   page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'> &
     Partial<
-      Pick<WorkbenchRead, 'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal'>
+      Pick<
+        WorkbenchRead,
+        'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal' | 'nativeSession'
+      >
     >;
   onSearch: (search: WorkbenchSearch) => void;
   onRetry?: (event?: MouseEvent<HTMLButtonElement>) => void;
@@ -342,6 +345,7 @@ export function WorkbenchView({
             <div className="space-y-4">
               <WorkbenchAppeal
                 appealId={search.case}
+                {...(page.nativeSession ? { nativeSession: page.nativeSession } : {})}
                 page={{
                   state: page.state,
                   appeals: page.appeals ?? [],

@@ -1,4 +1,5 @@
-import type { KernelClient } from '@rezics/client';
+import { SESSION_HEADER, type KernelClient } from '@rezics/client';
+import { decodeJwt } from 'jose';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -12,40 +13,12 @@ import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './a
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
-export type AppealAppellantIdentity =
-  | {
-      state: 'available';
-      kind: 'actor' | 'organization';
-      handle: string | null;
-      displayName: string | null;
-      automated: boolean;
-    }
-  | { state: 'deleted' }
-  | { state: 'concealed' }
-  | { state: 'unavailable' };
-export type AppealTargetContext =
-  | {
-      state: 'available';
-      destination: { kind: 'board'; id: string } | { kind: 'thread'; id: string; boardId: string };
-    }
-  | { state: 'concealed' }
-  | { state: 'unavailable' };
-export type AppealResolutionSnapshot = {
-  outcome: 'upheld' | 'reversed';
-  statement: string;
-  resolvedAt: string;
-};
-export type AppealSource = { partition: number; epoch: number; position: string };
-export type AppealProvenance = {
-  actorId: string;
-  session: { clientId: string; authnEpoch: number };
-  source: AppealSource;
-};
-export type AppealResolutionCommand = {
-  operationId: 'moderation_appeal.resolve';
-  method: 'POST';
-  path: string;
-};
+export type AppealAppellantIdentity = NativeAppealPage['appeals'][number]['appellantIdentity'];
+export type AppealTargetContext = NativeAppealPage['appeals'][number]['targetContext'];
+export type AppealResolutionSnapshot = NonNullable<NonNullable<NativeAppealPage['selectedAppeal']>['resolution']>;
+export type AppealSource = NativeAppealPage['provenance']['source'];
+export type AppealProvenance = NativeAppealPage['provenance'];
+export type AppealResolutionCommand = NativeAppealPage['appeals'][number]['resolutionCommand'];
 export type Appeal = {
   id: string;
   decisionId: string;
@@ -68,12 +41,14 @@ export type Appeal = {
   };
   canResolve?: boolean;
 };
-/** Consumer presentation, independent of the pending page. Native binding remains unavailable. */
+/** Consumer presentation, independent of the pending page. */
 export type AppealPage = {
   appeals: Appeal[];
   next: string | null;
   selectedAppeal?: Appeal;
   provenance?: AppealProvenance;
+  /** Opaque native response token; retained only by the private read and original command. */
+  nativeSession?: string;
 };
 export type AppealReadSource = {
   boardAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
@@ -90,6 +65,7 @@ type NativeAppealPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['
 function boundedAppealPage(page: NativeAppealPage | null | undefined): AppealPage {
   if (!page || !Array.isArray(page.appeals) || page.appeals.length > MODERATION_APPEALS_PAGE_SIZE)
     throw new Error('Invalid appeals page');
+  if (page.next !== null && typeof page.next !== 'string') throw new Error('Invalid appeals continuation');
   return page;
 }
 
@@ -200,11 +176,7 @@ function appealResult(result: {
   return boundedAppealPage(result.data);
 }
 
-/**
- * The installed client declares only pending pages. Exact inspection must not silently
- * degrade into page search or an undeclared request. Bind the generated inspect reader
- * here when Content installs its composed response and examples.
- */
+/** The generated request returns one bounded pending page and one independent exact selection. */
 export async function readModerationAppealPage(
   client: KernelClient,
   input: AppealReadInput,
@@ -218,36 +190,22 @@ export async function readModerationAppealPage(
     readerOrigin: readerOrigin ?? null,
     generation: crypto.randomUUID(),
   };
-  if (input.inspect)
-    return {
-      ...identity,
-      appeals: [],
-      targets: [],
-      next: null,
-      state: 'unavailable',
-      unavailableReason: 'native-appeal-inspect',
-    };
   try {
     const headers = auth(authorization);
-    const page = await readModerationAppeals(
-      {
-        boardAppeals: async (id, cursor) =>
-          appealResult(
-            await client.boards({ id }).appeals.get({
-              ...headers,
-              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            }),
-          ),
-        threadAppeals: async (id, cursor) =>
-          appealResult(
-            await client.threads({ id }).appeals.get({
-              ...headers,
-              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-            }),
-          ),
-      },
-      input,
-    );
+    const query = {
+      limit: MODERATION_APPEALS_PAGE_SIZE,
+      ...(input.cursor ? { cursor: input.cursor } : {}),
+      inspect: input.inspect,
+    };
+    const result = input.threadId
+      ? await client.threads({ id: input.threadId }).appeals.get({ ...headers, query })
+      : await client.boards({ id: input.boardId }).appeals.get({ ...headers, query });
+    const page = appealResult(result);
+    if (input.inspect) {
+      const nativeSession = new Headers(result.headers).get(SESSION_HEADER);
+      validateAppealInspection(page, input.inspect, authorization, viewerId, readerOrigin, nativeSession);
+      return { ...page, nativeSession: nativeSession!, targets: [], ...identity, state: 'ready' };
+    }
     return { ...page, targets: [], ...identity, state: 'ready' };
   } catch (error) {
     return {
@@ -257,5 +215,73 @@ export async function readModerationAppealPage(
       next: null,
       state: error instanceof AppealReadFailure ? error.state : isPlatformClosedError(error) ? 'closed' : 'unavailable',
     };
+  }
+}
+
+/** Final native page observation must cover every retained row and the exact selection. */
+function validSource(source: AppealSource | undefined): source is AppealSource {
+  return (
+    !!source &&
+    Number.isSafeInteger(source.partition) &&
+    source.partition >= 0 &&
+    Number.isSafeInteger(source.epoch) &&
+    source.epoch > 0 &&
+    typeof source.position === 'string' &&
+    source.position.length <= 32 &&
+    /^(0|[1-9][0-9]*)$/.test(source.position)
+  );
+}
+
+function validateAppealInspection(
+  page: AppealPage,
+  inspect: string,
+  authorization: string,
+  viewerId: string,
+  origin: PrivateReaderOrigin | null | undefined,
+  nativeSession: string | null,
+) {
+  // Comparison only: the successful native operation authenticates this same credential.
+  // The opaque native session token is never decoded or used as authorization.
+  const credential = decodeJwt(authorization.replace(/^Bearer /, ''));
+  const provenance = page.provenance;
+  const selected = page.selectedAppeal;
+  if (
+    !origin ||
+    origin.subject !== viewerId ||
+    !origin.csrfFingerprint ||
+    !nativeSession ||
+    !provenance ||
+    provenance.actorId !== viewerId ||
+    credential.sub !== viewerId ||
+    !provenance.session ||
+    typeof provenance.session.clientId !== 'string' ||
+    !provenance.session.clientId ||
+    provenance.session.clientId !== credential.client_id ||
+    provenance.session.authnEpoch !== credential.authn_epoch ||
+    !Number.isSafeInteger(provenance.session.authnEpoch) ||
+    provenance.session.authnEpoch <= 0 ||
+    !validSource(provenance.source) ||
+    !selected ||
+    selected.id !== inspect ||
+    !Object.hasOwn(selected, 'resolution') ||
+    (selected.resolution !== null &&
+      (!selected.resolution ||
+        !['upheld', 'reversed'].includes(selected.resolution.outcome) ||
+        typeof selected.resolution.statement !== 'string' ||
+        !Number.isFinite(Date.parse(selected.resolution.resolvedAt))))
+  )
+    throw new AppealReadFailure('unavailable');
+  for (const appeal of [...page.appeals, selected]) {
+    const source = appeal.source;
+    if (
+      !validSource(source) ||
+      source.partition !== provenance.source.partition ||
+      source.epoch !== provenance.source.epoch ||
+      BigInt(source.position) > BigInt(provenance.source.position) ||
+      appeal.resolutionCommand?.operationId !== 'moderation_appeal.resolve' ||
+      appeal.resolutionCommand.method !== 'POST' ||
+      appeal.resolutionCommand.path !== `/v1/moderation-appeals/${appeal.id}:resolve`
+    )
+      throw new AppealReadFailure('unavailable');
   }
 }

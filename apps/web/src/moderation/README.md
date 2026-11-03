@@ -46,13 +46,13 @@ native current board/thread destination and uses only disclosed appellant displa
 read current target bodies or fall back to the appellant account ID. Board and thread pending reads do no per-row
 target, identity or media hydration. Board targets remain operational appeals.
 
-The installed generated client still has not published Content's composed `inspect` request and response. Production
-exact selection therefore exposes `native-appeal-inspect` as unavailable, preserving the captured return queue. The
-consumer can present the composed disclosure and resolution fields when an admitted selected record is supplied,
-but native provenance, opaque session custody and the exact request remain unbound. No successful native exact
-inspection is claimed. See the [case and appeal guide](workbench-case.md) for the source, retirement and cost
-boundaries. Existing AppealResolution captures its sender and CSRF headers with its immutable command, retaining
-them through explicit uncertain retry.
+Board and thread inspection use the installed generated `inspect` request and composed response. Exact selection
+must match its requested ID and native page source, the prepared actor and current browser session; it also requires
+the opaque native response session header. The token stays in the private read and original frozen command, is never
+rendered or decoded, and is sent unchanged on resolution retry. Missing or inconsistent inspection remains unavailable
+without selecting a pending row. See the [case and appeal guide](workbench-case.md) for source, retirement and Cost
+boundaries. Native command authorization remains authoritative; a resolved observation or changed `canResolve` hint
+cannot acknowledge an uncertain original command.
 
 Selected workbench retry stays inside its admitted private reader and preserves the exact search, including the
 selected appeal and captured cursor. Keyboard recovery returns to the retry control or workbench boundary unless

@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import { SESSION_HEADER, type KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -16,7 +16,7 @@ type TakeDownInput = {
   reason: string;
 };
 type DismissInput = { reportId: string };
-type ResolveAppealInput = { id: string; outcome: 'uphold' | 'reverse'; statement: string };
+type ResolveAppealInput = { id: string; outcome: 'uphold' | 'reverse'; statement: string; nativeSession?: string };
 export type AppealResolutionResult =
   | { state: 'resolved'; outcome: 'uphold' | 'reverse'; statement: string }
   | { state: 'forbidden' }
@@ -104,7 +104,12 @@ export async function sendModerationAppealResolution(
   return submitModerationAppealResolution(async () => {
     const result = await client['moderation-appeals']({ id: data.id }).$resolve.post(
       { outcome: data.outcome, statement: data.statement },
-      { headers: moderationCommandHeaders(authorization, data.idempotencyKey) },
+      {
+        headers: {
+          ...moderationCommandHeaders(authorization, data.idempotencyKey),
+          ...(data.nativeSession ? { [SESSION_HEADER]: data.nativeSession } : {}),
+        },
+      },
     );
     if (result.error) throw Object.assign(new Error('Appeal resolution failed'), { status: result.status });
     return result.data;
@@ -165,7 +170,16 @@ export const actionOnAppeal = createServerFn({ method: 'POST' })
       Array.from(value.statement.trim()).length > 2000
     )
       throw new Error('Invalid appeal resolution');
+    if (
+      value.nativeSession !== undefined &&
+      (typeof value.nativeSession !== 'string' ||
+        !value.nativeSession ||
+        value.nativeSession.length > 65536 ||
+        /[\r\n]/.test(value.nativeSession))
+    )
+      throw new Error('Invalid native appeal session');
     return {
+      ...(typeof value.nativeSession === 'string' ? { nativeSession: value.nativeSession } : {}),
       id: value.id,
       outcome: value.outcome,
       statement: value.statement.trim(),

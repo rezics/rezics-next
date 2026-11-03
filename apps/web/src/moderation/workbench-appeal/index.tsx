@@ -19,6 +19,7 @@ export function WorkbenchAppeal({
   onRetry,
   onRestart,
   onUnresolvedChange,
+  nativeSession,
 }: {
   appealId: string;
   page: Parameters<typeof workbenchAppealFromPage>[0];
@@ -27,6 +28,7 @@ export function WorkbenchAppeal({
   onRetry?: (event?: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
+  nativeSession?: string;
 }) {
   const result = workbenchAppealFromPage(page, appealId);
   if (result.state !== 'ready') {
@@ -42,6 +44,7 @@ export function WorkbenchAppeal({
   return (
     <WorkbenchAppealDetail
       appeal={result.appeal}
+      {...(nativeSession ? { nativeSession } : {})}
       queueHref={queueHref}
       {...(isCurrent ? { isCurrent } : {})}
       {...(onUnresolvedChange ? { onUnresolvedChange } : {})}
@@ -54,11 +57,13 @@ export function WorkbenchAppealDetail({
   queueHref,
   isCurrent,
   onUnresolvedChange,
+  nativeSession,
 }: {
   appeal: Appeal;
   queueHref: string;
   isCurrent?: () => boolean;
   onUnresolvedChange?: (unresolved: boolean) => void;
+  nativeSession?: string;
 }) {
   const originalTarget = appealTarget(appeal);
   const resolution = appeal.resolution !== undefined ? appeal.resolution : (appeal.decision.appeal ?? null);
@@ -117,6 +122,7 @@ export function WorkbenchAppealDetail({
           )}
           <AppealResolution
             appealId={appeal.id}
+            {...(nativeSession ? { nativeSession } : {})}
             mayResolve={appeal.canResolve === true}
             resolution={resolution}
             {...(isCurrent ? { isCurrent } : {})}

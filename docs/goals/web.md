@@ -171,9 +171,10 @@ independent rather than making shared files or unfinished producer delivery into
   aggregate case search or platform-wide adjudication. Exact appeal selection now has an independent consumer beside
   the captured pending page, with no row scan or target enrichment. Its presentation separates original decision
   evidence from the disclosed current destination, shows only allowlisted appellant display fields and keeps explicit
-  pending/resolved outcomes. The generated Appeals client still lacks Content's composed inspection request and
-  response, so production exact selection remains the named unavailable `native-appeal-inspect` seam; page/selection
-  provenance and opaque session binding remain continuation work. See the [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
+  pending/resolved outcomes. The generated board/thread Appeals operation binds exact inspection, page/selection source provenance and the
+  prepared private actor/session. The opaque native session header follows only the private read and original
+  resolution command; missing or inconsistent inspection stays unavailable. Current resolved observations never
+  acknowledge uncertain commands; explicit retry retains the original sender, CSRF headers, key and operands. See the [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
   selected board; the Global catalogue has no history queue. The Web entry stays explicitly unavailable until
   Content delivers its private native history reader. It never
   derives history from report or appeal scans.
