@@ -1,4 +1,5 @@
 import { ProblemError } from '../http/problem.ts';
+import type { EntryImportMetadataReview } from './list-import-entry-metadata.ts';
 
 export const BANGUMI_LIMITS = { bytes: 262144, rows: 100, rowBytes: 8192, page: 10, apply: 5, depth: 16 } as const;
 export type BangumiRecord = Record<string, unknown>;
@@ -19,6 +20,7 @@ export type BangumiReview = {
   proposedState: string | null;
   current: { state: string; revision: number; incarnationId?: string | null } | null;
   conflict: boolean;
+  metadata?: EntryImportMetadataReview[];
 };
 export type BangumiChoice = {
   ordinal: number;

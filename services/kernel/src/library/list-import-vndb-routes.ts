@@ -11,6 +11,7 @@ import { LibraryNotFoundError } from './command-support.ts';
 import { createVndbImport } from './list-import-vndb.ts';
 import { vndbLabelAdoptionRoutes } from './list-import-vndb-label-routes.ts';
 import { VNDB_LIMITS, VndbInvalid } from './list-import-vndb-parser.ts';
+import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
 import {
   vndbApplySchema,
   vndbDecisionSchema,
@@ -26,6 +27,21 @@ const closed = { additionalProperties: false } as const;
 const uuid = t.String({ format: 'uuid' }),
   ordinal = t.Integer({ minimum: 0, maximum: VNDB_LIMITS.rows - 1 });
 const params = t.Object({ uploadId: uuid }, closed);
+const metadataParams = t.Object({ uploadId: uuid, ordinal }, closed);
+const metadataSelection = t.Object(
+  {
+    field: t.Union([
+      t.Literal('note'),
+      t.Literal('priority'),
+      t.Literal('privacy'),
+      t.Literal('sourceCreated'),
+      t.Literal('sourceUpdated'),
+    ]),
+    action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+    mapping: t.Optional(t.String({ maxLength: 64 })),
+  },
+  closed,
+);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const failures = {
   400: problemSchema('invalid_request'),
@@ -137,6 +153,77 @@ export function vndbImportRoutes(
           session.record(result);
           return result.value;
         }),
+    )
+    .post(
+      customMethod('/v1/libraryImports/vndb/:uploadId', 'reviewMetadata'),
+      {
+        params,
+        headers,
+        body: t.Object({ ordinal, sourceReviewToken: uuid }, closed),
+        response: { 200: t.Unsafe<Output<'reviewMetadata'>['value']>(t.Any()), ...failures },
+        detail: detail('review_metadata'),
+      },
+      ({ actor, params, body, headers, admission, job, session, set }) =>
+        run(set, async () => {
+          const result = await admission.run('normal', job, () =>
+            service().reviewMetadata(
+              actor,
+              params.uploadId,
+              body.ordinal,
+              body.sourceReviewToken,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          );
+          session.record(result);
+          return result.value;
+        }),
+    )
+    .get(
+      '/v1/libraryImports/vndb/:uploadId/metadata/:ordinal',
+      {
+        params: metadataParams,
+        query: t.Object({ reviewToken: uuid }, closed),
+        response: { 200: t.Unsafe<Output<'metadata'>>(t.Any()), ...failures },
+        detail: detail('read_metadata', false),
+      },
+      ({ actor, params, query, admission, job, set }) =>
+        run(set, () =>
+          admission.run('normal', job, () => service().metadata(actor, params.uploadId, params.ordinal, query.reviewToken)),
+        ),
+    )
+    .post(
+      customMethod('/v1/libraryImports/vndb/:uploadId', 'applyMetadata'),
+      {
+        params,
+        body: t.Object(
+          {
+            ordinal,
+            reviewToken: uuid,
+            fields: t.Array(metadataSelection, {
+              minItems: 1,
+              maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields,
+              uniqueItems: true,
+            }),
+          },
+          closed,
+        ),
+        response: { 200: t.Unsafe<Output<'applyMetadata'>>(t.Any()), ...failures },
+        detail: detail('apply_metadata'),
+      },
+      ({ actor, params, body, request, admission, job, session, set }) =>
+        run(set, () =>
+          admission.run('normal', job, () =>
+            service().applyMetadata(
+              actor,
+              params.uploadId,
+              body.ordinal,
+              body.reviewToken,
+              body.fields,
+              (outcome) => session.record(outcome),
+              request.signal,
+            ),
+          ),
+        ),
     )
     .post(
       customMethod('/v1/libraryImports/vndb/:uploadId', 'apply'),

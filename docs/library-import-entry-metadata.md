@@ -21,8 +21,10 @@ never converted to a clear. `clear` is an explicit native operation. Priority cl
 | Bangumi | `comment` or `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported | retained `private` when a recognized boolean value is present | retained `created_at` | retained `updated_at` |
 | AniList | `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported; retained numeric priority has no adopted mapping | a retained boolean `private` field only | retained `createdAt` | retained `updatedAt` |
 
-Recognized boolean privacy values are provider-specific true/false tokens. Unknown nonempty tokens remain private
-unknown evidence and can be adopted only when the native provenance value can retain the exact token. Empty values,
+Recognized boolean privacy values are provider-specific true/false tokens. MAL maps textual `private`/`true` and
+`public`/`false`; numeric `0` and `1` remain unknown until the retained provider contract defines their meanings.
+Unknown nonempty tokens remain private unknown evidence and can be adopted only when the native provenance value can
+retain the exact token. Empty values,
 malformed values and fields absent from a provider's retained schema stay distinguishable and are not guessed. Date-only
 and timestamp strings retain their original precision and zone. AniList integer time tokens are retained as unknown
 timestamp evidence without conversion. State dates such as MAL start/finish and VNDB started/finished never become
@@ -51,7 +53,7 @@ the current native values and mapped provider values. Confirmation sends that to
 operations (`adopt` or `clear`). `adopt` takes only the exact retained value shown by that review. Priority adoption
 also requires its displayed mapping identifier. No caller-supplied note, priority or provenance value is accepted.
 
-The metadata ledger is stored with the provider's existing upload row and is capped at eight reviews per row. It is
+The metadata ledger is stored with the provider's existing upload row and is capped at two reviews per row. It is
 removed by the existing upload deletion, expiry and account-erasure owners. A successful or stale receipt is retained
 through one refresh so an old retry can return its original field results without confirming the new token. Pending
 effects must be retried or resolved before a new review can replace them.
@@ -74,8 +76,12 @@ events or unredacted errors.
 The field count is `F <= 5`; the adopted note bound is `B = 4,096` UTF-8 bytes. A metadata read addresses one row and
 returns at most one native personal entry with at most 32 source observations. Existing provider page sizes are the
 result page bound `P`: VNDB 8, MAL 20, Bangumi 10 and AniList 20. The selected row count per metadata confirmation is
-`R = 1`; repeated requests remain bounded by the upload row count and eight review tokens per row. The review body is
-bounded to 1 KiB, confirmation to five operations and less than 2 KiB, and the private comparison response to 64 KiB.
+`R = 1`; repeated requests remain bounded by the upload row count and two review tokens per row. Each request body is
+capped at 2,048 encoded bytes, selects at most five fields and addresses at most two native commands: one atomic
+annotation command and one atomic source-observation admission or correction. The private comparison response is
+capped at 65,536 encoded bytes. Each retained metadata review is capped at 32,768 JSON bytes and each row history at
+65,536 bytes. MAL's existing whole-document limit is raised from 12 MiB to 48 MiB, covering the previous evidence
+allowance plus 500 rows × two 32 KiB review records, rounded up.
 
 Per review cost is the provider's indexed owner/upload/row read and current profile admission, plus the native personal
 read of one Subject and at most 32 indexed source observations. Per apply cost adds at most one annotation command and

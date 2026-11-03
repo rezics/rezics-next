@@ -25,11 +25,27 @@ import {
   type BangumiLabelOutcome,
   type BangumiTagPage,
 } from './list-import-bangumi-label-model.ts';
+import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const ordinal = t.Integer({ minimum: 0, maximum: 99 });
 const params = t.Object({ uploadId: id }, closed);
+const metadataParams = t.Object({ uploadId: id, ordinal: t.Integer({ minimum: 0, maximum: 99 }) }, closed);
+const metadataSelection = t.Object(
+  {
+    field: t.Union([
+      t.Literal('note'),
+      t.Literal('priority'),
+      t.Literal('privacy'),
+      t.Literal('sourceCreated'),
+      t.Literal('sourceUpdated'),
+    ]),
+    action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+    mapping: t.Optional(t.String({ maxLength: 64 })),
+  },
+  closed,
+);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const result = <T>() => t.Unsafe<T>(t.Any());
 const failures = {
@@ -128,6 +144,71 @@ export function bangumiImportRoutes(
               body.target,
               idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
             ),
+          ),
+        );
+      },
+    )
+    .post(
+      customMethod('/v1/libraryImports/bangumi/:uploadId', 'reviewMetadata'),
+      {
+        params,
+        headers,
+        body: t.Object({ ordinal, sourceReviewToken: id }, closed),
+        response: { 200: result<{ ordinal: number; reviewToken: string }>(), ...failures },
+        detail: detail('library_bangumi.review_metadata'),
+      },
+      ({ actor, params, body, headers, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () =>
+          admission.run('normal', job, () =>
+            engine().reviewMetadata(
+              actor,
+              params.uploadId,
+              body.ordinal,
+              body.sourceReviewToken,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
+      },
+    )
+    .get(
+      '/v1/libraryImports/bangumi/:uploadId/metadata/:ordinal',
+      {
+        params: metadataParams,
+        query: t.Object({ reviewToken: id }, closed),
+        response: { 200: result<Output<'metadata'>>(), ...failures },
+        detail: detail('library_bangumi.read_metadata', false),
+      },
+      ({ actor, params, query, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () => engine().metadata(actor, params.uploadId, params.ordinal, query.reviewToken));
+      },
+    )
+    .post(
+      customMethod('/v1/libraryImports/bangumi/:uploadId', 'applyMetadata'),
+      {
+        params,
+        body: t.Object(
+          {
+            ordinal,
+            reviewToken: id,
+            fields: t.Array(metadataSelection, {
+              minItems: 1,
+              maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields,
+              uniqueItems: true,
+            }),
+          },
+          closed,
+        ),
+        response: { 200: result<Output<'applyMetadata'>>(), ...failures },
+        detail: detail('library_bangumi.apply_metadata'),
+      },
+      ({ actor, params, body, request, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () =>
+          admission.run('normal', job, () =>
+            engine().applyMetadata(actor, params.uploadId, body.ordinal, body.reviewToken, body.fields, request.signal),
           ),
         );
       },

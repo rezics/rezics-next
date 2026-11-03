@@ -4,7 +4,7 @@ import { ProblemError } from '../http/problem.ts';
 export const MAL_LIMITS = {
   bytes: 2_097_152,
   wireBytes: 4_194_304,
-  evidenceBytes: 12_582_912,
+  evidenceBytes: 50_331_648,
   rows: 500,
   page: 20,
   depth: 16,
