@@ -126,8 +126,8 @@ Decision: board creation consumes preallocated empty Realms with the same owner,
 captured creation has an identical selected neighborhood; population and retained revision/command history grow
 independently. All asserted boards, scheme heads and Context decisions come from native commands. The shared
 container fixture accepts an additional unmeasured growth hook for Semantic and board neighbors, while preserving
-its observer, classifier, three scales and bounds. Context history adds retained subject revisions without changing
-facts, candidates or current decisions. Board history adds retained scheme and prepared-Realm revisions. Native
+its observer, classifier, three scales and bounds. Context history uses native reject/accept pairs on the fixed candidate and Context, ending accepted at each scale;
+its retained verdicts, revisions and command log grow without widening the selected page or changing Global facts. Board history adds retained scheme and prepared-Realm revisions. Native
 creation, command response reads, candidate reads and continuation-page work stay inside capture. These bindings
 require execution and do not close measured acceptance. Ban/publication boundaries still require separate physical
 bindings; the existing positive series and persona regressions do not establish those costs.

@@ -61,52 +61,75 @@ for (const axis of axes)
         actions: ['realm:read'], valid: '(,)',
       });
       const subjectRoute = routeOf(book.id)!;
-      let revisionBase = Number((await f.db.admin.query(
-        'SELECT max(revision) AS revision FROM semantic.revision WHERE route=$1 AND subject_id=$2',
-        [subjectRoute, book.id],
-      )).rows[0].revision);
+      const template = (await f.db.admin.query<{ slot_id: string; statement: Record<string, unknown> }>(
+        'SELECT slot_id, statement FROM semantic.candidate WHERE route=$1 AND subject_id=$2 AND candidate_id=$3',
+        [subjectRoute, book.id, candidate],
+      )).rows[0]!;
       const population: Population = {
-        name: `community-context-${axis}-${book.id}`,
+        name: `community-context-population-${book.id}`,
         hotPartition: partitionOf(subjectRoute), hotShare: 1,
-        rows({ route, ordinal }) {
-          const rowRoute = axis === 'history' ? subjectRoute : route;
-          const subject = axis === 'history' ? book.id : newId(rowRoute);
+        rows({ route }) {
+          const subject = newId(route), candidateId = newId(route);
           const transaction = crypto.randomUUID();
           return {
-            ...(axis === 'population' ? { 'semantic.subject': [{
-              route: rowRoute, subject_id: subject, type: 'schema:Book', recorded_transaction_id: transaction,
-            }] } : {}),
-            // Retained revisions never replace a fact, candidate or current decision.
-            'semantic.revision': [{
-              route: rowRoute, subject_id: subject,
-              revision: axis === 'history' ? revisionBase + (ordinal + 1) * 1000 : 1,
-              kind: axis === 'history' ? 'propose' : 'create', release: bundledDigest,
-              recorded_transaction_id: transaction,
+            'semantic.subject': [{ route, subject_id: subject, type: 'schema:Book',
+              recorded_transaction_id: transaction, current_release: bundledDigest }],
+            'semantic.revision': [1, 2].map((revision) => ({
+              route, subject_id: subject, revision, kind: revision === 1 ? 'create' : 'accept',
+              release: bundledDigest, recorded_transaction_id: crypto.randomUUID(),
+            })),
+            'semantic.candidate': [{
+              route, subject_id: subject, candidate_id: candidateId, slot_id: template.slot_id,
+              property: 'schema:datePublished', rank: 'normal',
+              statement: { ...template.statement, id: candidateId },
+              release: bundledDigest, revision: 1, origin: 'compact',
             }],
+            'semantic.acceptance': [{ route, subject_id: subject, context_id: context,
+              candidate_id: candidateId, head: 1, verdict: 'accept', revision: 2 }],
+            'semantic.acceptance_current': [{ route, subject_id: subject, context_id: context,
+              candidate_id: candidateId, slot_id: template.slot_id, head: 1, verdict: 'accept', revision: 2 }],
           };
         },
       };
-      const grow = async (scale: number, previous: number) => {
-        if (previous === 0) revisionBase = Number((await f.db.admin.query(
-          'SELECT max(revision) AS revision FROM semantic.revision WHERE route=$1 AND subject_id=$2',
-          [subjectRoute, book.id],
-        )).rows[0].revision);
-        await seed(f.db, population, { from: previous, to: scale });
-        const result = await f.db.admin.query<{ count: number }>(axis === 'history'
-          ? 'SELECT count(*)::integer AS count FROM semantic.revision WHERE route=$1 AND subject_id=$2'
-          : 'SELECT count(*)::integer AS count FROM semantic.subject WHERE route BETWEEN $1 AND $1+15 AND subject_id<>$2',
-        [axis === 'history' ? subjectRoute : partitionOf(subjectRoute) * 16, book.id]);
-        expect(result.rows[0]!.count).toBeGreaterThanOrEqual(scale);
-      };
       let head: number | null = null;
+      const decide = async (verb: 'accept' | 'reject') => {
+        const { acceptance } = await f.call<{ acceptance: { head: number; decision: string } }>(
+          'POST', `${path}/candidates/${candidate}:${verb}`, 200, f.owner,
+          { context, expected_head: head },
+        );
+        expect(acceptance).toMatchObject({ context, candidate, decision: verb, head: (head ?? 0) + 1 });
+        head = acceptance.head;
+      };
+      let historyBaseline = 0;
+      const grow = async (scale: number, previous: number) => {
+        if (axis === 'history') {
+          if (previous === 0) historyBaseline = Number((await f.db.admin.query(
+            'SELECT count(*) AS count FROM semantic.acceptance WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND candidate_id=$4',
+            [subjectRoute, book.id, context, candidate],
+          )).rows[0].count);
+          // Native verdicts grow this exact candidate/Context history and its command
+          // log. Each pair ends accepted, preserving the fixed visible neighborhood.
+          for (let ordinal = previous; ordinal < scale; ordinal++) {
+            await decide('reject');
+            await decide('accept');
+          }
+          const result = await f.db.admin.query<{ count: number }>(
+            'SELECT count(*)::integer AS count FROM semantic.acceptance WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND candidate_id=$4',
+            [subjectRoute, book.id, context, candidate],
+          );
+          expect(result.rows[0]!.count).toBeGreaterThanOrEqual(historyBaseline + scale * 2);
+        } else {
+          await seed(f.db, population, { from: previous, to: scale });
+          const result = await f.db.admin.query<{ count: number }>(
+            'SELECT count(*)::integer AS count FROM semantic.acceptance_current WHERE route BETWEEN $1 AND $1+15 AND subject_id<>$2 AND context_id=$3',
+            [partitionOf(subjectRoute) * 16, book.id, context],
+          );
+          expect(result.rows[0]!.count).toBeGreaterThanOrEqual(scale);
+        }
+      };
       await f.measure(`community ${visibility} Context local reject accept and Global fallback`, selected, axis, async () => {
         for (const verb of ['reject', 'accept'] as const) {
-          const { acceptance } = await f.call<{ acceptance: { head: number; decision: string } }>(
-            'POST', `${path}/candidates/${candidate}:${verb}`, 200, f.owner,
-            { context, expected_head: head },
-          );
-          expect(acceptance).toMatchObject({ context, candidate, decision: verb, head: (head ?? 0) + 1 });
-          head = acceptance.head;
+          await decide(verb);
           const local = await read(context);
           expect(local.context).toBe(context);
           for (const field of ['id', 'type', 'labels', 'descriptions', 'aliases'] as const)
@@ -149,5 +172,5 @@ for (const axis of axes)
           expect(local.subject.statements).toEqual(global.statements);
         }
       }, grow);
-    }, 600_000);
+    }, 1_800_000);
   }
