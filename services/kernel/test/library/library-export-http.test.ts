@@ -216,14 +216,13 @@ test('native owner export streams independent persisted facts, preserves dates, 
     orderComplete: true,
     visibilityDisposition: 'will_be_private',
   });
-  const occurrencePage = await client.libraryArchiveCollectionRecoveries({ id: recoveryUploadId })
-    .collections({ collectionId: collection }).occurrences.get({ query: { limit: 50 } });
+  const occurrencePage = await client
+    .libraryArchiveCollectionRecoveries({ id: recoveryUploadId })
+    .collections({ collectionId: collection })
+    .occurrences.get({ query: { limit: 50 } });
   if (occurrencePage.error) throw occurrencePage.error;
   if (!occurrencePage.data) throw new Error('Archive recovery occurrence page returned no data');
-  expect(occurrencePage.data.occurrences.map((item) => item.note)).toEqual([
-    'second occurrence',
-    'first occurrence',
-  ]);
+  expect(occurrencePage.data.occurrences.map((item) => item.note)).toEqual(['second occurrence', 'first occurrence']);
   expect(occurrencePage.data.occurrences.map((item) => item.sourceOccurrenceId)).toEqual([
     sourceMemberIds[1]!,
     sourceMemberIds[0]!,
@@ -258,9 +257,18 @@ test('native owner export streams independent persisted facts, preserves dates, 
   const recovered = await get(`/v1/collections/${recoveredId}?view=FULL`);
   expect(recovered.collection).toMatchObject({ id: recoveredId, title: 'Weekend', visibility: 'private' });
   const recoveredMembers = await get(`/v1/collections/${recoveredId}/members?limit=20`);
-  expect(recoveredMembers.members.map((member: { subjectId: string; note: string | null }) => [member.subjectId, member.note]))
-    .toEqual([[subjectIds[4], 'second occurrence'], [subjectIds[4], 'first occurrence']]);
-  expect((await request('GET', `/v1/libraryArchiveCollectionRecoveries/${recoveryUploadId}`, 'other')).status).toBe(404);
+  expect(
+    recoveredMembers.members.map((member: { subjectId: string; note: string | null }) => [
+      member.subjectId,
+      member.note,
+    ]),
+  ).toEqual([
+    [subjectIds[4], 'second occurrence'],
+    [subjectIds[4], 'first occurrence'],
+  ]);
+  expect((await request('GET', `/v1/libraryArchiveCollectionRecoveries/${recoveryUploadId}`, 'other')).status).toBe(
+    404,
+  );
 
   const recoveryAccess = fixture.access({
     actions: new Map([...scopes.map((action) => [action, { anonymous: false }] as const), ...LIFECYCLE_ACTIONS]),
@@ -282,37 +290,53 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   const directUpload = await replayService.create(ownerActor, archiveBase64, randomUUID());
   const directCollections = await replayService.listCollections(ownerActor, directUpload.uploadId, { limit: 50 });
-  const directPreview = await replayService.previewCollection(
-    ownerActor, directUpload.uploadId, collection, { limit: 50 },
-  );
+  const directPreview = await replayService.previewCollection(ownerActor, directUpload.uploadId, collection, {
+    limit: 50,
+  });
   const selectedOccurrences = directPreview.occurrences.map((item) => item.sourceOccurrenceId);
   const sourceMapping = [{ sourceSubjectId: subjectIds[4]!, targetSubjectId: subjectIds[4]! }];
   const oldReview = await replayService.review(
-    ownerActor, directUpload.uploadId,
-    { collectionId: collection, selectedOccurrenceIds: selectedOccurrences, mappings: sourceMapping }, randomUUID(),
+    ownerActor,
+    directUpload.uploadId,
+    { collectionId: collection, selectedOccurrenceIds: selectedOccurrences, mappings: sourceMapping },
+    randomUUID(),
   );
   const changedReview = await replayService.review(
-    ownerActor, directUpload.uploadId,
-    { collectionId: collection, selectedOccurrenceIds: selectedOccurrences,
-      mappings: [{ sourceSubjectId: subjectIds[4]!, targetSubjectId: null }] }, randomUUID(),
+    ownerActor,
+    directUpload.uploadId,
+    {
+      collectionId: collection,
+      selectedOccurrenceIds: selectedOccurrences,
+      mappings: [{ sourceSubjectId: subjectIds[4]!, targetSubjectId: null }],
+    },
+    randomUUID(),
   );
   expect(changedReview.mappings[0]?.state).toBe('unresolved');
   await expect(replayService.apply(ownerActor, directUpload.uploadId, oldReview.confirmation!)).rejects.toThrow();
   const finalReview = await replayService.review(
-    ownerActor, directUpload.uploadId,
-    { collectionId: collection, selectedOccurrenceIds: selectedOccurrences, mappings: sourceMapping }, randomUUID(),
+    ownerActor,
+    directUpload.uploadId,
+    { collectionId: collection, selectedOccurrenceIds: selectedOccurrences, mappings: sourceMapping },
+    randomUUID(),
   );
   const confirmation = finalReview.confirmation!;
-  const beforeCollectionIds = new Set((await sql`SELECT collection_id::text FROM library.collection
-    WHERE route=${route} AND curator_account_id=${owner} AND title='Weekend'`).rows.map((row) => row.collection_id));
+  const beforeCollectionIds = new Set(
+    (
+      await sql`SELECT collection_id::text FROM library.collection
+    WHERE route=${route} AND curator_account_id=${owner} AND title='Weekend'`
+    ).rows.map((row) => row.collection_id),
+  );
   let replayedCollectionId: string | null = null;
   let acknowledgedMemberId: string | null = null;
   for (const kind of ['create', 'member', 'order']) {
-    await expect(replayService.apply(ownerActor, directUpload.uploadId, confirmation))
-      .rejects.toThrow(`lost acknowledgement after ${kind}`);
+    await expect(replayService.apply(ownerActor, directUpload.uploadId, confirmation)).rejects.toThrow(
+      `lost acknowledgement after ${kind}`,
+    );
     if (kind === 'create') {
-      const afterCreate = (await sql`SELECT collection_id::text FROM library.collection
-        WHERE route=${route} AND curator_account_id=${owner} AND title='Weekend'`).rows;
+      const afterCreate = (
+        await sql`SELECT collection_id::text FROM library.collection
+        WHERE route=${route} AND curator_account_id=${owner} AND title='Weekend'`
+      ).rows;
       const created = afterCreate.map((row) => row.collection_id).filter((id) => !beforeCollectionIds.has(id));
       expect(created).toHaveLength(1);
       replayedCollectionId = created[0]!;
@@ -373,8 +397,11 @@ test('native owner export streams independent persisted facts, preserves dates, 
   const noteReview = await otherService.review(
     otherActor,
     noteUpload.uploadId,
-    { collectionId: collection, selectedOccurrenceIds: notePreview.occurrences.map((item) => item.sourceOccurrenceId),
-      mappings: sourceMapping },
+    {
+      collectionId: collection,
+      selectedOccurrenceIds: notePreview.occurrences.map((item) => item.sourceOccurrenceId),
+      mappings: sourceMapping,
+    },
     randomUUID(),
   );
   const noteApplied = await otherService.apply(otherActor, noteUpload.uploadId, noteReview.confirmation!);
@@ -384,19 +411,35 @@ test('native owner export streams independent persisted facts, preserves dates, 
     ['cleared', 'applied'],
     ['missing', 'unsupported'],
   ]);
-  const noteMembers = await request('GET', `/v1/collections/${noteApplied.collectionId}/members?limit=20`, 'other').then(json);
+  const noteMembers = await request(
+    'GET',
+    `/v1/collections/${noteApplied.collectionId}/members?limit=20`,
+    'other',
+  ).then(json);
   expect(noteMembers.members.map((member: { note: string | null }) => member.note)).toEqual([null, null]);
   otherNow = Date.parse(noteUpload.expiresAt) + 1;
   expect((await otherService.status(otherActor, noteUpload.uploadId)).state).toBe('expired');
-  expect((await sql`SELECT 1 FROM library.collection_archive_recovery_record
-    WHERE route=${route} AND account_id=${other} AND upload_id=${noteUpload.uploadId}`).rowCount).toBe(0);
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery_record
+    WHERE route=${route} AND account_id=${other} AND upload_id=${noteUpload.uploadId}`
+    ).rowCount,
+  ).toBe(0);
 
-  const sourceCollectionRecord = records.find((record) => record.section === 'collections' && record.collection_id === collection)!;
+  const sourceCollectionRecord = records.find(
+    (record) => record.section === 'collections' && record.collection_id === collection,
+  )!;
   const dynamicCollectionId = newId(route);
   const builtinCollectionId = newId(route);
   const extraCollections = [
     { ...sourceCollectionRecord, collection_id: dynamicCollectionId, title: 'Saved rule', membership_kind: 'dynamic' },
-    { ...sourceCollectionRecord, collection_id: builtinCollectionId, title: 'Built in', membership_kind: 'curated', builtin_kind: 'seeded' },
+    {
+      ...sourceCollectionRecord,
+      collection_id: builtinCollectionId,
+      title: 'Built in',
+      membership_kind: 'curated',
+      builtin_kind: 'seeded',
+    },
   ];
   const cancellationRecords = records.flatMap((record) =>
     record === sourceCollectionRecord ? [record, ...extraCollections] : [record],
@@ -420,18 +463,23 @@ test('native owner export streams independent persisted facts, preserves dates, 
   const cancellationUpload = await cancelService.create(otherActor, archiveForOther(cancellationRecords), randomUUID());
   cancellationUploadId = cancellationUpload.uploadId;
   const cancellationList = await cancelService.listCollections(otherActor, cancellationUploadId, { limit: 50 });
-  expect(cancellationList.collections.find((item) => item.id === dynamicCollectionId)?.unsupported)
-    .toBe('dynamic_membership_not_restored');
-  expect(cancellationList.collections.find((item) => item.id === builtinCollectionId)?.unsupported)
-    .toBe('built_in_not_restored');
-  const cancellationPreview = await cancelService.previewCollection(
-    otherActor, cancellationUploadId, collection, { limit: 50 },
+  expect(cancellationList.collections.find((item) => item.id === dynamicCollectionId)?.unsupported).toBe(
+    'dynamic_membership_not_restored',
   );
+  expect(cancellationList.collections.find((item) => item.id === builtinCollectionId)?.unsupported).toBe(
+    'built_in_not_restored',
+  );
+  const cancellationPreview = await cancelService.previewCollection(otherActor, cancellationUploadId, collection, {
+    limit: 50,
+  });
   const cancellationReview = await cancelService.review(
     otherActor,
     cancellationUploadId,
-    { collectionId: collection, selectedOccurrenceIds: cancellationPreview.occurrences.map((item) => item.sourceOccurrenceId),
-      mappings: sourceMapping },
+    {
+      collectionId: collection,
+      selectedOccurrenceIds: cancellationPreview.occurrences.map((item) => item.sourceOccurrenceId),
+      mappings: sourceMapping,
+    },
     randomUUID(),
   );
   const cancelled = await cancelService.apply(otherActor, cancellationUploadId, cancellationReview.confirmation!);
@@ -442,7 +490,9 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(cancelledOutcomes.outcomes.filter((item) => item.addState === 'applied')).toHaveLength(1);
   expect(cancelledOutcomes.outcomes.filter((item) => item.addState === 'pending')).toHaveLength(1);
   const cancelledMembers = await request(
-    'GET', `/v1/collections/${cancelled.collectionId}/members?limit=20`, 'other',
+    'GET',
+    `/v1/collections/${cancelled.collectionId}/members?limit=20`,
+    'other',
   ).then(json);
   expect(cancelledMembers.members).toHaveLength(1);
 
@@ -493,9 +543,24 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
   expect((await sql`SELECT 1 FROM library.library_export WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(
     0,
   );
-  await purge(db.pool, { accountId: owner, kind: 'collection_archive_recovery', parent: null, after: null, ordinal: 0, segment: 0 });
-  expect((await sql`SELECT 1 FROM library.collection_archive_recovery
-    WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(0);
-  expect((await sql`SELECT 1 FROM library.collection_archive_recovery_record
-    WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(0);
+  await purge(db.pool, {
+    accountId: owner,
+    kind: 'collection_archive_recovery',
+    parent: null,
+    after: null,
+    ordinal: 0,
+    segment: 0,
+  });
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery
+    WHERE route=${route} AND account_id=${owner}`
+    ).rowCount,
+  ).toBe(0);
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery_record
+    WHERE route=${route} AND account_id=${owner}`
+    ).rowCount,
+  ).toBe(0);
 });

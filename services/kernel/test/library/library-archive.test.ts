@@ -31,7 +31,14 @@ function entry(subject: string, state = 'retired-vocabulary') {
   };
 }
 function named(id = label, name = 'weekend') {
-  return { section: 'labels' as const, label_id: id, normalized_name: name, revision: 2, created_at: at, updated_at: at };
+  return {
+    section: 'labels' as const,
+    label_id: id,
+    normalized_name: name,
+    revision: 2,
+    created_at: at,
+    updated_at: at,
+  };
 }
 function assignment() {
   return {
