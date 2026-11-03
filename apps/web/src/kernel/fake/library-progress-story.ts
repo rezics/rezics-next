@@ -7,10 +7,21 @@ export type LibraryProgressStoryMode =
   | 'recorded'
   | 'none'
   | 'long'
+  | 'constructed-unknown-identity'
   | 'unavailable'
   | 'error'
   | 'detail-empty'
   | 'detail-long';
+
+export const libraryProgressStoryRequestCursor = 'earlier/opaque+==';
+export const libraryProgressStoryNextCursor = 'next/opaque+==';
+
+export const libraryProgressStoryLongSubjectLabel = (() => {
+  const subject = sessionsRecording.progressSessions[0]?.subject;
+  if (!subject) return null;
+  const label = typeof subject.label === 'string' ? subject.label : subject.label.value;
+  return `${label} — ${label} — ${label} — ${label}`;
+})();
 
 let mode: LibraryProgressStoryMode = 'recorded';
 
@@ -26,10 +37,23 @@ function failed(code: 'unavailable' | 'internal_error'): KernelRecording {
   };
 }
 
+function constructedUnknownIdentityList(): KernelRecording {
+  const progressSessions = sessionsRecording.progressSessions.map((session, index) => {
+    const { unitLabel: _unitLabel, ...stored } = session as typeof session & { unitLabel?: string };
+    if (!stored.subject || index !== 0 || !libraryProgressStoryLongSubjectLabel) return stored;
+    return {
+      ...stored,
+      subject: { ...stored.subject, label: libraryProgressStoryLongSubjectLabel },
+    };
+  });
+  return { status: 200, progressSessions, next: libraryProgressStoryNextCursor };
+}
+
 function list(): KernelRecording | undefined {
   if (mode === 'unavailable') return failed('unavailable');
   if (mode === 'error') return failed('internal_error');
   if (mode === 'none') return { status: 200, progressSessions: [], next: null };
+  if (mode === 'constructed-unknown-identity') return constructedUnknownIdentityList();
   if (mode !== 'long') return undefined;
   const template = sessionsRecording.progressSessions[0];
   if (!template) return { status: 200, progressSessions: [], next: null };

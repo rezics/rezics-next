@@ -5,7 +5,13 @@ import { ProgressIndexPage } from '../library/progress-page';
 import { readProgressIndex } from '../library/progress-server';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { setLibraryProgressStoryMode, type LibraryProgressStoryMode } from '../kernel/fake/library-progress-story';
+import {
+  libraryProgressStoryLongSubjectLabel,
+  libraryProgressStoryNextCursor,
+  libraryProgressStoryRequestCursor,
+  setLibraryProgressStoryMode,
+  type LibraryProgressStoryMode,
+} from '../kernel/fake/library-progress-story';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { unprofiledSubjectId } from '../kernel/fake/library-unprofiled-subject';
 import { PageStory, PatternStory, exposureStory, libraryProgressReady, pagePaths } from './page';
@@ -156,6 +162,51 @@ export const UnknownUnitDetailsOpen: Story = {
     expect(details).toHaveAttribute('open');
     expect(details.querySelector('code')).toBeVisible();
     expect(within(details).getByText(m.library_history_unavailable())).toBeVisible();
+    expect(details.querySelector('code')?.textContent).toBe('cursor_position / chapter');
+  },
+};
+
+export const UnknownUnitConstructedIdentityIndex: Story = {
+  name: 'Unknown unit and long supplied identity on the routed index',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Constructed consumer-response examples derived from the existing recording. The long label repeats a supplied subject label; stored mode, unit, amount and position stay unchanged, and null subjects stay null. Browser rendering, physical keyboard, target size and native results remain unmeasured.',
+      },
+    },
+  },
+  render: () =>
+    ProgressStory(
+      'constructed-unknown-identity',
+      `${pagePaths['library-progress']}&cursor=${encodeURIComponent(libraryProgressStoryRequestCursor)}`,
+    ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('main');
+    const rows = canvasElement.querySelectorAll('ol > li');
+    expect(rows.length).toBeGreaterThan(0);
+    const first = rows[0]!;
+    if (libraryProgressStoryLongSubjectLabel) await canvas.findByText(libraryProgressStoryLongSubjectLabel);
+    const warning = await canvas.findByText(m.library_progress_index_reader_history_unavailable());
+    expect(warning).toBeVisible();
+    const details = first.querySelector('details')!;
+    expect(details).not.toHaveAttribute('open');
+    expect(details.querySelector('code')).not.toBeVisible();
+    expect(details.querySelector('dt')?.textContent).toBe(
+      `${m.library_progress_mode()} / ${m.library_progress_unit()}`,
+    );
+
+    const next = await canvas.findByRole('link', { name: m.library_progress_more() });
+    const target = new URL(next.getAttribute('href')!, window.location.origin);
+    const original = new URL(pagePaths['library-progress'], window.location.origin);
+    expect(target.pathname).toBe(`/${getLocale()}/library/progress`);
+    expect(target.searchParams.get('subjectId')).toBe(original.searchParams.get('subjectId'));
+    expect(target.searchParams.get('cursor')).toBe(libraryProgressStoryNextCursor);
+
+    details.querySelector('summary')!.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(details).toHaveAttribute('open');
     expect(details.querySelector('code')?.textContent).toBe('cursor_position / chapter');
   },
 };
