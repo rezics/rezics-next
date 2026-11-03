@@ -233,8 +233,7 @@ async function readAccountSnapshot<T>(
     async (client) => {
       const currentHome = await readPartition(client, home);
       if (!currentHome) throw new CommandUnavailableError('deadline', home);
-      if (currentHome.writeState === 'moved')
-        throw new CommandUnavailableError('moved', home, currentHome.movedTo);
+      if (currentHome.writeState === 'moved') throw new CommandUnavailableError('moved', home, currentHome.movedTo);
       if (!Number.isSafeInteger(currentHome.epoch) || currentHome.epoch < 1)
         throw new CommandUnavailableError('contention', home);
       if (expectedHomeEpoch !== undefined && currentHome.epoch !== expectedHomeEpoch)
@@ -341,52 +340,64 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const continuation = parseCursor(deps.tokens, input.cursor, scope, now(), initialHomeEpoch, selected !== null);
 
       // Read the raw selection and continuation together so sparse visibility can never move its frontier.
-      const pageResult = await readAccountSnapshot(deps, owner, deadline, async (client, state) => {
-        if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
-        if (!state)
+      const pageResult = await readAccountSnapshot(
+        deps,
+        owner,
+        deadline,
+        async (client, state) => {
+          if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
+          if (!state)
+            return {
+              raw: [] as Slot[],
+              selectedSlot: null as Slot | null,
+              selectedShown: continuation.selectedShown,
+              hasMore: false,
+            };
+          const selectedRows =
+            selected && !continuation.selectedShown
+              ? ((await selectSelected.run(client, {
+                  route: actorRoute,
+                  actor_id: owner.accountId,
+                  subject_id: selected.subjectId,
+                  association_id: selected.associationId,
+                  generation: state.generation,
+                })) as Slot[])
+              : [];
+          const selectedSlot = selectedRows[0] ?? null;
+          const rawRows = (await selectRaw.run(client, {
+            route: actorRoute,
+            actor_id: owner.accountId,
+            generation: state.generation,
+            after_subject: continuation.after?.subjectId ?? first,
+            after_association: continuation.after?.associationId ?? first,
+            selected_subject: selected && (continuation.selectedShown || selectedSlot) ? selected.subjectId : null,
+            selected_association:
+              selected && (continuation.selectedShown || selectedSlot) ? selected.associationId : null,
+          })) as Slot[];
+          const rawPage = rawRows.slice(0, CLASSIFICATION_BALLOT_OWN_PAGE_SIZE);
           return {
-            raw: [] as Slot[],
-            selectedSlot: null as Slot | null,
-            selectedShown: continuation.selectedShown,
-            hasMore: false,
+            raw: rawPage,
+            selectedSlot,
+            selectedShown: continuation.selectedShown || selectedSlot !== null,
+            hasMore: rawRows.length > rawPage.length,
           };
-        const selectedRows =
-          selected && !continuation.selectedShown
-            ? ((await selectSelected.run(client, {
-                route: actorRoute,
-                actor_id: owner.accountId,
-                subject_id: selected.subjectId,
-                association_id: selected.associationId,
-                generation: state.generation,
-              })) as Slot[])
-            : [];
-        const selectedSlot = selectedRows[0] ?? null;
-        const rawRows = (await selectRaw.run(client, {
-          route: actorRoute,
-          actor_id: owner.accountId,
-          generation: state.generation,
-          after_subject: continuation.after?.subjectId ?? first,
-          after_association: continuation.after?.associationId ?? first,
-          selected_subject: selected && (continuation.selectedShown || selectedSlot) ? selected.subjectId : null,
-          selected_association:
-            selected && (continuation.selectedShown || selectedSlot) ? selected.associationId : null,
-        })) as Slot[];
-        const rawPage = rawRows.slice(0, CLASSIFICATION_BALLOT_OWN_PAGE_SIZE);
-        return {
-          raw: rawPage,
-          selectedSlot,
-          selectedShown: continuation.selectedShown || selectedSlot !== null,
-          hasMore: rawRows.length > rawPage.length,
-        };
-      }, initialHomeEpoch);
+        },
+        initialHomeEpoch,
+      );
       const rawSlots = pageResult.raw;
       const seedSlots = [...(pageResult.selectedSlot ? [pageResult.selectedSlot] : []), ...rawSlots];
       for (const slot of seedSlots) validateSlot(slot);
 
       if (!seedSlots.length) {
-        await readAccountSnapshot(deps, owner, deadline, async (_client, state) => {
-          if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
-        }, initialHomeEpoch);
+        await readAccountSnapshot(
+          deps,
+          owner,
+          deadline,
+          async (_client, state) => {
+            if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
+          },
+          initialHomeEpoch,
+        );
         return {
           viewer: { accountId: owner.accountId },
           inventory: {
@@ -483,8 +494,10 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         const key = keyOf(slot);
         if (!sameAssociation(initialAssociations.get(key) ?? null, finalAssociations.get(key) ?? null))
           throw new AccessUnavailableError('contention');
-        if (owner.scopes.includes(CLASSIFICATION_BALLOT_SET) &&
-            !sameAssociation(setAssociations.get(key) ?? null, finalSetAssociations.get(key) ?? null))
+        if (
+          owner.scopes.includes(CLASSIFICATION_BALLOT_SET) &&
+          !sameAssociation(setAssociations.get(key) ?? null, finalSetAssociations.get(key) ?? null)
+        )
           throw new AccessUnavailableError('contention');
         if (readableSlots.includes(slot)) {
           if (!sameAssociation(aggregateAssociations.get(key) ?? null, finalAggregateAssociations.get(key) ?? null))
@@ -493,18 +506,27 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       }
       if (!(await summaryObservation.current())) throw new AccessUnavailableError('contention');
 
-      const finalSlots = await readAccountSnapshot(deps, owner, deadline, async (client, state) => {
-        if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
-        if (!state) return [] as Slot[];
-        return (await selectCurrent.run(client, {
-          route: actorRoute,
-          actor_id: owner.accountId,
-          generation: state.generation,
-          keys: JSON.stringify(
-            seedSlots.map(({ subjectId, associationId }) => ({ subject_id: subjectId, association_id: associationId })),
-          ),
-        })) as Slot[];
-      }, initialHomeEpoch);
+      const finalSlots = await readAccountSnapshot(
+        deps,
+        owner,
+        deadline,
+        async (client, state) => {
+          if (actorStateKey(state) !== actorStateKey(initialState)) throw new AccessUnavailableError('contention');
+          if (!state) return [] as Slot[];
+          return (await selectCurrent.run(client, {
+            route: actorRoute,
+            actor_id: owner.accountId,
+            generation: state.generation,
+            keys: JSON.stringify(
+              seedSlots.map(({ subjectId, associationId }) => ({
+                subject_id: subjectId,
+                association_id: associationId,
+              })),
+            ),
+          })) as Slot[];
+        },
+        initialHomeEpoch,
+      );
       const currentSlots = currentSlotMap(finalSlots);
       const items: PageItem[] = [];
       for (const selectedSlot of seedSlots) {

@@ -336,15 +336,12 @@ test('the page continues from raw keys and promotes an exact selected slot once'
   expect(first.traversal).toBe('more');
   const home = await readPartition(database.admin, partitionOf(routeOf(accounts.owner)!)!);
   expect(home).not.toBeNull();
-  const stale = encodeCursor(
-    tokens,
-    ownPageBinding(first.inventory.generation as string),
-    { epoch: home!.epoch + 1, after: [subject.id, associationIds[0]!] },
-  );
+  const stale = encodeCursor(tokens, ownPageBinding(first.inventory.generation as string), {
+    epoch: home!.epoch + 1,
+    after: [subject.id, associationIds[0]!],
+  });
   expect(
-    (
-      await request('owner', 'GET', `/v1/me/classification-assessments?cursor=${encodeURIComponent(stale)}`)
-    ).status,
+    (await request('owner', 'GET', `/v1/me/classification-assessments?cursor=${encodeURIComponent(stale)}`)).status,
   ).toBe(409);
   const second = await responseJson(
     await request(
