@@ -50,6 +50,72 @@ export type RealmRankPage = Readonly<{
 export interface RealmRankSource {
   page(actor: Actor, request: RealmRankRequest, context: { deadline: number }): Promise<RealmRankPage>;
 }
+export type RealmRankOrderObservation = Readonly<{
+  question: RealmRankQuestion;
+  questionIdentity: string;
+  questionRevision: number;
+  priorGeneration: string;
+  priorEpoch: number | null;
+  priorIdentity: string | null;
+  priorActive: boolean;
+  priorUpdating: boolean;
+  realmAuthority: string;
+  realmRevision: string;
+  publicationGeneration: string;
+}>;
+export type RealmRankOrderCandidate = RealmRankCandidate & Readonly<{ securityRevision: number }>;
+export type RealmRankFigureValue = Readonly<{
+  subjectId: string;
+  count: number;
+  mean: number | null;
+  score: number | null;
+  priorEpoch: number | null;
+  revision: string;
+  asOf: string;
+}>;
+export type RealmRankFigureProof = Readonly<{
+  subjectId: string;
+  scored: boolean;
+  figure: RealmRankFigureValue | null;
+  updating: boolean;
+}>;
+export interface RealmRankOrderSource {
+  observe(
+    actor: Actor,
+    input: Readonly<{ realmId: string; questionId: string }>,
+    context: { deadline: number },
+  ): Promise<RealmRankOrderObservation>;
+  listScoredPartitions(
+    actor: Actor,
+    input: Readonly<{ realmId: string; questionId: string }>,
+    observation: RealmRankOrderObservation,
+    context: { deadline: number },
+  ): Promise<readonly number[]>;
+  readScoredPartition(
+    actor: Actor,
+    input: Readonly<{
+      realmId: string;
+      questionId: string;
+      partition: number;
+      after: Readonly<{ score: string; subjectId: string }> | null;
+      limit: number;
+    }>,
+    observation: RealmRankOrderObservation,
+    context: { deadline: number },
+  ): Promise<Readonly<{
+    partition: number;
+    epoch: number;
+    position: bigint;
+    generation: string;
+    candidates: readonly RealmRankOrderCandidate[];
+  }>>;
+  proveFigures(
+    actor: Actor,
+    input: Readonly<{ realmId: string; questionId: string; partition: number; subjectIds: readonly string[] }>,
+    observation: RealmRankOrderObservation,
+    context: { deadline: number },
+  ): Promise<Readonly<{ partition: number; epoch: number; position: bigint; figures: readonly RealmRankFigureProof[] }>>;
+}
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing };
 type Row = Omit<RealmRankCandidate, 'count' | 'mean' | 'score' | 'asOf'> & {
   count: string;
@@ -152,7 +218,7 @@ async function observe<T>(
   pool: Pool,
   partition: number,
   deadline: number,
-  read: (client: PoolClient, epoch: number) => Promise<T>,
+  read: (client: PoolClient, epoch: number, home: NonNullable<Awaited<ReturnType<typeof readPartition>>>) => Promise<T>,
 ): Promise<T> {
   return withConnection(pool, async (connection) => {
     const client = deadlineClient(connection, deadline) as PoolClient;
@@ -160,7 +226,7 @@ async function observe<T>(
     try {
       const home = await readPartition(client, partition);
       if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-      const value = await read(client, home.epoch);
+      const value = await read(client, home.epoch, home);
       await client.query('COMMIT');
       return value;
     } catch (error) {
@@ -353,6 +419,302 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
               })
             : null,
       };
+    },
+  };
+}
+
+type PriorObservation = {
+  generation: string;
+  active: boolean;
+  identity: string | null;
+  updating: boolean;
+};
+
+async function readPriorObservation(
+  pool: Pool,
+  realmId: string,
+  questionId: string,
+  deadline: number,
+): Promise<PriorObservation> {
+  const route = routeOf(realmId)!;
+  return observe(pool, partitionOf(route), deadline, async (client) => {
+    const freshness = await readFreshness.run(client, { route, population_id: realmId });
+    if (!freshness) throw new Error('Rating prior freshness is unavailable');
+    const result = await client.query<{ generation: string; active: boolean; identity: string | null }>(
+      `SELECT generation::text,start_count IS NOT NULL AS active,question_identity AS identity
+       FROM rating.population_prior_epoch WHERE route=$1 AND question_id=$2 AND population_id=$3`,
+      [route, questionId, realmId],
+    );
+    return { ...(result.rows[0] ?? { generation: '0', active: false, identity: null }), updating: freshness.updating };
+  });
+}
+
+function authorityDigest(actor: Actor): string {
+  const authority = actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
+  return createHash('sha256').update(JSON.stringify(authority)).digest('hex');
+}
+
+/** Current native producer for Search's complete ordered Realm traversal. The legacy page remains scored-only. */
+export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSource {
+  return {
+    async observe(actor, input, { deadline }) {
+      if (routeOf(input.realmId) === null || input.realmId === GLOBAL_CONTEXT.id || routeOf(input.questionId) === null)
+        throw new ProblemError('invalid_request');
+      const realm = await readRealm(deps, actor, input.realmId, { deadline });
+      if (!realm) throw new ProblemError('not_found');
+      const question = await readVisibleRatingQuestion(deps, actor, input.questionId, deadline);
+      if (!question) throw new ProblemError('not_found');
+      if (!realmRankQuestionEligible(question)) throw new ProblemError('invalid_request');
+      const questionIdentity = ratingQuestionIdentity(question);
+      const prior = await readPriorObservation(deps.pool, input.realmId, input.questionId, deadline);
+      // An ended or mismatched prior proves all-unscored only after the native population work is settled.
+      const priorActive = prior.active && prior.identity === questionIdentity;
+      if (!priorActive && prior.updating) throw new ProblemError('index_not_ready');
+      const publication = await deps.pool.query<{ last_value: string; is_called: boolean }>(
+        `SELECT last_value::text,is_called FROM rating.realm_rank_publication_generation`,
+      );
+      const generation = publication.rows[0];
+      if (!generation || !/^[0-9]+$/.test(generation.last_value)) throw new Error('Rank publication generation is unavailable');
+      return {
+        question,
+        questionIdentity,
+        questionRevision: question.revision,
+        priorGeneration: prior.generation,
+        priorEpoch: priorActive ? Number(prior.generation) : null,
+        priorIdentity: prior.identity,
+        priorActive,
+        priorUpdating: prior.updating,
+        realmAuthority: authorityDigest(actor),
+        realmRevision: `${realm.headRevisionId}:${realm.state}:${realm.visibility}`,
+        publicationGeneration: `${generation.last_value}:${generation.is_called ? 1 : 0}`,
+      };
+    },
+
+    async listScoredPartitions(_actor, input, observation, { deadline }) {
+      if (
+        routeOf(input.realmId) === null ||
+        input.realmId === GLOBAL_CONTEXT.id ||
+        input.questionId !== observation.question.id ||
+        !observation.priorActive ||
+        observation.priorEpoch === null
+      )
+        throw new ProblemError('invalid_request');
+      const populationRoute = routeOf(input.realmId)!;
+      return observe(deps.pool, partitionOf(populationRoute), deadline, async (client) => {
+        const result = await client.query<{ partition: number }>(
+          `SELECT partition_no AS partition FROM rating.realm_rank_generation
+           WHERE question_id=$1 AND population_id=$2
+           ORDER BY partition_no LIMIT 4097`,
+          [input.questionId, input.realmId],
+        );
+        if (
+          result.rows.length > 4096 ||
+          result.rows.some(
+            ({ partition }, index) =>
+              !Number.isInteger(partition) || partition < 0 || partition > 4095 ||
+              (index > 0 && partition <= result.rows[index - 1]!.partition),
+          )
+        )
+          throw new Error('Rank partition inventory is incomplete');
+        return result.rows.map(({ partition }) => partition);
+      });
+    },
+
+    async readScoredPartition(actor, input, observation, { deadline }) {
+      if (
+        routeOf(input.realmId) === null ||
+        input.realmId === GLOBAL_CONTEXT.id ||
+        input.questionId !== observation.question.id ||
+        !Number.isInteger(input.partition) ||
+        input.partition < 0 ||
+        input.partition > 4095 ||
+        !Number.isInteger(input.limit) ||
+        input.limit < 1 ||
+        input.limit > 200 ||
+        !observation.priorActive ||
+        observation.priorEpoch === null
+      )
+        throw new ProblemError('invalid_request');
+      if (
+        input.after !== null &&
+        (!/^(?:[0-9]|10)(?:\.[0-9]{1,4})?$/.test(input.after.score) ||
+          routeOf(input.after.subjectId) === null ||
+          partitionOf(routeOf(input.after.subjectId)!) !== input.partition)
+      )
+        throw new ProblemError('invalid_cursor');
+      return observe(deps.pool, input.partition, deadline, async (client, epoch, home) => {
+        const current = await generation(client, {
+          realmId: input.realmId,
+          questionId: input.questionId,
+          partition: input.partition,
+          sort: 'score_desc',
+          limit: input.limit,
+        });
+        const parameters: unknown[] = [
+          input.partition,
+          input.questionId,
+          input.realmId,
+          observation.questionIdentity,
+          observation.priorGeneration,
+          observation.priorEpoch,
+          input.limit,
+        ];
+        if (input.after) parameters.push(input.after.score, input.after.subjectId);
+        const rows = await client.query<Row & { securityRevision: string }>(
+          `SELECT rank.subject_id::text AS "subjectId",rank.count::text,rank.mean::text,rank.score::text,
+                  rank.prior_epoch AS "priorEpoch",rank.revision::text,rank.as_of AS "asOf",
+                  figure.pending_position IS NOT NULL AS updating,subject.security_revision::text AS "securityRevision"
+           FROM rating.realm_rank AS rank
+           JOIN rating.public_figure AS figure
+             ON figure.route=get_byte(uuid_send(rank.subject_id),10)*256+get_byte(uuid_send(rank.subject_id),11)
+            AND figure.question_id=rank.question_id AND figure.population_id=rank.population_id
+            AND figure.subject_id=rank.subject_id
+           JOIN semantic.subject AS subject
+             ON subject.route=get_byte(uuid_send(rank.subject_id),10)*256+get_byte(uuid_send(rank.subject_id),11)
+            AND subject.subject_id=rank.subject_id
+           WHERE rank.partition_no=$1 AND rank.question_id=$2 AND rank.population_id=$3
+             AND rank.question_identity=$4 AND rank.prior_generation=$5 AND rank.prior_epoch=$6
+           ${input.after ? 'AND (rank.score,rank.subject_id) < ($8::numeric,$9::uuid)' : ''}
+           ORDER BY rank.score DESC,rank.subject_id DESC LIMIT $7`,
+          parameters,
+        );
+        if (rows.rows.some(({ updating }) => updating || observation.priorUpdating))
+          throw new ProblemError('index_not_ready');
+        return {
+          partition: input.partition,
+          epoch,
+          position: BigInt(home.position),
+          generation: current,
+          candidates: rows.rows.map((row) => {
+            const securityRevision = Number(row.securityRevision);
+            if (!Number.isSafeInteger(securityRevision) || securityRevision < 0) throw new Error('Invalid subject revision');
+            return {
+              ...row,
+              count: Number(row.count),
+              mean: Number(row.mean) * (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
+              score: Number(row.score) * (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
+              asOf: row.asOf.toISOString(),
+              updating: row.updating || observation.priorUpdating,
+              securityRevision,
+            };
+          }),
+        };
+      });
+    },
+
+    async proveFigures(actor, input, observation, { deadline }) {
+      if (
+        routeOf(input.realmId) === null ||
+        input.realmId === GLOBAL_CONTEXT.id ||
+        input.questionId !== observation.question.id ||
+        !Number.isInteger(input.partition) ||
+        input.partition < 0 ||
+        input.partition > 4095 ||
+        !Array.isArray(input.subjectIds) ||
+        input.subjectIds.length > 256
+      )
+        throw new ProblemError('invalid_request');
+      const pairs = input.subjectIds.map((subjectId) => ({ subjectId, route: routeOf(subjectId) }));
+      if (
+        pairs.some(({ route }) => route === null || partitionOf(route!) !== input.partition) ||
+        new Set(input.subjectIds).size !== input.subjectIds.length
+      )
+        throw new ProblemError('invalid_request');
+      return observe(deps.pool, input.partition, deadline, async (client, epoch, home) => {
+        if (observation.priorUpdating) throw new ProblemError('index_not_ready');
+        if (pairs.length === 0) return { partition: input.partition, epoch, position: BigInt(home.position), figures: [] };
+        const result = await client.query<{
+          subjectId: string;
+          count: string | null;
+          mean: string | null;
+          score: string | null;
+          priorEpoch: number | null;
+          revision: string | null;
+          asOf: Date | null;
+          identity: string | null;
+          priorGeneration: string | null;
+          pending: boolean;
+          rankIdentity: string | null;
+          rankGeneration: string | null;
+          rankScore: string | null;
+        }>(
+          `WITH requested AS (
+             SELECT * FROM unnest($1::uuid[],$2::integer[]) AS input(subject_id,route)
+           )
+           SELECT requested.subject_id::text AS "subjectId",figure.count::text,figure.mean::text,figure.score::text,
+                  figure.prior_epoch AS "priorEpoch",figure.revision::text,figure.as_of AS "asOf",
+                  figure.question_identity AS identity,figure.published_prior_generation::text AS "priorGeneration",
+                  figure.pending_position IS NOT NULL AS pending,
+                  rank.question_identity AS "rankIdentity",rank.prior_generation::text AS "rankGeneration",
+                  rank.score::text AS "rankScore"
+           FROM requested
+           LEFT JOIN rating.public_figure AS figure
+             ON figure.route=requested.route AND figure.question_id=$3 AND figure.population_id=$4
+            AND figure.subject_id=requested.subject_id
+           LEFT JOIN rating.realm_rank AS rank
+             ON rank.partition_no=$5 AND rank.question_id=$3 AND rank.population_id=$4
+            AND rank.subject_id=requested.subject_id
+           ORDER BY requested.subject_id`,
+          [pairs.map(({ subjectId }) => subjectId), pairs.map(({ route }) => route), input.questionId, input.realmId, input.partition],
+        );
+        if (
+          result.rows.length !== pairs.length ||
+          new Set(result.rows.map(({ subjectId }) => subjectId)).size !== pairs.length
+        )
+          throw new Error('Figure eligibility observation is incomplete');
+        const figures = result.rows.map((row): RealmRankFigureProof => {
+          const count = row.count === null ? null : Number(row.count);
+          const figureIdentityMatches = row.identity === observation.questionIdentity;
+          const eligibleByPrior =
+            observation.priorActive &&
+            observation.priorIdentity === observation.questionIdentity &&
+            row.priorGeneration === observation.priorGeneration;
+          const currentRank =
+            eligibleByPrior &&
+            row.rankIdentity === observation.questionIdentity &&
+            row.rankGeneration === observation.priorGeneration &&
+            row.rankScore !== null;
+          const eligibleFigure =
+            eligibleByPrior &&
+            figureIdentityMatches &&
+            count !== null &&
+            count >= 5 &&
+            row.score !== null;
+          if (currentRank !== eligibleFigure) throw new Error('Figure and ordered-rank publication disagree');
+          const scored = currentRank && eligibleFigure;
+          if (count !== null && (!Number.isSafeInteger(count) || count < 0))
+            throw new Error('Invalid figure count');
+          if (row.mean !== null && !Number.isFinite(Number(row.mean))) throw new Error('Invalid figure mean');
+          if (row.score !== null && !Number.isFinite(Number(row.score))) throw new Error('Invalid figure score');
+          if (row.revision !== null && !/^[1-9][0-9]{0,18}$/.test(row.revision))
+            throw new Error('Invalid figure revision');
+          const figure =
+            count === null || count < 5 || !figureIdentityMatches || row.mean === null || row.revision === null || !row.asOf
+              ? null
+              : {
+                  subjectId: row.subjectId,
+                  count,
+                  mean: Number(row.mean) * (input.questionId === STANDARD_QUESTION_ID ? 1 : 2),
+                  score: scored ? Number(row.score) * (input.questionId === STANDARD_QUESTION_ID ? 1 : 2) : null,
+                  priorEpoch: scored ? (row.priorEpoch === null ? null : Number(row.priorEpoch)) : null,
+                  revision: row.revision,
+                  asOf: row.asOf.toISOString(),
+                };
+          if (
+            row.pending ||
+            observation.priorUpdating ||
+            (scored && figure === null)
+          )
+            throw new Error('Selected figure publication is incomplete');
+          return {
+            subjectId: row.subjectId,
+            scored,
+            figure,
+            updating: false,
+          };
+        });
+        return { partition: input.partition, epoch, position: BigInt(home.position), figures };
+      });
     },
   };
 }

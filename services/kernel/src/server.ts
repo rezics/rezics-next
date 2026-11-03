@@ -293,7 +293,12 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               prefix: searchConfig.prefix,
               source: rated.source,
               ratings: rated.ratings,
-              realmRatings: createRealmRatingNativeSource(),
+              realmRatings: createRealmRatingNativeSource({
+                pool,
+                search: openSearch,
+                prefix: searchConfig.prefix,
+                tokens: config.tokens,
+              }),
               cursors: config.tokens,
               clock: defaults.clock,
               publicFilters: () => {
