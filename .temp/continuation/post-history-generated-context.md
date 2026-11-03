@@ -35,8 +35,8 @@ acceptance:
   placement: default
   failing: true
   tests:
-    - "The generated GET /v1/posts/:id/revisions response includes the published closed page context, and Web consumes that exact generated type without a hand-written response variant."
-    - "Preserve the three mounted current-history files, including admitted context, immutable navigation and focus, recorded zero and scale, bounded target omission, same-address retry and source/account/session/exposure/locale retirement."
+    - 'The generated GET /v1/posts/:id/revisions response includes the published closed page context, and Web consumes that exact generated type without a hand-written response variant.'
+    - 'Preserve the three mounted current-history files, including admitted context, immutable navigation and focus, recorded zero and scale, bounded target omission, same-address retry and source/account/session/exposure/locale retirement.'
 ---
 
 Finish the generated-client binding for the retained current-context History visit. Regenerate the client from the
