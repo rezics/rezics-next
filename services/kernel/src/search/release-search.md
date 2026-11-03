@@ -23,6 +23,9 @@ preserve optional month/day. Year-only consumers may still request a year, but r
 This presentation uses the existing four-property, three-values-per-property preview and four-visible-fact cap;
 it adds no native read, source seek or retained state. It does not establish a bound for grouped execution.
 
+Decision: both public web response readers preserve optional month/day and reject a page containing an invalid
+Gregorian fact as unavailable, so malformed wire evidence cannot silently turn into a year-only date.
+
 The Semantic source and current Search hit facts preserve this shape. The HTTP fact schema admits month/day
 without changing the existing year-only shape. Facts use the normal current disclosure path; this adds no new
 source query, owner permission, resource lookup or enumeration. Distinct dates in one year remain distinct facts.

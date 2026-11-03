@@ -1,4 +1,5 @@
 import * as v from 'valibot';
+import { isCalendarDate } from '@rezics/filter';
 import type { KernelClient } from '@rezics/client';
 import { GLOBAL, PUBLIC_RATING_SCALE, QUESTION } from '../features/pages/subject-ratings';
 import { readSearchPage } from './search-request';
@@ -58,7 +59,15 @@ const accountSummary = v.object({
 });
 const fact: v.GenericSchema<NonNullable<NativeHit['facts']>[string][number]> = v.variant('kind', [
   v.object({ kind: v.literal('item'), id: v.string(), labels: textMap }),
-  v.object({ kind: v.literal('time'), year: v.pipe(v.number(), v.integer()) }),
+  v.pipe(
+    v.object({
+      kind: v.literal('time'),
+      year: v.pipe(v.number(), v.integer()),
+      month: v.exactOptional(v.pipe(v.number(), v.integer())),
+      day: v.exactOptional(v.pipe(v.number(), v.integer())),
+    }),
+    v.check(isCalendarDate),
+  ),
   v.object({ kind: v.literal('quantity'), amount: v.pipe(v.number(), v.finite()), unit: v.string() }),
   v.object({ kind: v.literal('code'), value: v.string() }),
 ]);
