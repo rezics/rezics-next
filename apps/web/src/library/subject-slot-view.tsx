@@ -218,10 +218,10 @@ export function SubjectLibrarySlot(props: SubjectSlotProps) {
         ...(ready.entry && data.restore ? { restore: data.restore } : {}),
         publicCollections: data.publicCollections,
         publicCollectionsNext: data.publicCollectionsNext,
-        publicCollectionsCount: data.publicCollectionsCount,
+        ...(data.publicCollectionsCount ? { publicCollectionsCount: data.publicCollectionsCount } : {}),
         collectionsLoaded: ready.collections && data.collectionsLoaded,
         collections: ready.collections ? data.collections : null,
-        collectionsNext: ready.collections ? (data.collectionsNext ?? null) : null,
+        ...(ready.collections && data.collectionsNext !== undefined ? { collectionsNext: data.collectionsNext } : {}),
         labels: ready.labels ? data.labels : null,
         ...(ready.labels
           ? {
