@@ -53,24 +53,26 @@ function selected(subject: Subject): Statement[] {
 }
 // Supplementary conformance over actual HTTP evidence; this is not a Search/list binding or an absence proof.
 function matches(statements: Statement[], platform: CreatedSubject, language: string): boolean {
-  return holdsCurrentStatements(
-    statements.map((statement) => ({
-      property: statement.property.id,
-      value: String(statement.value.content),
-      qualifiers: statement.qualifiers
-        .filter((part) => part.value.type === 'value')
-        .map((part) => ({
-          property: part.property.id,
-          value: String(part.value.content),
-        })),
-    })),
-    {
-      facet: 'statement',
-      property: 'schema:gamePlatform',
-      values: [platform.id],
-      qualifiers: [{ property: 'schema:inLanguage', in: [language] }],
-    },
-  ) === true;
+  return (
+    holdsCurrentStatements(
+      statements.map((statement) => ({
+        property: statement.property.id,
+        value: String(statement.value.content),
+        qualifiers: statement.qualifiers
+          .filter((part) => part.value.type === 'value')
+          .map((part) => ({
+            property: part.property.id,
+            value: String(part.value.content),
+          })),
+      })),
+      {
+        facet: 'statement',
+        property: 'schema:gamePlatform',
+        values: [platform.id],
+        qualifiers: [{ property: 'schema:inLanguage', in: [language] }],
+      },
+    ) === true
+  );
 }
 
 test('release platform language qualifiers belong to one actual statement and never form a Cartesian tuple', async () => {

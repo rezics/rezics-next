@@ -36,8 +36,7 @@ export function holdsCurrentStatements(
         if (facet?.kind !== 'quantity' || facet.unit !== unit) continue;
         value = facet.amount;
       }
-      if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte))
-        continue;
+      if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte)) continue;
     }
     let matches = true;
     for (const qualifier of clause.qualifiers ?? []) {
