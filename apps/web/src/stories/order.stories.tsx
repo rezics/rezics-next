@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { ReactNode } from 'react';
 import { OrderPage } from '../checkout/order-page';
 import type { CurrentEntitlement, OrderPageData } from '../checkout/order';
 import { subjectCover } from '../checkout/subject-cover';
@@ -10,10 +11,12 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { receiptStoryMoney, setMappedCheckoutStory, setReceiptMoneyStory } from '../kernel/fake/checkout';
 import { setEntitlementStoryMode } from '../kernel/fake/entitlements';
+import { AppShell } from '../shell/shell';
 import {
   PageStory,
   PatternStory,
   pagePaths,
+  pageReady,
   orderCanceledReady,
   orderFailedReady,
   orderPaidReady,
@@ -28,8 +31,12 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 // Authored disclosure interactions remain UNRUN at this source boundary.
+async function orderMain(canvasElement: HTMLElement) {
+  await pageReady({ canvasElement });
+  return within(within(canvasElement).getByRole('main'));
+}
 async function receiptDetails(canvasElement: HTMLElement, id: string, taxCode?: string) {
-  const canvas = within(canvasElement);
+  const canvas = await orderMain(canvasElement);
   const summary = await canvas.findByText(m.order_technical_details());
   const details = summary.closest('details')!;
   await expect(details).not.toHaveAttribute('open');
@@ -75,7 +82,8 @@ export const Canceled: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['order-canceled']} />,
 };
 
-// Contract-shaped component examples; these do not establish current native authority.
+// Contract-shaped component examples in the shared AppShell frame; these remain pattern evidence
+// and do not establish current native authority or actual-route recordings.
 function currentOrder(entitlement: CurrentEntitlement): OrderPageData {
   const order = paidRecording.order;
   return {
@@ -86,17 +94,24 @@ function currentOrder(entitlement: CurrentEntitlement): OrderPageData {
     subject: subjectCover(getLocale(), order.targetSubjectId, order.title, order.subject),
   };
 }
+function OrderPattern({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <PatternStory visitor="Signed In" path={`/orders/${id}`}>
+      <AppShell>{children}</AppShell>
+    </PatternStory>
+  );
+}
 function CurrentReceipt({ entitlement }: { entitlement: CurrentEntitlement }) {
   const order = currentOrder(entitlement);
   return (
-    <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+    <OrderPattern id={order.id}>
       <OrderPage order={{ ...order, ...(entitlement.kind === 'none' ? { entitlementId: null } : {}) }} />
-    </PatternStory>
+    </OrderPattern>
   );
 }
 function currentReceiptReady(label: () => string) {
   return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await canvas.findByRole('heading', { name: m.order_paid(), level: 1 });
     await canvas.findByText(label());
     await canvas.findByText(m.order_paid_total());
@@ -151,14 +166,14 @@ export const LongReceiptNarrow: Story = {
     const title =
       'A reader’s annotated edition with translations, illustrations and extensive historical notes — '.repeat(3);
     return (
-      <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+      <OrderPattern id={order.id}>
         <OrderPage
           order={{
             ...order,
             subject: { ...order.subject, subject: { ...order.subject.subject, title } },
           }}
         />
-      </PatternStory>
+      </OrderPattern>
     );
   },
   play: currentReceiptReady(() => m.order_entitlement_unavailable()),
@@ -169,7 +184,7 @@ export const UnknownSettlement: Story = {
   render: () => {
     const order = pendingRecording.order;
     return (
-      <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+      <OrderPattern id={order.id}>
         <OrderPage
           order={{
             ...order,
@@ -180,11 +195,11 @@ export const UnknownSettlement: Story = {
             subject: subjectCover(getLocale(), order.targetSubjectId, order.title, order.subject),
           }}
         />
-      </PatternStory>
+      </OrderPattern>
     );
   },
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await canvas.findByRole('heading', { name: m.order_pending(), level: 1 });
     await canvas.findByText(m.order_confirming());
     await canvas.findByText(m.order_entitlement_unavailable());
@@ -200,13 +215,13 @@ export const RecordedMoneyUnavailable: Story = {
     const order = currentOrder({ kind: 'unavailable' });
     delete order.money;
     return (
-      <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+      <OrderPattern id={order.id}>
         <OrderPage order={order} />
-      </PatternStory>
+      </OrderPattern>
     );
   },
   async play({ canvasElement }) {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await canvas.findByRole('heading', { name: m.order_paid(), level: 1 });
     await canvas.findByText(m.order_paid_total_unavailable());
     await canvas.findByText(m.order_tax_unavailable());
@@ -255,7 +270,7 @@ export const MappedRefundedPage: Story = {
 function ReconciliationPreview({ send }: { send: ReconciliationSender }) {
   const order = pendingRecording.order;
   return (
-    <PatternStory visitor="Signed In" path={`/orders/${order.id}`}>
+    <OrderPattern id={order.id}>
       <OrderPage
         order={{
           ...order,
@@ -266,19 +281,21 @@ function ReconciliationPreview({ send }: { send: ReconciliationSender }) {
         }}
         reconcile={send}
       />
-    </PatternStory>
+    </OrderPattern>
   );
 }
 
 // These operation-shaped component examples preserve the recorded pending order;
 // their queued response establishes neither payment nor benefit authority.
+// Refunded, long-receipt, unknown settlement/money, current-access and reconciliation
+// actual-route cases wait on Commerce producer-owned matching responses.
 export const ReconciliationQueued: Story = {
   name: 'Signed in, explicit status check queued (component)',
   render: () => (
     <ReconciliationPreview send={async ({ orderId }) => ({ kind: 'queued', orderId, reconciliation: 'queued' })} />
   ),
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
     await canvas.findByText(m.order_reconcile_queued());
     expect(canvas.queryByText(m.order_paid())).toBeNull();
@@ -288,7 +305,7 @@ export const ReconciliationUnavailable: Story = {
   name: 'Signed in, status check unavailable (component)',
   render: () => <ReconciliationPreview send={async () => ({ kind: 'unavailable' })} />,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
     await canvas.findByText(m.order_reconcile_unavailable());
   },
@@ -297,7 +314,7 @@ export const ReconciliationDenied: Story = {
   name: 'Signed in, status check permission changed (component)',
   render: () => <ReconciliationPreview send={async () => ({ kind: 'denied' })} />,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
     await canvas.findByText(m.order_reconcile_denied());
   },
@@ -319,7 +336,7 @@ export const ReconciliationRetry: Story = {
     );
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await orderMain(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_action() }));
     await canvas.findByText(m.order_reconcile_error());
     await userEvent.click(await canvas.findByRole('button', { name: m.order_reconcile_retry() }));
