@@ -124,5 +124,5 @@ test('native board journey keeps physical work fixed across retained history at 
       expect((await read(`${history(board, 'board')}&cursor=${cursor}`)).response.status).toBe(400);
     },
   });
-  assertGrowthAccessPaths('native retained history', samples, ['content.moderation_decision', 'content.moderation_decision_board']);
+  assertGrowthAccessPaths('native retained history', samples.samples, ['content.moderation_decision', 'content.moderation_decision_board']);
 }, 300_000);
