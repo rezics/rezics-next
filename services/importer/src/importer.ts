@@ -378,7 +378,9 @@ export class Importer {
       if (error instanceof StagingCheckpointError)
         return { status: 'invalid-dump', diagnostic: error.message, committedPrefix: rolling };
       const member =
-        error instanceof OpenLibraryDumpSetError && error.memberIndex !== null ? ` (member ${error.memberIndex})` : '';
+        error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
+          ? ` (member ${error.memberIndex}${error.reason ? `, ${error.reason}` : ''})`
+          : '';
       return {
         status: interrupted ? 'interrupted' : 'invalid-dump',
         diagnostic:
