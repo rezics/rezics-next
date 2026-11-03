@@ -48,7 +48,7 @@ export function RealmBanCurrentControl({
     () => {
       sequence.current++;
     },
-    'realm-ban-current',
+    'realm-ban',
   );
 
   async function review(accountId: string, source: HTMLButtonElement) {
