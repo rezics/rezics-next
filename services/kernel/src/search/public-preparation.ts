@@ -7,7 +7,13 @@ import type { PublicFilterConsumerContext, PublicFilterConsumerJob } from './pub
 import type { DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { SearchUnavailableError } from './opensearch.ts';
-import { createSubjectIndex, subjectIndexName, subjectGenerations } from './indices.ts';
+import {
+  createSubjectIndex,
+  markSubjectCalendarReady,
+  readSubjectCalendarMappingFormat,
+  subjectIndexName,
+  subjectGenerations,
+} from './indices.ts';
 import { applySubjectKeys, createSubjectIndexer } from './indexer.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
 import { subjectPartition } from './source.ts';
@@ -65,6 +71,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     context: PublicFilterConsumerContext,
   ) {
     const index = subjectIndexName(options.prefix, state.generation);
+    const calendarFormat = await readSubjectCalendarMappingFormat(options.search, options.prefix, state.generation);
     const release = await activeRelease(options.pool);
     if (!release || release.digest !== state.meaning || (await indexUuid(options.search, index)) !== state.uuid)
       return store.advance(record, state, 5000);
@@ -80,6 +87,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       listing: options.listing,
       index,
       consumer: subjectConsumer(options.prefix, state.generation),
+      ...(calendarFormat === null ? {} : { calendarFormat }),
     });
     if (state.partition === 4096) {
       if (state.phase !== 'activate') {
@@ -93,6 +101,8 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
         );
       }
+      if (calendarFormat === 1)
+        await markSubjectCalendarReady(options.search, options.prefix, state.generation);
       const activated = await options.runtime.publication.activate(publication.job, context);
       if (activated.status === 'activated') {
         if (activated.consumer.physicalTarget !== index)
@@ -120,6 +130,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
         consumer: subjectConsumer(options.prefix, state.generation),
         envelopes: 1,
         writer,
+        ...(calendarFormat === null ? {} : { calendarFormat }),
       });
       const replay = await relay.run(state.partition);
       if (replay.status !== 'read') return store.advance(record, state, 1000);
@@ -137,7 +148,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     if (state.pending) {
       // A crash can replay only this retained step, through the same ordinary serializer/version writer.
       await applySubjectKeys(
-        { ...options, index, writer },
+        { ...options, index, writer, ...(calendarFormat === null ? {} : { calendarFormat }) },
         state.partition,
         state.pending.keys,
         BigInt(state.pending.position),
@@ -201,7 +212,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       const state = await subjectGenerations(options.search, options.prefix);
       if (!state.generations.includes(generation)) {
         if (state.generations.length >= 3) throw new SearchUnavailableError('Public generation limit reached');
-        await createSubjectIndex(options.search, options.prefix, generation);
+        await createSubjectIndex(options.search, options.prefix, generation, 1);
       }
       return store.retain(
         {

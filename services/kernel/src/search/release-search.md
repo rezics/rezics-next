@@ -44,8 +44,10 @@ definitions or allocating/upgrading a generation. Its compatibility predicate ch
 fields; mapping compatibility alone establishes neither complete population nor publication readiness.
 
 The generic compiler emits same-nested-fact interval comparisons only with an explicit calendar-format capability.
-Existing runtime callers supply no such capability and refuse precise candidate compilation with typed Search
-unavailability. This prevents an old year-only index from establishing false negatives, including under NOT.
+The resumable Subject rebuild now allocates the successor mapping, replays it through the matching writer codec,
+and marks it ready only after reconciliation. Readiness is tied to the physical index UUID; the active Search service
+supplies the compiler capability only when that exact generation is ready. Old year-only generations remain
+unavailable for precise candidate compilation, including under NOT.
 The universal condition editor preserves imported typed endpoints as text, with its existing localized bound
 labels, rather than coercing them into numeric years. These primitives do not enable the release journey.
 
@@ -57,11 +59,9 @@ do not expose a generic producer control without a separately admitted Semantic 
 
 ## Remaining integration
 
-Install calendar preparation, publication, mixed/universal producer codecs and actual-physical-generation
-readiness/continuation binding together before supplying the compiler capability. The physical index still uses
-the historical year projection. Never rewrite immutable mappings/templates, silently admit an old generation,
-or broaden precise ranges into years. Replacement uses the existing resumable worker lifecycle. Regenerate public
-declarations when those integration interfaces change.
+The mixed discovery producer still needs the successor codec and readiness lifecycle. Do not rewrite immutable
+mappings/templates, silently admit an old generation, or broaden precise ranges into years. Replacement uses the
+existing resumable worker lifecycle. Regenerate public declarations when those integration interfaces change.
 
 The work grouping, bounded child/group continuations, active-release operand controls, mounted release page,
 eight-locale states and native all-pool growth measurements remain part of the same journey's continuation.

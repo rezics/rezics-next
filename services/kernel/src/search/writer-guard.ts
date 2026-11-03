@@ -818,6 +818,7 @@ export function createSearchWriterGuard(options: {
   pool: Pool;
   search: OpenSearch;
   index: string;
+  calendarFormat?: 1;
   consumer: string;
   source: SubjectSource;
   listing: SubjectListingSource;
@@ -1348,7 +1349,7 @@ export function createSearchWriterGuard(options: {
         const actions = await prepareBoundedSortKeys(
           options.search,
           options.index,
-          documentActions(snapshot, [subject], counts),
+          documentActions(snapshot, [subject], counts, options.calendarFormat),
         );
         const action = actions[0];
         if (!action || action.version < obligation || action.version > BigInt(Number.MAX_SAFE_INTEGER))
@@ -1600,7 +1601,7 @@ export function createSearchWriterGuard(options: {
         const actions = await prepareBoundedSortKeys(
           options.search,
           options.index,
-          documentActions(snapshot, ids, counts),
+          documentActions(snapshot, ids, counts, options.calendarFormat),
         );
         const current = await readSearchWriterPhysicalTarget(options.search, options.index);
         if (current.incarnation !== incarnation || current.writeAlias !== writeAlias)
@@ -1650,7 +1651,11 @@ export function createSearchWriterGuard(options: {
       return subject?.visibility === 'visible' && subject.redirect === null;
     });
     const counts = visible.length ? await options.listing.read(partition, visible) : undefined;
-    const actions = await prepareBoundedSortKeys(options.search, options.index, documentActions(snapshot, ids, counts));
+    const actions = await prepareBoundedSortKeys(
+      options.search,
+      options.index,
+      documentActions(snapshot, ids, counts, options.calendarFormat),
+    );
     const versions = await withReadTransaction(options.pool, async (tx) => {
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active' || owner.position !== snapshot.position) return null;

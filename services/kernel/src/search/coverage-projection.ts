@@ -4,6 +4,7 @@ import { ProblemError } from '../http/problem.ts';
 import { readIdentityHome, type HomeIdentity } from '../semantic/identity-basis.ts';
 import { withConnection } from '../database/pool.ts';
 import { createSubjectIndexer } from './indexer.ts';
+import { readSubjectCalendarMappingFormat } from './indices.ts';
 import { createCoverageStore, type HomeGuard } from './coverage-store.ts';
 import * as codec from './coverage-store-codec.ts';
 import type {
@@ -112,6 +113,11 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
           return snapshot;
         },
       };
+      const calendarFormat = await readSubjectCalendarMappingFormat(
+        options.search,
+        incarnation.prefix,
+        incarnation.generation,
+      );
       const indexer = createSubjectIndexer({
         pool: options.pool,
         search,
@@ -119,6 +125,7 @@ export function createCoverageProjection(options: ProjectionOptions): Pick<Subje
         listing: options.listing,
         index: incarnation.index,
         consumer: incarnation.consumer,
+        ...(calendarFormat === null ? {} : { calendarFormat }),
         aroundApply: async (_home, envelopes, apply) => {
           const last = envelopes.at(-1)!;
           slot = {

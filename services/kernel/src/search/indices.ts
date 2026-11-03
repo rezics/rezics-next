@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
 import { mixedDiscoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
+import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -73,8 +74,18 @@ export function subjectIndexDefinition(): SubjectIndexDefinition {
   return definition;
 }
 
-export async function createSubjectIndex(search: OpenSearch, prefix: string, generation: number): Promise<void> {
-  return createIndex(search, prefix, generation, subjectIndexDefinition());
+export async function createSubjectIndex(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  calendarFormat?: 1,
+): Promise<void> {
+  return createIndex(
+    search,
+    prefix,
+    generation,
+    calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition(),
+  );
 }
 
 /** Successor mapping in the same physical family; legacy Subject generations keep their format. */
@@ -183,6 +194,7 @@ export async function readSubjectSortFormat(
 type SubjectMappingObservation = {
   metadata: Record<string, unknown>;
   sortFormat: number | null;
+  calendarFormat: 1 | null;
   activatedAt: string | null;
   ratingCompatible: boolean;
 };
@@ -216,6 +228,8 @@ async function readSubjectMapping(
     metadata = mappings._meta;
   }
 
+  const calendarFormat = hasCalendarIndexFormat(mappings) ? 1 : null;
+
   let sortFormat: number | null = null;
   if (Object.hasOwn(metadata, 'name_sort_format')) {
     const format = metadata.name_sort_format;
@@ -236,10 +250,101 @@ async function readSubjectMapping(
   return {
     metadata,
     sortFormat,
+    calendarFormat,
     activatedAt,
     ratingCompatible:
       compatible(properties.rating_score, 'double') && compatible(properties.rating_prior_epoch, 'long'),
   };
+}
+
+/** Calendar writes follow the actual target mapping, including while it is still being populated. */
+export async function readSubjectCalendarMappingFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<1 | null> {
+  return (await readSubjectMapping(search, prefix, generation)).calendarFormat;
+}
+
+export async function readSubjectCalendarMappingFormatForIndex(search: OpenSearch, index: string): Promise<1 | null> {
+  const match = /^([a-z0-9][a-z0-9-]{0,47})subjects-g([1-9][0-9]*)$/.exec(index);
+  const generation = Number(match?.[2]);
+  if (!match || !Number.isSafeInteger(generation))
+    throw new SearchUnavailableError('Subject generation name is invalid');
+  return readSubjectCalendarMappingFormat(search, match[1]!, generation);
+}
+
+/** A calendar projection is searchable only after full population marked the exact physical UUID ready. */
+export async function readSubjectCalendarFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<1 | null> {
+  const observed = await readSubjectMapping(search, prefix, generation);
+  if (
+    observed.calendarFormat !== 1 ||
+    observed.metadata.calendar_range_ready !== 1 ||
+    typeof observed.metadata.calendar_range_incarnation !== 'string'
+  )
+    return null;
+  const incarnation = await readSubjectIndexUuid(search, prefix, generation);
+  return incarnation === observed.metadata.calendar_range_incarnation ? 1 : null;
+}
+
+/** Called only after the generation owner has proved complete population and reconciliation. */
+export async function markSubjectCalendarReady(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<string> {
+  const index = subjectIndexName(prefix, generation);
+  const before = await readSubjectMapping(search, prefix, generation);
+  if (before.calendarFormat !== 1)
+    throw new SearchUnavailableError('Subject generation does not have the calendar projection');
+  const incarnation = await readSubjectIndexUuid(search, prefix, generation);
+  const metadata = {
+    ...before.metadata,
+    calendar_range_format: 1,
+    calendar_range_ready: 1,
+    calendar_range_incarnation: incarnation,
+  };
+  await observedWrite(
+    () => search.request('PUT', `/${index}/_mapping`, { _meta: metadata }),
+    async () => {
+      const observed = await readSubjectMapping(search, prefix, generation);
+      return (
+        observed.calendarFormat === 1 &&
+        observed.metadata.calendar_range_ready === 1 &&
+        observed.metadata.calendar_range_incarnation === incarnation &&
+        (await readSubjectIndexUuid(search, prefix, generation)) === incarnation
+      );
+    },
+    'Subject calendar readiness could not be established',
+  );
+  return incarnation;
+}
+
+/** Read the UUID of one immutable physical generation, never through its mutable alias. */
+export async function readSubjectIndexUuid(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<string> {
+  const index = subjectIndexName(prefix, generation);
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request('GET', `/${index}/_settings`);
+  } catch (error) {
+    if (error instanceof OpenSearchError)
+      throw new SearchUnavailableError('Subject generation incarnation is unavailable', { cause: error });
+    throw error;
+  }
+  const entry = record(response.body) ? response.body[index] : undefined;
+  const settings = record(entry) ? entry.settings : undefined;
+  const native = record(settings) ? settings.index : undefined;
+  if (response.status !== 200 || !record(native) || typeof native.uuid !== 'string' || !native.uuid)
+    throw new SearchUnavailableError('Subject generation incarnation is missing or malformed');
+  return native.uuid;
 }
 
 export async function readSubjectActivationTime(

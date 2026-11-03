@@ -36,6 +36,10 @@ import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 import {
   createSubjectIndex,
   observedWrite,
+  readSubjectCalendarMappingFormat,
+  readSubjectCalendarMappingFormatForIndex,
+  readSubjectIndexUuid,
+  markSubjectCalendarReady,
   readSubjectSortFormat,
   SUBJECT_SORT_FORMAT,
   subjectAlias,
@@ -184,6 +188,8 @@ export async function rebuildSubjects(options: {
   runner: { refresh(): Promise<void> };
   /** The real default worker owns identified reconciliation and alias activation. */
   publication?: 'native';
+  /** Successor date projection. Omit to prepare the calendar format; null retains the legacy writer shape. */
+  calendarFormat?: 1 | null;
   pollMs?: number;
   rounds?: number;
   timeoutMs?: number;
@@ -218,18 +224,21 @@ export async function rebuildSubjects(options: {
     const state = await subjectGenerations(options.search, options.prefix);
     const previous = state.active;
     const highest = state.generations.at(-1) ?? 0;
-    // Advanced checkpoints on an old-format index cannot replay already consumed names.
-    // Only a generation created with the bounded writer format is safe to resume.
+    const calendarFormat = options.calendarFormat === undefined ? 1 : options.calendarFormat;
+    // Advanced checkpoints cannot replay documents through a different physical writer codec.
     const resumable =
       highest > (previous ?? 0) &&
-      (await readSubjectSortFormat(options.search, options.prefix, highest)) === SUBJECT_SORT_FORMAT;
+      (await readSubjectSortFormat(options.search, options.prefix, highest)) === SUBJECT_SORT_FORMAT &&
+      (await readSubjectCalendarMappingFormat(options.search, options.prefix, highest)) === calendarFormat;
     const generation = resumable ? highest : highest + 1;
     if (generation > highest && state.generations.length >= MAX_SUBJECT_GENERATIONS)
       throw new RebuildError('limit', generation);
-    await createSubjectIndex(options.search, options.prefix, generation);
+    await createSubjectIndex(options.search, options.prefix, generation, calendarFormat ?? undefined);
     const format = await readSubjectSortFormat(options.search, options.prefix, generation);
     if (format !== SUBJECT_SORT_FORMAT)
       throw new SearchUnavailableError('Search rebuild requires a new bounded-format generation');
+    if ((await readSubjectCalendarMappingFormat(options.search, options.prefix, generation)) !== calendarFormat)
+      throw new SearchUnavailableError('Search rebuild requires the requested calendar projection');
     await options.runner.refresh();
 
     if (options.publication === 'native') {
@@ -321,10 +330,22 @@ export async function rebuildSubjects(options: {
     }
 
     const activatedAt = new Date().toISOString();
+    const calendarIncarnation =
+      calendarFormat === 1 ? await markSubjectCalendarReady(options.search, options.prefix, generation) : undefined;
     await observedWrite(
       () =>
         options.search.request('PUT', `/${index}/_mapping`, {
-          _meta: { name_sort_format: format, activated_at: activatedAt },
+          _meta: {
+            name_sort_format: format,
+            activated_at: activatedAt,
+            ...(calendarFormat === 1
+              ? {
+                  calendar_range_format: 1,
+                  calendar_range_ready: 1,
+                  calendar_range_incarnation: calendarIncarnation,
+                }
+              : {}),
+          },
         }),
       async () => {
         const response = await options.search.request<unknown>('GET', `/${index}/_mapping`);
@@ -334,7 +355,16 @@ export async function rebuildSubjects(options: {
         const entry = response.body[index];
         if (!record(entry) || !record(entry.mappings) || !record(entry.mappings.properties)) return false;
         const meta = entry.mappings._meta;
-        return record(meta) && meta.name_sort_format === format && meta.activated_at === activatedAt;
+        if (!record(meta) || meta.name_sort_format !== format || meta.activated_at !== activatedAt) return false;
+        if (calendarFormat !== 1)
+          return !Object.hasOwn(meta, 'calendar_range_ready') && !Object.hasOwn(meta, 'calendar_range_incarnation');
+        if (
+          meta.calendar_range_format !== 1 ||
+          meta.calendar_range_ready !== 1 ||
+          meta.calendar_range_incarnation !== calendarIncarnation
+        )
+          return false;
+        return (await readSubjectIndexUuid(options.search, options.prefix, generation)) === calendarIncarnation;
       },
       'Search generation activation mapping could not be established',
     );
@@ -1204,7 +1234,8 @@ export async function nativeGenerationActions(options: {
     validateObservation(snapshot, partition, ids, obligation, true);
     // The supplied native writer owns factual projection, foreign fences and rating decoration.
     // This raw native observation supplies eligibility, key identity and external versions only.
-    return documentActions(snapshot, ids);
+    const calendarFormat = await readSubjectCalendarMappingFormatForIndex(search, index);
+    return documentActions(snapshot, ids, undefined, calendarFormat ?? undefined);
   }
   const keys = options.keys;
   if (!keys || keys.length !== ids.length) throw new TypeError('Native discovery keys are required');
