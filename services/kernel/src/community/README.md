@@ -576,7 +576,7 @@ These supply user behavior only; current native commands retain authority.
   and its authoritative clock/fence and candidate caps remain additional owner costs, not zero-cost callbacks.
 - Bound: source points return at most one row each; raw windows examine at most p+1 partial-btree current keys
   plus p+1 exact temporal payload keys; inspection examines one current key plus one temporal payload key.
-  Across both rounds this is 2(p+2s+1) current/payload pairs, independent of closed intervals. Payload reason is
+  Across both rounds this is 2(p+s+1) current/payload pairs, independent of closed intervals. Payload reason is
   at most 1024 Unicode scalars (4096 UTF-8 or 6146 JSON-string bytes). `realm_ban_current` already covers the
   needed native route/Realm/account/interval key; materialized tuple seeks prevent a temporal history scan.
   Cursors admit 4096 bytes of wire text. Each attempt makes one window, never scans old rows to fill it or
