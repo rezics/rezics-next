@@ -6596,7 +6596,7 @@ function preparationFixture() {
     `#!/bin/sh
 if [ "$1" = --help ]; then echo --expand-environment; exit 0; fi
 if [ "$1" = --unit=rezics-check-cache-maintenance ]; then
-  test -f exit-status || exit 97
+  test ! -f exit-status || exit 97
   printf '%s\\n' "$@" > maintenance-request
   exit 0
 fi
@@ -7060,7 +7060,9 @@ def install():`,
 test('maintenance revalidates last use and replacement identity before detaching measured LRU entries', () => {
   const fixture = preparationFixture();
   const cache = join(fixture.directory, 'dependency-artifacts');
-  const entries = ['a', 'b', 'c'].map((name) => join(cache, name.repeat(64)));
+  const entries = ['a', 'b', 'c'].map((name, index) =>
+    join(cache, ...(index === 1 ? ['native'] : []), name.repeat(64)),
+  );
   for (const [index, entry] of entries.entries()) {
     mkdirSync(entry, { recursive: true });
     writeFileSync(join(entry, '.cache-bytes'), '200000');
@@ -7074,7 +7076,7 @@ def changed_since_snapshot(_):
     entry = Path(${JSON.stringify(entries[1])})
     with (entry.parent / (entry.name + '.lock')).open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        detach_artifacts(entry.parent, entry)
+        detach_artifacts(Path(${JSON.stringify(cache)}), entry)
         entry.mkdir()
         (entry / '.cache-bytes').write_text('200000')
         os.utime(entry, ns=(2000000000, 2000000000))
@@ -7085,11 +7087,18 @@ def install():`,
   sweepArtifacts(fixture.directory, program);
   expect(entries.map(existsSync)).toEqual([true, true, false]);
   expect(entries.every((entry) => existsSync(entry + '.lock'))).toBe(true);
+  const maintenance = dependencyPreparationProgram.replace('def install():', smallCacheDisk + '\ndef install():');
+  sweepArtifacts(fixture.directory, maintenance);
+  expect(entries.map(existsSync)).toEqual([true, false, false]); // Both layers reach the shared byte target.
+  sweepArtifacts(fixture.directory, maintenance.replace("'free': 3000000", "'free': 0"));
+  expect(entries.some(existsSync)).toBe(false); // Free-space pressure reduces the same target to zero.
 });
 
 test('slow interrupted deletion releases coordination, preserves warm reuse and resumes within time and step budgets', async () => {
   const fixture = preparationFixture();
-  const run = fixture.create();
+  const run = fixture.create({
+    command: ['sh', '-c', 'touch command-invoked; printf broken > .temp/check-host/prepare.py'],
+  });
   expect(run.execute().status).toBe(0);
   const request = readFileSync(join(run.run, 'maintenance-request'), 'utf8').trim().split('\n');
   rmSync(join(run.run, '.temp/check-host/prepare.py'));

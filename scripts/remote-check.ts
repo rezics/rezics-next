@@ -2099,12 +2099,12 @@ def evict_artifacts(cache):
     clean_garbage(cache, deadline)
 
 
-def schedule_maintenance(root):
+def schedule_maintenance(root, source):
     # systemd owns a singleton timer/service outside the completed run's scope. Its program is independent of run files.
     # --no-block waits only for registration, never a sweep; failure cannot change the command's status.
     try:
         import base64, zlib
-        encoded = base64.b64encode(zlib.compress(Path(__file__).read_bytes())).decode('ascii')
+        encoded = base64.b64encode(zlib.compress(source)).decode('ascii')
         # ExecStart expands dollars and percent specifiers; carry source as inert encoded bytes instead.
         program = 'import base64,zlib;exec(zlib.decompress(base64.b64decode(' + repr(encoded) + ')))'
         subprocess.run(['systemd-run', '--unit=rezics-check-cache-maintenance', '--collect', '--no-block',
@@ -2643,6 +2643,8 @@ def lifetime():
     if host not in SUPERVISOR_SCHEMA['hosts'] or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
         raise RuntimeError('invalid host lifetime identity')
     root = Path(directory)
+    # Capture producer code before the command can modify its private wrapper files.
+    maintenance_source = Path(__file__).read_bytes()
     preparation_deadline = started + int(preparation_ms) / 1000
     if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
         raise RuntimeError('host lifetime subreaper unavailable')
@@ -2746,8 +2748,8 @@ def lifetime():
     else:
         code = code if code >= 0 else 128 - code
     # Terminal admission state is published only after the entire owned tree is reaped and timeout cgroups are empty.
+    schedule_maintenance(root, maintenance_source)
     durable(root / 'exit-status', str(code) + '\n')
-    schedule_maintenance(root)
     return code
 
 

@@ -490,8 +490,10 @@ Admission retries races against other callers. The default probe interval is fiv
    scans legacy entries, takes a cache-wide lock or waits for eviction. ENOSPC skips optional publication without a
    sweep or retry; install validation and the actual command result still apply. Partial staging stays inside the owned
    run for normal post-command cleanup.
-   After terminal status is durable and the run tree is reaped, the host registers the independent systemd
+   After result classification and reaping the run tree, the host registers the independent systemd
    `rezics-check-cache-maintenance` timer/service with `--no-block`; registration failure leaves the result unchanged.
+   Registration is bounded to one second and its launcher is reaped before terminal admission is published. The host
+   captures the maintenance program before starting the command, so mutable run files cannot replace its code.
    The timer starts after one second and repeats 60 seconds after service exit. Its self-contained program survives
    run-directory cleanup; systemd owns its control group, 256 MiB memory limit, 20% CPU quota, idle I/O priority,
    three-second runtime limit and one-second stop timeout. Controller deployment must restart this timer to update it.
