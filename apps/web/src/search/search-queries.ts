@@ -15,14 +15,7 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps, rea
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,
-    queryKey: [
-      'search',
-      'discovery-v1',
-      scoped ? (reader ?? 'unverified') : 'anonymous',
-      source,
-      locale,
-      params,
-    ],
+    queryKey: ['search', 'discovery-v1', scoped ? (reader ?? 'unverified') : 'anonymous', source, locale, params],
     queryFn: async ({ signal, client, queryKey }) => {
       try {
         return await readSearch({

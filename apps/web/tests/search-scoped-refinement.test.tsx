@@ -26,14 +26,26 @@ const current: SearchLoaderDeps = {
 describe('scoped Search refinement', () => {
   test('Realm and Collection reads and each value page keep one full predicate and native order', async () => {
     for (const resourceScope of [realm, collection]) {
-      const first = scopedRefinementRequests({ ...current, resourceScope }, ['en'], [
-        { property: 'ex:author', size: 2 },
-      ]);
+      const first = scopedRefinementRequests(
+        { ...current, resourceScope },
+        ['en'],
+        [{ property: 'ex:author', size: 2 }],
+      );
       expect(first.search.text).toBe('maps');
       expect(first.search.languages).toEqual(['ja', 'en']);
       expect(first.search.filter).toMatchObject({ and: expect.any(Array) });
       const serialized = JSON.stringify(first.search.filter);
-      for (const value of [resourceScope.kind, resourceScope.id, 'ex:series', 'atlas', 'ex:Book', 'ex:language', 'ex:pages', 'page', 'ex:Film'])
+      for (const value of [
+        resourceScope.kind,
+        resourceScope.id,
+        'ex:series',
+        'atlas',
+        'ex:Book',
+        'ex:language',
+        'ex:pages',
+        'page',
+        'ex:Film',
+      ])
         expect(serialized).toContain(value);
       expect(first.facets).toEqual({
         text: first.search.text,

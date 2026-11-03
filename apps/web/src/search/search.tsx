@@ -338,16 +338,11 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     const facetRead = refinementRequests?.facets;
     const facetsPromise: Promise<FacetState | undefined> =
       body && facetRead
-        ? readFacetPage(
-            facetRead,
-            (request) =>
-              kernelClient(data.locale).subjects.$facets.post(
-                request,
-                {
-                  ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
-                  fetch: { signal },
-                },
-              ),
+        ? readFacetPage(facetRead, (request) =>
+            kernelClient(data.locale).subjects.$facets.post(request, {
+              ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+              fetch: { signal },
+            }),
           ).catch((error): FacetState => {
             if (signal.aborted) throw error;
             if (isPlatformClosedError(error))
@@ -920,9 +915,7 @@ export function SearchPage({
                 ...(data.queryState?.resourceScope && session ? { reader: session } : {}),
               },
               signal,
-              ...(data.queryState?.resourceScope
-                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
-                : {}),
+              ...(data.queryState?.resourceScope ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } } : {}),
             });
             if (
               !signal.aborted &&

@@ -16,8 +16,6 @@ export async function readScopedSearchReader(request: Request): Promise<ScopedSe
   const principal = session.sessionSubject(request);
   const authorization = session.viewerCredential(request);
   if (authorization && !principal) return undefined;
-  const owner = searchSessionOwner(
-    principal ? { state: 'signed-in', subject: principal } : { state: 'signed-out' },
-  );
+  const owner = searchSessionOwner(principal ? { state: 'signed-in', subject: principal } : { state: 'signed-out' });
   return owner ? { owner, principal: principal ?? 'anonymous', authorization } : undefined;
 }

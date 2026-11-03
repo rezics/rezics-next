@@ -105,13 +105,10 @@ export const readRefinement = createServerFn({ method: 'POST' })
     if (!facetRead) return { status: 'invalid', code: 'invalid_refinement_request' };
     try {
       return await readFacetPage(facetRead, (body) =>
-        kernelClient(data.locale).subjects.$facets.post(
-          body,
-          {
-            ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
-            fetch: { signal },
-          },
-        ),
+        kernelClient(data.locale).subjects.$facets.post(body, {
+          ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+          fetch: { signal },
+        }),
       );
     } catch (error) {
       if (signal.aborted) throw error;

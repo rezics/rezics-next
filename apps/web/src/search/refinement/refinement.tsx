@@ -552,7 +552,8 @@ function RefinementInstance({
               {m.search_facet_retry({}, options)}
             </a>
           ) : (
-            state.status !== 'refused' && state.status !== 'withheld' && (
+            state.status !== 'refused' &&
+            state.status !== 'withheld' && (
               <Button
                 ref={(node) => {
                   recoveryAction.current = node;
