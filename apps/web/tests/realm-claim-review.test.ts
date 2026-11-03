@@ -190,6 +190,7 @@ describe('Platform Realm claim review and genuine native approval journey', () =
     expect(control.getSnapshot()).toMatchObject({ outcome: 'conflict', intent: null });
     await control.confirm();
     expect(posts).toBe(0);
+    await control.refresh();
     control.reviewCurrent();
     await control.prepare(requestId);
     await control.confirm();

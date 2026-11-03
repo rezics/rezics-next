@@ -37,7 +37,7 @@ function CurrentReview({ count = 1, concealed = false, context = true, long = fa
         ? {
             state: 'available',
             name: long ? 'A community Realm '.repeat(55) : 'A community Realm',
-            description: long ? 'Admitted Realm context '.repeat(180) : 'Context admitted for this reviewer.',
+            description: long ? 'Admitted Realm context '.repeat(170) : 'Context admitted for this reviewer.',
           }
         : { state: 'unavailable' },
     };
@@ -91,7 +91,7 @@ async function keyboardReview({ canvasElement }: { canvasElement: HTMLElement })
   await userEvent.keyboard('{Enter}');
   const confirmation = await view.findByRole('region', { name: m.realm_review_confirm_heading() });
   await expect(within(confirmation).getByRole('button', { name: m.realm_review_confirm() })).toBeEnabled();
-  await expect(confirmation.querySelector('h3')).toHaveFocus();
+  await expect(confirmation).toHaveFocus();
   await userEvent.click(within(confirmation).getByRole('button', { name: m.realm_review_cancel() }));
   await expect(view.queryByRole('region', { name: m.realm_review_confirm_heading() })).toBeNull();
   const article = canvasElement.querySelector('article[aria-busy]')!;

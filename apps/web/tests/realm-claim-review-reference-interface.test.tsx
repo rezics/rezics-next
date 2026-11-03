@@ -243,6 +243,10 @@ test('Realm claim review prioritizes the human request and preserves visible app
       ...reviewRequest,
       requestId: '01a1a000-0000-7000-8000-000000000098',
       claimantAccountId: '01a1a000-0000-7000-8000-000000000034',
+      approvalAdvice: {
+        ...reviewRequest.approvalAdvice!,
+        destination: `/v1/realms/${reviewRequest.realmId}/claimRequests/01a1a000-0000-7000-8000-000000000098:approve`,
+      },
     };
     const cursor = 'opaque.cursor+/keep?signature=%2F&scope=exact';
     const nextReads: unknown[] = [];

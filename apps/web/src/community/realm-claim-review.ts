@@ -138,7 +138,16 @@ function inspection(value: unknown, realmId: string): boolean {
       value.currentEpisode === false
     );
   const { currentEpisode, ...row } = value;
-  return currentEpisode === true && pending({ realmId, ...row }, realmId, true);
+  return (
+    closed(value, [
+      ...requestFields.filter((field) => field !== 'realmId'),
+      'claimant',
+      'approvalAdvice',
+      'currentEpisode',
+    ]) &&
+    currentEpisode === true &&
+    pending({ realmId, ...row }, realmId, true)
+  );
 }
 /** Fail closed at the native boundary; old queue factories remain display-only. */
 export function realmClaimReviewPage(value: unknown, realmId: string, native = false): RealmClaimReviewPage | null {
@@ -360,7 +369,7 @@ export function createRealmClaimReview(
       const ticket = begin();
       if (!ticket) return;
       const source = state.read.page.claimRequests.find((row) => row.requestId === requestId);
-      if (!source) return;
+      if (!source?.approvalAdvice || !source.claimant) return;
       const stateBeforeSelection = state.read;
       update({ busy: true, read: { kind: 'unavailable' } });
       const read = await load(undefined, ticket, requestId);
