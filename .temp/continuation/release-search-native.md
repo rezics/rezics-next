@@ -44,11 +44,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Classify the complete all-pool native name stream into canonical work candidates, ungroupable releases and independent per-work children; support explicit relevance order."
-    - "Hydrate current cards with the complete admitted filter and spoiler policy, preserving concealed-link confidentiality; reserve full matching, disclosure, hydration, serialization and final-authority work on every touched pool."
-    - "Install grouped POST /v1/subjects:search with existing viewer-bound encrypted group and child continuations; release, physical generation, disclosure, redirect, date, credit and order changes retire both."
-    - "Mount contextual work/release cards on /search/releases with independent expansions and continuations, URL-backed operands and ordered languages, accessible response-grounded repair/preparation/restart states in eight locales."
-    - "Under the applicable validation policy, measure native 1x/4x/16x first, next, final and empty pages, all-pool seeks, high-fanout preparation/resume and invalidation; inspect the installed page against the earlier-app bar."
+    - 'Classify the complete all-pool native name stream into canonical work candidates, ungroupable releases and independent per-work children; support explicit relevance order.'
+    - 'Hydrate current cards with the complete admitted filter and spoiler policy, preserving concealed-link confidentiality; reserve full matching, disclosure, hydration, serialization and final-authority work on every touched pool.'
+    - 'Install grouped POST /v1/subjects:search with existing viewer-bound encrypted group and child continuations; release, physical generation, disclosure, redirect, date, credit and order changes retire both.'
+    - 'Mount contextual work/release cards on /search/releases with independent expansions and continuations, URL-backed operands and ordered languages, accessible response-grounded repair/preparation/restart states in eight locales.'
+    - 'Under the applicable validation policy, measure native 1x/4x/16x first, next, final and empty pages, all-pool seeks, high-fanout preparation/resume and invalidation; inspect the installed page against the earlier-app bar.'
   workerOwned: true
 estimate:
   lines: 2100
