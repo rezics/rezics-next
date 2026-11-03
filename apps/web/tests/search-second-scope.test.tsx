@@ -154,14 +154,18 @@ describe('native Search resource scope', () => {
 
     const carried = searchFormFields({ filter, ratingPopulation: realmId, language: ['ja'] });
     expect(headerSearchFields(carried, undefined, '/en/search')).toContainEqual([RATING_POPULATION_FIELD, realmId]);
-    expect(
-      headerSearchFields(carried, { kind: 'Realm', id: realmId, name: 'Display only' }, undefined),
-    ).toContainEqual([RATING_POPULATION_FIELD, realmId]);
+    expect(headerSearchFields(carried, { kind: 'Realm', id: realmId, name: 'Display only' }, undefined)).toContainEqual(
+      [RATING_POPULATION_FIELD, realmId],
+    );
 
     const malformed = searchLoaderDeps({ q: 'maps', ratingPopulation: 'not-a-realm-id', cursor: 'opaque-page' });
     expect(malformed.invalidInput).toEqual({ key: RATING_POPULATION_FIELD, value: 'not-a-realm-id' });
     const corrected = searchLoaderDeps(
-      correctSearchInput({ q: 'maps', ratingPopulation: 'not-a-realm-id', cursor: 'opaque-page' }, RATING_POPULATION_FIELD, realmId),
+      correctSearchInput(
+        { q: 'maps', ratingPopulation: 'not-a-realm-id', cursor: 'opaque-page' },
+        RATING_POPULATION_FIELD,
+        realmId,
+      ),
     );
     expect(corrected.ratingPopulation).toBe(realmId);
     expect(corrected.cursor).toBeUndefined();

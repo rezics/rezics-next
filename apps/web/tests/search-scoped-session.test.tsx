@@ -19,7 +19,11 @@ test('session-bound Search lifetime includes the principal, complete basis, loca
   expect(ownerA).not.toBe(searchSessionLifetime('en', realmState, '["signed-in","reader-b"]'));
   expect(ownerA).not.toBe(searchSessionLifetime('zh-Hans', realmState, '["signed-in","reader-a"]'));
   expect(ownerA).not.toBe(
-    searchSessionLifetime('en', searchLoaderDeps({ q: 'maps', ratingPopulation: otherRealmId, sort: 'rating' }), '["signed-in","reader-a"]'),
+    searchSessionLifetime(
+      'en',
+      searchLoaderDeps({ q: 'maps', ratingPopulation: otherRealmId, sort: 'rating' }),
+      '["signed-in","reader-a"]',
+    ),
   );
   expect(ownerA).not.toBe(
     searchSessionLifetime('en', searchLoaderDeps({ q: 'maps', ratingPopulation: realmId }), '["signed-in","reader-a"]'),
@@ -42,7 +46,11 @@ test('uncertain session state has no owner and facet continuation identity chang
     text: 'maps',
   };
   const identity = refinementKey({ ...base, ratingPopulation: realmId, sort: 'rating', mode: 'personal' });
-  expect(refinementKey({ ...base, ratingPopulation: otherRealmId, sort: 'rating', mode: 'personal' })).not.toBe(identity);
+  expect(refinementKey({ ...base, ratingPopulation: otherRealmId, sort: 'rating', mode: 'personal' })).not.toBe(
+    identity,
+  );
   expect(refinementKey({ ...base, ratingPopulation: realmId, sort: 'relevance', mode: 'personal' })).not.toBe(identity);
-  expect(refinementKey({ ...base, ratingPopulation: realmId, sort: 'rating', mode: 'public-anonymous' })).not.toBe(identity);
+  expect(refinementKey({ ...base, ratingPopulation: realmId, sort: 'rating', mode: 'public-anonymous' })).not.toBe(
+    identity,
+  );
 });

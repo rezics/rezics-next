@@ -106,10 +106,7 @@ function SearchRoute() {
 function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
   const sessionState = useSession();
   const reader = searchSessionOwner(sessionState);
-  if (
-    searchRequiresCurrentReader(deps) &&
-    (sessionState.state !== 'signed-in' || reader === null)
-  )
+  if (searchRequiresCurrentReader(deps) && (sessionState.state !== 'signed-in' || reader === null))
     return (
       <SearchPage
         query={deps.query}

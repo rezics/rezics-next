@@ -42,12 +42,17 @@ type Story = StoryObj<typeof meta>;
 
 export const CollectionMembershipWithGlobalRating: Story = {
   name: 'Signed-in Collection results and native Global rating',
-  render: () => <PageStory visitor="Signed In" path={`/search?q=Mira&sort=rating&filter=${encodeURIComponent(collectionFilter)}`} />,
+  render: () => (
+    <PageStory visitor="Signed In" path={`/search?q=Mira&sort=rating&filter=${encodeURIComponent(collectionFilter)}`} />
+  ),
   play: async ({ canvasElement }) => {
     await pageReady({ canvasElement });
     await expect(await within(canvasElement).findByText('Mira Reading Room')).toBeVisible();
     const more = within(canvasElement).queryByRole('link', { name: /More results/ });
-    if (more) await expect(new URL(more.getAttribute('href')!, 'https://example.test').searchParams.get('filter')).toBe(collectionFilter);
+    if (more)
+      await expect(new URL(more.getAttribute('href')!, 'https://example.test').searchParams.get('filter')).toBe(
+        collectionFilter,
+      );
   },
 };
 
@@ -73,7 +78,10 @@ export const SignedOutScopedReturn: Story = {
     await pageReady({ canvasElement });
     const main = within(canvasElement).getByRole('main');
     const signIn = await within(main).findByRole('link', { name: /Sign in/ });
-    const returnTo = new URL(new URL(signIn.getAttribute('href')!, 'https://example.test').searchParams.get('return_to')!, 'https://example.test');
+    const returnTo = new URL(
+      new URL(signIn.getAttribute('href')!, 'https://example.test').searchParams.get('return_to')!,
+      'https://example.test',
+    );
     await expect(returnTo.searchParams.get('ratingPopulation')).toBe(ratingPopulationId);
     await expect(returnTo.searchParams.get('filter')).toBe(realmFilter);
   },
@@ -81,7 +89,9 @@ export const SignedOutScopedReturn: Story = {
 
 export const MalformedResourceRemainsCorrectable: Story = {
   name: 'Malformed Realm scope remains correctable',
-  render: () => <PageStory visitor="Signed In" path={`/search?q=Mira&filter=${encodeURIComponent('{"realm":{"id":"bad"}}')}`} />,
+  render: () => (
+    <PageStory visitor="Signed In" path={`/search?q=Mira&filter=${encodeURIComponent('{"realm":{"id":"bad"}}')}`} />
+  ),
   play: async ({ canvasElement }) => {
     await pageReady({ canvasElement });
     const input = within(canvasElement).getByRole('textbox');

@@ -78,7 +78,8 @@ export const readRefinement = createServerFn({ method: 'POST' })
       data.conditions.ratingPopulation === undefined || data.conditions.ratingPopulation === ''
         ? undefined
         : canonicalRealmRatingPopulationId(data.conditions.ratingPopulation);
-    if (data.conditions.ratingPopulation && !ratingPopulation) return { status: 'invalid', code: 'invalid_rating_population' };
+    if (data.conditions.ratingPopulation && !ratingPopulation)
+      return { status: 'invalid', code: 'invalid_rating_population' };
     if (
       resourceScope &&
       parsedScope.scope &&
