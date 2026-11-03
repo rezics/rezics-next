@@ -16,6 +16,8 @@ import { isScreenType } from '../catalogue/screen-profile';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
+import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
+import { OrganizationHistorySlot } from './subject-slots';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { candidateContext } from '../../subject/candidates';
 import type { KernelClient } from '@rezics/client';
@@ -308,6 +310,9 @@ export function SubjectFrame({
               {(frame.type === 'schema:Person' || frame.type === 'schema:Organization') && (
                 <PeopleProfileEntry id={frame.id} label={title} locale={locale} />
               )}
+              {frame.type === 'schema:Organization' && (
+                <ProducerHistoryEntry id={frame.id} label={title} locale={locale} />
+              )}
               {view === 'credits' && <PeopleProfileEntry work={frame.id} locale={locale} />}
               <GameProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
               {(frame.type === 'schema:Book' || frame.type === 'schema:BookSeries') && (
@@ -355,6 +360,7 @@ export function SubjectFrame({
           />
         )}
       </header>
+      <OrganizationHistorySlot subjectId={frame.id} subjectType={frame.type} label={title} locale={locale} />
       {library ? (
         <div
           data-slot="subject-library"

@@ -19,13 +19,17 @@ import type { FactsTransport } from './subject-facts';
 import type { CreateFailure, CreateResult } from './create-subject';
 import { presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
 import type { Violation } from '@rezics/definitions/validate';
+import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import {
+  peopleBiographyGroups,
   peopleInitialItem,
   peopleProfiles,
+  peopleScalarFields,
   validatePeopleItem,
   type PeopleRead,
   type PeopleTransport,
 } from './people-profile';
+import { PeopleBiographyGroups } from './people-biography/groups';
 import {
   beginCreditTargetReturn,
   creditIdentityTypes,
@@ -158,6 +162,26 @@ function ProfileIntro({ read, locale }: { read: Current; locale: string }) {
       )}
       <p className="text-muted-foreground">{m.people_profile_terms({}, o)}</p>
       <p className="text-muted-foreground">{m.people_profile_disclosure({}, o)}</p>
+      {profile &&
+        peopleBiographyGroups(read.release, profile.id, locale, read.public, !!read.public).map((group) => (
+          <p key={group.kind} className="text-sm text-muted-foreground">
+            {group.kind === 'biography'
+              ? m.people_biography_title({}, o)
+              : group.kind === 'occupations'
+                ? m.people_occupations_title({}, o)
+                : group.kind === 'languages'
+                  ? m.people_languages_title({}, o)
+                  : m.people_affiliations_title({}, o)}
+            {': '}
+            {group.fields.every((field) => field.status === 'unsupported')
+              ? m.people_biography_unsupported({}, o)
+              : group.fields.some((field) => field.status === 'current')
+                ? m.people_biography_current({}, o)
+                : group.fields.some((field) => field.status === 'unreadable')
+                  ? m.people_biography_unreadable({}, o)
+                  : m.people_biography_absent({}, o)}
+          </p>
+        ))}
       {work && (
         <section className="min-w-0 space-y-2 [overflow-wrap:anywhere]">
           <h2 className="font-semibold">{m.people_profile_credit({}, o)}</h2>
@@ -785,6 +809,7 @@ function PeopleProfileEditorLive({
   review,
   relations,
   onNavigate,
+  search,
   creditHandoffToken,
   handoffReader = '',
   handoffReaderLive = () => false,
@@ -796,6 +821,7 @@ function PeopleProfileEditorLive({
   transport: PeopleTransport;
   propose: FactsTransport['propose'];
   review: (property: string, session?: string) => CandidateTransport;
+  search?: EntityPickerSearch;
   relations?: ReactNode;
   onNavigate: (href: string) => void;
   creditHandoffToken?: string;
@@ -1041,9 +1067,7 @@ function PeopleProfileEditorLive({
               intro: m.facts_intro({}, o),
               empty: m.facts_empty({}, o),
               path: 'people',
-              properties: (current) =>
-                peopleProfiles(current.release, locale).find((profile) => profile.id === current.public.subject.type)
-                  ?.fields ?? [],
+              properties: (current) => peopleScalarFields(current.release, current.public.subject.type, locale),
             }}
             profileHeadingRef={retryHeading}
             profileIntro={<ProfileIntro read={privateRead} locale={locale} />}
@@ -1059,6 +1083,23 @@ function PeopleProfileEditorLive({
               },
             }}
             onReload={reloadCorrection}
+            review={review}
+          />
+          <PeopleBiographyGroups
+            read={{ ok: true, public: privateRead.public!, release: privateRead.release, source: null }}
+            locale={locale}
+            search={search}
+            transport={{
+              propose,
+              read: async () => {
+                const next = matching(await transport.load());
+                return next.ok && next.public
+                  ? { ok: true, public: next.public, release: next.release, source: null }
+                  : next.ok
+                    ? { ok: false, reason: 'unavailable' }
+                    : next;
+              },
+            }}
             review={review}
           />
           {relations && <div className={peopleRelationsSurface}>{relations}</div>}

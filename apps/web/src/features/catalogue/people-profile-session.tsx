@@ -1,12 +1,14 @@
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';
+import { useCallback } from 'react';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
 import { readCreatedCatalogueSubject } from './create-subject-actions';
 import { submitFactCorrection } from './subject-facts-actions';
 import { RelationEditorSession } from './relation-editor-session';
+import { relationTargetSearch } from './relation-editor-search';
 import { loadPeopleProfile, createCataloguePeopleProfile } from './people-profile-actions';
 import { PeopleProfileEditor } from './people-profile-view';
 import type { PeopleAddress } from './people-profile';
@@ -19,6 +21,10 @@ function PeopleProfileSessionLive({
 }: PeopleAddress & { locale: string; creditHandoffToken?: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
+  const search = useCallback(
+    (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
+    [locale],
+  );
   return (
     <PeopleProfileEditor
       {...(id ? { id } : {})}
@@ -52,6 +58,7 @@ function PeopleProfileSessionLive({
           },
         };
       }}
+      search={search}
       relations={id ? <RelationEditorSession id={id} locale={locale} /> : undefined}
       onNavigate={(href) => window.location.assign(href)}
     />

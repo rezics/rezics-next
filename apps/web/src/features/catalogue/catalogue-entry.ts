@@ -124,6 +124,15 @@ export const catalogueEntries = {
       ? `${subject({ id, label: label ?? '', locale })}/people`
       : `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
   }),
+  producerHistory: ({
+    id,
+    label = '',
+    locale,
+  }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
+    group: 'edit',
+    label: m.producer_history_title({}, options(locale)),
+    href: `${subject({ id, label, locale })}/producer`,
+  }),
 };
 
 /** Navigation may request sign-in; the native page still owns every current availability/authority decision. */

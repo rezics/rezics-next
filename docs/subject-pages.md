@@ -498,6 +498,7 @@ Manga correction retires current and nested public markup when a reload starts o
 Manga creation's explicit keyboard qualifier Add orients to the admitted stable qualifier's first editing control, falling back to its labelled group; refused additions, pointer use, moved focus and retired row or Type activation stay quiet.
 Manga correction shares one departure decision across scalar, relation and authored holders for pathname or search changes and browser unload: excluded changed assertions and unresolved proposals remain protected during read recovery; Stay preserves the complete holder, while Leave permanently releases local editing and retry recovery without cancelling native work. Pristine source copies and confirmed results alone permit departure, and inline confirmed-candidate review retains all sibling drafts.
 People correction retains private scalar and relation holders through failed reads; an explicit refresh restores all profile terms, work references and links only from a fresh matching subject, Type and supplied work, while exact review reopens against fresh authority.
+The People profile groups multilingual authored biography, occupations and working languages as labelled facts. `schema:abstract`, occupation concepts and `schema:knowsLanguage` bind only when the active release admits those exact descriptors; unreleased requested fields stay named unsupported, distinct from a supported field with no current value and from an independently unreadable current value. Biography opens the existing authored document route with language, document identity, references and return to the original profile. Occupations and languages are independently selected admitted items, not localized free-text identities. A stale selected fact requires explicit reselection. Returned candidates remain awaiting review; public facts refresh only from a new current read. Create, select and publish labels, Japanese 下書き, the credit create-and-return handoff and 44px wrapping stay with their existing owners. Decision: requested biography, occupation and language IDs are configuration until this release admits them; Web does not fork definitions.
 Screen correction also retains only private editor holders across refusal, including concealment; only a fresh matching read restores identity, selected evidence, nested editors and explicit sealed retries.
 Literary creation retains metadata only for its drafts; a refused or unavailable page or scalar current subject read removes identity, facts and editor markup, permanently retires old callbacks/results, and retains private drafts and exact sealed retries until a fresh matching read restores editing; relation and authored holders reread their original addresses before resuming. An existing Literary correction reload retires current public identity and assertion markup at start while keeping private correction holders and exact retries; only a fresh matching success restores current reading and proposal admission, and callbacks from the preceding observation stay retired across equal-identity recovery.
 Story Arc reload starts a new page observation: cached identity, links, facts and nested editor markup retire at reload start, while private holders keep unsent drafts and exact sealed retry intent; only a fresh successful matching Story Arc/work read restores page authority, and earlier callbacks/results stay retired even when identities match. Reload sends no command, and nested holders resume through their existing fresh-address recovery.
@@ -797,6 +798,21 @@ surviving meaningful opener; otherwise focus the count-bearing current slice (in
 failure alert. Movement away and back, pointer or Tab interaction, window blur, replacement reads and retirement cancel
 orientation permanently; independent corrections and exact unresolved commands remain intact. A read action attempted
 while busy cancels pending orientation without starting duplicate transport; retired reads stay silent.
+
+The Organization compact frame and Contribute menu add **Producer history** at
+`/{locale}/subjects/{id}/{slug}/producer` without widening the shared View enum or replacing `$view`. Parent `wdt:P749`
+and predecessor/successor `wdt:P1365`/`wdt:P1366` bind only when the active release admits their direction, range and
+inverse; unreleased requested fields stay named unsupported. Display predecessor, successor, parent, subsidiary and
+credited role as distinct meanings. Do not infer mergers, chronology or identity equivalence from a name, a date or a
+symmetric edge. Repeated credited names do not create organizations. The page is one native bounded relations/links
+window with current qualifiers, references and independently readable related subjects; continuation is explicit and
+incomplete history is not a complete genealogy. Date precision and unknown status are preserved. Editing opens the
+existing admitted relation/fact workflow with exact subject, statement and return context; returned proposals remain
+awaiting review. A stale selected assertion requires explicit reselection. Concealed endpoints stay concealed. There is
+no inferred global company tree and no per-card fetch loop. Native producer APIs, publication, authorization and durable
+semantics stay with their existing Goal; missing producer capability is named unavailable. Decision: requested parent and
+predecessor/successor IDs are configuration until this release admits them; Semantic owns configuration and Imports owns
+identity/source mapping.
 
 ## Statement consent
 

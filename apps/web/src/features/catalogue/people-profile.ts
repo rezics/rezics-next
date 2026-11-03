@@ -7,6 +7,9 @@ import { DefinitionReadError, definitionText, fetchGuideRelease } from './defini
 import { createSubjectRecord } from './create-subject-request';
 import type { CreateResult, CreatedReader, InitialSubject } from './create-subject';
 import { correctionProperty, type StatementInput } from './statement-editor';
+import { peopleBiographyGroups } from './people-biography';
+
+export { peopleAgentType, peopleBiographyGroups, peopleScalarFields } from './people-biography';
 
 export const peopleUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type PeopleAddress = { id?: string; work?: string };
@@ -53,6 +56,12 @@ export function peopleProfiles(release: Release, locale: string): PeopleProfile[
     const description = definitionText(type.descriptions, locale);
     const fields = type.properties.filter((property) => correctionProperty(release, id, property));
     const relations = type.properties.filter((property) => !!release.properties[property]?.relation);
+    const grouped = new Set(
+      peopleBiographyGroups(release, id, locale)
+        .flatMap((group) => group.fields)
+        .filter((field) => field.editor !== 'none')
+        .map((field) => field.id),
+    );
     return [
       {
         id,
@@ -63,7 +72,11 @@ export function peopleProfiles(release: Release, locale: string): PeopleProfile[
         fields,
         relations,
         unsupported: type.properties.filter(
-          (property) => property !== 'schema:name' && !fields.includes(property) && !relations.includes(property),
+          (property) =>
+            property !== 'schema:name' &&
+            !fields.includes(property) &&
+            !relations.includes(property) &&
+            !grouped.has(property),
         ),
       },
     ];

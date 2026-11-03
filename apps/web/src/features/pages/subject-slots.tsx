@@ -1,6 +1,9 @@
 import { createContext, useContext, useSyncExternalStore, type ComponentType } from 'react';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
+import { m } from '../../paraglide/messages.js';
+import { catalogueEntries } from '../catalogue/catalogue-entry';
 
 /** Only fields from the successful public subject read; no Library state or private commerce DTO. */
 export type SubjectPurchaseContext = Readonly<{ subjectId: string; subjectType: string; locale: string }>;
@@ -49,5 +52,30 @@ export function SubjectPurchaseSlot({ context }: { context: SubjectPurchaseConte
         {hydrated && privateRegion && <PreparedPurchaseRegion region={privateRegion} context={publicContext} />}
       </div>
     </PurchaseContext.Provider>
+  );
+}
+
+/** Additive Organization companion; no extra subject fetch and no View-enum widening. */
+export function OrganizationHistorySlot({
+  subjectId,
+  subjectType,
+  label,
+  locale,
+}: {
+  subjectId: string;
+  subjectType: string;
+  label: string;
+  locale: string;
+}) {
+  if (subjectType !== 'schema:Organization') return null;
+  const entry = catalogueEntries.producerHistory({ id: subjectId, label, locale });
+  const o = { locale: locale as never };
+  return (
+    <section data-slot="organization-history" className="min-w-0 space-y-2">
+      <p className="text-sm font-medium">{m.producer_history_title({}, o)}</p>
+      <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={entry.href}>
+        {entry.label}
+      </a>
+    </section>
   );
 }

@@ -579,10 +579,15 @@ workspace retirement cancel that handoff.
 eligibility, personal disclosure and `sourceOrConsent` stay with their existing native authorities. Ordinary forms
 never send ingestion Source metadata or infer private relationships.
 
-The present person and organization releases admit no authored biography field, so this profile supplies no
-biography or licence controls. Released media fields are identified as requiring their dedicated editor; this
-flow supplies no cover import or inferred rights. Future authored fields must use the existing authored composer.
-Metadata text retains its actual fallback language, independently of the entered facts' languages.
+Person biography, occupations and working languages appear as labelled groups on the existing People profile.
+Requested `schema:abstract`, occupation concepts and `schema:knowsLanguage` stay named unsupported until the active
+release admits those exact descriptors. An admitted biography field uses the existing authored document composer with
+language, document identity, references and return; short descriptions are not rewritten as long biography. Occupations
+and languages are independently selected admitted items. Organization producer history is a companion
+`/{locale}/subjects/{id}/{slug}/producer` route that reuses the existing relation editor; requested parent and
+predecessor/successor descriptors bind only when admitted. Released media fields still require their dedicated editor;
+this flow supplies no cover import or inferred rights. Metadata text retains its actual fallback language, independently
+of the entered facts' languages.
 
 The Storybook page is **Pages/Catalogue/Person and organization catalogue editor**, with base ID
 `pages-catalogue-person-and-organization-catalogue-editor`. Its `create-route`, `person-route` and

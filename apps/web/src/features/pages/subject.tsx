@@ -14,6 +14,7 @@ import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
+import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
@@ -530,6 +531,13 @@ export function SubjectPage({
           {page.views?.includes('editions') && <PublicationEditorEntry work={read.subject.id} locale={locale} />}
           {(read.subject.type === 'schema:Person' || read.subject.type === 'schema:Organization') && (
             <PeopleProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+          )}
+          {read.subject.type === 'schema:Organization' && (
+            <ProducerHistoryEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+            />
           )}
           {page.views?.includes('credits') && <PeopleProfileEntry work={read.subject.id} locale={locale} />}
           <GameProfileEntry
