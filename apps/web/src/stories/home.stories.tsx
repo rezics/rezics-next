@@ -298,7 +298,9 @@ export const QuestionChoicesSparseContinuation: Story = {
     await expect(next).toBeEnabled();
     await userEvent.click(next);
     const select = canvas.getByRole('combobox', { name: m.home_question_label() });
-    await waitFor(() => expect(select.querySelector('option[value="00000000-0000-7000-8000-000000000002"]')).not.toBeNull());
+    await waitFor(() =>
+      expect(select.querySelector('option[value="00000000-0000-7000-8000-000000000002"]')).not.toBeNull(),
+    );
   },
 };
 
@@ -324,7 +326,9 @@ export const QuestionChoicesSameInputRetry: Story = {
     await userEvent.click(canvas.getByRole('button', { name: m.home_questions_next() }));
     await expect(await canvas.findByText(m.home_questions_unavailable())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.home_questions_retry() }));
-    await waitFor(() => expect(select.querySelector('option[value="00000000-0000-7000-8000-000000000002"]')).not.toBeNull());
+    await waitFor(() =>
+      expect(select.querySelector('option[value="00000000-0000-7000-8000-000000000002"]')).not.toBeNull(),
+    );
     await expect(select).toHaveValue(questionId);
   },
 };

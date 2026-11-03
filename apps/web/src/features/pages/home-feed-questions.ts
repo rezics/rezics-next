@@ -158,8 +158,7 @@ export async function readHomeQuestion(
     });
     if (result.status !== 200 || result.error || !result.data) return refused(result.status, result.error?.value);
     const parsed = v.safeParse(questionSchema, result.data);
-    if (!parsed.success || parsed.output.id !== id)
-      return { status: 'unavailable', code: 'invalid_question_response' };
+    if (!parsed.success || parsed.output.id !== id) return { status: 'unavailable', code: 'invalid_question_response' };
     if (parsed.output.lifecycle?.state === 'retired') return { status: 'lost', code: 'question_retired' };
     if (parsed.output.realmId !== undefined) return { status: 'denied', code: 'question_not_global' };
     return { status: 'ready', question: projectQuestion(parsed.output) };
