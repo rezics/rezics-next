@@ -1547,7 +1547,10 @@ echo "SLOTS ${count}"
 run_id=
 run_directory=
 run_slice=
-if IFS= read -r run_id; then
+while IFS= read -r run_id; do
+  [ -n "$run_id" ] && break
+done
+if [ -n "$run_id" ]; then
   case "$run_id" in ''|*[!a-zA-Z0-9-]*) run_id= ;; esac
   if [ -n "$run_id" ]; then
     run_directory=${ROOT}/runs/$run_id

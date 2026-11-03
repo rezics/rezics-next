@@ -4895,7 +4895,7 @@ test("a slot holder cleans its run's systemd units and labelled containers befor
   expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
 });
 
-test('a slot holder whose run already wrote exit-status leaves normal cleanup alone', async () => {
+test('a slot holder registers its run after the keepalive line and leaves completed run cleanup alone', async () => {
   const { run, slot } = await generatedRun();
   const id = run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
   const fixture = runFixture();
@@ -4903,8 +4903,9 @@ test('a slot holder whose run already wrote exit-status leaves normal cleanup al
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, 'exit-status'), '0\n');
 
-  const result = fixture.execute(slot, {}, `${id}\n`);
+  const result = fixture.execute(slot, {}, `\n${id}\n`);
   expect(result.status, result.stderr).toBe(0);
+  expect(readFileSync(join(directory, '.remote-check-slot-count'), 'utf8')).toMatch(/^[1-9][0-9]*\n$/);
   expect(fixture.events().filter((event) => event.command === 'systemctl' && event.args[0] === 'stop')).toEqual([]);
   expect(fixture.events().filter((event) => event.command === 'docker' && event.args[0] === 'rm')).toEqual([]);
   expect(existsSync(directory)).toBe(true);
