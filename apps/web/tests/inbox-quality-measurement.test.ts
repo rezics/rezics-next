@@ -162,7 +162,11 @@ async function assertVisualState(page: Page, story: ReviewStory): Promise<void> 
       const status = main.getByRole('status');
       assertEqual(await status.count(), 1, `${story.key} exposes one status notice`);
       const expectedStatus = story.key === 'preparing' ? '503' : story.key === 'closed' ? '403' : '500';
-      assertEqual(await status.getAttribute('data-response-status'), expectedStatus, `${story.key} preserves response status`);
+      assertEqual(
+        await status.getAttribute('data-response-status'),
+        expectedStatus,
+        `${story.key} preserves response status`,
+      );
       assertGreater(await status.getByRole('button', { name: /retry/i }).count(), 0, `${story.key} offers retry`);
     } else if (story.key === 'more-than-ninety-nine') {
       assertGreater(await main.locator('[data-notice-id]').count(), 0, 'MoreThanNinetyNine renders notice rows');
@@ -172,7 +176,10 @@ async function assertVisualState(page: Page, story: ReviewStory): Promise<void> 
 
   const geometry = await page.evaluate(() => {
     const rows = [...document.querySelectorAll<HTMLElement>('[data-notice-id]')];
-    const blocks = rows.flatMap((row) => [row.querySelector<HTMLElement>('p'), row.querySelector<HTMLElement>('[data-notice-byline]')?.parentElement]);
+    const blocks = rows.flatMap((row) => [
+      row.querySelector<HTMLElement>('p'),
+      row.querySelector<HTMLElement>('[data-notice-byline]')?.parentElement,
+    ]);
     return {
       documentWidth: document.documentElement.scrollWidth,
       viewportWidth: document.documentElement.clientWidth,
@@ -236,207 +243,278 @@ afterAll(async () => {
   ]);
 });
 
-test(
-  'measure the existing Inbox Page and pattern review matrix with source-bound route/story evidence',
-  async () => {
-    const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-    assertTrue(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Captures bind to a full source commit');
-    const visualStories: ReviewStory[] = [
-      { key: 'empty', family: 'page', entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Empty']) },
-      {
-        key: 'mixed',
-        family: 'page',
-        reference: true,
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Mixed replies and moderation']),
+test('measure the existing Inbox Page and pattern review matrix with source-bound route/story evidence', async () => {
+  const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+  assertTrue(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Captures bind to a full source commit');
+  const visualStories: ReviewStory[] = [
+    { key: 'empty', family: 'page', entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Empty']) },
+    {
+      key: 'mixed',
+      family: 'page',
+      reference: true,
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Mixed replies and moderation']),
+    },
+    {
+      key: 'unavailable',
+      family: 'page',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Unavailable item']),
+    },
+    {
+      key: 'preparing',
+      family: 'page',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Service unavailable (503)']),
+    },
+    {
+      key: 'closed',
+      family: 'page',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Inbox closed']),
+    },
+    {
+      key: 'unavailable-operation',
+      family: 'page',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Inbox unavailable']),
+    },
+    {
+      key: 'more-than-ninety-nine',
+      family: 'page',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['More than 99 unread']),
+    },
+    {
+      key: 'hidden-target',
+      family: 'pattern',
+      entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', [
+        'Hidden Target',
+        'HiddenTarget',
+      ]),
+    },
+    {
+      key: 'long-content',
+      family: 'pattern',
+      entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', [
+        'Long Content',
+        'LongContent',
+      ]),
+    },
+  ];
+  const interactionStories = [
+    {
+      key: 'viewer-becomes-unknown',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Signed-in viewer becomes unknown']),
+      viewport: viewports[0],
+      verify: async (page: Page) => {
+        assertEqual(
+          await page.getByRole('main').locator('[data-notice-id]').count(),
+          0,
+          'Unknown viewer sees no stale notice rows',
+        );
+        assertEqual(await page.getByRole('main').getByRole('list').count(), 0, 'Unknown viewer receives no stale list');
       },
-      {
-        key: 'unavailable',
-        family: 'page',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Unavailable item']),
+    },
+    {
+      key: 'seen-viewer-becomes-unknown',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+        'Viewer changes while mark seen is waiting',
+      ]),
+      viewport: viewports[0],
+      verify: async (page: Page) => {
+        assertEqual(
+          await page.getByRole('main').locator('[data-notice-id]').count(),
+          0,
+          'Viewer change retires notices during mark-seen',
+        );
+        assertEqual(
+          await page.getByRole('main').getByRole('button', { name: /retry/i }).count(),
+          0,
+          'Retired viewer gets no stale retry',
+        );
       },
-      {
-        key: 'preparing',
-        family: 'page',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Service unavailable (503)']),
+    },
+    {
+      key: 'seen-retry-after-recovery',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+        'Mark seen waits, then retries the original notice after pagination',
+      ]),
+      viewport: viewports[0],
+      verify: async (page: Page) => {
+        assertGreater(
+          await page.getByRole('main').locator('[data-notice-id]').count(),
+          0,
+          'Mark-seen recovery retains the Inbox rows',
+        );
+        assertEqual(
+          await page.getByRole('main').locator('[data-response-status="429"]').count(),
+          0,
+          'Successful deliberate retry clears the rate-limit notice',
+        );
       },
-      { key: 'closed', family: 'page', entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Inbox closed']) },
-      {
-        key: 'unavailable-operation',
-        family: 'page',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Inbox unavailable']),
+    },
+    {
+      key: 'pagination-recovery',
+      entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', [
+        'Pagination Recovery',
+        'PaginationRecovery',
+      ]),
+      viewport: viewports[1],
+      verify: async (page: Page) => {
+        assertEqual(await page.getByRole('listitem').count(), 3, 'Continuation recovery retains all three notice rows');
+        assertEqual(
+          await page.getByRole('button', { name: /load more/i }).count(),
+          0,
+          'Completed continuation removes its control',
+        );
       },
-      {
-        key: 'more-than-ninety-nine',
-        family: 'page',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['More than 99 unread']),
+    },
+    {
+      key: 'rejected-continuation',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+        'Rejected continuation with separate first-page choice',
+      ]),
+      viewport: viewports[0],
+      verify: async (page: Page) => {
+        assertEqual(
+          await page.getByRole('main').getByRole('status').getAttribute('data-response-status'),
+          '409',
+          'Rejected continuation remains explicit',
+        );
+        assertTrue(
+          await page
+            .getByRole('main')
+            .getByRole('button', { name: /start first page/i })
+            .isEnabled(),
+          'First-page restart remains deliberate',
+        );
       },
-      {
-        key: 'hidden-target',
-        family: 'pattern',
-        entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', ['Hidden Target', 'HiddenTarget']),
+    },
+    {
+      key: 'first-page-restart-retry',
+      entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', [
+        'First-page restart unavailable, then deliberate retry',
+      ]),
+      viewport: viewports[0],
+      verify: async (page: Page) => {
+        assertEqual(
+          await page.getByRole('main').locator('[data-notice-id]').count(),
+          1,
+          'Deliberate retry restores the selected first-page result',
+        );
+        assertEqual(
+          await page.getByRole('main').locator('[data-response-status]').count(),
+          0,
+          'Deliberate retry clears the first-page failure',
+        );
       },
-      {
-        key: 'long-content',
-        family: 'pattern',
-        entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', ['Long Content', 'LongContent']),
-      },
-    ];
-    const interactionStories = [
-      {
-        key: 'viewer-becomes-unknown',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Signed-in viewer becomes unknown']),
-        viewport: viewports[0],
-        verify: async (page: Page) => {
-          assertEqual(await page.getByRole('main').locator('[data-notice-id]').count(), 0, 'Unknown viewer sees no stale notice rows');
-          assertEqual(await page.getByRole('main').getByRole('list').count(), 0, 'Unknown viewer receives no stale list');
-        },
-      },
-      {
-        key: 'seen-viewer-becomes-unknown',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Viewer changes while mark seen is waiting']),
-        viewport: viewports[0],
-        verify: async (page: Page) => {
-          assertEqual(await page.getByRole('main').locator('[data-notice-id]').count(), 0, 'Viewer change retires notices during mark-seen');
-          assertEqual(await page.getByRole('main').getByRole('button', { name: /retry/i }).count(), 0, 'Retired viewer gets no stale retry');
-        },
-      },
-      {
-        key: 'seen-retry-after-recovery',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Mark seen waits, then retries the original notice after pagination']),
-        viewport: viewports[0],
-        verify: async (page: Page) => {
-          assertGreater(await page.getByRole('main').locator('[data-notice-id]').count(), 0, 'Mark-seen recovery retains the Inbox rows');
-          assertEqual(await page.getByRole('main').locator('[data-response-status="429"]').count(), 0, 'Successful deliberate retry clears the rate-limit notice');
-        },
-      },
-      {
-        key: 'pagination-recovery',
-        entry: findStory('Patterns/Account/Inbox', '/stories/inbox-patterns.stories.tsx', ['Pagination Recovery', 'PaginationRecovery']),
-        viewport: viewports[1],
-        verify: async (page: Page) => {
-          assertEqual(await page.getByRole('listitem').count(), 3, 'Continuation recovery retains all three notice rows');
-          assertEqual(await page.getByRole('button', { name: /load more/i }).count(), 0, 'Completed continuation removes its control');
-        },
-      },
-      {
-        key: 'rejected-continuation',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['Rejected continuation with separate first-page choice']),
-        viewport: viewports[0],
-        verify: async (page: Page) => {
-          assertEqual(await page.getByRole('main').getByRole('status').getAttribute('data-response-status'), '409', 'Rejected continuation remains explicit');
-          assertTrue(await page.getByRole('main').getByRole('button', { name: /start first page/i }).isEnabled(), 'First-page restart remains deliberate');
-        },
-      },
-      {
-        key: 'first-page-restart-retry',
-        entry: findStory('Pages/Account/Inbox', '/stories/inbox.stories.tsx', ['First-page restart unavailable, then deliberate retry']),
-        viewport: viewports[0],
-        verify: async (page: Page) => {
-          assertEqual(await page.getByRole('main').locator('[data-notice-id]').count(), 1, 'Deliberate retry restores the selected first-page result');
-          assertEqual(await page.getByRole('main').locator('[data-response-status]').count(), 0, 'Deliberate retry clears the first-page failure');
-        },
-      },
-    ];
+    },
+  ];
 
-    const context = await browser!.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
-    await context.addInitScript(observeStorybook);
-    const page = await context.newPage();
-    const captures: Record<string, unknown>[] = [];
-    const interactions: Record<string, unknown>[] = [];
-    const referenceVariants = [
-      ...launchLocales.map((locale) => ({ locale, theme: 'light' as const })),
-      { locale: 'en', theme: 'dark' as const },
-      { locale: 'ja', theme: 'dark' as const },
-    ];
-    const otherVariants = ['en', 'zh-Hans'].flatMap((locale) =>
-      (['light', 'dark'] as const).map((theme) => ({ locale, theme })),
-    );
+  const context = await browser!.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+    reducedMotion: 'reduce',
+  });
+  await context.addInitScript(observeStorybook);
+  const page = await context.newPage();
+  const captures: Record<string, unknown>[] = [];
+  const interactions: Record<string, unknown>[] = [];
+  const referenceVariants = [
+    ...launchLocales.map((locale) => ({ locale, theme: 'light' as const })),
+    { locale: 'en', theme: 'dark' as const },
+    { locale: 'ja', theme: 'dark' as const },
+  ];
+  const otherVariants = ['en', 'zh-Hans'].flatMap((locale) =>
+    (['light', 'dark'] as const).map((theme) => ({ locale, theme })),
+  );
 
-    try {
-      for (const viewport of viewports) {
-        for (const story of visualStories) {
-          const variants = story.reference ? referenceVariants : otherVariants;
-          for (const { locale, theme } of variants) {
-            const { url } = await readyPage(page, story.entry, locale, theme, viewport.width, viewport.height);
-            await assertVisualState(page, story);
-            const pageState = await readState(page);
-            assertEqual(pageState.viewportWidth, viewport.width, `${story.key} renders at the requested viewport width`);
-            await page.evaluate(() => window.scrollTo(0, 0));
-            const imagePath = join(captureDirectory, `${story.entry.id}.${viewport.width}.${locale}.${theme}.png`);
-            await page.screenshot({ path: imagePath, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
-            const imageSha256 = createHash('sha256').update(readFileSync(imagePath)).digest('hex');
-            captures.push({
-              storyKey: story.key,
-              storyId: story.entry.id,
-              storyTitle: story.entry.title,
-              sourceCommit,
-              url,
-              viewport: { name: viewport.name, width: viewport.width, height: viewport.height },
-              globals: { locale, theme },
-              stateSha256: await stateHash(pageState),
-              pageState,
-              image: relative(root, imagePath).replaceAll('\\', '/'),
-              sha256: imageSha256,
-            });
-          }
+  try {
+    for (const viewport of viewports) {
+      for (const story of visualStories) {
+        const variants = story.reference ? referenceVariants : otherVariants;
+        for (const { locale, theme } of variants) {
+          const { url } = await readyPage(page, story.entry, locale, theme, viewport.width, viewport.height);
+          await assertVisualState(page, story);
+          const pageState = await readState(page);
+          assertEqual(pageState.viewportWidth, viewport.width, `${story.key} renders at the requested viewport width`);
+          await page.evaluate(() => window.scrollTo(0, 0));
+          const imagePath = join(captureDirectory, `${story.entry.id}.${viewport.width}.${locale}.${theme}.png`);
+          await page.screenshot({ path: imagePath, type: 'png', fullPage: true, animations: 'disabled', scale: 'css' });
+          const imageSha256 = createHash('sha256').update(readFileSync(imagePath)).digest('hex');
+          captures.push({
+            storyKey: story.key,
+            storyId: story.entry.id,
+            storyTitle: story.entry.title,
+            sourceCommit,
+            url,
+            viewport: { name: viewport.name, width: viewport.width, height: viewport.height },
+            globals: { locale, theme },
+            stateSha256: await stateHash(pageState),
+            pageState,
+            image: relative(root, imagePath).replaceAll('\\', '/'),
+            sha256: imageSha256,
+          });
         }
       }
-
-      for (const story of interactionStories) {
-        const { url } = await readyPage(page, story.entry, 'en', 'light', story.viewport.width, story.viewport.height);
-        await story.verify(page);
-        const pageState = await readState(page);
-        interactions.push({
-          storyKey: story.key,
-          storyId: story.entry.id,
-          sourceCommit,
-          url,
-          viewport: { name: story.viewport.name, width: story.viewport.width, height: story.viewport.height },
-          globals: { locale: 'en', theme: 'light' },
-          stateSha256: await stateHash(pageState),
-          pageState,
-        });
-      }
-    } finally {
-      await page.close();
-      await context.close();
     }
 
-    assertEqual(captures.length, 84, 'The documented Inbox review matrix has 84 source-bound captures');
-    assertEqual(visualStories.length, 9, 'All seven Page and both named Pattern stories are measured');
-    assertGreater(interactions.length, 0, 'Interaction recovery cases are measured');
-    assertGreater(assertionCount, 0, 'Review records nonzero route/story assertions');
+    for (const story of interactionStories) {
+      const { url } = await readyPage(page, story.entry, 'en', 'light', story.viewport.width, story.viewport.height);
+      await story.verify(page);
+      const pageState = await readState(page);
+      interactions.push({
+        storyKey: story.key,
+        storyId: story.entry.id,
+        sourceCommit,
+        url,
+        viewport: { name: story.viewport.name, width: story.viewport.width, height: story.viewport.height },
+        globals: { locale: 'en', theme: 'light' },
+        stateSha256: await stateHash(pageState),
+        pageState,
+      });
+    }
+  } finally {
+    await page.close();
+    await context.close();
+  }
 
-    const manifest = {
-      schemaVersion: 1,
-      contractHash,
-      sourceCommit,
-      storybook: { origin, indexUrl: `${origin}/index.json`, indexSha256: storyIndexSha256 },
-      evidenceBoundary: 'Storybook route/story fixtures only; these are not native persona or API evidence.',
-      reviewMatrix: {
-        referenceStory: 'Pages/Account/Inbox Mixed',
-        locales: [...launchLocales],
-        referenceThemes: { light: [...launchLocales], dark: ['en', 'ja'] },
-        otherStories: visualStories.filter((story) => !story.reference).map((story) => story.key),
-        otherLocales: ['en', 'zh-Hans'],
-        otherThemes: ['light', 'dark'],
-        viewports: viewports.map(({ name, width, height }) => ({ name, width, height })),
-      },
-      counts: {
-        visualStories: visualStories.length,
-        visualCases: captures.length,
-        interactionCases: interactions.length,
-        assertions: assertionCount,
-        totalCases: captures.length + interactions.length,
-      },
-      stories: [...visualStories, ...interactionStories.map(({ key, entry }) => ({ key, entry, family: 'interaction' as const }))].map(
-        ({ key, entry, family }) => ({ key, family, storyId: entry.id, title: entry.title, name: entry.name, importPath: entry.importPath }),
-      ),
-      captures,
-      interactions,
-    };
-    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    assertTrue(readFileSync(manifestPath, 'utf8').includes(sourceCommit), 'Manifest records the checked source revision');
-  },
-  900_000,
-);
+  assertEqual(captures.length, 84, 'The documented Inbox review matrix has 84 source-bound captures');
+  assertEqual(visualStories.length, 9, 'All seven Page and both named Pattern stories are measured');
+  assertGreater(interactions.length, 0, 'Interaction recovery cases are measured');
+  assertGreater(assertionCount, 0, 'Review records nonzero route/story assertions');
+
+  const manifest = {
+    schemaVersion: 1,
+    contractHash,
+    sourceCommit,
+    storybook: { origin, indexUrl: `${origin}/index.json`, indexSha256: storyIndexSha256 },
+    evidenceBoundary: 'Storybook route/story fixtures only; these are not native persona or API evidence.',
+    reviewMatrix: {
+      referenceStory: 'Pages/Account/Inbox Mixed',
+      locales: [...launchLocales],
+      referenceThemes: { light: [...launchLocales], dark: ['en', 'ja'] },
+      otherStories: visualStories.filter((story) => !story.reference).map((story) => story.key),
+      otherLocales: ['en', 'zh-Hans'],
+      otherThemes: ['light', 'dark'],
+      viewports: viewports.map(({ name, width, height }) => ({ name, width, height })),
+    },
+    counts: {
+      visualStories: visualStories.length,
+      visualCases: captures.length,
+      interactionCases: interactions.length,
+      assertions: assertionCount,
+      totalCases: captures.length + interactions.length,
+    },
+    stories: [
+      ...visualStories,
+      ...interactionStories.map(({ key, entry }) => ({ key, entry, family: 'interaction' as const })),
+    ].map(({ key, entry, family }) => ({
+      key,
+      family,
+      storyId: entry.id,
+      title: entry.title,
+      name: entry.name,
+      importPath: entry.importPath,
+    })),
+    captures,
+    interactions,
+  };
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  assertTrue(readFileSync(manifestPath, 'utf8').includes(sourceCommit), 'Manifest records the checked source revision');
+}, 900_000);
