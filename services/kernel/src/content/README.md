@@ -484,6 +484,8 @@ retain their existing behavior. Focused callback and receipt cases are in `test/
 Decision: native thread and post creation accepts `protected` visibility, while revisions cannot enter or leave that
 state; only the exact selected edition source receives the protected-source read exemption.
 
+Decision: generated client assertions follow protected post creation and retain the narrower revision visibility contract.
+
 Native thread creation sets `published`, `draft` or `protected` on both the thread and opening post. Native reply
 creation accepts optional `visibility: published | draft | protected`, defaulting to `published`. Revision input
 accepts only optional `published | draft`; omission preserves visibility. Explicit draft edits remain drafts. Only

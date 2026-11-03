@@ -171,7 +171,7 @@ export type ThreadInput = Readonly<{
 }>;
 export type PostInput = Readonly<{
   threadId: ThreadId;
-  visibility?: 'published' | 'draft';
+  visibility?: 'published' | 'draft' | 'protected';
   body: unknown;
   licence: string;
   subjectIds?: readonly ContentId[];
