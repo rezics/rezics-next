@@ -260,7 +260,7 @@ describe('minimal appeals through HTTP and committed effects', () => {
       now = originalNow;
     }
   });
-  test('moderators page pending appeals for targets they can act on, and no one else sees them', async () => {
+  test('queue readers see pending appeals with per-target resolution advice', async () => {
     const ids: string[] = [];
     let threadId = '';
     let visibleThread = '';
@@ -299,14 +299,15 @@ describe('minimal appeals through HTTP and committed effects', () => {
       seen.push(...page.body.appeals.map((a: { id: string }) => a.id));
       next = page.body.next;
     } while (next);
-    expect(seen.filter((id) => ids.includes(id))).toEqual(ids.slice(0, 2).reverse());
+    expect(seen.filter((id) => ids.includes(id))).toEqual(ids.slice().reverse());
     for (const account of [fixture.actor, fixture.principal, null])
       expect((await call('GET', path, undefined, undefined, account)).response.status).toBe(
         account === null ? 401 : 404,
       );
     const hidden = await call('GET', `/v1/threads/${threadId}/appeals`, undefined, undefined, fixture.recipient);
     expect(hidden.response.status).toBe(200);
-    expect(hidden.body.appeals).toEqual([]);
+    expect(hidden.body.appeals).toHaveLength(1);
+    expect(hidden.body.appeals[0]).toMatchObject({ id: ids[2], canResolve: false });
     const visible = await call('GET', `/v1/threads/${visibleThread}/appeals`, undefined, undefined, fixture.recipient);
     expect(visible.response.status).toBe(200);
     expect(visible.response.headers.get('cache-control')).toBe('private, no-store');
@@ -328,7 +329,7 @@ describe('minimal appeals through HTTP and committed effects', () => {
     const badCursor = await call('GET', `${path}?cursor=invalid`, undefined, undefined, fixture.recipient);
     expect(badCursor.response.status).toBe(400);
   });
-  test('board and thread appeal lists expose the current decision projection without disclosing its decider', async () => {
+  test('board and thread appeal reads expose current context and exact resolved readback without disclosing the decider', async () => {
     const cases: Array<{
       kind: 'thread' | 'post';
       id: string;
@@ -371,11 +372,22 @@ describe('minimal appeals through HTTP and committed effects', () => {
         createdAt: expect.any(String),
         decision: { statement: reason.reason, target: { kind: item.kind, id: item.id } },
       };
-      expect(reviewerBoard.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toEqual({
-        ...projected,
-        canResolve: true,
+      const reviewerRow = reviewerBoard.body.appeals.find((row: { id: string }) => row.id === item.appealId);
+      expect(reviewerRow).toMatchObject({ ...projected, canResolve: true });
+      expect(reviewerRow.appellantIdentity).toMatchObject({
+        state: 'available',
+        kind: 'actor',
+        automated: false,
       });
-      expect(deciderBoard.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toEqual({
+      expect(reviewerRow.targetContext).toHaveProperty('state');
+      expect(reviewerRow.resolutionCommand).toMatchObject({
+        operationId: 'moderation_appeal.resolve',
+        method: 'POST',
+        path: `/v1/moderation-appeals/${item.appealId}:resolve`,
+      });
+      expect(reviewerRow.source).toMatchObject({ partition: expect.any(Number), epoch: expect.any(Number) });
+      expect(reviewerRow.source.position).toMatch(/^(0|[1-9][0-9]*)$/);
+      expect(deciderBoard.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toMatchObject({
         ...projected,
         canResolve: false,
       });
@@ -388,7 +400,7 @@ describe('minimal appeals through HTTP and committed effects', () => {
       );
       expect(threadPage.response.status).toBe(200);
       expect(threadPage.response.headers.get('cache-control')).toBe('private, no-store');
-      expect(threadPage.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toEqual({
+      expect(threadPage.body.appeals.find((row: { id: string }) => row.id === item.appealId)).toMatchObject({
         ...projected,
         canResolve: true,
       });
@@ -396,18 +408,72 @@ describe('minimal appeals through HTTP and committed effects', () => {
       const outcome = index === 0 ? 'uphold' : 'reverse';
       if (index === 0) expect((await resolve(item.appealId, 'reverse', fixture.principal)).response.status).toBe(403);
       expect((await resolve(item.appealId, outcome)).response.status).toBe(200);
+      const pageBeforeSelection = await call(
+        'GET',
+        `/v1/boards/${boardId}/appeals?limit=1`,
+        undefined,
+        undefined,
+        fixture.recipient,
+      );
+      const exact = await call(
+        'GET',
+        `/v1/boards/${boardId}/appeals?limit=1&inspect=${item.appealId}`,
+        undefined,
+        undefined,
+        fixture.recipient,
+      );
+      expect(exact.response.status).toBe(200);
+      expect(exact.body.next).toBe(pageBeforeSelection.body.next);
+      expect(exact.body.selectedAppeal).toMatchObject({
+        id: item.appealId,
+        targetContext:
+          outcome === 'uphold'
+            ? { state: 'concealed' }
+            : { state: 'available', destination: { kind: 'thread', id: item.thread.id } },
+        resolution: {
+          outcome: outcome === 'uphold' ? 'upheld' : 'reversed',
+          statement: 'Reviewed independently',
+          resolvedAt: expect.any(String),
+        },
+      });
     }
     for (const raw of rawResponses) {
       expect(raw).not.toMatch(/decider(?:Id|_account_id)/i);
       expect(raw).not.toContain(fixture.principal);
     }
     await deliver();
+    const resolvedInspection = await call(
+      'GET',
+      `/v1/boards/${boardId}/appeals?limit=1&inspect=${cases[0]!.appealId}`,
+      undefined,
+      undefined,
+      fixture.recipient,
+    );
+    expect(resolvedInspection.response.status).toBe(200);
+    expect(resolvedInspection.body.appeals.map((row: { id: string }) => row.id)).not.toContain(cases[0]!.appealId);
+    expect(resolvedInspection.body.selectedAppeal).toMatchObject({
+      id: cases[0]!.appealId,
+      resolution: {
+        outcome: 'upheld',
+        statement: 'Reviewed independently',
+        resolvedAt: expect.any(String),
+      },
+    });
+    const concealedInspection = await call(
+      'GET',
+      `/v1/boards/${boardId}/appeals?inspect=${newId(routeOf(boardId)!)}`,
+      undefined,
+      undefined,
+      fixture.recipient,
+    );
+    expect(concealedInspection.response.status).toBe(404);
+    expect(concealedInspection.body).toMatchObject({ code: 'not_found' });
     const after = await call('GET', boardPath, undefined, undefined, fixture.recipient);
     expect(after.response.status).toBe(200);
     expect(after.body.appeals.map((row: { id: string }) => row.id)).not.toContain(cases[0]!.appealId);
     expect(after.body.appeals.map((row: { id: string }) => row.id)).not.toContain(cases[1]!.appealId);
   });
-  test('appeal list rechecks revoked target authority before disclosing the decision projection', async () => {
+  test('appeal list retains queue-visible items when target resolution authority is revoked', async () => {
     const { id, thread, decision } = await decide('post');
     const created = await appeal(decision.decision_id);
     await fixture.grant(fixture.recipient, 'moderation:read_reports', { route: routeOf(boardId)!, id: boardId });
@@ -430,8 +496,11 @@ describe('minimal appeals through HTTP and committed effects', () => {
     );
     const after = await call('GET', path, undefined, undefined, fixture.recipient);
     expect(after.response.status).toBe(200);
-    expect(after.body.appeals.map((item: { id: string }) => item.id)).not.toContain(created.id);
-    expect(JSON.stringify(after.body)).not.toContain(decision.decision_id);
+    expect(after.body.appeals.find((item: { id: string }) => item.id === created.id)).toMatchObject({
+      decision: { statement: reason.reason, target: { kind: 'post', id } },
+      canResolve: false,
+    });
+    expect(JSON.stringify(after.body)).not.toContain(fixture.principal);
   });
   test('appeal list preserves a moved source partition as a native unavailable response', async () => {
     const { id, decision } = await decide('thread');

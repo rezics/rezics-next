@@ -862,11 +862,26 @@ An account with `moderation:takedown` on the target, other than the original dec
 with a statement. The original decider and accounts lacking that authorization receive 403. `uphold` keeps the
 takedown. `reverse` restores the target, makes it readable under its ordinary disclosure rules, raises its security
 revision and emits a restore event. The resolution notifies the appellant with a mandatory moderation outcome.
-Pending appeals appear alongside reports in the moderator queue and leave it on resolution. Board and thread appeal
-list rows include the decision statement and its `{ kind, id }` target, plus `canResolve`, which is true only when
-the current `moderation:takedown` check succeeds and the viewer is not the original decider. It is a current list
-capability hint; resolving always repeats authorization at command time. List responses never include decider
-identity. This scope covers content targets only, not other owners' takedowns.
+Pending appeals appear alongside reports in the moderator queue and leave it on resolution. The queue's current
+`moderation:read_reports` grant admits its pending rows; each row keeps `canResolve` false unless the current
+`moderation:takedown` check succeeds on that exact target and the viewer is not the original decider. Revoking
+target authority therefore keeps the queue item readable while disabling resolution. Each row includes only the
+appellant's current public identity allowlist, a `targetContext` with an allowed board or thread destination, and the
+exact `moderation_appeal.resolve` command path. Identity and destination context report `concealed` separately from
+`unavailable`; no decider identity, private account field or target body is returned. Resolving always repeats
+authorization at command time.
+
+An optional `inspect=<appealId>` query adds `selectedAppeal` independently of the pending page and cursor. It admits
+one exact appeal only when the current queue scope, native decision link and target link still match. It can return
+the retained upheld/reversed outcome and resolution statement after the item leaves the queue; it never scans
+terminal history or infers an outcome from the missing queue row. Unknown and out-of-scope keys both return the
+native uniform 404. The response `provenance` binds the current actor, client session epoch and queue source
+position; each listed/selected appeal also carries its own source anchor. The existing session header remains opaque
+and no session or authorization token is copied into the response body. This scope covers content targets only, not
+other owners' takedowns.
+
+Decision: exact review uses `inspect=<appealId>` and returns `selectedAppeal` beside unchanged queue paging; optional
+identity and destination context use explicit `concealed` and `unavailable` states.
 
 The executable API contract is `specs/content-notification-outcomes.test.ts`, with the test-only interface in
 `specs/content-notification-driver.ts`. `CONTENT_NOTIFICATION_DRIVER` selects a real product binding exporting
@@ -2456,11 +2471,21 @@ Limits: board candidates <= 200, collection <= 100, public pages <= 100 results 
 - Growth check: `test/content/growth-reply-notices.test.ts`, posts per thread at scales [64, 256, 1024], with
   constant rows per post.
 
-### Appeals
+### Operation: Pending appeal review
 
-- **Touches:** Appeal reads one decision and inserts one appeal row. Resolve updates one appeal row and checks target authorization, plus `liftTakedown`'s bound and one notice. Pending lists follow the report list bound: at most L + 1 queue candidates and L independently authorized source reads, with L <= 100. The existing appeal read returns the decision statement, target and decider identity internally; list projection exposes only the statement and target, and derives `canResolve` from that same current target authorization plus the independent-review comparison. Board candidates are projected from committed events on the board route; a resolution permanently removes the candidate from its pending index.
-- **Bound:** Constant rows and statements per appeal and resolution; O(L) rows and statements per list, independent of appeals per board.
-- **Growth check:** `test/content/appeals-http.test.ts`, `appeals per board`, at 64, 256 and 1024 appeals; rows per call stay constant.
+#### Cost
+
+- Touches: The queue read checks `moderation:read_reports`, seeks L + 1 raw candidates, and does not refill after a candidate fails a current source/scope check. Each admitted candidate uses an exact appeal/decision read, a public identity batch by routed home, a current target-location batch by routed Content home, the ordinary current board/thread disclosure reader, a second public identity batch, an exact source re-read and a current `moderation:takedown` check. The queue scope is checked again before serialization. The existing selected appeal index is a full-prefix `(route, scope, created_at, appeal_id)` seek. Target lookups use routed primary keys; no decision or identity history is enumerated.
+- Bound: L is at most 100. The raw page reads at most L + 1 candidates; current appeal/decision reads and target-authority checks are O(L); identity batches, target-location batches and ordinary disclosures are bounded by the distinct admitted identities, target routes and target destinations. All statements, runner phases, examined rows and payload bytes inside Access and the ordinary disclosure readers remain charged to those owners. Page work is independent of pending appeals per scope and retained unrelated histories.
+- Growth check: `test/content/growth-appeal-boundaries.test.ts`, connected native scopes at 256, 1024 and 4096 unrelated pending/retained target and decision rows, with a fixed two-appeal page and one exact terminal key; compare rows, statements, blocks and request/response bytes. Independent identity/authority history axes remain in the continuation.
+
+### Operation: Exact selected appeal inspection
+
+#### Cost
+
+- Touches: One exact appeal/decision lookup and source anchor check the requested key; a batched public identity read and a routed target-location read prepare optional context; the ordinary board/thread reader checks current target disclosure. The identity is read again, the exact appeal/decision link is verified again, and queue scope plus current target authority are rechecked. A resolved result reads only that one retained appeal and performs no terminal page scan.
+- Bound: Constant work for one selected key, independent of pending queue depth and all terminal history. Identity and target preparation are limited to the selected appellant and target's routed homes; unavailable optional context is explicit, while required queue/source failure withholds the response.
+- Growth check: `test/content/growth-appeal-boundaries.test.ts`, one exact terminal key at 256, 1024 and 4096 independently growing unrelated pending and retained target/decision rows. Independent identity/authority histories and all empty/denied/revoked/retry phases remain in the continuation.
 
 ## Realm discovery source
 

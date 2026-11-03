@@ -5,7 +5,7 @@ import {
   type AppealHistoryAxis,
 } from './support/growth-appeal-boundaries-fixture.ts';
 
-const scales = [64, 256, 1024] as const;
+const scales = [256, 1024, 4096] as const;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 const axes: readonly AppealHistoryAxis[] = ['unrelated-pending', 'retained-history'];
 
@@ -60,7 +60,9 @@ test('native appeal queue paths keep bounded work across unrelated and retained 
   await fixture.revokeTargetModeration(lost!.threadId, people.reviewer.accountId);
   const lostControl = await fixture.listAppeals(boardId, people.reviewer.bearer);
   expect(lostControl.response.status).toBe(200);
-  expect(lostControl.body?.appeals.map((row: { id: string }) => row.id)).not.toContain(lost!.appealId);
+  expect(lostControl.body?.appeals.find((row: { id: string }) => row.id === lost!.appealId)).toMatchObject({
+    canResolve: false,
+  });
 
   const emptyBoardId = await fixture.createBoard('Terminal empty appeal boundary');
   await fixture.grant(emptyBoardId, people.reviewer.accountId, ['moderation:read_reports']);
@@ -122,6 +124,26 @@ test('native appeal queue paths keep bounded work across unrelated and retained 
       },
     },
     {
+      name: 'exact-terminal-readback',
+      boardId: emptyBoardId,
+      bearer: people.reviewer.bearer,
+      cursor: terminalCursor,
+      inspect: terminalRecords[0]!.appealId,
+      expectedStatus: 200,
+      assert(body: Record<string, any> | null) {
+        expect(body?.appeals).toEqual([]);
+        expect(body?.selectedAppeal).toMatchObject({
+          id: terminalRecords[0]!.appealId,
+          resolution: {
+            outcome: 'upheld',
+            statement: 'Reviewed independently',
+            resolvedAt: expect.any(String),
+          },
+        });
+        expect(body?.next).toBeNull();
+      },
+    },
+    {
       name: 'denied',
       boardId,
       bearer: people.author.bearer,
@@ -138,8 +160,8 @@ test('native appeal queue paths keep bounded work across unrelated and retained 
       cursor: undefined,
       expectedStatus: 200,
       assert(body: Record<string, any> | null) {
-        const rows = body?.appeals as Array<{ id: string }>;
-        expect(rows.map((row) => row.id)).not.toContain(lost!.appealId);
+        const rows = body?.appeals as Array<{ id: string; canResolve: boolean }>;
+        expect(rows.find((row) => row.id === lost!.appealId)).toMatchObject({ canResolve: false });
         expect(rows.length).toBeGreaterThan(0);
       },
     },
@@ -163,7 +185,12 @@ test('native appeal queue paths keep bounded work across unrelated and retained 
             pressureTarget.threadId,
           ),
         async operation() {
-          const result = await fixture.listAppeals(scenario.boardId, scenario.bearer, scenario.cursor);
+          const query = new URLSearchParams({ limit: '2' });
+          if (scenario.cursor) query.set('cursor', scenario.cursor);
+          if ('inspect' in scenario) query.set('inspect', scenario.inspect);
+          const result = await fixture.call('GET', `/v1/boards/${scenario.boardId}/appeals?${query}`, {
+            bearer: scenario.bearer,
+          });
           expect(result.response.status).toBe(scenario.expectedStatus);
           scenario.assert(result.body);
           return result.response.status;
