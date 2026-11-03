@@ -6,6 +6,7 @@ import { checkSettings, readControlPolicy } from './config.ts';
 import { capacityAvailable } from './launch.ts';
 import { harness } from './test-support.ts';
 import { toolRetryDelay } from './attempt-progress.ts';
+import { lifecycleMetrics } from './lifecycle-metrics.ts';
 
 test('local policy overrides individual leaves and validates configurable notifier bounds', () => {
   const h = harness();
@@ -20,6 +21,10 @@ test('local policy overrides individual leaves and validates configurable notifi
       workerResources: { minimumMemoryFraction: 0.5 },
       containers: { maxAgeHours: 0.5 },
       appServer: { requestTimeoutMs: 25 },
+      watchdog: { noWorkerMs: 100, hostProbeFailures: 1 },
+      width: { pageSize: 1 },
+      flow: { alertEveryMs: 25 },
+      lifecycle: { conflictWindowRows: 1 },
     };
     local.integration = { hourlyReportTimeoutMs: 200001 };
     writeFileSync(h.settings.localFile, JSON.stringify(local));
@@ -34,11 +39,21 @@ test('local policy overrides individual leaves and validates configurable notifi
       workerResources: { ...defaults.policy.workerResources, minimumMemoryFraction: 0.5 },
       containers: { ...defaults.policy.containers, maxAgeHours: 0.5 },
       appServer: { ...defaults.policy.appServer, requestTimeoutMs: 25 },
+      watchdog: { ...defaults.policy.watchdog, noWorkerMs: 100, hostProbeFailures: 1 },
+      width: { ...defaults.policy.width, pageSize: 1 },
+      flow: { ...defaults.policy.flow, alertEveryMs: 25 },
+      lifecycle: { ...defaults.policy.lifecycle, conflictWindowRows: 1 },
     });
     // The fixture environment normally disables delays; inspect the actual local policy without launching a worker.
     const retrySettings = settings;
     const task = h.tasks.dispatch(h.briefFile),
       ref = { taskId: task.id, attempt: 0 };
+    h.store.event({ taskId: task.id, attempt: 1 }, 'gate-outcome', { stage: 'rebase' });
+    h.store.event({ taskId: task.id, attempt: 2 }, 'gate-outcome', { stage: 'rebase' });
+    expect(lifecycleMetrics(h.store.db, new Date(), settings.policy).conflicts.recordedOutcomes).toMatchObject({
+      complete: false,
+      unclassifiedCount: 1,
+    });
     const now = Date.now();
     const fixtureEnvironment = process.env.REZICS_GOAL_TEST_ENVIRONMENT;
     delete process.env.REZICS_GOAL_TEST_ENVIRONMENT;

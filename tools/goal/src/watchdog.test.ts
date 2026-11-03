@@ -6,7 +6,8 @@ import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { migrate, openDb } from './db.ts';
-import { sshProbe, violations, watch } from './watchdog.ts';
+import { checkHostsInOutage, sshProbe, violations, watch } from './watchdog.ts';
+import { readControlPolicy } from './policy.ts';
 import { processIdentity } from './process.ts';
 import { workerMigrations, WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Task } from './types.ts';
@@ -640,4 +641,65 @@ test('a waiting attempt older than its class limit is reported as a long attempt
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('watchdog overrides govern idle boundaries, alert repetition and host-outage admission together', () => {
+  const root = temporaryDirectory('goal-watchdog-policy-');
+  const policy = readControlPolicy({
+    watchdog: { noWorkerMs: 100, alertEveryMs: 200, hostProbeEveryMs: 10, hostProbeFailures: 1 },
+  });
+  const endedAt = new Date(now - 100).toISOString();
+  const s = store(
+    [{ id: 'idle', state: 'running', currentAttempt: 1 }],
+    [{ taskId: 'idle', attempt: 1, state: 'exited', endedAt }],
+  );
+  const branches = { stabilize: 'missing', integration: 'missing' };
+  try {
+    expect(violations(s, now - 1, undefined, root, policy)).toEqual([]);
+    expect(violations(s, now, undefined, root, policy)).toHaveLength(1);
+    const run = (at: number) => watch(s, root, branches, root, () => {}, at, undefined, undefined, policy);
+    expect([run(now), run(now + 199), run(now + 200)]).toEqual([1, 0, 1]);
+    writeFileSync(
+      join(root, 'remote-check-hosts.json'),
+      JSON.stringify({ hosts: [{ name: 'fixture', address: 'u@host', identity: '/fixture/key' }] }),
+    );
+    let probes = 0;
+    const probe: Parameters<typeof watch>[6] = (_host, complete) => {
+      probes++;
+      complete({ status: 1, stderr: 'unreachable' });
+    };
+    const hosts = (at: number) => watch(store([], []), root, branches, root, () => {}, at, probe, undefined, policy);
+    expect([hosts(now), hosts(now + 9), hosts(now + 10)]).toEqual([0, 0, 1]);
+    expect(probes).toBe(2);
+    expect(checkHostsInOutage(root, policy)).toEqual(['fixture']);
+    expect(checkHostsInOutage(root)).toEqual([]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('SSH probe policy bounds connection, runtime and diagnostics without changing explicit deadline precedence', async () => {
+  const child = new EventEmitter() as EventEmitter & { stderr: PassThrough; kill(): boolean; unref(): void };
+  child.stderr = new PassThrough();
+  let killed = 0;
+  child.kill = () => {
+    killed++;
+    return true;
+  };
+  child.unref = () => {};
+  let args: unknown;
+  const start = ((_command: string, argv: unknown) => {
+    args = argv;
+    return child;
+  }) as unknown as typeof import('node:child_process').spawn;
+  const policy = readControlPolicy({
+    watchdog: { hostProbeTimeoutMs: 1, hostProbeConnectTimeoutSeconds: 3, hostProbeDiagnosticCharacters: 5 },
+  });
+  const result = new Promise<unknown>((resolve) =>
+    sshProbe({ name: 'fixture', address: 'u@host', identity: '/fixture/key' }, resolve, start, undefined, policy),
+  );
+  child.stderr.write('first diagnostic\nsecond diagnostic');
+  expect(await result).toEqual({ status: null, stderr: 'first' });
+  expect(args).toContain('ConnectTimeout=3');
+  expect(killed).toBe(1);
 });

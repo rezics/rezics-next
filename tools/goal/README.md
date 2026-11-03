@@ -424,6 +424,8 @@ Worker tuning uses `policy.workerResources`, lifecycle and retries use `policy.w
 A host still opts into stale-container cleanup with `containers.json`, whose explicit age overrides the central age.
 Host liveness captures `policy.host` at startup and forwards it to the detached supervisor; synthetic polling and
 backoff overrides retain precedence. Process cleanup receives the same caller policy, including after recovery.
+Watchdog, flow alarms and width snapshots use the startup policy; explicit synthetic probe deadlines and
+routing attempt limits retain precedence. Width notifications use the configured backlog age and low-water guidance.
 
 | Setting                                          | Default      | Purpose                                                                |
 | ------------------------------------------------ | ------------ | ---------------------------------------------------------------------- |
@@ -537,6 +539,31 @@ backoff overrides retain precedence. Process cleanup receives the same caller po
 | `policy.appServer.exitPollMs` | `20` | Identity poll interval while stopping recorded app-servers (ms). |
 | `policy.appServer.killWaitMs` | `5000` | Maximum recorded app-server wait after SIGKILL (ms). |
 | `policy.containers.cleanupIntervalMs` | `600000` | Minimum interval between opted-in stale-container sweeps (ms). |
+| `policy.watchdog.noWorkerMs` | `600000` | Ended-attempt idle time before reporting a missing worker (ms). |
+| `policy.watchdog.stabilizeBehindMs` | `1800000` | Time stabilize may remain absent from dev before an alert (ms). |
+| `policy.watchdog.alertEveryMs` | `7200000` | Minimum interval between repeated watchdog violation alerts (ms). |
+| `policy.watchdog.failureWindowMs` | `1800000` | Lookback for shared worker failure signatures (ms). |
+| `policy.watchdog.failureAttempts` | `3` | Minimum attempts sharing a failure signature for an incident. |
+| `policy.watchdog.failureTasks` | `2` | Minimum distinct tasks sharing a failure signature for an incident. |
+| `policy.watchdog.failureExampleCharacters` | `200` | Maximum characters in a shared-failure example. |
+| `policy.watchdog.hostProbeEveryMs` | `300000` | Interval between asynchronous check-host SSH probes (ms). |
+| `policy.watchdog.hostProbeTimeoutMs` | `20000` | Deadline for each check-host SSH probe (ms). |
+| `policy.watchdog.hostProbeConnectTimeoutSeconds` | `10` | SSH connection deadline for check-host probes (seconds). |
+| `policy.watchdog.hostProbeDiagnosticCharacters` | `4096` | Maximum first-line SSH diagnostic characters. |
+| `policy.watchdog.hostProbeFailures` | `2` | Consecutive failed check-host probes before outage and incident reporting. |
+| `policy.watchdog.attemptLimitMs` | `7200000` | Long-attempt threshold when no explicit routing limit is supplied (ms). |
+| `policy.watchdog.recentCommands` | `10` | Recent worker commands inspected for stall and polling reports. |
+| `policy.watchdog.commandLogTailBytes` | `262144` | Worker log tail inspected for recent commands (bytes). |
+| `policy.watchdog.commitCountTimeoutMs` | `5000` | Deadline for counting commits in long-attempt reports (ms). |
+| `policy.watchdog.processPollingCommands` | `2` | Recent process-inspection commands before reporting repeated polling. |
+| `policy.watchdog.longAttemptReportMs` | `3600000` | Minimum interval between unchanged long-attempt reports (ms). |
+| `policy.width.workerThreshold` | `10` | Confirmed live workers below which an eligible Goal receives a width event. |
+| `policy.width.bucketMs` | `900000` | Width-event deduplication bucket duration (ms). |
+| `policy.width.pageSize` | `64` | Active task rows per width-snapshot database page. |
+| `policy.width.sweepYieldItems` | `8` | Goal snapshots processed before yielding the width sweep. |
+| `policy.flow.alertEveryMs` | `3600000` | Minimum interval between alarms for the same flow threshold (ms). |
+| `policy.flow.waitingTaskExamples` | `3` | Maximum waiting-task examples included in a flow alarm. |
+| `policy.lifecycle.conflictWindowRows` | `1000` | Maximum rebase outcomes and attempts examined per trailing-hour conflict cohort. |
 
 ### Delivery flow telemetry
 

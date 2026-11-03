@@ -156,6 +156,7 @@ export async function runWorkerCommand(
                 (id) => (dependencies.find((dependency) => dependency.id === id)?.ready ? 'merged' : undefined),
                 Date.now(),
                 settings.stateDirectory,
+                settings.policy,
               ) ?? {
                 reason: 'start',
               })
@@ -238,7 +239,7 @@ export async function runWorkerCommand(
       const { flow, since, json } = parsedArguments;
       if (flow) {
         const now = new Date();
-        const metrics = lifecycleMetrics(store.db, now);
+        const metrics = lifecycleMetrics(store.db, now, settings.policy);
         const result = {
           ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
           lifecycle: metrics,

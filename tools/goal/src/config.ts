@@ -789,11 +789,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           (task) =>
             readRouting(settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>]
               .maxMs,
+          settings.policy,
         )
       );
     },
     sweepWidth: async () => {
-      await sweepWidthGovernor(db, inbox);
+      await sweepWidthGovernor(db, inbox, new Date(), { policy: settings.policy });
     },
     // Runs in the host's single-flight `backlog dispatch` child: dispatch is synchronous Git and install work.
     backlog: () =>
@@ -824,7 +825,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     async evaluateFlow() {
       const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
       const now = new Date();
-      const metrics = await lifecycleMetricsAsync(db, now);
+      const metrics = await lifecycleMetricsAsync(db, now, settings.policy);
       const flow = flowReport(
         readFlow(db, new Date(now.getTime() - (settings.policy ?? defaults.policy).flowHistoryMs).toISOString()),
         readFlowTasks(db),
@@ -837,6 +838,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         (summary) => flowInbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
         now,
         flowThresholds,
+        settings.policy,
       );
     },
     dispatchDailyStepAudit() {

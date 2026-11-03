@@ -352,7 +352,7 @@ export class WorkerJob implements GateOutcomeSink {
       )
         return;
       if (intent.options.awaitCheckHosts) {
-        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory);
+        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory, this.policy);
         if (hosts.length) {
           if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-awaits-check-hosts'))
             store.event(ref, 'retry-awaits-check-hosts', { hosts });

@@ -267,6 +267,39 @@
       "reportOverheadMs": 30000,
       "reportTerminationGraceMs": 250,
       "reportOutputCharacters": 512
+    },
+    "watchdog": {
+      "noWorkerMs": 600000,
+      "stabilizeBehindMs": 1800000,
+      "alertEveryMs": 7200000,
+      "failureWindowMs": 1800000,
+      "failureAttempts": 3,
+      "failureTasks": 2,
+      "failureExampleCharacters": 200,
+      "hostProbeEveryMs": 300000,
+      "hostProbeTimeoutMs": 20000,
+      "hostProbeConnectTimeoutSeconds": 10,
+      "hostProbeDiagnosticCharacters": 4096,
+      "hostProbeFailures": 2,
+      "attemptLimitMs": 7200000,
+      "recentCommands": 10,
+      "commandLogTailBytes": 262144,
+      "commitCountTimeoutMs": 5000,
+      "processPollingCommands": 2,
+      "longAttemptReportMs": 3600000
+    },
+    "width": {
+      "workerThreshold": 10,
+      "bucketMs": 900000,
+      "pageSize": 64,
+      "sweepYieldItems": 8
+    },
+    "flow": {
+      "alertEveryMs": 3600000,
+      "waitingTaskExamples": 3
+    },
+    "lifecycle": {
+      "conflictWindowRows": 1000
     }
   }
 }

@@ -39,6 +39,7 @@ async function main(args: string[]): Promise<void> {
     const bucket = parsed.bucket ? parseUtcHour(parsed.bucket) : completedUtcHour();
     const report = await renderHourlyEfficiencyReport(db, {
       bucket: bucket.start,
+      policy: settings.policy,
     });
     if (!parsed.send) {
       console.log(report);

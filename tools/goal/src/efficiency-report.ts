@@ -8,6 +8,7 @@ import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
 import { WorkerStore } from './store.ts';
+import type { ControlPolicy } from './policy.ts';
 
 const HOUR_MS = 60 * 60_000;
 const MAX_NOTIFIER_OUTPUT_BYTES = 4096;
@@ -48,6 +49,7 @@ export function parseUtcHour(value: string): UtcHour {
 }
 
 type ReportOptions = {
+  policy?: ControlPolicy | undefined;
   bucket?: string;
   now?: Date | number;
 };
@@ -424,7 +426,7 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
   const events = hourEvents(db, bucket, flowAvailable);
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
-  const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf) : null;
+  const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf, options.policy) : null;
   const starts = events.filter((event) => event.stage === 'worker' && event.action === 'started').length;
   const finishes = new Set(
     events

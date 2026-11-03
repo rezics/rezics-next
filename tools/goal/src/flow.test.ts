@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { checkFlowAlarms, dispatchDailyStepAudit, ensureFlow, flowReport, readFlow, recordFlow } from './flow.ts';
 import type { Task } from './types.ts';
+import { readControlPolicy } from './policy.ts';
 
 const task = (id: string, goal = 'sample'): Task =>
   ({
@@ -347,6 +348,24 @@ test('legacy terminal tasks suppress stale queues while live workers and post-in
     expect(report.queues.find((q) => q.stage === 'promotion')?.tasks).toEqual(['integrated', 'running']);
     expect(report.tasks.every((t) => t.workingMs === null)).toBe(true);
     expect(readFlow(db)).toEqual(events);
+  } finally {
+    db.close();
+  }
+});
+
+test('flow alarm overrides cap examples and permit another alarm exactly at the configured interval', () => {
+  const db = openDb(':memory:');
+  const policy = readControlPolicy({ flow: { alertEveryMs: 25, waitingTaskExamples: 1 } });
+  const now = Date.parse(date(0));
+  const report = flowReport([], [task('a'), task('b')], now);
+  report.flowEfficiency = 0;
+  report.queues = [{ stage: 'landing', length: 2, oldestAgeMs: 1, tasks: ['a', 'b'] }];
+  const sent: string[] = [];
+  const run = (offset: number) =>
+    checkFlowAlarms(db, report, (s) => sent.push(s), new Date(now + offset), undefined, policy);
+  try {
+    expect([run(0).length, run(24).length, run(25).length]).toEqual([1, 0, 1]);
+    expect(sent.every((s) => s.endsWith('top waiting tasks a'))).toBe(true);
   } finally {
     db.close();
   }
