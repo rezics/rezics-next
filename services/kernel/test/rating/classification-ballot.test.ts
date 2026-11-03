@@ -39,6 +39,7 @@ const actions = [
 ];
 const routeKey = new Uint8Array(32).fill(31);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
+const receiptKeys: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(47)]]) };
 let database: GrowthDatabase;
 let realAccess: RealAccessFixture<Persona>;
 let app: ReturnType<typeof createKernel>;
@@ -53,6 +54,7 @@ beforeAll(async () => {
     pool: database.pool,
     access: realAccess.access,
     tokens,
+    receiptKeys,
     routeKey,
     writeRate: realAccess.writeRate,
   });
