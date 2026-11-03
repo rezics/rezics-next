@@ -219,7 +219,10 @@ function projectAliases(subject: IndexedSubject, languages: readonly string[] | 
   );
 }
 
-function projectContextSubject(subject: IndexedSubject, languages: readonly string[] | undefined): DiscoveryContextSubject {
+function projectContextSubject(
+  subject: IndexedSubject,
+  languages: readonly string[] | undefined,
+): DiscoveryContextSubject {
   const aliases = projectAliases(subject, languages);
   return {
     id: subject.id,
@@ -247,15 +250,13 @@ export async function projectCharacterPersonContexts(
   const relevantProperty = subject.type === 'schema:Person' ? 'wdt:P725' : 'wdt:P453';
   const clauses = inverseContextClauses(filter).filter(({ property }) => property === relevantProperty);
   const probes = clauses.flatMap(({ property, sources, qualifiers }) =>
-    sources.map(
-      (source): InverseRelationFacetProbe => ({
-        subject: subject.id,
-        source,
-        property,
-        ...(qualifiers === undefined ? {} : { qualifiers }),
-        ...(options.spoilerThreshold === undefined ? {} : { spoilerThreshold: options.spoilerThreshold }),
-      }),
-    ),
+    sources.map((source): InverseRelationFacetProbe => ({
+      subject: subject.id,
+      source,
+      property,
+      ...(qualifiers === undefined ? {} : { qualifiers }),
+      ...(options.spoilerThreshold === undefined ? {} : { spoilerThreshold: options.spoilerThreshold }),
+    })),
   );
   const unique = [...new Map(probes.map((probe) => [JSON.stringify(probe), probe])).values()];
   const empty = { items: [], next: false };

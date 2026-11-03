@@ -188,7 +188,11 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
   if (summary.kind === 'subject') {
     if (key.owner !== 'semantic' || key.kind !== summary.value.type) unavailable();
-    const contexts = (value as { contexts?: { credits: { items: unknown[]; next: boolean }; appearances: { items: unknown[]; next: boolean } } }).contexts;
+    const contexts = (
+      value as {
+        contexts?: { credits: { items: unknown[]; next: boolean }; appearances: { items: unknown[]; next: boolean } };
+      }
+    ).contexts;
     if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
       unavailable();
   }
@@ -247,12 +251,19 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
           ...(hit.labels === undefined ? {} : { labels: { ...hit.labels } }),
           ...(hit.aliases === undefined
             ? {}
-            : { aliases: Object.fromEntries(Object.entries(hit.aliases).map(([language, values]) => [language, [...values]])) }),
+            : {
+                aliases: Object.fromEntries(
+                  Object.entries(hit.aliases).map(([language, values]) => [language, [...values]]),
+                ),
+              }),
           ...(hit.contexts === undefined
             ? {}
             : {
                 contexts: {
-                  credits: { items: hit.contexts.credits.items.map((item) => structuredClone(item)), next: hit.contexts.credits.next },
+                  credits: {
+                    items: hit.contexts.credits.items.map((item) => structuredClone(item)),
+                    next: hit.contexts.credits.next,
+                  },
                   appearances: {
                     items: hit.contexts.appearances.items.map((item) => structuredClone(item)),
                     next: hit.contexts.appearances.next,

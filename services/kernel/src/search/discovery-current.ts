@@ -317,13 +317,9 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           : { observeRelationRelease: context.observeRelationRelease }),
       });
       const checkedSubjects = new Map(
-        checked.passed
-          .filter(({ subject }) => subject.type === entry.kind)
-          .map(({ subject }) => [subject.id, subject]),
+        checked.passed.filter(({ subject }) => subject.type === entry.kind).map(({ subject }) => [subject.id, subject]),
       );
-      const accepted = new Set(
-        checkedSubjects.keys(),
-      );
+      const accepted = new Set(checkedSubjects.keys());
       selectedSemantic.push(...group.filter(({ key }) => accepted.has(key.id)));
     }
     const semanticEntry = registry.entries.find((entry) => entry.owner === 'semantic');
@@ -377,7 +373,10 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           key: candidate.key,
           summary: {
             kind: 'subject' as const,
-            value: { ...summary, label: selectedLabel ? { language: selectedLabel[0], value: selectedLabel[1] } : null },
+            value: {
+              ...summary,
+              label: selectedLabel ? { language: selectedLabel[0], value: selectedLabel[1] } : null,
+            },
           },
           labels,
           ...(Object.keys(aliases).length ? { aliases } : {}),

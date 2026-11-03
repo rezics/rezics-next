@@ -79,9 +79,7 @@ test('request replacement retires stale rows and a replaced release enters the r
   const key = characterPersonQueryKey('en', 'anonymous', parsed.search);
   expect(characterPersonQueryKey('ja', 'anonymous', parsed.search)).not.toEqual(key);
   expect(characterPersonQueryKey('en', 'account:one', parsed.search)).not.toEqual(key);
-  expect(
-    characterPersonQueryKey('en', 'anonymous', { ...parsed.search, name: 'Mika' }),
-  ).not.toEqual(key);
+  expect(characterPersonQueryKey('en', 'anonymous', { ...parsed.search, name: 'Mika' })).not.toEqual(key);
 
   const ready: DiscoveryState = {
     status: 'ready',
@@ -101,7 +99,11 @@ test('request replacement retires stale rows and a replaced release enters the r
 test('the browser admits current subject contexts and rejects an unproven continuation shape', () => {
   const contexts = {
     credits: {
-      items: [work, secondWork, role].map((id) => ({ id, labels: { en: `Work ${id}` }, aliases: { en: [`Alias ${id}`] } })),
+      items: [work, secondWork, role].map((id) => ({
+        id,
+        labels: { en: `Work ${id}` },
+        aliases: { en: [`Alias ${id}`] },
+      })),
       next: true,
     },
     appearances: { items: [], next: false },
@@ -130,7 +132,11 @@ test('the browser admits current subject contexts and rejects an unproven contin
     next: null,
     as_of: '2026-11-04T00:00:00.000Z',
   };
-  expect(parseDiscoveryPage(page)?.hits[0]).toMatchObject({ contexts, labels: { en: 'Aki' }, aliases: { en: ['Aki Sato'] } });
+  expect(parseDiscoveryPage(page)?.hits[0]).toMatchObject({
+    contexts,
+    labels: { en: 'Aki' },
+    aliases: { en: ['Aki Sato'] },
+  });
   const invalid = structuredClone(page);
   invalid.hits[0]!.contexts.credits.items.pop();
   expect(parseDiscoveryPage(invalid)).toBeUndefined();

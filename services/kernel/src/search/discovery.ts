@@ -155,7 +155,11 @@ export type DiscoveryRequest = SearchRequest & {
 export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
   languages?: readonly string[];
   spoilerThreshold?: 0 | 1 | 2;
-  observeRelationRelease?: () => Promise<{ digest: string; head: number; release: import('@rezics/filter').FilterRelease } | null>;
+  observeRelationRelease?: () => Promise<{
+    digest: string;
+    head: number;
+    release: import('@rezics/filter').FilterRelease;
+  } | null>;
 };
 export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';

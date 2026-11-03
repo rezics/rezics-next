@@ -258,10 +258,7 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
       case 'subject':
         if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
         const contexts = (hit as Extract<DiscoveryHit, { summary: { kind: 'subject' } }>).contexts;
-        if (
-          contexts &&
-          [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3)
-        )
+        if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
           return;
         break;
       case 'account':

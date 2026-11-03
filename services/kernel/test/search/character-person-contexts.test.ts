@@ -60,12 +60,11 @@ const filter: DiscoveryFilterDocument = {
 
 test('current Person contexts are capped, localized, and report continuation truthfully', async () => {
   const f = fixture();
-  const contexts = await projectCharacterPersonContexts(
-    f.source,
-    { id: personId, type: 'schema:Person' },
-    filter,
-    { languages: ['en'], spoilerThreshold: 1, observeRelationRelease: async () => active() },
-  );
+  const contexts = await projectCharacterPersonContexts(f.source, { id: personId, type: 'schema:Person' }, filter, {
+    languages: ['en'],
+    spoilerThreshold: 1,
+    observeRelationRelease: async () => active(),
+  });
   expect(contexts).toEqual({
     credits: {
       items: works.slice(0, 3).map((work) => ({
@@ -88,11 +87,9 @@ test('context windows retire when a touched work changes during disclosure', asy
     return result;
   };
   await expect(
-    projectCharacterPersonContexts(
-      f.source,
-      { id: personId, type: 'schema:Person' },
-      filter,
-      { languages: ['en'], observeRelationRelease: async () => active() },
-    ),
+    projectCharacterPersonContexts(f.source, { id: personId, type: 'schema:Person' }, filter, {
+      languages: ['en'],
+      observeRelationRelease: async () => active(),
+    }),
   ).resolves.toBeNull();
 });
