@@ -348,7 +348,7 @@ async function projectSummaries(
       const found = (await readSummaries.run(storage.client, {
         ...summaryParameters,
         bounded_labels: labelLanguages !== undefined,
-        label_languages: labelLanguages ?? [],
+        label_languages: [...(labelLanguages ?? [])],
       })) as Row[];
       for (const row of found) if (await storage.authorize(storage.client, row.id, batch)) rows.set(row.id, row);
     }
