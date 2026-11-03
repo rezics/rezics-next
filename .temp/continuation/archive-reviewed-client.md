@@ -1,21 +1,22 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/library-archive-merge-routes.ts",
-    "packages/client/src/kernel/**",
-    "packages/client/tests/library-archive-merge.test.ts",
-    "docs/library-archive-merge.md",
-    "docs/library-archive-personal-fact-recovery.md",
-    "docs/goals/library.capabilities.md"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": { "lines": 150, "files": 6 }
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/library-archive-merge-routes.ts',
+      'packages/client/src/kernel/**',
+      'packages/client/tests/library-archive-merge.test.ts',
+      'docs/library-archive-merge.md',
+      'docs/library-archive-personal-fact-recovery.md',
+      'docs/goals/library.capabilities.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 150, 'files': 6 },
 }
 ---
 

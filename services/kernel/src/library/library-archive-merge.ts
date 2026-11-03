@@ -1470,8 +1470,11 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       new Set(selected.map((item) => item.ordinal)).size !== selected.length ||
       selected.some(
         ({ ordinal, reviewRevision }) =>
-          !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records ||
-          !Number.isSafeInteger(reviewRevision) || reviewRevision < 1,
+          !Number.isInteger(ordinal) ||
+          ordinal < 0 ||
+          ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records ||
+          !Number.isSafeInteger(reviewRevision) ||
+          reviewRevision < 1,
       )
     )
       throw new ProblemError('invalid_request');

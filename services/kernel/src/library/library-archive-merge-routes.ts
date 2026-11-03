@@ -244,7 +244,10 @@ export function libraryArchiveMergeRoutes(
           closed,
         ),
         response: {
-          200: t.Object({ uploadId: id, reviewed: t.Array(t.Object({ ordinal, status: text, reviewRevision }, closed)) }, closed),
+          200: t.Object(
+            { uploadId: id, reviewed: t.Array(t.Object({ ordinal, status: text, reviewRevision }, closed)) },
+            closed,
+          ),
           ...failures,
         },
         detail: detail('library_archive_merge.review', 'library_entry:update', true),
@@ -261,7 +264,12 @@ export function libraryArchiveMergeRoutes(
       {
         params: t.Object({ id }, closed),
         body: t.Object(
-          { items: t.Array(t.Object({ ordinal, reviewRevision }, closed), { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems }) },
+          {
+            items: t.Array(t.Object({ ordinal, reviewRevision }, closed), {
+              minItems: 1,
+              maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems,
+            }),
+          },
           closed,
         ),
         response: {
