@@ -151,7 +151,8 @@ export async function readReleaseSearchNames(input: {
     for (const home of population.homes) {
       context.reserve({ pool: pool.id, observations: 2, ownerReads: 1, nameSeeks: 1, keys: size });
       const page = await pool.names.read({ partition: home.partition, after, limit: size }, population, context);
-      if (!isDeepStrictEqual(page.home, home) || page.candidates.length > size) unavailable();
+      if (!isDeepStrictEqual(page.home, home)) throw new ReleaseGroupingRestartRequired();
+      if (page.candidates.length > size) unavailable();
       nativeEnd &&= page.candidates.length < size;
       let previous = after;
       for (const candidate of page.candidates) {
