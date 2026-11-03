@@ -28,6 +28,26 @@ export function setLibraryFollowingStoryMode(next: LibraryFollowingStoryMode): v
   observation = 0;
 }
 
+function fullFollowingProjection(follow: (typeof followsRecording.follows)[number]) {
+  if (follow.targetType !== 'space') return follow;
+  if (mode === 'reading-no-destination')
+    return { ...follow, destination: { kind: 'unavailable' as const }, actions: { status: 'unavailable' as const } };
+  return {
+    ...follow,
+    destination: { kind: 'space' as const, spaceId: follow.targetId, address: spaceRecording.space.address },
+    actions: {
+      status: 'available' as const,
+      resourceType: 'community.realm' as const,
+      resourceId: spaceRecording.space.realmId,
+      viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+    },
+  };
+}
+
+function page(follows: (typeof followsRecording.follows)[number][], next: string | null) {
+  return { status: 200, follows: follows.map(fullFollowingProjection), next };
+}
+
 function list() {
   if (mode === 'unavailable')
     return { status: 503, type: 'https://rezics.com/problems/unavailable', code: 'unavailable' };
@@ -42,23 +62,21 @@ function list() {
         : `Current community observation ${observation}`;
     return {
       status: 200,
-      follows: base.map((follow) =>
-        follow.targetType === 'space' ? { ...follow, target: { ...follow.target, label } } : follow,
-      ),
+      follows: base
+        .map((follow) =>
+          follow.targetType === 'space' ? { ...follow, target: { ...follow.target, label } } : follow,
+        )
+        .map(fullFollowingProjection),
       next: null,
     };
   }
   if (mode === 'none') return { status: 200, follows: [], next: null };
   if (mode === 'inactive-page')
-    return {
-      status: 200,
-      follows: base.map((follow) => ({ ...follow, state: 'unfollowed' as const })),
-      next: 'next-page',
-    };
-  if (mode === 'last-follow') return { status: 200, follows: base.slice(-1), next: null };
+    return page(base.map((follow) => ({ ...follow, state: 'unfollowed' as const })), 'next-page');
+  if (mode === 'last-follow') return page(base.slice(-1), null);
   if (mode === 'hidden') {
     const hidden = base.map((follow, index) => (index < 2 ? { ...follow, target: null } : follow));
-    return { status: 200, follows: hidden, next: null };
+    return page(hidden, null);
   }
   if (mode === 'many') {
     const follows = Array.from({ length: 20 }, (_, index) => {
@@ -67,9 +85,9 @@ function list() {
       const target = { ...source.target, id: targetId, label: `Following item ${index + 1}` };
       return { ...source, targetId, target };
     });
-    return { status: 200, follows, next: 'next-page' };
+    return page(follows, 'next-page');
   }
-  return structuredClone(followsRecording);
+  return page(structuredClone(followsRecording.follows), null);
 }
 
 export const routes: FakeRoute[] = [

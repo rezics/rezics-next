@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { follow, mountFollowing, page } from './helpers/following-reading';
+import { follow, mountFollowing, page, realmId, spaceId } from './helpers/following-reading';
 import { prepareFollowing } from '../src/library/following-reading/presentation';
 
 test('one native-order index at 1/10/20 rows; repeated exact selections do not prepare identities again', () => {
@@ -29,11 +29,22 @@ test('a mixed twenty-row page inspects supplied Subject, Collection and missing 
   const subject = follow('subject', 'subject-id');
   const collection = follow('collection', 'collection-id');
   const missing = { ...follow('space', 'missing-id'), target: null };
+  const suppliedSpace = {
+    ...follow('space', spaceId),
+    destination: { kind: 'space' as const, spaceId, address: 'quiet / reading' },
+    actions: {
+      status: 'available' as const,
+      resourceType: 'community.realm' as const,
+      resourceId: realmId,
+      viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+    },
+  };
   const follows = [
     subject,
     collection,
+    suppliedSpace,
     missing,
-    ...Array.from({ length: 17 }, (_, i) =>
+    ...Array.from({ length: 16 }, (_, i) =>
       follow((['space', 'subject', 'collection'] as const)[i % 3]!, `mixed-${i}`),
     ),
   ];
@@ -48,6 +59,10 @@ test('a mixed twenty-row page inspects supplied Subject, Collection and missing 
         row.getAttribute('data-follow-target-type'),
       ),
     ).toEqual(follows.map((row) => row.targetType));
+    expect(h.host.querySelector<HTMLAnchorElement>(`[data-follow-target-type="space"] a`)?.getAttribute('href')).toBe(
+      '/en/spaces/quiet%20%2Freading',
+    );
+    expect(h.host.querySelector(`[data-follow-target-type="space"] a`)?.getAttribute('href')).not.toContain(spaceId);
     for (const row of [subject, collection]) {
       await h.inspect(row.targetId);
       const panel = h.host.querySelector('[role="dialog"]')!;
@@ -56,7 +71,7 @@ test('a mixed twenty-row page inspects supplied Subject, Collection and missing 
         row.targetType === 'subject' ? '/en/subjects/subject-id/' : '/en/collections/collection-id',
       );
     }
-    const missingRow = h.host.querySelector('[data-follow-target-type="space"]')!;
+    const missingRow = h.host.querySelectorAll('[data-follow-target-type="space"]')[1]!;
     await h.settle(() => missingRow.querySelector<HTMLButtonElement>('button[aria-label^="Inspect "]')!.click());
     const panel = h.host.querySelector('[role="dialog"]')!;
     expect(panel.textContent).toContain('public identity is currently unavailable');

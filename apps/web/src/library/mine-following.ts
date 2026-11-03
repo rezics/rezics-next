@@ -13,6 +13,8 @@ export type MineFollow = {
   state: RawFollow['state'];
   reason: RawFollow['reason'];
   target: LibrarySubject | null;
+  destination?: RawFollow['destination'];
+  actions?: RawFollow['actions'];
   idempotencyKey: string;
 };
 
@@ -32,6 +34,8 @@ function present(follow: RawFollow): MineFollow {
     state: follow.state,
     reason: follow.reason,
     target: follow.target ? subjectOf(follow.target) : null,
+    ...(follow.destination ? { destination: follow.destination } : {}),
+    ...(follow.actions ? { actions: follow.actions } : {}),
     idempotencyKey: crypto.randomUUID(),
   };
 }

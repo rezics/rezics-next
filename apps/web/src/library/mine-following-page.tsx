@@ -33,7 +33,7 @@ type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
 const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
 
 const followingOperations = ['follow.list'] as const;
-const followingReadingOperations = ['follow.list', 'collection.get'] as const;
+const followingReadingOperations = ['follow.list', 'collection.get', 'realm.join', 'realm.leave'] as const;
 
 export const mineFollowingQuery = (
   subject: string,
@@ -215,12 +215,17 @@ export function MineFollowingPageView({
   const requestedAddress = personalDirectoryAddress(cursor ?? undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressRejected = invalidAddress || page.addressInvalid || !requestedAddress.valid;
   const requestedCursor = requestedAddress.cursor;
-  // A meaningful row/page replacement retires local removal callbacks during render. Equivalent
-  // refetches (including freshly issued keys) preserve the native control's uncertain intent.
+  // This key tracks follow-command identity. Replaced summaries or Community advice retire reading
+  // through page-object identity while the existing FollowTargetControl keeps its uncertain intent.
   const lifetime = JSON.stringify({
-    ...page,
+    signedIn: page.signedIn,
+    next: page.next,
+    addressInvalid: page.addressInvalid,
+    cursorReset: page.cursorReset,
     cursor: requestedCursor,
-    follows: page.follows.map(({ idempotencyKey: _key, ...follow }) => follow),
+    follows: page.follows.map(
+      ({ idempotencyKey: _key, target: _target, destination: _destination, actions: _actions, ...intent }) => intent,
+    ),
   });
   const ref = useRef({
     key: lifetime,
@@ -283,6 +288,8 @@ function MineFollowingPageState({
 }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
+  const canJoinRealm = useOperation('realm.join');
+  const canLeaveRealm = useOperation('realm.leave');
   const [follows, setFollows] = useState(page.follows);
   const [removed, setRemoved] = useState(false);
   const listHeading = useRef<HTMLHeadingElement>(null);
@@ -304,6 +311,8 @@ function MineFollowingPageState({
     isCurrent: () =>
       readingOrigin.current(0) &&
       (!canReadCollection || readingOrigin.current(1)) &&
+      (!canJoinRealm || readingOrigin.current(2)) &&
+      (!canLeaveRealm || readingOrigin.current(3)) &&
       origin.isCurrent() &&
       getLocale() === locale &&
       !status &&
@@ -364,6 +373,8 @@ function MineFollowingPageState({
           subject={readingOrigin.subject}
           locale={locale}
           canReadCollection={canReadCollection}
+          canJoinRealm={canJoinRealm}
+          canLeaveRealm={canLeaveRealm}
           close={reading.close}
           readSpace={readSpace}
         />

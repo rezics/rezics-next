@@ -1,6 +1,10 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { spaceDestination, suppliedDestination } from '../src/library/following-reading/destinations';
+import {
+  currentSpaceDestination,
+  suppliedDestination,
+  suppliedRealmMembershipHref,
+} from '../src/library/following-reading/destinations';
 import { readSelectedSpace } from '../src/library/following-reading/space-reader';
 import type { SessionEnv } from '../src/session/client';
 import recording from '../src/kernel/recorded/space.json';
@@ -8,13 +12,56 @@ import { follow, realmId, spaceId } from './helpers/following-reading';
 
 test('only admitted address or actual Realm identity builds the localized community route', () => {
   expect(suppliedDestination(follow('space'), 'Community', 'ja')).toBeNull();
-  expect(spaceDestination({ address: 'quiet / reading', realmId }, 'ja')?.href).toBe(
+  const addressTarget = {
+    ...follow('space'),
+    destination: { kind: 'space' as const, spaceId, address: 'quiet / reading' },
+  };
+  expect(
+    suppliedDestination({ ...follow('space'), destination: { kind: 'realm', realmId } }, 'Community', 'de')?.href,
+  ).toBe(`/de/realms/${realmId}`);
+  expect(suppliedDestination(addressTarget, 'Community', 'ja')?.href).toBe(
     '/ja/spaces/quiet%20%2F%20reading',
   );
-  expect(spaceDestination({ address: null, realmId }, 'de')?.href).toBe(`/de/realms/${realmId}`);
   expect(realmId).not.toBe(spaceId);
-  expect(spaceDestination({ address: null, realmId: null }, 'en')).toBeNull();
-  expect(spaceDestination({ address: '', realmId: 'invalid' }, 'en')).toBeNull();
+  expect(suppliedDestination({ ...addressTarget, destination: { kind: 'unavailable' } }, 'Community', 'en')).toBeNull();
+  expect(
+    suppliedDestination(
+      { ...addressTarget, destination: { kind: 'space', spaceId, address: '' } },
+      'Community',
+      'en',
+    ),
+  ).toBeNull();
+});
+
+test('FULL Space operands keep address, Space identity and admitted Realm action identity separate', () => {
+  const supplied = {
+    ...follow('space'),
+    destination: { kind: 'space' as const, spaceId, address: 'quiet / reading' },
+    actions: {
+      status: 'available' as const,
+      resourceType: 'community.realm' as const,
+      resourceId: realmId,
+      viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+    },
+  };
+  const current = {
+    spaceId,
+    title: 'Community',
+    summary: 'Summary',
+    address: 'quiet / reading',
+    realmId,
+  };
+  expect(suppliedDestination(supplied, 'Community', 'ja')?.href).toBe('/ja/spaces/quiet%20%2F%20reading');
+  expect(currentSpaceDestination(supplied, current, 'ja')?.href).toBe('/ja/spaces/quiet%20%2F%20reading');
+  expect(suppliedRealmMembershipHref(supplied, current, 'ja', true, false)).toBe(`/ja/realms/${realmId}`);
+  expect(suppliedRealmMembershipHref(supplied, { ...current, realmId: spaceId }, 'ja', true, true)).toBeNull();
+  expect(suppliedRealmMembershipHref(supplied, current, 'ja', false, false)).toBeNull();
+  expect(
+    suppliedRealmMembershipHref({ ...supplied, actions: { status: 'unavailable' } }, current, 'en', true, true),
+  ).toBeNull();
+  expect(
+    suppliedRealmMembershipHref({ ...supplied, destination: { kind: 'unavailable' } }, current, 'en', true, true),
+  ).toBeNull();
 });
 
 test('one typed selected Space read uses the prepared credential and returns bounded current identity or a truthful refusal', async () => {

@@ -106,6 +106,13 @@ test('Following reads only each requested FULL page and maps embedded targets wi
             reason: 'membership',
             updatedAt: stamp,
             target: { id: 'space-1', type: 'space', label: 'Embedded space title' },
+            destination: { kind: 'space', spaceId: 'space-1', address: 'quiet / reading' },
+            actions: {
+              status: 'available',
+              resourceType: 'community.realm',
+              resourceId: 'realm-1',
+              viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+            },
           },
           {
             targetId: 'erased-subject',
@@ -141,6 +148,13 @@ test('Following reads only each requested FULL page and maps embedded targets wi
     ['erased-subject', 'subject'],
   ]);
   expect(second.follows[0]?.target?.label).toBe('Embedded space title');
+  expect(second.follows[0]?.destination).toEqual({ kind: 'space', spaceId: 'space-1', address: 'quiet / reading' });
+  expect(second.follows[0]?.actions).toEqual({
+    status: 'available',
+    resourceType: 'community.realm',
+    resourceId: 'realm-1',
+    viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+  });
   expect(second.follows[1]?.target).toBeNull();
   expect(second.next).toBeNull();
   expect(requests).toEqual([

@@ -11,7 +11,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The installed FULL page supplies summaries. Community inspection uses one deliberate Space read. Native destination actions remain unavailable until the existing page producer supplies admitted operands.',
+          'FULL Following rows supply admitted Space and Realm destinations. Inspection confirms the current Space before exposing its Realm membership owner; Community retains the command.',
       },
     },
   },
@@ -218,7 +218,10 @@ export const InspectionReady: Story = {
     await inspectCommunity(canvasElement);
     const panel = await within(canvasElement).findByRole('dialog');
     await expect(await within(panel).findByText(m.following_reading_current_identity())).toBeVisible();
-    await expect(within(panel).getByText(m.following_reading_actions_unavailable())).toBeVisible();
+    await expect(within(panel).getByRole('link', { name: m.realm_membership_label() })).toHaveAttribute(
+      'href',
+      /\/realms\//,
+    );
   },
 };
 export const CommunityPreparing: Story = {

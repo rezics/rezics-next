@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { deferred, follow, mountFollowing, page, realmId, spaceId } from './helpers/following-reading';
+import type { MineFollow } from '../src/library/mine-following';
 import type { SpaceRead } from '../src/library/following-reading/space-reader';
 
 const ready = (address: string | null, admittedRealm: string | null = realmId): SpaceRead => ({
@@ -11,6 +12,17 @@ const ready = (address: string | null, admittedRealm: string | null = realmId): 
     space: { spaceId, title: 'Current native title', summary: 'Native summary', address, realmId: admittedRealm },
   },
 });
+
+const realmActions = {
+  status: 'available' as const,
+  resourceType: 'community.realm' as const,
+  resourceId: realmId,
+  viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+};
+
+function projectedSpace(destination: NonNullable<MineFollow['destination']>): MineFollow {
+  return { ...follow('space'), destination, actions: realmActions };
+}
 
 test('denied, preparing, unavailable, retired and ready without a destination retain the follow and retry focus', async () => {
   let reads = 0;
@@ -61,8 +73,9 @@ test('at 1/10/20 follows initial reads stay zero and only the deliberately inspe
   for (const n of [1, 10, 20]) {
     const pending = deferred<SpaceRead>();
     let reads = 0;
+    const first = projectedSpace({ kind: 'space', spaceId, address: 'current-address' });
     const h = await mountFollowing(
-      page(...Array.from({ length: n }, (_, i) => follow('space', i ? `space-${i}` : spaceId))),
+      page(...Array.from({ length: n }, (_, i) => (i ? follow('space', `space-${i}`) : first))),
       () => {
         reads++;
         return pending.promise;
@@ -74,7 +87,11 @@ test('at 1/10/20 follows initial reads stay zero and only the deliberately inspe
       expect(reads).toBe(1);
       expect(h.host.querySelector('[role="dialog"]')?.textContent).toContain('Reading this community');
       await h.settle(() => pending.resolve(ready('current-address')));
-      expect(h.host.querySelector('[role="dialog"] a')?.getAttribute('href')).toBe('/en/spaces/current-address');
+      const hrefs = [...h.host.querySelectorAll<HTMLAnchorElement>('[role="dialog"] a')].map((link) =>
+        link.getAttribute('href'),
+      );
+      expect(hrefs).toContain('/en/spaces/current-address');
+      expect(hrefs).toContain(`/en/realms/${realmId}`);
       expect(h.host.textContent).toContain('Native summary');
       expect(reads).toBe(1);
     } finally {
@@ -87,7 +104,9 @@ test('same-ID fresh observations discard old address/admission; replacement, exp
   const pending = deferred<SpaceRead>();
   let reads = 0;
   const accountPending = deferred<SpaceRead>();
-  const h = await mountFollowing(page(follow('space')), async () =>
+  const h = await mountFollowing(
+    page(projectedSpace({ kind: 'space', spaceId, address: 'old-address' })),
+    async () =>
     ++reads === 1
       ? ready('old-address')
       : reads === 2
@@ -101,18 +120,21 @@ test('same-ID fresh observations discard old address/admission; replacement, exp
   try {
     await h.inspect(spaceId);
     expect(h.host.querySelector('[role="dialog"] a')?.getAttribute('href')).toContain('old-address');
-    await h.replace(page(follow('space')));
+    await h.replace(page(projectedSpace({ kind: 'space', spaceId, address: 'new-address' })));
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     await h.inspect(spaceId);
     expect(h.host.querySelector('[role="dialog"] a')).toBeNull();
     expect(h.host.textContent).toContain('No currently readable destination');
     expect(h.host.textContent).not.toContain('old-address');
     await h.inspect(spaceId);
-    await h.replace(page(follow('space')));
+    await h.replace(page(projectedSpace({ kind: 'space', spaceId, address: 'new-address' })));
     await h.settle(() => pending.resolve(ready('late-address')));
     expect(h.host.textContent).not.toContain('late-address');
+    await h.replace(page(projectedSpace({ kind: 'realm', realmId })));
     await h.inspect(spaceId);
-    expect(h.host.querySelector('[role="dialog"] a')?.getAttribute('href')).toBe(`/en/realms/${realmId}`);
+    expect([...h.host.querySelectorAll<HTMLAnchorElement>('[role="dialog"] a')].map((link) => link.getAttribute('href'))).toContain(
+      `/en/realms/${realmId}`,
+    );
     await h.admit([]);
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     await h.admit();

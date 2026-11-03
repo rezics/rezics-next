@@ -3,7 +3,11 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { SubjectCover } from '../subject-row';
 import type { FollowingSelection } from './current-selection';
-import { spaceDestination, type FollowingDestination } from './destinations';
+import {
+  currentSpaceDestination,
+  suppliedRealmMembershipHref,
+  type FollowingDestination,
+} from './destinations';
 import { FollowingReference } from './reference';
 import { readFollowingSpace } from './space-actions';
 import type { SpaceReading, SpaceReadInput, SpaceRead } from './space-reader';
@@ -78,6 +82,8 @@ export function FollowingInspection({
   subject,
   locale,
   canReadCollection,
+  canJoinRealm = false,
+  canLeaveRealm = false,
   close,
   readSpace,
 }: {
@@ -85,6 +91,8 @@ export function FollowingInspection({
   subject: string | null;
   locale: string;
   canReadCollection: boolean;
+  canJoinRealm?: boolean;
+  canLeaveRealm?: boolean;
   close: () => void;
   readSpace?: FollowingSpaceReader | undefined;
 }) {
@@ -99,11 +107,14 @@ export function FollowingInspection({
   const ready = isSpace && space.result.state === 'ready' ? space.result.space : null;
   const destination: FollowingDestination | null = isSpace
     ? ready
-      ? spaceDestination(ready, locale)
+      ? currentSpaceDestination(follow, ready, locale)
       : null
     : supplied?.kind === 'collection' && !canReadCollection
       ? null
       : supplied;
+  const actionHref = ready
+    ? suppliedRealmMembershipHref(follow, ready, locale, canJoinRealm, canLeaveRealm)
+    : null;
   const stateText = !follow.target
     ? m.following_reading_identity_unavailable()
     : !isSpace
@@ -152,7 +163,7 @@ export function FollowingInspection({
         <p>{reason}</p>
         <p>{m.following_reading_meaning()}</p>
         <p>{m.following_reading_remove_meaning()}</p>
-        <p role="status">{m.following_reading_actions_unavailable()}</p>
+        {actionHref ? null : <p role="status">{m.following_reading_actions_unavailable()}</p>}
       </div>
       {stateText ? <p role="status">{stateText}</p> : null}
       {ready ? (
@@ -196,6 +207,20 @@ export function FollowingInspection({
         </div>
       ) : !isSpace || ready ? (
         <p role="status">{m.following_reading_no_destination()}</p>
+      ) : null}
+      {actionHref && actionHref !== destination?.href ? (
+        <a
+          className={buttonVariants({
+            variant: 'outline',
+            className: 'min-h-11 max-w-full whitespace-normal break-words',
+          })}
+          href={actionHref}
+          onClick={(event) => {
+            if (!selection.current() || !space.current()) event.preventDefault();
+          }}
+        >
+          {m.realm_membership_label()}
+        </a>
       ) : null}
       <dl className="space-y-3">
         <FollowingReference
