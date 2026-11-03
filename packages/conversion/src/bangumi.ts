@@ -8,11 +8,7 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
-import {
-  bangumiPublicationTime,
-  isAdmittedBangumiType,
-  selectBangumiProfile,
-} from './bangumi-subject-profile.ts';
+import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -159,7 +155,8 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
 }
 
 function retainedFieldDiagnostics(record: NormalizedRecord): { pointer: string; code: string }[] {
-  const citedDate = (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
+  const citedDate =
+    (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
   return (['tags', 'platform', 'infobox', 'nsfw', 'date'] as const)
     .filter((field) => record[field] !== undefined)
     .filter((field) => field !== 'date' || !citedDate)

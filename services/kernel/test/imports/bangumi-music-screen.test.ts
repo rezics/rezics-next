@@ -61,15 +61,20 @@ test('ordinary Bangumi music and live-action imports are typed subjects with sou
     else expect(admitted?.library).toBeUndefined();
     const names = await observer.http(`/v1/subjects/${binding(id)}/candidates?property=schema%3Aname&limit=20`);
     expect(names.status).toBe(200);
-    expect((names.body.candidates as { statement: { value: { content: { text: string } } } }[]).some((row) => row.statement.value.content.text === rows.find((row) => row.id === id)!.name)).toBe(
-      true,
-    );
+    expect(
+      (names.body.candidates as { statement: { value: { content: { text: string } } } }[]).some(
+        (row) => row.statement.value.content.text === rows.find((row) => row.id === id)!.name,
+      ),
+    ).toBe(true);
   }
-  const published = await observer.http(`/v1/subjects/${binding(3)}/candidates?property=schema%3AdatePublished&limit=20`);
+  const published = await observer.http(
+    `/v1/subjects/${binding(3)}/candidates?property=schema%3AdatePublished&limit=20`,
+  );
   expect(published.status).toBe(200);
   expect(
     (published.body.candidates as { statement: { value: { content: { time: string; precision: number } } } }[]).some(
-      (row) => row.statement.value.content.time === '+2024-04-01T00:00:00Z' && row.statement.value.content.precision === 11,
+      (row) =>
+        row.statement.value.content.time === '+2024-04-01T00:00:00Z' && row.statement.value.content.precision === 11,
     ),
   ).toBe(true);
   const offset = runtime.captures.length;

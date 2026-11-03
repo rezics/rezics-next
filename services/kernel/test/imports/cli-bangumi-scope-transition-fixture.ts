@@ -384,9 +384,9 @@ export async function runJourney() {
     ].filter((c) => oldCandidateIds.includes(c.id));
     expect(oldOwnedCandidates).toHaveLength(oldCandidateIds.length);
     const liveAction = await invoke(6);
-    expect(liveAction.writes.every((e) => e.path !== '/v1/subjects:batchWrite' || !e.bytes.includes('"op":"create"'))).toBe(
-      true,
-    );
+    expect(
+      liveAction.writes.every((e) => e.path !== '/v1/subjects:batchWrite' || !e.bytes.includes('"op":"create"')),
+    ).toBe(true);
     for (const observed of sourceRows.slice(1)) {
       expect(observed.members[0]!.claim).toEqual(claim);
       expect(observed.members.slice(1).map((m) => m.claim)).toEqual(initialState.members.slice(1).map((m) => m.claim));

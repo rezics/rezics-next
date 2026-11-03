@@ -113,9 +113,7 @@ function completed(result: ImportRunResult, counts?: ImportRunResult['counts']) 
 function scope(f: ReturnType<typeof remote>, importer: Importer, images = true) {
   expect([...f.subjects.keys()].sort()).toEqual(created);
   expect(f.media.size).toBe(images ? 5 : 0);
-  expect(f.requests.map((command) => command.source.external_id).sort()).toEqual(
-    expect.arrayContaining(created),
-  );
+  expect(f.requests.map((command) => command.source.external_id).sort()).toEqual(expect.arrayContaining(created));
   expect([...new Set(f.mediaRequests)].sort()).toEqual(images ? created : []);
   const source = importer.session.store.source(registration.source);
   expect(source.count).toBe(5);
