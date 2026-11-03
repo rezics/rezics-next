@@ -100,11 +100,9 @@ test('Literary and Screen creation retain grouped evidence, addressed repair, an
   ]);
   const literaryRead = await readCreated(literaryId!);
   expect(literaryRead.type).toBe('schema:Book');
-  expect(literaryRead.statements['schema:wordCount']?.[0]?.references[0]?.parts.map((part) => part.property.id)).toEqual([
-    'schema:url',
-    'wdt:P648',
-    'schema:inLanguage',
-  ]);
+  expect(
+    literaryRead.statements['schema:wordCount']?.[0]?.references[0]?.parts.map((part) => part.property.id),
+  ).toEqual(['schema:url', 'wdt:P648', 'schema:inLanguage']);
 
   const screenLabel = `Structured screen work ${token}`;
   const screenPage = await fixture.alice.context.newPage();
@@ -125,7 +123,12 @@ test('Literary and Screen creation retain grouped evidence, addressed repair, an
   const qualifiers = screenRow.locator('section[id$="-qualifiers"]');
   await qualifiers.getByLabel('Add qualifier', { exact: true }).selectOption('schema:position');
   await qualifiers.getByRole('button', { name: 'Add', exact: true }).click();
-  await qualifiers.locator('div[data-statement-addition]').filter({ hasText: /position/i }).last().getByRole('textbox').fill('1');
+  await qualifiers
+    .locator('div[data-statement-addition]')
+    .filter({ hasText: /position/i })
+    .last()
+    .getByRole('textbox')
+    .fill('1');
   const screenReferences = screenRow.locator('section[id$="-references"]');
   const firstReference = screenReferences.getByRole('group', { name: /References 1/ });
   const firstUrl = 'https://example.org/removed-source';

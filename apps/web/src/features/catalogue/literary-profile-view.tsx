@@ -18,12 +18,7 @@ import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import { createTypes, type CreateTransport, type InitialSubject } from './create-subject';
 import { CreateSubjectForm } from './create-subject-form';
-import {
-  EditorFailure,
-  StatementFields,
-  statementHolderKey,
-  type StatementFieldsRead,
-} from './statement-editor-view';
+import { EditorFailure, StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
 import { controlId, presentStatementViolations } from './statement-validation-presentation';
 import {
   creationStatement,

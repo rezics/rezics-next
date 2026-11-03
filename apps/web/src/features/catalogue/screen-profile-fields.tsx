@@ -74,9 +74,9 @@ export function screenCreationControl(pointer: string, rows: ScreenRow[], releas
   const nativeAddress = qualifier || reference ? address : 'fact';
   if (definition?.datatype === 'wikibase-item' && path.endsWith('/value/content'))
     return { id: controlId(id, stableAddress, 'value'), label: `${label} · ${presented.label}` };
-  const field = (['state', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const).find(
-    (candidate) => presented.target === controlId(id, nativeAddress, candidate),
-  );
+  const field = (
+    ['state', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const
+  ).find((candidate) => presented.target === controlId(id, nativeAddress, candidate));
   if (!field) return;
   let target = controlId(id, stableAddress, field);
   if (definition?.datatype === 'time') {
@@ -474,7 +474,9 @@ export function ScreenInitialFields({
               localDraft
               stablePartAddresses
               draft={row.statement}
-              current={{ release, source: null, public: { related: {}, subject: { type } } } satisfies StatementFieldsRead}
+              current={
+                { release, source: null, public: { related: {}, subject: { type } } } satisfies StatementFieldsRead
+              }
               locale={locale}
               feedback={{ id: screenRowId(row), errors: [] }}
               guideReturn={`/${locale}/catalogue/screen`}
