@@ -258,10 +258,12 @@ export function isExportCoverage(value: unknown): value is ExportCoverage {
 }
 
 export function isExportStatus(value: unknown): value is ExportStatus {
-  if (!isObject(value) || !isExportCoverage(value) || !isExportState(value.state)) return false;
+  if (!isObject(value) || !isExportCoverage(value)) return false;
+  const status = value as ExportStatus;
+  if (!isExportState(status.state)) return false;
   return (
-    value.first === null ||
-    (typeof value.first === 'string' && value.first.length > 0 && value.first.length <= EXPORT_CURSOR_CHARS)
+    status.first === null ||
+    (typeof status.first === 'string' && status.first.length > 0 && status.first.length <= EXPORT_CURSOR_CHARS)
   );
 }
 
@@ -286,9 +288,10 @@ function validSectionTotals(value: unknown, rows: number, recordBytes: number): 
 
 export function isExportManifest(value: unknown): value is ExportManifest {
   if (!isObject(value) || !isExportCoverage(value)) return false;
-  if (!validCount(value.rows, EXPORT_STREAM_RECORDS) || !validCount(value.recordBytes, EXPORT_STREAM_BYTES)) return false;
-  if (value.version === 1) return !Object.hasOwn(value, 'sectionTotals');
-  return validSectionTotals(value.sectionTotals, value.rows, value.recordBytes);
+  const manifest = value as ExportManifest;
+  if (!validCount(manifest.rows, EXPORT_STREAM_RECORDS) || !validCount(manifest.recordBytes, EXPORT_STREAM_BYTES)) return false;
+  if (manifest.version === 1) return !Object.hasOwn(value, 'sectionTotals');
+  return validSectionTotals(manifest.sectionTotals, manifest.rows, manifest.recordBytes);
 }
 
 export function isExportRecord(value: unknown): value is ExportRecord {
