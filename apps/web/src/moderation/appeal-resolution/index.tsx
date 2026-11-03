@@ -59,7 +59,7 @@ function ResolutionForm({
       ? null
       : JSON.stringify([session.state, session.subject, session.csrfToken, nativeSession]);
   const admitted =
-    (mayResolve || intent.unresolved) &&
+    (mayResolve || intent.unresolved || intent.phase === 'settled') &&
     ((session.state === 'signed-in' && Boolean(session.subject) && Boolean(session.csrfToken)) ||
       (session.state === 'unknown' && onResolve !== resolveAppeal));
   const focusAttempt = useRef(0);

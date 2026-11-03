@@ -9,7 +9,7 @@ import { prepareSession, viewerCredential } from '../../session/request';
 import { catalogueReportsClient } from '../catalogue-reports-client';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from '../private-reader-origin';
 import { preparePrivateReaderRead, type PrivateReaderRead } from '../private-reader-lifetime';
-import { readModerationAppealPage, type Appeal, type AppealPage, type AppealProvenance } from '../appeals-read';
+import { readModerationAppeals, type Appeal, type AppealPage, type AppealProvenance } from '../appeals-read';
 import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
 import {
   WORKBENCH_PAGE_SIZE,
@@ -231,7 +231,7 @@ export async function readWorkbench(
 
 const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
 
-function nativeSource(client: KernelClient, authorization: string, origin: PrivateReaderOrigin): WorkbenchNativeSource {
+function nativeSource(client: KernelClient, authorization: string): WorkbenchNativeSource {
   const headers = auth(authorization);
   return {
     async realms(cursor) {
@@ -270,19 +270,21 @@ function nativeSource(client: KernelClient, authorization: string, origin: Priva
       );
     },
     async boardAppeals(boardId, cursor, inspect) {
-      const page = await readModerationAppealPage(
-        client,
-        { boardId, ...(cursor ? { cursor } : {}), ...(inspect ? { inspect } : {}) },
-        authorization,
-        origin.subject,
-        origin,
+      // Bind here only after the generated GET exposes inspect, selectedAppeal and provenance.
+      if (inspect) throw new WorkbenchReadFailure('unavailable', 'native-appeal-inspect');
+      const result = await client.boards({ id: boardId }).appeals.get({
+        ...headers,
+        query: { limit: WORKBENCH_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+      });
+      if (result.error) throw new WorkbenchReadFailure(listFailure(result.status, result.error.value));
+      if (!result.data) throw new WorkbenchReadFailure('unavailable');
+      return readModerationAppeals(
+        {
+          boardAppeals: async () => result.data,
+          threadAppeals: async () => ({ appeals: [], next: null }),
+        },
+        { boardId },
       );
-      if (page.state !== 'ready')
-        throw new WorkbenchReadFailure(
-          page.state === 'closed' ? 'denied' : page.state === 'stale' ? 'stale' : 'unavailable',
-          page.unavailableReason,
-        );
-      return page;
     },
     async catalogueReports(cursor, selection) {
       const result = await catalogueReportsClient(client).catalogue.reports.get({
@@ -327,7 +329,7 @@ export async function readWorkbenchPage(
   readerOrigin: PrivateReaderOrigin,
 ): Promise<WorkbenchRead> {
   try {
-    const page = await readWorkbench(nativeSource(client, authorization, readerOrigin), search);
+    const page = await readWorkbench(nativeSource(client, authorization), search);
     return { ...page, generation: crypto.randomUUID(), readerOrigin };
   } catch (error) {
     return {
