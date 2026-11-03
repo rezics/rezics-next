@@ -39,14 +39,14 @@ not only their final SQL. The row envelope below counts returned native rows and
 ordered rank seek contributes C consumed rows, including denied candidates. The generation and selected-question
 identities are exact equality bindings, not post-seek filters.
 
-| Work | Calls | Statements and controls | Rows |
-| --- | ---: | ---: | ---: |
-| Initial/final selected-Realm authorization | 2 | `2 A_R` | `2 R_R` |
-| Prior observation (`readPartition`, freshness, prior; BEGIN/COMMIT) | 2 | 10 | 6 |
-| Candidate observation (partition, generation, rank seek; BEGIN/COMMIT) | 1 | 5, or 4 when the seek is skipped | `2+C` |
-| Current Subject authorization and identity | C | `C A_S` | `C R_S` |
-| Final generation observation (partition, generation; BEGIN/COMMIT) | 1 | 4 | 2 |
-| Selected question and label head plus provenance authority | 2 | `2(5+A_Q)` | `2(2+R_Q)` |
+| Work                                                                   | Calls |          Statements and controls |       Rows |
+| ---------------------------------------------------------------------- | ----: | -------------------------------: | ---------: |
+| Initial/final selected-Realm authorization                             |     2 |                          `2 A_R` |    `2 R_R` |
+| Prior observation (`readPartition`, freshness, prior; BEGIN/COMMIT)    |     2 |                               10 |          6 |
+| Candidate observation (partition, generation, rank seek; BEGIN/COMMIT) |     1 | 5, or 4 when the seek is skipped |      `2+C` |
+| Current Subject authorization and identity                             |     C |                          `C A_S` |    `C R_S` |
+| Final generation observation (partition, generation; BEGIN/COMMIT)     |     1 |                                4 |          2 |
+| Selected question and label head plus provenance authority             |     2 |                       `2(5+A_Q)` | `2(2+R_Q)` |
 
 Thus successful calls use at most `29 + 2 A_R + C A_S + 2 A_Q` statements/control statements and
 `14 + C + 2 R_R + C R_S + 2 R_Q` examined rows. Inactive or identity-mismatched priors skip the scored seek;

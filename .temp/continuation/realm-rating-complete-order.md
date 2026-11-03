@@ -1,47 +1,39 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "implementation",
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "after": [
-    "ad62e9df-8356-44ee-bd31-8a665d466bfc"
-  ],
-  "waiting": [],
-  "paths": [
-    "services/kernel/src/rating/realm-rank*",
-    "services/kernel/src/rating/README.md",
-    "services/kernel/src/rating/cost-realm-order.md",
-    "services/kernel/db/rating/**",
-    "services/kernel/src/semantic/subject-source-key-pages.ts",
-    "services/kernel/src/semantic/search-source.ts",
-    "services/kernel/db/semantic/**",
-    "services/kernel/src/search/realm-rating-order.ts",
-    "services/kernel/src/search/service.ts",
-    "services/kernel/src/server.ts",
-    "services/kernel/test/rating/realm-rank-order*",
-    "services/kernel/test/rating/growth-realm-rank-source.test.ts",
-    "services/kernel/test/rating/support/growth-realm-rank-source-fixture.ts",
-    "services/kernel/test/search/second-scope-realm-rating.test.ts"
-  ],
-  "estimate": {
-    "lines": 2600,
-    "files": 22
-  },
-  "acceptance": {
-    "tests": [
-      "Complete scored/unscored canonical Realm traversal uses native selected-question publication, current disclosure and coherent invalidation across pages.",
-      "Three-scale native growth at 256/1024/4096 validates source-derived physical row, statement, transaction-control, memory and ordered-index bounds, including selected-question observations and the actual question_identity prefix.",
-      "Search consumes the producer's delivered method while retaining query admission, predicate semantics, cross-partition composition, useful-page accounting, public response and signed outer cursor."
-    ]
-  }
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': ['ad62e9df-8356-44ee-bd31-8a665d466bfc'],
+  'waiting': [],
+  'paths':
+    [
+      'services/kernel/src/rating/realm-rank*',
+      'services/kernel/src/rating/README.md',
+      'services/kernel/src/rating/cost-realm-order.md',
+      'services/kernel/db/rating/**',
+      'services/kernel/src/semantic/subject-source-key-pages.ts',
+      'services/kernel/src/semantic/search-source.ts',
+      'services/kernel/db/semantic/**',
+      'services/kernel/src/search/realm-rating-order.ts',
+      'services/kernel/src/search/service.ts',
+      'services/kernel/src/server.ts',
+      'services/kernel/test/rating/realm-rank-order*',
+      'services/kernel/test/rating/growth-realm-rank-source.test.ts',
+      'services/kernel/test/rating/support/growth-realm-rank-source-fixture.ts',
+      'services/kernel/test/search/second-scope-realm-rating.test.ts',
+    ],
+  'estimate': { 'lines': 2600, 'files': 22 },
+  'acceptance':
+    {
+      'tests':
+        [
+          'Complete scored/unscored canonical Realm traversal uses native selected-question publication, current disclosure and coherent invalidation across pages.',
+          'Three-scale native growth at 256/1024/4096 validates source-derived physical row, statement, transaction-control, memory and ordered-index bounds, including selected-question observations and the actual question_identity prefix.',
+          "Search consumes the producer's delivered method while retaining query admission, predicate semantics, cross-partition composition, useful-page accounting, public response and signed outer cursor.",
+        ],
+    },
 }
 ---
 
