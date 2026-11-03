@@ -59,9 +59,7 @@ test('the generic Type-directory route preserves terms, hands off specialized Ty
       definition,
       propertyDefinitions: Object.fromEntries(
         [...propertyIds].flatMap((property) =>
-          release.properties[property]
-            ? [[property, release.properties[property] as PropertyDefinition]]
-            : [],
+          release.properties[property] ? [[property, release.properties[property] as PropertyDefinition]] : [],
         ),
       ),
     };
@@ -136,7 +134,10 @@ test('the generic Type-directory route preserves terms, hands off specialized Ty
     const nameFact = host.querySelectorAll<HTMLFieldSetElement>('fieldset[id^="generic-fact-"]')[1]!;
     await user.type(within(nameFact).getByRole('textbox', { name: m.correction_value() }), 'Meal name');
     await user.type(within(nameFact).getByRole('textbox', { name: m.correction_language() }), 'en');
-    await user.type(within(nameFact).getAllByRole('textbox', { name: m.correction_url() })[0]!, 'https://food.example/name-source');
+    await user.type(
+      within(nameFact).getAllByRole('textbox', { name: m.correction_url() })[0]!,
+      'https://food.example/name-source',
+    );
 
     const submit = () => canvas().getByRole('button', { name: m.catalogue_create_submit() });
     await user.click(submit());
@@ -162,9 +163,15 @@ test('the generic Type-directory route preserves terms, hands off specialized Ty
     expect(posts).toHaveLength(2);
     expect(posts[1]!.key).toBe(posts[0]!.key);
     expect(posts[1]!.body).toEqual(posts[0]!.body);
-    const item = posts[0]!.body as { type: string; statements: Record<string, { value: unknown; references: { parts: unknown[] }[] }[]> };
+    const item = posts[0]!.body as {
+      type: string;
+      statements: Record<string, { value: unknown; references: { parts: unknown[] }[] }[]>;
+    };
     expect(item.type).toBe(food.id);
-    expect(item.statements['schema:url']![0]!.value).toEqual({ type: 'value', content: 'https://food.example/repaired' });
+    expect(item.statements['schema:url']![0]!.value).toEqual({
+      type: 'value',
+      content: 'https://food.example/repaired',
+    });
     expect(item.statements['schema:url']![0]!.references[0]!.parts).toEqual([
       { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://food.example/source' } },
     ]);

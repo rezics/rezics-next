@@ -23,12 +23,12 @@ type CreateDescriptorRead =
 
 function createType(
   summary: {
-  typeId: string;
-  label: string;
-  language: string | null;
-  description: string | null;
-  descriptionLanguage: string | null;
-  definition?: { bases?: unknown };
+    typeId: string;
+    label: string;
+    language: string | null;
+    description: string | null;
+    descriptionLanguage: string | null;
+    definition?: { bases?: unknown };
   },
   current?: {
     releaseDigest: string;
@@ -70,7 +70,8 @@ async function readCreateDescriptor(typeId: string, locale: string): Promise<Cre
       return { ok: false, reason: 'unavailable' };
     const release = response.data.release as Release;
     if (!release.types?.[typeId] || !release.properties) return { ok: false, reason: 'unavailable' };
-    const specializedPath = musicContextKind(release, typeId) === 'unsupported' ? undefined : '/catalogue/music-context';
+    const specializedPath =
+      musicContextKind(release, typeId) === 'unsupported' ? undefined : '/catalogue/music-context';
     const missing = new Set<string>();
     for (const id of result.descriptor.definition.properties) {
       const property = result.descriptor.properties[id];

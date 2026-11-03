@@ -87,7 +87,8 @@ function ItemTargetControl({
   const label = m.relation_target({}, o);
   const selected = part.value.type === 'value' ? valueTarget(part.value.content, targets) : undefined;
   const setValue = (value: SnakInput['value'], item?: EntityPickerSubject) => {
-    const previousId = part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : undefined;
+    const previousId =
+      part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : undefined;
     onTargetChange(previousId, item, part);
     onChange(value);
   };
@@ -211,12 +212,7 @@ function RemoveFact({
   );
 }
 
-function statementValue(
-  part: SnakInput,
-  read: StatementFieldsRead,
-  locale: string,
-  targets: EntityPickerSubject[],
-) {
+function statementValue(part: SnakInput, read: StatementFieldsRead, locale: string, targets: EntityPickerSubject[]) {
   const definition = read.release.properties[part.property.id];
   if (definition?.datatype === 'wikibase-item' && part.value.type === 'value') {
     const item = valueTarget(part.value.content, targets);
@@ -365,15 +361,14 @@ export function GenericCreateReview({
         {languages.map((language, index) => (
           <ContentItemFrame key={language} as="div" className="min-w-0 space-y-1 rounded-xl bg-muted/30 p-3">
             <p className="text-sm text-muted-foreground">{language}</p>
-            {item.labels[language] && <p lang={language} className="font-medium">{item.labels[language]}</p>}
+            {item.labels[language] && (
+              <p lang={language} className="font-medium">
+                {item.labels[language]}
+              </p>
+            )}
             {item.descriptions?.[language] && <p lang={language}>{item.descriptions[language]}</p>}
             {!!item.aliases?.[language]?.length && <p lang={language}>{item.aliases[language]!.join(' · ')}</p>}
-            <Button
-              type="button"
-              variant="outline"
-              className={wrap}
-              onClick={() => onJump(`create-label-${index}`)}
-            >
+            <Button type="button" variant="outline" className={wrap} onClick={() => onJump(`create-label-${index}`)}>
               {m.people_profile_review_open({}, options)}
             </Button>
           </ContentItemFrame>
@@ -554,7 +549,10 @@ export function GenericCreateFactsWorkspace({
       if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
     (target.matches('input,select,textarea,button,[role="combobox"]')
       ? target
-      : target.querySelector<HTMLElement>('input:not([disabled]),select:not([disabled]),textarea,button:not([disabled])'))?.focus();
+      : target.querySelector<HTMLElement>(
+          'input:not([disabled]),select:not([disabled]),textarea,button:not([disabled])',
+        )
+    )?.focus();
   };
   const rowErrors = (fact: GenericCreateFact) => {
     const targetId = `generic-fact-${fact.holder}`;
@@ -690,7 +688,9 @@ export function GenericCreateFactsWorkspace({
                 {!admitted ? (
                   <div role="alert" className="space-y-2">
                     <p>{m.catalogue_create_fact_withdrawn({}, options)}</p>
-                    <p className="break-all text-sm"><code>{fact.property}</code></p>
+                    <p className="break-all text-sm">
+                      <code>{fact.property}</code>
+                    </p>
                     <div className="min-w-0 space-y-2">
                       <p>{m.correction_preserved({}, options)}</p>
                       <PartValue part={fact.statement} read={displayRead} locale={locale} />
@@ -703,60 +703,60 @@ export function GenericCreateFactsWorkspace({
                   </div>
                 ) : (
                   <fieldset disabled={disabled || !!descriptorIssue || !canEdit()} className="contents">
-                  <StatementFields
-                    draft={fact.statement}
-                    current={read}
-                    locale={locale}
-                    creation
-                    localDraft
-                    stablePartAddresses
-                    feedback={feedback}
-                    unitLabel={(id) => quantityUnitLabel(id, read.public.related, locale) ?? id}
-                    change={(statement) => update(fact.holder, statement)}
-                    valueControl={
-                      definition?.datatype === 'wikibase-item' && definition.targets?.length ? (
-                        <ItemTargetControl
-                          part={fact.statement}
-                          definition={definition}
-                          targets={fact.targets}
-                          locale={locale}
-                          disabled={disabled || !!descriptorIssue || !canEdit()}
-                          onChange={(value) => update(fact.holder, { ...fact.statement, value })}
-                          onTargetChange={(previousId, selected, part) =>
-                            updateTarget(fact.holder, previousId, selected, part)
-                          }
-                        />
-                      ) : undefined
-                    }
-                    partControl={(part, change) => {
-                      const partDefinition = descriptor.propertyDefinitions[part.property.id];
-                      if (partDefinition?.datatype !== 'wikibase-item' || !partDefinition.targets?.length)
-                        return undefined;
-                      return (
-                        <ItemTargetControl
-                          part={part}
-                          definition={partDefinition}
-                          targets={fact.targets}
-                          locale={locale}
-                          disabled={disabled || !!descriptorIssue || !canEdit()}
-                          onChange={change}
-                          onTargetChange={(previousId, selected, targetPart) =>
-                            updateTarget(fact.holder, previousId, selected, targetPart)
-                          }
-                        />
-                      );
-                    }}
-                    reuse={
-                      facts.length > 1
-                        ? { disabled: disabled || !canEdit(), onReuse: (index) => beginReuse(fact, index) }
-                        : undefined
-                    }
-                    focusReference={
-                      focusCopy?.holder === fact.holder
-                        ? { index: focusCopy.index, nonce: focusCopy.nonce }
-                        : undefined
-                    }
-                  />
+                    <StatementFields
+                      draft={fact.statement}
+                      current={read}
+                      locale={locale}
+                      creation
+                      localDraft
+                      stablePartAddresses
+                      feedback={feedback}
+                      unitLabel={(id) => quantityUnitLabel(id, read.public.related, locale) ?? id}
+                      change={(statement) => update(fact.holder, statement)}
+                      valueControl={
+                        definition?.datatype === 'wikibase-item' && definition.targets?.length ? (
+                          <ItemTargetControl
+                            part={fact.statement}
+                            definition={definition}
+                            targets={fact.targets}
+                            locale={locale}
+                            disabled={disabled || !!descriptorIssue || !canEdit()}
+                            onChange={(value) => update(fact.holder, { ...fact.statement, value })}
+                            onTargetChange={(previousId, selected, part) =>
+                              updateTarget(fact.holder, previousId, selected, part)
+                            }
+                          />
+                        ) : undefined
+                      }
+                      partControl={(part, change) => {
+                        const partDefinition = descriptor.propertyDefinitions[part.property.id];
+                        if (partDefinition?.datatype !== 'wikibase-item' || !partDefinition.targets?.length)
+                          return undefined;
+                        return (
+                          <ItemTargetControl
+                            part={part}
+                            definition={partDefinition}
+                            targets={fact.targets}
+                            locale={locale}
+                            disabled={disabled || !!descriptorIssue || !canEdit()}
+                            onChange={change}
+                            onTargetChange={(previousId, selected, targetPart) =>
+                              updateTarget(fact.holder, previousId, selected, targetPart)
+                            }
+                          />
+                        );
+                      }}
+                      reuse={
+                        facts.length > 1
+                          ? { disabled: disabled || !canEdit(), onReuse: (index) => beginReuse(fact, index) }
+                          : undefined
+                      }
+                      focusReference={
+                        focusCopy?.holder === fact.holder
+                          ? { index: focusCopy.index, nonce: focusCopy.nonce }
+                          : undefined
+                      }
+                    />
                   </fieldset>
                 )}
                 {prefix && localErrors.length > 0 && (
@@ -766,7 +766,9 @@ export function GenericCreateFactsWorkspace({
                     </summary>
                     <ul className="list-disc break-all ps-5">
                       {localErrors.map((error, index) => (
-                        <li key={index}><code>{error.pointer}</code> · {error.code}</li>
+                        <li key={index}>
+                          <code>{error.pointer}</code> · {error.code}
+                        </li>
                       ))}
                     </ul>
                   </details>
@@ -793,7 +795,9 @@ export function GenericCreateFactsWorkspace({
                   current ? { ...current, capture: captureReuse(current.source, factsForReuse()) } : current,
                 )
               }
-              onOpen={(holder, index) => setFocusCopy((current) => ({ holder, index, nonce: (current?.nonce ?? 0) + 1 }))}
+              onOpen={(holder, index) =>
+                setFocusCopy((current) => ({ holder, index, nonce: (current?.nonce ?? 0) + 1 }))
+              }
             />
           )}
         </>

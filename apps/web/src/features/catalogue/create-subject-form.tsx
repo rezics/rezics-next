@@ -25,7 +25,11 @@ import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
 import { MusicContextCreateEntry } from './music-context-create-entry';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
-import { GenericCreateFactsWorkspace, GenericCreateReview, genericCreateFactPointers } from './generic-create-facts-view';
+import {
+  GenericCreateFactsWorkspace,
+  GenericCreateReview,
+  genericCreateFactPointers,
+} from './generic-create-facts-view';
 import {
   initialTerms,
   type CreateFailure,
@@ -271,7 +275,8 @@ function CreateSubjectFormLive({
   const selectedType = directoryMode ? directoryType : types.find((entry) => entry.id === type);
   const genericDescriptor = directoryMode ? genericCreateDescriptor(directoryType) : undefined;
   const genericFacts = directoryMode && directoryType ? (genericFactsByType[directoryType.id] ?? []) : [];
-  const specializedCreatePath = directoryMode && directoryType ? genericCreateSpecializedPath(directoryType) : undefined;
+  const specializedCreatePath =
+    directoryMode && directoryType ? genericCreateSpecializedPath(directoryType) : undefined;
   const selectedTypeName = selectedType?.label.trim();
   const hasTypeName = !!selectedTypeName && selectedTypeName !== type;
   const uncertain = (failure?.reason === 'unavailable' && request.current !== null) || unresolvedDelivery.current;
@@ -928,30 +933,28 @@ function CreateSubjectFormLive({
                   specializedPath={specializedCreatePath}
                 />
               )}
-              {directoryMode &&
-                itemReview?.descriptor &&
-                itemReview.item.type === type && (
-                  <GenericCreateReview
-                    item={itemReview.item}
-                    descriptor={itemReview.descriptor}
-                    facts={itemReview.facts ?? genericFacts}
-                    factTargets={itemReview.factTargets ?? {}}
-                    locale={locale}
-                    stale={itemReview.stale}
-                    onJump={(id) => {
-                      const target = document.getElementById(id);
-                      if (!target) return;
-                      for (let parent = target.parentElement; parent; parent = parent.parentElement)
-                        if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
-                      const focus = target.matches('input, select, textarea, button, [role="combobox"]')
-                        ? target
-                        : target.querySelector<HTMLElement>(
-                            'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [role="combobox"]',
-                          );
-                      focus?.focus();
-                    }}
-                  />
-                )}
+              {directoryMode && itemReview?.descriptor && itemReview.item.type === type && (
+                <GenericCreateReview
+                  item={itemReview.item}
+                  descriptor={itemReview.descriptor}
+                  facts={itemReview.facts ?? genericFacts}
+                  factTargets={itemReview.factTargets ?? {}}
+                  locale={locale}
+                  stale={itemReview.stale}
+                  onJump={(id) => {
+                    const target = document.getElementById(id);
+                    if (!target) return;
+                    for (let parent = target.parentElement; parent; parent = parent.parentElement)
+                      if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+                    const focus = target.matches('input, select, textarea, button, [role="combobox"]')
+                      ? target
+                      : target.querySelector<HTMLElement>(
+                          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [role="combobox"]',
+                        );
+                    focus?.focus();
+                  }}
+                />
+              )}
               {!directoryMode && itemReview && profile?.review?.(itemReview)}
               {failure && (
                 <div

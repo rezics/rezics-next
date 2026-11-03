@@ -61,7 +61,11 @@ test('the actual released Food descriptor prepares complete scalar evidence and 
         value: { type: 'value', content: 'https://food.example/item' },
         rank: 'normal',
         references: [
-          { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://food.example/source' } }] },
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://food.example/source' } },
+            ],
+          },
         ],
       }),
     ],
@@ -69,7 +73,11 @@ test('the actual released Food descriptor prepares complete scalar evidence and 
       expect.objectContaining({
         value: { type: 'value', content: { text: 'Meal name', language: 'en' } },
         references: [
-          { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://food.example/name-source' } }] },
+          {
+            parts: [
+              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://food.example/name-source' } },
+            ],
+          },
         ],
       }),
     ],

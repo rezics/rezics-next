@@ -282,9 +282,7 @@ function ScalarControl({
     });
   };
   const unitName = (id: string) =>
-    id === '1'
-      ? m.correction_unitless({}, o)
-      : (unitLabel?.(id) ?? quantityUnitLabel(id, read.public.related, locale));
+    id === '1' ? m.correction_unitless({}, o) : (unitLabel?.(id) ?? quantityUnitLabel(id, read.public.related, locale));
   const units = (
     definition.units?.includes('*') ? ['1', ...Object.keys(unitSymbols)] : (definition.units ?? [])
   ).filter((id) => !!unitName(id));

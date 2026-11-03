@@ -3,7 +3,13 @@ import type { EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { checkSubjectInput, type Violation } from '@rezics/definitions/validate';
 import type { CreateType, InitialSubject, TermDraft } from './create-subject';
 import { initialTerms } from './create-subject';
-import { creationStatement, editableScalar, emptyCreationStatement, type SnakInput, type StatementInput } from './statement-editor';
+import {
+  creationStatement,
+  editableScalar,
+  emptyCreationStatement,
+  type SnakInput,
+  type StatementInput,
+} from './statement-editor';
 import { factLimit } from './subject-facts';
 
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
@@ -54,7 +60,9 @@ const specializedCreatePaths: Record<string, string> = {
   'wd:Q2620972': '/catalogue/story-arc',
 };
 
-export function genericCreateSpecializedPath(type: string | Pick<CreateType, 'id' | 'specializedPath'>): string | undefined {
+export function genericCreateSpecializedPath(
+  type: string | Pick<CreateType, 'id' | 'specializedPath'>,
+): string | undefined {
   if (typeof type === 'string') return specializedCreatePaths[type];
   return type.specializedPath ?? specializedCreatePaths[type.id];
 }

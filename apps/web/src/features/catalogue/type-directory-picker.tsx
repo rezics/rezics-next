@@ -31,10 +31,7 @@ export function TypeDirectoryPicker({
   refreshToken: number;
   onSelectionChange: (type: CreateType | null) => void;
   onPendingChange: (pending: boolean) => void;
-  onDescriptorState?: (
-    typeId: string,
-    state: 'reading' | 'current' | 'missing' | 'unavailable' | 'unadmitted',
-  ) => void;
+  onDescriptorState?: (typeId: string, state: 'reading' | 'current' | 'missing' | 'unavailable' | 'unadmitted') => void;
   offered?: readonly CreateType[];
   unavailable?: readonly string[];
   admitType?: (type: CreateType) => boolean;
