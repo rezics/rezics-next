@@ -2926,6 +2926,7 @@
   "realm_bans_inspect_account": "Genaue Konto-ID",
   "realm_bans_inspect_action": "Konto prüfen",
   "realm_bans_inspect_retry": "Prüfung wiederholen",
+  "realm_bans_inspect_absent": "Für dieses Konto wurde keine aktuelle Sperre festgestellt. Dies ist kein Befehlsbeleg und bestätigt weder die Wiederherstellung der Mitgliedschaft noch den Abschluss einer früheren Entfernung.",
   "realm_bans_inspect_unavailable": "Die Prüfung der aktuellen Sperre ist nicht verfügbar. Ob dieses Konto gesperrt ist, bleibt offen. Die Auswahl bleibt für einen erneuten Versuch erhalten.",
   "realm_bans_empty": "Keine aktuellen Sperren auf dieser Seite.",
   "realm_bans_no_reason": "Kein Grund angegeben",

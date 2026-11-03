@@ -92,3 +92,63 @@ export const DeniedInspection: Story = {
     await expect(canvas.getByRole('button', { name: m.realm_bans_inspect_retry() })).toBeEnabled();
   },
 };
+
+/** Injected observation seam; these fixtures do not publish a native client contract. */
+export const CurrentSelectedEpisode: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
+      <AppShell>
+        <RealmBansControl
+          realmId={realmId}
+          initial={page}
+          ready
+          read={read}
+          write={write}
+          inspect={async (input) => ({
+            state: 'current',
+            input,
+            ban: {
+              accountId: input.accountId,
+              actor: null,
+              reason: 'Exact selected episode',
+              at: '2026-11-02T14:05:00Z',
+            },
+          })}
+        />
+      </AppShell>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
+      '01a17a3b-70ea-712a-9ff7-81fc6a938199',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_inspect_action() }));
+  },
+};
+
+export const SelectedAccountAbsent: Story = {
+  render: () => (
+    <PatternStory visitor="Signed In" path="/spaces/quiet-novel-club">
+      <AppShell>
+        <RealmBansControl
+          realmId={realmId}
+          initial={page}
+          ready
+          read={read}
+          write={write}
+          inspect={async (input) => ({ state: 'absent', input })}
+        />
+      </AppShell>
+    </PatternStory>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
+      '01a17a3b-70ea-712a-9ff7-81fc6a938199',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_inspect_action() }));
+  },
+};

@@ -1153,6 +1153,7 @@ function RealmBansVisit({
             key={renderGeneration}
             realmId={realmId}
             inspect={inspect}
+            cursor={pageRead.current.cursor}
             gate={gate}
             disabled={disabled}
           />

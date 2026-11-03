@@ -2920,6 +2920,7 @@
   "realm_bans_inspect_account": "Exact account ID",
   "realm_bans_inspect_action": "Inspect account",
   "realm_bans_inspect_retry": "Retry inspection",
+  "realm_bans_inspect_absent": "No current ban was observed for this account. This is not a command receipt and does not establish membership restoration or completion of an earlier removal.",
   "realm_bans_inspect_unavailable": "Current ban inspection is unavailable. This does not establish whether this account is banned. Your selection is retained for retry.",
   "realm_bans_empty": "No current bans on this page.",
   "realm_bans_no_reason": "No reason provided",

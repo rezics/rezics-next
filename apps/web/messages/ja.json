@@ -2926,6 +2926,7 @@
   "realm_bans_inspect_account": "正確なアカウントID",
   "realm_bans_inspect_action": "アカウントを確認",
   "realm_bans_inspect_retry": "確認を再試行",
+  "realm_bans_inspect_absent": "このアカウントの現在の禁止は確認されませんでした。これは操作の受領証ではなく、メンバー資格の復元や以前の削除処理の完了を示すものではありません。",
   "realm_bans_inspect_unavailable": "現在の利用禁止を確認できません。このアカウントが利用禁止かどうかは不明です。再試行のため選択を保持します。",
   "realm_bans_empty": "このページに現在の利用禁止はありません。",
   "realm_bans_no_reason": "理由なし",

@@ -2926,6 +2926,7 @@
   "realm_bans_inspect_account": "ID exacto de la cuenta",
   "realm_bans_inspect_action": "Consultar cuenta",
   "realm_bans_inspect_retry": "Reintentar consulta",
+  "realm_bans_inspect_absent": "No se observó un bloqueo actual para esta cuenta. Esto no es un recibo de una orden ni confirma la restauración de la membresía o la finalización de una eliminación anterior.",
   "realm_bans_inspect_unavailable": "La consulta del bloqueo actual no está disponible. Esto no permite determinar si la cuenta está bloqueada. La selección se conserva para reintentar.",
   "realm_bans_empty": "No hay bloqueos actuales en esta página.",
   "realm_bans_no_reason": "Sin motivo indicado",

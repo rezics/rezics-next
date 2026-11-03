@@ -2926,6 +2926,7 @@
   "realm_bans_inspect_account": "確切的帳戶 ID",
   "realm_bans_inspect_action": "檢查帳戶",
   "realm_bans_inspect_retry": "重試檢查",
+  "realm_bans_inspect_absent": "未觀察到此帳號的目前封禁。這不是命令回執，也不表示成員資格已恢復或先前的移除流程已完成。",
   "realm_bans_inspect_unavailable": "目前封鎖檢查無法使用，無法判定此帳戶是否已遭封鎖。所選帳戶將保留，以便重試。",
   "realm_bans_empty": "此頁沒有目前封鎖。",
   "realm_bans_no_reason": "未提供原因",

@@ -2926,6 +2926,7 @@
   "realm_bans_inspect_account": "准确的账户 ID",
   "realm_bans_inspect_action": "检查账户",
   "realm_bans_inspect_retry": "重试检查",
+  "realm_bans_inspect_absent": "未观察到此账号的当前封禁。这不是命令回执，也不表示成员资格已恢复或之前的移除流程已完成。",
   "realm_bans_inspect_unavailable": "当前封禁检查不可用，无法确定此账户是否已被封禁。所选账户将保留，以便重试。",
   "realm_bans_empty": "此页没有当前封禁。",
   "realm_bans_no_reason": "未提供原因",

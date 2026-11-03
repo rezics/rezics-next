@@ -94,7 +94,7 @@ The composed current-ban reader remains unbound: the installed generated declara
 `limit` and `cursor` and returns the four original row fields. Content's native owner describes the expanded
 selection and identity composition, but source declarations do not install that contract in Web.
 
-Decision: expose exact account selection through the failure-only `unavailableRealmBanCurrent` seam until the generated composition is installed; retain selection for explicit retry without reading or moving the list frontier.
+Decision: expose exact account selection through the unbound `unavailableRealmBanCurrent` default until the generated composition is installed; retain selection for explicit retry without reading or moving the list frontier.
 
 `RealmBanCurrentControl` accepts one account ID separately from authoring handle lookup. Its default source
 returns unavailable without network work and never claims absence, identity disclosure or mutation advice.
@@ -103,9 +103,12 @@ admission and the Stay/Leave boundary with the existing writer. Page replacement
 caller/source replacement fences queued and late inspection results. Inspection never changes a draft ban,
 an uncertain command or its definitive receipt. All eight locales provide the unavailable explanation.
 
-The installed positive selected inspection still needs to retain the list frontier, bind the
-Realm/account/current episode, and keep absent, denied and unavailable outcomes distinct only where
-the native response admits them. An unavailable inspection retains selection for explicit retry; it
+The inspection seam accepts an admitted current observation or operational absence, bound to the captured
+Realm, exact account and opaque list frontier. It freezes the original selected read input for explicit retry,
+rejects mismatched observations as unavailable, and copies the current episode's native record fields before
+rendering its actual reason, time and moderator fallback. Absence has its own explanation and never renders
+the writer's lifted-ban receipt. These injected observations do not install the missing generated contract.
+The default remains unavailable until generated delivery can bind the admitted native selection. An unavailable inspection retains selection for explicit retry; it
 does not certify absence. A definitive unban receipt stays independent from readback, and neither
 current absence nor accepted removal claims restored membership or completed Accounts work.
 
@@ -138,3 +141,5 @@ Existing affected stories remain unchanged:
   `--role-removal-required`, `--revoked`, `--ambiguous-retry`, `--saving`
 
 Decision: publish the mounted composed ban contract through the normal native declaration generator before binding Web; derive every composed field from that generated delivery.
+
+Decision: keep exact observation rendering behind the injected inspection seam while generated composition is unavailable; never send an undeclared selected query or infer absence from list exhaustion.

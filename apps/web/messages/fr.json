@@ -2926,6 +2926,7 @@
   "realm_bans_inspect_account": "Identifiant exact du compte",
   "realm_bans_inspect_action": "Consulter le compte",
   "realm_bans_inspect_retry": "Réessayer la consultation",
+  "realm_bans_inspect_absent": "Aucun bannissement actuel n’a été observé pour ce compte. Ce résultat n’est pas un reçu de commande et ne confirme ni le rétablissement de l’adhésion ni la fin d’un retrait antérieur.",
   "realm_bans_inspect_unavailable": "La consultation du bannissement actuel est indisponible. Cela ne permet pas de savoir si ce compte est banni. La sélection est conservée pour réessayer.",
   "realm_bans_empty": "Aucun bannissement actuel sur cette page.",
   "realm_bans_no_reason": "Aucun motif indiqué",
