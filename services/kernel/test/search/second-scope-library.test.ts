@@ -38,19 +38,16 @@ const access: Access = {
   },
 };
 
-const observed: {
-  current:
-    | {
-        principal: string;
-        request: unknown;
-        context: Parameters<SearchService['search']>[4];
-      }
-    | undefined;
-} = { current: undefined };
+type SearchCall = {
+  principal: string;
+  request: unknown;
+  context: Parameters<SearchService['search']>[4];
+};
+const observed: SearchCall[] = [];
 const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
   async search(principal, request, _time, _active, context) {
-    observed.current = { principal, request, context };
+    observed.push({ principal, request, context });
     await context?.complete(page);
     return page;
   },
@@ -84,7 +81,7 @@ afterAll(async () => {
 });
 
 test('Library scope requests preserve the verified reader, Access, route key, deadline, text and released conditions', async () => {
-  observed.current = undefined;
+  observed.length = 0;
   const body = {
     text: 'Kokoro',
     filter: {
@@ -107,7 +104,7 @@ test('Library scope requests preserve the verified reader, Access, route key, de
   );
 
   expect(response.status).toBe(200);
-  const capture = observed.current;
+  const capture = observed[0];
   if (!capture) throw new Error('Search route did not call the bound service');
   expect(capture.principal).toBe(`account:${reader.accountId}`);
   expect(capture.request).toEqual(body);
