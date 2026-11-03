@@ -15,9 +15,8 @@ export function PhoneNavigationClearance({ children }: { children: ReactNode }) 
     const update = () => {
       const browserStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true;
       const isStandalone = standalone.matches || browserStandalone;
-      const value = !phone.matches || isStandalone
-        ? '0px'
-        : `${Math.ceil(navigation.getBoundingClientRect().height)}px`;
+      const value =
+        !phone.matches || isStandalone ? '0px' : `${Math.ceil(navigation.getBoundingClientRect().height)}px`;
       if (isStandalone) element.dataset.standalone = 'true';
       else delete element.dataset.standalone;
       if (value !== previous) {

@@ -321,7 +321,9 @@ function ShelfSelectionBar({
           label={(count) => m.library_selection_count({ count })}
           ariaLabel={m.library_selection_heading()}
           bottomOffset="var(--bottom-nav-height, 5rem)"
-          statusMessage={selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined}
+          statusMessage={
+            selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined
+          }
           primaryAction={
             <Button
               ref={launcher}
@@ -335,7 +337,12 @@ function ShelfSelectionBar({
           }
           actions={
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Button variant="ghost" className="min-h-11" disabled={controls.selectionPending} onClick={controls.selectPage}>
+              <Button
+                variant="ghost"
+                className="min-h-11"
+                disabled={controls.selectionPending}
+                onClick={controls.selectPage}
+              >
                 {m.library_selection_page()}
               </Button>
               <BulkLibraryRemovalAction controller={bulkRemoval} pending={controls.pending} />
@@ -356,7 +363,8 @@ function ShelfSelectionBar({
           selectedState
             ? m.library_bulk_status_review_summary({
                 count: reviewTargets.length,
-                status: controls.commonStates.find((option) => option.id === selectedState)?.label.text ?? selectedState,
+                status:
+                  controls.commonStates.find((option) => option.id === selectedState)?.label.text ?? selectedState,
               })
             : undefined
         }
@@ -401,7 +409,9 @@ function BulkStatusReview({ controls }: { controls: Controls }) {
       {review.phase === 'ready' ? (
         <p>{m.library_bulk_status_review_summary({ count: review.targets.length, status: review.stateLabel })}</p>
       ) : null}
-      {review.targets.length ? <SelectionReviewList items={targets} labelledBy={m.library_selection_heading()} /> : null}
+      {review.targets.length ? (
+        <SelectionReviewList items={targets} labelledBy={m.library_selection_heading()} />
+      ) : null}
       {review.phase === 'preview-uncertain' ? (
         <Button
           variant="outline"

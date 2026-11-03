@@ -139,7 +139,9 @@ function BulkLibraryRemovalReview({
           {m.library_bulk_entry_remove_recover()}
         </Button>
       ) : null}
-      {review.outcomes.length ? <SelectionResultView results={results} /> : review.phase === 'complete' && !review.readError ? (
+      {review.outcomes.length ? (
+        <SelectionResultView results={results} />
+      ) : review.phase === 'complete' && !review.readError ? (
         <p>{m.library_bulk_entry_remove_empty()}</p>
       ) : null}
     </section>

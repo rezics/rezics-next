@@ -1,7 +1,6 @@
 # Library selection review
 
-The private shelf selects only the currently supplied rows, in visible selection order, up to the native UI cap of
-100. The shared SelectionBar shows the exact count, keeps Review and Clear reachable, and places secondary actions in
+The private shelf selects only the currently supplied rows, in visible selection order, up to the native UI cap of 100. The shared SelectionBar shows the exact count, keeps Review and Clear reachable, and places secondary actions in
 its phone menu. The review lists each selected title and exact subject identity, explains unavailable status access,
 and offers only status choices shared by the current selected profiles. Opening or returning from review retains the
 still-current selection and returns focus to its live launcher; a changed row identity, state, selection, session or

@@ -73,12 +73,7 @@ export function SelectionReviewView({
   const mobile = useIsMobile();
   const selectedChoice = statusChoices.find((choice) => choice.id === statusValue);
   const canReviewStatus =
-    statusAllowed &&
-    !statusBlocked &&
-    !pending &&
-    hydrated &&
-    !!selectedChoice &&
-    items.length > 0;
+    statusAllowed && !statusBlocked && !pending && hydrated && !!selectedChoice && items.length > 0;
   const close = (next: boolean) => {
     onOpenChange(next);
     if (next) return;
@@ -151,7 +146,9 @@ export function SelectionReviewView({
         </DialogHeader>
         <div className="space-y-4">{summary}</div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" className="min-h-11" />}>{m.library_selection_review_close()}</DialogClose>
+          <DialogClose render={<Button variant="outline" className="min-h-11" />}>
+            {m.library_selection_review_close()}
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

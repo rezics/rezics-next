@@ -31,7 +31,14 @@ test('selection review stays ordered and refuses additions beyond each bounded s
 });
 
 test('review identity changes with current entry state and command identity', () => {
-  const entry = { subjectId: 'subject-1', revision: 1, incarnationId: 'incarnation-1', changeKey: 'change-1', removeKey: 'remove-1', state: 'planned' };
+  const entry = {
+    subjectId: 'subject-1',
+    revision: 1,
+    incarnationId: 'incarnation-1',
+    changeKey: 'change-1',
+    removeKey: 'remove-1',
+    state: 'planned',
+  };
   const signature = selectionReviewSignature([entry]);
   expect(selectionReviewSignature([{ ...entry, revision: 2 }])).not.toBe(signature);
   expect(selectionReviewSignature([{ ...entry, incarnationId: 'incarnation-2' }])).not.toBe(signature);

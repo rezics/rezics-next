@@ -45,15 +45,15 @@ safe-area, SSR fallback, desktop and standalone behavior. This source review doe
 
 ## Delivered and reserved component owners
 
-| Component family | Retained behavior and owner |
-| --- | --- |
-| Feed rows and attribution | Ordered rows, supplied authors, source labels and occurrence attributes are owned by the [Feed implementation](../../apps/web/src/features/feed/README.md). Missing producer data is not reconstructed in the browser. |
-| Reply context and branches | Chronological reading stays with [thread reading](../../apps/web/src/threads/README.md); guarded parent disclosure and bounded page branches are owned by [reply context](../../apps/web/src/threads/reply-context.md). |
-| Composer and draft recovery | The [thread owner](../../apps/web/src/threads/README.md#browser-only-writing-recovery) documents browser-only writing recovery, current-visit retry and the limits of recovery across reloads. |
-| Empty and route states | Feed empty, preparing, unavailable and error states belong to the [Feed owner](../../apps/web/src/features/feed/README.md); shell route-state presentation remains in the [shell owner](../../apps/web/src/shell/README.md). |
-| Generic tag controls | Generic tagging remains reserved by the [Semantic capability contract](../../docs/goals/semantic.capabilities.md); source-concept browsing does not imply community tag votes. |
-| Selection review and results | The [Library owner](../../apps/web/src/library/README.md) records exact bounded selection, native review ownership and distinct supplied outcome groups. |
-| Shared selection bar and navigation | The [UI SelectionBar](../../packages/ui/src/components/selection-bar.tsx) composes with the [measured shell clearance](../../apps/web/src/shell/README.md#phone-navigation-clearance). |
+| Component family                    | Retained behavior and owner                                                                                                                                                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Feed rows and attribution           | Ordered rows, supplied authors, source labels and occurrence attributes are owned by the [Feed implementation](../../apps/web/src/features/feed/README.md). Missing producer data is not reconstructed in the browser.       |
+| Reply context and branches          | Chronological reading stays with [thread reading](../../apps/web/src/threads/README.md); guarded parent disclosure and bounded page branches are owned by [reply context](../../apps/web/src/threads/reply-context.md).      |
+| Composer and draft recovery         | The [thread owner](../../apps/web/src/threads/README.md#browser-only-writing-recovery) documents browser-only writing recovery, current-visit retry and the limits of recovery across reloads.                               |
+| Empty and route states              | Feed empty, preparing, unavailable and error states belong to the [Feed owner](../../apps/web/src/features/feed/README.md); shell route-state presentation remains in the [shell owner](../../apps/web/src/shell/README.md). |
+| Generic tag controls                | Generic tagging remains reserved by the [Semantic capability contract](../../docs/goals/semantic.capabilities.md); source-concept browsing does not imply community tag votes.                                               |
+| Selection review and results        | The [Library owner](../../apps/web/src/library/README.md) records exact bounded selection, native review ownership and distinct supplied outcome groups.                                                                     |
+| Shared selection bar and navigation | The [UI SelectionBar](../../packages/ui/src/components/selection-bar.tsx) composes with the [measured shell clearance](../../apps/web/src/shell/README.md#phone-navigation-clearance).                                       |
 
 ## Review boundary
 

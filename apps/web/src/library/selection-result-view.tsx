@@ -1,5 +1,10 @@
 import { m } from '../paraglide/messages.js';
-import { groupSelectionResults, selectionResultStates, type SelectionResultItem, type SelectionResultState } from './selection-review';
+import {
+  groupSelectionResults,
+  selectionResultStates,
+  type SelectionResultItem,
+  type SelectionResultState,
+} from './selection-review';
 
 const resultLabel: Record<SelectionResultState, () => string> = {
   applied: m.library_bulk_status_applied,
@@ -33,9 +38,7 @@ export function SelectionResultView({ results }: { results: readonly SelectionRe
                   key={item.key}
                   data-selection-result-state={state}
                   {...(item.source === 'bulk-status' ? { 'data-bulk-status-outcome': item.sourceState } : {})}
-                  {...(item.source === 'bulk-removal'
-                    ? { 'data-bulk-library-removal-outcome': item.sourceState }
-                    : {})}
+                  {...(item.source === 'bulk-removal' ? { 'data-bulk-library-removal-outcome': item.sourceState } : {})}
                 >
                   <span className="font-medium">{item.title}</span>{' '}
                   <code className="break-all text-xs text-muted-foreground">{item.subjectId}</code>

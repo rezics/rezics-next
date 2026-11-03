@@ -34,7 +34,11 @@ export function SelectionBar({
       className="fixed inset-x-0 z-40 flex flex-wrap items-center justify-between gap-3 border-t bg-background p-3 shadow-lg"
       style={{ bottom: bottomOffset ?? 'calc(env(safe-area-inset-bottom, 0px) + var(--bottom-nav-height, 0px))' }}
     >
-      {statusMessage ? <p role="status" className="w-full text-sm">{statusMessage}</p> : null}
+      {statusMessage ? (
+        <p role="status" className="w-full text-sm">
+          {statusMessage}
+        </p>
+      ) : null}
       <span aria-live="polite" aria-atomic="true">
         {label(count)}
       </span>
