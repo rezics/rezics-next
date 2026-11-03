@@ -196,7 +196,7 @@ export function GameStatementFields({
       change={change}
       valueControl={valueControl ?? control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
-      stablePartAddresses={stablePartAddresses}
+      {...(stablePartAddresses ? { stablePartAddresses: true } : {})}
       reuse={reuse}
       focusReference={focusReference}
     />
