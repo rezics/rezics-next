@@ -1306,10 +1306,10 @@ export function applyRetentionOnDatabase(
     throw new RetentionFailure('Deletion page size must be an integer from 1 through 100.', 'usage');
   const started = database.transaction(() => {
     session.assertHeld(ownership);
-    revalidatePins(database, plan, plan.source, catalog);
     if (!catalog.tables.has('run_retention_work')) ensureRetentionWork(database);
     const existing = workRow(database, plan.planId);
     if (existing?.status === 'complete') return existing;
+    revalidatePins(database, plan, plan.source, catalog);
     return beginOrResumeWork(database, plan, catalog);
   }).immediate();
   if (started.status === 'complete') {
