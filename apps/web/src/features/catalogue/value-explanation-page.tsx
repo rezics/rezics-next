@@ -329,7 +329,7 @@ export function ValueExplanationPage({
                   {m.value_change({}, o)}
                 </ContentItemHeading>
                 {change?.kind === 'ready' ? (
-                  <ChangeExplanation detail={change.detail} locale={locale} />
+                  <ChangeExplanation detail={change.detail} revision={change.detail.revision} locale={locale} />
                 ) : (
                   <p>
                     {change?.kind === 'denied' ? m.value_metadata_denied({}, o) : m.value_change_unavailable({}, o)}

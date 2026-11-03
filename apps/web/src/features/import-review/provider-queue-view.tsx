@@ -65,7 +65,7 @@ export function ProviderQueue({
   initialScope?: QueueScope;
   initialChoice?: ProviderContextChoice;
   initialReturn?: ProviderQueueReturnVisit | undefined;
-  onReviewCandidate?: (visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void;
+  onReviewCandidate?: ((visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void) | undefined;
   canWrite?: boolean;
   current?: () => boolean;
 }) {
@@ -290,7 +290,7 @@ function ProviderQueueResults({
   current: () => boolean;
   canWrite: boolean;
   locale: string;
-  onReviewCandidate?: (visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void;
+  onReviewCandidate?: ((visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void) | undefined;
   actionHeld: boolean;
   onActionHeldChange: (held: boolean) => void;
   onChoiceRefused: () => void;

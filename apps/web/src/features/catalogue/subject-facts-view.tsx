@@ -105,10 +105,10 @@ function ExactReview({
       locale={locale}
       initialProperty={address.property}
       exactCandidate={address.candidate}
-      context={address.context === candidateContext ? undefined : address.context}
-      returnHref={address.returnHref}
-      returnLabel={address.returnLabel}
-      returnUnavailable={address.returnUnavailable}
+      {...(address.context === candidateContext ? {} : { context: address.context })}
+      {...(address.returnHref ? { returnHref: address.returnHref } : {})}
+      {...(address.returnLabel ? { returnLabel: address.returnLabel } : {})}
+      {...(address.returnUnavailable !== undefined ? { returnUnavailable: address.returnUnavailable } : {})}
       transport={transport}
     />
   );

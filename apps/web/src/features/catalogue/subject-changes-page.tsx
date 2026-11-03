@@ -111,7 +111,7 @@ function CurrentReviewLink({
   revision,
   onReviewCandidate,
 }: {
-  pageHref?: string;
+  pageHref?: string | undefined;
   address: CurrentCandidateAddress;
   revision: number;
   onReviewCandidate?: Props['onReviewCandidate'];
@@ -141,7 +141,7 @@ export function ChangeExplanation({
   detail: ChangeDetail;
   revision: number;
   locale: string;
-  pageHref?: string;
+  pageHref?: string | undefined;
   onReviewCandidate?: Props['onReviewCandidate'];
 }) {
   const o = { locale: locale as never };

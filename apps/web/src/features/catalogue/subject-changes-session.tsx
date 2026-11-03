@@ -55,7 +55,7 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
   }>({ checked: false });
   useEffect(() => {
     const visit = lease ? takeSubjectChangesReturn(id, lease.reader) : undefined;
-    setRestored({ lease, checked: true, ...(visit ? { visit } : {}) });
+    setRestored({ ...(lease ? { lease } : {}), checked: true, ...(visit ? { visit } : {}) });
   }, [id, lease]);
   const transport = useMemo(() => {
     const headers = observed.csrfToken ? { 'X-CSRF-Token': observed.csrfToken } : {};
@@ -103,8 +103,8 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
       locale={locale}
       transport={transport}
       currentHref={currentHref}
-      lease={lease}
-      initialReturn={restored.lease === lease ? restored.visit : undefined}
+        {...(lease ? { lease } : {})}
+        {...(restored.lease === lease && restored.visit ? { initialReturn: restored.visit } : {})}
     />
   );
 });
