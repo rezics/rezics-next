@@ -255,7 +255,7 @@ function itemRow(row: Record<string, unknown>): PlanItem {
   };
 }
 
-const planColumns = `confirmation_id AS "confirmationId", source_label_id AS "sourceLabelId",
+const planColumns = `consolidation_id AS "confirmationId", source_label_id AS "sourceLabelId",
   target_label_id AS "targetLabelId", source_label_revision AS "sourceLabelRevision",
   target_label_revision AS "targetLabelRevision", selection_digest AS "selectionDigest",
   review_evidence AS "reviewEvidence", item_count AS "itemCount", next_item AS "nextItem",
