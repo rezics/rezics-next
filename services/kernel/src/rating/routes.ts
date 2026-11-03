@@ -124,7 +124,11 @@ function publicReadDetail(operationId: string, action: string) {
   };
 }
 
-function classificationDetail(operationId: string, action: string, options: { publicRead?: boolean; write?: boolean } = {}) {
+function classificationDetail(
+  operationId: string,
+  action: string,
+  options: { publicRead?: boolean; write?: boolean } = {},
+) {
   return {
     operationId,
     'x-action': action,
@@ -488,9 +492,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       async ({ actor, params, admission, job }) => {
         requireRoutableIds(params.id, params.associationId);
         return admission.run('normal', job, () =>
-          command(() =>
-            classificationBallots().readAggregate(actor, params.id, params.associationId, job.deadline),
-          ),
+          command(() => classificationBallots().readAggregate(actor, params.id, params.associationId, job.deadline)),
         );
       },
     )

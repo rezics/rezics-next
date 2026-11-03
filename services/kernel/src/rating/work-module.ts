@@ -46,7 +46,9 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
         });
         registerRatingSegmentWork(context, counter);
         registerRatingSubjectMergeWork(context);
-        context.addService(() => startRelays(context.pool, [createClassificationBallotRelay(context.pool, context.clock)]));
+        context.addService(() =>
+          startRelays(context.pool, [createClassificationBallotRelay(context.pool, context.clock)]),
+        );
       }
     },
   };

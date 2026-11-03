@@ -174,7 +174,10 @@ export function relatedReadEligibility(
   });
 }
 
-export function subjectReadEligibility(resource: { route: number; id: string }, action = 'subject:read'): ResourceEligibility {
+export function subjectReadEligibility(
+  resource: { route: number; id: string },
+  action = 'subject:read',
+): ResourceEligibility {
   const prepare = measured<Prepare, PublicState>(
     ({ resource }) => pointWork(resource, publicStateBytes, true),
     ({ pool, resource }) => withConnection(pool, (client) => publicState(client, resource, true)),

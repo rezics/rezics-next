@@ -1368,6 +1368,7 @@ for retry. These source observations remain separate from community classificati
   clear a retained slot after concealment. No retained payload is returned by this route.
 - Growth check: focused mounted tests clear an observation and verify anonymous reads cannot resurrect it.
   Native growth and current-authority race injection remain continuation work.
+
 ## Classification assessments
 
 A classification association is the exact current Semantic statement, not its display label. The first native reader supports only disclosed Global associations whose released property is in the `classification` group and targets `skos:Concept`. Realm-local candidates are unavailable until their disclosure contract is adopted. Association identity binds the original candidate, release and revision, subject, target, Global context and qualifiers, including spoiler qualifiers. The actor home retains the association identifiers and a digest of that immutable binding, not a copied Semantic statement. Reads do not follow redirects. A replacement or redirected candidate stays unavailable until a native rebind policy exists. Source confidence, source voter counts and inferred source ballots never seed these native totals.

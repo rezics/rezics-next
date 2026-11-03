@@ -55,8 +55,7 @@ export function classificationBallotCountDelta(
   next: ContributionState,
 ): CountDelta {
   const counted = (value: ContributionState | null): CountDelta => {
-    if (!value?.eligible || value.assessment === null)
-      return { support: 0, oppose: 0, falsePositive: 0 };
+    if (!value?.eligible || value.assessment === null) return { support: 0, oppose: 0, falsePositive: 0 };
     return {
       support: value.assessment === 'support' ? 1 : 0,
       oppose: value.assessment === 'oppose' ? 1 : 0,
@@ -95,13 +94,21 @@ function receiptKey(event: CloudEvent, envelope: Envelope): string {
 
 function receiptDigest(event: CloudEvent, envelope: Envelope): Buffer {
   return createHash('sha256')
-    .update(canonicalize([event.type, event.subject ?? null, event.data, envelope.epoch, envelope.position.toString()])!)
+    .update(
+      canonicalize([event.type, event.subject ?? null, event.data, envelope.epoch, envelope.position.toString()])!,
+    )
     .digest();
 }
 
 function validateEnvelope(envelope: Envelope): void {
-  if (!Number.isInteger(envelope.partition) || envelope.partition < 0 || envelope.partition > 4095 ||
-      !Number.isInteger(envelope.epoch) || envelope.epoch < 1 || envelope.position < 1n)
+  if (
+    !Number.isInteger(envelope.partition) ||
+    envelope.partition < 0 ||
+    envelope.partition > 4095 ||
+    !Number.isInteger(envelope.epoch) ||
+    envelope.epoch < 1 ||
+    envelope.position < 1n
+  )
     throw new TypeError('Invalid classification ballot source envelope');
 }
 
@@ -168,11 +175,18 @@ async function applyLifecycle(pool: Pool, event: CloudEvent, envelope: Envelope,
 }
 
 async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
-  if (event.type !== CLASSIFICATION_BALLOT_CLEANUP || !Value.Check(RATING_EVENTS[CLASSIFICATION_BALLOT_CLEANUP], event.data))
+  if (
+    event.type !== CLASSIFICATION_BALLOT_CLEANUP ||
+    !Value.Check(RATING_EVENTS[CLASSIFICATION_BALLOT_CLEANUP], event.data)
+  )
     throw new TypeError('Invalid classification ballot cleanup event');
   const data = event.data as { actorId: string; generation: string };
   const route = routeOfRequired(data.actorId);
-  if (event.subject !== data.actorId || partitionOf(route) !== envelope.partition || BigInt(data.generation) > MAX_BIGINT)
+  if (
+    event.subject !== data.actorId ||
+    partitionOf(route) !== envelope.partition ||
+    BigInt(data.generation) > MAX_BIGINT
+  )
     throw new TypeError('Classification ballot cleanup has an invalid actor home');
   await runCommand(
     pool,
@@ -241,7 +255,10 @@ async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, c
 }
 
 async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
-  if (event.type !== CLASSIFICATION_BALLOT_CHANGED || !Value.Check(RATING_EVENTS[CLASSIFICATION_BALLOT_CHANGED], event.data))
+  if (
+    event.type !== CLASSIFICATION_BALLOT_CHANGED ||
+    !Value.Check(RATING_EVENTS[CLASSIFICATION_BALLOT_CHANGED], event.data)
+  )
     throw new TypeError('Invalid classification ballot event');
   const data = event.data as {
     actorId: string;
@@ -287,7 +304,13 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
         actor_id: data.actorId,
       };
       const previous = (await contributionLock.run(tx, address)) as ContributionRow | null;
-      if (!classificationBallotEnvelopeIsNewer(previous, { revision: data.revision, epoch: envelope.epoch, position: envelope.position }))
+      if (
+        !classificationBallotEnvelopeIsNewer(previous, {
+          revision: data.revision,
+          epoch: envelope.epoch,
+          position: envelope.position,
+        })
+      )
         return noEffect(null);
       if (previous && !Buffer.from(previous.bindingHash).equals(bindingHash)) return noEffect(null);
 
@@ -343,7 +366,12 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
           {
             type: CLASSIFICATION_AGGREGATE_CHANGED,
             subject: data.subjectId,
-            data: { subjectId: data.subjectId, associationId: data.associationId, generation: generation.toString(), asOf },
+            data: {
+              subjectId: data.subjectId,
+              associationId: data.associationId,
+              generation: generation.toString(),
+              asOf,
+            },
           },
         ],
       };

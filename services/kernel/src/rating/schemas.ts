@@ -13,7 +13,11 @@ export const ClassificationBallotInputSchema = strictContentSchema(
   t.Object({ assessment: t.Union([t.Literal('support'), t.Literal('oppose')]), falsePositive: t.Boolean() }, closed),
 );
 export const ClassificationBallotSetResponseSchema = t.Object(
-  { associationId: id, revision: t.String({ pattern: '^[1-9][0-9]*$' }), delivery: t.Union([t.Literal('enqueued'), t.Literal('unchanged')]) },
+  {
+    associationId: id,
+    revision: t.String({ pattern: '^[1-9][0-9]*$' }),
+    delivery: t.Union([t.Literal('enqueued'), t.Literal('unchanged')]),
+  },
   closed,
 );
 export const ClassificationBallotOwnResponseSchema = t.Object(

@@ -38,7 +38,7 @@ type CurrentRead = {
   securityRevision: string;
   revision: number;
   transactionId: string;
-    binding: Omit<CurrentClassificationAssociation, 'bindingHash'>;
+  binding: Omit<CurrentClassificationAssociation, 'bindingHash'>;
 };
 
 /** Resolve one exact, currently selected Global classification statement. The returned digest binds
@@ -82,101 +82,104 @@ export async function readCurrentClassificationAssociation(input: {
   });
 
   const source = async (): Promise<CurrentRead | null> =>
-    withReadTransaction(input.pool, async (client) => {
-      const reject = (): null => null;
-      requireAccessDeadline(input.deadline);
-      const home = await readPartition(client, partitionOf(subjectRoute));
-      if (!home || home.writeState === 'moved') throw new AccessUnavailableError('contention');
-      const subjectAllowed = await subjectRead(client, input.time);
-      const ballotAllowed = await ballotAction(client, input.time);
-      if (!subjectAllowed || !ballotAllowed) return reject();
+    withReadTransaction(
+      input.pool,
+      async (client) => {
+        const reject = (): null => null;
+        requireAccessDeadline(input.deadline);
+        const home = await readPartition(client, partitionOf(subjectRoute));
+        if (!home || home.writeState === 'moved') throw new AccessUnavailableError('contention');
+        const subjectAllowed = await subjectRead(client, input.time);
+        const ballotAllowed = await ballotAction(client, input.time);
+        if (!subjectAllowed || !ballotAllowed) return reject();
 
-      const visible = await readVisibility.run(client, { route: subjectRoute, subject_id: input.subjectId });
-      if (visible?.visibility !== 'visible' || !visible.type) return reject();
-      const subjectVersion = await readItemIdentityVersion(client, input.subjectId);
-      if (!subjectVersion || subjectVersion.redirect !== null) return reject();
+        const visible = await readVisibility.run(client, { route: subjectRoute, subject_id: input.subjectId });
+        if (visible?.visibility !== 'visible' || !visible.type) return reject();
+        const subjectVersion = await readItemIdentityVersion(client, input.subjectId);
+        if (!subjectVersion || subjectVersion.redirect !== null) return reject();
 
-      const candidate = await readAssociation.run(client, {
-        route: subjectRoute,
-        subject_id: input.subjectId,
-        candidate_id: input.associationId,
-      });
-      if (
-        !candidate ||
-        candidate.candidateId !== input.associationId ||
-        candidate.relation ||
-        typeof candidate.property !== 'string'
-      )
-        return reject();
-      const revision = Number(candidate.revision);
-      if (!Number.isSafeInteger(revision) || revision < 1 || typeof candidate.release !== 'string')
-        return reject();
+        const candidate = await readAssociation.run(client, {
+          route: subjectRoute,
+          subject_id: input.subjectId,
+          candidate_id: input.associationId,
+        });
+        if (
+          !candidate ||
+          candidate.candidateId !== input.associationId ||
+          candidate.relation ||
+          typeof candidate.property !== 'string'
+        )
+          return reject();
+        const revision = Number(candidate.revision);
+        if (!Number.isSafeInteger(revision) || revision < 1 || typeof candidate.release !== 'string') return reject();
 
-      const release = await readRelease(client, candidate.release, { composed: false });
-      if (!release) return reject();
-      const property = release.properties[candidate.property];
-      const holder = release.types[visible.type];
-      if (
-        property?.relation?.group !== 'classification' ||
-        property.datatype !== 'wikibase-item' ||
-        !property.targets?.includes('skos:Concept') ||
-        !holder?.properties.includes(candidate.property)
-      )
-        return reject();
+        const release = await readRelease(client, candidate.release, { composed: false });
+        if (!release) return reject();
+        const property = release.properties[candidate.property];
+        const holder = release.types[visible.type];
+        if (
+          property?.relation?.group !== 'classification' ||
+          property.datatype !== 'wikibase-item' ||
+          !property.targets?.includes('skos:Concept') ||
+          !holder?.properties.includes(candidate.property)
+        )
+          return reject();
 
-      const selected = await effectiveGlobalSlotFacts(client, input.subjectId, candidate.property, candidate.slotId);
-      const current = selected.facts.find(
-        (fact) =>
-          fact.kind === 'statement' &&
-          fact.statement_id === input.associationId &&
-          fact.property === candidate.property &&
-          fact.fact_release === candidate.release &&
-          Number(fact.fact_revision) === revision,
-      );
-      if (!current) return reject();
-      const statement = candidate.statement as {
-        property?: { id?: unknown };
-        value?: { type?: unknown; content?: unknown };
-        qualifiers?: unknown;
-      };
-      if (
-        statement.value?.type !== 'value' ||
-        typeof statement.value.content !== 'string' ||
-        routeOf(statement.value.content) === null ||
-        !Array.isArray(statement.qualifiers)
-      )
-        return reject();
-      const canonicalStatement = canonicalize(candidate.statement);
-      if (typeof canonicalStatement !== 'string') return reject();
-      const statementDigest = createHash('sha256').update(canonicalStatement).digest('hex');
-      const targetId = statement.value.content;
-      const disclosure = await readCandidateDisclosure(client, {
-        subject: input.subjectId,
-        candidate: input.associationId,
-      });
-      if (!disclosure?.disclosed) return reject();
+        const selected = await effectiveGlobalSlotFacts(client, input.subjectId, candidate.property, candidate.slotId);
+        const current = selected.facts.find(
+          (fact) =>
+            fact.kind === 'statement' &&
+            fact.statement_id === input.associationId &&
+            fact.property === candidate.property &&
+            fact.fact_release === candidate.release &&
+            Number(fact.fact_revision) === revision,
+        );
+        if (!current) return reject();
+        const statement = candidate.statement as {
+          property?: { id?: unknown };
+          value?: { type?: unknown; content?: unknown };
+          qualifiers?: unknown;
+        };
+        if (
+          statement.value?.type !== 'value' ||
+          typeof statement.value.content !== 'string' ||
+          routeOf(statement.value.content) === null ||
+          !Array.isArray(statement.qualifiers)
+        )
+          return reject();
+        const canonicalStatement = canonicalize(candidate.statement);
+        if (typeof canonicalStatement !== 'string') return reject();
+        const statementDigest = createHash('sha256').update(canonicalStatement).digest('hex');
+        const targetId = statement.value.content;
+        const disclosure = await readCandidateDisclosure(client, {
+          subject: input.subjectId,
+          candidate: input.associationId,
+        });
+        if (!disclosure?.disclosed) return reject();
 
-      return {
-        id: input.subjectId,
-        type: visible.type,
-        securityRevision: visible.securityRevision,
-        revision: subjectVersion.revision,
-        transactionId: subjectVersion.transactionId,
-        binding: {
-          subjectId: input.subjectId,
-          subjectRoute,
-          associationId: input.associationId,
-          slotId: candidate.slotId,
-          property: candidate.property,
-          targetId,
-          contextId: GLOBAL_CONTEXT,
-          release: candidate.release,
-          revision,
-          qualifiers: statement.qualifiers,
-          statementDigest,
-        },
-      };
-    }, input.deadline);
+        return {
+          id: input.subjectId,
+          type: visible.type,
+          securityRevision: visible.securityRevision,
+          revision: subjectVersion.revision,
+          transactionId: subjectVersion.transactionId,
+          binding: {
+            subjectId: input.subjectId,
+            subjectRoute,
+            associationId: input.associationId,
+            slotId: candidate.slotId,
+            property: candidate.property,
+            targetId,
+            contextId: GLOBAL_CONTEXT,
+            release: candidate.release,
+            revision,
+            qualifiers: statement.qualifiers,
+            statementDigest,
+          },
+        };
+      },
+      input.deadline,
+    );
 
   const first = await source();
   if (!first) return null;
@@ -191,17 +194,21 @@ export async function readCurrentClassificationAssociation(input: {
     deadline: input.deadline,
   });
   const targetSnapshot = async () =>
-    withReadTransaction(input.pool, async (client) => {
-      requireAccessDeadline(input.deadline);
-      const home = await readPartition(client, partitionOf(targetRoute));
-      if (!home || home.writeState === 'moved') throw new AccessUnavailableError('contention');
-      if (!(await targetRead(client, input.time))) return null;
-      const visible = await readVisibility.run(client, { route: targetRoute, subject_id: first.binding.targetId });
-      if (visible?.visibility !== 'visible' || visible.type !== 'skos:Concept') return null;
-      const version = await readItemIdentityVersion(client, first.binding.targetId);
-      if (!version || version.redirect !== null) return null;
-      return { type: visible.type, securityRevision: visible.securityRevision, version };
-    }, input.deadline);
+    withReadTransaction(
+      input.pool,
+      async (client) => {
+        requireAccessDeadline(input.deadline);
+        const home = await readPartition(client, partitionOf(targetRoute));
+        if (!home || home.writeState === 'moved') throw new AccessUnavailableError('contention');
+        if (!(await targetRead(client, input.time))) return null;
+        const visible = await readVisibility.run(client, { route: targetRoute, subject_id: first.binding.targetId });
+        if (visible?.visibility !== 'visible' || visible.type !== 'skos:Concept') return null;
+        const version = await readItemIdentityVersion(client, first.binding.targetId);
+        if (!version || version.redirect !== null) return null;
+        return { type: visible.type, securityRevision: visible.securityRevision, version };
+      },
+      input.deadline,
+    );
 
   const firstTarget = await targetSnapshot();
   if (!firstTarget) return null;

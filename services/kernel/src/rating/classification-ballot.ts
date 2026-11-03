@@ -4,7 +4,10 @@ import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { noEffect, type CommandEvent, type CommandTransaction } from '../command/command.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { readCurrentClassificationAssociation, type CurrentClassificationAssociation } from '../semantic/classification-association.ts';
+import {
+  readCurrentClassificationAssociation,
+  type CurrentClassificationAssociation,
+} from '../semantic/classification-association.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
@@ -107,7 +110,9 @@ function nextRevision(value: string | undefined): string {
 
 function changedEvent(input: {
   actorId: string;
-  association: CurrentClassificationAssociation | Pick<CurrentClassificationAssociation, 'subjectId' | 'associationId' | 'bindingHash'>;
+  association:
+    | CurrentClassificationAssociation
+    | Pick<CurrentClassificationAssociation, 'subjectId' | 'associationId' | 'bindingHash'>;
   assessment: Assessment | null;
   falsePositive: boolean;
   revision: string;
@@ -217,7 +222,11 @@ export function createClassificationBallotCommands(config: Dependencies) {
           return current;
         },
       },
-      async (tx, _command, prepared): Promise<{
+      async (
+        tx,
+        _command,
+        prepared,
+      ): Promise<{
         value: { associationId: string; revision: string; delivery: 'unchanged' | 'enqueued' };
         events: readonly CommandEvent[];
       }> => {
@@ -239,7 +248,11 @@ export function createClassificationBallotCommands(config: Dependencies) {
           prior.eligible &&
           prior.eligibilityGeneration === state.generation;
         if (unchanged && !activation.event)
-          return noEffect({ associationId: input.associationId, revision: prior.revision, delivery: 'unchanged' as const });
+          return noEffect({
+            associationId: input.associationId,
+            revision: prior.revision,
+            delivery: 'unchanged' as const,
+          });
 
         const revision = nextRevision(prior?.revision);
         const bindingHash = Buffer.from(prepared.bindingHash, 'hex');
@@ -278,8 +291,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
    * their own retained ballot after association visibility is lost without learning anything. */
   async function clear(actor: Actor, subjectId: string, associationId: string, idempotencyKey: string): Promise<void> {
     const owner = account(actor, CLASSIFICATION_BALLOT_SET);
-    if (routeOf(subjectId) === null || routeOf(associationId) === null)
-      throw new ClassificationBallotNotFoundError();
+    if (routeOf(subjectId) === null || routeOf(associationId) === null) throw new ClassificationBallotNotFoundError();
     await runner.ownAccountPrepared(
       actor,
       {
@@ -366,30 +378,38 @@ export function createClassificationBallotCommands(config: Dependencies) {
     });
     if (!association) throw new ClassificationBallotNotFoundError();
     const actorRoute = requireRoute(owner.accountId);
-    const slot = await withReadTransaction(pool, async (client) => {
-      const current = await readAccount(client, actorRoute, owner.accountId);
-      assertCurrentAccount(owner, current);
-      return (await ownSlotRead.run(client, {
-        route: actorRoute,
-        actor_id: owner.accountId,
-        subject_id: subjectId,
-        association_id: associationId,
-      })) as BallotSlot | null;
-    }, deadline);
+    const slot = await withReadTransaction(
+      pool,
+      async (client) => {
+        const current = await readAccount(client, actorRoute, owner.accountId);
+        assertCurrentAccount(owner, current);
+        return (await ownSlotRead.run(client, {
+          route: actorRoute,
+          actor_id: owner.accountId,
+          subject_id: subjectId,
+          association_id: associationId,
+        })) as BallotSlot | null;
+      },
+      deadline,
+    );
     const currentSlot = slot && hashBytes(slot.binding_hash) === association.bindingHash ? slot : null;
     const contribution = currentSlot
-      ? await withReadTransaction(pool, (client) =>
-          contributionOwnRead.run(client, {
-            route: association.subjectRoute,
-            subject_id: subjectId,
-            association_id: associationId,
-            actor_route: actorRoute,
-            actor_id: owner.accountId,
-          }),
-        deadline)
+      ? await withReadTransaction(
+          pool,
+          (client) =>
+            contributionOwnRead.run(client, {
+              route: association.subjectRoute,
+              subject_id: subjectId,
+              association_id: associationId,
+              actor_route: actorRoute,
+              actor_id: owner.accountId,
+            }),
+          deadline,
+        )
       : null;
     const currentContribution =
-      contribution && Buffer.isBuffer(contribution.bindingHash) &&
+      contribution &&
+      Buffer.isBuffer(contribution.bindingHash) &&
       hashBytes(contribution.bindingHash) === association.bindingHash
         ? contribution
         : null;
@@ -400,8 +420,7 @@ export function createClassificationBallotCommands(config: Dependencies) {
       falsePositive: currentSlot?.assessment ? currentSlot.falsePositive : false,
       revision: currentSlot?.revision ?? null,
       pending:
-        currentSlot !== null &&
-        (currentContribution === null || currentContribution.revision !== currentSlot.revision),
+        currentSlot !== null && (currentContribution === null || currentContribution.revision !== currentSlot.revision),
     };
   }
 
@@ -416,14 +435,17 @@ export function createClassificationBallotCommands(config: Dependencies) {
       deadline,
     });
     if (!association) throw new ClassificationBallotNotFoundError();
-    const rows = (await withReadTransaction(pool, (client) =>
-      aggregateRead.run(client, {
-        route: association.subjectRoute,
-        subject_id: subjectId,
-        association_id: associationId,
-        binding_hash: Buffer.from(association.bindingHash, 'hex'),
-      }),
-    deadline)) as Aggregate[];
+    const rows = (await withReadTransaction(
+      pool,
+      (client) =>
+        aggregateRead.run(client, {
+          route: association.subjectRoute,
+          subject_id: subjectId,
+          association_id: associationId,
+          binding_hash: Buffer.from(association.bindingHash, 'hex'),
+        }),
+      deadline,
+    )) as Aggregate[];
     const row = rows[0] ?? null;
     return classificationAggregateView(associationId, row);
   }
