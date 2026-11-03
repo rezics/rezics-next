@@ -35,10 +35,12 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function render(state: CreatorStatementStory, id = creatorStatementFixture.id) {
+function render(state: CreatorStatementStory, id = creatorStatementFixture.id, search = '') {
   selectCreatorStatementStory(state);
-  return <PageStory visitor="Signed In" path={`/creator/statements/${id}`} />;
+  return <PageStory visitor="Signed In" path={`/creator/statements/${id}${search}`} />;
 }
+
+const laterLineSearch = '?cursor=story-lines-next&from=story-statements-next';
 
 export const Creator: Story = {
   render: () => render('creator'),
@@ -179,3 +181,42 @@ export const LinesUnavailable: Story = {
   play: stateReady(m.statements_unavailable),
 };
 export const Stale: Story = { render: () => render('stale'), play: stateReady(m.statements_stale) };
+export const LaterStaleLines: Story = {
+  render: () => render('later-stale-lines', paidCreatorStatementFixture.id, laterLineSearch),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await expect(await view.findByText(paidCreatorStatementFixture.paidReference!)).toBeVisible();
+    await expect(view.getByText(m.statements_stale())).toBeVisible();
+    await expect(
+      view.getByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(6.75)),
+    ).toBeVisible();
+    const disclosure = view.getByText(m.statements_provenance(), { exact: true });
+    disclosure.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(view.getByText(paidCreatorStatementFixture.id, { exact: true })).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: m.statements_restart_lines() }));
+    await view.findByText('txn_creatorCharge');
+    await expect(view.getByText(paidCreatorStatementFixture.paidReference!)).toBeVisible();
+    await expect(view.queryByText(m.statements_stale())).not.toBeInTheDocument();
+  },
+};
+export const LaterEmptyLines: Story = {
+  render: () => render('later-empty-lines', paidCreatorStatementFixture.id, laterLineSearch),
+  play: async (context) => {
+    await pageReady(context);
+    const view = within(within(context.canvasElement).getByRole('main'));
+    await expect(await view.findByText(paidCreatorStatementFixture.paidReference!)).toBeVisible();
+    await expect(view.getByRole('heading', { name: m.statement_line_page_reader_page_empty() })).toBeVisible();
+    await expect(view.getByRole('status')).toHaveTextContent(m.statements_lines_empty());
+    await expect(
+      view.queryByRole('heading', { name: m.statement_line_page_reader_first_empty() }),
+    ).not.toBeInTheDocument();
+    await expect(
+      view.getByText(new Intl.NumberFormat(getLocale(), { style: 'currency', currency: 'USD' }).format(6.75)),
+    ).toBeVisible();
+    await userEvent.click(view.getByRole('link', { name: m.statements_restart_lines() }));
+    await view.findByText('txn_creatorCharge');
+    await expect(view.getByText(paidCreatorStatementFixture.paidReference!)).toBeVisible();
+  },
+};

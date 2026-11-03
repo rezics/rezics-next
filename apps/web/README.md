@@ -3386,6 +3386,8 @@ navigation retain the original line cursor and list return cursor. An `invalid_c
 restarts that list or line page. Other failures retry the exact requested page. Line restart preserves `from`,
 and Back uses it only as the statement-list cursor. Pending detail navigation carries the same statement ID and
 return address. No recovery follows a provider redirect or refreshes a cursor automatically.
+A later stale or empty line page keeps the admitted paid point, captured amounts and list return address;
+list later-empty stays a separate list composition.
 
 Source contracts: the Commerce owner README's financial-evidence and recorded-display sections, payout route DTOs,
 the generated payout client and existing statement fixtures/pages. No external reference source applies.

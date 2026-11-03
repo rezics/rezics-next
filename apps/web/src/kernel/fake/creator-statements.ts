@@ -108,7 +108,9 @@ export type CreatorStatementStory =
   | 'unavailable'
   | 'error'
   | 'stale'
-  | 'lines-unavailable';
+  | 'lines-unavailable'
+  | 'later-stale-lines'
+  | 'later-empty-lines';
 let selected: CreatorStatementStory = 'creator';
 export function selectCreatorStatementStory(value: CreatorStatementStory): void {
   selected = value;
@@ -125,12 +127,13 @@ export const routes: FakeRoute[] = [
       if (selected === 'stale') return { status: 409, code: 'stale_cursor' };
       const url = new URL(request.url);
       const statementId = match?.[1];
+      const later = url.searchParams.has('cursor');
       if (!statementId) {
         if (selected === 'later-empty')
           return {
             status: 200,
-            payoutStatements: url.searchParams.has('cursor') ? [] : [creatorStatementFixture, euro],
-            next: url.searchParams.has('cursor') ? 'story-statements-later' : 'story-statements-next',
+            payoutStatements: later ? [] : [creatorStatementFixture, euro],
+            next: later ? 'story-statements-later' : 'story-statements-next',
           };
         return {
           status: 200,
@@ -139,13 +142,11 @@ export const routes: FakeRoute[] = [
               ? []
               : selected === 'unknown-unit'
                 ? [historicalCreatorStatementFixture]
-                : url.searchParams.has('cursor')
+                : later
                   ? [paidCreatorStatementFixture]
                   : [creatorStatementFixture, euro],
           next:
-            selected === 'empty' || selected === 'unknown-unit' || url.searchParams.has('cursor')
-              ? null
-              : 'story-statements-next',
+            selected === 'empty' || selected === 'unknown-unit' || later ? null : 'story-statements-next',
         };
       }
       const statements =
@@ -156,6 +157,9 @@ export const routes: FakeRoute[] = [
       if (!statement) return { status: 404, code: 'not_found' };
       if (!match?.[2]) return { status: 200, statement };
       if (selected === 'lines-unavailable') return { status: 503, code: 'overloaded' };
+      if (selected === 'later-stale-lines' && later) return { status: 409, code: 'stale_cursor' };
+      if (selected === 'later-empty-lines' && later) return { status: 200, lines: [], next: null };
+      const laterLinePage = selected === 'later-stale-lines' || selected === 'later-empty-lines';
       const line = {
         ...(selected === 'unknown-unit' ? historicalCreatorLineFixture : creatorLineFixture),
         statementId,
@@ -170,7 +174,7 @@ export const routes: FakeRoute[] = [
             ? []
             : selected === 'unknown-unit'
               ? [line]
-              : url.searchParams.has('cursor')
+              : later
                 ? [
                     {
                       ...refund,
@@ -183,9 +187,8 @@ export const routes: FakeRoute[] = [
                 : [line],
         next:
           selected === 'empty' ||
-          statement.state === 'paid' ||
-          statement.currency === 'eur' ||
-          url.searchParams.has('cursor')
+          later ||
+          (!laterLinePage && (statement.state === 'paid' || statement.currency === 'eur'))
             ? null
             : 'story-lines-next',
       };
