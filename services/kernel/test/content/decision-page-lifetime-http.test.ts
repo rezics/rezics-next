@@ -108,7 +108,10 @@ for (const change of ['revoke', 'suspend'] as const) {
       access: system.access,
       action: 'account:manage',
     });
-    const context = () => ({ pool: system.database.pool, deadline: Date.now() + 30_000, actor: credential.actor });
+    const context = async () => {
+      const boundary = { pool: system.database.pool, deadline: Date.now() + 30_000 };
+      return { ...boundary, actor: await system.access.authenticate(credential.bearer, boundary) };
+    };
     const input = {
       principalId: principal.accountId,
       assignedActorId: author.accountId,
@@ -116,7 +119,7 @@ for (const change of ['revoke', 'suspend'] as const) {
       valid: '(,)',
       key: crypto.randomUUID(),
     };
-    const assignment = await commands.create(context(), input);
+    const assignment = await commands.create(await context(), input);
     const delegated = await system.auth.issue({
       accountId: author.accountId,
       clientId: system.auth.ordinaryClient.id,
@@ -128,7 +131,7 @@ for (const change of ['revoke', 'suspend'] as const) {
     await fixture.command('POST', `${path}:appeal`, { statement: 'Pending delegated lifetime' });
     expect((await fixture.call('GET', path, { bearer: delegated.bearer })).response.status).toBe(200);
     await withheld(path, delegated.bearer, async () => {
-      if (change === 'revoke') await commands.revoke(context(), { ...input, key: crypto.randomUUID() });
+      if (change === 'revoke') await commands.revoke(await context(), { ...input, key: crypto.randomUUID() });
       else
         await fixture.command(
           'POST',
