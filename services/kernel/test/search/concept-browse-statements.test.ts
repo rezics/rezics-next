@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { newId } from '../../src/route/route.ts';
 import {
+  completeNativeStatementPrefix,
   matchNativeConceptStatements,
   conceptStatementRequest,
   type ConceptStatementReader,
@@ -35,7 +36,11 @@ const graph: ConceptBrowseSource = {
     throw new Error('Matching must not traverse the hierarchy');
   },
 };
-function fixture(statements: IndexedStatement[], current: 'current' | 'changed' | 'unavailable' = 'current') {
+function fixture(
+  statements: IndexedStatement[],
+  current: 'current' | 'changed' | 'unavailable' = 'current',
+  complete = false,
+) {
   let retired = 0,
     revalidated = 0;
   const store = {
@@ -47,7 +52,7 @@ function fixture(statements: IndexedStatement[], current: 'current' | 'changed' 
   } as unknown as ConceptBrowseStore;
   const reader: ConceptStatementReader = async () => ({
     status: 'current',
-    page: { statements, examined: statements.length, after: null, terminal: true, complete: false },
+    page: { statements, examined: statements.length, after: null, terminal: true, complete },
     revalidate: async () => {
       revalidated++;
       return current;
@@ -59,6 +64,16 @@ const statement = (value: string, level: string): IndexedStatement => ({
   property: selection.property,
   value,
   qualifiers: [{ property: 'rezics:spoilerLevel', value: level }],
+});
+
+test('native absence requires a ready complete first prefix', () => {
+  const after = { slot: '00000000-0000-4000-8000-000000000001', candidate: '00000000-0000-4000-8000-000000000002', observation: 'a'.repeat(64) };
+  expect([
+    completeNativeStatementPrefix(true, null, 0, 64),
+    completeNativeStatementPrefix(true, after, 1, 64),
+    completeNativeStatementPrefix(true, null, 64, 64),
+    completeNativeStatementPrefix(false, null, 0, 64),
+  ]).toEqual([true, false, false, false]);
 });
 
 test('descendant witnesses obey their own spoilers; exact mode cannot borrow another statement', async () => {
@@ -78,6 +93,23 @@ test('withheld and terminal empty windows remain unknown under exclusion and Boo
   expect(compileCurrentFilter({ or: [leaf, { type: { in: ['schema:Book'] } }] }).evaluate([result.match, false])).toBe(
     'not_proven',
   );
+});
+
+test('only a current complete first prefix proves absence; a terminal resumed suffix stays unknown', async () => {
+  const complete = fixture([], 'current', true);
+  expect(await matchNativeConceptStatements(complete.reader, graph, complete.store, state, 0, request)).toMatchObject({
+    match: false,
+    page: { complete: true },
+  });
+  expect(
+    (
+      await matchNativeConceptStatements(complete.reader, graph, complete.store, state, 0, request, {
+        slot: '00000000-0000-4000-8000-000000000001',
+        candidate: '00000000-0000-4000-8000-000000000002',
+        observation: 'a'.repeat(64),
+      })
+    ).match,
+  ).toBe('not_proven');
 });
 
 test('a rejected native candidate that changes after membership forces retained-cut restart', async () => {

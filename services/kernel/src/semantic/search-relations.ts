@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import {
+  completeNativeStatementPrefix,
   conceptStatementRequest,
   conceptStatementQualifiers,
   type ConceptStatementReader,
@@ -397,7 +398,14 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         examined: first.rows.length,
         after: last ? { slot: last.slot_id, candidate: last.candidate_id, observation: first.observation } : cursor,
         terminal: first.rows.length < limit,
-        complete: false,
+        // selection_ready means this is the full current selected prefix. A short first
+        // window therefore proves absence; a full or resumed window only proves progress.
+        complete: completeNativeStatementPrefix(
+          first.subject.selection_ready,
+          cursor,
+          first.rows.length,
+          limit,
+        ),
       },
       async revalidate() {
         const final = await snapshot();

@@ -26,8 +26,8 @@ export type ConceptStatementWindow = Readonly<{
   examined: number;
   after: ConceptStatementCursor | null;
   terminal: boolean;
-  /** Exhaustion is progress, never a native complete-absence proof. */
-  complete: false;
+  /** True only when the native owner proves the complete selected prefix in this window. */
+  complete: boolean;
 }>;
 export type ConceptStatementRead =
   | Readonly<{
@@ -48,6 +48,23 @@ export type ConceptStatementReader = (
 
 export const CONCEPT_STATEMENT_PAGE_SIZE = 64;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** A short first window over a ready selection is the whole current native prefix. */
+export function completeNativeStatementPrefix(
+  selectionReady: boolean,
+  after: ConceptStatementCursor | null,
+  examined: number,
+  limit: number,
+): boolean {
+  return (
+    selectionReady &&
+    after === null &&
+    Number.isSafeInteger(examined) &&
+    examined >= 0 &&
+    Number.isSafeInteger(limit) &&
+    limit > 0 &&
+    examined < limit
+  );
+}
 /** Own and structurally admit inputs before any native or retained await. */
 export function conceptStatementRequest(
   partition: number,
@@ -141,15 +158,18 @@ export async function matchNativeConceptStatements(
   }
   if (read.status === 'changed') return restart();
   if (read.status !== 'current') return { status: read.status, match: 'not_proven' };
-  const page = structuredClone(read.page);
+  const nativePage = structuredClone(read.page);
   if (
-    !Number.isSafeInteger(page.examined) ||
-    page.examined < page.statements.length ||
-    page.examined > limit ||
-    page.complete !== false ||
-    (!page.terminal && page.after === null)
+    !Number.isSafeInteger(nativePage.examined) ||
+    nativePage.examined < nativePage.statements.length ||
+    nativePage.examined > limit ||
+    typeof nativePage.complete !== 'boolean' ||
+    (!nativePage.terminal && nativePage.after === null)
   )
     return restart();
+  // A terminal suffix cannot prove the omitted prefix. Multi-window absence needs a separate
+  // owner proof; this matcher accepts a native complete-prefix proof only from its first window.
+  const page = { ...nativePage, complete: cursor === null && nativePage.complete };
   const qualifiers = conceptStatementQualifiers(request);
   const match = await matchCurrentConceptStatements(source, store, retained, {
     selection: request.selection,
@@ -163,7 +183,7 @@ export async function matchNativeConceptStatements(
         qualifiers,
       }),
     })),
-    complete: false,
+    complete: page.complete,
   });
   const current = await read.revalidate();
   if (current === 'changed') return restart();

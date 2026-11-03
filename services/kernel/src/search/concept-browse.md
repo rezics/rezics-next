@@ -2,8 +2,9 @@
 
 Search's hierarchy traversal is derived work beneath the existing retained-plan worker. It does not establish
 Semantic graph coverage, release admission, disclosure or authorization. Indexed storage and worker dispatch
-are installed; native classified-statement windows are available through SubjectSource. The hierarchy source,
-complete-absence proof and public hierarchy journey remain to be connected.
+are installed; native classified-statement windows and a complete first-prefix absence proof are
+available through SubjectSource. The hierarchy source, multi-window absence proof and public hierarchy
+journey remain to be connected.
 Absent a native source adapter the worker leaves the plan preparing; it cannot seal an empty closure.
 
 Decision: hierarchy continuation follows sortable full native edge keys independently of returned child IDs, so
@@ -121,8 +122,9 @@ matching never replaces a closure with `in:64` and never refills a window implic
 windows require a later terminal seek. A cursor carries the source identity/revision/security and
 active release observation; replacement discards it. These internal cursors are not public Search cursors.
 
-Decision: native statement windows remain internal and cannot establish absence; terminal windows
-retain `not_proven` until Semantic supplies a current complete-absence proof.
+Decision: native statement windows remain internal. A complete-absence proof is valid only when
+Semantic establishes the complete selected prefix from its start; a terminal continuation suffix is
+not proof for the omitted prefix.
 
 The reader uses the current release to admit the property, Concept condition and all qualifiers,
 then reads the stored immutable releases to interpret each selected statement. The existing native
@@ -135,9 +137,14 @@ or synthetic coverage producer is returned.
 
 `matchNativeConceptStatements` composes these native windows with the sealed-cut membership batch.
 Qualifiers and the independently supplied spoiler threshold constrain each statement separately.
-After membership it revalidates native evidence even if the candidate was rejected. Any changed raw
-candidate or native dependency retires the retained cut and returns restart without a verdict or cursor.
-Unavailable evidence discards provisional positives. Exhaustion alone cannot enable exclusion.
+Semantic marks `complete` only when `selection_ready` holds, the first request has no cursor, and the
+raw selected prefix contains fewer rows than the bounded window. The proof includes hidden, rejected
+and withheld raw candidates and is returned only after the full prefix and its native dependencies are
+revalidated. A full window or a terminal continuation suffix stays incomplete. This proves absence
+only for prefixes that fit one dispatch; a multi-window aggregate still needs a native owner proof.
+After membership the reader revalidates native evidence even if the candidate was rejected. Any
+changed raw candidate or native dependency retires the retained cut and returns restart without a
+verdict or cursor. Unavailable evidence discards provisional positives.
 
 The window has two native prefix reads (initial and revalidation), each examining at most B raw
 selected rows for B <= 64, plus point joins for candidate, hidden candidate, disclosure, acceptance
@@ -152,7 +159,8 @@ observations; no native window performs graph traversal per candidate.
 This expands the operation structure, not an all-pool dispatch reservation: stored-release/body byte
 bounds, qualifier fanout, owner control-query work and physical tuple/identity footprints must still
 be composed before enabling this port in the Search dispatcher. The port is exposed by SubjectSource
-but is not activated by Search or the hierarchy worker. Native growth and useful-page guarantees,
-complete-absence ownership, the hierarchy adapter/APIs and the installed localized page remain in
-the continuation. The focused tests cover statement isolation, terminal uncertainty and restart on
-a rejected candidate's changed evidence; they do not measure native growth or connected browser work.
+but is not activated by Search or the hierarchy worker. Multi-window complete-absence ownership,
+native growth and useful-page guarantees, the hierarchy adapter/APIs and the installed localized page
+remain in the continuation. The focused tests cover statement isolation, complete first-prefix proof,
+terminal uncertainty and restart on a rejected candidate's changed evidence; they do not measure
+native growth or connected browser work.
