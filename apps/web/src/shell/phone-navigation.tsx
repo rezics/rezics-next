@@ -8,6 +8,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import type { SessionState } from '../session/state';
 import { NavigationEntries } from './navigation-view';
+import { navigationPathMatches } from './navigation';
 
 type Session = SessionState | 'unknown';
 /** A vertical supplies only actions it can currently offer, with its native route rechecking authority. */
@@ -116,6 +117,7 @@ export function PhoneNavigationView({
   account: ReactNode;
 }) {
   const locale = getLocale();
+  const navigationContext = { locale, pathname };
   const signIn = `/auth/sign-in?return_to=${encodeURIComponent(`/${locale}${pathname === '/' ? '' : pathname}`)}`;
   return (
     <nav
@@ -130,7 +132,12 @@ export function PhoneNavigationView({
         <a
           className={phoneTabClass}
           href={`/${locale}/library`}
-          aria-current={pathname.startsWith('/library') || pathname.startsWith('/collections') ? 'page' : undefined}
+          aria-current={
+            navigationPathMatches(navigationContext, '/library', 'prefix') ||
+            navigationPathMatches(navigationContext, '/collections', 'prefix')
+              ? 'page'
+              : undefined
+          }
         >
           <Library aria-hidden="true" className="size-5" />
           {m.nav_library()}
@@ -157,7 +164,7 @@ export function PhoneNavigationView({
       <a
         className={phoneTabClass}
         href={signedIn ? `/${locale}/inbox` : signIn}
-        aria-current={pathname.startsWith('/inbox') ? 'page' : undefined}
+        aria-current={navigationPathMatches(navigationContext, '/inbox', 'prefix') ? 'page' : undefined}
       >
         <span className="relative">
           <Inbox aria-hidden="true" className="size-5" />

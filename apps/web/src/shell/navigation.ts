@@ -64,6 +64,16 @@ export function navigationPathname(context: NavigationContext): string {
   return path === prefix ? '/' : path.startsWith(`${prefix}/`) ? path.slice(prefix.length) : path;
 }
 
+export function navigationPathMatches(
+  context: NavigationContext,
+  destination: string,
+  match: 'exact' | 'prefix',
+): boolean {
+  const pathname = navigationPathname(context);
+  const path = pathOnly(destination);
+  return pathname === path || (match === 'prefix' && path !== '/' && pathname.startsWith(`${path}/`));
+}
+
 export function resolveNavigation(
   entries: readonly NavigationContribution[],
   context: NavigationContext,
@@ -86,9 +96,7 @@ export function resolveNavigation(
         label: typeof entry.label === 'function' ? entry.label(publicContext) : entry.label,
         path,
         href: `/${context.locale}${path === '/' ? '' : path}`,
-        current:
-          publicContext.pathname === currentPath ||
-          (entry.match === 'prefix' && currentPath !== '/' && publicContext.pathname.startsWith(`${currentPath}/`)),
+        current: navigationPathMatches(publicContext, currentPath, entry.match ?? 'exact'),
       },
     ];
   });
