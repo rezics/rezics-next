@@ -1,11 +1,20 @@
 import { processIdentity } from './process.ts';
-import { installService } from './service.ts';
+import { installService, SERVICE_UNITS } from './service.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import {
   childEnvironment,
   cliSmoke,
@@ -22,6 +31,7 @@ import {
   sync,
   syncChecks,
   residentRegression,
+  residentCommand,
   restartResident,
   observeResident,
   type Check,
@@ -622,6 +632,137 @@ test('cp-sync bootstraps missing service state from published main before legacy
     })),
   ).rejects.toThrow('did not become ready');
 });
+
+test('cp-sync publishes the real CLI and installs services while retiring a transient legacy supervisor', async () => {
+  const directory = temporaryDirectory();
+  closers.push(directory.close);
+  const repo = join(directory.path, 'main');
+  const source = resolve(import.meta.dir, '../../..');
+  git(source, 'clone', '--quiet', '--shared', '--no-checkout', source, repo);
+  git(repo, 'checkout', '--quiet', '-B', 'main', git(source, 'rev-parse', 'HEAD'));
+  git(repo, 'config', 'user.email', 'test@example.invalid');
+  git(repo, 'config', 'user.name', 'Test');
+  const cli = readFileSync(join(repo, 'tools/goal/src/cli.ts'), 'utf8');
+  write(repo, 'tools/goal/src/cli.ts', "throw new Error('The legacy CLI cannot install resident services');\n");
+  git(repo, 'commit', '-qam', 'Fixture legacy CLI');
+  const main = git(repo, 'rev-parse', 'HEAD');
+  git(repo, 'branch', 'stabilize');
+  git(repo, 'checkout', '--quiet', '-b', 'dev');
+  write(repo, 'tools/goal/src/cli.ts', cli);
+  git(repo, 'commit', '-qam', 'Fixture resident CLI');
+  const goalTree = git(repo, 'rev-parse', 'HEAD:tools/goal');
+  git(repo, 'checkout', '--quiet', 'main');
+  symlinkSync(join(source, 'node_modules'), join(repo, 'node_modules'));
+
+  const systemctl = Bun.which('systemctl');
+  const systemdRun = Bun.which('systemd-run');
+  expect(systemctl).not.toBeNull();
+  expect(systemdRun).not.toBeNull();
+  const legacy = `rezics-goal-supervisor-test-${createHash('sha256').update(repo).digest('hex').slice(0, 16)}.service`;
+  const control = (...args: string[]) => {
+    const result = spawnSync(systemctl!, ['--user', ...args], { encoding: 'utf8', timeout: 30_000 });
+    if (result.error) throw result.error;
+    return { code: result.status, output: result.stdout.trim() + result.stderr.trim() };
+  };
+  const started = spawnSync(
+    systemdRun!,
+    [
+      '--user',
+      '--quiet',
+      '--collect',
+      `--unit=${legacy}`,
+      '--property=RuntimeMaxSec=120',
+      '/usr/bin/sleep',
+      'infinity',
+    ],
+    { encoding: 'utf8', timeout: 30_000 },
+  );
+  expect(started.error ?? started.stderr).toBe('');
+  expect(started.status).toBe(0);
+  closers.push(() => {
+    control('stop', legacy);
+  });
+  expect(control('show', '--property=Transient', '--value', legacy)).toEqual({ code: 0, output: 'yes' });
+  expect(control('show', '--property=ActiveState', '--value', legacy)).toEqual({ code: 0, output: 'active' });
+
+  const home = join(directory.path, 'home');
+  const bin = join(directory.path, 'bin');
+  const units = join(home, '.config/systemd/user');
+  const calls = join(directory.path, 'service-commands.jsonl');
+  // The adapter delegates legacy shutdown to systemd under an owned name. Resident activation and linger are
+  // recorded locally so this test cannot replace the machine's real Goal services or change its login policy.
+  write(
+    directory.path,
+    'bin/systemctl',
+    `#!${process.execPath}
+import { appendFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
+if (args.includes('rezics-goal-supervisor.service')) {
+  const result = spawnSync(${JSON.stringify(systemctl)}, args.map(arg => arg === 'rezics-goal-supervisor.service' ? ${JSON.stringify(legacy)} : arg), { stdio: 'inherit' });
+  process.exit(result.status ?? 1);
+}
+const units = args.filter(arg => arg.startsWith('rezics-goal-'));
+const installed = units.every(unit => existsSync(join(${JSON.stringify(units)}, unit)));
+if (args.includes('--property=LoadState')) { console.log(installed ? 'loaded' : 'not-found'); process.exit(installed ? 0 : 1); }
+if (!installed) throw new Error('Resident units must be installed before activation');
+if (args.includes('--property=ActiveState')) console.log('active');
+else if (args.includes('show')) console.log('LoadState=loaded\\nActiveState=active\\nResult=success');
+`,
+  );
+  chmodSync(join(bin, 'systemctl'), 0o755);
+  write(directory.path, 'bin/loginctl', '#!/bin/sh\nexit 0\n');
+  chmodSync(join(bin, 'loginctl'), 0o755);
+  mkdirSync(home, { recursive: true });
+  const previousHome = process.env.HOME;
+  const previousPath = process.env.PATH;
+  const installs: Array<{ code: number; output: string }> = [];
+  const lines: string[] = [];
+  try {
+    process.env.HOME = home;
+    process.env.PATH = `${bin}:${previousPath ?? ''}`;
+    expect(
+      await sync({
+        cwd: repo,
+        worktreeRoot: join(directory.path, 'worktrees'),
+        checks: [{ name: 'fixture gate', argv: [process.execPath, '-e', 'process.exit(0)'], timeoutMs: 30_000 }],
+        print: (line) => lines.push(line),
+        resident: {
+          async observe() {
+            return { liveWorkers: 0, passedGates: 0, landings: 0 };
+          },
+          async restart(checkout) {
+            expect(readFileSync(join(checkout, 'tools/goal/src/cli.ts'), 'utf8')).toBe(cli);
+            await restartResident(checkout, async (argv, cwd) => {
+              const result = await residentCommand(argv, cwd);
+              if (argv.includes('install')) installs.push(result);
+              return result;
+            });
+          },
+        },
+      }),
+    ).toBe(0);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+  }
+  expect(installs).toHaveLength(1);
+  expect(installs[0]!.code).toBe(0);
+  expect(installs[0]!.output).not.toContain('usage: goal <');
+  for (const unit of SERVICE_UNITS) expect(readFileSync(join(units, unit), 'utf8')).not.toContain('@CHECKOUT@');
+  expect(readFileSync(join(repo, '.temp/goal/goal.env'), 'utf8')).toContain(`GOAL_MAIN_CHECKOUT="${repo}"`);
+  expect(control('show', '--property=ActiveState', '--value', legacy).output).not.toBe('active');
+  expect(readFileSync(calls, 'utf8')).toContain('"stop","rezics-goal-supervisor.service"');
+  expect(git(repo, 'rev-parse', 'main^')).toBe(main);
+  expect(git(repo, 'rev-parse', 'main:tools/goal')).toBe(goalTree);
+  expect(history(repo).map((entry) => entry.action)).toEqual(['sync']);
+  expect(lines.some((line) => line.includes('rolling back'))).toBe(false);
+  expect(git(repo, 'status', '--porcelain')).toBe('');
+}, 60_000);
 
 test('resident observation counts living current workers and successful gates and landings in its window', async () => {
   const dir = temporaryDirectory();
