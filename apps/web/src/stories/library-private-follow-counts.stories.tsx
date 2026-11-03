@@ -1,89 +1,49 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { createKernelClient } from '@rezics/client';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { PrivateFollowCountsPageView } from '../library/private-follow-counts-page';
-import { privateFollowCountsQuery, readFollowCounts, type FollowCountsSearch } from '../library/private-follow-counts';
+import {
+  privateFollowCountsStoryTarget,
+  setPrivateFollowCountsStoryMode,
+  type PrivateFollowCountsStoryMode,
+} from '../kernel/fake/private-follow-counts-stories';
 import { m } from '../paraglide/messages.js';
-import { AppShell } from '../shell/shell';
-import { PatternStory } from './page';
+import { PageStory, pageReady } from './page';
 
-const target = { targetType: 'collection' as const, targetId: '0192f3a0-6c1e-7b2a-9d4e-000000000021' };
-type Scenario = 'zero' | 'nonzero' | 'context' | 'denied' | 'unavailable' | 'loading' | 'invalid';
-
-function CountsResponseStory({ scenario }: { scenario: Scenario }) {
-  const viewer = { subject: 'count-story-viewer', csrfToken: 'count-story-session' };
-  const context: FollowCountsSearch =
-    scenario === 'invalid' ? { invalidContext: true } : ['context', 'denied'].includes(scenario) ? target : {};
-  const query = useQuery(
-    privateFollowCountsQuery(viewer, context, async () => {
-      const client = createKernelClient('https://kernel.example.test', {
-        fetch: (async (input) => {
-          if (scenario === 'loading') return new Promise<Response>(() => {});
-          const outgoing = String(input).endsWith('/outgoing');
-          const status = scenario === 'unavailable' ? 503 : scenario === 'denied' && !outgoing ? 404 : 200;
-          const body =
-            status === 503
-              ? { code: 'dependency_unavailable' }
-              : status === 404
-                ? { code: 'not_found' }
-                : outgoing
-                  ? { followingCount: scenario === 'zero' ? 0 : 24 }
-                  : { ...target, followerCount: 0 };
-          return Response.json(body, {
-            status,
-            headers: { 'cache-control': 'private, no-store', ...(status === 503 ? { 'retry-after': '7' } : {}) },
-          });
-        }) as typeof fetch,
-      });
-      return { viewer, ...(await readFollowCounts(client, 'Bearer story-transport', context)) };
-    }),
-  );
-  return (
-    <PrivateFollowCountsPageView
-      page={query.isFetching || !query.data ? { context, outgoing: { state: 'loading' }, target: null } : query.data}
-      busy={query.isFetching}
-      onReload={() => void query.refetch()}
-    />
-  );
-}
-
-function CountsStory({ scenario = 'zero' }: { scenario?: Scenario }) {
-  return (
-    <PatternStory visitor="Signed In" path="/library/follow-counts">
-      <AppShell>
-        <CountsResponseStory scenario={scenario} />
-      </AppShell>
-    </PatternStory>
-  );
-}
+const countsPath = '/library/follow-counts';
+const contextPath = `${countsPath}?targetType=${privateFollowCountsStoryTarget.targetType}&targetId=${privateFollowCountsStoryTarget.targetId}`;
 
 const meta = {
   title: 'Pages/Library/Private follow counts',
-  component: CountsStory,
   parameters: {
     layout: 'fullscreen',
     docs: {
       description: {
         component:
-          'Contract-shaped HTTP responses through the product count reader. Native authorization and visual review remain postintegration work; no fixture grants are supplied.',
+          'Actual /library/follow-counts route through contract-shaped story kernel responses and the product count reader. Native authorization and visual review remain postintegration work; no fixture grants are supplied.',
       },
     },
   },
-} satisfies Meta<typeof CountsStory>;
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+function CountsStory({ mode, path = countsPath }: { mode: PrivateFollowCountsStoryMode; path?: string }) {
+  setPrivateFollowCountsStoryMode(mode);
+  useEffect(() => () => setPrivateFollowCountsStoryMode('absent'), []);
+  return <PageStory visitor="Signed In" path={path} />;
+}
+
 export const ReadyZero: Story = {
+  render: () => <CountsStory mode="zero" />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('0', { exact: true })).toBeVisible();
     await expect(canvas.getByText(m.library_follow_counts_context_help())).toBeVisible();
   },
 };
-export const ReadyNonzero: Story = { args: { scenario: 'nonzero' } };
+export const ReadyNonzero: Story = { render: () => <CountsStory mode="nonzero" /> };
 export const ContextualZero: Story = {
-  args: { scenario: 'context' },
+  render: () => <CountsStory mode="context" path={contextPath} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('0', { exact: true })).toBeVisible();
@@ -92,7 +52,7 @@ export const ContextualZero: Story = {
   },
 };
 export const DeniedContext: Story = {
-  args: { scenario: 'denied' },
+  render: () => <CountsStory mode="denied" path={contextPath} />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_follow_counts_denied());
@@ -101,7 +61,7 @@ export const DeniedContext: Story = {
   },
 };
 export const Unavailable: Story = {
-  args: { scenario: 'unavailable' },
+  render: () => <CountsStory mode="unavailable" />,
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_follow_counts_unavailable());
@@ -112,5 +72,20 @@ export const Unavailable: Story = {
     await expect(canvas.queryByText('0', { exact: true })).toBeNull();
   },
 };
-export const Loading: Story = { args: { scenario: 'loading' } };
-export const InvalidContext: Story = { args: { scenario: 'invalid' } };
+export const Loading: Story = {
+  render: () => <CountsStory mode="loading" />,
+  play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
+    await expect(await within(canvasElement).findByRole('status')).toHaveTextContent(
+      m.library_follow_counts_loading(),
+    );
+  },
+};
+export const InvalidContext: Story = {
+  render: () => <CountsStory mode="nonzero" path={`${countsPath}?targetType=collection`} />,
+  play: async ({ canvasElement }) => {
+    await expect(await within(canvasElement).findByRole('status')).toHaveTextContent(
+      m.library_follow_counts_invalid_context(),
+    );
+  },
+};
