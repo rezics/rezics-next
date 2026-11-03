@@ -1309,7 +1309,8 @@ exact provider record/member identity, source version or payload digest, observa
 Semantic association. Ordinary Kana association payloads do not imply counts or denominators.
 
 Decision: use the existing Subject `:id` resource path with explicit `:read`, `:put` and `:clear` methods for
-supplied-association reads and immutable CAS commands.
+supplied-association reads and immutable CAS commands. Imports consumes them through the generated Eden client;
+official client declaration emit for these routes stays on the compiler database.
 
 `POST /v1/subjects/:id/source-classifications:read` takes `{ associations: [...] }` (zero through 32).
 `SourceClassificationBatchInput` and `SourceClassificationBatch` are exported from `rating/register.ts`.

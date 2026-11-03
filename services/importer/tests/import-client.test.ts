@@ -25,7 +25,7 @@ const observation = {
   confidence: 2.4,
 };
 
-test('import transport posts the documented classification read, put and clear seams', async () => {
+test('import transport posts generated classification read, put and clear client methods', async () => {
   const requests: { method: string; path: string; key: string | null; body: unknown }[] = [];
   const transport = createImportTransport({
     origin: 'https://api.importer.test',

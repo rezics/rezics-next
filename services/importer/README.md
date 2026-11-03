@@ -450,7 +450,8 @@ dates. Uncertain deliveries resume through the ordinary import command with the 
 
 Decision: classification heads live in `run_classification_heads` (`source,subject_id,association_key`);
 operations reuse `run_aggregate_operations` with `intended.family='classification'`. Native calls use the
-documented AIP-136 HTTP seam until Content's generated client lands. An unchanged dump record still
+mounted generated client (`subjects({id})['source-classifications'].$read|$put|$clear`); official kernel
+declaration emit for these routes stays on the compiler database. An unchanged dump record still
 evaluates admitted classification when `classificationAdmission` is configured.
 
 Indexed custody for a classification is one journal lookup/prepare, one POST of

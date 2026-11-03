@@ -124,12 +124,20 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
   post(options: PersonalWriteOptions): PersonalEntryCall<LibraryExportStatus>;
 };
 
+type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
+type SubjectPath = ReturnType<SubjectsClient>;
+type SourceClassificationsClient =
+  import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
+
 export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries' | 'libraryExports'> & {
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
   subjects: KernelSubjectsClient;
 };
-export type KernelSubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
+export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
+  ((...args: Parameters<SubjectsClient>) => SubjectPath & {
+    'source-classifications': SourceClassificationsClient;
+  });
 export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 
 /** Home and Following share the installed feedItems response declaration. */
