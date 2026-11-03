@@ -57,10 +57,11 @@ beforeAll(async () => {
     client.query = new Proxy(client.query, {
       apply(query, receiver, args) {
         const result = Reflect.apply(query, receiver, args);
-        if (!Array.isArray(args[1]) || !args[1].includes('progress_session:update') || !result?.then) return result;
+        const parameters = Array.isArray(args[1]) ? args[1] : args[0]?.values;
+        if (!Array.isArray(parameters) || !parameters.includes('progress_session:update') || !result?.then)
+          return result;
         return result.then((value: pg.QueryResult) => {
-          if (value.rows.some((row) => row.allowed === false))
-            deniedOwnerChecks.push({ parameters: args[1], rows: value.rows });
+          if (value.rows.some((row) => row.allowed === false)) deniedOwnerChecks.push({ parameters, rows: value.rows });
           return value;
         });
       },
