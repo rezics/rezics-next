@@ -22,7 +22,7 @@ export async function createSavedQueryEvaluationGrowthFixture() {
       await base.entry(id);
       subjectIds.push(id);
     }
-    const targetSubjectId = subjectIds[0]!;
+    const targetSubjectId = [...subjectIds].sort()[0]!;
     const unrelatedSubjectId = await base.subject('Unrelated retained-label subject');
     const otherSubjectResponse = await base.send(
       'POST',
