@@ -1,4 +1,5 @@
 import defaults from '../defaults.json';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 import type { Task } from './types.ts';
@@ -187,7 +188,7 @@ function stageDurations(events: FlowEvent[], stage: FlowStage): number[] {
 }
 
 export type FlowTask = Pick<Task, 'id'> & {
-  brief: Pick<Task['brief'], 'goal'>;
+  brief: Pick<Task['brief'], 'goal' | 'urgent'>;
   /** Authoritative store snapshot, also covering terminal tasks predating closure events. */
   terminalState?: Task['state'];
 };
@@ -228,16 +229,21 @@ export function readFlowTasks(db: Database): FlowTask[] {
   return (
     db
       .query(
-        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.state') AS state FROM worker_tasks ORDER BY sequence",
+        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state FROM worker_tasks ORDER BY sequence",
       )
       .all() as {
       id: string;
       goal: string | null;
+      urgent: number | null;
       state: Task['state'];
     }[]
   )
-    .filter((row): row is { id: string; goal: string; state: Task['state'] } => typeof row.goal === 'string')
-    .map((row) => ({ id: row.id, brief: { goal: row.goal }, terminalState: row.state }));
+    .filter((row) => typeof row.goal === 'string')
+    .map((row) => ({
+      id: row.id,
+      brief: { goal: row.goal!, ...(row.urgent === 1 ? { urgent: true } : {}) },
+      terminalState: row.state,
+    }));
 }
 
 export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
@@ -270,6 +276,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     return {
       taskId: task.id,
       goal: task.brief.goal,
+      ...(task.brief.urgent ? { urgent: true } : {}),
       elapsedMs: elapsed,
       workingMs: working,
       efficiency: elapsed && working !== null ? working / elapsed : null,
@@ -301,8 +308,11 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       tasks: pending.map((e) => e.taskId),
     };
   });
+  const urgent = new Set(tasks.filter((t) => t.brief.urgent).map((t) => t.id));
   const integrated = new Set(
-    ordered.filter((e) => e.stage === 'integration' && e.action === 'integrated').map((e) => e.taskId),
+    ordered
+      .filter((e) => e.stage === 'integration' && e.action === 'integrated' && !urgent.has(e.taskId))
+      .map((e) => e.taskId),
   );
   const attemptCounts = new Map<string, number>();
   for (const e of ordered)
@@ -350,6 +360,14 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       }))
       .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
   return {
+    urgent: {
+      tasks: [...urgent],
+      integrated: new Set(
+        ordered
+          .filter((e) => urgent.has(e.taskId) && e.stage === 'integration' && e.action === 'integrated')
+          .map((e) => e.taskId),
+      ).size,
+    },
     stages: stageSummaries,
     goals,
     tasks: taskRows,
@@ -377,6 +395,7 @@ export function checkFlowAlarms(
   inbox: (summary: string) => void,
   now = new Date(),
   thresholds = DEFAULT_FLOW_THRESHOLDS,
+  policy: ControlPolicy = defaultPolicy,
 ): string[] {
   ensureFlow(db);
   const breaches: [string, string, string][] = [];
@@ -399,11 +418,11 @@ export function checkFlowAlarms(
     const old = db.query('SELECT sent_at FROM flow_alarm_sends WHERE threshold=?').get(key) as {
       sent_at: string;
     } | null;
-    if (old && now.getTime() - Date.parse(old.sent_at) < 3600000) continue;
+    if (old && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs) continue;
     const top = [...report.queues]
       .sort((a, b) => b.oldestAgeMs - a.oldestAgeMs)
       .flatMap((q) => q.tasks)
-      .slice(0, 3);
+      .slice(0, policy.flow.waitingTaskExamples);
     inbox(`Flow alarm: stage ${stage}; measurement ${measurement}; top waiting tasks ${top.join(', ') || 'none'}`);
     db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at) VALUES (?,?)').run(key, now.toISOString());
     sent.push(key);
