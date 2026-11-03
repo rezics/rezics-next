@@ -2,22 +2,25 @@ import { useCallback, useRef, useState } from 'react';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import type { DocumentImagePresentation } from './document-media';
+import { DocumentImageInspector } from './document-image-inspector';
 
 type DocumentImageProps = {
   image: DocumentImagePresentation | null;
   alt: string;
   locale: string;
+  /** Callers without a mounted disclosed-reader lifetime can leave inspection disabled. */
+  inspectable?: boolean;
 };
 
 /** Render only delivered derivative facts. The existing Worker route independently authorizes the bytes. */
 export function NativeDocumentImage(props: DocumentImageProps) {
   const { image } = props;
-  // A replacement or withdrawn disclosure retires the entire load lifetime, including its callbacks.
-  const identity = image?.variants.length ? `${image.id}:${image.digest}` : 'unavailable';
+  // Replacing any supplied presentation fact or its alt text retires image and inspector callbacks together.
+  const identity = image?.variants.length ? JSON.stringify([image, props.alt]) : 'unavailable';
   return <DocumentImageDisclosure key={identity} {...props} />;
 }
 
-function DocumentImageDisclosure({ image, alt, locale }: DocumentImageProps) {
+function DocumentImageDisclosure({ image, alt, locale, inspectable = true }: DocumentImageProps) {
   const [phase, setPhase] = useState<'initial' | 'ready' | 'failed' | 'retrying'>('initial');
   const current = useRef<HTMLImageElement | null>(null);
   const options = { locale: locale as never };
@@ -101,6 +104,9 @@ function DocumentImageDisclosure({ image, alt, locale }: DocumentImageProps) {
             </button>
           ) : null}
         </>
+      ) : null}
+      {available && image && inspectable ? (
+        <DocumentImageInspector image={image} alt={alt} locale={locale} onUnavailable={() => setPhase('failed')} />
       ) : null}
       {credit ? (
         <figcaption

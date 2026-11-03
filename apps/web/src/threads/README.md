@@ -263,6 +263,25 @@ within the existing native document/media limits. Prepared multilingual stories 
 journey at 390 and 1280 pixels in both themes, plus keyboard use and unavailable media. They reuse recorded DTO
 shapes and visibly identify prepared content; they are not native disclosure proof.
 
+## Document image inspection
+
+An available inline document image can open one image inspector from its own localized **Inspect image** control.
+The inspector uses only the supplied presentation and one of its admitted `coverSrc` derivative URLs. It starts
+fitted to the viewport; **Actual pixels** displays the selected delivered derivative at its stated pixel dimensions.
+Both modes keep the image's aspect ratio truthful. The dialog keeps Close and both scale controls reachable, lets
+keyboard users focus and scroll the image region, and returns focus to the inline control when that visit closes.
+Alternative text and the existing admitted rights holder, source link and licence wrap in a separate scrollable
+metadata region.
+
+Inspection mounts no second image surface until explicitly opened, and it never reads the media map, calls a native
+producer, resolves an original, preloads another document image, retries in the background or stores private image
+metadata. The selected derivative's failure retires the dialog and all inspector metadata through the existing inline
+failure/retry state. The current post and immutable-revision body already own disclosure, spoiler reveal and reader
+lifetime; replacing or withdrawing that presentation removes the inspector with it. Callers without those guarantees
+can disable the optional affordance with `inspectable={false}`.
+
+Decision: Inspection opens in Fit view; Actual pixels uses the admitted variant with the largest pixel area and shows its exact delivered dimensions.
+
 ## Following reply branches
 
 [Reply context](reply-context.md#bounded-page-branches) owns bounded supplied-page ancestry, local collapse and exact
