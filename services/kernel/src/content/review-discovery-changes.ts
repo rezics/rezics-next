@@ -70,9 +70,9 @@ export async function readReviewDiscoveryChanges(
       if (cut > current || after > cut) throw new RangeError('Review discovery change frontier is ahead of source');
       const rows = (
         await client.query<{ id: string; position: string; origin: ReviewDiscoveryOrigin }>(
-          `SELECT thread_id AS id,position::text,origin FROM content.review_discovery_change
-       WHERE partition_no=$1 AND position>$2::bigint AND position<=$3::bigint
-       ORDER BY position LIMIT $4`,
+          `SELECT thread_id AS id,position::text,origin FROM content.review_discovery_change AS change
+       WHERE partition_no=$1 AND change.position>$2::bigint AND change.position<=$3::bigint
+       ORDER BY change.position LIMIT $4`,
           [partition, after.toString(), cut.toString(), limit + 1],
         )
       ).rows;
