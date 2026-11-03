@@ -55,8 +55,15 @@ export type Vote = {
   transactionId: string;
 };
 
-export type PutVoteInput = { questionId: string; targetId: string; units: number | null };
-export type PutVoteOutcome = { vote: Vote | null; component: SessionComponent | null };
+export type PutVoteInput = {
+  questionId: string;
+  targetId: string;
+  units: number | null;
+};
+export type PutVoteOutcome = {
+  vote: Vote | null;
+  component: SessionComponent | null;
+};
 
 export class VoteInvalidError extends Error {
   constructor(readonly field: string) {
@@ -152,7 +159,12 @@ function queryClient(client: Queryable): Queryable {
   return { query: client.query.bind(client) };
 }
 
-async function findQuestion(config: Dependencies, actor: Actor, questionId: string, deadline = deadlineFor(5_000)): Promise<RatingQuestion> {
+async function findQuestion(
+  config: Dependencies,
+  actor: Actor,
+  questionId: string,
+  deadline = deadlineFor(5_000),
+): Promise<RatingQuestion> {
   const row = await readVisibleRatingQuestion(config, actor, questionId, deadline, false);
   if (!row) throw new RatingQuestionNotFoundError();
   return asQuestion(row);
@@ -209,7 +221,10 @@ class VoteUnchanged extends Error {
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
 export function createVoteCommands(config: Dependencies) {
   const { pool, clock } = config;
-  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const runner = createLibraryCommandRunner({
+    pool,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
@@ -223,8 +238,6 @@ export function createVoteCommands(config: Dependencies) {
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
     const { question, target: resolved } = await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
-    if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
-    validateUnits(question, input.units);
 
     try {
       const outcome = await runner.ownAccountPrepared(
@@ -233,15 +246,17 @@ export function createVoteCommands(config: Dependencies) {
           action: VOTE_SCOPE,
           kind: 'rating.vote.put',
           requestKey: idempotencyKey,
-          input: { questionId: input.questionId, targetId: input.targetId, units: input.units },
+          input: {
+            questionId: input.questionId,
+            targetId: input.targetId,
+            units: input.units,
+          },
           // Current question provenance is checked again on each native attempt,
           // before ownAccountPrepared permits receipt disclosure or execution.
           prepare: async (attempt) => {
             const current = await prepareVoteTarget(config, actor, input, commandAttemptDeadline(attempt));
             if (current.target.subjectId !== resolved.subjectId)
               throw new IdentityRatingAdmissionPendingError(input.targetId, 'source-pending');
-            if (input.units !== null && current.question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
-            validateUnits(current.question, input.units);
           },
         },
         async (tx, command) => {
@@ -368,7 +383,11 @@ export function createVoteCommands(config: Dependencies) {
       );
       return {
         vote: outcome.value,
-        component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
+        component: {
+          partition: outcome.partition,
+          epoch: outcome.epoch,
+          position: outcome.position,
+        },
       };
     } catch (error) {
       if (error instanceof VoteUnchanged) return { vote: error.vote, component: null };

@@ -28,12 +28,21 @@ import selectQuestions from './own-votes-questions.sql';
 export const OWN_VOTES_PAGE_SIZE = 20;
 const first = '00000000-0000-0000-0000-000000000000';
 type Key = { questionId: string; targetId: string };
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  routeKey: Uint8Array;
+  clock?: KernelClock;
+};
 type CommandLinks = { clear: string; readback: string };
 export type OwnVoteActions =
   | (CommandLinks & { state: 'editable'; put: string })
   | (CommandLinks & { state: 'retired'; reason: 'question_retired' })
-  | { state: 'unavailable'; reason: 'merged_source' | 'identity_pending' | 'read_only' };
+  | {
+      state: 'unavailable';
+      reason: 'merged_source' | 'identity_pending' | 'read_only';
+    };
 export type OwnVoteEntry = {
   /** Exact stored source key, even when its permitted navigation points at a terminal. */
   targetId: string;
@@ -44,7 +53,11 @@ export type OwnVoteEntry = {
   own: { units: number; revision: number; at: string };
   actions: OwnVoteActions;
 };
-export type OwnVotesPage = { viewer: { accountId: string }; votes: OwnVoteEntry[]; next: string | null };
+export type OwnVotesPage = {
+  viewer: { accountId: string };
+  votes: OwnVoteEntry[];
+  next: string | null;
+};
 
 function ownerOf(actor: Actor): AccountActor {
   if (actor.kind !== 'account' || !actor.scopes.includes(VOTE_SCOPE) || routeOf(actor.accountId) === null)
@@ -112,7 +125,8 @@ async function commandPreparation(deps: Dependencies, actor: Actor, slot: Key, d
       error instanceof LibraryNotFoundError ||
       error instanceof RatingQuestionNotFoundError ||
       (error instanceof ProblemError && error.code === 'not_found')
-    ) return null;
+    )
+      return null;
     if (error instanceof SubjectIdentityUnavailableError) throw new AccessUnavailableError('contention');
     throw error;
   }
@@ -165,7 +179,8 @@ export function createOwnVotesReader(deps: Dependencies) {
           async (client) => {
             await partitionReadClient(client, home);
             const state = await readPartition(client, home);
-            if (!state || (epoch !== undefined && state.epoch !== epoch)) throw new AccessUnavailableError('contention');
+            if (!state || (epoch !== undefined && state.epoch !== epoch))
+              throw new AccessUnavailableError('contention');
             epoch = state.epoch;
             await currentAccount(client, owner);
             return read(client, state);
@@ -197,10 +212,18 @@ export function createOwnVotesReader(deps: Dependencies) {
           cursor.after.some((value) => typeof value !== 'string' || routeOf(value) === null)
         )
           throw new ProblemError('invalid_cursor');
-        after = { questionId: cursor.after[0] as string, targetId: cursor.after[1] as string };
+        after = {
+          questionId: cursor.after[0] as string,
+          targetId: cursor.after[1] as string,
+        };
       }
       const page = await accountRead((client) => readOwnVotesRawPage(client, owner, after));
-      if (!page.votes.length) return { viewer: { accountId: owner.accountId }, votes: [], next: null };
+      if (!page.votes.length)
+        return {
+          viewer: { accountId: owner.accountId },
+          votes: [],
+          next: null,
+        };
       const sources = [...new Set(page.votes.map((row) => row.targetId))];
       const questionIds = [...new Set(page.votes.map((row) => row.questionId))];
       const mappings = await identityEpochStore.readMappings(deps.pool, sources);
@@ -212,7 +235,12 @@ export function createOwnVotesReader(deps: Dependencies) {
       const prepared = new Map<string, Awaited<ReturnType<typeof commandPreparation>>>();
       for (const slot of page.votes) {
         const mapping = initial.get(slot.targetId)!;
-        if (visible.has(slot.targetId) && mapping.state === 'mapped' && mapping.terminal === slot.targetId && initialQuestions.has(slot.questionId))
+        if (
+          visible.has(slot.targetId) &&
+          mapping.state === 'mapped' &&
+          mapping.terminal === slot.targetId &&
+          initialQuestions.has(slot.questionId)
+        )
           prepared.set(key(slot), await commandPreparation(deps, owner, slot, deadline));
       }
       const terminals = [
@@ -244,12 +272,17 @@ export function createOwnVotesReader(deps: Dependencies) {
         const before = prepared.get(key(slot));
         if (!before) continue;
         const latest = await commandPreparation(deps, owner, slot, deadline);
-        if (!latest || JSON.stringify(before) !== JSON.stringify(latest)) throw new AccessUnavailableError('contention');
+        if (!latest || JSON.stringify(before) !== JSON.stringify(latest))
+          throw new AccessUnavailableError('contention');
         const question = finalQuestions.get(slot.questionId);
-        if (question && question.revision === latest.question.revision &&
-            question.lifecycleState === latest.question.lifecycleState &&
-            Number(question.lifecycleRevision) === latest.question.lifecycleRevision &&
-            latest.target.subjectId === slot.targetId) commandReady.add(key(slot));
+        if (
+          question &&
+          question.revision === latest.question.revision &&
+          question.lifecycleState === latest.question.lifecycleState &&
+          Number(question.lifecycleRevision) === latest.question.lifecycleRevision &&
+          latest.target.subjectId === slot.targetId
+        )
+          commandReady.add(key(slot));
       }
       await requireRelease();
       if (!(await summaryObservation.current())) throw new AccessUnavailableError('contention');
@@ -258,18 +291,31 @@ export function createOwnVotesReader(deps: Dependencies) {
         for (const id of sources) {
           const mapping = final.get(id)!;
           if (mapping.state !== 'mapped' || mapping.terminal !== id || !finalVisible.has(id)) continue;
-          const admission = await admitIdentityRatingEffect(client, { requestedTargetId: id, resolvedTargetId: id });
+          const admission = await admitIdentityRatingEffect(client, {
+            requestedTargetId: id,
+            resolvedTargetId: id,
+          });
           if (admission.status === 'admitted') admitted.add(id);
         }
         const current = await selectCurrent.run(client, {
           route: routeOf(owner.accountId)!,
           voter_id: owner.accountId,
-          keys: page.votes.map((row) => ({ question_id: row.questionId, target_id: row.targetId })),
+          keys: page.votes.map((row) => ({
+            question_id: row.questionId,
+            target_id: row.targetId,
+          })),
         });
         // This is the native gate shared by the existing command runner, not a copied maintenance rule.
         // An absent gate is initialized by enterShelfWrite; an installed closed gate cannot execute.
-        const gate = await commandGate.run(client, { route: routeOf(owner.accountId)!, account_id: owner.accountId });
-        return { current, admitted, writable: state.writeState === 'active' && (!gate || gate.mode === 'open') };
+        const gate = await commandGate.run(client, {
+          route: routeOf(owner.accountId)!,
+          account_id: owner.accountId,
+        });
+        return {
+          current,
+          admitted,
+          writable: state.writeState === 'active' && (!gate || gate.mode === 'open'),
+        };
       });
       const byKey = new Map(current.map((row) => [key(row), row]));
       const votes: OwnVoteEntry[] = [];
@@ -290,9 +336,13 @@ export function createOwnVotesReader(deps: Dependencies) {
         const question = finalQuestions.get(row.questionId);
         const previousQuestion = initialQuestions.get(row.questionId);
         if (!subject || !question || !previousQuestion) continue;
-        if (JSON.stringify(question) !== JSON.stringify(previousQuestion) ||
-            row.revision !== selected.revision || row.units !== selected.units ||
-            row.countedTarget !== selected.countedTarget) throw new AccessUnavailableError('contention');
+        if (
+          JSON.stringify(question) !== JSON.stringify(previousQuestion) ||
+          row.revision !== selected.revision ||
+          row.units !== selected.units ||
+          row.countedTarget !== selected.countedTarget
+        )
+          throw new AccessUnavailableError('contention');
         if (row.units === null) continue;
         if (row.changedAt === null) throw new Error('Rating vote has no change time');
         const path = `/v1/subjects/${row.targetId}/ratings/${row.questionId}/vote`;
@@ -302,15 +352,30 @@ export function createOwnVotesReader(deps: Dependencies) {
         else if (row.countedTarget !== row.targetId || !admitted.has(row.targetId) || !commandReady.has(key(row)))
           actions = { state: 'unavailable', reason: 'identity_pending' };
         else if (question.lifecycleState === 'retired')
-          actions = { state: 'retired', reason: 'question_retired', clear: path, readback: path };
-        else actions = { state: 'editable', put: path, clear: path, readback: path };
+          actions = {
+            state: 'retired',
+            reason: 'question_retired',
+            clear: path,
+            readback: path,
+          };
+        else
+          actions = {
+            state: 'editable',
+            put: path,
+            clear: path,
+            readback: path,
+          };
         votes.push({
           targetId: row.targetId,
           questionId: row.questionId,
           subject,
           subjectHref: `/v1/subjects/${latest.terminal}`,
           question: ratingQuestionView(question),
-          own: { units: Number(row.units), revision: Number(row.revision), at: new Date(row.changedAt).toISOString() },
+          own: {
+            units: Number(row.units),
+            revision: Number(row.revision),
+            at: new Date(row.changedAt).toISOString(),
+          },
           actions,
         });
       }

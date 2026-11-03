@@ -7,7 +7,15 @@ const id = t.String({ format: 'uuid' });
 const path = t.String();
 export const OwnVoteActionsSchema = t.Union([
   t.Object({ state: t.Literal('editable'), put: path, clear: path, readback: path }, closed),
-  t.Object({ state: t.Literal('retired'), reason: t.Literal('question_retired'), clear: path, readback: path }, closed),
+  t.Object(
+    {
+      state: t.Literal('retired'),
+      reason: t.Literal('question_retired'),
+      clear: path,
+      readback: path,
+    },
+    closed,
+  ),
   t.Object(
     {
       state: t.Literal('unavailable'),

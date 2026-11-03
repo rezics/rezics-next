@@ -1557,7 +1557,12 @@ Populated response:
 ```json
 {
   "viewer": { "accountId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702001" },
-  "inventory": { "kind": "current-retained", "complete": false, "generation": "1", "cleanup": "settled" },
+  "inventory": {
+    "kind": "current-retained",
+    "complete": false,
+    "generation": "1",
+    "cleanup": "settled"
+  },
   "items": [
     {
       "state": "available",
@@ -1589,7 +1594,12 @@ Populated response:
         "statementDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "qualifiersDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
-      "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "pending" },
+      "own": {
+        "assessment": "support",
+        "falsePositive": true,
+        "revision": "1",
+        "pending": "pending"
+      },
       "aggregate": {
         "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102",
         "state": "suppressed",
@@ -1620,7 +1630,12 @@ slot is minimal:
   "subject": null,
   "target": null,
   "association": null,
-  "own": { "assessment": "support", "falsePositive": true, "revision": "1", "pending": "unknown" },
+  "own": {
+    "assessment": "support",
+    "falsePositive": true,
+    "revision": "1",
+    "pending": "unknown"
+  },
   "aggregate": null,
   "actions": {
     "state": "withdraw-only",
