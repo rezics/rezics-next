@@ -1,36 +1,27 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "packages/client/src/kernel/**",
-    "services/kernel/src/library/**",
-    "services/kernel/test/library/**",
-    "docs/library-import-mal-labels.md",
-    "docs/goals/library.capabilities.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "after": [
-    "029513f7-8729-46ef-8fab-77e1e34b6893"
-  ],
-  "waiting": [],
-  "estimate": {
-    "lines": 900,
-    "files": 8
-  },
-  "acceptance": [
-    "Generate the installed kernel client declarations through the compiler database and type-check kernel and client workspaces.",
-    "Through the actual retained MAL producer, review one existing and one proposed private label, confirm, and read the exact native assignments without creating an Entry or Session.",
-    "Complete bounded whole-caller coverage with native64/512/4096 unrelated retained rows and owner label/assignment history while selected rows, values, new labels, page size and encoded bytes stay fixed."
-  ]
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'packages/client/src/kernel/**',
+      'services/kernel/src/library/**',
+      'services/kernel/test/library/**',
+      'docs/library-import-mal-labels.md',
+      'docs/goals/library.capabilities.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': ['029513f7-8729-46ef-8fab-77e1e34b6893'],
+  'waiting': [],
+  'estimate': { 'lines': 900, 'files': 8 },
+  'acceptance':
+    [
+      'Generate the installed kernel client declarations through the compiler database and type-check kernel and client workspaces.',
+      'Through the actual retained MAL producer, review one existing and one proposed private label, confirm, and read the exact native assignments without creating an Entry or Session.',
+      'Complete bounded whole-caller coverage with native64/512/4096 unrelated retained rows and owner label/assignment history while selected rows, values, new labels, page size and encoded bytes stay fixed.',
+    ],
 }
 ---
 
