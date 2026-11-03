@@ -56,7 +56,7 @@ async function createTarget(): Promise<string> {
     },
     'importer',
   );
-  return (await json(response)).subject.id;
+  return (await json(response, 201)).subject.id;
 }
 
 async function json(response: Response, status = 200) {
