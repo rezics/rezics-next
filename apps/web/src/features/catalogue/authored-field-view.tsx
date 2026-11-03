@@ -1241,9 +1241,9 @@ function AuthoredFieldLive({
             </section>
           )}
           {prepared && current && stage === 'review' && (
-            <section aria-label={m.authored_review_contribution({}, o)} className="min-w-0 space-y-4">
+            <section aria-label={m.authored_continue_review({}, o)} className="min-w-0 space-y-4">
               <ContentItemHeading className="text-xl font-semibold">
-                {m.authored_review_contribution({}, o)}
+                {m.authored_continue_review({}, o)}
               </ContentItemHeading>
               <div className="grid min-w-0 gap-4 lg:grid-cols-2">
                 <DraftReviewCard

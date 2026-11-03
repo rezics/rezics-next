@@ -1,4 +1,4 @@
-import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { fromPlainText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import type { CandidateFailure } from '../../subject/candidates';
 import type { ProposalResult, StatementInput } from './statement-editor';
 import type { AuthoredCommand, AuthoredRead } from './authored-field';
