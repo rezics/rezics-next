@@ -14,6 +14,7 @@ const scopes = [
   'library_entry:update',
   'library_entry:delete',
   'progress_session:read',
+  'progress_session:create',
   'progress_session:update',
   'copy:read',
   'copy:create',

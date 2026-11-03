@@ -341,6 +341,11 @@ Decision: Web reads ordinary saved identities through the existing Dynamic Colle
 owner-only rule edit stays off the public page, and 202/empty 200/503/stale-cursor recovery follow
 [saved-query results](../apps/web/src/library/saved-query-results.md).
 
+Private saved-member evaluation fails closed when a live label assignment lacks its native slot or assignment
+identity, including under `NOT`; incomplete facts never become label absence. The existing partial owner-label
+index excludes retained deleted assignments from this negative witness. Its source derivation and deferred
+native plan evidence are recorded in the [Library cost entry](../services/kernel/src/library/cost-saved-query-evaluation.md).
+
 Saved dynamic Collections use `POST /v1/collections` with the closed body
 `{membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}`.
 `PUT /v1/collections/{collectionId}/rule` takes the closed body `{revision,filter,sort?}` and returns

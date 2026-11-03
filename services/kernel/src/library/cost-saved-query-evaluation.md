@@ -5,13 +5,14 @@ then `readDynamicMembers` and the native owner-working Source. It includes the w
 filter reader. It does not cover public/unlisted COMPLETE output, publication, FULL summaries or command writes.
 Engine-invisible multiversion work is outside the adopted examined-work criterion.
 
-**Status: incomplete derivation; native growth is unmeasured.** The row constant for the unidentified-label
-probe below is not supported by the current indexes. Consequently neither a composed numeric row ceiling nor
-a passing saved-query growth report is asserted here. Existing primitive, ad-hoc query and rule-command
-measurements cannot fill this gap.
+**Status: source-derived negative-witness bound; composed native growth is unmeasured.** The retained source
+already installs an ordered partial B-tree for the live unidentified-label predicate. Its path removes deleted
+assignment history from the witness relation. The exact plan and the composed native 64/512/4096 campaign remain
+controller acceptance; no physical scan or end-to-end cost is claimed here.
 
-Decision: keep the composed saved-query read unmeasured until its unidentified-label probe has an indexed
-bound and the complete native first/deep/terminal/refusal capture has run; do not substitute ledger ceilings.
+Decision: retain the existing `owner_index_label_legacy` path instead of duplicating its index or migration;
+the canonical schema and `20261030192835_owner_member_index.sql` already define it. Record this source-derived
+bound separately from the deferred physical-plan and composed-read evidence.
 
 ## Structural inputs
 
@@ -91,11 +92,12 @@ filters cannot skip an unbounded population. Sort/materialization/join nodes add
 | Canonical original group         | Same PK with canonical subject also equal, then strict tuple `(stored_subject_id,driver,fact_id) > after`, bounded LIMIT before hydration.                                                                                              |
 | Entry fact                       | `entry_pkey(route,account_id,subject_id)`.                                                                                                                                                                                              |
 | Reserved label facts             | `label_assignment_reserved_source`: equality `(route,account_id,subject_id)`, order `assignment_id`, partial predicate `slot_no IS NOT NULL`. Unique reserved slots are `0..31`; deleted rows must release slots.                       |
+| Unidentified live-label witness  | `owner_index_label_legacy(route,account_id,subject_id,label_id)`, ordered witness; its partial predicate is exactly `deleted_at IS NULL AND (slot_no IS NULL OR assignment_id IS NULL)`. `owner_index_label_live` is a wider eligible path. |
 | Session facts                    | `progress_session_raw_source(route,account_id,subject_id,session_id)` supplies the exact prefix/order without sorting all retained sessions.                                                                                            |
 | Live copy facts                  | `copy_live_raw_source(route,account_id,subject_id,copy_id)` supplies the prefix/order and `deletion_id IS NULL` partial predicate.                                                                                                      |
 | Definition size/body             | `definition_release` digest point at route 0; closure's `acceptedRelease` first reads size/compression in the same snapshot, then reads an uncomposed release under byte admission. Saved admission's `readRelease` is a separate call. |
 
-## Missing row derivation and production handoff
+## Negative witness derivation and production handoff
 
 The first branch of `owner-filter-native-closure-facts.sql` is executed even for a state-only predicate:
 
@@ -105,18 +107,18 @@ WHERE a.route=i.route AND a.account_id=i.account_id AND a.subject_id=i.subject_i
 ORDER BY a.label_id LIMIT 1
 ```
 
-`label_assignment_pkey(route,account_id,subject_id,label_id)` provides order but does not exclude retained
-deleted rows. `label_assignment_reserved_source` and `label_assignment_reserved_slot` require nonnull slots,
-so cannot serve this branch. `label_assignment_purge_due` contains deleted rows, the opposite predicate.
-The schema requires every deleted assignment to have a null slot, permits null slots for live assignments,
-and caps only nonnull slots. Distinct deleted labels for the same original can therefore grow independently
-of its live 32-slot population. There is no index here on the live unidentified predicate.
+The canonical migration and schema define
+`owner_index_label_legacy(route,account_id,subject_id,label_id)` with the exact partial predicate in the query.
+The three equality keys select one owner/original prefix and `label_id` supplies the ordered witness. Deleted
+assignments are absent from this partial index, regardless of how many are retained in the primary-key range.
+The index therefore supports a B-tree seek followed by at most one matching witness entry for `LIMIT 1`; this
+is no more than `L+1` for the installed `L=32` live-slot cap. The wider `owner_index_label_live` partial index
+also excludes deleted assignments, but the exact legacy predicate avoids residual checks for identified rows.
 
-On a negative probe, finding zero qualifying rows can examine the whole retained original-label prefix.
-Neither `LIMIT 1` nor the outer `32*h+32` reservation bounds that examined population. This is engine-visible
-filter work, not excluded multiversion maintenance. A compliant finite constant for this branch needs an
-indexed negative seek or a separately proved structural cap on that entire prefix. Commerce owns that
-production correction and its migration; this derivation does not prescribe a second Source or ledger.
+This is a source-derived path, not evidence that PostgreSQL selected it in the deployed plan. The native plan
+must show this exact index (or the wider live index), its actual node/loop/row and buffer counters, and no
+deleted-row prefix walk at each scale. A returned-row count or index name alone does not establish examined
+work. Until that native observation runs, the physical witness measurement remains unmeasured.
 
 Other components still need their complete native Access, identity, release and preparation constants composed
 before a numeric ceiling is adopted. Their reservations alone are not supplied as missing proofs.
@@ -132,6 +134,14 @@ After three insufficient refill rounds, `prepareSparsePage` reserves exactly one
 through `members-preparation.ts` and returns preparing. It does not prove a ready page or a bounded total
 build. The finite step, queue/background and eventual completion costs need separate native capture; a
 100-iteration polling helper is not a one-page sample. No preparation work has been measured by this document.
+
+The composed member path is `Cfixed-authority/source + Ccandidate(P) + P*Cclosure(L) +
+Cprojection(P) + Clifetime/cleanup`. `Cclosure(L)` includes all native fact drivers and the fail-closed label
+witness; `Cprojection(P)` includes final original/terminal disclosure and cursor encoding. First, strict deep,
+terminal/empty and refusal paths each include the mounted saved-member caller's two saved-rule authority
+brackets, current Source/scope fences, both operational times and cleanup. Preparation/activation and any
+background work are reported separately. The native campaign records actual statements, examined rows, buffers,
+request/response bytes and full completion/cleanup; those results are not inferred from this source formula.
 
 The remaining dedicated test must start with `createCollectionRulesFixture`, real Auth, command-created rule
 and admitted facts. Fix a private fact predicate and page size at all scales 64/512/4096. Independently grow
