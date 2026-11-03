@@ -1406,7 +1406,8 @@ function InlinePostEditorContent({
   const inspection = useWritingInspection({
     signal: lifetime.controller.signal,
     binding: JSON.stringify([containerId, idempotencyKey, initialRevisionId, revisionId]),
-    current: () => lifetime.current(),
+    authority: inspectionAdmission?.authority ?? lifetime,
+    current: () => lifetime.current() && (inspectionAdmission?.current() ?? true),
     revision: () => writingRevision.current,
     snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current }),
     title: () => null,

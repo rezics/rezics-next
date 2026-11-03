@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act } from 'react';
+import { act, useReducer } from 'react';
 import {
   documentText,
   fromPlainText,
@@ -273,17 +273,23 @@ test('connected new-thread, reply and inline edit inspect exact unsent writing, 
   ]);
   const serialized = serializeDocument(body);
   let mode: 'new' | 'reply' | 'edit' = 'new';
+  let admitted = true;
+  const inspectionAdmission = { authority: {}, current: () => admitted };
+  let renderAdmission: () => void = () => undefined;
   const pageRoot = createRootRoute({ component: Outlet });
   const page = createRoute({
     getParentRoute: () => pageRoot,
     path: '/',
-    component: () =>
-      mode === 'edit' ? (
+    component: () => {
+      const [, render] = useReducer((revision: number) => revision + 1, 0);
+      renderAdmission = render;
+      return mode === 'edit' ? (
         <InlinePostEditor
           initialBody={body}
           containerId="thread"
           revisionId="source-revision"
           idempotencyKey="edit-key"
+          inspectionAdmission={inspectionAdmission}
           onSubmit={async (command) => {
             commands.push(command);
             return { ok: false, reason: 'unavailable' };
@@ -303,7 +309,8 @@ test('connected new-thread, reply and inline edit inspect exact unsent writing, 
           }}
           onSuccess={() => undefined}
         />
-      ),
+      );
+    },
   });
   const router = createRouter({
     routeTree: pageRoot.addChildren([page]),
@@ -324,8 +331,8 @@ test('connected new-thread, reply and inline edit inspect exact unsent writing, 
     });
   };
   try {
-    for (const kind of ['new', 'reply', 'edit'] as const) {
-      mode = kind;
+    for (const kind of ['new', 'reply', 'edit', 'edit-admission'] as const) {
+      mode = kind === 'edit-admission' ? 'edit' : kind;
       commands.length = 0;
       client.setQueryData(sessionQuery.queryKey, session);
       await act(async () =>
@@ -336,7 +343,7 @@ test('connected new-thread, reply and inline edit inspect exact unsent writing, 
         ),
       );
       await settle(() => Boolean(host.querySelector('.ProseMirror')) && Boolean(button(m.thread_inspection_open())));
-      if (kind === 'new')
+      if (mode === 'new')
         await act(async () => {
           const input = host.querySelector('input:not([type="hidden"])')! as unknown as HTMLInputElement;
           Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'Unsent title');
@@ -356,23 +363,32 @@ test('connected new-thread, reply and inline edit inspect exact unsent writing, 
       const anchor = window.document.getSelection()?.anchorNode;
       const anchorElement = anchor instanceof window.HTMLElement ? anchor : anchor?.parentElement;
       expect(anchorElement?.closest('[data-block-id]')?.getAttribute('data-block-id')).toBe('exact-current-node');
-      await click(kind === 'edit' ? m.thread_edit_save() : m.thread_write_send());
+      await click(mode === 'edit' ? m.thread_edit_save() : m.thread_write_send());
       await settle(() => commands.length === 1);
       expect(serializeDocument(commands[0]!.body)).toBe(serialized);
-      if (kind === 'reply') expect(commands[0]!.parentId).toBe('exact-parent');
-      if (kind === 'edit') expect(commands[0]!.revisionId).toBe('source-revision');
+      if (mode === 'reply') expect(commands[0]!.parentId).toBe('exact-parent');
+      if (mode === 'edit') expect(commands[0]!.revisionId).toBe('source-revision');
       await click(m.thread_inspection_open());
       await settle(() => Boolean(window.document.querySelector('[data-private-writing-inspection]')));
       expect(window.document.body.textContent).toContain(m.thread_inspection_unknown());
       await click(m.thread_inspection_return());
       await settle(() => !window.document.querySelector('[role="dialog"]'));
-      await click(kind === 'edit' ? m.thread_edit_save() : m.thread_write_retry());
+      await click(mode === 'edit' ? m.thread_edit_save() : m.thread_write_retry());
       await settle(() => commands.length === 2);
       expect(commands[1]!.idempotencyKey).toBe(commands[0]!.idempotencyKey);
       expect(serializeDocument(commands[1]!.body)).toBe(serialized);
       await click(m.thread_inspection_open());
       await settle(() => Boolean(window.document.querySelector('[data-private-writing-inspection]')));
       const privateNode = window.document.querySelector('[data-private-writing-inspection]')!;
+      if (kind === 'edit-admission') {
+        for (const current of [false, true]) {
+          admitted = current;
+          await act(async () => renderAdmission());
+          expect(privateNode.textContent).toBe('');
+          expect(button(m.thread_inspection_open()).disabled).toBe(true);
+        }
+        continue;
+      }
       await act(async () => {
         client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
         expect(privateNode.textContent).toBe('');

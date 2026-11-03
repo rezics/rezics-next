@@ -369,6 +369,8 @@ no typed per-post request budget; context, IDs and title consume that envelope t
 Inspection consumes portable writing's installed `onSnapshotPending`, `onSnapshotError` and admitted `onChange` port.
 An unnormalized current editor state is honestly pending or unsupported; inspection never falls back to an older body
 as though current, nor replaces the editor's recovery authority. Inline edits now consume that same optional port.
+Decision: Inline current-writing and paired-conflict inspections share the admitted snapshot revision and native
+reading-admission identity; admission loss retires current-writing inspection without changing command ownership.
 A valid profile/schema is distinguished from an empty body, unfinished uploads, unavailable attachments, supplied
 server refusals, in-flight commands and unknown outcomes. Inspection does not read media state, resolve accounts,
 fetch metadata, acquire upload capability, retry, reseal or unlock a command. Without admitted current image summaries,

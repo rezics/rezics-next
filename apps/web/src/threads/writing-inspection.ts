@@ -316,6 +316,8 @@ export type InspectionSource = {
   signal: AbortSignal;
   /** A caller/target/readiness change creates a new visit, never revives this one. */
   binding: string;
+  /** Optional native reading admission identity, separate from the authoring session. */
+  authority?: object;
   current: () => boolean;
   revision: () => number;
   snapshot: () => { body: DocumentSnapshot; phase: SnapshotPhase };

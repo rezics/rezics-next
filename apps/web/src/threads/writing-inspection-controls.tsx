@@ -14,10 +14,15 @@ export function useWritingInspection(source: InspectionSource) {
   useLayoutEffect(() => {
     const binding = source.binding;
     const signal = source.signal;
+    const authority = source.authority;
     const visit = new WritingInspection({
       binding,
       signal,
-      current: () => latest.current.binding === binding && latest.current.signal === signal && latest.current.current(),
+      current: () =>
+        latest.current.binding === binding &&
+        latest.current.signal === signal &&
+        latest.current.authority === authority &&
+        latest.current.current(),
       revision: () => latest.current.revision(),
       snapshot: () => latest.current.snapshot(),
       title: () => latest.current.title(),
@@ -27,7 +32,7 @@ export function useWritingInspection(source: InspectionSource) {
     });
     setInspection(visit);
     return () => visit.retire();
-  }, [source.binding, source.signal]);
+  }, [source.binding, source.signal, source.authority]);
   useLayoutEffect(() => {
     inspection?.sync();
   });
