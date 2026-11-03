@@ -2233,8 +2233,6 @@ returns a map with one statement per media partition. Each available avatar has 
 
 ## Private uploader inventory
 
-Decision: `media.own` uses public platform exposure with native authenticated uploader-only disclosure; `private` is not a supported exposure declaration.
-
 Authenticated `GET /v1/media?cursor=...` returns the current account's own bounded history. The person identity
 comes only from the verified account actor. There is no account selector, organization impersonation or library
 count. A successful page with no entries and `nextCursor: null` means that the current actor home has no remaining
