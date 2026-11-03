@@ -14,6 +14,7 @@ import { ScreenProfileOverview } from '../catalogue/screen-profile-reader';
 import { isScreenType } from '../catalogue/screen-profile';
 import { composedSubjectRead } from '../catalogue/music-reader';
 import { MusicAlbumOverview } from '../catalogue/music-reader-view';
+import { AlbumTrackOverview } from '../catalogue/album-track-reader/entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
@@ -725,12 +726,24 @@ export function SubjectPage({
             {!overview && bar}
             {overview && !header && afterHeader}
             {overview && read && !page.account && read.subject.type === 'schema:MusicAlbum' ? (
-              <MusicAlbumOverview
-                locale={locale}
-                public={composedSubjectRead(read)}
-                bounds={boundedProfileRelations(page)}
-                link={ContextLink}
-              />
+              <>
+                <MusicAlbumOverview
+                  source={page}
+                  reader={page.requestedReader ?? null}
+                  locale={locale}
+                  public={composedSubjectRead(read)}
+                  bounds={boundedProfileRelations(page)}
+                  link={ContextLink}
+                />
+                <AlbumTrackOverview
+                  source={page}
+                  reader={page.requestedReader ?? null}
+                  id={read.subject.id}
+                  context={page.context?.id ?? read.subject.context}
+                  locale={locale}
+                  realm={realm}
+                />
+              </>
             ) : null}
             {overview && read && !page.account && isScreenType(read.subject.type) ? (
               <ScreenProfileOverview

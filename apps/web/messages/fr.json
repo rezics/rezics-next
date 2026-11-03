@@ -7811,5 +7811,19 @@
   "library_filtered_status_pending": "Pas encore terminé",
   "library_filtered_status_read": "Actualiser l’opération d’origine",
   "library_filtered_status_more": "Page de résultats suivante",
-  "library_filtered_status_expired": "Les résultats natifs ont expiré"
+  "library_filtered_status_expired": "Les résultats natifs ont expiré",
+  "album_tracks_title": "Contenu de l’album",
+  "album_tracks_scope": "Chaque appartenance admise conserve son ordre, ses qualificatifs et l’identité de sa cible. Les détails des pistes ou éditions sans configuration native restent indisponibles.",
+  "album_tracks_unconfigured": "La configuration des pistes ou éditions est indisponible. Aucune liste de pistes n’a été déduite.",
+  "album_tracks_unavailable": "Cette fenêtre de l’album est indisponible. Réessayez de lire la même fenêtre.",
+  "album_tracks_withheld": "Cet album ou cette appartenance n’est pas divulgué à ce lecteur.",
+  "album_tracks_next_unavailable": "La fenêtre suivante n’a pas pu être lue. La précédente reste visible.",
+  "album_tracks_open": "Ouvrir le sujet (nouvel onglet)",
+  "album_tracks_return": "Revenez à cet onglet pour conserver votre fenêtre de l’album.",
+  "album_tracks_retry": "Réessayer cette fenêtre",
+  "album_tracks_correction": "Examiner les appartenances (nouvel onglet)",
+  "album_tracks_kind": "Type de sujet",
+  "album_tracks_complete": "Aucune continuation n’a été renvoyée pour ce flux.",
+  "album_tracks_membership": "Déclaration d’appartenance",
+  "album_tracks_target": "Identité de la cible"
 }

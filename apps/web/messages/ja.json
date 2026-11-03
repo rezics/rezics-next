@@ -7811,5 +7811,19 @@
   "library_filtered_status_pending": "未完了",
   "library_filtered_status_read": "元の操作を更新",
   "library_filtered_status_more": "次の結果ページ",
-  "library_filtered_status_expired": "ネイティブの結果は期限切れです"
+  "library_filtered_status_expired": "ネイティブの結果は期限切れです",
+  "album_tracks_title": "アルバムの内容",
+  "album_tracks_scope": "公開された各所属関係の順序、修飾情報、対象の識別情報を保持します。ネイティブ設定のないトラックやリリースの詳細は利用できません。",
+  "album_tracks_unconfigured": "トラックまたはリリースの設定は利用できません。トラック一覧は推測しません。",
+  "album_tracks_unavailable": "このアルバムの表示範囲を読み込めません。同じ範囲で再試行してください。",
+  "album_tracks_withheld": "このアルバムまたは所属関係は、この閲覧者には開示されていません。",
+  "album_tracks_next_unavailable": "次の表示範囲を読み込めませんでした。前の範囲を引き続き表示しています。",
+  "album_tracks_open": "項目を開く（新しいタブ）",
+  "album_tracks_return": "このタブに戻ると、アルバムの表示範囲をそのまま確認できます。",
+  "album_tracks_retry": "この範囲を再読み込み",
+  "album_tracks_correction": "所属関係を確認（新しいタブ）",
+  "album_tracks_kind": "項目の種類",
+  "album_tracks_complete": "このストリームには続きが返されませんでした。",
+  "album_tracks_membership": "所属関係の記述",
+  "album_tracks_target": "対象の識別情報"
 }

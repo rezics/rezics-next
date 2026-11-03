@@ -7811,5 +7811,19 @@
   "library_filtered_status_pending": "尚未完成",
   "library_filtered_status_read": "重新整理原始操作",
   "library_filtered_status_more": "下一頁結果",
-  "library_filtered_status_expired": "原生結果已過期"
+  "library_filtered_status_expired": "原生結果已過期",
+  "album_tracks_title": "專輯內容",
+  "album_tracks_scope": "每條已准入的成員關係保留各自的順序、限定資訊和目標身分。缺少原生設定的曲目或發行詳情無法使用。",
+  "album_tracks_unconfigured": "曲目或發行設定無法使用。不會推測曲目列表。",
+  "album_tracks_unavailable": "此專輯視窗暫時無法使用，請重試讀取同一視窗。",
+  "album_tracks_withheld": "此專輯或成員關係未向目前瀏覽者揭露。",
+  "album_tracks_next_unavailable": "無法讀取下一視窗，仍顯示上一視窗。",
+  "album_tracks_open": "開啟條目（新分頁）",
+  "album_tracks_return": "返回此分頁即可保留專輯視窗。",
+  "album_tracks_retry": "重試此視窗",
+  "album_tracks_correction": "檢查成員關係（新分頁）",
+  "album_tracks_kind": "條目類型",
+  "album_tracks_complete": "此資料流未傳回後續視窗。",
+  "album_tracks_membership": "成員關係陳述",
+  "album_tracks_target": "目標身分"
 }

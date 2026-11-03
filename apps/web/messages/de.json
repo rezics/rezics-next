@@ -7811,5 +7811,19 @@
   "library_filtered_status_pending": "Noch nicht abgeschlossen",
   "library_filtered_status_read": "Ursprünglichen Vorgang aktualisieren",
   "library_filtered_status_more": "Nächste Ergebnisseite",
-  "library_filtered_status_expired": "Native Ergebnisse sind abgelaufen"
+  "library_filtered_status_expired": "Native Ergebnisse sind abgelaufen",
+  "album_tracks_title": "Albuminhalte",
+  "album_tracks_scope": "Jede freigegebene Zugehörigkeit behält ihre Reihenfolge, Qualifikatoren und Zielidentität. Titel- und Veröffentlichungsdetails ohne native Konfiguration bleiben nicht verfügbar.",
+  "album_tracks_unconfigured": "Die Konfiguration für Titel oder Veröffentlichungen ist nicht verfügbar. Es wurde keine Titelliste abgeleitet.",
+  "album_tracks_unavailable": "Dieses Albumfenster ist nicht verfügbar. Versuche, dasselbe Fenster erneut zu lesen.",
+  "album_tracks_withheld": "Dieses Album oder diese Zugehörigkeit ist für diese Ansicht nicht offengelegt.",
+  "album_tracks_next_unavailable": "Das nächste Fenster konnte nicht gelesen werden. Das vorherige Fenster bleibt sichtbar.",
+  "album_tracks_open": "Objekt öffnen (neuer Tab)",
+  "album_tracks_return": "Kehre zu diesem Tab zurück, um dein Albumfenster beizubehalten.",
+  "album_tracks_retry": "Dieses Fenster erneut lesen",
+  "album_tracks_correction": "Zugehörigkeiten prüfen (neuer Tab)",
+  "album_tracks_kind": "Objekttyp",
+  "album_tracks_complete": "Für diesen Datenstrom wurde keine Fortsetzung zurückgegeben.",
+  "album_tracks_membership": "Zugehörigkeitsaussage",
+  "album_tracks_target": "Zielidentität"
 }

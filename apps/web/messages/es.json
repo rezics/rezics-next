@@ -7811,5 +7811,19 @@
   "library_filtered_status_pending": "Sin finalizar",
   "library_filtered_status_read": "Actualizar operación original",
   "library_filtered_status_more": "Siguiente página de resultados",
-  "library_filtered_status_expired": "Los resultados nativos han caducado"
+  "library_filtered_status_expired": "Los resultados nativos han caducado",
+  "album_tracks_title": "Contenido del álbum",
+  "album_tracks_scope": "Cada pertenencia admitida conserva su orden, calificadores e identidad de destino. Los detalles de pistas o ediciones sin configuración nativa no están disponibles.",
+  "album_tracks_unconfigured": "La configuración de pistas o ediciones no está disponible. No se ha deducido ninguna lista de pistas.",
+  "album_tracks_unavailable": "Esta ventana del álbum no está disponible. Intenta leer de nuevo la misma ventana.",
+  "album_tracks_withheld": "Este álbum o pertenencia no se muestra a este lector.",
+  "album_tracks_next_unavailable": "No se pudo leer la siguiente ventana. La anterior sigue visible.",
+  "album_tracks_open": "Abrir entidad (pestaña nueva)",
+  "album_tracks_return": "Vuelve a esta pestaña para conservar la ventana del álbum.",
+  "album_tracks_retry": "Reintentar esta ventana",
+  "album_tracks_correction": "Revisar pertenencias (pestaña nueva)",
+  "album_tracks_kind": "Tipo de entidad",
+  "album_tracks_complete": "No se recibió una continuación para este flujo.",
+  "album_tracks_membership": "Declaración de pertenencia",
+  "album_tracks_target": "Identidad de destino"
 }
