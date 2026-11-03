@@ -4,6 +4,7 @@ import homePageRecording from '../recorded/home-page.json';
 import definitionsRecording from '../recorded/definitions-release.json';
 import { progressSessionProfile } from '../../library/progress-profile';
 import type { ProgressMode } from '../../library/progress-reads';
+import type { NativeContinuePage } from '../../library/continue-adapter';
 import type { Release } from '../../subject/definitions';
 import { recordedBookState } from './library-entry-states.ts';
 import type { KernelRecording } from '../fake.ts';
@@ -83,14 +84,15 @@ function subjects(): Record<string, unknown>[] {
       subjectId: entry.subjectId,
       state: index === 0 ? activeState : index === 1 ? 'not-a-state-id' : null,
       lastActivityAt: `2026-10-28T00:38:4${index}.000Z`,
-      activeProgressSession:
-        sessionsRecording.progressSessions.find((item) => item.subjectId === entry.subjectId) ?? null,
+      activeProgressSession: basicSession(
+        sessionsRecording.progressSessions.find((item) => item.subjectId === entry.subjectId),
+      ),
     })),
     {
       subjectId: entrylessId,
       state: null,
       lastActivityAt: '2026-10-28T00:38:49.000Z',
-      activeProgressSession: entrylessSession,
+      activeProgressSession: basicSession(entrylessSession),
     },
   ];
   while (available.length < 6) {
@@ -101,14 +103,64 @@ function subjects(): Record<string, unknown>[] {
       state: index % 2 === 0 ? activeState : null,
       lastActivityAt: `2026-10-28T00:39:${String(index).padStart(2, '0')}.000Z`,
       activeProgressSession: {
-        ...entrylessSession,
-        id: `${subjectId.slice(0, 8)}-session`,
+        ...basicSession(entrylessSession),
+        id: subjectId,
         subjectId,
         versionSubjectId: subjectId,
       },
     });
   }
   return available.slice(0, storySize);
+}
+
+function basicSession(session: (typeof sessionsRecording.progressSessions)[number] | undefined) {
+  if (!session) return null;
+  const { subject: _subject, ...basic } = session;
+  return basic;
+}
+
+type NativeSummary = NonNullable<NativeContinuePage['subjects'][number]['subject']>;
+// These retained summaries are presentation inputs, not recordings of native Continue responses.
+// Key by the supplied summary ID: an entry's stored reference cannot rename its header.
+const summaries = new Map<string, NativeSummary>(
+  [...entriesRecording.libraryEntries, ...sessionsRecording.progressSessions].flatMap((row) =>
+    row.subject ? [[row.subject.id, row.subject] as const] : [],
+  ),
+);
+
+function continueResponse(request: Request): KernelRecording {
+  const headers = { 'cache-control': 'private, no-store' };
+  const problem = (status: number, code: string): KernelRecording => ({ status, code, headers });
+  const query = new URL(request.url).searchParams;
+  for (const key of query.keys())
+    if (!['limit', 'cursor', 'view', 'spaceId'].includes(key) || query.getAll(key).length !== 1)
+      return problem(400, 'invalid_request');
+  const view = query.get('view') ?? 'BASIC';
+  const rawLimit = query.get('limit');
+  const limit = rawLimit === null ? 20 : Number(rawLimit);
+  if (
+    (view !== 'BASIC' && view !== 'FULL') ||
+    rawLimit?.trim() === '' ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 100
+  )
+    return problem(400, 'invalid_request');
+  const spaceId = query.get('spaceId');
+  if (spaceId !== null && !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(spaceId))
+    return problem(400, 'invalid_request');
+  // No native Space population or signed continuation recording is supplied by this fixture.
+  if (query.has('cursor')) return problem(400, 'invalid_cursor');
+  if (unavailable(request)) return problem(503, 'service_unavailable');
+  const rows = subjects();
+  if (spaceId !== null || rows.length > limit) return problem(503, 'dependency_unavailable');
+  return {
+    status: 200,
+    subjects:
+      view === 'BASIC' ? rows : rows.map((row) => ({ ...row, subject: summaries.get(String(row.subjectId)) ?? null })),
+    next: null,
+    headers,
+  };
 }
 
 const headers = new Map<string, ContinueHeader>([
@@ -143,14 +195,8 @@ export const routes: FakeRoute[] = [
   {
     method: 'GET',
     path: '/v1/libraryContinue',
-    story: ({ request }) =>
-      unavailable(request)
-        ? { status: 503, code: 'service_unavailable' }
-        : { status: 200, subjects: subjects(), next: null },
-    fixture: ({ request }) =>
-      unavailable(request)
-        ? { status: 503, code: 'service_unavailable' }
-        : { status: 200, subjects: subjects(), next: null },
+    story: ({ request }) => continueResponse(request),
+    fixture: ({ request }) => continueResponse(request),
   },
   {
     method: 'POST',

@@ -381,7 +381,7 @@ test(
         'filter=%7B%7D',
         'orderBy=lastActivityAt',
         'direction=asc',
-        'view=FULL',
+        'view=COMPACT',
         'q=book',
         'limit=0',
         'limit=101',

@@ -59,9 +59,10 @@ unknown and requires explicit migration/readiness, never a fabricated timestamp.
 
 ## HTTP contract
 
-`GET /v1/libraryContinue?limit&cursor` has operation ID `library_continue.list` and a closed query. Only `limit` and `cursor` are accepted. The shared paging
+`GET /v1/libraryContinue?limit&cursor&view&spaceId` has operation ID `library_continue.list` and a closed query.
+Only `limit`, `cursor`, optional `view=BASIC|FULL` and optional UUID `spaceId` are accepted. The shared paging
 default is 20 and maximum 100, with integer minimum 1. Unknown `accountId`, state/status/type selectors, `filter`,
-`orderBy`, direction, search, view and every other parameter return `400 invalid_request`. Continue does not reuse
+`orderBy`, direction, search, unknown view values and every other parameter return `400 invalid_request`. Continue does not reuse
 the fixed status-tab shelf query or require status tabs as product navigation.
 
 Success is closed `200` JSON:
@@ -73,11 +74,38 @@ Success is closed `200` JSON:
     state: string | null;
     lastActivityAt: string;
     activeProgressSession: BASIC_SESSION | null;
+    subject?: SubjectSummary | null; // FULL only
   }
   [];
   next: string | null;
 }
 ```
+
+Omitted `view` and `view=BASIC` preserve the original closed rows exactly, with no `subject` property. `FULL`
+adds the optional nullable native
+[`SubjectSummarySchema`](../services/kernel/src/semantic/http/summaries.ts): `id`, `type`, `types`, nullable
+`label: { value, language }`, `creativeWork` and nullable native `cover`. A cover retains only that schema's media,
+dimensions, placeholder, variants, focal point and credit fields. A missing or withheld summary is null; it neither
+removes a qualifying canonical ID nor grants access to its header. Summary failure retains the actual failure.
+Use the current authenticated native `readSubjectSummaries` batch over bounded shown canonical IDs, with current
+Access, language, deadline and route key, before the final Source/disclosure/version checks. Membership, BASIC
+sessions, absence, ordering and readiness remain the same for both views. No per-row hydration or header endpoint
+is required. View does not change the native cursor binding; BASIC and FULL may continue the same query.
+
+`spaceId` retains Content's accepted [Home selection contract](research/home-and-list-items.md#concrete-home-specification-for-adoption):
+selection is exact and conjunctive. The existing
+[`openSpaceSubjectPopulation`](../services/kernel/src/content/feed-subject-scope.ts) intersects the owner's eligible
+subjects with the selected current readable Space/Realm's native publication population and rechecks that population
+before delivery. It grants no subject disclosure or owner readiness. Malformed or repeated `spaceId` is rejected;
+selected-space failures remain failures. This reconciliation adds no Space policy or selectors.
+
+The Web adapter's generated `KernelClient.libraryContinue.get` uses one `{ limit: 6, view: 'FULL', cursor? }`
+request. Missing, null, withheld, mismatched or malformed supplied summaries remain unavailable presentation,
+never successful empty results. The fake's retained entry/session summaries are illustrative DTO inputs, not
+native Continue responses or evidence of Source readiness. Decision: the fake uses only exact supplied summary
+IDs and fields; unrecorded headers stay null, and Space population or signed pagination without recordings stays
+unavailable rather than being simulated. Web owns the existing Progress route captures; exact native recordings
+remain unavailable until supplied by that owner.
 
 `state` is an exact data ID, not a kernel enum. `subjectId` is canonical. BASIC_SESSION reuses the existing HTTP
 field set in [progress-routes.ts](../services/kernel/src/library/progress-routes.ts): `id`, `subjectId`,
@@ -128,7 +156,11 @@ Its `personal`, `profiles` and `privacy` prerequisite descriptors are not callab
 no integrated released Library population family export; the independent setup uses actual `createSubject` and
 `request`, without duplicating a producer, custom Definitions release, SQL fact/permission writes or test handler.
 Missing bundled choices, gates and routes remain meaningful native reds, not skips, missing-driver passes or
-permanent throw placeholders. Existing profile and outcome suites are frozen and unchanged.
+permanent throw placeholders. Existing profile and outcome assertions remain unchanged except the superseded
+`view=FULL` rejection, replaced with unknown-view rejection. The existing
+[`continue-http.test.ts`](../services/kernel/test/library/continue-http.test.ts) owns positive native FULL projection,
+BASIC equivalence and view-independent continuation acceptance; this reconciliation does not duplicate it or
+establish that it ran.
 
 The executable cases require:
 
