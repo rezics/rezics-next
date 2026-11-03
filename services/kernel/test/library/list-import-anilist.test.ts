@@ -6,6 +6,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { createSessionCommands } from '../../src/library/sessions.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
   f = await createProfileEntryFixture();
@@ -79,6 +80,9 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     'library_entry:update',
     'library_entry:read',
     'rating:vote',
+    'progress_session:create',
+    'progress_session:read',
+    'progress_session:update',
   ]);
   await f.grantLibraryGate(importer.actor.accountId);
   const steward = await authenticateAccount(
@@ -157,8 +161,71 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     expect(response.status).toBe(200);
     return { ordinal, reviewId: (await response.json()).review.id };
   }
-  const first = await review(0, {}),
-    skipped = await review(2, { skip: true });
+  let first = await review(0, {});
+  const skipped = await review(2, { skip: true });
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens }),
+    repeats = await Promise.all(
+      [0, 1].map(() =>
+        sessions.startSession(
+          importer.actor,
+          { subjectId, mode: 'scalar_amount', unit: 'minute' },
+          entryKey(),
+        ),
+      ),
+    );
+  async function reviewDates(occurrenceId: string, sourceReviewToken = first.reviewId) {
+    const response = await f.send(importer.bearer, 'POST', `${path}/dates/review`, {
+      ordinal: 0,
+      sourceReviewToken,
+      occurrenceId,
+      startAction: 'adopt',
+      finishAction: 'adopt',
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+  async function applyDates(dateReview: { version: string }) {
+    const response = await f.send(importer.bearer, 'POST', `${path}/dates/apply`, {
+      confirm: true,
+      rows: [{ ordinal: 0, version: dateReview.version, fields: ['startDate', 'finishDate'] }],
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+  const firstDateReview = await reviewDates(repeats[0]!.value.id);
+  expect(firstDateReview.fields).toMatchObject({
+    startDate: { proposed: { year: 2023 }, precision: 'year', status: 'ready' },
+    finishDate: { proposed: { year: 2024, month: 2, day: 29 }, status: 'ready' },
+  });
+  const refreshedSourceReview = await review(0, {});
+  expect((await applyDates(firstDateReview)).outcomes[0].status).toBe('stale');
+  first = refreshedSourceReview;
+  await sessions.patchSessionJournal(
+    importer.actor,
+    repeats[0]!.value.id,
+    { revision: 1, startDate: { year: 2022 } },
+    entryKey(),
+  );
+  expect((await applyDates(firstDateReview)).outcomes[0].status).toBe('stale');
+  const correctedReview = await reviewDates(repeats[0]!.value.id),
+    corrected = await applyDates(correctedReview);
+  expect(corrected.outcomes[0].fields.map((field: { status: string }) => field.status)).toEqual(['applied', 'applied']);
+  expect(await sessions.readSessionJournal(importer.actor, repeats[0]!.value.id)).toMatchObject({
+    startDate: { year: 2023 },
+    finishDate: { year: 2024, month: 2, day: 29 },
+  });
+  const reopenedDates = await (await f.send(importer.bearer, 'GET', path)).json();
+  expect(reopenedDates.rows[0].consumptionDateOutcome.fields.map((field: { status: string }) => field.status)).toEqual([
+    'applied',
+    'applied',
+  ]);
+  const secondDateReview = await reviewDates(repeats[1]!.value.id);
+  expect((await applyDates(secondDateReview)).outcomes[0].status).toBe('applied');
+  expect(await sessions.readSessionJournal(importer.actor, repeats[1]!.value.id)).toMatchObject({
+    startDate: { year: 2023 },
+    finishDate: { year: 2024, month: 2, day: 29 },
+  });
+  expect((await sessions.readSession(importer.actor, repeats[0]!.value.id)).revision).toBe(1);
   const apply = async (confirmations: unknown[], target = path) => {
     const response = await f.send(importer.bearer, 'POST', target + ':apply', { confirmations });
     expect(response.status).toBe(200);
@@ -319,4 +386,9 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await f.send(importer.bearer, 'GET', path)).status).toBeGreaterThanOrEqual(401);
   const denied = await f.send(importer.bearer, 'POST', path + ':apply', { confirmations: [first] });
   expect(denied.status).toBeGreaterThanOrEqual(401);
+  const datesDenied = await f.send(importer.bearer, 'POST', `${path}/dates/apply`, {
+    confirm: true,
+    rows: [{ ordinal: 0, version: first.reviewId, fields: ['startDate'] }],
+  });
+  expect(datesDenied.status).toBeGreaterThanOrEqual(401);
 }, 120000);

@@ -6,6 +6,7 @@ import { mintReadTime, noEffect } from '../command/command.ts';
 import { readAccount } from '../access/account-data.ts';
 import accountShare from '../access/account-share.sql';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { ProblemError } from '../http/problem.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
@@ -27,7 +28,20 @@ import {
 import { aniListLabelEvidence, ANILIST_LABEL_LIMITS } from './list-import-anilist-label-evidence.ts';
 import { ANILIST_LIMITS, AniListInputError, parseAniList, type AniListRow } from './list-import-anilist-parser.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
-import { createSessionCommands } from './sessions.ts';
+import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
+import {
+  IMPORT_CONSUMPTION_LIMITS,
+  aniListDateSource,
+  applyImportConsumptionDateRows,
+  executeImportConsumptionDateIntent,
+  publicImportConsumptionDateReview,
+  reviewImportConsumptionDates,
+  type ImportConsumptionDateIntent,
+  type ImportConsumptionDateReview,
+  type ImportDateAction,
+  type ImportDateField,
+  type ImportDateSessionIdentity,
+} from './import-consumption.ts';
 import {
   createVoteCommands,
   RatingQuestionNotFoundError,
@@ -125,6 +139,32 @@ export type AniListScoreOutcome = {
   status: 'skipped' | 'stale' | 'unsupported' | 'failed' | 'unavailable' | 'applied';
   reason?: string;
 };
+export type AniListDateReviewInput = {
+  ordinal: number;
+  sourceReviewToken: string;
+  occurrenceId: string;
+  startAction?: ImportDateAction;
+  finishAction?: ImportDateAction;
+};
+export type AniListDateApplyInput = {
+  confirm: true;
+  rows: { ordinal: number; version: string; fields: ImportDateField[] }[];
+};
+type AniListDateAdmissionIdentity = {
+  provider: 'anilist';
+  importId: string;
+  ordinal: number;
+  sourceReviewToken: string;
+  dateReviewVersion: string;
+  sourceFingerprint: string;
+  matchFingerprint: string;
+  subjectId: string;
+  profileDigest: string;
+  occurrence: ImportDateSessionIdentity;
+  occurrenceProfileBinding: unknown;
+  clientId: string;
+  requestedBy: string | null;
+};
 type Review = {
   id: string;
   match: AniListMatch;
@@ -151,6 +191,8 @@ export type AniListOutcome = {
 export type AniListStored = {
   source: AniListRow;
   review?: Review;
+  consumptionDateReview?: ImportConsumptionDateReview;
+  consumptionDateIntent?: ImportConsumptionDateIntent;
   metadataReviews?: EntryImportMetadataReview[];
   started?: boolean;
   progress?: ProgressAdoptionCheckpoint;
@@ -611,6 +653,10 @@ export function createAniListImport(deps: Dependencies) {
         progress: row.payload.review?.progress
           ? publicProgress(row.payload.review.progress, row.payload.progress)
           : null,
+        consumptionDateReview: row.payload.consumptionDateReview
+          ? publicImportConsumptionDateReview(row.payload.consumptionDateReview)
+          : null,
+        consumptionDateOutcome: row.payload.consumptionDateIntent?.outcome ?? null,
       });
     }
     await snapshot(actor, async () => undefined);
@@ -706,9 +752,21 @@ export function createAniListImport(deps: Dependencies) {
     };
     const saved = await save(actor, id, ordinal, 'review', key, input, (current) => {
       if (current.started) throw new LibraryConflictError();
+      if (
+        current.consumptionDateIntent?.patch &&
+        (!current.consumptionDateIntent.outcome || current.consumptionDateIntent.outcome.status === 'failed')
+      )
+        throw new LibraryConflictError();
       if (current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
         throw new LibraryConflictError();
-      return { ...current, review: value, progress: undefined, outcome: undefined };
+      return {
+        ...current,
+        review: value,
+        progress: undefined,
+        outcome: undefined,
+        consumptionDateReview: undefined,
+        consumptionDateIntent: undefined,
+      };
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
     const current = await load(actor, id, ordinal);
@@ -1208,6 +1266,301 @@ export function createAniListImport(deps: Dependencies) {
         outcomes.length === confirmations.length &&
         !outcomes.some((outcome) => outcome.score?.status === 'unavailable' || outcome.score?.status === 'skipped'),
     };
+  }
+  function dateAdmission(actor: Actor, identity: AniListDateAdmissionIdentity): ProgressSessionJournalAdmission {
+    return {
+      identity,
+      assert: async (tx) => {
+        const account = owner(actor),
+          route = requireRoute(account.accountId),
+          header = (
+            await tx.query<{ payload: Header }>(
+              'SELECT payload FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=-1',
+              [route, account.accountId, identity.importId],
+            )
+          ).rows[0]?.payload,
+          current = (
+            await tx.query<{ payload: Stored }>(
+              'SELECT payload FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=$4',
+              [route, account.accountId, identity.importId, identity.ordinal],
+            )
+          ).rows[0]?.payload;
+        if (
+          !header ||
+          header.cancelled ||
+          !current ||
+          current.review?.id !== identity.sourceReviewToken ||
+          current.consumptionDateReview?.version !== identity.dateReviewVersion ||
+          current.consumptionDateReview?.sourceFingerprint !== identity.sourceFingerprint ||
+          current.consumptionDateReview?.matchFingerprint !== identity.matchFingerprint ||
+          current.consumptionDateReview?.subjectId !== identity.subjectId ||
+          hash(current.source) !== identity.sourceFingerprint
+        )
+          throw new LibraryConflictError();
+        const matching = await match(actor, current.source);
+        if (matching.fingerprint !== identity.matchFingerprint) throw new LibraryConflictError();
+        const live = await observe(actor, String(identity.subjectId));
+        if (
+          !live ||
+          live.subjectId !== identity.subjectId ||
+          hash({ epoch: live.epoch, pin: live.pin, binding: live.profileBinding }) !== identity.profileDigest
+        )
+          throw new LibraryConflictError();
+        if (account.clientId !== identity.clientId || (account.requestedBy ?? null) !== identity.requestedBy)
+          throw new LibraryConflictError();
+        const session = await tx.query<{
+          subject_id: string;
+          version_subject_id: string | null;
+          started_at: Date | string;
+          transaction_id: string;
+          state: string;
+          library_profile_pin: unknown;
+        }>(
+          `SELECT subject_id::text,version_subject_id::text,started_at,transaction_id,state,library_profile_pin
+           FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id=$3`,
+          [route, account.accountId, identity.occurrence.sessionId],
+        );
+        const occurrence = session.rows[0];
+        if (
+          !occurrence ||
+          occurrence.state === 'retired' ||
+          occurrence.subject_id !== identity.occurrence.subjectId ||
+          occurrence.version_subject_id !== identity.occurrence.versionSubjectId ||
+          new Date(occurrence.started_at).toISOString() !== identity.occurrence.startedAt ||
+          occurrence.transaction_id !== identity.occurrence.transactionId ||
+          hash(occurrence.library_profile_pin) !== hash(identity.occurrenceProfileBinding)
+        )
+          throw new LibraryConflictError();
+      },
+    };
+  }
+  async function reviewConsumptionDates(actor: Actor, id: string, input: AniListDateReviewInput, key: string) {
+    const account = owner(actor),
+      stored = await load(actor, id, input.ordinal),
+      sourceReview = stored.review;
+    if (
+      !sourceReview ||
+      sourceReview.id !== input.sourceReviewToken ||
+      sourceReview.input.skip ||
+      !sourceReview.observation ||
+      hash(stored.source) !== sourceReview.sourceFingerprint
+    )
+      throw new LibraryConflictError();
+    const matching = await match(actor, stored.source),
+      subjectId = sourceReview.observation.subjectId,
+      live = await observe(actor, subjectId);
+    if (
+      matching.fingerprint !== sourceReview.match.fingerprint ||
+      !live ||
+      live.subjectId !== subjectId ||
+      live.epoch !== sourceReview.observation.epoch ||
+      hash(live.pin) !== hash(sourceReview.observation.pin)
+    )
+      throw new LibraryConflictError();
+    const session = await sessions.readPresentedSession(actor, input.occurrenceId, async (value) => value),
+      occurrenceFact = await sessions.inspectSession(actor, input.occurrenceId);
+    if (session.subjectId !== subjectId || session.state === 'retired') throw new LibraryNotFoundError();
+    if (
+      occurrenceFact.session.id !== session.id ||
+      occurrenceFact.session.startedAt !== session.startedAt ||
+      occurrenceFact.session.transactionId !== session.transactionId ||
+      occurrenceFact.session.versionSubjectId !== session.versionSubjectId
+    )
+      throw new LibraryConflictError();
+    const journal = await sessions.readSessionJournal(actor, input.occurrenceId),
+      version = randomUUID(),
+      profileBinding = live.profileBinding ?? null,
+      reviewed = reviewImportConsumptionDates({
+        version,
+        sourceReviewToken: sourceReview.id,
+        sourceFingerprint: sourceReview.sourceFingerprint,
+        matchFingerprint: matching.fingerprint,
+        subjectId,
+        profileDigest: hash({ epoch: live.epoch, pin: live.pin, binding: live.profileBinding }),
+        profileBinding,
+        occurrenceProfileBinding: occurrenceFact.pin,
+        occurrence: {
+          sessionId: session.id,
+          subjectId: session.subjectId,
+          versionSubjectId: session.versionSubjectId,
+          startedAt: session.startedAt,
+          transactionId: session.transactionId,
+        },
+        journal,
+        start: aniListDateSource(stored.source.evidence, 'startedAt'),
+        finish: aniListDateSource(stored.source.evidence, 'completedAt'),
+        actions: {
+          ...(input.startAction === undefined ? {} : { startDate: input.startAction }),
+          ...(input.finishAction === undefined ? {} : { finishDate: input.finishAction }),
+        },
+        profileCurrent: !!live.profile && !!live.profileBinding,
+      }),
+      result = publicImportConsumptionDateReview(reviewed);
+    if (Buffer.byteLength(JSON.stringify(result)) > IMPORT_CONSUMPTION_LIMITS.resultBytes) throw new AniListInputError();
+    const saved = await save(actor, id, input.ordinal, 'consumption-dates-review', key, input, (current) => {
+        if (
+          current.review?.id !== sourceReview.id ||
+          current.consumptionDateIntent?.patch &&
+            (!current.consumptionDateIntent.outcome || current.consumptionDateIntent.outcome.status === 'failed')
+        )
+          throw new LibraryConflictError();
+        return { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
+      });
+    if (saved.value.version !== result.version) throw new LibraryConflictError();
+    const latest = await load(actor, id, input.ordinal);
+    if (latest.consumptionDateReview?.version !== saved.value.version) throw new LibraryConflictError();
+    return saved.value;
+  }
+  async function currentConsumptionDates(actor: Actor, id: string, ordinal: number, review: ImportConsumptionDateReview) {
+    const header = await load<Header>(actor, id, -1),
+      stored = await load(actor, id, ordinal);
+    if (
+      header.cancelled ||
+      !stored.review ||
+      stored.review.id !== review.sourceReviewToken ||
+      hash(stored.source) !== review.sourceFingerprint ||
+      stored.consumptionDateReview?.version !== review.version
+    )
+      return false;
+    const matching = await match(actor, stored.source),
+      live = await observe(actor, review.subjectId);
+    if (
+      matching.fingerprint !== review.matchFingerprint ||
+      !live ||
+      live.subjectId !== review.subjectId ||
+      hash({ epoch: live.epoch, pin: live.pin, binding: live.profileBinding }) !== review.profileDigest
+    )
+      return false;
+    const session = await sessions.readPresentedSession(actor, review.occurrence.sessionId, async (value) => value),
+      occurrenceFact = await sessions.inspectSession(actor, review.occurrence.sessionId),
+      journal = await sessions.readSessionJournal(actor, review.occurrence.sessionId);
+    return (
+      session.id === review.occurrence.sessionId &&
+      session.subjectId === review.occurrence.subjectId &&
+      session.versionSubjectId === review.occurrence.versionSubjectId &&
+      session.startedAt === review.occurrence.startedAt &&
+      session.transactionId === review.occurrence.transactionId &&
+      session.state !== 'retired' &&
+      hash(occurrenceFact.pin) === hash(review.occurrenceProfileBinding) &&
+      journal.revision === review.journalRevision
+    );
+  }
+  async function applyConsumptionDates(
+    actor: Actor,
+    id: string,
+    input: AniListDateApplyInput,
+    signal?: AbortSignal,
+    record?: (value: unknown) => void,
+  ) {
+    if (
+      !input.confirm ||
+      input.rows.length > IMPORT_CONSUMPTION_LIMITS.rows ||
+      new Set(input.rows.map((row) => row.ordinal)).size !== input.rows.length
+    )
+      throw new AniListInputError();
+    const account = owner(actor),
+      selected = input.rows;
+    const result = await applyImportConsumptionDateRows(
+      selected,
+      signal,
+      async (item) => {
+        const stored = await load(actor, id, item.ordinal),
+          reviewed = stored.consumptionDateReview;
+        if (!reviewed || reviewed.version !== item.version || stored.review?.id !== reviewed.sourceReviewToken) {
+          return {
+            version: item.version,
+            status: 'stale' as const,
+            fields: item.fields.map((field) => ({ field, status: 'stale' as const })),
+            receipt: null,
+          };
+        }
+        const previous = stored.consumptionDateIntent;
+        if (previous && (previous.version !== item.version || previous.fields.join(',') !== item.fields.join(',')))
+          throw new LibraryConflictError();
+        const nativeRequestKey = previous?.nativeRequestKey ?? `anilist:${id}:${item.ordinal}:dates:${item.version}:journal`,
+          identity: AniListDateAdmissionIdentity =
+            (previous?.admissionIdentity as AniListDateAdmissionIdentity | undefined) ?? {
+            provider: 'anilist',
+            importId: id,
+            ordinal: item.ordinal,
+            sourceReviewToken: reviewed.sourceReviewToken,
+            dateReviewVersion: reviewed.version,
+            sourceFingerprint: reviewed.sourceFingerprint,
+            matchFingerprint: reviewed.matchFingerprint,
+            subjectId: reviewed.subjectId,
+            profileDigest: reviewed.profileDigest,
+            occurrence: reviewed.occurrence,
+            occurrenceProfileBinding: reviewed.occurrenceProfileBinding,
+            clientId: account.clientId,
+            requestedBy: account.requestedBy ?? null,
+          },
+          admission = dateAdmission(actor, identity),
+          intent = await executeImportConsumptionDateIntent({
+            review: reviewed,
+            fields: item.fields,
+            ...(previous ? { existing: previous } : {}),
+            nativeRequestKey,
+            admissionIdentity: identity,
+            admission,
+            isCurrent: () => currentConsumptionDates(actor, id, item.ordinal, reviewed),
+            async persist(next) {
+              try {
+                await save(
+                  actor,
+                  id,
+                  item.ordinal,
+                  'consumption-dates-intent',
+                  `anilist:${id}:${item.ordinal}:dates:${item.version}:${hash(next)}`,
+                  { version: item.version, fields: item.fields, digest: hash(next) },
+                  (current) => {
+                    if (
+                      current.review?.id !== reviewed.sourceReviewToken ||
+                      current.consumptionDateReview?.version !== reviewed.version ||
+                      hash(current.source) !== reviewed.sourceFingerprint ||
+                      current.consumptionDateIntent?.nativeRequestKey !== undefined &&
+                        current.consumptionDateIntent.nativeRequestKey !== next.nativeRequestKey
+                    )
+                      throw new LibraryConflictError();
+                    return { ...current, started: true, consumptionDateIntent: next };
+                  },
+                );
+                return true;
+              } catch (error) {
+                if (error instanceof LibraryConflictError) return false;
+                throw error;
+              }
+            },
+            patch: (sessionId, patch, requestKey, nativeAdmission) =>
+              sessions.patchSessionJournal(actor, sessionId, patch, requestKey, nativeAdmission),
+            ...(record ? { record } : {}),
+            ...(signal ? { signal } : {}),
+            isStaleError: (error) =>
+              error instanceof ProgressConflictError ||
+              error instanceof LibraryConflictError ||
+              error instanceof LibraryNotFoundError ||
+              (error instanceof ProblemError &&
+                ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
+            rethrowError: (error) => error instanceof GrantDeniedError,
+          });
+        return (
+          intent.outcome ?? {
+            version: item.version,
+            status: 'unattempted' as const,
+            fields: item.fields.map((field) => ({ field, status: 'unattempted' as const })),
+            receipt: null,
+          }
+        );
+      },
+      (item) => ({
+        version: item.version,
+        status: 'unattempted',
+        fields: item.fields.map((field) => ({ field, status: 'unattempted' })),
+        receipt: null,
+      }),
+    );
+    const outcomes = result.outcomes.map((outcome, index) => ({ ordinal: selected[index]!.ordinal, ...outcome }));
+    if (Buffer.byteLength(JSON.stringify(outcomes)) > IMPORT_CONSUMPTION_LIMITS.resultBytes) throw new AniListInputError();
+    return { importId: id, outcomes, complete: result.complete };
   }
   async function cancel(actor: Actor, id: string, key: string, remove = false) {
     const account = owner(actor),

@@ -12,6 +12,7 @@ import { createVndbImport } from './list-import-vndb.ts';
 import { vndbLabelAdoptionRoutes } from './list-import-vndb-label-routes.ts';
 import { VNDB_LIMITS, VndbInvalid } from './list-import-vndb-parser.ts';
 import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
+import { IMPORT_CONSUMPTION_LIMITS } from './import-consumption.ts';
 import {
   vndbApplySchema,
   vndbPageSchema,
@@ -26,6 +27,7 @@ type Output<K extends keyof Service> = Awaited<ReturnType<Service[K]>>;
 const closed = { additionalProperties: false } as const;
 const uuid = t.String({ format: 'uuid' }),
   ordinal = t.Integer({ minimum: 0, maximum: VNDB_LIMITS.rows - 1 });
+const dateRows = Math.min(IMPORT_CONSUMPTION_LIMITS.rows, VNDB_LIMITS.page);
 const params = t.Object({ uploadId: uuid }, closed);
 const metadataParams = t.Object({ uploadId: uuid, ordinal }, closed);
 const metadataSelection = t.Object(
@@ -173,6 +175,77 @@ export function vndbImportRoutes(
           session.record(result);
           return result.value;
         }),
+    )
+    .post(
+      '/v1/libraryImports/vndb/:uploadId/dates/review',
+      {
+        params,
+        headers,
+        body: t.Object(
+          {
+            ordinal,
+            sourceReviewToken: uuid,
+            occurrenceId: uuid,
+            startAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
+            finishAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<Output<'reviewConsumptionDates'>['value']>(t.Any()),
+          ...failures,
+        },
+        detail: { ...detail('dates_review'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
+      },
+      ({ actor, params, body, headers, admission, job, session, set }) =>
+        run(set, async () => {
+          const result = await admission.run('normal', job, () =>
+            service().reviewConsumptionDates(actor, params.uploadId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+          );
+          session.record(result);
+          return result.value;
+        }),
+    )
+    .post(
+      '/v1/libraryImports/vndb/:uploadId/dates/apply',
+      {
+        params,
+        body: t.Object(
+          {
+            confirm: t.Literal(true),
+            rows: t.Array(
+              t.Object(
+                {
+                  ordinal,
+                  version: uuid,
+                  fields: t.Array(t.Union([t.Literal('startDate'), t.Literal('finishDate')]), {
+                    minItems: 1,
+                    maxItems: IMPORT_CONSUMPTION_LIMITS.fields,
+                    uniqueItems: true,
+                  }),
+                },
+                closed,
+              ),
+              { minItems: 1, maxItems: dateRows, uniqueItems: true },
+            ),
+          },
+          closed,
+        ),
+        response: { 200: t.Unsafe<Output<'applyConsumptionDates'>>(t.Any()), ...failures },
+        detail: { ...detail('dates_apply'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
+      },
+      ({ actor, params, body, request, admission, job, session, set }) =>
+        run(set, () =>
+          admission.run('normal', job, () =>
+            service().applyConsumptionDates(
+              actor,
+              params.uploadId,
+              body,
+              (outcome) => session.record(outcome),
+              request.signal,
+            ),
+          ),
+        ),
     )
     .post(
       customMethod('/v1/libraryImports/vndb/:uploadId', 'reviewMetadata'),

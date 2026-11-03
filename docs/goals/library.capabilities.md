@@ -576,12 +576,14 @@ private assessments under the installed private capture and source-fence contrac
 their original shape; the archive-entry/label merge remains
 version 1 only; native64/512/4096 executed growth evidence remains deferred to integration.
 
-MAL consumption-date adoption is available through its existing private upload, review and result journey. The owner
-selects an existing progress occurrence and explicitly adopts valid year, year/month or full calendar dates into the
-private journal; unknown and invalid evidence stays unapplied, and clearing requires a separate choice. AniList date
-adoption remains open, and VNDB native score effects remain unavailable pending the Content admission guard; the
-provider review/evidence contract is installed. See the
-[consumption-date contract](../library-import-consumption-dates.md).
+MAL, AniList and VNDB consumption-date adoption is integrated with each provider's existing private import journey. A
+source row targets one owner-supplied progress occurrence; supported calendar precision is retained through review and
+the atomic journal patch. AniList `startedAt`/`completedAt` and VNDB `fields.started`/`fields.finished`
+retain source precision and use the same atomic journal patch while preserving each provider's row, page, review,
+source and cleanup interfaces. Review binds the provider source and canonical Subject to the supplied occurrence,
+profile identity and journal revision; the private upload retains per-field receipts. Web303/Web325 keep their existing
+interfaces; Web318/Web142 keep journal/history ownership. Generated client declarations remain unavailable until the
+kernel client producer has its configured compiler database. See the [date adoption contract](../library-import-consumption-dates.md).
 
 Native `POST /v1/libraryExports`, owner status/pages GET and DELETE cancellation are mounted; the
 [portable format and Web handoff](../library-export.md) own schema, meanings, bounds and failure states.

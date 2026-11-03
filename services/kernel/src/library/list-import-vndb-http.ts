@@ -122,6 +122,8 @@ const row = object({
   decision: t.Union([t.Null(), vndbDecisionSchema]),
   scoreDecision: t.Union([t.Null(), scoreDecision]),
   nativeScore,
+  consumptionDateReview: nullable(t.Unknown()),
+  consumptionDateOutcome: nullable(t.Unknown()),
   fieldsTreatment: object({ state: t.String(), score: t.String(), other: t.String() }),
 });
 export const vndbPreviewSchema = object({

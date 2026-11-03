@@ -5,6 +5,7 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { parseVndb, VNDB_LIMITS } from '../../src/library/list-import-vndb-parser.ts';
+import { createSessionCommands } from '../../src/library/sessions.ts';
 import { OWNED_PHASES } from '../../src/library/erasure-owned-graph.ts';
 let f: NativeProfileFixture, matched: string;
 const vnId = `v${Date.now()}${Math.floor(Math.random() * 100000)}`;
@@ -172,7 +173,6 @@ test('reviewed conflicts preserve facts, revision and release guards reject stal
   await json('DELETE', `${base}/${next.uploadId}`);
   await f.activate(f.originalDigest);
 }, 120000);
-
 test('VNDB score review preserves unsupported precision, explicit native units and clear consent without effects', async () => {
   const scorer = await f.identity([
     'subject:create',
@@ -292,6 +292,69 @@ test('VNDB score review preserves unsupported precision, explicit native units a
     ),
   ).toBeNull();
 }, 120000);
+
+test('VNDB typed dates select one repeat, preserve precision, and clear only with explicit consent', async () => {
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens }),
+    first = (await sessions.startSession(f.owner.actor, { subjectId: matched, mode: 'scalar_amount', unit: 'minute' }, entryKey())).value,
+    second = (await sessions.startSession(f.owner.actor, { subjectId: matched, mode: 'scalar_amount', unit: 'minute' }, entryKey())).value,
+    { uploadId } = await upload(xml(vn(vnId, '<started>2020-05-00</started><finished>2021-02-03</finished>'))),
+    providerReview = await review(uploadId, { ordinal: 0, action: 'retain' });
+  expect(
+    (await f.send('other', 'POST', `${base}/${uploadId}/dates/review`, {
+      ordinal: 0,
+      sourceReviewToken: providerReview.reviewId,
+      occurrenceId: first.id,
+      startAction: 'adopt',
+    })).status,
+  ).toBe(404);
+  const reviewed = await json('POST', `${base}/${uploadId}/dates/review`, {
+    ordinal: 0,
+    sourceReviewToken: providerReview.reviewId,
+    occurrenceId: first.id,
+    startAction: 'adopt',
+    finishAction: 'adopt',
+  });
+  expect(reviewed.fields).toMatchObject({
+    startDate: { proposed: { year: 2020, month: 5 }, precision: 'month', status: 'ready' },
+    finishDate: { proposed: { year: 2021, month: 2, day: 3 }, status: 'ready' },
+  });
+  const applied = await json('POST', `${base}/${uploadId}/dates/apply`, {
+    confirm: true,
+    rows: [{ ordinal: 0, version: reviewed.version, fields: ['startDate', 'finishDate'] }],
+  });
+  expect(applied.outcomes[0].fields.map((field: { status: string }) => field.status)).toEqual(['applied', 'applied']);
+  expect(await sessions.readSessionJournal(f.owner.actor, first.id)).toMatchObject({
+    startDate: { year: 2020, month: 5 },
+    finishDate: { year: 2021, month: 2, day: 3 },
+  });
+  expect((await json('GET', `${base}/${uploadId}`)).rows[0].consumptionDateOutcome.fields).toMatchObject([
+    { field: 'startDate', status: 'applied' },
+    { field: 'finishDate', status: 'applied' },
+  ]);
+  expect(await sessions.readSessionJournal(f.owner.actor, second.id)).toMatchObject({ startDate: null, finishDate: null });
+  await sessions.patchSessionJournal(
+    f.owner.actor,
+    second.id,
+    { revision: 1, startDate: { year: 1999 }, finishDate: { year: 2000 } },
+    entryKey(),
+  );
+  const clear = await json('POST', `${base}/${uploadId}/dates/review`, {
+    ordinal: 0,
+    sourceReviewToken: providerReview.reviewId,
+    occurrenceId: second.id,
+    startAction: 'clear',
+    finishAction: 'clear',
+  });
+  const cleared = await json('POST', `${base}/${uploadId}/dates/apply`, {
+    confirm: true,
+    rows: [{ ordinal: 0, version: clear.version, fields: ['startDate', 'finishDate'] }],
+  });
+  expect(cleared.outcomes[0].fields.map((field: { status: string }) => field.status)).toEqual(['cleared', 'cleared']);
+  expect(await sessions.readSessionJournal(f.owner.actor, second.id)).toMatchObject({ startDate: null, finishDate: null });
+  expect((await sessions.readSession(f.owner.actor, first.id)).revision).toBe(1);
+  expect((await sessions.readSession(f.owner.actor, second.id)).revision).toBe(1);
+  await json('DELETE', `${base}/${uploadId}`);
+}, 120000);
 test('XML bounds, exact identifier kinds, missing/zero/invalid evidence and native terminal denial', async () => {
   const zero = parseVndb(xml(vn('v1', '<vote>0</vote><started>bad</started><finished>0000-00-00</finished>')))[0]!;
   for (const name of ['score', 'started']) expect(zero.fields[name]?.kind).toBe('invalid');
@@ -316,6 +379,11 @@ test('XML bounds, exact identifier kinds, missing/zero/invalid evidence and nati
   for (const [method, path, body] of [
     ['GET', `${base}/${made.uploadId}`, undefined],
     ['POST', `${base}/${made.uploadId}:apply`, { rows: [{ ordinal: 0, reviewId: entryKey() }] }],
+    [
+      'POST',
+      `${base}/${made.uploadId}/dates/apply`,
+      { confirm: true, rows: [{ ordinal: 0, version: entryKey(), fields: ['startDate'] }] },
+    ],
   ] as const)
     expect([401, 403]).toContain((await f.send('owner', method, path, body)).status);
 }, 120000);

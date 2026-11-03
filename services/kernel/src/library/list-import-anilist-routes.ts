@@ -15,6 +15,7 @@ import { LibraryConflictError } from './entries.ts';
 import { AniListInputError } from './list-import-anilist-parser.ts';
 import { ANILIST_LABEL_LIMITS } from './list-import-anilist-label-evidence.ts';
 import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
+import { IMPORT_CONSUMPTION_LIMITS } from './import-consumption.ts';
 import { createAniListImport } from './list-import-anilist.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -211,6 +212,81 @@ export function aniListImportRoutes(
       },
       ({ actor, params, body, request }) =>
         command(() => imports().apply(actor, params.importId, body.confirmations, request.signal)),
+    )
+    .post(
+      `${path}/dates/review`,
+      {
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
+        params,
+        headers,
+        body: t.Object(
+          {
+            ordinal,
+            sourceReviewToken: t.String({ minLength: 1, maxLength: 128 }),
+            occurrenceId: id,
+            startAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
+            finishAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewConsumptionDates']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
+          ...failures,
+        },
+        detail: { ...detail('dates_review'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
+      },
+      ({ actor, params, body, headers }) =>
+        command(() =>
+          imports().reviewConsumptionDates(
+            actor,
+            params.importId,
+            body,
+            idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+          ),
+        ),
+    )
+    .post(
+      `${path}/dates/apply`,
+      {
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
+        params,
+        body: t.Object(
+          {
+            confirm: t.Literal(true),
+            rows: t.Array(
+              t.Object(
+                {
+                  ordinal,
+                  version: t.String({ minLength: 1, maxLength: 128 }),
+                  fields: t.Array(t.Union([t.Literal('startDate'), t.Literal('finishDate')]), {
+                    minItems: 1,
+                    maxItems: IMPORT_CONSUMPTION_LIMITS.fields,
+                    uniqueItems: true,
+                  }),
+                },
+                closed,
+              ),
+              { minItems: 1, maxItems: IMPORT_CONSUMPTION_LIMITS.rows, uniqueItems: true },
+            ),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyConsumptionDates']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
+          ...failures,
+        },
+        detail: { ...detail('dates_apply'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
+      },
+      ({ actor, params, body, request }) =>
+        command(() => imports().applyConsumptionDates(actor, params.importId, body, request.signal)),
     )
     .post(
       customMethod(path, 'reviewMetadata'),

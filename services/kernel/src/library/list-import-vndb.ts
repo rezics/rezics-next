@@ -13,10 +13,24 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
+import { createSessionCommands, ProgressConflictError, type ProgressSessionJournalAdmission } from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { vndbSourceFingerprint, type VndbEntryReview } from './list-import-vndb-admission.ts';
 import { parseVndb, VNDB_LIMITS, type SourceValue, type VndbRow } from './list-import-vndb-parser.ts';
+import {
+  IMPORT_CONSUMPTION_LIMITS,
+  applyImportConsumptionDateRows,
+  executeImportConsumptionDateIntent,
+  publicImportConsumptionDateReview,
+  reviewImportConsumptionDates,
+  vndbDateSource,
+  type ImportConsumptionDateIntent,
+  type ImportConsumptionDateReview,
+  type ImportDateAction,
+  type ImportDateField,
+  type ImportDateSessionIdentity,
+} from './import-consumption.ts';
 import {
   applyEntryImportMetadataCommands,
   ENTRY_IMPORT_METADATA_LIMITS,
@@ -77,6 +91,17 @@ type ScoreDecision = {
   guard: VndbEntryReview;
   nativeAdmission: 'unavailable';
 };
+export type VndbDateReviewInput = {
+  ordinal: number;
+  sourceReviewToken: string;
+  occurrenceId: string;
+  startAction?: ImportDateAction;
+  finishAction?: ImportDateAction;
+};
+export type VndbDateApplyInput = {
+  confirm: true;
+  rows: { ordinal: number; version: string; fields: ImportDateField[] }[];
+};
 type Decision = {
   reviewId: string;
   status: 'reviewed' | 'applying' | 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed';
@@ -90,6 +115,23 @@ type Decision = {
   matchDigest?: string;
   metadata?: EntryImportMetadataReview[];
   score?: ScoreDecision;
+  consumptionDateReview?: ImportConsumptionDateReview;
+  consumptionDateIntent?: ImportConsumptionDateIntent;
+};
+type VndbDateAdmissionIdentity = {
+  provider: 'vndb';
+  uploadId: string;
+  ordinal: number;
+  sourceReviewToken: string;
+  dateReviewVersion: string;
+  sourceFingerprint: string;
+  matchFingerprint: string;
+  subjectId: string;
+  profileDigest: string;
+  occurrence: ImportDateSessionIdentity;
+  occurrenceProfileBinding: unknown;
+  clientId: string;
+  requestedBy: string | null;
 };
 
 type NativeScoreReviewResult =
@@ -270,8 +312,9 @@ const updated = (accountId: string) => [
 export function createVndbImport(config: Config) {
   const { pool, access } = config;
   const runner = createLibraryCommandRunner(config),
-    entries = createEntryCommands(config);
-  const votes = createVoteCommands(config);
+    entries = createEntryCommands(config),
+    votes = createVoteCommands(config),
+    sessions = createSessionCommands(config);
   const personalEntries = createEntryPersonalCommands(config);
   function owner(actor: Actor): AccountActor {
     if (actor.kind !== 'account' || !actor.scopes.includes('library_entry:update')) throw new GrantDeniedError();
@@ -357,6 +400,7 @@ export function createVndbImport(config: Config) {
       targetId: source.source.subjectId,
       source: vndbSourceFingerprint(source),
       states: source.source.kind === 'supported' ? (source.source.profile.entryStateSet?.states ?? []) : [],
+      profileSupported: source.source.kind === 'supported',
       baseline: entry
         ? { state: entry.state, revision: entry.revision, incarnationId: entry.incarnationId ?? null }
         : null,
@@ -499,6 +543,10 @@ export function createVndbImport(config: Config) {
         decision: decision && stateActionOf(decision) !== null ? publicDecision(decision) : null,
         scoreDecision: decision?.score ? publicScoreDecision(decision.score) : null,
         nativeScore,
+        consumptionDateReview: decision?.consumptionDateReview
+          ? publicImportConsumptionDateReview(decision.consumptionDateReview)
+          : null,
+        consumptionDateOutcome: decision?.consumptionDateIntent?.outcome ?? null,
         fieldsTreatment: {
           state: decision?.state ? 'proposed native entry state' : 'retained; explicit state required',
           score: nativeScore.sourceReason,
@@ -659,6 +707,11 @@ export function createVndbImport(config: Config) {
       if (!stored.rows[0]) throw new ProblemError('conflict');
       const before = stored.rows[0].decisions[choice.ordinal];
       if (before && ['applying', 'applied', 'failed'].includes(before.status)) throw new ProblemError('conflict');
+      if (
+        before?.consumptionDateIntent?.patch &&
+        (!before.consumptionDateIntent.outcome || before.consumptionDateIntent.outcome.status === 'failed')
+      )
+        throw new ProblemError('conflict');
       if (before?.metadata?.some((item) => item.confirmation && !item.confirmation.outcome))
         throw new ProblemError('conflict');
       const reviewId = randomUUID();
@@ -678,6 +731,336 @@ export function createVndbImport(config: Config) {
       await save(tx, account, id, choice.ordinal, decision);
       return publicDecision(decision);
     });
+  }
+  const dateProfileDigest = (target: Awaited<ReturnType<typeof current>>) =>
+    target
+      ? entryImportMetadataDigest({
+          targetId: target.targetId,
+          source: target.source,
+          incarnationId: target.baseline?.incarnationId ?? null,
+        })
+      : null;
+  async function dateAdmission(
+    actor: Actor,
+    identity: VndbDateAdmissionIdentity,
+  ): Promise<ProgressSessionJournalAdmission> {
+    return {
+      identity,
+      assert: async (tx) => {
+        const account = owner(actor),
+          route = requireRoute(account.accountId),
+          stored = await tx.query<{ row: VndbRow | null; decision: Decision | null; active: boolean }>(
+            `SELECT rows->$4::integer AS row,decisions->$4::text AS decision,
+              state='active' AND expires_at>clock_timestamp() AS active
+             FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+            [route, account.accountId, identity.uploadId, identity.ordinal],
+          ),
+          { row, decision, active } = stored.rows[0] ?? {};
+        if (
+          !active ||
+          !row ||
+          !decision ||
+          decision.reviewId !== identity.sourceReviewToken ||
+          !['reviewed', 'applied', 'unsupported'].includes(decision.status) ||
+          decision.targetId !== identity.subjectId ||
+          entryImportMetadataDigest(row) !== identity.sourceFingerprint ||
+          decision.matchDigest !== identity.matchFingerprint ||
+          decision.consumptionDateReview?.version !== identity.dateReviewVersion ||
+          decision.consumptionDateReview.sourceReviewToken !== identity.sourceReviewToken ||
+          decision.consumptionDateReview.profileDigest !== identity.profileDigest
+        )
+          throw new LibraryConflictError();
+        if (account.clientId !== identity.clientId || (account.requestedBy ?? null) !== identity.requestedBy)
+          throw new LibraryConflictError();
+        const matching = await match(actor, row),
+          target = await current(actor, identity.subjectId);
+        if (
+          entryImportMetadataDigest(matching) !== identity.matchFingerprint ||
+          !target ||
+          target.source !== decision.guard?.source ||
+          dateProfileDigest(target) !== identity.profileDigest
+        )
+          throw new LibraryConflictError();
+        const occurrenceResult = await tx.query<{
+          subject_id: string;
+          version_subject_id: string | null;
+          started_at: Date | string;
+          transaction_id: string;
+          state: string;
+          library_profile_pin: unknown;
+        }>(
+          `SELECT subject_id::text,version_subject_id::text,started_at,transaction_id,state,library_profile_pin
+           FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id=$3`,
+          [route, account.accountId, identity.occurrence.sessionId],
+        );
+        const occurrence = occurrenceResult.rows[0];
+        if (
+          !occurrence ||
+          occurrence.state === 'retired' ||
+          occurrence.subject_id !== identity.occurrence.subjectId ||
+          occurrence.version_subject_id !== identity.occurrence.versionSubjectId ||
+          new Date(occurrence.started_at).toISOString() !== identity.occurrence.startedAt ||
+          occurrence.transaction_id !== identity.occurrence.transactionId ||
+          entryImportMetadataDigest(occurrence.library_profile_pin) !==
+            entryImportMetadataDigest(identity.occurrenceProfileBinding)
+        )
+          throw new LibraryConflictError();
+      },
+    };
+  }
+  async function reviewConsumptionDates(actor: Actor, id: string, input: VndbDateReviewInput, key: string) {
+    const stored = await retainedRow(actor, id, input.ordinal),
+      row = stored.row,
+      decision = stored.decision,
+      target = stored.target,
+      matchingFingerprint = entryImportMetadataDigest(stored.matching),
+      sourceFingerprint = entryImportMetadataDigest(row);
+    if (
+      !decision ||
+      decision.reviewId !== input.sourceReviewToken ||
+      !decision.targetId ||
+      !decision.guard ||
+      !target ||
+      !['reviewed', 'applied', 'unsupported'].includes(decision.status) ||
+      decision.matchDigest !== matchingFingerprint ||
+      target.targetId !== decision.targetId ||
+      target.source !== decision.guard.source
+    )
+      throw new LibraryConflictError();
+    const session = await sessions.readPresentedSession(actor, input.occurrenceId, async (value) => value),
+      occurrenceFact = await sessions.inspectSession(actor, input.occurrenceId);
+    if (session.subjectId !== decision.targetId || session.state === 'retired') throw new LibraryNotFoundError();
+    if (
+      occurrenceFact.session.id !== session.id ||
+      occurrenceFact.session.startedAt !== session.startedAt ||
+      occurrenceFact.session.transactionId !== session.transactionId ||
+      occurrenceFact.session.versionSubjectId !== session.versionSubjectId
+    )
+      throw new LibraryConflictError();
+    const journal = await sessions.readSessionJournal(actor, input.occurrenceId),
+      version = randomUUID(),
+      profileBinding = { source: target.source, incarnationId: target.baseline?.incarnationId ?? null },
+      profileDigest = dateProfileDigest(target);
+    if (!profileDigest) throw new LibraryConflictError();
+    const reviewed = reviewImportConsumptionDates({
+      version,
+      sourceReviewToken: decision.reviewId,
+      sourceFingerprint,
+      matchFingerprint: matchingFingerprint,
+      subjectId: decision.targetId,
+      profileDigest,
+      profileBinding,
+      occurrenceProfileBinding: occurrenceFact.pin,
+      occurrence: {
+        sessionId: session.id,
+        subjectId: session.subjectId,
+        versionSubjectId: session.versionSubjectId,
+        startedAt: session.startedAt,
+        transactionId: session.transactionId,
+      },
+      journal,
+      start: vndbDateSource(row.fields.started),
+      finish: vndbDateSource(row.fields.finished),
+      actions: {
+        ...(input.startAction === undefined ? {} : { startDate: input.startAction }),
+        ...(input.finishAction === undefined ? {} : { finishDate: input.finishAction }),
+      },
+      profileCurrent: target.profileSupported,
+    });
+    const result = publicImportConsumptionDateReview(reviewed);
+    if (Buffer.byteLength(JSON.stringify(result)) > IMPORT_CONSUMPTION_LIMITS.resultBytes)
+      throw new ProblemError('content_too_large');
+    const saved = await mutation(actor, 'consumption-dates-review', key, { id, input }, async (tx, account) => {
+      const locked = await tx.query<{ row: VndbRow | null; decision: Decision | null }>(
+        `SELECT rows->$4::integer AS row,decisions->$4::text AS decision FROM library.vndb_import
+         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active'
+           AND expires_at>clock_timestamp() FOR UPDATE`,
+        [requireRoute(account.accountId), account.accountId, id, input.ordinal],
+      );
+      const currentRow = locked.rows[0]?.row,
+        current = locked.rows[0]?.decision,
+        pending = current?.consumptionDateIntent;
+      if (
+        !currentRow ||
+        !current ||
+        current.reviewId !== decision.reviewId ||
+        current.matchDigest !== matchingFingerprint ||
+        entryImportMetadataDigest(currentRow) !== sourceFingerprint ||
+        (pending?.patch && (!pending.outcome || pending.outcome.status === 'failed'))
+      )
+        throw new ProblemError('conflict');
+      const next = { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
+      await save(tx, account, id, input.ordinal, next);
+      return publicImportConsumptionDateReview(reviewed);
+    });
+    return saved;
+  }
+  async function currentConsumptionDates(actor: Actor, id: string, ordinal: number, reviewed: ImportConsumptionDateReview) {
+    const retained = await retainedRow(actor, id, ordinal),
+      decision = retained.decision,
+      target = retained.target;
+    if (
+      retained.state !== 'active' ||
+      retained.expires_at.getTime() <= Date.now() ||
+      !decision ||
+      decision.reviewId !== reviewed.sourceReviewToken ||
+      decision.targetId !== reviewed.subjectId ||
+      !decision.guard ||
+      decision.guard.source !== target?.source ||
+      decision.matchDigest !== reviewed.matchFingerprint ||
+      entryImportMetadataDigest(retained.row) !== reviewed.sourceFingerprint ||
+      entryImportMetadataDigest(retained.matching) !== reviewed.matchFingerprint ||
+      decision.consumptionDateReview?.version !== reviewed.version ||
+      dateProfileDigest(target) !== reviewed.profileDigest
+    )
+      return false;
+    const session = await sessions.readPresentedSession(actor, reviewed.occurrence.sessionId, async (value) => value),
+      occurrenceFact = await sessions.inspectSession(actor, reviewed.occurrence.sessionId),
+      journal = await sessions.readSessionJournal(actor, reviewed.occurrence.sessionId);
+    return (
+      session.id === reviewed.occurrence.sessionId &&
+      session.subjectId === reviewed.occurrence.subjectId &&
+      session.versionSubjectId === reviewed.occurrence.versionSubjectId &&
+      session.startedAt === reviewed.occurrence.startedAt &&
+      session.transactionId === reviewed.occurrence.transactionId &&
+      session.state !== 'retired' &&
+      entryImportMetadataDigest(occurrenceFact.pin) === entryImportMetadataDigest(reviewed.occurrenceProfileBinding) &&
+      journal.revision === reviewed.journalRevision
+    );
+  }
+  async function applyConsumptionDates(
+    actor: Actor,
+    id: string,
+    input: VndbDateApplyInput,
+    record: (outcome: CommandOutcome<unknown>) => void,
+    signal?: AbortSignal,
+  ) {
+    if (
+      !input.confirm ||
+      input.rows.length > Math.min(IMPORT_CONSUMPTION_LIMITS.rows, VNDB_LIMITS.page) ||
+      new Set(input.rows.map((item) => item.ordinal)).size !== input.rows.length
+    )
+      throw new ProblemError('invalid_request');
+    const deadline = Date.now() + VNDB_LIMITS.applyMs,
+      result = await applyImportConsumptionDateRows(
+        input.rows,
+        signal,
+        async (item) => {
+          const retained = await retainedRow(actor, id, item.ordinal),
+            decision = retained.decision,
+            reviewed = decision?.consumptionDateReview;
+          if (
+            !decision ||
+            !reviewed ||
+            reviewed.version !== item.version ||
+            decision.reviewId !== reviewed.sourceReviewToken
+          )
+            return {
+              version: item.version,
+              status: 'stale' as const,
+              fields: item.fields.map((field) => ({ field, status: 'stale' as const })),
+              receipt: null,
+            };
+          const previous = decision.consumptionDateIntent;
+          if (previous && (previous.version !== item.version || previous.fields.join(',') !== item.fields.join(',')))
+            throw new ProblemError('conflict');
+          const account = owner(actor),
+            nativeRequestKey = previous?.nativeRequestKey ?? `vndb:${id}:${item.ordinal}:dates:${item.version}:journal`,
+            identity: VndbDateAdmissionIdentity =
+              (previous?.admissionIdentity as VndbDateAdmissionIdentity | undefined) ?? {
+                provider: 'vndb',
+                uploadId: id,
+                ordinal: item.ordinal,
+                sourceReviewToken: reviewed.sourceReviewToken,
+                dateReviewVersion: reviewed.version,
+                sourceFingerprint: reviewed.sourceFingerprint,
+                matchFingerprint: reviewed.matchFingerprint,
+                subjectId: reviewed.subjectId,
+                profileDigest: reviewed.profileDigest,
+                occurrence: reviewed.occurrence,
+                occurrenceProfileBinding: reviewed.occurrenceProfileBinding,
+                clientId: account.clientId,
+                requestedBy: account.requestedBy ?? null,
+              },
+            nativeAdmission = await dateAdmission(actor, identity),
+            intent = await executeImportConsumptionDateIntent({
+              review: reviewed,
+              fields: item.fields,
+              ...(previous ? { existing: previous } : {}),
+              nativeRequestKey,
+              admissionIdentity: identity,
+              admission: nativeAdmission,
+              isCurrent: () => currentConsumptionDates(actor, id, item.ordinal, reviewed),
+              async persist(next) {
+                try {
+                  const saved = await mutation(
+                    actor,
+                    'consumption-dates-intent',
+                    `vndb:${id}:${item.ordinal}:dates:${item.version}:${entryImportMetadataDigest(next)}`,
+                    { id, ordinal: item.ordinal, version: item.version, fields: item.fields, digest: entryImportMetadataDigest(next) },
+                    async (tx, account) => {
+                      const locked = await tx.query<{ row: VndbRow | null; decision: Decision | null }>(
+                        `SELECT rows->$4::integer AS row,decisions->$4::text AS decision FROM library.vndb_import
+                         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active'
+                           AND expires_at>clock_timestamp() FOR UPDATE`,
+                        [requireRoute(account.accountId), account.accountId, id, item.ordinal],
+                      );
+                      const row = locked.rows[0]?.row,
+                        current = locked.rows[0]?.decision;
+                      if (
+                        !row ||
+                        !current ||
+                        current.reviewId !== reviewed.sourceReviewToken ||
+                        current.consumptionDateReview?.version !== reviewed.version ||
+                        entryImportMetadataDigest(row) !== reviewed.sourceFingerprint ||
+                        (current.consumptionDateIntent?.nativeRequestKey !== undefined &&
+                          current.consumptionDateIntent.nativeRequestKey !== next.nativeRequestKey)
+                      )
+                        throw new LibraryConflictError();
+                      await save(tx, account, id, item.ordinal, { ...current, consumptionDateIntent: next });
+                      return { version: reviewed.version };
+                    },
+                  );
+                  record(saved);
+                  return true;
+                } catch (error) {
+                  if (error instanceof LibraryConflictError) return false;
+                  throw error;
+                }
+              },
+              patch: (sessionId, patch, requestKey, admission) =>
+                sessions.patchSessionJournal(actor, sessionId, patch, requestKey, admission),
+              record,
+              ...(signal ? { signal } : {}),
+              isStaleError: (error) =>
+                error instanceof ProgressConflictError ||
+                error instanceof LibraryConflictError ||
+                error instanceof LibraryNotFoundError ||
+                (error instanceof ProblemError &&
+                  ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)),
+              rethrowError: (error) => error instanceof GrantDeniedError,
+            });
+          return (
+            intent.outcome ?? {
+              version: item.version,
+              status: 'unattempted' as const,
+              fields: item.fields.map((field) => ({ field, status: 'unattempted' as const })),
+              receipt: null,
+            }
+          );
+        },
+        (item) => ({
+          version: item.version,
+          status: 'unattempted',
+          fields: item.fields.map((field) => ({ field, status: 'unattempted' })),
+          receipt: null,
+        }),
+        () => Date.now() >= deadline,
+      ),
+      outcomes = result.outcomes.map((outcome, index) => ({ ordinal: input.rows[index]!.ordinal, ...outcome }));
+    if (Buffer.byteLength(JSON.stringify(outcomes)) > IMPORT_CONSUMPTION_LIMITS.resultBytes)
+      throw new ProblemError('content_too_large');
+    return { uploadId: id, outcomes, complete: result.complete, stopped: signal?.aborted ? 'cancelled' : Date.now() >= deadline ? 'deadline' : null };
   }
   async function metadataView(
     actor: Actor,
@@ -1169,6 +1552,8 @@ export function createVndbImport(config: Config) {
     preview,
     page,
     review,
+    reviewConsumptionDates,
+    applyConsumptionDates,
     reviewMetadata,
     metadata: metadataView,
     applyMetadata,
