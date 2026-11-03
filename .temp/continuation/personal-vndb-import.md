@@ -1,27 +1,23 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/library/personal-list-import",
-    "apps/web/src/library/personal-list-import.md",
-    "apps/web/src/routes/library/import-vndb.tsx",
-    "apps/web/src/library/navigation.ts",
-    "apps/web/messages",
-    "apps/web/tests/personal-list-import.test.tsx",
-    "docs/goals/web.md"
-  ],
-  "riskAreas": [],
-  "criticalPath": false,
-  "after": [
-    "2bb1fbdd-fd3b-4f51-a945-0faf1a112617"
-  ],
-  "waiting": [],
-  "estimate": {
-    "lines": 2500,
-    "files": 12
-  }
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/library/personal-list-import',
+      'apps/web/src/library/personal-list-import.md',
+      'apps/web/src/routes/library/import-vndb.tsx',
+      'apps/web/src/library/navigation.ts',
+      'apps/web/messages',
+      'apps/web/tests/personal-list-import.test.tsx',
+      'docs/goals/web.md',
+    ],
+  'riskAreas': [],
+  'criticalPath': false,
+  'after': ['2bb1fbdd-fd3b-4f51-a945-0faf1a112617'],
+  'waiting': [],
+  'estimate': { 'lines': 2500, 'files': 12 },
 }
 ---
 
