@@ -241,6 +241,13 @@ async function unavailable(page: Page) {
 }
 async function versions(page: Page, count: number) {
   await page.waitForFunction((count) => document.querySelectorAll('section > ol > li').length === count, count);
+  // History now starts compact. Explicitly inspect the first admitted row before the existing body witnesses.
+  // Programmatic activation leaves the original continuation/disclosure focus assertions intact.
+  await page.evaluate(() => {
+    if (!document.querySelector('[data-history-inspector]')) {
+      document.querySelector<HTMLButtonElement>('[data-history-inspect="0"]')?.click();
+    }
+  });
 }
 async function calls(page: Page) {
   return page.evaluate(() => (window as unknown as Driver).historyCalls);

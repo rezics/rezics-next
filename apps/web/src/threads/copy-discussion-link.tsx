@@ -71,11 +71,11 @@ function trackCopyInteraction() {
 }
 
 /** A changed admitted destination retires the previous row's copy interaction. */
-export function CopyDiscussionLink({ href }: { href: string }) {
-  return <CopyLink key={href} href={href} />;
+export function CopyDiscussionLink({ href, copyOnly = false }: { href: string; copyOnly?: boolean }) {
+  return <CopyLink key={href} href={href} copyOnly={copyOnly} />;
 }
 
-function CopyLink({ href }: { href: string }) {
+function CopyLink({ href, copyOnly }: { href: string; copyOnly: boolean }) {
   const fieldId = useId();
   const statusId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -182,7 +182,7 @@ function CopyLink({ href }: { href: string }) {
           </Button>
         }
         entries={[
-          { type: 'link', label: m.board_feed_open_thread(), href },
+          ...(!copyOnly ? [{ type: 'link' as const, label: m.board_feed_open_thread(), href }] : []),
           { type: 'item', label: m.thread_content_copy_link(), onSelect: () => void copyLink() },
         ]}
       />

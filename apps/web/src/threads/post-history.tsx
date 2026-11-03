@@ -1,29 +1,20 @@
-import { DocumentBody } from '../document-body';
-import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { Byline } from './byline';
-import { NativeDocumentImage } from './document-media';
-import { exactRevisionHref } from './exact-revision-href';
-import { revisionDocumentImage } from './exact-revision-media';
 import { readPostHistory } from './reads';
-import { RevisionProvenance } from './revision-provenance-view';
 import {
   historicalBindingCurrent,
   sameHistoricalReadBinding,
   type HistoricalReaderSource,
 } from './historical-reader-provenance';
-import {
-  historySessionReady,
-  PostHistoryLifetime,
-  postHistorySessionSource,
-  type HistoryPage,
-} from './post-history-lifetime';
+import { historySessionReady, PostHistoryLifetime, postHistorySessionSource } from './post-history-lifetime';
 
-type Revision = HistoryPage['revisions'][number];
+import { RevisionHistoryNavigation } from './revision-history-navigation';
+export { RevisionEntry } from './revision-history-entry';
+
 type ContinuationIntent = { connection: number; element: HTMLButtonElement };
 type ContinuationBoundary = { connection: number; revisionId: string | null; intent: ContinuationIntent };
 
@@ -111,6 +102,7 @@ function HistoryDisclosure({
 }) {
   const regionId = `post-history-${useId().replaceAll(':', '')}`;
   const [continuationStatus, setContinuationStatus] = useState<string | null>(null);
+  const [additionStatus, setAdditionStatus] = useState<string | null>(null);
   const keyboardActivation = useRef<HTMLButtonElement | undefined>(undefined);
   const continuationIntent = useRef<ContinuationIntent | undefined>(undefined);
   const continuationBoundary = useRef<ContinuationBoundary | undefined>(undefined);
@@ -178,6 +170,7 @@ function HistoryDisclosure({
     continuationIntent.current = undefined;
     continuationBoundary.current = undefined;
     setContinuationStatus(null);
+    setAdditionStatus(null);
     const keyboardOwner =
       cursor !== undefined && keyboardElement && document.activeElement === keyboardElement
         ? keyboardElement
@@ -230,6 +223,9 @@ function HistoryDisclosure({
       }
       const page = result.data;
       const entries = page.revisions.map((revision) => ({ revision, documentMedia: page.documentMedia }));
+      if (cursor !== undefined && entries.length > 0 && lifetime.snapshot().open) {
+        setAdditionStatus(m.revision_history_added({ count: new Intl.NumberFormat(locale).format(entries.length) }));
+      }
       if (
         cursor !== undefined &&
         intent &&
@@ -280,6 +276,7 @@ function HistoryDisclosure({
     continuationIntent.current = undefined;
     continuationBoundary.current = undefined;
     setContinuationStatus(null);
+    setAdditionStatus(null);
     if (!lifetime.ownsConnection(connection)) return;
     const view = lifetime.snapshot();
     const reveal = !view.open;
@@ -321,26 +318,30 @@ function HistoryDisclosure({
           </p>
         ) : null}
         {available && revisions.length > 0 ? (
-          <ol className="space-y-5" aria-label={m.thread_history_heading()}>
-            {revisions.map(({ revision, documentMedia }, index) => (
-              <RevisionEntry
-                key={revision.revisionId}
-                revision={revision}
-                number={index + 1}
-                authors={authors}
-                mentions={mentions}
-                documentMedia={documentMedia}
-                now={now}
-                subjects={subjects}
-                currentVote={viewerId === revision.authorId ? reviewVotes[revision.id] : undefined}
-                review={review}
-                focusBoundary={
-                  continuationBoundary.current?.connection === connection &&
-                  continuationBoundary.current.revisionId === revision.revisionId
-                }
-              />
-            ))}
-          </ol>
+          <RevisionHistoryNavigation
+            key={connection}
+            active={open}
+            entries={revisions}
+            authors={authors}
+            mentions={mentions}
+            now={now}
+            subjects={subjects}
+            reviewVotes={reviewVotes}
+            viewerId={viewerId}
+            review={review}
+            hasMore={next !== null}
+            isCurrent={() => lifetime.ownsConnection(connection)}
+            boundaryRevisionId={
+              continuationBoundary.current?.connection === connection
+                ? continuationBoundary.current.revisionId
+                : undefined
+            }
+          />
+        ) : null}
+        {available && open && additionStatus ? (
+          <p role="status" className="sr-only">
+            {additionStatus}
+          </p>
         ) : null}
         {continuationBoundary.current?.connection === connection && continuationBoundary.current.revisionId === null ? (
           <ContentItemHeading level={4} tabIndex={-1} data-history-focus-boundary className="font-semibold">
@@ -393,80 +394,5 @@ function HistoryDisclosure({
         ) : null}
       </section>
     </div>
-  );
-}
-
-export function RevisionEntry({
-  revision,
-  number,
-  authors,
-  mentions,
-  documentMedia,
-  now,
-  subjects,
-  currentVote,
-  review,
-  focusBoundary = false,
-}: {
-  revision: Revision;
-  number: number;
-  authors: HistoryPage['authors'];
-  mentions: HistoryPage['mentions'];
-  documentMedia: HistoryPage['documentMedia'];
-  now: string;
-  subjects: HistoryPage['subjects'];
-  currentVote: HistoryPage['reviewVotes'][string] | undefined;
-  review: boolean;
-  focusBoundary?: boolean;
-}) {
-  const locale = getLocale();
-  const headingId = `revision-entry-${useId().replaceAll(':', '')}`;
-  return (
-    <li className="min-w-0 border-t border-border/60 pt-4 first:border-0 first:pt-0">
-      <ContentItemFrame
-        as="article"
-        data-slot="content-item-frame"
-        aria-labelledby={headingId}
-        className="min-w-0 space-y-3 rounded-xl [overflow-wrap:anywhere]"
-      >
-        <ContentItemHeading
-          level={4}
-          id={headingId}
-          tabIndex={focusBoundary ? -1 : undefined}
-          data-history-focus-boundary={focusBoundary ? '' : undefined}
-          className="font-semibold"
-        >
-          <a
-            href={exactRevisionHref({ postId: revision.id, revisionId: revision.revisionId }, locale)}
-            className="inline-flex min-h-11 max-w-full items-center rounded-sm underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            {m.thread_history_version({ number: String(number) })}
-          </a>
-        </ContentItemHeading>
-        <Byline
-          author={authors?.[revision.authorId]}
-          createdAt={revision.revisedAt ?? revision.createdAt}
-          now={now}
-          showAuthor
-          className="[&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
-        />
-        {revision.availability === 'available' && revision.body ? (
-          <DocumentBody
-            className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere]"
-            document={revision.body}
-            mentions={mentions}
-            locale={locale}
-            renderImage={({ mediaId, alt }) => (
-              <NativeDocumentImage
-                image={revisionDocumentImage(documentMedia, revision, mediaId)}
-                alt={alt}
-                locale={locale}
-              />
-            )}
-          />
-        ) : null}
-        <RevisionProvenance revision={revision} subjects={subjects} currentVote={currentVote ?? null} review={review} />
-      </ContentItemFrame>
-    </li>
   );
 }

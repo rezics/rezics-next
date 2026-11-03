@@ -377,6 +377,12 @@ async function click(host: HTMLElement, label: string) {
     button!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  // Explicit inspection replaces the former automatic mounting of every returned document.
+  const region = host.querySelector<HTMLElement>('section > ol')?.parentElement;
+  if (region && !region.hidden && !region.querySelector('[data-history-inspector]')) {
+    const inspect = region.querySelector<HTMLButtonElement>('[data-history-inspect="0"]');
+    if (inspect) await act(async () => inspect.click());
+  }
 }
 
 function exactDisclosure(host: HTMLElement) {
@@ -550,7 +556,7 @@ test('exact revision and history share actual reader provenance, serialized admi
     obsoleteHistory.resolve(Response.json({ revisions: [later], next: null }));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(harness.host.querySelectorAll('section > ol > li')).toHaveLength(1);
-    expect(harness.host.querySelector('section [role="status"]')?.textContent).toContain(m.thread_history_loading());
+    expect(harness.host.querySelector('section > [role="status"]')?.textContent).toContain(m.thread_history_loading());
     expect(
       [...harness.host.querySelectorAll('button')].find(
         (button) => button.textContent?.trim() === m.thread_history_more(),

@@ -50,3 +50,61 @@ and a separate browser QueryClient. The existing [recovery suite](../../tests/po
 retains its assertions and exercises the default component, validator, generated client and controlled native
 transport. Browser/native acceptance, Storybook, growth and integration verification remain separate obligations;
 workspace typing does not establish those outcomes.
+
+## Loaded revision inspection
+
+`HistoryDisclosure` remains the only history request owner. `RevisionHistoryNavigation` receives the admitted
+window, page media, labels, subjects and author-private vote comparisons. It cannot call a read or enumerate
+history. Selection, keyboard movement, collapse and exact-address copying perform no native calls. Only the
+original History, More and Retry controls request a bounded page, with the original binding and failed cursor.
+
+The navigation subtree is keyed by the disclosure's connection inside its already lifetime-keyed parent.
+Retirement therefore clears the selected index, destination, inspector, pending focus and clipboard interaction
+without matching an old account tuple. Local callbacks also check the live connection immediately before acting.
+A retired callback cannot select or collapse a successor's body. Closing unmounts the inspector and its copy
+helper but retains the selected loaded position; reopening uses the owner's admitted window without another
+read. A native unavailable response clears that window and its navigation state.
+
+The initial list is collapsed. It contains only actual returned revisions, in native order. Its ordinals mean
+positions in **loaded history**, never global version numbers, a total, a gap count, or a claim that the first
+row is current. Each row retains its original immutable address. Revision time uses the delivered `revisedAt`,
+or explicitly labels the delivered `createdAt` as creation time when there is no revision time. No timestamp
+is minted from an identifier.
+
+Summary projection is one pass over the supplied array and allocates one small record per row. It never accesses
+or copies a body. Author labels are bounded to 120 code points and licence labels to 80, together below the
+240-code-point metadata budget. Iteration stops at the bound without materializing a long string as an array.
+Deleted authors follow the existing Byline disclosure and do not reveal retained names or handles. Missing
+identity batches remain unknown; selecting a row cannot fetch an author. Counts and provenance presence use
+only admitted metadata, without comparing neighbouring revisions or deriving an edit explanation.
+
+One selected index and one destination value describe the entire inspection state. No expansion map or per-body
+cache is created. At most one inspector mounts, using the original DocumentBody, media authorization and
+RevisionProvenance composition, in document-before-provenance order. The complete admitted snapshot goes to the
+installed renderer; the presentation does not trim documents or replace removed bodies. Removed revisions show
+their admitted metadata, exact address and an explanation, with no body reconstructed from cached content.
+Recorded ratings and differing own current votes remain distinct in the selected inspector.
+
+## Focus and exact-address return
+
+Decision: start with collapsed rows and open immutable destinations in a new tab, retaining this tab's admitted
+history, selected revision, focus and scroll position without navigation storage or a return URL.
+
+Every exact link retains the canonical localized post/revision path, and deliberately opens a separate tab with
+`noopener noreferrer`. The reader returns by closing that tab or switching to the original tab. The exact
+reader's existing return-to-thread link and authorization rules remain unchanged. No private text, author name,
+credential or cursor is added to an exact address. Copy uses the installed CopyDiscussionLink helper in copy-only
+mode because the row already supplies the explicit new-tab link. Its failed-copy field remains selectable; it
+contains only the canonical path resolved against the current origin.
+
+Each row has a normal expand/collapse button. Up/Down and Home/End move focus between those buttons without
+selecting or reading; Enter and Space use native button activation. The loaded-only select and explicit Inspect
+button can reach any returned position, while Previous/Next stop at the ends of the loaded window. Inspector
+collapse returns focus to its row only when focus was inside that inspector. It never steals focus from another
+control. Each target has a 44px minimum and labels wrap at phone width.
+
+Continuation retains the selected index and destination. The original keyboard intent still focuses the first
+returned boundary (or an empty-page boundary), while pointer activation retains its original focus behaviour.
+An additional live announcement counts only returned additions. Retry does not discard readable summaries or
+move the inspector. Empty history, initial transport error, sparse continuation, failed continuation and terminal
+history retain their original meanings; loaded counts never claim to be a total.

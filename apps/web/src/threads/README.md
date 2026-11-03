@@ -274,3 +274,31 @@ Prepared portable-writing stories use the real composer and visibly supplied sub
 are separately labelled prepared editor fixtures. Existing composer and browser-draft stories continue to own rich
 formatting, upload, departure and reload interactions. Portable-writing interaction stories cover phone 390 and
 desktop 1280, light/dark, long writing, file inspection, cancellation, export fallback, replacement and keyboard return.
+
+## Finding and inspecting returned revisions
+
+Post history uses a compact ordered list around the existing HistoryDisclosure and
+[history lifetime](post-history-lifetime.md#loaded-revision-inspection). Each summary contains only admitted
+author disclosure, actual revision/creation time, licence, availability and provenance presence. Loaded ordinals
+are explicitly local; neither the first returned row nor its position identifies the current revision. The
+native response provides no body summary, so there are no body-derived previews or inferred change descriptions.
+
+Decision: histories initially show collapsed rows; exact immutable links open in another tab so the original
+history, selected inspector, focus and reading position survive the visit without persistent storage.
+
+The loaded-only navigator, row inspection controls and Previous/Next never fetch. A single active inspector
+reuses the existing document/media renderer and provenance view. Closing it removes the full document from the
+DOM without changing that revision's availability. Removed bodies retain only the admitted metadata and an
+honest explanation. The review citation and the author's differing current vote remain separate facts.
+
+Summary projection is O(N) small metadata records for N supplied revisions. Generated author/licence text fits
+within 240 code points; documents are neither flattened nor duplicated. Inspection state is constant in N.
+The original disclosure owns page reads, authors/mentions/media, exact failed-cursor retry and continuation
+focus. The presentation is keyed by its connection and retires with the session, account, read authority,
+QueryClient, route and locale. Returning through an A–B–A identity change cannot restore old disclosure.
+
+Exact-address actions keep every canonical post/revision link. Opening a new tab leaves the original position
+intact; the installed copy helper offers a selectable same-origin URL if clipboard access fails. Identifiers
+stay out of ordinary summary labels. No private text, credentials or history cursor enter return navigation.
+Prepared revision-history stories exercise loaded, inspected, removed, partial-failure and terminal states at
+390px and 1280px, in both themes; prepared fixtures do not establish native response authorization.
