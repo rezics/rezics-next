@@ -4,9 +4,17 @@ import { mediaRequest } from '../src/media/index.ts';
 
 type Reservation = { byteCount: number; sha256: string | null };
 type Put = (key: string, value: ReadableStream<Uint8Array>, options?: R2PutOptions) => unknown;
+type Completion = {
+  id: string;
+  authorization: string | null;
+  containerId: string;
+  reservationRequestId: string;
+  byteCount: number;
+  sha256: string;
+};
 
 const reservations = new Map<string, Reservation>();
-const completions: { id: string; byteCount: number; sha256: string }[] = [];
+const completions: Completion[] = [];
 let nextId = 0;
 const kernel = Bun.serve({
   port: 0,
@@ -17,8 +25,15 @@ const kernel = Bun.serve({
     const reservation = id === undefined ? undefined : reservations.get(id);
     if (!match || !id || !reservation) return Response.json({ code: 'not_found' }, { status: 404 });
     if (match[2]) {
-      const input = (await request.json()) as { byteCount: number; sha256: string };
-      completions.push({ id, ...input });
+      const input = (await request.json()) as Omit<Completion, 'id' | 'authorization'>;
+      completions.push({
+        id,
+        authorization: request.headers.get('authorization'),
+        containerId: input.containerId,
+        reservationRequestId: input.reservationRequestId,
+        byteCount: input.byteCount,
+        sha256: input.sha256,
+      });
       return Response.json({ media: { id, state: 'uploaded' } });
     }
     return Response.json({
@@ -268,7 +283,16 @@ test('streams one exact measured body, completes once with its digest, and does 
   expect(response.status).toBe(200);
   expect(stored).toEqual(bytes);
   expect(storage.calls).toEqual({ puts: 1, deletes: 0 });
-  expect(completions.slice(completedBefore)).toEqual([{ id, byteCount: bytes.byteLength, sha256: digest }]);
+  expect(completions.slice(completedBefore)).toEqual([
+    {
+      id,
+      authorization: 'Bearer user:person',
+      containerId: 'container',
+      reservationRequestId: `request-${id}`,
+      byteCount: bytes.byteLength,
+      sha256: digest,
+    },
+  ]);
 });
 
 test('short, oversized, and errored sources fail once and clean up their single attempted write', async () => {

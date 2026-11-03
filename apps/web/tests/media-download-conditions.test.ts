@@ -44,6 +44,7 @@ function fixture(options: FixtureOptions = {}) {
   const decisions = new Map<string, DownloadDecision>([['original', allowedDecision()]]);
   let headMissing = options.headMissing ?? false;
   let getMissing = options.getMissing ?? false;
+  let kernelProblem: { status: number; code: string } | null = null;
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async (input, init) => {
@@ -55,6 +56,17 @@ function fixture(options: FixtureOptions = {}) {
       variant: url.searchParams.get('variant'),
       authorization: outgoing.headers.get('authorization'),
     });
+    if (kernelProblem) {
+      return Response.json(
+        {
+          type: `https://rezics.com/problems/${kernelProblem.code}`,
+          title: kernelProblem.code,
+          status: kernelProblem.status,
+          code: kernelProblem.code,
+        },
+        { status: kernelProblem.status },
+      );
+    }
     const decision = decisions.get(url.searchParams.get('variant') ?? '') ?? { allowed: false as const };
     if (decision.allowed) return Response.json(decision);
     return Response.json(
@@ -106,7 +118,11 @@ function fixture(options: FixtureOptions = {}) {
       );
     },
     setDecision(value: DownloadDecision, variant = 'original') {
+      kernelProblem = null;
       decisions.set(variant, value);
+    },
+    setKernelProblem(status: number, code: string) {
+      kernelProblem = { status, code };
     },
     setHeadMissing(value: boolean) {
       headMissing = value;
@@ -376,4 +392,60 @@ test('single byte ranges cover closed, open, suffix, clamped, huge, malformed, m
     },
     { headMissing: false, headSize: 0 },
   );
+});
+
+test('each download forwards the current caller; a prior 200 or matching validator cannot replace refusal or unavailability', async () => {
+  await withFixture(async (value) => {
+    const signedOut = await value.send();
+    expect(signedOut.status).toBe(200);
+    expect(new Uint8Array(await signedOut.arrayBuffer())).toEqual(bytes);
+    expectOneFreshAuthorization(value, 1, null);
+
+    const bound = await value.send({ headers: { authorization: 'Bearer current-viewer' } });
+    expect(bound.status).toBe(200);
+    expectOneFreshAuthorization(value, 2, 'Bearer current-viewer');
+
+    const other = await value.send({ headers: { authorization: 'Bearer other-viewer' } });
+    expect(other.status).toBe(200);
+    expectOneFreshAuthorization(value, 3, 'Bearer other-viewer');
+    expect(value.headCalls).toHaveLength(3);
+    expect(value.getCalls).toHaveLength(3);
+
+    value.setDecision({ allowed: false });
+    const revoked = await value.send({
+      headers: { authorization: 'Bearer current-viewer', 'if-none-match': etag, range: 'bytes=0-3' },
+    });
+    expect(revoked.status).toBe(404);
+    const revokedSurface = `${await revoked.clone().text()}\n${[...revoked.headers].map(([name, entry]) => `${name}: ${entry}`).join('\n')}`;
+    expect(revokedSurface).not.toContain(key);
+    expect(revokedSurface).not.toContain(digest);
+    expect(value.headCalls).toHaveLength(3);
+    expect(value.getCalls).toHaveLength(3);
+    expectOneFreshAuthorization(value, 4, 'Bearer current-viewer');
+
+    value.setDecision(allowedDecision());
+    expect((await value.send()).status).toBe(200);
+    expect(value.getCalls).toHaveLength(4);
+
+    for (const [index, item] of [
+      { status: 401, code: 'authentication_required', credential: null },
+      { status: 503, code: 'dependency_unavailable', credential: 'Bearer current-viewer' },
+    ].entries()) {
+      value.setKernelProblem(item.status, item.code);
+      const response = await value.send({
+        headers: {
+          ...(item.credential === null ? {} : { authorization: item.credential }),
+          'if-none-match': etag,
+          range: 'bytes=0-3',
+        },
+      });
+      expect(response.status, item.code).toBe(404);
+      const surface = `${await response.clone().text()}\n${[...response.headers].map(([name, entry]) => `${name}: ${entry}`).join('\n')}`;
+      expect(surface).not.toContain(key);
+      expect(surface).not.toContain(digest);
+      expect(value.headCalls).toHaveLength(4);
+      expect(value.getCalls).toHaveLength(4);
+      expectOneFreshAuthorization(value, index + 6, item.credential);
+    }
+  });
 });
