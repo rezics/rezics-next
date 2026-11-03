@@ -5,6 +5,8 @@ import { HomeFeed } from '../src/features/pages/home-feed';
 import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
 import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
+import { exactRevisionHref } from '../src/threads/exact-revision-href';
+import { threadLocation } from '../src/threads/thread-href';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 
@@ -71,6 +73,10 @@ test('Thread and post rows expose supplied identity beside the primary destinati
 const collectionId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2';
 const reviewId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
 const spaceId = '01a1a000-0000-7000-8000-000000000811';
+const reviewedSubjectId = '12345678-1234-1234-1234-123456789abd';
+const questionId = '12345678-1234-1234-1234-123456789abe';
+const parentId = '12345678-1234-1234-1234-123456789abf';
+const parentRevisionId = '12345678-1234-1234-1234-123456789ab0';
 
 function collectionRow(source: 'following' | 'discovery' = 'following'): FeedItem {
   return {
@@ -98,9 +104,39 @@ function reviewRow(): FeedItem {
       title: 'A careful reread',
       createdAt: '2026-11-03T00:00:00Z',
       excerpt: 'The opening holds.',
+      reviewContext: {
+        target: {
+          state: 'available',
+          subject: {
+            id: reviewedSubjectId,
+            kind: 'schema:Book',
+            label: { value: 'The reviewed edition', language: 'en' },
+          },
+        },
+        citation: {
+          state: 'available',
+          question: {
+            id: questionId,
+            revision: 7,
+            label: 'Does the ending hold up?',
+            grain: 'work',
+            scale: { min: 0, max: 10, displayStep: 1 },
+          },
+          units: 8,
+          voteRevision: 5,
+        },
+      },
     },
     destination: { kind: 'thread', id: reviewId, title: 'A careful reread' },
-  };
+  } as FeedItem;
+}
+
+function postWithParent(parent: unknown): FeedItem {
+  const item = row('post');
+  return {
+    ...item,
+    summary: { ...item.summary, parentContext: { kind: 'reply', parent } },
+  } as FeedItem;
 }
 
 function spaceRow(): FeedItem {
@@ -136,7 +172,10 @@ test('Collection, review and Space rows keep native identity and omit missing en
   expect(html[0]).not.toContain('Current Reader');
   expect(html[1]).toContain('Review');
   expect(html[1]).toContain('A careful reread');
-  expect(html[1]).not.toContain('rating');
+  expect(html[1]).toContain('The reviewed edition');
+  expect(html[1]).toContain('Does the ending hold up?');
+  expect(html[1]).toContain(questionId);
+  expect(html[1]).toContain('8 units');
   expect(html[2]).toContain('Space');
   expect(html[2]).toContain('Home Reading Room');
   expect(html[2]).toContain('Atlas');
@@ -162,4 +201,76 @@ test('Collection, review and Space rows keep native identity and omit missing en
     expect(labeled).toContain('A careful reread');
   }
   setLocale('en', { reload: false });
+});
+
+test('Home review and reply cards keep current citation and immediate-parent identities exact', () => {
+  const review = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(reviewRow(), 'en')} />);
+  expect(review).toContain(`data-feed-review-subject="${reviewedSubjectId}"`);
+  expect(review).toContain(`data-feed-review-question="${questionId}"`);
+  expect(review).toContain('data-feed-review-question-revision="7"');
+  expect(review).toContain('data-feed-review-units="8"');
+
+  const absent = reviewRow();
+  absent.summary = {
+    ...absent.summary,
+    reviewContext: {
+      target: { state: 'absent' },
+      citation: { state: 'absent' },
+    },
+  } as FeedItem['summary'];
+  const absentHtml = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(absent, 'en')} />);
+  expect(absentHtml).not.toContain(questionId);
+
+  const withheld = reviewRow();
+  withheld.summary = {
+    ...withheld.summary,
+    reviewContext: {
+      target: { state: 'withheld' },
+      citation: { state: 'withheld' },
+    },
+  } as FeedItem['summary'];
+  const withheldHtml = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(withheld, 'en')} />);
+  expect(withheldHtml).toContain(m.post_history_score_concealed({}, { locale: 'en' }));
+  expect(withheldHtml).not.toContain(questionId);
+  expect(withheldHtml).not.toContain(reviewedSubjectId);
+
+  const threadId = '12345678-1234-1234-1234-123456789abc';
+  const thread = { id: threadId, title: 'A discussion' };
+  const available = renderToStaticMarkup(
+    <ContentItem
+      {...homeFeedItemPresentation(
+        postWithParent({
+          state: 'available',
+          id: parentId,
+          revisionId: parentRevisionId,
+          createdAt: '2026-11-03T00:00:00Z',
+          author: { id: '12345678-1234-1234-1234-123456789ab1', displayName: 'Current Parent', handle: 'parent' },
+          excerpt: 'Hidden parent spoiler',
+          language: 'ja',
+          spoiler: true,
+        }),
+        'en',
+      )}
+    />,
+  );
+  expect(available).toContain(`href="${threadLocation('en', thread, undefined, parentId)}"`);
+  expect(available).toContain(`href="${exactRevisionHref({ postId: parentId, revisionId: parentRevisionId }, 'en')}"`);
+  expect(available).toContain('Current Parent');
+  expect(available).toContain('/en/@parent');
+  expect(available).toContain('data-feed-parent-language="ja"');
+  expect(available).not.toContain('Hidden parent spoiler');
+
+  const removed = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(postWithParent({ state: 'removed', id: parentId }), 'en')} />,
+  );
+  expect(removed).toContain(m.thread_reply_parent_deleted({}, { locale: 'en' }));
+  expect(removed).toContain(`href="${threadLocation('en', thread, undefined, parentId)}"`);
+
+  const concealed = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(postWithParent({ state: 'withheld' }), 'en')} />,
+  );
+  expect(concealed).toContain(m.thread_reply_parent_unavailable({}, { locale: 'en' }));
+  expect(concealed).not.toContain(parentId);
+  expect(concealed).not.toContain('Current Parent');
+  expect(concealed).not.toContain('Hidden parent spoiler');
 });

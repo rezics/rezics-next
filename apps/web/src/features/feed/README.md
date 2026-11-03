@@ -198,6 +198,9 @@ link. Author, verified identity, reviewed Subject and image-credit links remain 
 44px minimum targets. Continue keeps its progress state and its separate progress-session destination. FeedResults
 and the reaction owner retain the actions slot; card reading adds no writes or action store.
 
+Decision: Home shows only available review citations and admitted parent data; withheld context stays generic,
+removed parents keep only their admitted post anchor, and spoiler excerpts wait for explicit reveal.
+
 Decision: show absolute, locale-formatted UTC feed-occurrence time, explicitly separate from supplied creation time;
 null or invalid occurrence remains Unknown and never falls back to creation, progress or page `asOf`.
 

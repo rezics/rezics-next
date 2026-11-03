@@ -5390,6 +5390,7 @@
   "home_kinds_retry": "유형 다시 불러오기",
   "home_kinds_next": "다른 유형",
   "home_feed_kind_review": "리뷰",
+  "home_feed_review_cited_units": "인용된 값: {units} 단위",
   "library_type_action": "유형: {type}",
   "library_types_heading": "유형 선택",
   "library_types_description": "내 라이브러리의 유형을 한 페이지씩 확인하세요. 추적 중인 항목만 필터링하며 계속 읽기에는 영향을 주지 않습니다.",

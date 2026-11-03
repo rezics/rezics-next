@@ -5390,6 +5390,7 @@
   "home_kinds_retry": "タイプを再読み込み",
   "home_kinds_next": "ほかのタイプ",
   "home_feed_kind_review": "レビュー",
+  "home_feed_review_cited_units": "引用値：{units}単位",
   "library_type_action": "タイプ：{type}",
   "library_types_heading": "タイプを選択",
   "library_types_description": "ライブラリにあるタイプを1ページずつ表示します。絞り込みは登録済みの項目に適用され、「続きを読む」は変わりません。",

@@ -5390,6 +5390,7 @@
   "home_kinds_retry": "Volver a cargar los tipos",
   "home_kinds_next": "Más tipos",
   "home_feed_kind_review": "Reseña",
+  "home_feed_review_cited_units": "Valor citado: {units} unidades",
   "library_type_action": "Tipo: {type}",
   "library_types_heading": "Elegir un tipo",
   "library_types_description": "Explora los tipos de tu biblioteca, una página a la vez. El filtro se aplica a las entradas seguidas; «Continuar» no cambia.",

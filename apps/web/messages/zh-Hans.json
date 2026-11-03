@@ -5390,6 +5390,7 @@
   "home_kinds_retry": "重新加载类型",
   "home_kinds_next": "更多类型",
   "home_feed_kind_review": "评论",
+  "home_feed_review_cited_units": "引用值：{units} 个单位",
   "library_type_action": "类型：{type}",
   "library_types_heading": "选择类型",
   "library_types_description": "分页查看你资料库中的类型。此筛选仅用于已追踪条目，不影响继续阅读。",
