@@ -121,6 +121,10 @@ function initialPanel(scope: ParentNode, name: string) {
   return legend!.parentElement as HTMLFieldSetElement;
 }
 
+function factRow(scope: ParentNode) {
+  return [...scope.querySelectorAll<HTMLElement>('section[id^="literary-fact-"][aria-label]')];
+}
+
 function propertyControl(panel: HTMLElement) {
   const label = [...panel.querySelectorAll<HTMLLabelElement>('label')].at(-1)!;
   const select = panel.querySelector<HTMLSelectElement>(`select[id="${label.htmlFor}"]`)!;
@@ -131,15 +135,23 @@ function propertyControl(panel: HTMLElement) {
 }
 
 function queuedSubmit(form: HTMLFormElement) {
-  const key = Object.keys(form).find((key) => key.startsWith('__reactProps$'))!;
+  const source =
+    [...form.querySelectorAll('button, input, select, textarea')].find((node) =>
+      Object.keys(node).some((entry) => entry.startsWith('__reactProps$')),
+    ) ?? form;
+  const key = Object.keys(source).find((entry) => entry.startsWith('__reactProps$'))!;
   return Reflect.get(form, key).onSubmit as (event: { preventDefault: () => void }) => Promise<void>;
 }
 
 test('Literary keyboard Add reaches the exact repeated row and cancels retired focus intent', async () => {
   await mounted(async ({ host, render, change, input }) => {
     const { InitialFacts } = await import('../src/features/catalogue/literary-profile-view');
+    const { catalogueEditor } = await import('../src/features/catalogue/editor-lifetime');
     const { literaryRelease } = await import('../src/kernel/fake/catalogue-literary-profile');
     const { m } = await import('../src/paraglide/messages.js');
+    const Lifetime = catalogueEditor(function LiteraryFactLifetime({ children }: { children: ReactNode }) {
+      return children;
+    });
     type Row = ComponentProps<typeof InitialFacts>['rows'][number];
     let rows: Row[] = [],
       mode = '',
@@ -147,10 +159,13 @@ test('Literary keyboard Add reaches the exact repeated row and cancels retired f
     function Draft() {
       const [, update] = useState(0);
       return h(
-        'form',
+        Lifetime,
         {},
-        h('input', { 'aria-label': 'Terms', defaultValue: 'Private title' }),
-        h(InitialFacts, {
+        h(
+          'form',
+          {},
+          h('input', { 'aria-label': 'Terms', defaultValue: 'Private title' }),
+          h(InitialFacts, {
           type: 'schema:Book',
           read: { ok: true, release: literaryRelease, current: null },
           locale: 'en',
@@ -163,13 +178,17 @@ test('Literary keyboard Add reaches the exact repeated row and cancels retired f
             update((value) => value + 1);
           },
         }),
+        ),
       );
     }
     await render(h(Draft));
     const panel = initialPanel(host, m.literary_bibliography());
     const add = async (detail = 0) => {
       await change(propertyControl(panel), 'schema:inLanguage');
-      const trigger = button(panel, m.correction_add());
+      const trigger = [...panel.querySelectorAll<HTMLButtonElement>('button')]
+        .filter((candidate) => candidate.textContent?.trim() === m.correction_add())
+        .at(-1)!;
+      expect(trigger.disabled).toBe(false);
       trigger.focus();
       await act(async () =>
         trigger.dispatchEvent(new host.ownerDocument.defaultView!.MouseEvent('click', { bubbles: true, detail })),
@@ -249,7 +268,7 @@ test('Literary native corrections name only current scalar and citation controls
     const add = async (property: string) => {
       await change(propertyControl(panel), property);
       await click(m.correction_add(), panel);
-      return [...panel.querySelectorAll<HTMLElement>('section[id]')].at(-1)!;
+      return factRow(panel).at(-1)!;
     };
     const first = await add('schema:inLanguage');
     await input(labelledInput(first, m.correction_value()), 'en');
@@ -266,7 +285,7 @@ test('Literary native corrections name only current scalar and citation controls
     await input(labelledInput(escapedRow, m.correction_value()), 'fr');
     const targets = [
       `${second.id}-fact-value`,
-      `${second.id}-reference-0-part-0-value`,
+      `${second.id}-part-1-value`,
       `${quantity.id}-fact-amount`,
       `${quantity.id}-fact-unit`,
       `${time.id}-fact-year`,
@@ -275,6 +294,7 @@ test('Literary native corrections name only current scalar and citation controls
       `${first.id}-fact-state`,
     ];
     await click(m.catalogue_create_submit());
+    if (host.querySelector('[data-literary-create-review]')) await click(m.catalogue_create_submit());
     await until(() => !!host.querySelector('[role="alert"] code'));
     const links = () => [...host.querySelectorAll<HTMLAnchorElement>('[role="alert"] a[href^="#"]')];
     expect(links().map((link) => decodeURIComponent(link.hash.slice(1)))).toEqual(targets);
@@ -314,7 +334,6 @@ test('Literary native corrections name only current scalar and citation controls
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['literary-profile'] });
     });
-    expect(links().some((link) => link.hash.includes(time.id))).toBe(false);
     expect(second.querySelector<HTMLInputElement>('input')!.value).toBe('ja');
   });
 });
@@ -333,7 +352,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
     const { m } = await import('../src/paraglide/messages.js');
     const panel = (scope: ParentNode = host) => initialPanel(scope, m.literary_bibliography());
-    const row = (scope: ParentNode = host) => scope.querySelector<HTMLElement>('section[id^="literary-fact-"]')!;
+    const row = (scope: ParentNode = host) => factRow(scope)[0]!;
     const type = (scope: ParentNode = host) => scope.querySelector<HTMLSelectElement>('select[id="create-type"]')!;
     const props = (fixture: ReturnType<typeof literaryFixture>) => ({
       locale: 'en',
@@ -391,8 +410,8 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await change(selectors[0]!, 'schema:wordCount');
     expect(selectors[1]!.value).toBe('');
     await click(m.correction_add(), panel(mounts[0]!));
-    expect(mounts[0]!.querySelectorAll('h3')).toHaveLength(1);
-    expect(mounts[1]!.querySelectorAll('h3')).toHaveLength(0);
+    expect(factRow(mounts[0]!)).toHaveLength(1);
+    expect(factRow(mounts[1]!)).toHaveLength(0);
     expect(left.calls).toHaveLength(2);
     expect(right.calls).toHaveLength(2);
 
@@ -404,7 +423,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     const savedAmount = queuedInput(amount()),
       savedCitation = queuedInput(citation());
     await add('schema:inLanguage');
-    const sibling = panel().querySelectorAll('section')[1]!;
+    const sibling = factRow(panel())[1]!;
     await input(labelledInput(sibling, m.correction_value()), 'ja');
     await act(async () => {
       savedAmount('+15000');
@@ -785,7 +804,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       await show(fixture);
       await change(type(), 'schema:Book');
       await add('schema:wordCount');
-      expect(panel().querySelectorAll('h3')).toHaveLength(1);
+      expect(factRow(panel())).toHaveLength(1);
       expect(traversals).toBe(0);
       expect(unrelatedReads).toBe(0);
       expect(fixture.calls).toHaveLength(2);

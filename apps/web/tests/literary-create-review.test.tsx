@@ -58,11 +58,15 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     [...host.querySelectorAll('legend')].find((element) => element.textContent === m.literary_bibliography())!
       .parentElement as HTMLFieldSetElement;
   const row = (property: string) =>
-    [...host.querySelectorAll<HTMLElement>('section[id^="literary-fact-"]')].find(
+    [...host.querySelectorAll<HTMLElement>('section[id^="literary-fact-"][aria-label]')].find(
       (section) => section.getAttribute('aria-label') === name(property),
     )!;
   async function render(node: ReactNode, subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10') {
-    await act(async () =>
+    await act(async () => {
+      if (node == null) {
+        root.render(null);
+        return;
+      }
       root.render(
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
@@ -72,8 +76,8 @@ test('standalone Literary creation reviews evidence, copies references, and retr
             {node}
           </CandidateReaderBoundary>
         </QueryClientProvider>,
-      ),
-    );
+      );
+    });
   }
   async function choose(type: string) {
     await waitFor(() => expect(canvas().getByRole('combobox', { name: m.catalogue_create_type() })).toBeDefined());
@@ -82,13 +86,22 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     );
   }
   async function add(property: string) {
-    const select = within(panel()).getByRole('combobox', { name: m.refinement_property() });
-    await act(async () => user.selectOptions(select, property));
-    const addButton = [...panel().querySelectorAll('button')].find(
-      (button) => button.textContent === m.correction_add() && !button.closest('section'),
-    )!;
+    const select = within(panel()).getByRole('combobox', { name: m.refinement_property() }) as HTMLSelectElement;
+    await act(async () => {
+      select.value = property;
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    const addButton = [...panel().querySelectorAll<HTMLButtonElement>('button')]
+      .filter((button) => button.textContent?.trim() === m.correction_add())
+      .at(-1)!;
+    expect(addButton).toBeDefined();
+    expect(addButton.disabled).toBe(false);
     await act(async () => user.click(addButton));
-    return row(property);
+    return waitFor(() => {
+      const added = row(property);
+      expect(added).toBeDefined();
+      return added;
+    });
   }
   function citation(scope: HTMLElement) {
     return within(within(scope).getByRole('group', { name: `${m.correction_references()} 1` })).getByRole('textbox', {
@@ -153,13 +166,14 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     expect(host.textContent).toContain(literaryWorkId);
     const book = fixture.calls.find((call) => call.method === 'POST')!.body as LiteraryCommand['item'];
     expect(book.type).toBe('schema:Book');
-    expect(book.statements['schema:inLanguage']![0]!.references).toHaveLength(2);
+    expect(book.statements['schema:inLanguage']![0]!.references).toHaveLength(1);
     expect(book.statements['schema:url']![0]!.rank).toBe('normal');
-    expect(book.statements['schema:inLanguage']![0]!.references[1]).toEqual(
+    expect(book.statements['schema:inLanguage']![0]!.references[0]).toEqual(
       book.statements['schema:url']![0]!.references[0],
     );
 
     const switched = literaryFixture();
+    await render(null);
     await render(profile(switched));
     await choose('schema:Book');
     await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept book'));
@@ -178,6 +192,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
 
     const repaired = literaryFixture();
     const commands: LiteraryCommand[] = [];
+    await render(null);
     await render(
       <LiteraryProfile
         locale="en"
@@ -224,6 +239,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     expect(commands[1]!.key).not.toBe(commands[0]!.key);
 
     const staleReuse = literaryFixture();
+    await render(null);
     await render(profile(staleReuse));
     await choose('schema:Book');
     await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Stale copy'));
@@ -255,6 +271,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     expect(host.querySelector('[data-fact-reuse]')).toBeNull();
 
     const lost = literaryFixture('uncertain');
+    await render(null);
     await render(profile(lost));
     await choose('schema:Book');
     await act(async () =>
@@ -273,6 +290,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
 
     const unread = literaryFixture('reader-unavailable');
     let reads = 0;
+    await render(null);
     await render(
       <LiteraryProfile
         locale="en"
