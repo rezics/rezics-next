@@ -198,7 +198,13 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
         communityWorkModule,
         createRatingWorkModule(async () => '0'.repeat(64)),
       ],
-      { databaseUrl: database.url, pool: database.pool, client: workClient, env, executorId: `rating-terminal-${randomUUID()}` },
+      {
+        databaseUrl: database.url,
+        pool: database.pool,
+        client: workClient,
+        env,
+        executorId: `rating-terminal-${randomUUID()}`,
+      },
     );
     await runtime.launch();
 
@@ -280,7 +286,9 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
            WHERE partition_no = $1 AND consumer = 'effects' AND position > $2 AND position <= $3`,
           [partition, before.toString(), batch.position.toString()],
         );
-        await Promise.all(workflows.rows.map(({ workflow_id }) => workClient!.retrieveWorkflow(workflow_id).getResult()));
+        await Promise.all(
+          workflows.rows.map(({ workflow_id }) => workClient!.retrieveWorkflow(workflow_id).getResult()),
+        );
       }
       throw new Error('Effects relay did not reach a settled checkpoint');
     }
@@ -360,11 +368,7 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       const receiptKind = kind === 'realm' ? 'rating.voter-realm.membership' : 'rating.voter-eligibility.event';
       const receiptFloor = await commandPosition(voterId, receiptKind);
       if (kind === 'realm') {
-        await request(
-          direction === 'adding' ? 'POST' : 'DELETE',
-          `/v1/realms/${realmId}/membership`,
-          voterId,
-        );
+        await request(direction === 'adding' ? 'POST' : 'DELETE', `/v1/realms/${realmId}/membership`, voterId);
         await drainEffects();
         const transitionId = await commandTransitionId(voterId, receiptKind, receiptFloor);
         await completeRegisteredJob({ voterId, realmId, direction, transitionId });
@@ -402,7 +406,12 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       targetId: string,
       before: unknown,
     ): Promise<void> {
-      const pages = await database.admin.query<{ partition_no: number; epoch: number; position: string; data: { votes: unknown[] } }>(
+      const pages = await database.admin.query<{
+        partition_no: number;
+        epoch: number;
+        position: string;
+        data: { votes: unknown[] };
+      }>(
         `SELECT partition_no, epoch, position::text, data FROM core.outbox
          WHERE subject = $1 AND type = 'com.rezics.rating.segment.page.v1'
            AND position = $2
@@ -415,7 +424,11 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
         `SELECT epoch, position::text FROM core.consumer_checkpoint WHERE partition_no = $1 AND consumer = 'effects'`,
         [page.partition_no],
       );
-      if (!start.rows[0] || start.rows[0].epoch !== page.epoch || BigInt(start.rows[0].position) < BigInt(page.position))
+      if (
+        !start.rows[0] ||
+        start.rows[0].epoch !== page.epoch ||
+        BigInt(start.rows[0].position) < BigInt(page.position)
+      )
         throw new Error('Effects checkpoint did not settle through the segment page');
       await database.admin.query(
         `UPDATE core.consumer_checkpoint SET epoch = $2, position = $3, updated_at = clock_timestamp()
