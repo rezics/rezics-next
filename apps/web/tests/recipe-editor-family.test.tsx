@@ -82,7 +82,10 @@ test('Recipe creation and current correction share complete frames with independ
       const target = buttons.find((button) => !(button as HTMLButtonElement).disabled) ?? buttons[0]!;
       await user.click(target);
     });
-  const input = (scope: HTMLElement, name: string) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
+  const input = (scope: HTMLElement, name: string) => {
+    const matches = within(scope).getAllByRole('textbox', { name }) as HTMLInputElement[];
+    return matches.find((node) => node.id.includes('-fact-')) ?? matches[0]!;
+  };
   const replace = (control: HTMLElement, value: string) =>
     act(async () => {
       await user.clear(control);
@@ -860,7 +863,7 @@ test('Recipe creation and current correction share complete frames with independ
     await cite(nestedRow, 'https://cook.example/first');
     await cite(nestedRow, 'https://cook.example/second');
     const firstGroup = [...nestedRow.querySelectorAll('fieldset')].find((node) =>
-      node.querySelector('legend')?.textContent?.includes(`${m.correction_references()} 1`),
+      node.querySelector(':scope > legend')?.textContent?.includes(`${m.correction_references()} 1`),
     )!;
     await choosePart(firstGroup, 'schema:inLanguage');
     await click(firstGroup, m.correction_add());
