@@ -162,7 +162,7 @@ function renderRecord(record: InspectionRecord): string[] {
     `  Fence omissions: ${record.omittedFieldGroups?.length ? record.omittedFieldGroups.join(', ') : 'none recorded'}`,
   );
   lines.push(
-    `  Local source-key completion row retained: ${record.localCompletionRetained ? 'yes' : 'no'}; it is not generation-scoped or a current selected/public read.`,
+    `  Local source-key completion row retained: ${record.localCompletionRetained ? 'yes' : 'no'}; it is not generation-scoped, not a current selected/public read, and not proof of publication.`,
   );
   if (!record.envelopes?.length) {
     lines.push('  Prepared request envelopes: none retained for this record.');

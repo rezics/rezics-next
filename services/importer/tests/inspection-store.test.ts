@@ -75,8 +75,9 @@ test('read-only inspection pages bounded work, binds cursors, and drills into or
     const run = fixture.store.begin(source);
     if (run === 'busy') throw new Error('Expected an active generation');
     const pageKeys = Array.from({ length: 22 }, (_, index) => `Q${String(index).padStart(4, '0')}`);
-    for (const key of [...pageKeys, 'Q-MULTI', 'Q-SETTLED']) fixture.store.stage(run, staged(source, key));
+    for (const key of [...pageKeys, 'Q-MULTI', 'Q-SETTLED', 'QBASE']) fixture.store.stage(run, staged(source, key));
     expect(fixture.store.seal(run, { complete: true, skipped: 3 }).status).toBe('ready');
+    fixture.store.classify(run, 'QBASE', { commands: [] });
     for (const key of pageKeys)
       fixture.store.prepare(run, key, { commands: [command(source, key)], deferredCover: true });
     const multiCommands = Array.from({ length: 101 }, (_, index) => command(source, 'Q-MULTI', index));
