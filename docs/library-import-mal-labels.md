@@ -105,23 +105,22 @@ deletes the whole document through the existing `list_import_mal` graph phase. N
 their own erasure phases. Export projects immutable source rows only, excluding new review/command capabilities.
 
 Focused coverage: `test/library/list-import-mal-labels.test.ts` and the retained MAL case in
-`test/library/erasure-owned-graph.test.ts`. The owner journey uses the generated client to reopen the actual
-producer's evidence, submit existing/new targets, confirm and read exact native assignment IDs/revisions. An
-explicit canonical manual target change retires the previous confirmation even when both Subjects have the same
-display text. No claim mutation or tag-derived identity is needed for this case.
+`test/library/erasure-owned-graph.test.ts`. Generated-client owner coverage and whole-caller growth remain pending;
+the existing HTTP owner case does not establish the generated client's label extension. Changed-Subject coverage
+must use explicit canonical manual review or the admitted claim controls, independently of display/tag text.
 
 Decision: growth fixes R=3 selected rows (two supported and one negative), T=32 supported values, M=2 new names,
 P=20 and source bytes while growing native owner/neighbor labels and inactive same-Subject/label assignments.
 
-The native64/512/4096 case measures the mounted whole caller: upload, first/deep/final pages, exact source,
+The native64/512/4096 case must measure the mounted whole caller: upload, first/deep/final pages, exact source,
 review, maximum source bytes/values, duplicate targets, capacity refusal, lost-acknowledgement original replay,
-stale review, final cancellation, evidence removal and native cleanup. It captures actual statements, plan rows and
+stale review, final cancellation, evidence removal and native cleanup. It must capture actual statements, plan rows and
 buffers and encoded database request/response bytes across the instrumented pools. Producer document SELECT and
-UPDATE occurrences and their wire bytes are separately identified; complete plans retain Subject/account
+UPDATE occurrences and their wire bytes must be separately identified; complete plans must retain Subject/account
 preparation, reservations, native receipts, History/events and owner-index maintenance. Source, selection, page and
-per-value outcome bytes are counted separately. Preparation and measurement errors fail the case; an unavailable
+per-value outcome bytes must be counted separately. Preparation and measurement errors must fail the case; an unavailable
 native run supplies no measurement. Partial request cancellation and terminal erasure remain the focused cases
-above. Frozen integration remains a controller check; authored growth coverage does not claim an executed result.
+above. Frozen integration remains a controller check; neither growth coverage nor an executed result is claimed.
 
 ## Performance review
 
@@ -135,7 +134,7 @@ by the existing caps but is not an O(T)-byte claim or a latency measurement.
 
 Reservations still read at most 32 reserved tuples and lock at most 33 addressed parents with the predicates
 above. Those facts do not bound nested command work: owner admission/preparation, original receipt checks,
-History, events and index maintenance must remain in total statement/row/buffer/byte comparisons. The new caller
-case retains their full plans rather than subtracting them or declaring failed preparation a zero-cost sample.
+History, events and index maintenance must remain in total statement/row/buffer/byte comparisons. The caller
+case must retain their full plans without subtracting them or declaring failed preparation a zero-cost sample.
 Any document batching optimization must preserve committed original operands, per-value acknowledgement,
 currentness fences and partial cancellation; it needs a separate measured D-axis comparison before adoption.
