@@ -40,8 +40,8 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/space-page-render.test.ts
@@ -51,8 +51,8 @@ acceptance:
   placement: default
   tests:
     - Default Space and Realm destinations consume the mounted home with its current native viewer observation and generated Client operation.
-    - "Native advice alone admits participation, join, leave, claim and management; anonymous, member, denied, banned, orphaned, concealed, missing carrier and operational failure remain distinct."
-    - "Complete visits retire on credential, locale, route, container, lifecycle, presentation and native-observation replacement; native batches and independent continuations retain keyboard retry and return focus."
+    - 'Native advice alone admits participation, join, leave, claim and management; anonymous, member, denied, banned, orphaned, concealed, missing carrier and operational failure remain distinct.'
+    - 'Complete visits retire on credential, locale, route, container, lifecycle, presentation and native-observation replacement; native batches and independent continuations retain keyboard retry and return focus.'
   failing: true
 ---
 
