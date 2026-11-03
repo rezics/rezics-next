@@ -69,9 +69,14 @@ bun run --cwd services/kernel check test/content/growth-realm-image-summary.test
 
 The workspace compiler command is `bun run --cwd services/kernel typecheck`. The controller binds execution to the
 committed source revision. Shared runner profiles retain actual statement text, rows, shared buffer hits/reads,
-three-scale samples and reached failures. No three-scale observations or reached product assertions are claimed
-until this native command executes. Browser acceptance, broader native acceptance and promotion remain deferred to
-controller admission. This document is an operation binding, not a gate or a promotion claim.
+three-scale samples and reached failures when execution reaches the operation.
+
+The focused command at `2d98ba938a` stopped in shared schema preparation with
+`error: Schema dump differs from db/library/schema.sql.` before loading the test. That snapshot and its library
+migrations are unchanged from the retained base. No product assertion was reached and observations at 256, 1024
+and 4096 remain unavailable; authored assertions are not executed evidence. The owning seam is Library's schema
+snapshot/migration consistency, not the Realm summary producer. Browser acceptance, broader native acceptance and
+promotion remain deferred to controller admission. This document is an operation binding, not a gate or a promotion claim.
 
 Read for this binding: Content's Realm presentation media and Cost sections, `realm-media.ts`,
 `realm-media-read.ts` and its two SQL projections, the existing functional asset and Realm download growth tests,
