@@ -10,7 +10,7 @@ import {
 } from '../support/growth.ts';
 import {
   growthPostFirstPublicationFixture, publicationScales, publicationBody,
-  type PublicationAxis, type PublicationKind, type PublicationTarget,
+  type PublicationKind, type PublicationTarget,
 } from './support/growth-post-first-publication-fixture.ts';
 
 setDefaultTimeout(1_800_000);
@@ -22,7 +22,8 @@ function writes(records: readonly SqlExecution[]) {
 
 /** Bind the measured writes to this exact source and native command envelope,
  * so a cheap HTTP response or event-only observation cannot satisfy growth. */
-function publicationBindings(records: readonly SqlExecution[], target: PublicationTarget, revisionId: string) {
+function publicationBindings(records: readonly SqlExecution[], target: PublicationTarget, revisionId: string,
+  state: { security_revision: string; thread_security_revision: string }) {
   const one = (sql: string) => {
     const matches = records.filter(r => r.statement === sql);
     expect(matches).toHaveLength(1);
@@ -36,10 +37,12 @@ function publicationBindings(records: readonly SqlExecution[], target: Publicati
   expect(head.parameters[updateHead.params.indexOf('revision_id')]).toBe(revisionId);
   expect(head.parameters[updateHead.params.indexOf('previous_visibility')]).toBe('draft');
   expect(head.parameters[updateHead.params.indexOf('visibility')]).toBe('published');
+  expect(head.parameters[updateHead.params.indexOf('security_revision')]).toBe(state.security_revision);
   if (target.ancestry === 1) {
     const thread = one(publishOpeningThread.sql);
     expect(thread.parameters[publishOpeningThread.params.indexOf('thread_id')]).toBe(target.threadId);
     expect(thread.parameters[publishOpeningThread.params.indexOf('post_id')]).toBe(target.post.id);
+    expect(thread.parameters[publishOpeningThread.params.indexOf('security_revision')]).toBe(state.thread_security_revision);
   } else expect(records.filter(r => r.statement === publishOpeningThread.sql)).toHaveLength(0);
   const commit = one(fence.sql);
   const json = (name: 'events' | 'basis' | 'receipt') => {
@@ -96,11 +99,14 @@ for (const kind of ['opening', 'reply'] as const) {
       let target: PublicationTarget;
       let before: Awaited<ReturnType<Fixture['snapshot']>>;
       let completed: { target: PublicationTarget; before: typeof before; revisionId: string } | undefined;
-      async function prepare(scale: number) {
+      async function verifyCompleted() {
         if (completed) {
           await f.assertPublished(completed.target, completed.revisionId, completed.before);
           completed = undefined;
         }
+      }
+      async function prepare(scale: number) {
+        await verifyCompleted();
         target = await f.draft(kind, axis === 'revisions' ? scale : 0);
         before = await f.snapshot(target);
       }
@@ -110,7 +116,7 @@ for (const kind of ['opening', 'reply'] as const) {
         expect(result.status, JSON.stringify(result.value)).toBe(200);
         const revisionId = result.value.post.revisionId as string;
         expect(revisionId).not.toBe(target.post.revisionId);
-        publicationBindings(observer.records.slice(start), target, revisionId);
+        publicationBindings(observer.records.slice(start), target, revisionId, before.state);
         completed = { target, before, revisionId };
       }
       try {
@@ -120,14 +126,14 @@ for (const kind of ['opening', 'reply'] as const) {
           bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
           rule: 'series',
           async grow(_db, scale, previous) {
-            await f.grow(axis as PublicationAxis, scale, previous);
+            await f.grow(axis, scale, previous);
             await prepare(scale); // Spare warmup draft is outside capture too.
           },
           warmup: publish,
           prepare: async (_db, scale) => prepare(scale),
           operation: publish,
         });
-        if (completed) await f.assertPublished(completed.target, completed.revisionId, completed.before);
+        await verifyCompleted();
         growthEvidence(report, kind);
       } finally {
         try { await observer.close(); } finally { await f.close(); }

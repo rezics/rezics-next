@@ -2,8 +2,10 @@
 
 This private acceptance binds [Content Done-when 1](../goals/content.md#done-when) and its
 [three-scale native acceptance](../goals/content.md#acceptance) to the existing revision API.
-The source inspected is `7611eb8d97eafcc58b5bcbf410b8fa626386f105`, which retains the producer and native
-functional scenarios through `da495f8652249175e14b29192011b208c38cfdf9`.
+The source inspected is `7611eb8d97eafcc58b5bcbf410b8fa626386f105`, which contains the native producer and
+functional scenarios named by the contract. Its integration reference
+`da495f8652249175e14b29192011b208c38cfdf9` is not an ancestor of this retained base; the operation binding below
+uses the actual retained source, without merging that reference.
 This document describes authored assertions; it does not record a measured pass or notification delivery.
 Controller admission owns execution of the native acceptance after integration.
 
@@ -49,7 +51,7 @@ The classifier uses constant rows/statements and logarithmic blocks with unchang
 | --- | --- | --- |
 | Unrelated threads/posts | Routed bulk rows copy the shape of a real native opening, with independent IDs in the selected home partition; one thread/post/revision per ordinal | Selected draft history, containers, body and ancestry |
 | Selected retained revisions | Each fresh selected draft receives exactly N immutable retained revision rows, copied from its own current native revision; its native head and visibility are asserted unchanged | Unrelated population and command history; no synthetic receipts or events |
-| Native command history | N disjoint, expired native `POST /v1/grants` commands on a real unrelated post in the selected home, for another real account; counts pin grants and home receipt/outbox/write-basis pressure | Thread/post populations and selected revision history; no current grant or selected visibility changes |
+| Native command history | N disjoint, expired native `POST /v1/grants` commands on a real unrelated post in the selected home, for another real account; transaction joins pin grants to their actual native receipt/outbox/write-basis envelopes | Thread/post populations and selected revision history; no current grant or selected visibility changes |
 
 Opening drafts are routed into the fixture's home by selecting their real creation idempotency keys before
 issuing the command. Replies use a fixed native chain: selected draft plus 32 parents, including the opening.
@@ -108,7 +110,7 @@ actor and permissions.
 
 For opening rollback, the supported one-shot SQL observer fails after the actual native event fence has run.
 The real revision insert, post CAS and opening update are reached, followed by ROLLBACK. Revision IDs, post and
-thread security/visibility, receipt/basis and outbox evidence must equal pre-state. Anonymous thread visibility
+thread security/visibility, receipt/basis and outbox evidence, home command counts and partition position must equal pre-state. Anonymous thread visibility
 stays concealed; retrying the identical key after the one-shot fault succeeds once and exposes the thread.
 Observers and isolated databases are closed in `finally` blocks. No shared fixture, producer, frozen spec or
 notice-consumer file changes.

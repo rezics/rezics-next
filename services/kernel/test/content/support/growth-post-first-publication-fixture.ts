@@ -22,7 +22,10 @@ export type PublicationTarget = {
  * Only the pool changes: ordinary production HTTP runs on the shared observer. */
 export async function growthPostFirstPublicationFixture() {
   const native = await postPublicationFixture();
-  const db = await openGrowthDatabase(native.pool.options.connectionString);
+  const db = await openGrowthDatabase(native.pool.options.connectionString).catch(async error => {
+    await native.close();
+    throw error;
+  });
   try {
     const kernel = createKernel({
       pool: db.pool,
@@ -64,6 +67,7 @@ export async function growthPostFirstPublicationFixture() {
     const scope = await native.thread();
     const home = partitionOf(routeOf(scope.id)!);
     const route = routeOf(scope.id)!;
+    const historyPost = await native.reply(scope.id, 'published');
     // The reply has exactly 32 parents, including the opening; the selected
     // draft is the 33rd post. No population changes this ancestry.
     let parent = scope.firstPost;
@@ -133,7 +137,7 @@ export async function growthPostFirstPublicationFixture() {
     const publications = async (id: string) => (await native.evidence(id)).filter(e => e.type === publicationType);
     async function snapshot(target: PublicationTarget) {
       const id = target.post.id;
-      const [state, revisions, records] = await Promise.all([
+      const [state, revisions, records, commandState] = await Promise.all([
         native.state(id),
         db.admin.query('SELECT revision_id FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY revision_id',
           [routeOf(id), id]),
@@ -142,8 +146,13 @@ export async function growthPostFirstPublicationFixture() {
            FROM core.outbox o WHERE o.partition_no=c.partition_no AND o.position=c.position) AS events
           FROM core.receipt c JOIN editorial.write_basis b USING(partition_no,transaction_id)
           WHERE c.partition_no=$1 AND c.response->>'itemId'=$2 ORDER BY c.position`, [home, id]),
+        db.admin.query(`SELECT position::text,epoch,
+          (SELECT count(*)::integer FROM core.receipt WHERE partition_no=$1) AS receipts,
+          (SELECT count(*)::integer FROM core.outbox WHERE partition_no=$1) AS outbox,
+          (SELECT count(*)::integer FROM editorial.write_basis WHERE partition_no=$1) AS bases
+          FROM core.partition WHERE partition_no=$1`, [home]),
       ]);
-      return { state, revisions: revisions.rows, records: records.rows, events: await native.evidence(id) };
+      return { state, revisions: revisions.rows, records: records.rows, commandState: commandState.rows[0]!, events: await native.evidence(id) };
     }
     async function assertPublished(target: PublicationTarget, revisionId: string, before: Awaited<ReturnType<typeof snapshot>>) {
       const after = await snapshot(target);
@@ -153,6 +162,11 @@ export async function growthPostFirstPublicationFixture() {
         thread_visibility: 'published',
         thread_security_revision: String(BigInt(before.state.thread_security_revision) + (target.ancestry === 1 ? 1n : 0n)),
         revisions: before.state.revisions + 1,
+      });
+      expect(after.commandState).toEqual({
+        position: String(BigInt(before.commandState.position) + 1n), epoch: before.commandState.epoch,
+        receipts: before.commandState.receipts + 1, outbox: before.commandState.outbox + 2,
+        bases: before.commandState.bases + 1,
       });
       expect(after.records).toHaveLength(before.records.length + 1);
       const record = after.records.at(-1)!;
@@ -188,13 +202,22 @@ export async function growthPostFirstPublicationFixture() {
           // Disjoint, expired grants to one unrelated real resource. Every
           // receipt, basis and outbox row is produced by the native grant API.
           await checked('POST', '/v1/grants', {
-            resource: { route, id: scope.firstPost.id }, subject: { kind: 'account', id: historySubject },
+            resource: { route, id: historyPost.id }, subject: { kind: 'account', id: historySubject },
             actions: ['post:read'], valid: `[${start},${end})`,
           }, 201);
         }
         const count = await db.admin.query(`SELECT count(*)::integer AS n FROM access.resource_grant
-          WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='post:read'`, [route, scope.firstPost.id, historySubject]);
+          WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='post:read'`, [route, historyPost.id, historySubject]);
         expect(count.rows[0]!.n).toBe(scale);
+        const lineage = await db.admin.query(`SELECT count(DISTINCT c.transaction_id)::integer AS receipts,
+          count(DISTINCT b.transaction_id)::integer AS bases,count(DISTINCT o.position)::integer AS envelopes
+          FROM access.resource_grant g
+          JOIN core.receipt c ON c.partition_no=$4 AND c.transaction_id=g.transaction_id
+          JOIN editorial.write_basis b ON b.partition_no=c.partition_no AND b.transaction_id=c.transaction_id
+          JOIN core.outbox o ON o.partition_no=c.partition_no AND o.position=c.position
+          WHERE g.route=$1 AND g.resource_id=$2 AND g.subject_id=$3 AND g.action='post:read'`,
+          [route, historyPost.id, historySubject, home]);
+        expect(lineage.rows[0]).toEqual({ receipts: scale, bases: scale, envelopes: scale });
         for (const relation of ['core.receipt', 'core.outbox', 'editorial.write_basis']) {
           const records = await db.admin.query(`SELECT count(*)::integer AS n FROM ${relation} WHERE partition_no=$1`, [home]);
           expect(records.rows[0]!.n).toBeGreaterThanOrEqual(scale);
