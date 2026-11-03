@@ -12,10 +12,9 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS } from './events.ts';
 import { createAppealEffect } from './appeals.ts';
 import { writeNotices } from './notices.ts';
-import readDecision from './read-moderation-decision.sql';
+import readDecisionSource from './decision-page-source.sql';
 import readHistorySource from './moderation-history-source.sql';
 import projectHistory from './project-moderation-history.sql';
-import currentTarget from './moderation-history-target.sql';
 
 const takedownType = 'com.rezics.content.moderation.takedown.v1';
 const appealWindowMs = 183 * 24 * 60 * 60 * 1000;
@@ -76,60 +75,77 @@ async function snapshot<T>(
   );
 }
 
-/** Author access is independent of the visibility of the taken-down target. */
+type DecisionSource = NonNullable<Awaited<ReturnType<typeof readDecisionSource.run>>>;
+
+/** Equality includes retained fields, appeal facts and current target placement.
+ * Compare source text as well: statement retention may expire without a write. */
+function sameDecisionSource(left: DecisionSource, right: DecisionSource) {
+  return left.witness === right.witness && left.statement === right.statement;
+}
+
+/** Only these retained fields leave the source reader. In particular, the
+ * equality witness contains private identities and must never be serialized. */
+function decisionValue(decision: DecisionSource) {
+  const decidedAt = new Date(decision.decided_at);
+  return {
+    id: decision.decision_id,
+    targetKind: decision.target_kind as 'board' | 'thread' | 'post',
+    targetId: decision.target_id,
+    action: 'takedown' as const,
+    statement: decision.statement,
+    decidedAt: decidedAt.toISOString(),
+    appealDeadline:
+      decision.target_kind === 'board' ? null : new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
+    appeal:
+      decision.appeal_id === null
+        ? null
+        : {
+            id: decision.appeal_id,
+            outcome: decision.outcome as 'upheld' | 'reversed' | null,
+            statement: decision.resolver_statement,
+            resolvedAt: decision.resolved_at === null ? null : new Date(decision.resolved_at).toISOString(),
+          },
+  };
+}
+
+/** Author access is independent of the visibility of the taken-down target.
+ * Foreign authority preparation happens after releasing selection. The final
+ * observation checks the actual selected source and partition, then current
+ * moderator authority in that same native snapshot. It never grants target text. */
 export async function readModerationDecision(
   deps: { pool: Pool; access: Access },
   id: string,
   context: { actor: Actor; deadline: number },
 ) {
   const route = routeOf(id);
-  if (route === null) return null;
-  const observed = await snapshot(deps.pool, route, context.deadline, async (client) => {
-    const decision = await readDecision.run(client, { route, decision_id: id });
-    if (!decision) return null;
-    const [target] = await currentTarget.run(client, { route, kind: decision.target_kind, id: decision.target_id });
-    return target ? { decision, target } : null;
+  if (route === null || context.actor.kind !== 'account') return null;
+  const selected = await snapshot(deps.pool, route, context.deadline, (client) =>
+    readDecisionSource.run(client, { route, decision_id: id }),
+  );
+  if (!selected.value) return null;
+  const needsModerator =
+    selected.value.target_kind === 'board' || selected.value.author_account_id !== context.actor.accountId;
+  if (needsModerator && !selected.value.available) return null;
+  // Access may acquire other connections. Keep it outside the source checkout;
+  // no positive authorization result survives into the final observation.
+  const check = needsModerator
+    ? await accessCheck(
+        deps.access,
+        context.actor,
+        'moderation:takedown',
+        { route, id: selected.value.target_id },
+        { pool: deps.pool, deadline: context.deadline },
+      )
+    : null;
+  const final = await snapshot(deps.pool, route, context.deadline, async (client, partition) => {
+    if (partition.epoch !== selected.anchor.epoch) return null;
+    const source = await readDecisionSource.run(client, { route, decision_id: id });
+    if (!source || !sameDecisionSource(selected.value!, source)) return null;
+    if (check && !(await check(client))) return null;
+    return source;
   });
-  if (!observed.value || context.actor.kind !== 'account') return null;
-  const { decision, target } = observed.value;
-  let anchor = observed.anchor;
-  if (decision.target_kind === 'board' || target.author_account_id !== context.actor.accountId) {
-    if (!target.available) return null;
-    // Preparation may acquire a connection; release the source checkout first.
-    const check = await accessCheck(
-      deps.access,
-      context.actor,
-      'moderation:takedown',
-      { route, id: decision.target_id },
-      { pool: deps.pool, deadline: context.deadline },
-    );
-    const authorized = await snapshot(deps.pool, route, context.deadline, (client) => check(client));
-    if (!authorized.value) return null;
-    anchor = authorized.anchor;
-  }
-  const decidedAt = new Date(decision.decided_at);
-  return {
-    value: {
-      id: decision.decision_id,
-      targetKind: decision.target_kind as 'board' | 'thread' | 'post',
-      targetId: decision.target_id,
-      action: 'takedown' as const,
-      statement: decision.statement,
-      decidedAt: decidedAt.toISOString(),
-      appealDeadline:
-        decision.target_kind === 'board' ? null : new Date(decidedAt.getTime() + appealWindowMs).toISOString(),
-      appeal:
-        decision.appeal_id === null
-          ? null
-          : {
-              id: decision.appeal_id,
-              outcome: decision.outcome as 'upheld' | 'reversed' | null,
-              statement: decision.resolver_statement,
-              resolvedAt: decision.resolved_at === null ? null : new Date(decision.resolved_at).toISOString(),
-            },
-    },
-    anchor,
-  };
+  if (!final.value) return null;
+  return { value: decisionValue(final.value), anchor: final.anchor };
 }
 
 /** Inbox disclosure is limited to the current author of a post or thread.
@@ -140,51 +156,44 @@ export async function readModerationDecisionForAuthor(
   context: { actor: Actor; deadline: number },
 ) {
   if (context.actor.kind !== 'account') return null;
+  const accountId = context.actor.accountId;
   const route = routeOf(id);
   if (route === null) return null;
   const reference = () =>
     snapshot(deps.pool, route, context.deadline, async (client) => {
-      const decision = await readDecision.run(client, { route, decision_id: id });
-      if (!decision || decision.target_kind === 'board') return null;
-      const [target] = await currentTarget.run(client, {
-        route,
-        kind: decision.target_kind,
-        id: decision.target_id,
-      });
-      if (!target || target.author_account_id !== context.actor.accountId) return null;
-      return { decision, target };
+      const source = await readDecisionSource.run(client, { route, decision_id: id });
+      return source && source.target_kind !== 'board' && source.author_account_id === accountId ? source : null;
     });
   const before = await reference();
   if (!before.value) return null;
   const current = await readModerationDecision(deps, id, context);
   if (!current?.value) return null;
   const after = await reference();
-  if (!after.value) return null;
-  const left = before.value.decision;
-  const right = after.value.decision;
-  const sameTime = (leftValue: Date | string | null, rightValue: Date | string | null) =>
-    leftValue === null || rightValue === null
-      ? leftValue === rightValue
-      : new Date(leftValue).getTime() === new Date(rightValue).getTime();
-  const sameDecision =
-    left.decision_id === right.decision_id &&
-    left.target_kind === right.target_kind &&
-    left.target_id === right.target_id &&
-    left.appeal_id === right.appeal_id &&
-    left.outcome === right.outcome &&
-    sameTime(left.resolved_at, right.resolved_at);
   if (
-    !sameDecision ||
-    before.value.target.author_account_id !== after.value.target.author_account_id ||
-    current.value.id !== right.decision_id ||
-    current.value.targetId !== right.target_id ||
-    current.value.targetKind !== right.target_kind ||
-    (current.value.appeal?.id ?? null) !== right.appeal_id ||
-    (current.value.appeal?.outcome ?? null) !== right.outcome ||
-    !sameTime(current.value.appeal?.resolvedAt ?? null, right.resolved_at)
+    !after.value ||
+    before.anchor.epoch !== after.anchor.epoch ||
+    current.anchor.epoch !== after.anchor.epoch ||
+    !sameDecisionSource(before.value, after.value)
   )
     return null;
-  return current;
+  // Match every exposed field too, including retention and the resolver's
+  // statement; an intervening read must not substitute another source version.
+  const expected = decisionValue(after.value);
+  if (
+    current.value.id !== expected.id ||
+    current.value.targetKind !== expected.targetKind ||
+    current.value.targetId !== expected.targetId ||
+    current.value.action !== expected.action ||
+    current.value.statement !== expected.statement ||
+    current.value.decidedAt !== expected.decidedAt ||
+    current.value.appealDeadline !== expected.appealDeadline ||
+    (current.value.appeal?.id ?? null) !== (expected.appeal?.id ?? null) ||
+    (current.value.appeal?.outcome ?? null) !== (expected.appeal?.outcome ?? null) ||
+    (current.value.appeal?.statement ?? null) !== (expected.appeal?.statement ?? null) ||
+    (current.value.appeal?.resolvedAt ?? null) !== (expected.appeal?.resolvedAt ?? null)
+  )
+    return null;
+  return { value: expected, anchor: after.anchor };
 }
 
 async function writeOnRoute<T>(
