@@ -369,7 +369,10 @@ export async function createReport(
         const partition = await readPartition(client, partitionOf(route(target.id)));
         if (!partition || partition.writeState === 'moved' || !observed) return false;
         const current = await targetFacts(client, target);
-        if (!current || current.fingerprint !== observed.fingerprint) return false;
+        if (!current || current.fingerprint !== observed.fingerprint) {
+          if (target.kind === 'space' || target.kind === 'realm') throw new ReportUnavailableError();
+          return false;
+        }
         // This fact is consumed only by a new command body, AFTER receipt lookup.
         // A changed, nonexistent revision under a reused key must still conflict.
         validRevision = await exactRevision(client, target, current, semantic.revisionId);

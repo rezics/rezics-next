@@ -749,6 +749,8 @@ function publishedModels(): void {
       | Readonly<{ kind: 'thread'; id: string }>
       | Readonly<{ kind: 'post'; id: string }>
       | Readonly<{ kind: 'subject'; id: string }>
+      | Readonly<{ kind: 'space'; id: string }>
+      | Readonly<{ kind: 'realm'; id: string }>
     >
   >();
   same<

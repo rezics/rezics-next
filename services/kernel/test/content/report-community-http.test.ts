@@ -81,11 +81,11 @@ test('Space and Realm reports retain receipts and dismissed outcomes through the
     expect(catalogue.body.reports.map((row: { id: string }) => row.id)).toContain(reportId);
     expect((await call(system.actors.other, 'GET', path)).status).toBe(404);
     const dismissKey = crypto.randomUUID();
-    expect((await call(moderator, 'POST', `${path}:dismiss`, undefined, dismissKey)).status).toBe(200);
-    expect((await call(moderator, 'POST', `${path}:dismiss`, undefined, dismissKey)).status).toBe(200);
+    expect((await call(moderator, 'POST', `${path}/$dismiss`, undefined, dismissKey)).status).toBe(200);
+    expect((await call(moderator, 'POST', `${path}/$dismiss`, undefined, dismissKey)).status).toBe(200);
     expect((await call(reporter, 'GET', path)).body.report).toMatchObject({ target: resource, evidence: input.evidence, outcome: 'dismissed' });
     await seedResourceDenial(system.database.pool, routeOf(id)!, id, moderator.actor.accountId, ['moderation:takedown']);
-    expect((await call(moderator, 'POST', `${path}:dismiss`, undefined, dismissKey)).status).toBe(404);
+    expect((await call(moderator, 'POST', `${path}/$dismiss`, undefined, dismissKey)).status).toBe(404);
     await seedResourceDenial(system.database.pool, routeOf(id)!, id, reporter.actor.accountId, [`${kind}:read`]);
     const retained = await call(reporter, 'GET', path);
     expect(retained.status).toBe(200);

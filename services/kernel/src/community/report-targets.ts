@@ -14,7 +14,7 @@ export async function communityReportTargetFacts(client: AccessClient, target: C
   if (route === null) return null;
   const statement = target.kind === 'space' ? space : realm;
   const parameters = { route, id: target.id };
-  const result = await client.query(statement.sql, statement.params.map((name) => parameters[name]));
+  const result = await client.query(statement.sql, statement.params.map((name) => parameters[name as keyof typeof parameters]));
   return result.rows[0] ? { fingerprint: JSON.stringify(result.rows[0]) } : null;
 }
 
