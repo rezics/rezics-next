@@ -185,10 +185,7 @@ async function observeThreads(
   if (rows.length !== unique.length) throw new ProblemError('dependency_unavailable');
   for (const [index, row] of rows.entries()) {
     const id = unique[index]!;
-    if (
-      row.anchor.partition.partitionNo !== partitionOf(routeOf(id)!) ||
-      (row.value && !threadMatches(row.value, id))
-    )
+    if (row.anchor.partition.partitionNo !== partitionOf(routeOf(id)!) || (row.value && !threadMatches(row.value, id)))
       throw new ProblemError('dependency_unavailable');
   }
   return {
@@ -422,7 +419,8 @@ function composeValues(
         thread?.availability === 'available' && thread.firstPost.availability === 'available'
           ? feedAuthor(owners.accounts.get(thread.firstPost.authorId))
           : undefined;
-      const postSummary = post?.availability === 'available' ? feedAuthor(owners.accounts.get(post.authorId)) : undefined;
+      const postSummary =
+        post?.availability === 'available' ? feedAuthor(owners.accounts.get(post.authorId)) : undefined;
       const review = thread ? reviewContext(thread, owners) : undefined;
       const parent = post ? parentContext(reference, post, content, owners) : undefined;
       return [

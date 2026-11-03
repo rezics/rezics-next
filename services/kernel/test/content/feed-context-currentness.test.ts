@@ -18,8 +18,13 @@ test('native context rejects mismatched observations and retires a removed or hi
     const created = await f.call('POST', '/v1/threads', {
       bearer: f.author.bearer,
       body: {
-        kind: 'review', title: 'Current native parent', body: fromPlainText('Review opening'),
-        licence: 'CC0-1.0', boardId: f.boardId, subjectIds: [f.subjectId], visibility: 'published',
+        kind: 'review',
+        title: 'Current native parent',
+        body: fromPlainText('Review opening'),
+        licence: 'CC0-1.0',
+        boardId: f.boardId,
+        subjectIds: [f.subjectId],
+        visibility: 'published',
       },
     });
     expect(created.response.status, created.text).toBe(201);
@@ -39,23 +44,33 @@ test('native context rejects mismatched observations and retires a removed or hi
     const prepare = () => prepareFeedContentContext(dependencies, references, context, ['en']);
     const initial = await (await prepare()).finish();
     expect(initial.contexts.get('one')?.parentContext).toMatchObject({
-      kind: 'reply', parent: { state: 'available', id: parentId, excerpt: 'Private after removal', language: null, spoiler: false },
+      kind: 'reply',
+      parent: { state: 'available', id: parentId, excerpt: 'Private after removal', language: null, spoiler: false },
     });
     expect(initial.contexts.get('two')).toEqual(initial.contexts.get('one'));
     expect(initial.contexts.get('one')?.reviewContext).toMatchObject({
-      target: { state: 'available', subject: { id: f.subjectId } }, citation: { state: 'absent' },
+      target: { state: 'available', subject: { id: f.subjectId } },
+      citation: { state: 'absent' },
     });
     const { thread, post } = initial.contexts.get('one')!;
     expect(thread).not.toBeNull();
     expect(post).not.toBeNull();
-    await expect(prepareFeedContentContext(dependencies, [
-      { ...references[0]!, initialThread: thread!, initialPost: post! },
-      { ...references[1]!, initialPost: { ...post!, parentId: null } },
-    ], context)).rejects.toThrow('conflicting post observations');
+    await expect(
+      prepareFeedContentContext(
+        dependencies,
+        [
+          { ...references[0]!, initialThread: thread!, initialPost: post! },
+          { ...references[1]!, initialPost: { ...post!, parentId: null } },
+        ],
+        context,
+      ),
+    ).rejects.toThrow('conflicting post observations');
     const mismatched = await prepareFeedContentContext(dependencies, references, context, [], {
-      observeThreads: async (ids, current) => (await discloseThreads(dependencies, ids, current)).map((row) => ({
-        ...row, value: row.value ? { ...row.value, id: f.subjectId } : null,
-      })),
+      observeThreads: async (ids, current) =>
+        (await discloseThreads(dependencies, ids, current)).map((row) => ({
+          ...row,
+          value: row.value ? { ...row.value, id: f.subjectId } : null,
+        })),
     });
     await expect(mismatched.finish()).rejects.toMatchObject({ code: 'dependency_unavailable' });
 
@@ -72,17 +87,24 @@ test('native context rejects mismatched observations and retires a removed or hi
 
     const hiddenParent = await reply('Private after takedown');
     const hiddenChild = await reply('Child of hidden parent', hiddenParent);
-    const beforeHide = await prepareFeedContentContext(dependencies, [{ key: 'hidden', threadId, postId: hiddenChild }], context);
+    const beforeHide = await prepareFeedContentContext(
+      dependencies,
+      [{ key: 'hidden', threadId, postId: hiddenChild }],
+      context,
+    );
     const grant = await f.call('POST', '/v1/grants', {
       bearer: f.governance.bearer,
       body: {
         resource: { route: routeOf(hiddenParent), id: hiddenParent },
-        subject: { kind: 'account', id: f.other.accountId }, actions: ['moderation:takedown'], valid: '(,)',
+        subject: { kind: 'account', id: f.other.accountId },
+        actions: ['moderation:takedown'],
+        valid: '(,)',
       },
     });
     expect(grant.response.status, grant.text).toBe(201);
     const hidden = await f.call('POST', `/v1/posts/${hiddenParent}:takeDown`, {
-      bearer: f.other.bearer, body: { reason: 'Hide the selected parent' },
+      bearer: f.other.bearer,
+      body: { reason: 'Hide the selected parent' },
     });
     expect(hidden.response.status, hidden.text).toBe(200);
     const concealed = (await beforeHide.finish()).contexts.get('hidden')!;
