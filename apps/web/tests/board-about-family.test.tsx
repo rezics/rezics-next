@@ -81,17 +81,16 @@ async function load(community: CommunityPresentation | 'unavailable' | null) {
       fetch: (input, init) => {
         const path = new URL(new Request(input, init).url).pathname;
         calls.push(path);
-        if (community !== null && path === `/v1/boards/${id}`)
-          return Promise.resolve(
-            Response.json({
-              board: {
-                ...realmBoard.board,
-                ...(community === 'unavailable' ? {} : { community }),
-              },
-            }),
-          );
-        if (community === 'unavailable' && path.startsWith('/v1/realms/'))
-          return Promise.resolve(Response.json({ code: 'not_found' }, { status: 404 }));
+        if (community !== null && path === `/v1/boards/${id}/page`)
+          return recorded(input, init).then(async (response) => {
+            const page = (await response.json()) as Record<string, unknown>;
+            const board = page.board as Record<string, unknown>;
+            const { community: _recordedCommunity, ...base } = board;
+            return Response.json({
+              ...page,
+              board: { ...base, ...(community === 'unavailable' ? {} : { community }) },
+            });
+          });
         return recorded(input, init);
       },
     }),
@@ -185,7 +184,7 @@ test('two simultaneous Boards retain local About/Rules associations, full suppli
     expect(view.html).toContain(m.board_community_protected_help());
     expect(view.html).not.toContain(supplied.members.state === 'current' ? supplied.members.version : 'unexpected');
     expect(calls).toEqual(before);
-    expect(calls.filter((path) => path === '/v1/accounts')).toHaveLength(1);
+    expect(calls.filter((path) => path === '/v1/accounts')).toHaveLength(0);
     expect(calls.some((path) => /^\/v1\/(posts|media|members)\//u.test(path))).toBe(false);
   } finally {
     await view.close();

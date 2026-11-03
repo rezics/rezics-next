@@ -199,6 +199,7 @@ export declare function createSearchWriterGuard(options: {
     pool: Pool;
     search: OpenSearch;
     index: string;
+    calendarFormat?: 1;
     consumer: string;
     source: SubjectSource;
     listing: SubjectListingSource;

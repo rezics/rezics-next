@@ -4,6 +4,7 @@ import { type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
 import { type RealmPresentation } from './presentation.ts';
+import read from './realm-read.sql';
 export type RealmDependencies = SpaceDependencies;
 export type RealmContext = SpaceContext;
 export type RealmInput = Readonly<{
@@ -51,6 +52,9 @@ export declare class RealmConflictError extends Error {
 export declare class RealmInputError extends Error {
     constructor();
 }
+/** Exact current source for a composed management read. The caller owns disclosure,
+ * management, partition and lifecycle checks on this same snapshot. */
+export declare function readRealmSettingsHead(client: Parameters<typeof read.run>[0], realmId: string, at: string): Promise<RealmView | null>;
 /** One head seek at Access's authoritative T, with the native grant branch
  * and no current ban required for protected Realms. Missing and denied resources both return null.
  */

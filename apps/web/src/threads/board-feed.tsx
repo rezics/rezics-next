@@ -9,7 +9,6 @@ import { getLocale } from '../paraglide/runtime.js';
 import { BoardSortNav, type BoardSort } from './board-sort';
 import { Byline, fullDateTime, timeText } from './byline';
 import { threadLocation, threadTitle } from './thread-href';
-import { threadActivity } from './activity';
 import { CopyDiscussionLink } from './copy-discussion-link';
 import {
   BoardPinBadge,
@@ -29,6 +28,8 @@ import {
   nativePinnedSection,
   ordinaryBoardThreads,
   type BoardFeedThread,
+  type BoardFeedAuthors,
+  type BoardOpeningCard,
   type BoardThreadPage,
   type CommunityBoardPage,
 } from './board-feed-data';
@@ -38,10 +39,10 @@ import type { PageAuthors } from '../identity/read';
 const consumedContinuationStates = new WeakSet<object>();
 let lastObservedHistoryIndex: number | null = null;
 
-function nativeReactionCounts(thread: BoardFeedThread): Partial<Record<ReactionKind, number>> | undefined {
-  if (thread.availability !== 'available' || thread.reactions === undefined) return undefined;
+function boardReactionCounts(card: BoardOpeningCard | undefined): Partial<Record<ReactionKind, number>> | undefined {
+  if (!card || card.interaction.counts.state !== 'as-of') return undefined;
   const counts: Partial<Record<ReactionKind, number>> = {};
-  for (const [kind, value] of Object.entries(thread.reactions)) {
+  for (const [kind, value] of Object.entries(card.interaction.counts.values)) {
     if (!Number.isSafeInteger(value) || value < 0) return undefined;
     counts[kind as ReactionKind] = value;
   }
@@ -50,6 +51,7 @@ function nativeReactionCounts(thread: BoardFeedThread): Partial<Record<ReactionK
 
 function ThreadCard({
   thread,
+  openingCard,
   authors,
   now,
   pin,
@@ -58,7 +60,8 @@ function ThreadCard({
   origin,
 }: {
   thread: BoardFeedThread;
-  authors: CommunityBoardPage['authors'];
+  openingCard?: BoardOpeningCard;
+  authors: BoardFeedAuthors;
   now: string;
   pin?: BoardPinThread;
   pinControl?: ReactNode;
@@ -82,8 +85,16 @@ function ThreadCard({
         ) : null}
       </>
     ) : null;
-  const { replyCount, lastActivityAt } = threadActivity(thread);
-  const counts = nativeReactionCounts(thread);
+  const comments = openingCard?.comments.state === 'current' ? openingCard.comments : undefined;
+  const replyCount = comments?.count;
+  const lastActivityAt = comments?.lastActivityAt ?? null;
+  const counts = boardReactionCounts(openingCard);
+  const reply =
+    openingCard?.actions.reply === 'allowed' || openingCard?.actions.reply === 'sign-in'
+      ? { href: `${href}${href.includes('#') ? '' : '#reply'}` }
+      : undefined;
+  const reactionValue =
+    openingCard?.interaction.viewer.state === 'current' ? openingCard.interaction.viewer.reaction : null;
 
   return (
     <ContentItem
@@ -117,20 +128,24 @@ function ThreadCard({
             href={href}
             signedIn={signedIn}
             origin={origin}
-            {...(replyCount === null ? {} : { replyCount })}
+            {...(replyCount === undefined ? {} : { replyCount })}
             {...(counts === undefined
               ? {}
               : {
                   reaction: {
                     target: { kind: 'thread' as const, id: thread.id },
                     counts,
-                    value: null,
+                    value: reactionValue,
                     personalReady: false,
                     settleWithRead: false,
                     reactionOrigin: { key: origin.key, reader: null, isCurrent: origin.isCurrent },
+                    sourceWatermark:
+                      openingCard?.interaction.counts.state === 'as-of'
+                        ? openingCard.interaction.counts.source
+                        : undefined,
                   },
                 })}
-            reply={{ href: `${href}${href.includes('#') ? '' : '#reply'}` }}
+            {...(reply ? { reply } : {})}
             overflow={<CopyDiscussionLink href={href} />}
           >
             {signedIn ? null : <CopyDiscussionLink href={href} />}
@@ -161,7 +176,8 @@ type BoardFeedProps = {
   boardId: string;
   sort: BoardSort;
   page: CommunityBoardPage['threads'];
-  authors: CommunityBoardPage['authors'];
+  openingCards?: CommunityBoardPage['openingCards'];
+  authors: BoardFeedAuthors;
   now: string;
   actions?: ReactNode;
   cursor?: string;
@@ -207,6 +223,7 @@ function BoardFeedVisit({
   boardId,
   sort,
   page,
+  openingCards,
   authors: initialAuthors,
   now,
   actions,
@@ -338,6 +355,7 @@ function BoardFeedVisit({
       <ThreadCard
         key={`${boardId}:${thread.id}:${thread.availability}`}
         thread={thread}
+        {...(openingCards?.[thread.id] ? { openingCard: openingCards[thread.id] } : {})}
         authors={authors}
         now={now}
         {...(row === undefined ? {} : { pin: row })}

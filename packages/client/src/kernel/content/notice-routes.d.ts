@@ -5,6 +5,7 @@ type Dependencies = {
     pool: import('pg').Pool;
     access: Access;
     tokens: KeyRing;
+    routeKey: Uint8Array;
     clock?: () => Date;
 };
 /** Mounts the account-private notification API on the content kernel. */
@@ -5181,13 +5182,63 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                             200: {
                                 items: {
                                     id: string;
-                                    kind: "mention" | "moderation_decision" | "reply";
+                                    kind: "board_activity" | "mention" | "moderation_decision" | "reply" | "thread_watch";
                                     createdAt: string;
                                     actorId: string | null;
                                     threadId: string | null;
                                     postId: string | null;
                                     decisionId: string | null;
                                     reportId: string | null;
+                                    actor: {
+                                        state: "available";
+                                        accountId: string;
+                                        displayName: string;
+                                        handle: string | null;
+                                        avatarUrl: string | null;
+                                        automated: boolean;
+                                    } | {
+                                        state: "withheld";
+                                        displayName: "Former or unavailable account";
+                                        handle: null;
+                                        avatarUrl: null;
+                                    } | {
+                                        state: "system";
+                                        displayName: "Moderation team";
+                                        handle: null;
+                                        avatarUrl: null;
+                                    };
+                                    target: {
+                                        state: "available" | "withheld";
+                                        threadId: string | null;
+                                        postId: string | null;
+                                        boardId: string | null;
+                                        threadTitle: string | null;
+                                        boardTitle: string | null;
+                                    };
+                                    summary: string;
+                                    actions: {
+                                        open: {
+                                            kind: "board";
+                                            boardId: string;
+                                        } | {
+                                            kind: "thread";
+                                            threadId: string;
+                                        } | {
+                                            kind: "thread_post";
+                                            threadId: string;
+                                            postId: string;
+                                        } | {
+                                            kind: "moderation_decision";
+                                            decisionId: string;
+                                        } | {
+                                            kind: "report_outcome";
+                                            reportId: string;
+                                        } | null;
+                                        markSeen: {
+                                            method: "POST";
+                                            path: string;
+                                        };
+                                    };
                                     unread: boolean;
                                 }[];
                                 next: string | null;
@@ -5286,6 +5337,11 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 200: {
                                     count: number;
                                     capped: boolean;
+                                    basis: "current-visible-lower-bound" | "current-visible-unread";
+                                    witness: {
+                                        kind: "current-disclosure";
+                                        at: string;
+                                    };
                                 };
                                 400: Response | {
                                     type: unknown;
@@ -5365,6 +5421,121 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
             };
         };
     };
+} & {
+    v1: {
+        accounts: {
+            ":accountId": {
+                notifications: {
+                    $markSeen: {
+                        post: {
+                            body: {
+                                through: string;
+                            };
+                            params: {
+                                accountId: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                204: void;
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                429: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                500: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -5386,46 +5557,14 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
     schemas: {};
     response: {};
     error: [];
-}, "post", "/v1/accounts/:accountId/notifications/$markSeen", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "post", "/v1/accounts/:accountId/notifications/:noticeId/$markSeen", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         accountId: import("typebox").TString;
+        noticeId: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
     }>;
-    body: {
-        '~standard': {
-            version: 1;
-            vendor: string;
-            types: {
-                input: {
-                    through: string;
-                };
-                output: {
-                    through: string;
-                };
-            } | undefined;
-            validate(value: unknown): {
-                value: {
-                    through: string;
-                };
-                issues?: never;
-            } | {
-                value?: never;
-                issues: {
-                    message: string;
-                }[];
-            };
-            jsonSchema: {
-                input: () => import("typebox").TObject<{
-                    through: import("typebox").TString;
-                }>;
-                output: () => import("typebox").TObject<{
-                    through: import("typebox").TString;
-                }>;
-            };
-        };
-    };
     response: {
         400: import("typebox").TObject<{
             type: import("typebox").TSchema;
@@ -5553,7 +5692,7 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
             bearerAuth: never[];
         }[];
     };
-}, {}, "/v1/accounts/:accountId/notifications/$markSeen">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { accountId }, body, headers: requestHeaders, actor, admission, job, set }: {
+}, {}, "/v1/accounts/:accountId/notifications/:noticeId/$markSeen">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params: { accountId, noticeId }, headers: requestHeaders, actor, admission, job, set }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -5747,43 +5886,11 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             accountId: import("typebox").TString;
+            noticeId: import("typebox").TString;
         }>;
         headers: import("typebox").TObject<{
             "idempotency-key": import("typebox").TString;
         }>;
-        body: {
-            '~standard': {
-                version: 1;
-                vendor: string;
-                types: {
-                    input: {
-                        through: string;
-                    };
-                    output: {
-                        through: string;
-                    };
-                } | undefined;
-                validate(value: unknown): {
-                    value: {
-                        through: string;
-                    };
-                    issues?: never;
-                } | {
-                    value?: never;
-                    issues: {
-                        message: string;
-                    }[];
-                };
-                jsonSchema: {
-                    input: () => import("typebox").TObject<{
-                        through: import("typebox").TString;
-                    }>;
-                    output: () => import("typebox").TObject<{
-                        through: import("typebox").TString;
-                    }>;
-                };
-            };
-        };
         response: {
             400: import("typebox").TObject<{
                 type: import("typebox").TSchema;
@@ -5911,7 +6018,7 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
                 bearerAuth: never[];
             }[];
         };
-    }, {}, "/v1/accounts/:accountId/notifications/$markSeen">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/accounts/:accountId/notifications/:noticeId/$markSeen">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -5934,12 +6041,11 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
     rid?: string;
     request: Request;
     store: {};
-    body: {
-        through: string;
-    };
+    body: unknown;
     query: Record<string, string | undefined>;
     params: {
         accountId: string;
+        noticeId: string;
     };
     headers: {
         "idempotency-key": string;
@@ -5962,43 +6068,11 @@ export declare function noticeRoutes(app: ReturnType<typeof definitionRoutes>, d
 }) => Promise<void>, {
     params: import("typebox").TObject<{
         accountId: import("typebox").TString;
+        noticeId: import("typebox").TString;
     }>;
     headers: import("typebox").TObject<{
         "idempotency-key": import("typebox").TString;
     }>;
-    body: {
-        '~standard': {
-            version: 1;
-            vendor: string;
-            types: {
-                input: {
-                    through: string;
-                };
-                output: {
-                    through: string;
-                };
-            } | undefined;
-            validate(value: unknown): {
-                value: {
-                    through: string;
-                };
-                issues?: never;
-            } | {
-                value?: never;
-                issues: {
-                    message: string;
-                }[];
-            };
-            jsonSchema: {
-                input: () => import("typebox").TObject<{
-                    through: import("typebox").TString;
-                }>;
-                output: () => import("typebox").TObject<{
-                    through: import("typebox").TString;
-                }>;
-            };
-        };
-    };
     response: {
         400: import("typebox").TObject<{
             type: import("typebox").TSchema;

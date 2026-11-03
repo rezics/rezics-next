@@ -14,6 +14,7 @@ import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts
 export declare const DISCOVERY_DOCUMENT_FORMAT = 1;
 /** Successor requires a complete native rebuild; format 1 retains its original reader. */
 export declare const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
+/** Calendar facts are written only to a physical generation using the matching successor mapping. */
 export declare const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
 export declare const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export declare const MAX_ACCOUNT_DISCOVERY_BATCH = 100;
@@ -41,6 +42,23 @@ export type DiscoveryOwnerKey = {
 };
 export type DiscoveryUnionKey = DiscoveryKey | DiscoveryOwnerKey;
 export type DiscoveryOwnerKind = 'collection' | 'review' | 'space';
+/** Owner names used by the closed page DTO; native source owners remain on execution keys. */
+export type DiscoveryPublicOwnerKey = {
+    owner: 'library';
+    kind: 'collection';
+    route: number;
+    id: string;
+} | {
+    owner: 'content';
+    kind: 'review';
+    route: number;
+    id: string;
+} | {
+    owner: 'community';
+    kind: 'space';
+    route: number;
+    id: string;
+};
 /** Already eligible native projection. Only the producer can establish eligibility and exact claims at T. */
 export type IndexedAccount = {
     id: string;
@@ -110,22 +128,67 @@ export type DiscoverySummary = {
     kind: 'account';
     value: AccountDiscoverySummary;
 };
+export type DiscoveryContextSubject = {
+    id: string;
+    labels: Record<string, string>;
+    aliases?: Record<string, string[]>;
+};
+export type DiscoveryContextList = {
+    items: DiscoveryContextSubject[];
+    next: boolean;
+};
+export type CharacterPersonDiscoveryContexts = {
+    credits: DiscoveryContextList;
+    appearances: DiscoveryContextList;
+};
 export type DiscoveryHit = {
     key: DiscoveryKey;
     summary: DiscoverySummary;
+    labels?: Record<string, string>;
+    aliases?: Record<string, string[]>;
+    contexts?: CharacterPersonDiscoveryContexts;
 };
+export type PublicCollectionDiscoverySummary = Readonly<{
+    id: string;
+    title: string;
+    description: string | null;
+}>;
+export type PublicReviewDiscoverySummary = Readonly<{
+    id: string;
+    kind: 'review';
+    title: string | null;
+    author?: Readonly<{
+        displayName: string | null;
+        handle: string | null;
+    }>;
+    excerpt?: string;
+    subject?: Readonly<{
+        id: string;
+        title: string | null;
+    }> | null;
+}>;
+export type PublicSpaceDiscoverySummary = Readonly<{
+    id: string;
+    title: string;
+    address: string;
+    summary?: string;
+    realm?: Readonly<{
+        id: string;
+        title: string | null;
+    }> | null;
+}>;
 export type DiscoveryOwnerSummary = {
     kind: 'collection';
-    value: DiscoveryOwnerMetadataSummary;
+    value: PublicCollectionDiscoverySummary;
 } | {
     kind: 'review';
-    value: DiscoveryOwnerMetadataSummary;
+    value: PublicReviewDiscoverySummary;
 } | {
     kind: 'space';
-    value: DiscoveryOwnerMetadataSummary;
+    value: PublicSpaceDiscoverySummary;
 };
 export type DiscoveryOwnerHit = {
-    key: DiscoveryOwnerKey;
+    key: DiscoveryPublicOwnerKey;
     summary: DiscoveryOwnerSummary;
 };
 export type DiscoveryUnionSummary = DiscoverySummary | DiscoveryOwnerSummary;
@@ -149,7 +212,7 @@ export type DiscoveryKindMetadata = {
     count?: KindCountEvidence;
 };
 export type DiscoveryPage = {
-    hits: DiscoveryHit[];
+    hits: DiscoveryUnionHit[];
     kinds: {
         values: DiscoveryKindMetadata[];
         next: string | null;
@@ -165,22 +228,50 @@ export type DiscoveryRequest = SearchRequest & {
     spaceId?: string;
 };
 /** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */
-export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'>;
+export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
+    languages?: readonly string[];
+    spoilerThreshold?: 0 | 1 | 2;
+    observeRelationRelease?: () => Promise<{
+        digest: string;
+        head: number;
+        release: import('@rezics/filter').FilterRelease;
+    } | null>;
+};
 export type DiscoveryCursorKeys = KeyRing;
 export type DiscoveryDomain = 'text' | 'kind' | 'type' | 'statement' | 'owner' | 'collection' | 'zone' | 'realm';
 export type DiscoveryTruth = boolean | 'not_applicable' | 'not_proven';
 /** The closed public metadata envelope returned by owner-native current reads. */
-export type DiscoveryOwnerMetadataSummary = Readonly<{
+export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = DiscoveryOwnerKind> = K extends 'collection' ? Readonly<{
     id: string;
     title: string;
     summary: string | null;
+    revision: string;
+    sourcePosition: string;
+    card: import('../library/collection-discovery-summaries.ts').PublicCollectionDiscoverySummary;
+}> : K extends 'review' ? Readonly<{
+    id: string;
+    title: string | null;
+    summary: string | null;
+    sourceVersion: string;
+    sourcePosition: string;
+    authorId: string;
+    subjectId: string;
+}> : Readonly<{
+    id: string;
+    title: string;
+    summary: string | null;
+    revision: string;
+    sourcePosition: string;
+    address: string | null;
+    realmId: string | null;
+    realmTitle: string | null;
 }>;
 export type DiscoveryOwnerAdapter<K extends DiscoveryOwnerKind, O extends 'commerce' | 'content'> = Readonly<{
     owner: O;
     kind: K;
     metadata: Readonly<Omit<DiscoveryKindMetadata, 'count'>>;
     /** The owner validates current eligibility and returns only the public metadata summary at this read. */
-    readCurrent: (ids: readonly string[], context: DiscoveryReadContext) => Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary>>;
+    readCurrent: (ids: readonly string[], context: DiscoveryReadContext) => Promise<ReadonlyMap<string, DiscoveryOwnerMetadataSummary<K>>>;
 }>;
 export type DiscoveryAdapterSlot<T> = Readonly<{
     readiness: 'unavailable';
@@ -320,10 +411,11 @@ export type DiscoveryConsumerCaptureInput = Omit<PublicFilterConsumerCaptureInpu
     comparator: 'mixed-public-v1';
 }>;
 export type DiscoveryEngineHit = Readonly<{
-    key: DiscoveryKey;
+    key: DiscoveryUnionKey;
     index: string;
     sourcePosition: string;
     revision: string;
+    sourceVersion?: string | null;
     matched: readonly string[];
     sort: readonly (string | number | null)[];
 }>;

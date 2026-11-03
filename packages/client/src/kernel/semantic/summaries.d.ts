@@ -53,6 +53,21 @@ export type SummaryReaderDependencies = {
     maySeeCover?: SummaryDependencies['maySeeCover'];
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
+type SummarySources = readonly Readonly<{
+    partition: number;
+    epoch: number;
+    position: bigint;
+}>[];
+export type SummaryCoverState = 'available' | 'absent' | 'concealed';
+/** Internal composition, never a browser-supplied witness or a cached allow.
+ * Each component is an independent native home position, as in Subject reads.
+ */
+export type SubjectSummaryObservation = Readonly<{
+    summaries: ReadonlyMap<string, SubjectSummary | null>;
+    covers: ReadonlyMap<string, SummaryCoverState>;
+    components: SummarySources;
+    current: () => Promise<boolean>;
+}>;
 /** Preserve the callable related-read adapter, and expose preparation to the batch owner.
  * Preparation never runs while the final snapshot is checked out. Only the returned
  * native checks execute on that snapshot; no allow decision is retained.
@@ -62,4 +77,10 @@ export declare function summaryAuthorization(prepare: (id: string, batch: readon
 export declare function readSubjectSummaries(deps: SummaryDependencies | SummaryReaderDependencies, ids: readonly string[], { languages }?: {
     languages?: readonly string[];
 }): Promise<Map<string, SubjectSummary | null>>;
+/** Read the ordinary projection and retain its actual source homes for a
+ * composing native reader. No owner connection survives the returned promise.
+ */
+export declare function readSubjectSummaryObservation(deps: SummaryReaderDependencies, ids: readonly string[], { languages }?: {
+    languages?: readonly string[];
+}): Promise<SubjectSummaryObservation>;
 export {};

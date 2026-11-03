@@ -23,6 +23,7 @@ export type SearchRequest = {
     text?: string;
     filter?: unknown;
     sort?: SearchPlan['sort'];
+    spoilerThreshold?: number;
     population?: {
         realm: string;
     };
@@ -79,10 +80,12 @@ export declare function createSearchService({ pool, client, prefix, source, rati
 }): {
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number, active?: {
         digest: string;
+        head?: number;
         release: FilterRelease;
     } | null, readContext?: PublicSearchReadContext): Promise<PublicSearchPage>;
     facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest, now?: number, context?: {
         deadline: number;
+        scope?: LeafOptions;
     }): Promise<FacetDiscovery200Response>;
     suggest(q: string, limit?: number, languages?: string[], read?: {
         deadline: number;

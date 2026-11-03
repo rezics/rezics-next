@@ -4,21 +4,22 @@ import type { Access } from '../request/access.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { readCollectionSourceWorkState } from '../library/collection-source-work-native.ts';
 import type { MembersPreparationWorkDefinition } from '../library/members-preparation.ts';
+import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import { type CollectionMemberAdmission } from '../library/owner-filter.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CurrentOwnerFilterPlan } from './current-filter-plan.ts';
-import { type MembersPreparationWorkContext } from './scope-work-context.ts';
+import { type CollectionPublicationWorkContext, type MembersPreparationWorkContext } from './scope-work-context.ts';
 import { type ScopeWork } from './scope-execution.ts';
 import type { ScopeEvaluationProgress } from './scope-source.ts';
 export type MembersWorkInput = Readonly<{
     pool: Pool;
     access: Access;
     deadline: number;
-    work: MembersPreparationWorkContext;
+    work: MembersPreparationWorkContext | CollectionPublicationWorkContext;
 }>;
 export type MembersSnapshot = Readonly<{
-    native: MembersPreparationWorkDefinition;
+    native: MembersPreparationWorkDefinition | CollectionPublicationWorkDefinition;
     source: Awaited<ReturnType<typeof readCollectionSourceWorkState>>;
     observation: IdentityScopeObservation;
     ownerFence: string | null;

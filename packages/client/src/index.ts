@@ -188,6 +188,10 @@ type PostHistoryPath = Omit<GeneratedPostHistoryPath, 'get'> &
 type PostPath = Omit<GeneratedPostPath, 'revisions'> & { revisions: PostHistoryPath };
 type PostsClient = Omit<GeneratedKernelClient['posts'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['posts']>) => PostPath);
+
+type BoardPageCall = ReturnType<ReturnType<GeneratedKernelClient['boards']>['page']['get']>;
+/** Response declared by the mounted GET /v1/boards/:id/page route. */
+export type BoardPageResponse = NonNullable<Awaited<BoardPageCall>['data']>;
 type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
 type DecisionPagePath = ReturnType<GeneratedKernelClient['moderation-decisions']>;
 type DecisionPageGet = DecisionPagePath['get'];

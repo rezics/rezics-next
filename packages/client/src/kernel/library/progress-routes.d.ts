@@ -1,9 +1,9 @@
-import type { EpisodeProgressWireRoutes } from './episode-progress-wire.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { type ReportedYearSummary } from './reported-year-summary.ts';
 type Dependencies = {
     routeKey: Uint8Array;
     pool: Pool;
@@ -5215,51 +5215,18 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             };
         };
     };
-} & EpisodeProgressWireRoutes & {
+} & {
     v1: {
         libraryReportedYearSummary: {
             get: {
                 body: unknown;
                 params: {};
-                query: { year: number; };
+                query: {
+                    year: string | number;
+                };
                 headers: unknown;
                 response: {
-                    200: Readonly<{
-                        completedOccurrences: string;
-                        distinctCompletedSubjects: string;
-                        repeatOccurrences: string;
-                        completedOccurrencesWithUnknownProfile: string;
-                        finishPrecision: Readonly<{ year: string; month: string; day: string; }>;
-                    }> & Readonly<{
-                        scope: 'retained_native_sessions';
-                        year: number;
-                        calendar: 'gregorian';
-                        dateSource: 'explicitly_reported_journal_finish';
-                        months: readonly (Readonly<{
-                            completedOccurrences: string;
-                            distinctCompletedSubjects: string;
-                            repeatOccurrences: string;
-                            completedOccurrencesWithUnknownProfile: string;
-                            finishPrecision: Readonly<{ year: string; month: string; day: string; }>;
-                        }> & { month: number; })[];
-                        monthUnallocated: Readonly<{
-                            completedOccurrences: string;
-                            distinctCompletedSubjects: string;
-                            repeatOccurrences: string;
-                            completedOccurrencesWithUnknownProfile: string;
-                            finishPrecision: Readonly<{ year: string; month: string; day: string; }>;
-                        }>;
-                        coverage: Readonly<{
-                            nativeSessions: 'complete';
-                            initializedSessions: string;
-                            retainedSessions: string;
-                            completedOccurrencesWithMissingFinish: string;
-                            completedOccurrencesWithUnsupportedFinish: string;
-                            otherHistory: 'unavailable';
-                            unitMeaning: 'not_evaluated';
-                        }>;
-                        currentness: Readonly<{ state: 'snapshot'; revision: string; }>;
-                    }>;
+                    200: ReportedYearSummary;
                     400: Response | {
                         type: unknown;
                         title: unknown;
@@ -5410,6 +5377,228 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     };
                 };
                 error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        progressSessions: {
+            ":sessionId": {
+                episodes: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            sessionId: string;
+                        };
+                        query: {
+                            ids?: string;
+                            cursor?: string;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                revision: number;
+                                episodes: {
+                                    episodeSubjectId: string | null;
+                                    completed: boolean | null;
+                                    membership: "detached" | "member" | "unavailable";
+                                    ordinal: string | null;
+                                }[];
+                                next: string | null;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        progressSessions: {
+            ":sessionId": {
+                $recordEpisodes: {
+                    post: {
+                        body: {
+                            revision: number;
+                            clear?: true;
+                            add?: string[];
+                            remove?: string[];
+                        };
+                        params: {
+                            sessionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                revision: number;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
             };
         };
     };
@@ -7778,6 +7967,8 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
         'x-exposure': string;
         'x-action': string;
         security: {}[];
+        'x-authority-anchor'?: string;
+        'x-authority-resource-types'?: string[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         responses: {
             200: {
@@ -8112,6 +8303,8 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
             'x-exposure': string;
             'x-action': string;
             security: {}[];
+            'x-authority-anchor'?: string;
+            'x-authority-resource-types'?: string[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
             responses: {
                 200: {
@@ -8306,6 +8499,8 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
         'x-exposure': string;
         'x-action': string;
         security: {}[];
+        'x-authority-anchor'?: string;
+        'x-authority-resource-types'?: string[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         responses: {
             200: {

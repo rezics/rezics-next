@@ -3,9 +3,12 @@ import type { CommandAuthorization, CommandOutcome } from '../command/command.ts
 import { type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KernelClock } from '../clock.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { type SourceFigures } from './source-figures.ts';
+import { type SourceProvider } from './source-provider.ts';
 export declare const SOURCE_STATISTIC_WRITE_ACTION = "source_statistic:write";
-type SourceStatistic = {
-    source: 'vndb';
+export type SourceStatistic = {
+    source: SourceProvider;
     sourceAlias?: string;
     sourceRecordId: string;
     scale: {
@@ -13,22 +16,31 @@ type SourceStatistic = {
         max: number;
     };
     mean: number;
+    figures?: SourceFigures;
     count: number;
     asOf: string;
     licence: string;
     attribution: string;
+    observation?: {
+        kind: 'unversioned';
+        digest: string;
+    };
 };
-type Input = Omit<SourceStatistic, 'source'>;
+type Input = Omit<SourceStatistic, 'source' | 'observation'> & {
+    expectedObservation?: string | null;
+};
 type ClearInput = Readonly<{
     sourceAlias?: string;
     sourceRecordId: string;
     count: 0;
     asOf: string;
+    expectedObservation?: string | null;
 }>;
 type Dependencies = {
     pool: Pool;
     access: () => Access;
     routeKey: Uint8Array;
+    tokens: KeyRing;
     clock?: KernelClock;
 };
 type CommandDependencies = {
@@ -44,6 +56,7 @@ type WriteInput = {
     idempotencyKey: string;
     authorization: CommandAuthorization;
     deadline: number;
+    subjectAvailable?: boolean;
 };
 type ClearInputCommand = {
     actor: Actor;
@@ -53,6 +66,7 @@ type ClearInputCommand = {
     idempotencyKey: string;
     authorization: CommandAuthorization;
     deadline: number;
+    subjectAvailable?: boolean;
 };
 type ExpectedFenceRevision = Readonly<{
     source: string;
@@ -5247,9 +5261,29 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                         headers: unknown;
                         response: {
                             200: {
-                                source: "vndb";
+                                source: "bangumi" | "vndb";
+                                observation?: {
+                                    kind: "unversioned";
+                                    digest: string;
+                                };
                                 sourceAlias?: string;
                                 sourceRecordId: string;
+                                figures?: {
+                                    schemaVersion: 1;
+                                    distribution?: {
+                                        unit: "ratings";
+                                        completeness: "complete" | "partial";
+                                        bins: {
+                                            score: number;
+                                            count: number;
+                                        }[];
+                                    };
+                                    rank?: {
+                                        unit: "subjects";
+                                        position: number;
+                                        population?: number;
+                                    };
+                                };
                                 scale: {
                                     min: number;
                                     max: number;
@@ -5352,8 +5386,25 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     ":source": {
                         put: {
                             body: {
+                                expectedObservation?: string | null;
                                 sourceAlias?: string;
                                 sourceRecordId: string;
+                                figures?: {
+                                    schemaVersion: 1;
+                                    distribution?: {
+                                        unit: "ratings";
+                                        completeness: "complete" | "partial";
+                                        bins: {
+                                            score: number;
+                                            count: number;
+                                        }[];
+                                    };
+                                    rank?: {
+                                        unit: "subjects";
+                                        position: number;
+                                        population?: number;
+                                    };
+                                };
                                 scale: {
                                     min: number;
                                     max: number;
@@ -5366,7 +5417,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             };
                             params: {
                                 id: string;
-                                source: "vndb";
+                                source: never;
                             };
                             query: unknown;
                             headers: {
@@ -5374,9 +5425,29 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                             };
                             response: {
                                 200: {
-                                    source: "vndb";
+                                    source: "bangumi" | "vndb";
+                                    observation?: {
+                                        kind: "unversioned";
+                                        digest: string;
+                                    };
                                     sourceAlias?: string;
                                     sourceRecordId: string;
+                                    figures?: {
+                                        schemaVersion: 1;
+                                        distribution?: {
+                                            unit: "ratings";
+                                            completeness: "complete" | "partial";
+                                            bins: {
+                                                score: number;
+                                                count: number;
+                                            }[];
+                                        };
+                                        rank?: {
+                                            unit: "subjects";
+                                            position: number;
+                                            population?: number;
+                                        };
+                                    };
                                     scale: {
                                         min: number;
                                         max: number;
@@ -5472,6 +5543,117 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             };
         };
     };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                "source-statistics": {
+                    ":source": {
+                        $clear: {
+                            post: {
+                                body: {
+                                    expectedObservation?: string | null;
+                                    sourceAlias?: string;
+                                    sourceRecordId: string;
+                                    count: 0;
+                                    asOf: string;
+                                };
+                                params: {
+                                    id: string;
+                                    source: never;
+                                };
+                                query: unknown;
+                                headers: {
+                                    "idempotency-key": string;
+                                };
+                                response: {
+                                    204: void;
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    409: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
 }, import("elysia").DefaultEphemeral, {
     derive: {
         readonly admission: import("../http/admission.ts").Admission;
@@ -5493,77 +5675,17 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     schemas: {};
     response: {};
     error: [];
-}, "post", "/v1/subjects/:id/source-statistics/:source/$clear", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
+}, "get", "/v1/subjects/:id/source-statistics/:source/observations", import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
     params: import("typebox").TObject<{
         id: import("typebox").TString;
-        source: import("typebox").TLiteral<"vndb">;
+        source: import("typebox").TUnion<import("typebox").TLiteral<"bangumi" | "vndb">[]>;
     }>;
-    headers: import("typebox").TObject<{
-        "idempotency-key": import("typebox").TString;
+    query: import("typebox").TObject<{
+        digest: import("typebox").TOptional<import("typebox").TString>;
+        cursor: import("typebox").TOptional<import("typebox").TString>;
+        history: import("typebox").TOptional<import("typebox").TLiteral<"true">>;
     }>;
-    body: {
-        '~standard': {
-            version: 1;
-            vendor: string;
-            types: {
-                input: {
-                    sourceAlias?: string;
-                    sourceRecordId: string;
-                    count: 0;
-                    asOf: string;
-                };
-                output: {
-                    sourceAlias?: string;
-                    sourceRecordId: string;
-                    count: 0;
-                    asOf: string;
-                };
-            } | undefined;
-            validate(value: unknown): {
-                value: {
-                    sourceAlias?: string;
-                    sourceRecordId: string;
-                    count: 0;
-                    asOf: string;
-                };
-                issues?: never;
-            } | {
-                value?: never;
-                issues: {
-                    message: string;
-                }[];
-            };
-            jsonSchema: {
-                input: () => import("typebox").TObject<{
-                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
-                    sourceRecordId: import("typebox").TString;
-                    count: import("typebox").TLiteral<0>;
-                    asOf: import("typebox").TString;
-                }>;
-                output: () => import("typebox").TObject<{
-                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
-                    sourceRecordId: import("typebox").TString;
-                    count: import("typebox").TLiteral<0>;
-                    asOf: import("typebox").TString;
-                }>;
-            };
-        };
-    };
     response: {
-        400: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail?: import("typebox").TOptional<import("typebox").TString>;
-            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -5648,11 +5770,179 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        204: import("typebox").TVoid & {
-            headers: {
-                readonly "rezics-session-token": import("typebox").TString;
-            };
-        };
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        200: import("typebox").TObject<{
+            source: import("typebox").TUnion<import("typebox").TLiteral<"bangumi" | "vndb">[]>;
+            head: import("typebox").TObject<{
+                digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"published">, import("typebox").TLiteral<"cleared">]>;
+                observation: import("typebox").TUnion<[import("typebox").TObject<{
+                    digest: import("typebox").TString;
+                    payloadVersion: import("typebox").TLiteral<1>;
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    asOf: import("typebox").TString;
+                    nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    legacy: import("typebox").TBoolean;
+                    provenance: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>;
+                    payload: import("typebox").TUnion<[import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        scale: import("typebox").TObject<{
+                            min: import("typebox").TInteger;
+                            max: import("typebox").TInteger;
+                        }>;
+                        mean: import("typebox").TNumber;
+                        figures: import("typebox").TOptional<import("typebox").TObject<{
+                            schemaVersion: import("typebox").TLiteral<1>;
+                            distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"ratings">;
+                                completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                bins: import("typebox").TArray<import("typebox").TObject<{
+                                    score: import("typebox").TInteger;
+                                    count: import("typebox").TInteger;
+                                }>>;
+                            }>>;
+                            rank: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"subjects">;
+                                position: import("typebox").TInteger;
+                                population: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>>;
+                        }>>;
+                        count: import("typebox").TInteger;
+                        asOf: import("typebox").TString;
+                        licence: import("typebox").TString;
+                        attribution: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        count: import("typebox").TLiteral<0>;
+                        asOf: import("typebox").TString;
+                    }>]>;
+                }>, import("typebox").TNull]>;
+            }>;
+            resolution: import("typebox").TObject<{
+                put: import("typebox").TObject<{
+                    expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+                clear: import("typebox").TObject<{
+                    expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+            }>;
+            selectedObservation: import("typebox").TOptional<import("typebox").TObject<{
+                digest: import("typebox").TString;
+                payloadVersion: import("typebox").TLiteral<1>;
+                sourceAlias: import("typebox").TString;
+                sourceRecordId: import("typebox").TString;
+                asOf: import("typebox").TString;
+                nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                legacy: import("typebox").TBoolean;
+                provenance: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"unversioned">;
+                    digest: import("typebox").TString;
+                }>;
+                payload: import("typebox").TUnion<[import("typebox").TObject<{
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    scale: import("typebox").TObject<{
+                        min: import("typebox").TInteger;
+                        max: import("typebox").TInteger;
+                    }>;
+                    mean: import("typebox").TNumber;
+                    figures: import("typebox").TOptional<import("typebox").TObject<{
+                        schemaVersion: import("typebox").TLiteral<1>;
+                        distribution: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"ratings">;
+                            completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                            bins: import("typebox").TArray<import("typebox").TObject<{
+                                score: import("typebox").TInteger;
+                                count: import("typebox").TInteger;
+                            }>>;
+                        }>>;
+                        rank: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"subjects">;
+                            position: import("typebox").TInteger;
+                            population: import("typebox").TOptional<import("typebox").TInteger>;
+                        }>>;
+                    }>>;
+                    count: import("typebox").TInteger;
+                    asOf: import("typebox").TString;
+                    licence: import("typebox").TString;
+                    attribution: import("typebox").TString;
+                }>, import("typebox").TObject<{
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    count: import("typebox").TLiteral<0>;
+                    asOf: import("typebox").TString;
+                }>]>;
+            }>>;
+            history: import("typebox").TOptional<import("typebox").TObject<{
+                items: import("typebox").TArray<import("typebox").TObject<{
+                    digest: import("typebox").TString;
+                    payloadVersion: import("typebox").TLiteral<1>;
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    asOf: import("typebox").TString;
+                    nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    legacy: import("typebox").TBoolean;
+                    provenance: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>;
+                    payload: import("typebox").TUnion<[import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        scale: import("typebox").TObject<{
+                            min: import("typebox").TInteger;
+                            max: import("typebox").TInteger;
+                        }>;
+                        mean: import("typebox").TNumber;
+                        figures: import("typebox").TOptional<import("typebox").TObject<{
+                            schemaVersion: import("typebox").TLiteral<1>;
+                            distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"ratings">;
+                                completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                bins: import("typebox").TArray<import("typebox").TObject<{
+                                    score: import("typebox").TInteger;
+                                    count: import("typebox").TInteger;
+                                }>>;
+                            }>>;
+                            rank: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"subjects">;
+                                position: import("typebox").TInteger;
+                                population: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>>;
+                        }>>;
+                        count: import("typebox").TInteger;
+                        asOf: import("typebox").TString;
+                        licence: import("typebox").TString;
+                        attribution: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        count: import("typebox").TLiteral<0>;
+                        asOf: import("typebox").TString;
+                    }>]>;
+                }>>;
+                nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>>;
+        }>;
     };
     detail: {
         operationId: string;
@@ -5663,7 +5953,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
         }[];
         'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
     };
-}, {}, "/v1/subjects/:id/source-statistics/:source/$clear">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, body, headers: requestHeaders, authorizeCommand, admission, job, session, set }: {
+}, {}, "/v1/subjects/:id/source-statistics/:source/observations">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, query, authorizeCommand, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -5673,17 +5963,6 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
         redirect?: never;
     };
     status: import("elysia").SelectiveStatus<{
-        400: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
         401: {
             type: unknown;
             title: unknown;
@@ -5750,20 +6029,178 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             detail: unknown;
             errors: unknown;
         };
-        204: void;
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        200: {
+            source: never;
+            head: {
+                digest: string | null;
+                state: "cleared" | "empty" | "published";
+                observation: {
+                    digest: string;
+                    payloadVersion: 1;
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    asOf: string;
+                    nativeOrder: string | null;
+                    legacy: boolean;
+                    provenance: {
+                        kind: "unversioned";
+                        digest: string;
+                    };
+                    payload: {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        scale: {
+                            min: number;
+                            max: number;
+                        };
+                        mean: number;
+                        figures?: {
+                            schemaVersion: 1;
+                            distribution?: {
+                                unit: "ratings";
+                                completeness: "complete" | "partial";
+                                bins: {
+                                    score: number;
+                                    count: number;
+                                }[];
+                            };
+                            rank?: {
+                                unit: "subjects";
+                                position: number;
+                                population?: number;
+                            };
+                        };
+                        count: number;
+                        asOf: string;
+                        licence: string;
+                        attribution: string;
+                    } | {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        count: 0;
+                        asOf: string;
+                    };
+                } | null;
+            };
+            resolution: {
+                put: {
+                    expectedObservation: string | null;
+                };
+                clear: {
+                    expectedObservation: string | null;
+                };
+            };
+            selectedObservation?: {
+                digest: string;
+                payloadVersion: 1;
+                sourceAlias: string;
+                sourceRecordId: string;
+                asOf: string;
+                nativeOrder: string | null;
+                legacy: boolean;
+                provenance: {
+                    kind: "unversioned";
+                    digest: string;
+                };
+                payload: {
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    scale: {
+                        min: number;
+                        max: number;
+                    };
+                    mean: number;
+                    figures?: {
+                        schemaVersion: 1;
+                        distribution?: {
+                            unit: "ratings";
+                            completeness: "complete" | "partial";
+                            bins: {
+                                score: number;
+                                count: number;
+                            }[];
+                        };
+                        rank?: {
+                            unit: "subjects";
+                            position: number;
+                            population?: number;
+                        };
+                    };
+                    count: number;
+                    asOf: string;
+                    licence: string;
+                    attribution: string;
+                } | {
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    count: 0;
+                    asOf: string;
+                };
+            };
+            history?: {
+                items: {
+                    digest: string;
+                    payloadVersion: 1;
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    asOf: string;
+                    nativeOrder: string | null;
+                    legacy: boolean;
+                    provenance: {
+                        kind: "unversioned";
+                        digest: string;
+                    };
+                    payload: {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        scale: {
+                            min: number;
+                            max: number;
+                        };
+                        mean: number;
+                        figures?: {
+                            schemaVersion: 1;
+                            distribution?: {
+                                unit: "ratings";
+                                completeness: "complete" | "partial";
+                                bins: {
+                                    score: number;
+                                    count: number;
+                                }[];
+                            };
+                            rank?: {
+                                unit: "subjects";
+                                position: number;
+                                population?: number;
+                            };
+                        };
+                        count: number;
+                        asOf: string;
+                        licence: string;
+                        attribution: string;
+                    } | {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        count: 0;
+                        asOf: string;
+                    };
+                }[];
+                nextCursor: string | null;
+            };
+        };
     }>;
     problem: import("elysia").SelectiveProblem<{
-        400: {
-            type: unknown;
-            title: unknown;
-            status: number;
-            code: unknown;
-            retryable: unknown;
-            effect_status: "not_applicable" | "not_applied";
-            request_id: string;
-            detail: unknown;
-            errors: unknown;
-        };
         401: {
             type: unknown;
             title: unknown;
@@ -5830,79 +6267,188 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             detail: unknown;
             errors: unknown;
         };
-        204: void;
+        400: {
+            type: unknown;
+            title: unknown;
+            status: number;
+            code: unknown;
+            retryable: unknown;
+            effect_status: "not_applicable" | "not_applied";
+            request_id: string;
+            detail: unknown;
+            errors: unknown;
+        };
+        200: {
+            source: never;
+            head: {
+                digest: string | null;
+                state: "cleared" | "empty" | "published";
+                observation: {
+                    digest: string;
+                    payloadVersion: 1;
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    asOf: string;
+                    nativeOrder: string | null;
+                    legacy: boolean;
+                    provenance: {
+                        kind: "unversioned";
+                        digest: string;
+                    };
+                    payload: {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        scale: {
+                            min: number;
+                            max: number;
+                        };
+                        mean: number;
+                        figures?: {
+                            schemaVersion: 1;
+                            distribution?: {
+                                unit: "ratings";
+                                completeness: "complete" | "partial";
+                                bins: {
+                                    score: number;
+                                    count: number;
+                                }[];
+                            };
+                            rank?: {
+                                unit: "subjects";
+                                position: number;
+                                population?: number;
+                            };
+                        };
+                        count: number;
+                        asOf: string;
+                        licence: string;
+                        attribution: string;
+                    } | {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        count: 0;
+                        asOf: string;
+                    };
+                } | null;
+            };
+            resolution: {
+                put: {
+                    expectedObservation: string | null;
+                };
+                clear: {
+                    expectedObservation: string | null;
+                };
+            };
+            selectedObservation?: {
+                digest: string;
+                payloadVersion: 1;
+                sourceAlias: string;
+                sourceRecordId: string;
+                asOf: string;
+                nativeOrder: string | null;
+                legacy: boolean;
+                provenance: {
+                    kind: "unversioned";
+                    digest: string;
+                };
+                payload: {
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    scale: {
+                        min: number;
+                        max: number;
+                    };
+                    mean: number;
+                    figures?: {
+                        schemaVersion: 1;
+                        distribution?: {
+                            unit: "ratings";
+                            completeness: "complete" | "partial";
+                            bins: {
+                                score: number;
+                                count: number;
+                            }[];
+                        };
+                        rank?: {
+                            unit: "subjects";
+                            position: number;
+                            population?: number;
+                        };
+                    };
+                    count: number;
+                    asOf: string;
+                    licence: string;
+                    attribution: string;
+                } | {
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    count: 0;
+                    asOf: string;
+                };
+            };
+            history?: {
+                items: {
+                    digest: string;
+                    payloadVersion: 1;
+                    sourceAlias: string;
+                    sourceRecordId: string;
+                    asOf: string;
+                    nativeOrder: string | null;
+                    legacy: boolean;
+                    provenance: {
+                        kind: "unversioned";
+                        digest: string;
+                    };
+                    payload: {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        scale: {
+                            min: number;
+                            max: number;
+                        };
+                        mean: number;
+                        figures?: {
+                            schemaVersion: 1;
+                            distribution?: {
+                                unit: "ratings";
+                                completeness: "complete" | "partial";
+                                bins: {
+                                    score: number;
+                                    count: number;
+                                }[];
+                            };
+                            rank?: {
+                                unit: "subjects";
+                                position: number;
+                                population?: number;
+                            };
+                        };
+                        count: number;
+                        asOf: string;
+                        licence: string;
+                        attribution: string;
+                    } | {
+                        sourceAlias: string;
+                        sourceRecordId: string;
+                        count: 0;
+                        asOf: string;
+                    };
+                }[];
+                nextCursor: string | null;
+            };
+        };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
         params: import("typebox").TObject<{
             id: import("typebox").TString;
-            source: import("typebox").TLiteral<"vndb">;
+            source: import("typebox").TUnion<import("typebox").TLiteral<"bangumi" | "vndb">[]>;
         }>;
-        headers: import("typebox").TObject<{
-            "idempotency-key": import("typebox").TString;
+        query: import("typebox").TObject<{
+            digest: import("typebox").TOptional<import("typebox").TString>;
+            cursor: import("typebox").TOptional<import("typebox").TString>;
+            history: import("typebox").TOptional<import("typebox").TLiteral<"true">>;
         }>;
-        body: {
-            '~standard': {
-                version: 1;
-                vendor: string;
-                types: {
-                    input: {
-                        sourceAlias?: string;
-                        sourceRecordId: string;
-                        count: 0;
-                        asOf: string;
-                    };
-                    output: {
-                        sourceAlias?: string;
-                        sourceRecordId: string;
-                        count: 0;
-                        asOf: string;
-                    };
-                } | undefined;
-                validate(value: unknown): {
-                    value: {
-                        sourceAlias?: string;
-                        sourceRecordId: string;
-                        count: 0;
-                        asOf: string;
-                    };
-                    issues?: never;
-                } | {
-                    value?: never;
-                    issues: {
-                        message: string;
-                    }[];
-                };
-                jsonSchema: {
-                    input: () => import("typebox").TObject<{
-                        sourceAlias: import("typebox").TOptional<import("typebox").TString>;
-                        sourceRecordId: import("typebox").TString;
-                        count: import("typebox").TLiteral<0>;
-                        asOf: import("typebox").TString;
-                    }>;
-                    output: () => import("typebox").TObject<{
-                        sourceAlias: import("typebox").TOptional<import("typebox").TString>;
-                        sourceRecordId: import("typebox").TString;
-                        count: import("typebox").TLiteral<0>;
-                        asOf: import("typebox").TString;
-                    }>;
-                };
-            };
-        };
         response: {
-            400: import("typebox").TObject<{
-                type: import("typebox").TSchema;
-                title: import("typebox").TSchema;
-                status: import("typebox").TLiteral<number>;
-                code: import("typebox").TSchema;
-                retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-                request_id: import("typebox").TString;
-                detail?: import("typebox").TOptional<import("typebox").TString>;
-                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                    pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-                }>>>;
-            }>;
             401: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -5987,11 +6533,179 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
-            204: import("typebox").TVoid & {
-                headers: {
-                    readonly "rezics-session-token": import("typebox").TString;
-                };
-            };
+            400: import("typebox").TObject<{
+                type: import("typebox").TSchema;
+                title: import("typebox").TSchema;
+                status: import("typebox").TLiteral<number>;
+                code: import("typebox").TSchema;
+                retryable: import("typebox").TSchema;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                request_id: import("typebox").TString;
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    pointer: import("typebox").TString;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                }>>>;
+            }>;
+            200: import("typebox").TObject<{
+                source: import("typebox").TUnion<import("typebox").TLiteral<"bangumi" | "vndb">[]>;
+                head: import("typebox").TObject<{
+                    digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"published">, import("typebox").TLiteral<"cleared">]>;
+                    observation: import("typebox").TUnion<[import("typebox").TObject<{
+                        digest: import("typebox").TString;
+                        payloadVersion: import("typebox").TLiteral<1>;
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        asOf: import("typebox").TString;
+                        nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        legacy: import("typebox").TBoolean;
+                        provenance: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"unversioned">;
+                            digest: import("typebox").TString;
+                        }>;
+                        payload: import("typebox").TUnion<[import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>]>;
+                    }>, import("typebox").TNull]>;
+                }>;
+                resolution: import("typebox").TObject<{
+                    put: import("typebox").TObject<{
+                        expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>;
+                    clear: import("typebox").TObject<{
+                        expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    }>;
+                }>;
+                selectedObservation: import("typebox").TOptional<import("typebox").TObject<{
+                    digest: import("typebox").TString;
+                    payloadVersion: import("typebox").TLiteral<1>;
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    asOf: import("typebox").TString;
+                    nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    legacy: import("typebox").TBoolean;
+                    provenance: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>;
+                    payload: import("typebox").TUnion<[import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        scale: import("typebox").TObject<{
+                            min: import("typebox").TInteger;
+                            max: import("typebox").TInteger;
+                        }>;
+                        mean: import("typebox").TNumber;
+                        figures: import("typebox").TOptional<import("typebox").TObject<{
+                            schemaVersion: import("typebox").TLiteral<1>;
+                            distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"ratings">;
+                                completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                bins: import("typebox").TArray<import("typebox").TObject<{
+                                    score: import("typebox").TInteger;
+                                    count: import("typebox").TInteger;
+                                }>>;
+                            }>>;
+                            rank: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"subjects">;
+                                position: import("typebox").TInteger;
+                                population: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>>;
+                        }>>;
+                        count: import("typebox").TInteger;
+                        asOf: import("typebox").TString;
+                        licence: import("typebox").TString;
+                        attribution: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        count: import("typebox").TLiteral<0>;
+                        asOf: import("typebox").TString;
+                    }>]>;
+                }>>;
+                history: import("typebox").TOptional<import("typebox").TObject<{
+                    items: import("typebox").TArray<import("typebox").TObject<{
+                        digest: import("typebox").TString;
+                        payloadVersion: import("typebox").TLiteral<1>;
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        asOf: import("typebox").TString;
+                        nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        legacy: import("typebox").TBoolean;
+                        provenance: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"unversioned">;
+                            digest: import("typebox").TString;
+                        }>;
+                        payload: import("typebox").TUnion<[import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            scale: import("typebox").TObject<{
+                                min: import("typebox").TInteger;
+                                max: import("typebox").TInteger;
+                            }>;
+                            mean: import("typebox").TNumber;
+                            figures: import("typebox").TOptional<import("typebox").TObject<{
+                                schemaVersion: import("typebox").TLiteral<1>;
+                                distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"ratings">;
+                                    completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                    bins: import("typebox").TArray<import("typebox").TObject<{
+                                        score: import("typebox").TInteger;
+                                        count: import("typebox").TInteger;
+                                    }>>;
+                                }>>;
+                                rank: import("typebox").TOptional<import("typebox").TObject<{
+                                    unit: import("typebox").TLiteral<"subjects">;
+                                    position: import("typebox").TInteger;
+                                    population: import("typebox").TOptional<import("typebox").TInteger>;
+                                }>>;
+                            }>>;
+                            count: import("typebox").TInteger;
+                            asOf: import("typebox").TString;
+                            licence: import("typebox").TString;
+                            attribution: import("typebox").TString;
+                        }>, import("typebox").TObject<{
+                            sourceAlias: import("typebox").TString;
+                            sourceRecordId: import("typebox").TString;
+                            count: import("typebox").TLiteral<0>;
+                            asOf: import("typebox").TString;
+                        }>]>;
+                    }>>;
+                    nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>>;
+            }>;
         };
         detail: {
             operationId: string;
@@ -6002,7 +6716,7 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
             }[];
             'x-rate-limit'?: Readonly<import("../http/rate-limit.ts").RateLimitDeclaration>;
         };
-    }, {}, "/v1/subjects/:id/source-statistics/:source/$clear">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
+    }, {}, "/v1/subjects/:id/source-statistics/:source/observations">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>>, NoInfer<import("elysia").DefaultSingleton & {
         derive: {
             readonly admission: import("../http/admission.ts").Admission;
             readonly job: {
@@ -6025,20 +6739,17 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     rid?: string;
     request: Request;
     store: {};
-    body: {
-        sourceAlias?: string;
-        sourceRecordId: string;
-        count: 0;
-        asOf: string;
+    body: unknown;
+    query: {
+        digest?: string;
+        cursor?: string;
+        history?: "true";
     };
-    query: Record<string, string | undefined>;
     params: {
         id: string;
-        source: "vndb";
+        source: never;
     };
-    headers: {
-        "idempotency-key": string;
-    };
+    headers: Record<string, string | undefined>;
     cookie: Record<string, import("elysia").Cookie<unknown>>;
     readonly admission: import("../http/admission.ts").Admission;
     readonly job: {
@@ -6054,77 +6765,175 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<undefined>, {
-    params: import("typebox").TObject<{
-        id: import("typebox").TString;
-        source: import("typebox").TLiteral<"vndb">;
-    }>;
-    headers: import("typebox").TObject<{
-        "idempotency-key": import("typebox").TString;
-    }>;
-    body: {
-        '~standard': {
-            version: 1;
-            vendor: string;
-            types: {
-                input: {
-                    sourceAlias?: string;
-                    sourceRecordId: string;
-                    count: 0;
-                    asOf: string;
+}) => Promise<{
+    source: never;
+    head: {
+        digest: string | null;
+        state: "cleared" | "empty" | "published";
+        observation: {
+            digest: string;
+            payloadVersion: 1;
+            sourceAlias: string;
+            sourceRecordId: string;
+            asOf: string;
+            nativeOrder: string | null;
+            legacy: boolean;
+            provenance: {
+                kind: "unversioned";
+                digest: string;
+            };
+            payload: {
+                sourceAlias: string;
+                sourceRecordId: string;
+                scale: {
+                    min: number;
+                    max: number;
                 };
-                output: {
-                    sourceAlias?: string;
-                    sourceRecordId: string;
-                    count: 0;
-                    asOf: string;
+                mean: number;
+                figures?: {
+                    schemaVersion: 1;
+                    distribution?: {
+                        unit: "ratings";
+                        completeness: "complete" | "partial";
+                        bins: {
+                            score: number;
+                            count: number;
+                        }[];
+                    };
+                    rank?: {
+                        unit: "subjects";
+                        position: number;
+                        population?: number;
+                    };
                 };
-            } | undefined;
-            validate(value: unknown): {
-                value: {
-                    sourceAlias?: string;
-                    sourceRecordId: string;
-                    count: 0;
-                    asOf: string;
-                };
-                issues?: never;
+                count: number;
+                asOf: string;
+                licence: string;
+                attribution: string;
             } | {
-                value?: never;
-                issues: {
-                    message: string;
-                }[];
+                sourceAlias: string;
+                sourceRecordId: string;
+                count: 0;
+                asOf: string;
             };
-            jsonSchema: {
-                input: () => import("typebox").TObject<{
-                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
-                    sourceRecordId: import("typebox").TString;
-                    count: import("typebox").TLiteral<0>;
-                    asOf: import("typebox").TString;
-                }>;
-                output: () => import("typebox").TObject<{
-                    sourceAlias: import("typebox").TOptional<import("typebox").TString>;
-                    sourceRecordId: import("typebox").TString;
-                    count: import("typebox").TLiteral<0>;
-                    asOf: import("typebox").TString;
-                }>;
-            };
+        } | null;
+    };
+    resolution: {
+        put: {
+            expectedObservation: string | null;
+        };
+        clear: {
+            expectedObservation: string | null;
         };
     };
+    selectedObservation?: {
+        digest: string;
+        payloadVersion: 1;
+        sourceAlias: string;
+        sourceRecordId: string;
+        asOf: string;
+        nativeOrder: string | null;
+        legacy: boolean;
+        provenance: {
+            kind: "unversioned";
+            digest: string;
+        };
+        payload: {
+            sourceAlias: string;
+            sourceRecordId: string;
+            scale: {
+                min: number;
+                max: number;
+            };
+            mean: number;
+            figures?: {
+                schemaVersion: 1;
+                distribution?: {
+                    unit: "ratings";
+                    completeness: "complete" | "partial";
+                    bins: {
+                        score: number;
+                        count: number;
+                    }[];
+                };
+                rank?: {
+                    unit: "subjects";
+                    position: number;
+                    population?: number;
+                };
+            };
+            count: number;
+            asOf: string;
+            licence: string;
+            attribution: string;
+        } | {
+            sourceAlias: string;
+            sourceRecordId: string;
+            count: 0;
+            asOf: string;
+        };
+    };
+    history?: {
+        items: {
+            digest: string;
+            payloadVersion: 1;
+            sourceAlias: string;
+            sourceRecordId: string;
+            asOf: string;
+            nativeOrder: string | null;
+            legacy: boolean;
+            provenance: {
+                kind: "unversioned";
+                digest: string;
+            };
+            payload: {
+                sourceAlias: string;
+                sourceRecordId: string;
+                scale: {
+                    min: number;
+                    max: number;
+                };
+                mean: number;
+                figures?: {
+                    schemaVersion: 1;
+                    distribution?: {
+                        unit: "ratings";
+                        completeness: "complete" | "partial";
+                        bins: {
+                            score: number;
+                            count: number;
+                        }[];
+                    };
+                    rank?: {
+                        unit: "subjects";
+                        position: number;
+                        population?: number;
+                    };
+                };
+                count: number;
+                asOf: string;
+                licence: string;
+                attribution: string;
+            } | {
+                sourceAlias: string;
+                sourceRecordId: string;
+                count: 0;
+                asOf: string;
+            };
+        }[];
+        nextCursor: string | null;
+    };
+}>, {
+    params: import("typebox").TObject<{
+        id: import("typebox").TString;
+        source: import("typebox").TUnion<import("typebox").TLiteral<"bangumi" | "vndb">[]>;
+    }>;
+    query: import("typebox").TObject<{
+        digest: import("typebox").TOptional<import("typebox").TString>;
+        cursor: import("typebox").TOptional<import("typebox").TString>;
+        history: import("typebox").TOptional<import("typebox").TLiteral<"true">>;
+    }>;
     response: {
-        400: import("typebox").TObject<{
-            type: import("typebox").TSchema;
-            title: import("typebox").TSchema;
-            status: import("typebox").TLiteral<number>;
-            code: import("typebox").TSchema;
-            retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
-            request_id: import("typebox").TString;
-            detail?: import("typebox").TOptional<import("typebox").TString>;
-            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
-                pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
-            }>>>;
-        }>;
         401: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -6209,11 +7018,179 @@ export declare function sourceStatisticRoutes(app: ReturnType<typeof definitionR
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
-        204: import("typebox").TVoid & {
-            headers: {
-                readonly "rezics-session-token": import("typebox").TString;
-            };
-        };
+        400: import("typebox").TObject<{
+            type: import("typebox").TSchema;
+            title: import("typebox").TSchema;
+            status: import("typebox").TLiteral<number>;
+            code: import("typebox").TSchema;
+            retryable: import("typebox").TSchema;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            request_id: import("typebox").TString;
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                pointer: import("typebox").TString;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+            }>>>;
+        }>;
+        200: import("typebox").TObject<{
+            source: import("typebox").TUnion<import("typebox").TLiteral<"bangumi" | "vndb">[]>;
+            head: import("typebox").TObject<{
+                digest: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"empty">, import("typebox").TLiteral<"published">, import("typebox").TLiteral<"cleared">]>;
+                observation: import("typebox").TUnion<[import("typebox").TObject<{
+                    digest: import("typebox").TString;
+                    payloadVersion: import("typebox").TLiteral<1>;
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    asOf: import("typebox").TString;
+                    nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    legacy: import("typebox").TBoolean;
+                    provenance: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>;
+                    payload: import("typebox").TUnion<[import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        scale: import("typebox").TObject<{
+                            min: import("typebox").TInteger;
+                            max: import("typebox").TInteger;
+                        }>;
+                        mean: import("typebox").TNumber;
+                        figures: import("typebox").TOptional<import("typebox").TObject<{
+                            schemaVersion: import("typebox").TLiteral<1>;
+                            distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"ratings">;
+                                completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                bins: import("typebox").TArray<import("typebox").TObject<{
+                                    score: import("typebox").TInteger;
+                                    count: import("typebox").TInteger;
+                                }>>;
+                            }>>;
+                            rank: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"subjects">;
+                                position: import("typebox").TInteger;
+                                population: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>>;
+                        }>>;
+                        count: import("typebox").TInteger;
+                        asOf: import("typebox").TString;
+                        licence: import("typebox").TString;
+                        attribution: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        count: import("typebox").TLiteral<0>;
+                        asOf: import("typebox").TString;
+                    }>]>;
+                }>, import("typebox").TNull]>;
+            }>;
+            resolution: import("typebox").TObject<{
+                put: import("typebox").TObject<{
+                    expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+                clear: import("typebox").TObject<{
+                    expectedObservation: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                }>;
+            }>;
+            selectedObservation: import("typebox").TOptional<import("typebox").TObject<{
+                digest: import("typebox").TString;
+                payloadVersion: import("typebox").TLiteral<1>;
+                sourceAlias: import("typebox").TString;
+                sourceRecordId: import("typebox").TString;
+                asOf: import("typebox").TString;
+                nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                legacy: import("typebox").TBoolean;
+                provenance: import("typebox").TObject<{
+                    kind: import("typebox").TLiteral<"unversioned">;
+                    digest: import("typebox").TString;
+                }>;
+                payload: import("typebox").TUnion<[import("typebox").TObject<{
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    scale: import("typebox").TObject<{
+                        min: import("typebox").TInteger;
+                        max: import("typebox").TInteger;
+                    }>;
+                    mean: import("typebox").TNumber;
+                    figures: import("typebox").TOptional<import("typebox").TObject<{
+                        schemaVersion: import("typebox").TLiteral<1>;
+                        distribution: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"ratings">;
+                            completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                            bins: import("typebox").TArray<import("typebox").TObject<{
+                                score: import("typebox").TInteger;
+                                count: import("typebox").TInteger;
+                            }>>;
+                        }>>;
+                        rank: import("typebox").TOptional<import("typebox").TObject<{
+                            unit: import("typebox").TLiteral<"subjects">;
+                            position: import("typebox").TInteger;
+                            population: import("typebox").TOptional<import("typebox").TInteger>;
+                        }>>;
+                    }>>;
+                    count: import("typebox").TInteger;
+                    asOf: import("typebox").TString;
+                    licence: import("typebox").TString;
+                    attribution: import("typebox").TString;
+                }>, import("typebox").TObject<{
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    count: import("typebox").TLiteral<0>;
+                    asOf: import("typebox").TString;
+                }>]>;
+            }>>;
+            history: import("typebox").TOptional<import("typebox").TObject<{
+                items: import("typebox").TArray<import("typebox").TObject<{
+                    digest: import("typebox").TString;
+                    payloadVersion: import("typebox").TLiteral<1>;
+                    sourceAlias: import("typebox").TString;
+                    sourceRecordId: import("typebox").TString;
+                    asOf: import("typebox").TString;
+                    nativeOrder: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    legacy: import("typebox").TBoolean;
+                    provenance: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"unversioned">;
+                        digest: import("typebox").TString;
+                    }>;
+                    payload: import("typebox").TUnion<[import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        scale: import("typebox").TObject<{
+                            min: import("typebox").TInteger;
+                            max: import("typebox").TInteger;
+                        }>;
+                        mean: import("typebox").TNumber;
+                        figures: import("typebox").TOptional<import("typebox").TObject<{
+                            schemaVersion: import("typebox").TLiteral<1>;
+                            distribution: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"ratings">;
+                                completeness: import("typebox").TUnion<[import("typebox").TLiteral<"complete">, import("typebox").TLiteral<"partial">]>;
+                                bins: import("typebox").TArray<import("typebox").TObject<{
+                                    score: import("typebox").TInteger;
+                                    count: import("typebox").TInteger;
+                                }>>;
+                            }>>;
+                            rank: import("typebox").TOptional<import("typebox").TObject<{
+                                unit: import("typebox").TLiteral<"subjects">;
+                                position: import("typebox").TInteger;
+                                population: import("typebox").TOptional<import("typebox").TInteger>;
+                            }>>;
+                        }>>;
+                        count: import("typebox").TInteger;
+                        asOf: import("typebox").TString;
+                        licence: import("typebox").TString;
+                        attribution: import("typebox").TString;
+                    }>, import("typebox").TObject<{
+                        sourceAlias: import("typebox").TString;
+                        sourceRecordId: import("typebox").TString;
+                        count: import("typebox").TLiteral<0>;
+                        asOf: import("typebox").TString;
+                    }>]>;
+                }>>;
+                nextCursor: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            }>>;
+        }>;
     };
     detail: {
         operationId: string;

@@ -225,6 +225,21 @@ export declare const PROBLEMS: {
         readonly title: 'Library Entry Restore Expired';
         readonly retryable: false;
     };
+    readonly library_entry_annotation_correction_limit: {
+        readonly status: 409;
+        readonly title: 'Library Entry Annotation Correction Limit Reached';
+        readonly retryable: false;
+    };
+    readonly library_entry_annotation_correction_epoch: {
+        readonly status: 409;
+        readonly title: 'Library Entry Annotation Correction Epoch Changed';
+        readonly retryable: false;
+    };
+    readonly library_entry_annotation_correction_expired: {
+        readonly status: 409;
+        readonly title: 'Library Entry Annotation Correction Expired';
+        readonly retryable: false;
+    };
     readonly library_entry_state_restore_stale: {
         readonly status: 409;
         readonly title: 'Library Entry State Restore Stale';

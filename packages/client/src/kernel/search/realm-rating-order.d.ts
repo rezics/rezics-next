@@ -15,6 +15,18 @@ export type RealmRatingContext = RatingCursorContext & {
     };
     generation: number;
     asOf: string;
+    /** Opaque current native observations bound into the signed continuation scope. */
+    questionIdentity: string;
+    questionRevision: number;
+    questionProvenance: string;
+    observation: string;
+    priorGeneration: string;
+    canonicalGeneration: string;
+    publicationGeneration: string;
+    meaningDigest: string | null;
+    searchGeneration: number;
+    priorActive: boolean;
+    priorUpdating: boolean;
 };
 export type RealmRatingQuery = {
     principal: string;
@@ -32,10 +44,12 @@ export type RealmRatingQuery = {
 };
 export type RealmRatingHit = SearchHit & {
     ratingPhase: RatingPhase;
-    /** Same subject-home snapshot as the figure, including a proven absent figure. */
+    /** Figure-home snapshot, including proven absence; independent of canonical Subject-home positions. */
     position: bigint;
     threshold: 5 | 10;
     figure: PublicRatingFigure | null;
+    /** Consumed canonical row which already appeared in the scored phase. */
+    suppressed?: true;
 };
 /** Content-owned native seam. No default provider is fabricated from Global/indexed figures.
  * observe checks current Context read AND ban authority for this principal, even for empty queries.
@@ -50,7 +64,18 @@ export type RealmRatingHit = SearchHit & {
  */
 export interface RealmRatingSource {
     observe(query: RealmRatingQuery): Promise<RealmRatingContext>;
-    read(query: RealmRatingQuery, context: RealmRatingContext, request: SearchFrontier & {
+    /** Bounded rating-index pages keyed by their subject-home partition. Search owns their merge. */
+    readScoredFrontiers(query: RealmRatingQuery, context: RealmRatingContext, request: SearchFrontier & {
+        size: number;
+    }): Promise<{
+        context: RealmRatingContext;
+        partitions: readonly Readonly<{
+            partition: number;
+            hits: readonly RealmRatingHit[];
+        }>[];
+    }>;
+    /** Current Search name_sort walk. It must prove every candidate's rating eligibility natively. */
+    readUnscored(query: RealmRatingQuery, context: RealmRatingContext, request: SearchFrontier & {
         size: number;
     }): Promise<{
         context: RealmRatingContext;

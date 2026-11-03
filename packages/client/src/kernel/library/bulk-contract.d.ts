@@ -25,6 +25,10 @@ export type SubjectSelection = {
     filter?: string;
     sort?: 'id';
 };
+export type OccurrenceSelection = {
+    kind: 'occurrences';
+    memberIds: readonly string[];
+};
 export type BulkSelectionSource = Readonly<{
     id: string;
     revision: number;
@@ -36,10 +40,6 @@ export type BulkSelectionSource = Readonly<{
     scannedCandidates: number;
     selectedSubjects: number;
 }>;
-export type OccurrenceSelection = {
-    kind: 'occurrences';
-    memberIds: readonly string[];
-};
 export type BulkAdmission = {
     action: 'set_status';
     state: EntryState;
@@ -88,6 +88,7 @@ export type OperationView = Readonly<{
     selectionKind: BulkAdmission['selection']['kind'];
     state: EntryState | null;
     collectionId: string | null;
+    /** Exact source/revision/filter authority used to capture a filtered selection. */
     selectionSource: BulkSelectionSource | null;
     phase: BulkPhase;
     selectionComplete: boolean;

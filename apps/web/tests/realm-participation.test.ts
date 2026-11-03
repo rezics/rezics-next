@@ -212,7 +212,7 @@ test('A signed-out Join entry navigates to sign-in for both absent and earlier v
   }
 });
 
-async function renderMembershipEntries(queries: QueryClient) {
+async function renderMembershipEntries(queries: QueryClient, advice: 'allowed' | 'denied' = 'allowed') {
   const board = {
     id: '0192f3a0-6c1e-7b2a-9d4e-000000000301',
     realmId,
@@ -227,7 +227,7 @@ async function renderMembershipEntries(queries: QueryClient) {
         createElement(RealmMembership, { realm: publicRealm, returnTo }),
         createElement(BoardStartThread, {
           board,
-          realm: { ...publicRealm, title: 'Realm', state: 'active' },
+          advice,
           returnTo,
         }),
       ),
@@ -249,6 +249,7 @@ test('current membership plus uncertain leave intent cannot carry across a known
     const before = RealmMembership({ realm: publicRealm, returnTo });
     expect(before).not.toBeNull();
     expect(await renderMembershipEntries(queries)).toContain(`>${m.realm_leave()}</button>`);
+    expect(await renderMembershipEntries(queries)).toContain(m.board_start_thread());
     session = { ...session, csrfToken: 'rotated-csrf' };
     // The keyed subtree owns pending, refusal/recovery and the uncertain original leave action/key.
     // Token rotation keeps that whole subtree; replacing the subject discards it.
@@ -258,7 +259,6 @@ test('current membership plus uncertain leave intent cannot carry across a known
     const waiting = await renderMembershipEntries(queries);
     expect(waiting).toContain(m.realm_membership_loading());
     expect(waiting).not.toContain(`>${m.realm_leave()}</button>`);
-    expect(waiting).not.toContain(m.board_start_thread());
     expect(waiting).not.toContain(m.realm_leave_retry_same());
 
     let finishOldRead!: (viewer: RealmViewer) => void;
@@ -275,13 +275,24 @@ test('current membership plus uncertain leave intent cannot carry across a known
     const denied = await renderMembershipEntries(queries);
     expect(denied).toContain(m.realm_banned());
     expect(denied).not.toContain(`>${m.realm_leave()}</button>`);
-    expect(denied).not.toContain(m.board_start_thread());
+    expect(denied).toContain(m.board_start_thread());
     expect(queries.getQueryData(current.queryKey)).toEqual({ state: 'banned', idempotencyKey: 'current-key' });
     for (const state of ['unknown', 'unavailable', 'signed-in'] as const) {
       session = { state, csrfToken: null, subject: null };
       expect(await renderMembershipEntries(queries)).toBe('<div></div>');
     }
     expect(realmMembershipQuery(realmId, null).enabled).toBe(false);
+  } finally {
+    queries.clear();
+  }
+});
+
+test('Board start visibility follows mounted action advice', async () => {
+  const queries = new QueryClient();
+  try {
+    session = { state: 'signed-in', subject: 'current-person', csrfToken: 'csrf' };
+    expect(await renderMembershipEntries(queries, 'allowed')).toContain(m.board_start_thread());
+    expect(await renderMembershipEntries(queries, 'denied')).not.toContain(m.board_start_thread());
   } finally {
     queries.clear();
   }

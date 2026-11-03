@@ -1,35 +1,30 @@
-export type FollowingSpaceDestination =
-    | {
-          kind: "space";
-          spaceId: string;
-          address: string;
-      }
-    | {
-          kind: "realm";
-          realmId: string;
-      }
-    | {
-          kind: "unavailable";
-      };
-export type FollowingSpaceActions =
-    | {
-          status: "available";
-          resourceType: "community.space" | "community.realm";
-          resourceId: string;
-          viewerActions: {
-              action: string;
-              operations: string[];
-          }[];
-      }
-    | {
-          status: "unavailable";
-      };
-export type FollowingSpaceProjection = {
-    target: {
+export type FollowingSpaceDestination = Readonly<{
+    kind: 'space';
+    spaceId: string;
+    address: string;
+}> | Readonly<{
+    kind: 'realm';
+    realmId: string;
+}> | Readonly<{
+    kind: 'unavailable';
+}>;
+export type FollowingSpaceActions = Readonly<{
+    status: 'available';
+    resourceType: 'community.space' | 'community.realm';
+    resourceId: string;
+    viewerActions: Readonly<{
+        action: string;
+        operations: string[];
+    }>[];
+}> | Readonly<{
+    status: 'unavailable';
+}>;
+export type FollowingSpaceProjection = Readonly<{
+    target: Readonly<{
         id: string;
-        type: "space";
+        type: 'space';
         label: string;
-    } | null;
+    }> | null;
     destination: FollowingSpaceDestination;
     actions: FollowingSpaceActions;
-};
+}>;

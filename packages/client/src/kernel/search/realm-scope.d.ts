@@ -19,6 +19,12 @@ export type PreparedRealmScope = Readonly<{
     readiness: 'population_ready';
     basis: string;
 }>;
+declare const refinement: unique symbol;
+/** Factory-local input position, never a public Search continuation or ready page. */
+export type RealmRefinementFrontier = Readonly<{
+    [refinement]: true;
+    basis: string;
+}>;
 /** Additive native preparation/evaluation boundary on the real service-bound Scope.
  * This does not activate public mixed-kind admission or claim ready ordered pages.
  */
@@ -32,6 +38,8 @@ export declare function createRealmScopeSource(input: {
         release: FilterRelease;
     }> | null>;
 }): {
+    /** Bounded anchors cover every boolean branch before separate finite source frontiers. */
+    realms(scope: PreparedRealmScope): readonly string[];
     prepare(filter: DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
         scope: PreparedRealmScope;
         work: WorkReceipt;
@@ -53,4 +61,19 @@ export declare function createRealmScopeSource(input: {
         values: RelationFacetMatch[];
         work: WorkReceipt;
     }>;
+    /** Settle exactly one Content window with the COMPLETE current predicate.
+     * Sparse windows advance as preparation input; they never become empty public
+     * pages. Unknown evidence refuses the whole window, including its successor.
+     * The enclosing retained writer must commit subjects and frontier atomically.
+     */
+    refinePrefix(scope: PreparedRealmScope, frontier: RealmRefinementFrontier | null, allowance: WorkAllowance): Promise<Readonly<{
+        readiness: 'refined_input';
+        basis: string;
+        subjects: readonly string[];
+        frontier: RealmRefinementFrontier | null;
+        exhausted: boolean;
+        work: WorkReceipt;
+    }>>;
+    /** Final consumption observes every resource, including excluded/empty input. */
+    revalidate(scope: PreparedRealmScope, allowance: WorkAllowance): Promise<WorkReceipt>;
 };

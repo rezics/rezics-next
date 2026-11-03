@@ -8,6 +8,14 @@ export declare const NOTIFICATION_KINDS: readonly [Readonly<{
     readonly optional: true;
     readonly default: true;
 }>, Readonly<{
+    readonly kind: 'thread_watch';
+    readonly optional: true;
+    readonly default: true;
+}>, Readonly<{
+    readonly kind: 'board_activity';
+    readonly optional: true;
+    readonly default: true;
+}>, Readonly<{
     readonly kind: 'moderation_decision';
     readonly optional: false;
     readonly default: true;

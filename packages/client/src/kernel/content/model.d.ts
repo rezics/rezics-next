@@ -30,6 +30,64 @@ export type ReviewVoteCitation = Readonly<{
     units: number;
     revision: number;
 }>;
+export type FeedReviewContext = Readonly<{
+    target: Readonly<{
+        state: 'available';
+        subject: Readonly<{
+            id: ContentId;
+            kind: string;
+            label: Readonly<{
+                value: string;
+                language: string;
+            }> | null;
+        }>;
+    }> | Readonly<{
+        state: 'absent' | 'withheld';
+    }>;
+    citation: Readonly<{
+        state: 'available';
+        question: Readonly<{
+            id: ContentId;
+            revision: number;
+            label: string;
+            grain: 'work' | 'release' | 'episode' | 'character';
+            scale: Readonly<{
+                min: number;
+                max: number;
+                displayStep: number;
+            }>;
+        }>;
+        units: number;
+        voteRevision: number;
+    }> | Readonly<{
+        state: 'absent' | 'withheld';
+    }>;
+}>;
+export type FeedParentAuthor = Readonly<{
+    id: ContentId;
+    displayName: string | null;
+    handle: string | null;
+}>;
+export type FeedParentContext = Readonly<{
+    kind: 'opening';
+}> | Readonly<{
+    kind: 'reply';
+    parent: Readonly<{
+        state: 'available';
+        id: PostId;
+        revisionId: RevisionId;
+        createdAt: string;
+        author: FeedParentAuthor | null;
+        excerpt: string | null;
+        language: string | null;
+        spoiler: boolean;
+    }> | Readonly<{
+        state: 'removed';
+        id: PostId;
+    }> | Readonly<{
+        state: 'withheld';
+    }>;
+}>;
 export type ItemMetadata = Readonly<{
     id: PostId;
     threadId: ThreadId;

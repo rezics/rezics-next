@@ -87,6 +87,8 @@ export declare function parseProgressMeasureCreate(input: unknown, descriptor?: 
 export declare function parseRecord(mode: ProgressMode, input: unknown, context: ProgressRecordContext, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressRecord>;
 /** Complete or abandon an active session. An amount, position, or unit count is not an action. */
 export declare function transition(state: ProgressState, action: ProgressAction): ProgressOutcome<ProgressState>;
+/** Correct only the addressed occurrence; recorded values never imply completion. */
+export declare function correctOccurrence(state: ProgressState, action: 'reopen' | 'retire'): ProgressOutcome<ProgressState>;
 /** The history row for a validated record. Unit ids stay the given ids, in code-unit order. */
 export declare function changeIntent(record: ProgressRecord, measureId?: string): ProgressIntent;
 /**
@@ -94,6 +96,3 @@ export declare function changeIntent(record: ProgressRecord, measureId?: string)
  * `removed` is how many submitted ids already existed.
  */
 export declare function nextUnitCount(current: number, added: number, removed: number): ProgressOutcome<number>;
-
-/** Correct only the addressed occurrence; recorded values never imply completion. */
-export declare function correctOccurrence(state: ProgressState, action: 'reopen' | 'retire'): ProgressOutcome<ProgressState>;

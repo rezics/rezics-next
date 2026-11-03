@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, type BoardPageResponse } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client.ts';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../src/identity/page-loaders.ts';
 
@@ -97,12 +97,39 @@ function recordingClient(
         }
         metrics.K += 1;
         calls.push(url);
-        if (url.pathname === `/v1/boards/${boardId}`)
-          return Response.json({
-            board: { ...metadata, id: boardId, title: 'Cost board', availability: 'available' },
+        if (url.pathname === `/v1/boards/${boardId}/page`) {
+          const author = (authorId: string) => ({
+            state: 'available',
+            id: authorId,
+            kind: 'actor',
+            handle: `author-${authorId.slice(-3)}`,
+            displayName: null,
+            automated: false,
           });
-        if (url.pathname === `/v1/boards/${boardId}/threads`)
-          return Response.json({ threads: data.threads, next: null });
+          const page = {
+            board: { ...metadata, id: boardId, title: 'Cost board', availability: 'available', realmId: null },
+            pinnedThreads: [],
+            threads: data.threads.map((thread) => ({
+              thread,
+              target: { kind: 'thread', id: thread.id, boardId },
+              authors: { thread: author(thread.authorId), openingPost: author(thread.firstPost.authorId) },
+              media: { state: 'none', images: [] },
+              interaction: {
+                target: { kind: 'thread', id: thread.id },
+                counts: { state: 'unavailable' },
+                viewer: { state: 'not-applicable' },
+              },
+              comments: { state: 'unavailable' },
+              actions: { reply: 'allowed', react: 'allowed', share: 'available' },
+            })),
+            next: null,
+            rankRefreshedAt: null,
+            reactionsAsOf: null,
+            viewer: { participation: 'allowed' },
+            actions: { createThread: 'allowed' },
+          } as unknown as BoardPageResponse;
+          return Response.json(page);
+        }
         if (url.pathname === `/v1/threads/${threadId}`)
           return Response.json({
             thread: {
@@ -158,7 +185,7 @@ function signedRequest() {
   });
 }
 
-test('a thread or board page reads its authors in one request at every size', async () => {
+test('a Board page receives its authors with the opening cards while a thread page batches bylines', async () => {
   for (const size of sizes) {
     for (const authorCount of sizes.filter((count) => count <= size)) {
       {
@@ -169,10 +196,9 @@ test('a thread or board page reads its authors in one request at every size', as
         const identity = calls.filter((url) => url.pathname === '/v1/accounts');
         expect(page.threads.threads).toHaveLength(size);
         expect(Object.keys(page.authors ?? {})).toHaveLength(authorCount);
-        expect(identity).toHaveLength(1);
-        expect(identity[0]?.searchParams.get('ids')?.split(',')).toEqual(recorded.data.authors);
-        expect(calls.filter((url) => url.pathname !== '/v1/accounts')).toHaveLength(2);
-        expect(metrics).toEqual({ K: 3, D: 0, R: 0, A: 0 });
+        expect(identity).toHaveLength(0);
+        expect(calls.map((url) => url.pathname)).toEqual([`/v1/boards/${boardId}/page`]);
+        expect(metrics).toEqual({ K: 1, D: 0, R: 0, A: 0 });
       }
       {
         const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
@@ -206,7 +232,8 @@ test('an empty board makes no identity read', async () => {
   const page = await loadBoardPageWithAuthors(recorded.client, { id: boardId });
   expect(page.authors).toEqual({});
   expect(calls.some((url) => url.pathname === '/v1/accounts')).toBe(false);
-  expect(metrics).toEqual({ K: 2, D: 0, R: 0, A: 0 });
+  expect(calls.map((url) => url.pathname)).toEqual([`/v1/boards/${boardId}/page`]);
+  expect(metrics).toEqual({ K: 1, D: 0, R: 0, A: 0 });
 });
 
 test('a later thread page includes its starter and skips erased post identities', async () => {
@@ -232,28 +259,23 @@ test('a later thread page includes its starter and skips erased post identities'
   expect(metrics).toEqual({ K: 4, D: 1, R: 0, A: 0 });
 });
 
-test('failed optional identities leave both page reads intact without retries', async () => {
+test('failed optional identities leave thread reads intact without retries; Board authors remain in its response', async () => {
   for (const failure of ['http', 'network'] as const) {
-    for (const kind of ['board', 'thread'] as const) {
-      const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
-      const calls: URL[] = [];
-      const recorded = recordingClient(10, 10, metrics, calls, failure);
-      const page =
-        kind === 'board'
-          ? await loadBoardPageWithAuthors(recorded.client, { id: boardId })
-          : await loadThreadPageWithAuthors(
-              recorded.client,
-              signedRequest(),
-              sessionEnv(metrics),
-              { id: threadId },
-              { sitekey: '', scriptUrl: 'https://site.test/turnstile.js' },
-            );
-      expect(page.authors).toBeNull();
-      expect('posts' in page ? page.posts.posts : page.threads.threads).toHaveLength(10);
-      expect(Number.isNaN(Date.parse(page.now))).toBe(false);
-      expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(1);
-      // Thread context brief (8dd1eb27ce), Cost: "One added read per page view, independent of the number of posts."
-      expect(metrics).toEqual({ K: kind === 'thread' ? 4 : 3, D: kind === 'thread' ? 1 : 0, R: 0, A: 0 });
-    }
+    const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
+    const calls: URL[] = [];
+    const recorded = recordingClient(10, 10, metrics, calls, failure);
+    const page = await loadThreadPageWithAuthors(
+      recorded.client,
+      signedRequest(),
+      sessionEnv(metrics),
+      { id: threadId },
+      { sitekey: '', scriptUrl: 'https://site.test/turnstile.js' },
+    );
+    expect(page.authors).toBeNull();
+    expect(page.posts.posts).toHaveLength(10);
+    expect(Number.isNaN(Date.parse(page.now))).toBe(false);
+    expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(1);
+    // Thread context brief (8dd1eb27ce), Cost: "One added read per page view, independent of the number of posts."
+    expect(metrics).toEqual({ K: 4, D: 1, R: 0, A: 0 });
   }
 });

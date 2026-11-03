@@ -9,6 +9,8 @@ export type RatingCursorContext = {
         authority: string;
         revision: string;
     };
+    /** Opaque digest of current question, prior, publication, meaning and canonical observations. */
+    observation?: string;
 };
 export type RatingPhase = 'scored' | 'unscored';
 export type RatingCursorResult = {

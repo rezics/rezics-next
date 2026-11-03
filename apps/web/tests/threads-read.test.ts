@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { KernelClient } from '@rezics/client';
+import type { BoardPageResponse, KernelClient } from '@rezics/client';
 import { RemovedPost } from '../src/threads/post-removed';
 import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../src/identity/page-loaders';
 import { threadHref } from '../src/threads/thread-href';
@@ -98,55 +98,100 @@ const erasedThread = thread(5, 'A quiet discussion');
 const pageCursor = 'signed+page/next==';
 const account = { id: id(90), state: 'active', displayName: 'Reader', handle: 'reader' };
 
-test('a protected board page uses the member credential for its bounded board reads', async () => {
+function boardPage(
+  values: readonly ThreadRead['thread'][],
+  next: string | null = null,
+  currentBoard = board.board,
+): BoardPageResponse {
+  return {
+    board: currentBoard,
+    pinnedThreads: [],
+    threads: values.map((thread) => ({
+      thread,
+      target: { kind: 'thread', id: thread.id, boardId: thread.boardId },
+      authors: {
+        thread: { state: 'available', id: account.id, kind: 'actor', handle: account.handle, displayName: account.displayName, automated: false },
+        openingPost: { state: 'available', id: account.id, kind: 'actor', handle: account.handle, displayName: account.displayName, automated: false },
+      },
+      media: { state: 'none', images: [] },
+      interaction: {
+        target: { kind: 'thread', id: thread.id },
+        counts: { state: 'unavailable' },
+        viewer: { state: 'not-applicable' },
+      },
+      comments: { state: 'unavailable' },
+      actions: { reply: 'allowed', react: 'allowed', share: 'available' },
+    })),
+    next,
+    rankRefreshedAt: null,
+    reactionsAsOf: null,
+    viewer: { participation: 'allowed' },
+    actions: { createThread: 'allowed' },
+  } as unknown as BoardPageResponse;
+}
+
+test('a protected board page uses the member credential for its single opening read', async () => {
   const realmId = id(91);
   const authorization = 'Bearer realm-member';
   const reads: { path: string; authorization: string | undefined }[] = [];
-  const memberBoard = { board: { ...board.board, realmId } };
   const memberThread = { id: id(92), authorId: id(90) };
   const fakeClient = {
     boards: () => ({
-      get: async (options?: { headers?: { authorization?: string } }) => {
-        reads.push({ path: '/v1/boards/member', authorization: options?.headers?.authorization });
-        return { data: memberBoard };
-      },
-      threads: {
-        get: async (options?: { headers?: { authorization?: string } }) => {
-          reads.push({ path: '/v1/boards/member/threads', authorization: options?.headers?.authorization });
-          return { data: { threads: [memberThread], next: null } };
+      page: {
+        get: async (options?: { query?: Record<string, string>; headers?: { authorization?: string } }) => {
+          reads.push({ path: '/v1/boards/member/page', authorization: options?.headers?.authorization });
+          expect(options?.query).toEqual({ sort: 'active' });
+          return { data: boardPage([memberThread as ThreadRead['thread']], null, { ...board.board, realmId }) };
         },
       },
     }),
-    realms: () => ({
-      get: async (options?: { headers?: { authorization?: string } }) => {
-        reads.push({ path: '/v1/realms/member', authorization: options?.headers?.authorization });
-        return { data: { realm: { realmId, title: 'Members only' } } };
-      },
-    }),
-    accounts: {
-      get: async (options?: { query?: { ids?: string } }) => {
-        reads.push({ path: `/v1/accounts?ids=${options?.query?.ids}`, authorization: undefined });
-        return { data: { accounts: [account] } };
-      },
-    },
   } as unknown as KernelClient;
 
   const page = await loadBoardPageWithAuthors(fakeClient, { id: id(1) }, authorization);
 
   expect(page.board).toMatchObject({ id: id(1), realmId });
-  expect(page.realm).toEqual({ id: realmId, title: 'Members only' });
   expect(page.threads.threads).toEqual([memberThread]);
-  expect(page.authors?.[id(90)]).toEqual(account);
-  expect(
-    reads.filter(({ authorization: value }) => value).sort((left, right) => left.path.localeCompare(right.path)),
-  ).toEqual(
-    [
-      { path: '/v1/boards/member', authorization },
-      { path: '/v1/realms/member', authorization },
-      { path: '/v1/boards/member/threads', authorization },
-    ].sort((left, right) => left.path.localeCompare(right.path)),
-  );
-  expect(reads.filter(({ path }) => path.startsWith('/v1/accounts'))).toHaveLength(1);
+  expect(page.authors?.[id(90)]).toMatchObject({ state: 'available', id: id(90), displayName: 'Reader' });
+  expect(reads).toEqual([{ path: '/v1/boards/member/page', authorization }]);
+});
+
+test('the Board reader retains per-card count, freshness, and action witnesses without enriching the page', async () => {
+  const base = boardPage([first.thread]);
+  const populatedCard = {
+    ...base.threads[0]!,
+    interaction: {
+      target: { kind: 'thread' as const, id: first.thread.id },
+      counts: { state: 'as-of' as const, values: { like: 3 }, source: { epoch: 2, position: '12' } },
+      viewer: { state: 'current' as const, reaction: null },
+    },
+    comments: {
+      state: 'current' as const,
+      cohort: 'public' as const,
+      count: { kind: 'lower-bound' as const, value: 4 },
+      lastActivityAt: '2026-11-04T00:00:00.000Z',
+      source: { epoch: 2, position: '10' },
+    },
+  };
+  const response = { ...base, threads: [populatedCard] } as unknown as BoardPageResponse;
+  const requests: string[] = [];
+  const fakeClient = {
+    boards: () => ({
+      page: {
+        get: async () => {
+          requests.push('page');
+          return { data: response };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+
+  const page = await loadBoardPageWithAuthors(fakeClient, { id: id(1) });
+
+  expect(page.openingCards[first.thread.id]).toBe(populatedCard);
+  expect(page.openingCards[first.thread.id]?.comments).toEqual(populatedCard.comments);
+  expect(page.openingCards[first.thread.id]?.interaction).toEqual(populatedCard.interaction);
+  expect(page.actions).toEqual(response.actions);
+  expect(requests).toEqual(['page']);
 });
 
 test('a board page preserves kernel order and follows the emitted cursor', async () => {
@@ -154,24 +199,17 @@ test('a board page preserves kernel order and follows the emitted cursor', async
   let pageNumber = 0;
   const fakeClient = {
     boards: () => ({
-      get: async () => ({ data: board }),
-      threads: {
+      page: {
         get: async (options?: { query?: Record<string, string> }) => {
-          requests.push({ path: '/v1/boards/board/threads', ...(options?.query ? { query: options.query } : {}) });
-          const pages: Threads[] = [
-            { threads: [first.thread, second.thread], next: pageCursor },
-            { threads: [last.thread], next: null },
+          requests.push({ path: `/v1/boards/${id(1)}/page`, ...(options?.query ? { query: options.query } : {}) });
+          const pages = [
+            boardPage([first.thread, second.thread], pageCursor),
+            boardPage([last.thread]),
           ];
           return { data: pages[pageNumber++] };
         },
       },
     }),
-    accounts: {
-      get: async (options?: { query?: { ids?: string } }) => {
-        requests.push({ path: '/v1/accounts', ids: options?.query?.ids });
-        return { data: { accounts: [account] } };
-      },
-    },
   } as unknown as KernelClient;
 
   const firstPage = await loadBoardPageWithAuthors(fakeClient, { id: id(1), sort: 'new' });
@@ -185,13 +223,9 @@ test('a board page preserves kernel order and follows the emitted cursor', async
   expect(firstPage.threads.next).toBe(pageCursor);
   expect(secondPage.threads.threads.map((value) => value.title)).toEqual(['Last reading']);
   expect(secondPage.threads.next).toBeNull();
-  expect(requests.filter(({ path }) => path.endsWith('/threads'))).toEqual([
-    { path: '/v1/boards/board/threads', query: {} },
-    { path: '/v1/boards/board/threads', query: { cursor: pageCursor } },
-  ]);
-  expect(requests.filter(({ path }) => path === '/v1/accounts')).toEqual([
-    { path: '/v1/accounts', ids: id(90) },
-    { path: '/v1/accounts', ids: id(90) },
+  expect(requests).toEqual([
+    { path: `/v1/boards/${id(1)}/page`, query: { sort: 'new' } },
+    { path: `/v1/boards/${id(1)}/page`, query: { cursor: pageCursor, sort: 'new' } },
   ]);
 });
 
@@ -365,7 +399,7 @@ test('only a self-deleted owner post with the original unexpired server deadline
 test('kernel 404s stay on the not-found boundary for board and thread route loaders', async () => {
   const missing = { error: { value: { code: 'not_found' } }, status: 404 };
   const fakeClient = {
-    boards: () => ({ get: async () => missing, threads: { get: async () => missing } }),
+    boards: () => ({ page: { get: async () => missing } }),
     threads: () => ({ get: async () => missing, posts: { get: async () => missing } }),
   } as unknown as KernelClient;
 

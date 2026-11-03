@@ -2740,32 +2740,41 @@ object cannot change the initial observation used to detect a hydration race.
 
 ### Cost: mounted Board opening envelope
 
-- Touches: The mounted factory runs two `readRealmBoard` observations and two `listBoardOpeningThreads` passes
-  to bracket hydration with current Board and thread equality. Each page pass reads at most 21 raw ordinary
-  candidates, selects/discloses at most 20 ordinary threads and, only on an initial request, selects/discloses the
-  existing five-pin cohort. The action reader prepares current Access evidence once, batches `thread:create` for one
-  Board and `post:create`/`reaction:set` for at most 25 threads, and checks current Realm participation once. Author
-  and media projections each run twice: at most 50 deduplicated identities per author pass and 800 opening-post media
-  keys per media pass, in batches of 32. The request-bound activity reader selects at most 25 unique selected
-  threads before hydration and confirms only its initially current witnesses afterward, carrying the actor and
-  deadline. Reaction counts and signed-in viewer slots each run twice; count reads group by target home and viewer
-  reads use one statement in the actor's home. The route performs no per-card GET or cross-partition join.
-- Bound: The two page observations read at most 42 raw ordinary candidates, hydrate at most 40 ordinary candidates
-  and 10 initial pins, and never refill a sparse page. Reaction count work is at most 25 target-home statements and
-  175 aggregate rows per pass; viewer work is at most one statement and 25 rows per pass. Let H be the number of
-  represented Content partitions among current selected threads, H <= 25. The producer's initial `select` uses one
-  read-only transaction per represented partition: BEGIN, one partition-anchor read, one batch query and COMMIT.
-  `confirm` reselects only initially current keys, so its represented partitions H' <= H. Activity therefore adds at
-  most 4(H + H') <= 200 Content statements/controls and 2(H + H') <= 100 pool checkouts; each checkout is released
-  before the next partition. A failed started transaction adds one ROLLBACK. The producer makes no Access calls;
-  Access retries remain charged to the page, action, participation, author and media callees above. The body fields
-  alone contribute at most 25 x 2 MiB x 6 = 300 MiB of serialized JSON before bounded card metadata. The selected
-  and final page snapshots coexist through equality checks; parsed document memory, response serialization, every
-  other pool's retry/control totals and runner peak remain separate terms in native capture.
-- Growth check: Deferred to controller acceptance. Exercise initial and continuation pages at 256/1024/4096 unrelated
-  Board, pin/history, thread/review, Realm/Space, account/authority, reaction and target/reference rows; separately
-  grow unrelated author/media and membership/ban history. Capture each participating pool and runner phase for
-  populated, empty, withheld, stale and retry paths and preserve strict physical-plan refusal.
+- **Cardinality.** Let `P <= 5` be the initial pin cohort, `S <= 20` the selected ordinary page, `Q <= 21` the raw
+  ordinary lookahead per page pass, `C = P + S <= 25` the selected cards, `M <= 32C <= 800` their media slots,
+  `A <= 50` their distinct authors, `H <= C` the initially represented Content partitions for activity, and
+  `H' <= H` the partitions still current at confirmation. A continuation has `P = 0`. The two observations therefore
+  read at most 42 ordinary candidates and hydrate at most 40 ordinary candidates plus 10 initial pins; sparse pages
+  are not refilled.
+- **Response bytes and retained memory.** Each selected body is capped at `MAX_DOCUMENT_BYTES = 2 MiB`; JSON string
+  escaping expands a body by at most 6 bytes per source byte. Thus the body contribution is at most
+  `6 * C * 2 MiB <= 300 MiB`. The remaining response is bounded by the mounted response and nested schemas: one Board,
+  at most 25 cards, 800 media slots, 50 author projections, 25 comment witnesses, activity, viewer and action fields,
+  plus a cursor of at most 4096 bytes. There is no smaller aggregate response-byte cap. Initial and final page
+  projections coexist for equality checks, so the reader can retain up to 2C body snapshots, 2A author projections,
+  and 2M media-slot projections, as well as the two bounded reaction, viewer and activity maps. The 2 MiB input cap
+  bounds encoded source bodies, not parsed-object heap size; the heap term is the sum of the parsed representations
+  of those at most 2C bodies plus response serialization and the bounded projections above.
+- **Statements, controls and pools.** The reader performs two Board point observations and two
+  `listBoardOpeningThreads` calls. For each page call, the existing listing derivation gives at most `26 + E` data
+  statements outside a Realm, `30 + E` in a public Realm, or `32 + E` in a non-public Realm (`E <= 6` Access
+  preparation terms); use the coarser 43-statement page envelope. Across the pair, at most 25 target-home reaction
+  statements and 175 aggregate rows per pass, one actor-home viewer statement and 25 rows per signed-in pass, and
+  50 author statements per pass are added. Media runs twice: for at most 800 keys per pass, each key has one media
+  parent snapshot, then each selected image has its initial and final derivative authorization; batches contain at
+  most 32 keys. The action reader runs once for one Board and at most 25 threads, and Realm participation runs once.
+  Their statement, control and pool terms are the bounded terms of those callees, with each individual Access read
+  charged its own admitted retry attempts (at most `E <= 6` per decision), including the page, action, participation,
+  author and media reads. For activity, each represented partition uses one checkout and a read-only transaction with
+  two data statements (anchor and batch) and two control statements (BEGIN and COMMIT). Initial selection plus
+  confirmation therefore adds `2(H + H') <= 100` Content data statements, `2(H + H') <= 100` transaction controls,
+  and `H + H' <= 50` Content pool checkouts. A started transaction that fails adds one ROLLBACK control. The producer
+  performs no Access reads. The GET has one request deadline and no command-runner phase; its checks are awaited by
+  the request, with per-pool checkout and retry totals taken from the callees above.
+- **Growth check.** Deferred to controller acceptance. Exercise initial and continuation pages at 256/1024/4096
+  unrelated Board, pin/history, thread/review, Realm/Space, account/authority, reaction and target/reference rows;
+  separately grow unrelated author/media and membership/ban history. Capture each participating pool and runner
+  phase for populated, empty, withheld, stale and retry paths and preserve strict physical-plan refusal.
 
 ### Mention notices
 

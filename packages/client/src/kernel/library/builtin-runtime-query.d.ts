@@ -40,6 +40,7 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
     filter(filter: FilterDocument, releaseDigest: string): Promise<{
         scope: {
             realm: {
+                realms(scope: import("../search/realm-scope.ts").PreparedRealmScope): readonly string[];
                 prepare(filter: import("@rezics/filter").DiscoveryFilterDocument, allowance: WorkAllowance): Promise<Readonly<{
                     scope: import("../search/realm-scope.ts").PreparedRealmScope;
                     work: WorkReceipt;
@@ -54,6 +55,49 @@ export declare function openOwnerQuery(deps: OwnerQueryDependencies, input: {
                 evaluate(scope: import("../search/realm-scope.ts").PreparedRealmScope, subjects: readonly string[], allowance: WorkAllowance): Promise<{
                     basis: string;
                     values: import("../search/source.ts").RelationFacetMatch[];
+                    work: WorkReceipt;
+                }>;
+                refinePrefix(scope: import("../search/realm-scope.ts").PreparedRealmScope, frontier: import("../search/realm-scope.ts").RealmRefinementFrontier | null, allowance: WorkAllowance): Promise<Readonly<{
+                    readiness: 'refined_input';
+                    basis: string;
+                    subjects: readonly string[];
+                    frontier: import("../search/realm-scope.ts").RealmRefinementFrontier | null;
+                    exhausted: boolean;
+                    work: WorkReceipt;
+                }>>;
+                revalidate(scope: import("../search/realm-scope.ts").PreparedRealmScope, allowance: WorkAllowance): Promise<WorkReceipt>;
+                searchBasis: (prepared: import("../search/realm-scope.ts").PreparedRealmScope, request: {
+                    text?: string;
+                    textQuery?: Record<string, unknown>;
+                    textBoost?: string;
+                    generation: number;
+                    indexUuid: string;
+                }) => import("../search/scope-source.ts").ScopeBasis;
+                searchPage: (prepared: import("../search/realm-scope.ts").PreparedRealmScope, request: {
+                    basis: import("../search/scope-source.ts").ScopeBasis;
+                    text?: string;
+                    textQuery?: Record<string, unknown>;
+                    textBoost?: string;
+                    generation: number;
+                    indexUuid: string;
+                    after: import("../search/scope-ordered.ts").ScopeNameSortTuple | null;
+                    quota: number;
+                    allowance: WorkAllowance;
+                }) => Promise<{
+                    status: 'preparing';
+                    basis: import("../search/scope-source.ts").ScopeBasis;
+                    work: WorkReceipt;
+                    hits?: never;
+                    subjects?: never;
+                    after?: never;
+                    exhausted?: never;
+                } | {
+                    status: 'ready';
+                    basis: import("../search/scope-source.ts").ScopeBasis;
+                    hits: import("../search/query.ts").SearchHit[];
+                    subjects: import("../search/source.ts").IndexedSubject[];
+                    after: import("../search/scope-ordered.ts").ScopeNameSortTuple | null;
+                    exhausted: boolean;
                     work: WorkReceipt;
                 }>;
             };

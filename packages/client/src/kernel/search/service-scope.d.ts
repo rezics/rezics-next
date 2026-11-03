@@ -14,8 +14,8 @@ export declare function registerSearchScopeRuntime(service: SearchService, runti
  * Reuse the constructor's runtime and the caller's actual reader context. Runtime ownership
  * permits admission, not native readiness; the Source owns capability checks during preparation.
  * The same runtime carries Content's RealmSubjectSource or its disclosure/maintenance
- * composition. realm.prepare, realm.sourcePrefix and realm.evaluate use that installed
- * source with these exact reader options. Absent live maintenance remains unavailable;
- * population_ready is preparation input, never a useful canonical Search page.
+ * composition. Realm preparation, finite prefix capture, predicate refinement and final
+ * page revalidation use that installed source with these exact reader options. Absent live
+ * maintenance remains unavailable; population_ready is preparation input, never a page.
  */
 export declare function createSearchScopeForService(service: SearchService, options: LeafOptions): ReturnType<typeof createSearchScopeSource>;
