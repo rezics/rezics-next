@@ -893,6 +893,236 @@ export function createSearchService({
         }
         return checked;
       };
+      if (realmScopedRequest) {
+        if (!scope || !preparedRealm || !scopeWork || !admitted) throw indexNotReady();
+        const realms = discoveryRealmIds(admitted);
+        if (realms.length === 0) throw indexNotReady();
+        const queryId = createHash('sha256')
+          .update(
+            JSON.stringify([
+              'realm-name-pages-v1',
+              preparedRealm.scope.basis,
+              principal,
+              generation,
+              format,
+              compiledText?.query ?? null,
+            ]),
+          )
+          .digest('hex');
+        const retained = createScopePreparationStore(pool, prefix);
+        scopeWork.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
+        await sourceRequest(() => retained.retainRealm(queryId, preparedRealm!.scope.basis, realms));
+        scopeWork.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
+        let retainedState = await sourceRequest(() => retained.readRealm(queryId, preparedRealm!.scope.basis, realms));
+        const preparationDefinition = { basis: preparedRealm.scope.basis, realms };
+        const requestWork = () => ({
+          bytes: scopeWork!.remaining().remaining.bytes,
+          deadline: readContext?.deadline ?? Date.now() + 10_000,
+          settle(bytes: number) {
+            scopeWork!.consume({ ...zeroScopeWork(), bytes });
+          },
+        });
+        if (!retainedState.complete) {
+          const next: Extract<ScopeCaptureFrontier, { kind: 'realm' }> = {
+            kind: 'realm',
+            value: {
+              realms: retainedState.frontier.value.realms.map((entry) => ({ ...entry })),
+              catalogueAfter: retainedState.frontier.value.catalogueAfter
+                ? [...retainedState.frontier.value.catalogueAfter]
+                : null,
+              catalogueExhausted: retainedState.frontier.value.catalogueExhausted,
+            },
+          };
+          let candidates: SearchIndexHit[] = [];
+          const activeRealm = next.value.realms.find((entry) => !entry.exhausted);
+          if (activeRealm) {
+            const raw = await sourceRequest(() =>
+              scope!.realm.sourcePrefix(
+                preparedRealm!.scope,
+                activeRealm.id,
+                activeRealm.after,
+                32,
+                scopeWork!.remaining(),
+              ),
+            );
+            scopeWork.native(raw.work);
+            next.value.realms = next.value.realms.map((entry) =>
+              entry.id === activeRealm.id
+                ? { ...entry, after: raw.after, exhausted: raw.exhausted }
+                : entry,
+            );
+            const ids = [...new Set(raw.subjects)];
+            if (ids.length) {
+              const indexed = await sourceRequest(() =>
+                searchSubjectHits(client, prefix, {
+                  ...(compiledText ? { query: compiledText.query } : {}),
+                  filter: { ids: { values: ids } },
+                  sort: 'name',
+                  generation,
+                  size: ids.length,
+                  work: requestWork(),
+                }),
+              );
+              scopeWork.consume({
+                ...zeroScopeWork(),
+                statements: 1,
+                candidateKeys: ids.length,
+                nativeRows: indexed.hits.length,
+              });
+              candidates = indexed.hits;
+            }
+          } else if (!next.value.catalogueExhausted) {
+            const indexed = await sourceRequest(() =>
+              searchSubjectHits(client, prefix, {
+                ...(compiledText ? { query: compiledText.query } : {}),
+                sort: 'name',
+                generation,
+                size: 32,
+                ...(next.value.catalogueAfter ? { after: next.value.catalogueAfter } : {}),
+                work: requestWork(),
+              }),
+            );
+            scopeWork.consume({
+              ...zeroScopeWork(),
+              statements: 1,
+              candidateKeys: indexed.hits.length,
+              nativeRows: indexed.hits.length,
+            });
+            candidates = indexed.hits;
+            next.value.catalogueAfter = indexed.hits.at(-1)?.sort ?? next.value.catalogueAfter;
+            next.value.catalogueExhausted = indexed.hits.length < 32;
+          }
+          const live = candidates as unknown as NativeSearchHit[];
+          const checked = live.length ? await checkCandidates(live) : new Map();
+          const visible = live.filter((hit) => checked.has(hit));
+          let retainedHits: SearchIndexHit[] = [];
+          if (visible.length) {
+            const evaluation = await sourceRequest(() =>
+              scope!.realm.evaluate(preparedRealm!.scope, visible.map((hit) => hit.id), scopeWork!.remaining()),
+            );
+            scopeWork.native(evaluation.work);
+            if (
+              evaluation.basis !== preparedRealm.scope.basis ||
+              evaluation.values.length !== visible.length ||
+              evaluation.values.includes('not_proven')
+            )
+              throw indexNotReady();
+            retainedHits = visible.filter((_, index) => evaluation.values[index] === true) as SearchIndexHit[];
+          }
+          const complete = next.value.catalogueExhausted && next.value.realms.every((entry) => entry.exhausted);
+          scopeWork.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 32768 });
+          const advanced = await sourceRequest(() =>
+            retained.advanceRealm(queryId, retainedState, next, complete, retainedHits),
+          );
+          if (!advanced) throw indexNotReady();
+          retainedState = {
+            ...retainedState,
+            frontier: next,
+            complete,
+            revision: (BigInt(retainedState.revision) + 1n).toString(),
+          };
+        }
+        if (!retainedState.complete) throw indexNotReady();
+
+        const after = cursor?.ok ? scopeCursorAfter('name', cursor.after) : null;
+        const rows = await sourceRequest(() =>
+          readOrderedScopeRows(pool, prefix, queryId, 'name', after, limit + 1, scopeWork!),
+        );
+        if (rows.length > limit + 1) throw indexNotReady();
+        const ids = rows.map((hit) => hit.id);
+        const currentHits = ids.length
+          ? await sourceRequest(() =>
+              searchSubjectHits(client, prefix, {
+                ...(compiledText ? { query: compiledText.query } : {}),
+                filter: { ids: { values: ids } },
+                sort: 'name',
+                generation,
+                size: ids.length,
+                work: requestWork(),
+              }),
+            )
+          : { hits: [] as SearchIndexHit[] };
+        if (
+          currentHits.hits.length !== rows.length ||
+          currentHits.hits.some(
+            (hit, index) => hit.id !== rows[index]!.id || !isDeepStrictEqual(hit.sort, rows[index]!.sort),
+          )
+        )
+          throw new ProblemError('search_restart_required');
+        scopeWork.consume({
+          ...zeroScopeWork(),
+          statements: Number(ids.length > 0),
+          candidateKeys: ids.length,
+          nativeRows: currentHits.hits.length,
+        });
+        const checked = currentHits.hits.length
+          ? await checkCandidates(currentHits.hits as unknown as NativeSearchHit[])
+          : new Map();
+        if (checked.size !== currentHits.hits.length) throw new ProblemError('search_restart_required');
+        const verifyRealm = async (values: readonly SearchIndexHit[]) => {
+          for (let offset = 0; offset < values.length; offset += 100) {
+            const batch = values.slice(offset, offset + 100);
+            const evaluation = await sourceRequest(() =>
+              scope!.realm.evaluate(preparedRealm!.scope, batch.map((hit) => hit.id), scopeWork!.remaining()),
+            );
+            scopeWork.native(evaluation.work);
+            if (
+              evaluation.basis !== preparedRealm!.scope.basis ||
+              evaluation.values.length !== batch.length ||
+              evaluation.values.some((value) => value !== true)
+            )
+              throw new ProblemError('search_restart_required');
+          }
+        };
+        await verifyRealm(currentHits.hits);
+        const exhausted = rows.length <= limit;
+        const shownHits = currentHits.hits.slice(0, limit);
+        const shown = shownHits.map((hit) => checked.get(hit as unknown as NativeSearchHit)!);
+        const results: SearchHit[] = shown.map((subject) => projectHit(subject, hitOptions));
+        if (hitOptions.properties && shown.length) {
+          const facts = await sourceRequest(() =>
+            projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
+          );
+          results.forEach((hit, index) => (hit.facts = facts[index]!));
+        }
+        const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
+        const as_of = await asOf(generation!);
+        const witnesses = new Map<string, number>();
+        for (const subject of shown.slice(0, 2)) witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+        const response: PublicSearchPage = {
+          subjects: publicResults,
+          ...(metadata
+            ? {
+                kinds: {
+                  values: metadata.values,
+                  next:
+                    metadata.after === null
+                      ? null
+                      : await encodeKindCursor(cursors, binding, generation!, kinds!.digest, metadata.after, now),
+                },
+              }
+            : {}),
+          next:
+            exhausted || shownHits.length === 0
+              ? null
+              : await encodeSearchCursor(cursors, binding, {
+                  generation: generation!,
+                  after: shownHits.at(-1)!.sort,
+                }, now),
+          as_of,
+        };
+        const finalChecks = shownHits.length ? (currentHits.hits as SearchIndexHit[]) : [];
+        if (finalChecks.length) {
+          const finalSource = await checkCandidates(finalChecks as unknown as NativeSearchHit[]);
+          if (finalSource.size !== finalChecks.length) throw new ProblemError('search_restart_required');
+          await verifyRealm(finalChecks);
+        }
+        if ((await indexRequest(freshAliasGeneration)) !== generation)
+          throw new ProblemError('search_restart_required');
+        await readContext?.complete(response);
+        return response;
+      }
       if (
         scope &&
         preparedScope &&
