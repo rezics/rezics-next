@@ -2,12 +2,6 @@ import type { KernelClient } from '@rezics/client';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, FieldGroup } from '@rezics/definitions/bulk';
 import type { ConversionInput, ConvertedRecord, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
-import type {
-  ClassificationAssociation,
-  ClassificationClear,
-  ClassificationObservation,
-  SourceClassificationRead,
-} from '../../kernel/src/rating/source-classification-contract.ts';
 
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
@@ -39,6 +33,17 @@ export type ImportSourceStatisticFigure = GeneratedStatisticList[number] &
 export type ImportPublicFigure = GeneratedPublicFigure extends { figure: infer Figure }
   ? Figure
   : GeneratedPublicFigure;
+
+type SourceClassificationsClient = ReturnType<KernelClient['subjects']>['source-classifications'];
+type GeneratedClassificationPut = Readonly<Parameters<SourceClassificationsClient['$put']['post']>[0]>;
+type GeneratedClassificationClear = Readonly<Parameters<SourceClassificationsClient['$clear']['post']>[0]>;
+type GeneratedClassificationBatch = NonNullable<
+  Awaited<ReturnType<SourceClassificationsClient['$read']['post']>>['data']
+>;
+export type ClassificationAssociation = GeneratedClassificationPut['association'];
+export type ClassificationObservation = GeneratedClassificationPut['value'];
+export type ClassificationClear = GeneratedClassificationClear['value'];
+export type SourceClassificationRead = GeneratedClassificationBatch['items'][number];
 
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;
@@ -74,7 +79,6 @@ export interface ImportTransport {
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]>;
   readPublicFigure?(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure>;
-  /** Documented classification routes until Content's generated client methods land. */
   readSourceClassifications?(
     input: { subjectId: string; associations: readonly ClassificationAssociation[] },
     signal?: AbortSignal,
@@ -100,8 +104,6 @@ export interface ImportTransport {
     signal?: AbortSignal,
   ): Promise<{ observationDigest: string; state: 'cleared' }>;
 }
-
-export type { ClassificationAssociation, ClassificationClear, ClassificationObservation, SourceClassificationRead };
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
 

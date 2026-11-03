@@ -42,7 +42,8 @@ test('statistic custody sits with VNDB observations; classification keeps its ow
   expect(classification).not.toContain('run_aggregate_heads');
   expect(classification).not.toContain('/v1/subjects/{id}/source-statistics');
   expect(classification).toContain('run_classification_heads');
-  expect(classification).toContain('AIP-136 HTTP seam');
+  expect(classification).toContain('source-classifications');
+  expect(classification).toContain('$read|$put|$clear');
   expect(classification).toContain('source-classifications:read');
 });
 

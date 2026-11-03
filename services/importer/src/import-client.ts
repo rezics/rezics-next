@@ -705,52 +705,8 @@ export function createImportTransport(options: ImportTransportOptions) {
       return value as ImportSourceStatisticFigure;
     });
   }
-  async function classificationCall(
-    path: string,
-    body: unknown,
-    expected: number,
-    signal?: AbortSignal,
-    key?: string,
-  ): Promise<unknown> {
-    const bytes = JSON.stringify(snapshot(body, BODY_BYTES));
-    ensure(bytes.length > 0 && Buffer.byteLength(bytes) <= BODY_BYTES);
-    const reply = await response(
-      async () => {
-        try {
-          const fetched = await importFetch(new URL(path, origin), {
-            method: 'POST',
-            headers: {
-              accept: 'application/json',
-              'content-type': 'application/json',
-              ...(key === undefined ? {} : { 'idempotency-key': idempotencyKey(key) }),
-            },
-            body: bytes,
-            ...(signal === undefined ? {} : { signal }),
-          });
-          const text = await fetched.text();
-          let data: unknown;
-          if (text.length) {
-            try {
-              data = JSON.parse(text);
-            } catch {
-              data = undefined;
-            }
-          }
-          return {
-            status: fetched.status,
-            data: fetched.ok ? data : undefined,
-            error: fetched.ok ? undefined : { value: data },
-            response: fetched,
-          };
-        } catch (error) {
-          if (error instanceof ImportTransportError) throw error;
-          throw new ImportTransportError();
-        }
-      },
-      expected,
-      signal,
-    );
-    return reply.body;
+  function classifications(subjectId: string) {
+    return client.subjects({ id: subjectId })['source-classifications'];
   }
   function associationBody(association: unknown): ClassificationAssociation {
     const value = snapshot(association, BODY_BYTES);
@@ -788,13 +744,12 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     ensure(Array.isArray(input.associations) && input.associations.length <= 32);
     const associations = input.associations.map(associationBody);
-    const body = await classificationCall(
-      `/v1/subjects/${input.subjectId}/source-classifications:read`,
-      { associations },
+    const reply = await response(
+      () => classifications(input.subjectId).$read.post({ associations }, fetchOptions(signal)),
       200,
       signal,
     );
-    const value = snapshot(body, RESPONSE_BYTES);
+    const value = snapshot(reply.body, RESPONSE_BYTES);
     ensure(typeof value === 'object' && value !== null && !Array.isArray(value) && 'items' in value);
     const items = (value as { items: unknown }).items;
     ensure(Array.isArray(items) && items.length === associations.length);
@@ -818,14 +773,23 @@ export function createImportTransport(options: ImportTransportOptions) {
       input.expectedObservation === null ||
         (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
     );
-    const body = await classificationCall(
-      `/v1/subjects/${input.subjectId}/source-classifications:put`,
-      { association, expectedObservation: input.expectedObservation, value },
+    const body = await response(
+      () =>
+        classifications(input.subjectId).$put.post(
+          {
+            association,
+            expectedObservation: input.expectedObservation,
+            value: value as ClassificationObservation,
+          },
+          {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          },
+        ),
       200,
       signal,
-      input.idempotencyKey,
     );
-    const reply = snapshot(body, RESPONSE_BYTES) as Record<string, unknown>;
+    const reply = snapshot(body.body, RESPONSE_BYTES) as Record<string, unknown>;
     ensure(
       typeof reply === 'object' &&
         reply !== null &&
@@ -853,14 +817,23 @@ export function createImportTransport(options: ImportTransportOptions) {
       input.expectedObservation === null ||
         (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
     );
-    const body = await classificationCall(
-      `/v1/subjects/${input.subjectId}/source-classifications:clear`,
-      { association, expectedObservation: input.expectedObservation, value },
+    const body = await response(
+      () =>
+        classifications(input.subjectId).$clear.post(
+          {
+            association,
+            expectedObservation: input.expectedObservation,
+            value: value as ClassificationClear,
+          },
+          {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          },
+        ),
       200,
       signal,
-      input.idempotencyKey,
     );
-    const reply = snapshot(body, RESPONSE_BYTES) as Record<string, unknown>;
+    const reply = snapshot(body.body, RESPONSE_BYTES) as Record<string, unknown>;
     ensure(
       typeof reply === 'object' &&
         reply !== null &&
