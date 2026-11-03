@@ -1633,9 +1633,9 @@ type Counted<T> = T extends ErasedPlaceholder & { readonly revisionId?: never }
 type ReactionCountProjection<T extends { readonly id: string }> = Readonly<{
   items: readonly Counted<T>[];
   reactionsAsOf: ReactionCountFreshness | null;
-  /** Targets with at least one installed current aggregate row. An absent target
-   * row does not prove a zero count and remains unavailable to page consumers. */
-  targetsWithRows: readonly string[];
+  /** Targets with at least one installed aggregate row and its oldest row watermark.
+   * An absent target row does not prove a zero count and remains unavailable. */
+  targetFreshness: readonly Readonly<{ id: string; source: ReactionCountFreshness }>[];
 }>;
 
 async function readReactionCountProjection<T extends { readonly id: string }>(
@@ -1661,6 +1661,7 @@ async function readReactionCountProjection<T extends { readonly id: string }>(
     groups.set(partition, group);
   }
   const sums = new Map<string, Map<ViewerReactionKind, number>>();
+  const targetSources = new Map<string, ReactionCountFreshness>();
   let oldest: { epoch: number; position: bigint } | null = null;
   for (const [partition, group] of groups) {
     const parameters = { partition, target_ids: group.ids, routes: group.routes };
@@ -1684,6 +1685,14 @@ async function readReactionCountProjection<T extends { readonly id: string }>(
       const reactionKind = kind as ViewerReactionKind;
       counted.set(reactionKind, (counted.get(reactionKind) ?? 0) + row.count);
       sums.set(row.targetId, counted);
+      const targetOldest = targetSources.get(row.targetId);
+      if (
+        targetOldest === undefined ||
+        row.sourceEpoch < targetOldest.epoch ||
+        (row.sourceEpoch === targetOldest.epoch && position < BigInt(targetOldest.position))
+      ) {
+        targetSources.set(row.targetId, { epoch: row.sourceEpoch, position: position.toString() });
+      }
       if (
         oldest === null ||
         row.sourceEpoch < oldest.epoch ||
@@ -1705,7 +1714,7 @@ async function readReactionCountProjection<T extends { readonly id: string }>(
       return { ...target, reactions };
     }) as Counted<T>[],
     reactionsAsOf: oldest === null ? null : { epoch: oldest.epoch, position: oldest.position.toString() },
-    targetsWithRows: [...sums.keys()],
+    targetFreshness: [...targetSources].map(([id, source]) => ({ id, source })),
   };
 }
 
@@ -1723,8 +1732,8 @@ export async function withReactionCounts<T extends { readonly id: string }>(
   return { items: projection.items, reactionsAsOf: projection.reactionsAsOf };
 }
 
-/** The native page projection exposes coverage without treating a missing aggregate
- * row as an exact zero. Existing feed callers keep their established return shape. */
+/** The native page projection exposes each target's aggregate watermark without
+ * treating a missing aggregate row as an exact zero. Existing feed callers keep their established return shape. */
 export async function withReactionCountsAndCoverage<T extends { readonly id: string }>(
   dependencies: ContentReadDependencies,
   targets: readonly T[],

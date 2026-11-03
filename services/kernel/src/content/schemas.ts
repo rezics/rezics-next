@@ -770,6 +770,22 @@ const boardOpeningCounts = t.Union([
   ),
   t.Object({ state: t.Literal('unavailable') }, closed),
 ]);
+const boardOpeningComments = t.Union([
+  t.Object(
+    {
+      state: t.Literal('current'),
+      cohort: t.Union([t.Literal('public'), t.Literal('viewer')]),
+      count: t.Object(
+        { kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]), value: t.Integer({ minimum: 0 }) },
+        closed,
+      ),
+      lastActivityAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+      source: t.Object({ epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) }, closed),
+    },
+    closed,
+  ),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
 const boardOpeningMedia = t.Union([
   t.Object({ state: t.Literal('none'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
   t.Object(
@@ -795,7 +811,7 @@ export const BoardOpeningCardSchema = t.Object(
       },
       closed,
     ),
-    comments: t.Object({ state: t.Literal('unavailable') }, closed),
+    comments: boardOpeningComments,
     actions: t.Object({ reply: boardAdvice, react: boardAdvice, share: t.Literal('available') }, closed),
   },
   closed,

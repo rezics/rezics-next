@@ -2589,28 +2589,42 @@ check uses scales [256, 1024, 4096] with the series rule.
 
 Decision: Mount the combined reader at `GET /v1/boards/{id}/page`; accept `new`, `active` and `hot` while binding continuation to the existing native sort, viewer and pin revision.
 
+Decision: Board comments are current only from a request-bound cohort witness; expose its exact or lower-bound count, last contribution time and source, and keep unsupported cohorts unavailable. Candidate episodes, empty prefixes and loaded page length never establish a count.
+
+The native factory remains `createBoardPageReader(dependencies)`, returning
+`readBoardOpeningPage(boardId, { actor, deadline }, { cursor?, sort?: 'new' | 'active' | 'hot' })`.
+Its producer seam is `readConversationActivityBatch(threadIds, { actor, deadline })`, returning
+`{ items: BoardOpeningActivityWitness[], anchors: AnchoredPosition[] }`. Each current witness binds one thread to
+`cohort: {kind:'public'}` or `cohort: {kind:'viewer', accountId}`, a `{kind:'exact'|'lower-bound', value}` count,
+`lastActivityAt`, and `{epoch, position}` source; withheld witnesses return only `{state:'unavailable', threadId}`.
+The HTTP response head is `board`, `pinnedThreads`, `threads`, `next`, `rankRefreshedAt`, `reactionsAsOf`, `viewer`,
+`actions`. A populated public card can carry
+`comments: {state:'current', cohort:'public', count:{kind:'exact', value:4}, lastActivityAt:'2026-11-04T00:00:00.000Z', source:{epoch:2, position:'10'}}`;
+a withheld or unsupported cohort carries `comments: {state:'unavailable'}`. A changed final witness returns
+`503 dependency_unavailable` with no partial page. The existing Web Board reader owns binding this response and review.
+
 ### Cost: mounted Board opening envelope
 
 - Touches: The mounted factory runs two `readRealmBoard` observations and two `listBoardOpeningThreads` passes
-  to bracket author, media and action hydration with current Board and thread equality. Each page pass reads at most
-  21 raw ordinary candidates, selects/discloses at most 20 ordinary threads and, only on an initial request, selects
-  and discloses the existing five-pin cohort. Each ordinary pass also reads its pin revision and repeats the native
-  final parent observation. The action reader prepares current Access evidence once, batches `thread:create` for one
-  Board and `post:create`/`reaction:set` for at most 25 threads, and checks current Realm participation once. Two
-  public author batches read at most 50 deduplicated identities grouped by account route. Two existing media
-  media projection passes cover at most 800 deduplicated opening-post media keys each in batches of 32; each selected key
-  retains the helper's current parent, Realm and final derivative authorization. Reaction totals use the existing
-  one-seek-per-target-partition projection; signed-in viewer reactions add one batch in the viewer's home. The page
-  reports comments as unavailable because `conversation-activity.ts` has no proven current coverage for this read.
-- Bound: A single request observes at most 42 raw candidates across its two validation passes, hydrates at most 40
-  ordinary candidates and 10 initial pins, and never refills a sparse page. Existing page passes retain their own
-  bounded Access preparation, partition fence, BEGIN/COMMIT or rollback controls, source-cursor validation, chain
-  reads, citation checks and native dispatch retries. Account, media and reaction calls use their existing pools,
-  home grouping, deadlines and runner work; this wrapper adds no cross-partition join or shared transaction. One
-  opening post admits up to `MAX_DOCUMENT_BYTES` (2 MiB) and 32 media references, title limits remain 1,024
-  characters, and published rules are limited to 64 KiB; JSON escaping and repeated copies mean these source caps
-  are not themselves a response-byte or retained-memory cap. The aggregate byte, statement, control and runner
-  bounds still need the native capture below; no fitted cap is asserted.
+  to bracket hydration with current Board and thread equality. Each page pass reads at most 21 raw ordinary
+  candidates, selects/discloses at most 20 ordinary threads and, only on an initial request, selects/discloses the
+  existing five-pin cohort. The action reader prepares current Access evidence once, batches `thread:create` for one
+  Board and `post:create`/`reaction:set` for at most 25 threads, and checks current Realm participation once. Author
+  and media projections each run twice: at most 50 deduplicated identities per author pass and 800 opening-post media
+  keys per media pass, in batches of 32. Activity runs twice for at most 25 unique selected threads, carrying the
+  request actor and deadline. Reaction counts and signed-in viewer slots each run twice; count reads group by target
+  home and viewer reads use one statement in the actor's home. The route performs no per-card GET or cross-partition
+  join.
+- Bound: The two page observations read at most 42 raw ordinary candidates, hydrate at most 40 ordinary candidates
+  and 10 initial pins, and never refill a sparse page. Reaction count work is at most 25 target-home statements and
+  175 aggregate rows per pass; viewer work is at most one statement and 25 rows per pass. Each activity call receives
+  at most 25 IDs; its installed producer owns grouped native reads, cohort disclosure and any Access retry terms.
+  Existing page passes retain their partition fences, cursor checks, chain reads, citation checks and native dispatch
+  retries. Each opening document is capped at 2 MiB and can expand to at most six JSON bytes per source byte, so the
+  25-card body contribution is at most 300 MiB before titles, author/media metadata and envelope fields. Both page
+  snapshots coexist during final comparison; account/media summaries and activity witnesses are also retained twice.
+  The complete response-byte, retained-memory, all-pool statement/control and runner ceiling still requires the
+  producer's delivered cost contract and the deferred native capture; no fitted cap is asserted.
 - Growth check: Deferred to controller acceptance. Exercise initial and continuation pages at 256/1024/4096 unrelated
   Board, pin/history, thread/review, Realm/Space, account/authority, reaction and target/reference rows; separately
   grow unrelated author/media and membership/ban history. Capture each participating pool and runner phase for

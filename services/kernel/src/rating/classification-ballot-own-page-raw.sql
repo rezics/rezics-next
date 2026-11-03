@@ -1,12 +1,15 @@
-WITH selection AS (SELECT :selected_subject::uuid AS selected_subject)
-SELECT subject_id AS "subjectId", association_id AS "associationId",
-       binding_hash AS "bindingHash", assessment, false_positive AS "falsePositive",
-       revision::text AS revision, eligibility_generation::text AS "eligibilityGeneration"
-FROM rating.classification_ballot
-CROSS JOIN selection
-WHERE route = :route::integer AND actor_id = :actor_id::uuid
-  AND eligible AND assessment IS NOT NULL AND eligibility_generation = :generation::bigint
-  AND (subject_id, association_id) > (:after_subject::uuid, :after_association::uuid)
-  AND (selected_subject IS NULL OR (subject_id, association_id) <> (selected_subject, :selected_association::uuid))
-ORDER BY subject_id, association_id
+WITH selection AS (SELECT :selected_subject::uuid AS subject_id)
+SELECT ballot.subject_id AS "subjectId", ballot.association_id AS "associationId",
+       ballot.binding_hash AS "bindingHash", ballot.assessment,
+       ballot.false_positive AS "falsePositive", ballot.revision::text AS revision,
+       ballot.eligibility_generation::text AS "eligibilityGeneration"
+FROM rating.classification_ballot AS ballot CROSS JOIN selection
+WHERE ballot.route = :route::integer AND ballot.actor_id = :actor_id::uuid
+  AND ballot.eligible AND ballot.assessment IS NOT NULL AND ballot.eligibility_generation = :generation::bigint
+  AND (ballot.subject_id, ballot.association_id) > (:after_subject::uuid, :after_association::uuid)
+  AND (
+    selection.subject_id IS NULL
+    OR (ballot.subject_id, ballot.association_id) <> (selection.subject_id, :selected_association::uuid)
+  )
+ORDER BY ballot.subject_id, ballot.association_id
 LIMIT 21;

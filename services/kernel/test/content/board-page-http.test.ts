@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { realmBoardWorld } from './realm-board-create-support.ts';
+import {
+  projectBoardOpeningComments,
+  projectBoardOpeningReactionCounts,
+  type BoardOpeningActivityWitness,
+} from '../../src/content/board-page.ts';
+import type { Actor } from '../../src/request/access.ts';
 
 let world: Awaited<ReturnType<typeof realmBoardWorld>>;
 
@@ -10,6 +16,47 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await world?.close();
+});
+
+test('Board comments require a current matching cohort witness and reaction zero differs from unavailable', () => {
+  const threadId = 'thread-one';
+  const publicZero: BoardOpeningActivityWitness = {
+    state: 'current',
+    threadId,
+    cohort: { kind: 'public' },
+    count: { kind: 'exact', value: 0 },
+    lastActivityAt: null,
+    source: { epoch: 2, position: '10' },
+  };
+  const privateActivity: BoardOpeningActivityWitness = {
+    ...publicZero,
+    cohort: { kind: 'viewer', accountId: 'account-one' },
+    count: { kind: 'lower-bound', value: 2 },
+    lastActivityAt: '2026-11-04T00:00:00.000Z',
+  };
+  const anonymous = { kind: 'anonymous' } as Actor;
+  const account = { kind: 'account', accountId: 'account-one' } as Actor;
+
+  expect(projectBoardOpeningComments(threadId, publicZero, anonymous)).toMatchObject({
+    state: 'current',
+    cohort: 'public',
+    count: { kind: 'exact', value: 0 },
+    lastActivityAt: null,
+  });
+  expect(projectBoardOpeningComments(threadId, privateActivity, anonymous)).toEqual({ state: 'unavailable' });
+  expect(projectBoardOpeningComments(threadId, privateActivity, account)).toMatchObject({
+    state: 'current',
+    cohort: 'viewer',
+    count: { kind: 'lower-bound', value: 2 },
+  });
+  expect(projectBoardOpeningComments('other-thread', publicZero, anonymous)).toEqual({ state: 'unavailable' });
+
+  expect(projectBoardOpeningReactionCounts(true, {}, { epoch: 2, position: '10' })).toEqual({
+    state: 'as-of',
+    values: {},
+    source: { epoch: 2, position: '10' },
+  });
+  expect(projectBoardOpeningReactionCounts(true, undefined, undefined)).toEqual({ state: 'unavailable' });
 });
 
 test.serial('the mounted opening page combines current Realm context and a disclosed discussion card', async () => {

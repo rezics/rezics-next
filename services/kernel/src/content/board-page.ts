@@ -20,6 +20,7 @@ import {
   type ContentReadDependencies,
   type ReactionCountFreshness,
   type ThreadView,
+  type ViewerReactionKind,
 } from './reads.ts';
 import type { AnchoredPosition, BoardView, ReadContext } from './model.ts';
 import type { Actor } from '../request/access.ts';
@@ -43,6 +44,33 @@ export type BoardOpeningMedia = Readonly<
   | { state: 'available'; images: readonly DocumentImagePresentation[] }
   | { state: 'unavailable'; images: readonly [] }
 >;
+export type BoardOpeningActivityWitness =
+  | Readonly<{
+      state: 'current';
+      threadId: string;
+      cohort: Readonly<{ kind: 'public' }> | Readonly<{ kind: 'viewer'; accountId: string }>;
+      count: Readonly<{ kind: 'exact' | 'lower-bound'; value: number }>;
+      lastActivityAt: string | null;
+      source: Readonly<{ epoch: number; position: string }>;
+    }>
+  | Readonly<{ state: 'unavailable'; threadId: string }>;
+export type BoardOpeningActivityRead = Readonly<{
+  items: readonly BoardOpeningActivityWitness[];
+  anchors: readonly AnchoredPosition[];
+}>;
+export type BoardOpeningActivityReader = (
+  threadIds: readonly string[],
+  context: Readonly<{ actor: Actor; deadline: number }>,
+) => Promise<BoardOpeningActivityRead>;
+export type BoardOpeningComments =
+  | Readonly<{
+      state: 'current';
+      cohort: 'public' | 'viewer';
+      count: Readonly<{ kind: 'exact' | 'lower-bound'; value: number }>;
+      lastActivityAt: string | null;
+      source: Readonly<{ epoch: number; position: string }>;
+    }>
+  | Readonly<{ state: 'unavailable' }>;
 export type BoardOpeningCard = Readonly<{
   thread: ThreadView;
   target: Readonly<{ kind: 'thread'; id: string; boardId: string }>;
@@ -55,7 +83,7 @@ export type BoardOpeningCard = Readonly<{
       | Readonly<{ state: 'unavailable' }>;
     viewer: Readonly<{ state: 'current'; reaction: string | null }> | Readonly<{ state: 'not-applicable' }>;
   }>;
-  comments: Readonly<{ state: 'unavailable' }>;
+  comments: BoardOpeningComments;
   actions: Readonly<{ reply: BoardAdvice; react: BoardAdvice; share: 'available' }>;
 }>;
 export type BoardOpeningPage = Readonly<{
@@ -71,7 +99,10 @@ export type BoardOpeningPage = Readonly<{
 }>;
 
 type BoardOpeningDependencies = ContentBoardDependencies &
-  Pick<ContentCommandDependencies, 'realmParticipation' | 'routeKey'>;
+  Pick<ContentCommandDependencies, 'realmParticipation' | 'routeKey'> & {
+    /** Installed by the conversation-activity producer when its current witness reader is delivered. */
+    readConversationActivityBatch?: BoardOpeningActivityReader;
+  };
 type ActiveIdentity = Extract<PublicIdentity, { state: 'active' }>;
 
 export class BoardOpeningChangedError extends Error {
@@ -201,6 +232,102 @@ function imageProjection(
   return { state: 'available', images: selected as DocumentImagePresentation[] };
 }
 
+const unavailableComments: BoardOpeningComments = { state: 'unavailable' };
+
+export function projectBoardOpeningComments(
+  threadId: string,
+  witness: BoardOpeningActivityWitness | undefined,
+  actor: Actor,
+): BoardOpeningComments {
+  if (!witness || witness.state !== 'current' || witness.threadId !== threadId) return unavailableComments;
+  if (witness.cohort.kind === 'viewer') {
+    if (actor.kind !== 'account' || witness.cohort.accountId !== actor.accountId) return unavailableComments;
+  } else if (witness.cohort.kind !== 'public') {
+    return unavailableComments;
+  }
+  if (
+    !Number.isSafeInteger(witness.count.value) ||
+    witness.count.value < 0 ||
+    (witness.count.kind !== 'exact' && witness.count.kind !== 'lower-bound') ||
+    (witness.count.value === 0 && witness.lastActivityAt !== null) ||
+    (witness.lastActivityAt !== null && !Number.isFinite(Date.parse(witness.lastActivityAt))) ||
+    !Number.isSafeInteger(witness.source.epoch) ||
+    witness.source.epoch < 1 ||
+    !/^[1-9][0-9]*$/.test(witness.source.position)
+  )
+    return unavailableComments;
+  return {
+    state: 'current',
+    cohort: witness.cohort.kind,
+    count: witness.count,
+    lastActivityAt: witness.lastActivityAt,
+    source: witness.source,
+  };
+}
+
+export function projectBoardOpeningReactionCounts(
+  interactionReady: boolean,
+  values: Readonly<Partial<Record<ViewerReactionKind, number>>> | undefined,
+  source: ReactionCountFreshness | undefined,
+): BoardOpeningCard['interaction']['counts'] {
+  if (!interactionReady || !values || !source) return { state: 'unavailable' };
+  return { state: 'as-of', values, source };
+}
+
+type BoardActivityProjection = Readonly<{
+  comments: ReadonlyMap<string, BoardOpeningComments>;
+  anchors: readonly AnchoredPosition[];
+}>;
+
+async function readBoardActivity(
+  dependencies: BoardOpeningDependencies,
+  actor: Actor,
+  threads: readonly ThreadView[],
+  deadline: number,
+): Promise<BoardActivityProjection> {
+  const threadIds = threads
+    .filter((thread) => thread.availability === 'available' && availablePost(thread) !== null)
+    .map((thread) => thread.id);
+  if (threadIds.length > 25) throw new RangeError('Board opening activity accepts at most twenty-five threads');
+  const comments = new Map<string, BoardOpeningComments>(threadIds.map((id) => [id, unavailableComments]));
+  if (threadIds.length === 0 || !dependencies.readConversationActivityBatch) return { comments, anchors: [] };
+
+  const result = await within(deadline, () =>
+    dependencies.readConversationActivityBatch!(threadIds, { actor, deadline }),
+  );
+  const requested = new Set(threadIds);
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const witness of result.items) {
+    if (!requested.has(witness.threadId)) continue;
+    if (seen.has(witness.threadId)) {
+      duplicates.add(witness.threadId);
+      comments.set(witness.threadId, unavailableComments);
+      continue;
+    }
+    seen.add(witness.threadId);
+    if (witness.state === 'current')
+      comments.set(witness.threadId, projectBoardOpeningComments(witness.threadId, witness, actor));
+    else comments.set(witness.threadId, unavailableComments);
+  }
+  for (const id of duplicates) comments.set(id, unavailableComments);
+  return { comments, anchors: result.anchors };
+}
+
+function reactionProjectionView(projection: Awaited<ReturnType<typeof withReactionCountsAndCoverage>>) {
+  return {
+    items: projection.items.map((item) => ({ id: item.id, reactions: 'reactions' in item ? item.reactions : null })),
+    targetFreshness: [...projection.targetFreshness].sort((left, right) => left.id.localeCompare(right.id)),
+    reactionsAsOf: projection.reactionsAsOf,
+  };
+}
+
+function viewerReactionView<T extends { readonly id: string; readonly viewerReaction?: string | null }>(
+  items: readonly T[],
+) {
+  return items.map((item) => [item.id, item.viewerReaction ?? null] as const);
+}
+
 function assertSamePage(
   board: BoardView,
   first: BoardThreadPage,
@@ -245,6 +372,14 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     });
     const selectedThreads = [...selectedPage.pinnedThreads, ...selectedPage.entries];
     const uniqueThreads = [...new Map(selectedThreads.map((thread) => [thread.id, thread])).values()];
+    const actionThreads = uniqueThreads.filter(
+      (thread) => thread.availability === 'available' && thread.firstPost.availability === 'available',
+    );
+    const targets = actionThreads.map((thread) => ({ id: thread.id }));
+    const reads = readDependencies();
+    const initialCounts = await withReactionCountsAndCoverage(reads, targets, context.deadline);
+    const initialViewers = await withViewerReactions(reads, context.actor, targets, context.deadline);
+    const initialActivity = await readBoardActivity(dependencies, context.actor, uniqueThreads, context.deadline);
     const authorIds = accountIdsFor(uniqueThreads);
     const authors = await readAuthors(dependencies, authorIds, context.deadline);
     const images = await readMedia(dependencies, context.actor, uniqueThreads, context.deadline);
@@ -254,10 +389,6 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     if (!isDeepStrictEqual(images, currentImages)) throw new BoardOpeningChangedError();
 
     const participation = await participationAdvice(dependencies, context.actor, selectedBoard.value, context.deadline);
-    const actionThreads = uniqueThreads.filter(
-      (thread) => thread.availability === 'available' && thread.firstPost.availability === 'available',
-    );
-    const reads = readDependencies();
     const actionEvidence = await readBoardPageActionEvidence(
       reads,
       boardId,
@@ -265,12 +396,18 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
       actionThreads.map((thread) => thread.id),
       context,
     );
-    const targets = actionThreads.map((thread) => ({ id: thread.id }));
     const counted = await withReactionCountsAndCoverage(reads, targets, context.deadline);
     const viewers = await withViewerReactions(reads, context.actor, targets, context.deadline);
+    const finalActivity = await readBoardActivity(dependencies, context.actor, uniqueThreads, context.deadline);
+    if (
+      !isDeepStrictEqual(reactionProjectionView(initialCounts), reactionProjectionView(counted)) ||
+      !isDeepStrictEqual(viewerReactionView(initialViewers), viewerReactionView(viewers)) ||
+      !isDeepStrictEqual(initialActivity.comments, finalActivity.comments)
+    )
+      throw new BoardOpeningChangedError();
     const countedById = new Map(counted.items.map((item) => [item.id, item]));
     const viewerById = new Map(viewers.map((item) => [item.id, item]));
-    const covered = new Set(counted.targetsWithRows);
+    const targetFreshness = new Map(counted.targetFreshness.map((item) => [item.id, item.source]));
 
     const finalBoard = await readRealmBoard(dependencies, boardId, context);
     const finalPage = await listBoardOpeningThreads(dependencies, boardId, context, {
@@ -285,7 +422,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
       const countedThread = countedById.get(thread.id);
       const viewerThread = viewerById.get(thread.id);
       const aggregate = countedThread && 'reactions' in countedThread ? countedThread.reactions : undefined;
-      const source = interactionReady && aggregate && covered.has(thread.id) ? counted.reactionsAsOf : null;
+      const source = interactionReady && aggregate ? targetFreshness.get(thread.id) : undefined;
       return {
         thread,
         target: { kind: 'thread', id: thread.id, boardId: thread.boardId },
@@ -296,13 +433,13 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
         media: imageProjection(thread, currentImages),
         interaction: {
           target: { kind: 'thread', id: thread.id },
-          counts: source && aggregate ? { state: 'as-of', values: aggregate, source } : { state: 'unavailable' },
+          counts: projectBoardOpeningReactionCounts(interactionReady, aggregate, source),
           viewer:
             context.actor.kind === 'account' && interactionReady
               ? { state: 'current', reaction: viewerThread?.viewerReaction ?? null }
               : { state: 'not-applicable' },
         },
-        comments: { state: 'unavailable' },
+        comments: finalActivity.comments.get(thread.id) ?? unavailableComments,
         actions: {
           reply: advice(
             context.actor,
@@ -335,6 +472,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
         ...selectedPage.anchors,
         finalBoard.anchor,
         ...finalPage.anchors,
+        ...finalActivity.anchors,
         ...actionEvidence.anchors,
       ],
     };
