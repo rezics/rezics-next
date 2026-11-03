@@ -136,8 +136,10 @@ function NativeMembership({
   const signIn = source.viewer.state === 'anonymous' && source.actions.join === 'sign-in';
   const message = (() => {
     if (source.viewer.state === 'banned' || source.actions.participate === 'banned') return m.realm_banned();
-    if (source.viewer.state === 'orphaned' || source.actions.participate === 'orphaned') return m.realm_claim_orphaned();
-    if (source.viewer.state === 'denied' || source.actions.participate === 'denied') return m.realm_native_access_denied();
+    if (source.viewer.state === 'orphaned' || source.actions.participate === 'orphaned')
+      return m.realm_claim_orphaned();
+    if (source.viewer.state === 'denied' || source.actions.participate === 'denied')
+      return m.realm_native_access_denied();
     if (source.viewer.state === 'unavailable' || source.actions.participate === 'unavailable')
       return m.realm_membership_unavailable();
     if (source.actions.participate === 'sign-in') return m.realm_sign_in_to_join();
@@ -190,7 +192,11 @@ function NativeMembership({
       data-member-state={source.viewer.state === 'member' ? source.viewer.membership : source.viewer.state}
       data-native-advice={source.actions.participate}
     >
-      {message ? <p role="status" className="max-w-prose text-sm text-muted-foreground">{message}</p> : null}
+      {message ? (
+        <p role="status" className="max-w-prose text-sm text-muted-foreground">
+          {message}
+        </p>
+      ) : null}
       {signIn ? (
         <Button
           className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"

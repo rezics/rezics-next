@@ -515,8 +515,7 @@ function SpaceHome({
       ) : (
         <FollowTargetControl targetId={page.space.id} />
       )}
-      {page.realm && !realmRemoved &&
-      (nativeObservation ? true : readable && !frozen) ? (
+      {page.realm && !realmRemoved && (nativeObservation ? true : readable && !frozen) ? (
         <RealmMembership
           realm={page.realm}
           spaceId={page.space.id}
@@ -540,7 +539,9 @@ function SpaceHome({
       {...(page.realmCarrier ? { 'data-realm-carrier': page.realmCarrier } : {})}
     >
       {page.realmCarrier === 'unavailable' ? (
-        <p role="status" className="text-sm text-muted-foreground">{m.realm_shelf_unavailable()}</p>
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.realm_shelf_unavailable()}
+        </p>
       ) : null}
       {showCommunity && page.realm ? (
         <RealmHomeHeader realm={page.realm} space={page.space} participation={participation} />
@@ -593,9 +594,7 @@ function SpaceHome({
           {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
         />
       ) : null}
-      {page.realm &&
-      !realmRemoved &&
-      (!nativeObservation || nativeObservation.actions.claim === 'admitted') ? (
+      {page.realm && !realmRemoved && (!nativeObservation || nativeObservation.actions.claim === 'admitted') ? (
         <RealmClaimPanel
           realmId={page.realm.id}
           initial={page.realm.continuity ?? null}

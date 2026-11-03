@@ -11,7 +11,13 @@ function observation(kind: ViewerCase): Pick<NativeRealmHomePage, 'viewer' | 'ac
   if (kind === 'member')
     return {
       viewer: { state: 'member', membership: 'member' },
-      actions: { participate: 'admitted', join: 'unavailable', leave: 'admitted', claim: 'unavailable', manage: 'admitted' },
+      actions: {
+        participate: 'admitted',
+        join: 'unavailable',
+        leave: 'admitted',
+        claim: 'unavailable',
+        manage: 'admitted',
+      },
     };
   return {
     viewer: { state: kind },
@@ -29,11 +35,7 @@ function ViewerAdvice({ kind }: { kind: ViewerCase }) {
   return (
     <PatternStory path={appearancePath}>
       <div className="min-w-0 max-w-[390px] p-4" data-viewer-case={kind}>
-        <RealmMembership
-          realm={realm}
-          returnTo={appearancePath}
-          nativeObservation={observation(kind)}
-        />
+        <RealmMembership realm={realm} returnTo={appearancePath} nativeObservation={observation(kind)} />
       </div>
     </PatternStory>
   );

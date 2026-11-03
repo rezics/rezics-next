@@ -556,7 +556,12 @@ export async function locateRealmWithOrigin(
       value: {
         kind: 'page',
         page: {
-          space: { id: space.spaceId, title: space.title, summary: space.summary, ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}) },
+          space: {
+            id: space.spaceId,
+            title: space.title,
+            summary: space.summary,
+            ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}),
+          },
           realm: null,
           realmCarrier: 'concealed',
         },
@@ -568,7 +573,12 @@ export async function locateRealmWithOrigin(
       value: {
         kind: 'page',
         page: {
-          space: { id: space.spaceId, title: space.title, summary: space.summary, ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}) },
+          space: {
+            id: space.spaceId,
+            title: space.title,
+            summary: space.summary,
+            ...(extendedSpace.banner ? { banner: extendedSpace.banner } : {}),
+          },
           realm: null,
           realmCarrier: 'unavailable',
         },

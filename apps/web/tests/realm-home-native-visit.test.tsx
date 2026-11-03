@@ -30,9 +30,8 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const sessionModule = await import('../src/session/query');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
 mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
-const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } = await import(
-  '../src/community/realm-home-native'
-);
+const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } =
+  await import('../src/community/realm-home-native');
 const { loadSpacePageWithOrigin } = await import('../src/community/space');
 const { SpacePage } = await import('../src/community/space-page');
 const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
@@ -156,7 +155,9 @@ test('default Space reads bind the composed home after address resolution and pr
       home: {
         get: async ({ query }: { query: { languages: string[] } }) => {
           calls.push(`home:${query.languages.join(',')}`);
-          return homeStatus === 200 ? { status: 200, data: fixture() } : { status: homeStatus, error: { status: homeStatus } };
+          return homeStatus === 200
+            ? { status: 200, data: fixture() }
+            : { status: homeStatus, error: { status: homeStatus } };
         },
       },
     }),
@@ -187,14 +188,20 @@ test('Client operation seam binds home, raw shelf cursors and selected languages
   const requests: unknown[] = [];
   const client = {
     realms: ({ realmId }: { realmId: string }) => ({
-      home: { get: async (input: unknown) => (requests.push(['home', realmId, input]), { status: 200, data: fixture() }) },
+      home: {
+        get: async (input: unknown) => (requests.push(['home', realmId, input]), { status: 200, data: fixture() }),
+      },
       boardShelf: {
-        get: async (input: unknown) =>
-          (requests.push(['boardShelf', realmId, input]), { status: 200, data: { items: [], next: null } }),
+        get: async (input: unknown) => (
+          requests.push(['boardShelf', realmId, input]),
+          { status: 200, data: { items: [], next: null } }
+        ),
       },
       publicationShelf: {
-        get: async (input: unknown) =>
-          (requests.push(['publicationShelf', realmId, input]), { status: 200, data: { items: [], next: null } }),
+        get: async (input: unknown) => (
+          requests.push(['publicationShelf', realmId, input]),
+          { status: 200, data: { items: [], next: null } }
+        ),
       },
     }),
   } as unknown as KernelClient;

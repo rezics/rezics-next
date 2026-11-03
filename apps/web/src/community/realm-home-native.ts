@@ -62,7 +62,10 @@ export type NativeRealmHomeOperations = {
 
 type NativeRealmHomeRoute = {
   home: {
-    get(input: { query: { languages: string[] }; headers?: Record<string, string> }): Promise<Result<NativeRealmHomePage>>;
+    get(input: {
+      query: { languages: string[] };
+      headers?: Record<string, string>;
+    }): Promise<Result<NativeRealmHomePage>>;
   };
   boardShelf: {
     get(input: { query: { cursor?: string }; headers?: Record<string, string> }): Promise<Result<NativeRealmBoardPage>>;
@@ -76,12 +79,14 @@ type NativeRealmHomeRoute = {
 };
 
 /** The mounted endpoints exist on Kernel; this narrow seam bridges them until Client generation lands. */
-export function bindNativeRealmHomeOperations(client: KernelClient, auth: Record<string, never> | { headers: { authorization: string } }): NativeRealmHomeOperations {
+export function bindNativeRealmHomeOperations(
+  client: KernelClient,
+  auth: Record<string, never> | { headers: { authorization: string } },
+): NativeRealmHomeOperations {
   const route = (realmId: string) => client.realms({ realmId }) as unknown as NativeRealmHomeRoute;
   return {
     home: ({ realmId, languages }) => route(realmId).home.get({ query: { languages }, ...auth }),
-    boardShelf: ({ realmId, cursor }) =>
-      route(realmId).boardShelf.get({ query: cursor ? { cursor } : {}, ...auth }),
+    boardShelf: ({ realmId, cursor }) => route(realmId).boardShelf.get({ query: cursor ? { cursor } : {}, ...auth }),
     publicationShelf: ({ realmId, languages, cursor }) =>
       route(realmId).publicationShelf.get({ query: { languages, ...(cursor ? { cursor } : {}) }, ...auth }),
   };
