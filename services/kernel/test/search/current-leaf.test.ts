@@ -205,6 +205,7 @@ test('conflicting spoiler witnesses remain unknown through NOT while identical l
     not: { statement: { property: 'schema:code', in: ['ABC'], qualifiers: [spoiler] } },
   });
   const clause = filter.leaves[0]!;
+  if (clause.facet !== 'statement') throw new Error('Expected a statement clause');
   const conflict = statement({
     qualifiers: [
       { property: 'rezics:spoilerLevel', value: '0' },
