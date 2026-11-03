@@ -1,9 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
-import {
-  parseNativeContextDirectoryPage,
-  parseNativeContextLifecycle,
-} from '../../community/setup-context-native';
+import { parseNativeContextDirectoryPage, parseNativeContextLifecycle } from '../../community/setup-context-native';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { ContextDirectoryApi } from './directory-api';
 import {

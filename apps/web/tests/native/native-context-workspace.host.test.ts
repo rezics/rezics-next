@@ -87,12 +87,18 @@ async function visit(path: string): Promise<Page> {
 }
 
 async function waitForBff(page: Page): Promise<void> {
-  await page.locator('[aria-busy="true"]').waitFor({ state: 'detached' }).catch(() => {});
+  await page
+    .locator('[aria-busy="true"]')
+    .waitFor({ state: 'detached' })
+    .catch(() => {});
   await stack.refreshKernelRequests();
 }
 
 function bffRequests(since: number): NativeKernelRequest[] {
-  return stack.kernelRequests().slice(since).filter((request) => !request.fixtureRequest);
+  return stack
+    .kernelRequests()
+    .slice(since)
+    .filter((request) => !request.fixtureRequest);
 }
 
 function isServerFn(url: string): boolean {
@@ -173,8 +179,7 @@ test('signed-in Alice discovers a named Context, creates one, then deletes and r
   await waitForBff(directory);
   const deletedWrites = bffRequests(deleteStart).filter(
     (request) =>
-      request.method === 'DELETE' &&
-      new URL(request.url, stack.kernelOrigin).pathname === `/v1/contexts/${createdId}`,
+      request.method === 'DELETE' && new URL(request.url, stack.kernelOrigin).pathname === `/v1/contexts/${createdId}`,
   );
   expect(deletedWrites).toHaveLength(1);
   const rereads = bffRequests(deleteStart).filter((request) => {
