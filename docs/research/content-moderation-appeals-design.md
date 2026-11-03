@@ -175,3 +175,24 @@ contradictory expectations before the backend denial portion of slice 3; this re
 [search]: ../../services/kernel/src/search/README.md#deletion-lifecycle
 [frozen-denial]: ../../specs/content-notification-outcomes.test.ts#L424
 [native-denial]: ../../services/kernel/test/content/appeals-http.test.ts#L239
+
+## Retained board decisions and native history
+
+The delivered Content seam is `GET /v1/boards/{id}/moderation-history?limit=20&targetKind=all` and
+`GET /v1/moderation-decisions/{decisionId}`. History supports `all|board|thread|post`, limit 1–100 and a signed
+board/selection/viewer-bound cursor. It returns exact decision DTOs, not report evidence or decider identity.
+Web owns the workbench and history rendering; no second queue or frontend is introduced. The mounted kernel
+moderation routes and registered Content effects use these same readers and projector.
+
+Decision: board affected-party rights are unspecified, so board exact/history inspection requires current
+explicit `moderation:takedown` authority; board decisions have no author branch, notice or appeal deadline.
+The existing board takedown records one reason, action-time scope and command transaction id atomically with
+the action, receipt and event; same-key retries reauthorize and do not add another decision. The existing trusted
+lift port belongs to thread/post appeal reversal; no board lift API or new enforcement permission is added.
+Older actions without retained decisions remain unavailable, without invented reasons or historical backfill.
+
+Every page rechecks board and target authority and current scope. Raw-key sparse progress is independent of
+withholding; exact-kind pages use their own index so unrelated kinds cannot expand examined work. Both routes
+are private/no-store. An erased decider's statement follows the existing 183-day exception and is blank at expiry
+even before deferred purge; other decisions retain their existing policy. Operation costs live beside the engine
+in Content's [history contract][content]. Broader native acceptance and promotion remain integration work.

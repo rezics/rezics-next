@@ -14,7 +14,10 @@ import { ModerationDecisionSchema, readModerationDecision } from './moderation-d
 import { reportBoardPlacement } from './board-report-candidates.ts';
 import type { ReportTarget } from './reports.ts';
 import page from './page-moderation-history.sql';
+import selectedPage from './moderation-history-kind-page.sql';
 import type { ModerationDependencies } from './moderation.ts';
+
+export const MODERATION_HISTORY_MAX_LIMIT = 100;
 
 const missing = () => new ProblemError('not_found');
 const invalidCursor = () => new ProblemError('invalid_cursor');
@@ -22,8 +25,8 @@ const invalidCursor = () => new ProblemError('invalid_cursor');
 export const ModerationHistoryQuerySchema = t.Object(
   {
     cursor: t.Optional(t.String()),
-    limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
-    targetKind: t.Optional(t.Union([t.Literal('all'), t.Literal('thread'), t.Literal('post')])),
+    limit: t.Optional(t.Integer({ minimum: 1, maximum: MODERATION_HISTORY_MAX_LIMIT })),
+    targetKind: t.Optional(t.Union([t.Literal('all'), t.Literal('board'), t.Literal('thread'), t.Literal('post')])),
   },
   { additionalProperties: false },
 );
@@ -31,7 +34,7 @@ export const ModerationHistoryQuerySchema = t.Object(
 export type ModerationHistoryQuery = {
   cursor?: string;
   limit?: number;
-  targetKind?: 'all' | 'thread' | 'post';
+  targetKind?: 'all' | 'board' | 'thread' | 'post';
 };
 
 export const ModerationHistoryPageSchema = t.Object(
@@ -45,7 +48,7 @@ export const ModerationHistoryPageSchema = t.Object(
 type HistoryContext = { actor: Actor; deadline: number };
 type Candidate = {
   decision_id: string;
-  target_kind: 'thread' | 'post';
+  target_kind: 'board' | 'thread' | 'post';
   target_id: string;
   decided_at: string;
 };
@@ -100,7 +103,7 @@ export async function listModerationHistory(
   if (route === null) throw missing();
   const limit = query.limit ?? 20;
   const targetKind = query.targetKind ?? 'all';
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !['all', 'thread', 'post'].includes(targetKind))
+  if (!Number.isInteger(limit) || limit < 1 || limit > MODERATION_HISTORY_MAX_LIMIT || !['all', 'board', 'thread', 'post'].includes(targetKind))
     throw new ProblemError('invalid_request');
 
   const boardCheck = await accessCheck(
@@ -145,7 +148,7 @@ export async function listModerationHistory(
   }
 
   const candidates = await snapshot(deps.pool, route, context.deadline, (client) =>
-    page.run(client, {
+    (targetKind === 'all' ? page : selectedPage).run(client, {
       route,
       board_id: boardId,
       target_kind: targetKind,

@@ -14,6 +14,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   principalCommandIdentity,
   commandTime,
+  currentCommand,
   authoritativeTimeValue,
   runCommand,
   type CommandEvent,
@@ -247,6 +248,8 @@ async function prepareAuthorizedPoint(
         await insertDecision.run(tx, {
           route,
           decision_id: newId(route),
+          recorded_transaction_id: currentCommand(tx).transactionId,
+          board_id: point.kind === 'board' ? point.id : scope.board_id,
           target_kind: point.kind,
           target_id: point.id,
           statement: point.reason,
