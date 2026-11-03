@@ -351,11 +351,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
       ]) ||
       !exactKeys(
         journal,
-        [
-          'sessionId',
-          'revision',
-          ...(version === 3 ? ['startDate', 'finishDate', 'reflection', 'assessment'] : []),
-        ],
+        ['sessionId', 'revision', ...(version === 3 ? ['startDate', 'finishDate', 'reflection', 'assessment'] : [])],
         version === 3 ? [] : ['startDate', 'finishDate', 'reflection'],
       ) ||
       !uuid(row.accountId) ||

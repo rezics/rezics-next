@@ -1,27 +1,19 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "packages/client/src/kernel/library*",
-    "docs/library-archive-personal-fact-recovery.md",
-    "docs/goals/library.capabilities.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 80,
-    "files": 3
-  }
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'packages/client/src/kernel/library*',
+      'docs/library-archive-personal-fact-recovery.md',
+      'docs/goals/library.capabilities.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 80, 'files': 3 },
 }
 ---
 

@@ -971,12 +971,7 @@ test('V3 unknown and V2 absent assessments stay inert while an explicit archived
       version: c.version,
       coverage: `private-library-owner-facts-v${c.version}`,
     };
-    const id = (
-      await upload(
-        owner,
-        framed([{ ...sourceRow, journal: c.journal }], manifest),
-      )
-    ).uploadId as string;
+    const id = (await upload(owner, framed([{ ...sourceRow, journal: c.journal }], manifest))).uploadId as string;
     const row = (await previewAll(owner, id)).records.find((item: any) => item.section === 'journals')!;
     expect(row.evidence.journal).toEqual(c.journal);
     await json(
@@ -1123,7 +1118,9 @@ test('missing personal targets stay inert and concurrent annotation or journal r
   const missing = await makeUpload(missingFactOwner);
   const missingRows = (await previewAll(missingFactOwner, missing.id)).records;
   const missingAnnotation = missingRows.find((row: any) => row.section === 'annotations')!;
-  const missingJournal = missingRows.find((row: any) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId)!;
+  const missingJournal = missingRows.find(
+    (row: any) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId,
+  )!;
   const foreignJournal = missingRows.find(
     (row: any) => row.section === 'journals' && row.evidence.sessionId === repeatedSourceSessionId,
   )!;
@@ -1327,14 +1324,24 @@ test('cancellation stops pending effects and terminal erasure removes retained a
   const journal = rows.find((row: any) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId);
   const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
   const target = (
-    await sessions.startSession(cancelledOwner.actor, { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' }, key())
+    await sessions.startSession(
+      cancelledOwner.actor,
+      { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' },
+      key(),
+    )
   ).value;
   await json(
     await send(cancelledOwner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         { ordinal: entry.ordinal, kind: 'entry', subjectId: subjects[0], stateId: 'planned', action: 'update' },
         { ordinal: label.ordinal, kind: 'label', target: { mode: 'create' } },
-        { ordinal: journal.ordinal, kind: 'journal', subjectId: subjects[0], sessionId: target.id, fields: { assessment: 'set' } },
+        {
+          ordinal: journal.ordinal,
+          kind: 'journal',
+          subjectId: subjects[0],
+          sessionId: target.id,
+          fields: { assessment: 'set' },
+        },
         {
           ordinal: provenance.ordinal,
           kind: 'observation',

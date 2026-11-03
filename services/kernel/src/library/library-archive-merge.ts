@@ -431,12 +431,12 @@ function supportedArchiveAssessment(value: unknown): value is { meaningRevision:
   const assessment = object(value);
   return Boolean(
     assessment &&
-      Object.keys(assessment).length === 2 &&
-      assessment.meaningRevision === 1 &&
-      (assessment.units === null ||
-        (Number.isSafeInteger(assessment.units) &&
-          (assessment.units as number) >= 0 &&
-          (assessment.units as number) <= 20)),
+    Object.keys(assessment).length === 2 &&
+    assessment.meaningRevision === 1 &&
+    (assessment.units === null ||
+      (Number.isSafeInteger(assessment.units) &&
+        (assessment.units as number) >= 0 &&
+        (assessment.units as number) <= 20)),
   );
 }
 
@@ -1249,12 +1249,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             },
           };
 
-        const changes = (['startDate', 'finishDate', 'reflection'] as const).some((field) => {
-          const choice = choices[field];
-          if (choice === undefined || choice === 'preserve') return false;
-          const next = choice === 'clear' ? null : archiveJournal[field];
-          return !sameJson(current[field], next);
-        }) ||
+        const changes =
+          (['startDate', 'finishDate', 'reflection'] as const).some((field) => {
+            const choice = choices[field];
+            if (choice === undefined || choice === 'preserve') return false;
+            const next = choice === 'clear' ? null : archiveJournal[field];
+            return !sameJson(current[field], next);
+          }) ||
           (assessmentChoice !== undefined &&
             assessmentChoice !== 'preserve' &&
             (current.assessment.meaningRevision !== 1 ||
@@ -1547,11 +1548,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       const assessmentChoice = choices.assessment as ArchiveFieldChoice | undefined;
       if (assessmentChoice !== undefined) {
         const archivedAssessment = object(evidence.assessment);
-        if (
-          assessmentChoice !== 'preserve' &&
-          !supportedArchiveAssessment(archivedAssessment)
-        )
-          return null;
+        if (assessmentChoice !== 'preserve' && !supportedArchiveAssessment(archivedAssessment)) return null;
         const currentAssessment = object(current.assessment);
         const value = archivedAssessment?.units;
         const alreadyEqual =
@@ -1561,8 +1558,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           patch.assessment = assessmentChoice === 'clear' || value === null ? null : { units: value };
         fields.assessment = {
           choice: assessmentChoice,
-          outcome:
-            assessmentChoice === 'preserve' ? 'preserved' : alreadyEqual ? 'unchanged' : 'accepted',
+          outcome: assessmentChoice === 'preserve' ? 'preserved' : alreadyEqual ? 'unchanged' : 'accepted',
         };
       }
       return {

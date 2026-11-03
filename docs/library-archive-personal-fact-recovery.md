@@ -24,11 +24,11 @@ The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET
 and preview are private and no-store. Canonical archive8bb/Web323 owns the only archive interface; Web318/142 continues to own the existing
 occurrence editor.
 
-| Retained row  | Explicit current target                         | Selected fields                             | Native operation                                                                      |
-| ------------- | ----------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                          | `createEntryPersonalCommands().saveAnnotations`                                       |
+| Retained row  | Explicit current target                                               | Selected fields                                       | Native operation                                                                      |
+| ------------- | --------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `annotations` | Canonical Subject, existing Entry incarnation                         | `note`, `priority`                                    | `createEntryPersonalCommands().saveAnnotations`                                       |
 | `journals`    | Canonical Subject and one owner-supplied existing non-retired Session | `startDate`, `finishDate`, `reflection`, `assessment` | `createSessionCommands().patchSessionJournal`                                         |
-| `provenance`  | Explicitly mapped readable canonical Subject    | `privacy`, `sourceCreated`, `sourceUpdated` | `createEntryPersonalCommands().admitSourceObservation` or `.correctSourceObservation` |
+| `provenance`  | Explicitly mapped readable canonical Subject                          | `privacy`, `sourceCreated`, `sourceUpdated`           | `createEntryPersonalCommands().admitSourceObservation` or `.correctSourceObservation` |
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
 uses the native null/clear operation. For V1/V2, a missing assessment is unsupported and never clears. For V3, setting
