@@ -905,7 +905,7 @@ There is no new cleanup coordinator, acknowledgement or custody proof; later nat
 
 - Touches: existing image job, one source object/media row, at most twelve derivative objects/rows.
 - Bound: constant indexed statements, O(log R); existing 20 MiB and 40-million-pixel decode bounds.
-- Growth check: later reuse the image publication case in `test/content/growth-media.test.ts`.
+- Growth check: `test/content/growth-realm-asset-publication.test.ts` captures Realm HTTP reservation and registered image-workflow completion.
 
 ### Cost: Realm asset collection and account erasure
 
