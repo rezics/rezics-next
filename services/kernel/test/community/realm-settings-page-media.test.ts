@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import mediaRead from '../../src/content/realm-media-read.sql';
+import { routeOf } from '../../src/route/route.ts';
 import { growthRealmPresentationClaimFixture } from '../content/support/growth-realm-presentation-claim-fixture.ts';
 
 let f: Awaited<ReturnType<typeof growthRealmPresentationClaimFixture>>;
@@ -56,6 +58,39 @@ test.serial(
       revisions: await f.revisionCount(realm.realmId),
       writes: await writeCounts(),
     }).toEqual(before);
+
+    // Historical optional metadata must be bounded at acquisition, while the
+    // valid image, selected keys and current descriptor grants remain usable.
+    const route = routeOf(avatar.id)!;
+    const original = (await f.base.db.admin.query(
+      'SELECT thumbhash, average_color FROM content.media WHERE route=$1 AND media_id=$2',
+      [route, avatar.id],
+    )).rows[0];
+    try {
+      for (const size of [32, 33, 65_536]) {
+        await f.base.db.admin.query(
+          'UPDATE content.media SET thumbhash=$3, average_color=$4 WHERE route=$1 AND media_id=$2',
+          [route, avatar.id, Buffer.alloc(size, 1), size === 32 ? '#ABCDEF' : 'x'.repeat(size)],
+        );
+        const raw = await mediaRead.run(f.base.db.pool, { route, media_id: avatar.id });
+        expect(raw?.thumbhash).toBe(size === 32 ? Buffer.alloc(32, 1).toString('base64') : null);
+        expect(raw?.average_color).toBe(size === 32 ? '#ABCDEF' : null);
+        const bounded = await f.base.call('GET', `/v1/realms/${realm.realmId}/settings`, {
+          bearer: f.base.governor.bearer,
+        });
+        expect(bounded.response.status, bounded.text).toBe(200);
+        expect(bounded.value.snapshot.avatar.state).toBe('available');
+        expect(bounded.value.snapshot.avatar.value.placeholder).toEqual(
+          size === 32 ? { thumbhash: raw!.thumbhash, color: '#ABCDEF' } : null,
+        );
+        expect(bounded.value.snapshot.banner).toEqual(page.value.snapshot.banner);
+      }
+    } finally {
+      await f.base.db.admin.query(
+        'UPDATE content.media SET thumbhash=$3, average_color=$4 WHERE route=$1 AND media_id=$2',
+        [route, avatar.id, original.thumbhash, original.average_color],
+      );
+    }
 
     const sparse = await f.patch(
       realm.realmId,
