@@ -10,6 +10,7 @@ const nullableText = nullable(t.String());
 const count = t.Integer({ minimum: 0 });
 const disposition = strings('applied', 'skipped', 'stale', 'unsupported', 'failed');
 const reviewStatus = strings('reviewed', 'applying', 'applied', 'skipped', 'stale', 'unsupported', 'failed');
+const scoreStatus = strings('reviewed', 'applying', 'applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable');
 const baseline = t.Union([
   t.Null(),
   object({ state: t.String(), revision: t.Integer({ minimum: 1 }), incarnationId: nullableText }),
@@ -21,6 +22,57 @@ export const vndbDecisionSchema = object({
   state: nullableText,
   baseline,
   replace: t.Boolean(),
+  action: nullable(strings('state', 'skip', 'retain')),
+});
+const nativeQuestion = object({
+  id: uuid,
+  revision: t.Integer({ minimum: 1 }),
+  meaning: nullableText,
+  label: t.String(),
+  grain: strings('work', 'release', 'episode', 'character'),
+  scale: object({ min: t.Integer(), max: t.Integer(), step: t.Integer({ minimum: 1 }) }),
+  aggregateEffect: t.Literal('public-standard-aggregate'),
+});
+const nativeVoteObservation = t.Union([
+  object({ state: t.Literal('unavailable') }),
+  object({ state: t.Literal('absent') }),
+  object({ state: t.Literal('cleared'), revision: t.Integer({ minimum: 1 }), at: t.String() }),
+  object({ state: t.Literal('set'), units: t.Integer({ minimum: 0 }), revision: t.Integer({ minimum: 1 }), at: t.String() }),
+]);
+const scoreDecision = object({
+  reviewId: uuid,
+  status: scoreStatus,
+  targetId: uuid,
+  action: strings('vote', 'clear'),
+  units: nullable(t.Integer({ minimum: 0, maximum: 20 })),
+  question: nativeQuestion,
+  currentVote: nativeVoteObservation,
+  consent: strings('adopt-native-vote', 'clear-native-vote'),
+  sourceReason: t.String(),
+  nativeAdmission: t.Literal('unavailable'),
+});
+export const vndbReviewSchema = t.Union([
+  vndbDecisionSchema,
+  scoreDecision,
+  object({
+    status: t.Literal('unavailable'),
+    reason: strings('native-question-unavailable', 'native-current-vote-unavailable'),
+  }),
+]);
+const nativeScore = object({
+  question: nullable(nativeQuestion),
+  currentVote: nativeVoteObservation,
+  sourceReason: t.String(),
+  exactUnits: nullable(t.Integer({ minimum: 0, maximum: 20 })),
+  admission: object({
+    status: t.Literal('unavailable'),
+    reason: strings(
+      'conditional-admission-unavailable',
+      'native-question-unavailable',
+      'native-current-vote-unavailable',
+      'source-not-vn-score',
+    ),
+  }),
 });
 const sourceValue = object({
   kind: strings('missing', 'unknown', 'invalid', 'value'),
@@ -54,7 +106,9 @@ const row = object({
     }),
   ]),
   decision: t.Union([t.Null(), vndbDecisionSchema]),
-  fieldsTreatment: object({ state: t.String(), other: t.String() }),
+  scoreDecision: t.Union([t.Null(), scoreDecision]),
+  nativeScore,
+  fieldsTreatment: object({ state: t.String(), score: t.String(), other: t.String() }),
 });
 export const vndbPreviewSchema = object({
   uploadId: uuid,
@@ -71,7 +125,10 @@ export const vndbPageSchema = object({
 });
 export const vndbApplySchema = object({
   uploadId: uuid,
-  outcomes: t.Array(object({ ordinal: count, reviewId: uuid, status: disposition }), {
+  outcomes: t.Array(t.Union([
+    object({ ordinal: count, reviewId: uuid, status: disposition }),
+    object({ ordinal: count, scoreReviewId: uuid, status: strings('applied', 'skipped', 'stale', 'unsupported', 'failed', 'unavailable') }),
+  ]), {
     maxItems: VNDB_LIMITS.page,
   }),
   stopped: nullable(strings('deadline', 'cancelled')),

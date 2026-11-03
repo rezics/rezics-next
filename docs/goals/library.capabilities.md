@@ -87,7 +87,9 @@ The label methods are producer composition; Web325 remains the complete AniList 
 Personal VNDB XML upload now has mounted preview/page/source/review/apply/cancel/delete methods documented in
 [its owner contract](../library-import-vndb.md), with focused native HTTP scenarios in
 `services/kernel/test/library/list-import-vndb-http.test.ts`. This adds explicit released entry-state application
-and private loss retention; it does not establish broader frozen acceptance or support for live provider accounts.
+and private loss retention. Exact source votes now have a separate native-question/units review, but score application
+is typed unavailable until Content supplies the writer's atomic reviewed-current admission guard. No native vote,
+aggregate, broader frozen acceptance or live provider-account support is claimed.
 
 The Kernel wrappers import the original frozen specifications. These commands are the supported native entry
 points from the worktree root; they are listed as evidence entry points and were not executed here.
@@ -548,7 +550,8 @@ version 1 only; native64/512/4096 executed growth evidence remains deferred to i
 MAL consumption-date adoption is available through its existing private upload, review and result journey. The owner
 selects an existing progress occurrence and explicitly adopts valid year, year/month or full calendar dates into the
 private journal; unknown and invalid evidence stays unapplied, and clearing requires a separate choice. AniList date
-adoption and typed VNDB personal-row integration remain open provider-specific capabilities. See the
+adoption remains open, and VNDB native score effects remain unavailable pending the Content admission guard; the
+provider review/evidence contract is installed. See the
 [consumption-date contract](../library-import-consumption-dates.md).
 
 Native `POST /v1/libraryExports`, owner status/pages GET and DELETE cancellation are mounted; the

@@ -66,3 +66,10 @@ Missing or denied read authority remains distinct from an empty directory; there
 per-offer entitlement read. Session, Subject, locale and viewer-exposure changes retire previous rows and late replies.
 Decision: a viewer-exposure cache update restarts discovery at the first page with a fresh read, including when an
 account changes away and back before rendering.
+
+## VNDB score admission handoff
+
+The installed Content writer, `createVoteCommands.putVoteOutcome(actor, input, idempotencyKey)`, has no conditional
+guard for the reviewed question revision, canonical/counting identity and current vote or absence. VNDB score review
+and private evidence are installed, while score effects remain typed unavailable until Content supplies that guard
+inside its native writer; no Library vote writer or provider aggregate is introduced.

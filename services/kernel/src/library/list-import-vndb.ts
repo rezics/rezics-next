@@ -8,6 +8,12 @@ import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf } from '../route/route.ts';
+import {
+  createVoteCommands,
+  STANDARD_QUESTION_ID,
+  type RatingQuestion,
+  type Vote,
+} from '../rating/votes.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
@@ -15,7 +21,7 @@ import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { vndbSourceFingerprint, type VndbEntryReview } from './list-import-vndb-admission.ts';
-import { parseVndb, VNDB_LIMITS, type VndbRow } from './list-import-vndb-parser.ts';
+import { parseVndb, VNDB_LIMITS, type SourceValue, type VndbRow } from './list-import-vndb-parser.ts';
 import {
   applyEntryImportMetadataCommands,
   ENTRY_IMPORT_METADATA_LIMITS,
@@ -33,16 +39,53 @@ import {
 
 type Config = Parameters<typeof createEntryCommands>[0] & { routeKey: Uint8Array };
 const VNDB_DECISIONS_BYTES = 8_388_608;
-export type VndbChoice = {
-  ordinal: number;
-  action: 'skip' | 'retain' | 'state';
-  targetId?: string;
-  state?: string;
-  replace?: boolean;
+export type VndbScoreSelection = { kind: 'vote'; units: number } | { kind: 'clear' };
+export type VndbChoice =
+  | { ordinal: number; action: 'skip' | 'retain'; targetId?: string }
+  | { ordinal: number; action: 'state'; targetId?: string; state: string; replace?: boolean }
+  | {
+      ordinal: number;
+      action: 'score';
+      targetId?: string;
+      questionId: string;
+      questionRevision: number;
+      selection: VndbScoreSelection;
+      consent: 'adopt-native-vote' | 'clear-native-vote';
+    };
+type NativeQuestion = {
+  id: string;
+  revision: number;
+  meaning: string | null;
+  label: string;
+  grain: RatingQuestion['grain'];
+  scale: { min: number; max: number; step: number };
+  aggregateEffect: 'public-standard-aggregate';
+};
+type NativeVoteObservation =
+  | { state: 'unavailable' }
+  | { state: 'absent' }
+  | { state: 'cleared'; revision: number; at: string }
+  | { state: 'set'; units: number; revision: number; at: string };
+type ScoreDecision = {
+  reviewId: string;
+  status: 'reviewed' | 'unavailable' | 'applied' | 'skipped' | 'stale' | 'failed';
+  targetId: string;
+  action: 'vote' | 'clear';
+  units: number | null;
+  question: NativeQuestion;
+  currentVote: NativeVoteObservation;
+  consent: 'adopt-native-vote' | 'clear-native-vote';
+  sourceScore: SourceValue;
+  sourceReason: string;
+  targetFingerprint: string;
+  commandKey: string;
+  guard: VndbEntryReview;
+  nativeAdmission: 'unavailable';
 };
 type Decision = {
   reviewId: string;
   status: 'reviewed' | 'applying' | 'applied' | 'skipped' | 'unsupported' | 'stale' | 'failed';
+  stateAction?: 'state' | 'skip' | 'retain' | null;
   targetId: string | null;
   state: string | null;
   baseline: { state: string; revision: number; incarnationId: string | null } | null;
@@ -51,7 +94,86 @@ type Decision = {
   guard: VndbEntryReview | null;
   matchDigest?: string;
   metadata?: EntryImportMetadataReview[];
+  score?: ScoreDecision;
 };
+
+type NativeScoreReviewResult =
+  | {
+      reviewId: string;
+      status: ScoreDecision['status'];
+      targetId: string;
+      action: ScoreDecision['action'];
+      units: number | null;
+      question: NativeQuestion;
+      currentVote: NativeVoteObservation;
+      consent: ScoreDecision['consent'];
+      sourceReason: string;
+      nativeAdmission: 'unavailable';
+    }
+  | { status: 'unavailable'; reason: 'native-question-unavailable' | 'native-current-vote-unavailable' };
+type NativeScorePreview = {
+  question: NativeQuestion | null;
+  currentVote: NativeVoteObservation;
+  sourceReason: string;
+  exactUnits: number | null;
+  admission: {
+    status: 'unavailable';
+    reason:
+      | 'conditional-admission-unavailable'
+      | 'native-question-unavailable'
+      | 'native-current-vote-unavailable'
+      | 'source-not-vn-score';
+  };
+};
+
+function nativeQuestionView(question: RatingQuestion): NativeQuestion {
+  return {
+    id: question.id,
+    revision: question.revision,
+    meaning: question.meaning,
+    label: question.label,
+    grain: question.grain,
+    scale: { min: question.minimumUnits, max: question.maximumUnits, step: question.stepUnits },
+    aggregateEffect: 'public-standard-aggregate',
+  };
+}
+
+function nativeVoteView(vote: Vote | null): NativeVoteObservation {
+  if (!vote) return { state: 'absent' };
+  return vote.units === null
+    ? { state: 'cleared', revision: vote.revision, at: vote.changedAt }
+    : { state: 'set', units: vote.units, revision: vote.revision, at: vote.changedAt };
+}
+
+function sourceScoreReason(source: SourceValue): { reason: string; exactUnits: number | null } {
+  if (source.kind === 'missing') return { reason: 'No source score was supplied; absence never clears a native vote.', exactUnits: null };
+  if (source.kind === 'unknown') return { reason: 'The source score is unknown; no native vote is proposed.', exactUnits: null };
+  if (source.kind === 'invalid')
+    return {
+      reason: source.raw === '0' ? 'Zero is invalid on VNDB’s 1–10 source scale.' : 'The source score is invalid on VNDB’s 1–10 scale.',
+      exactUnits: null,
+    };
+  if (typeof source.value !== 'number' || source.scale?.min !== 1 || source.scale.max !== 10 || source.scale.step !== 0.1)
+    return { reason: 'The retained source value does not match the supported VNDB score scale.', exactUnits: null };
+  const doubled = source.value * 2;
+  return Number.isInteger(doubled)
+    ? {
+        reason: `VNDB ${source.raw} has an exact native-unit candidate of ${doubled}; explicitly choose it before adoption.`,
+        exactUnits: doubled,
+      }
+    : {
+        reason: `VNDB ${source.raw} is valid on the 1–10, 0.1-step scale but has no exact standard half-point value. Choose native units explicitly; no rounding is applied.`,
+        exactUnits: null,
+      };
+}
+
+function stateActionOf(decision: Decision): 'state' | 'skip' | 'retain' | null {
+  if (decision.stateAction !== undefined) return decision.stateAction;
+  if (decision.state !== null) return 'state';
+  if (decision.status === 'skipped') return 'skip';
+  if (decision.status === 'unsupported') return 'retain';
+  return null;
+}
 export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposals {
   const noteField = row.fields.notes ?? row.fields.note;
   let note: EntryImportMetadataProposal;
@@ -144,6 +266,7 @@ export function createVndbImport(config: Config) {
   const { pool, access } = config;
   const runner = createLibraryCommandRunner(config),
     entries = createEntryCommands(config);
+  const votes = createVoteCommands(config);
   const personalEntries = createEntryPersonalCommands(config);
   function owner(actor: Actor): AccountActor {
     if (actor.kind !== 'account' || !actor.scopes.includes('library_entry:update')) throw new GrantDeniedError();
@@ -234,6 +357,46 @@ export function createVndbImport(config: Config) {
         : null,
     };
   }
+  async function nativeQuestion(actor: Actor): Promise<NativeQuestion | null> {
+    try {
+      const question = await votes.readRatingQuestion(actor, STANDARD_QUESTION_ID);
+      if (question.id !== STANDARD_QUESTION_ID) return null;
+      const view = nativeQuestionView(question);
+      return Buffer.byteLength(JSON.stringify(view)) <= 12_288 ? view : null;
+    } catch {
+      return null;
+    }
+  }
+  async function nativeScorePreview(
+    actor: Actor,
+    source: SourceValue | undefined,
+    targetId: string | undefined,
+    question?: NativeQuestion | null,
+  ): Promise<NativeScorePreview> {
+    const selectedQuestion = question === undefined ? await nativeQuestion(actor) : question;
+    let currentVote: NativeVoteObservation = { state: 'unavailable' };
+    if (selectedQuestion && targetId) {
+      try {
+        currentVote = nativeVoteView(await votes.readOwnVote(actor, selectedQuestion.id, targetId));
+      } catch {
+        currentVote = { state: 'unavailable' };
+      }
+    }
+    const score = source ?? { kind: 'missing' as const, raw: null };
+    const treatment = sourceScoreReason(score);
+    const reason = !selectedQuestion
+      ? 'native-question-unavailable'
+      : targetId && currentVote.state === 'unavailable'
+        ? 'native-current-vote-unavailable'
+        : 'conditional-admission-unavailable';
+    return {
+      question: selectedQuestion,
+      currentVote,
+      sourceReason: treatment.reason,
+      exactUnits: treatment.exactUnits,
+      admission: { status: 'unavailable', reason },
+    };
+  }
   async function metadataProfile(actor: Actor, decision: Decision) {
     if (!decision.targetId || !decision.guard) return null;
     const live = await current(actor, decision.targetId);
@@ -306,19 +469,33 @@ export function createVndbImport(config: Config) {
   }
   async function page(actor: Actor, id: string, offset: number) {
     const upload = await load(actor, id);
+    const pageRows = upload.rows.slice(offset, offset + VNDB_LIMITS.page);
+    const question = pageRows.some((row) => row.kind === 'vn') ? await nativeQuestion(actor) : null;
     const rows = [];
-    for (const row of upload.rows.slice(offset, offset + VNDB_LIMITS.page)) {
+    for (const row of pageRows) {
       const matching = await match(actor, row),
         decision = upload.decisions[row.ordinal];
       const targetId = decision?.targetId ?? (matching.candidates.length === 1 ? matching.candidates[0] : undefined);
       const target = targetId ? await current(actor, targetId) : null;
+      const nativeScore = row.kind === 'vn'
+        ? await nativeScorePreview(actor, row.fields.score, target?.targetId, question)
+        : {
+            question: null,
+            currentVote: { state: 'unavailable' as const },
+            sourceReason: 'Retained releases, reviews, and length votes are never Subject enjoyment votes.',
+            exactUnits: null,
+            admission: { status: 'unavailable' as const, reason: 'source-not-vn-score' as const },
+          };
       rows.push({
         ...row,
         match: matching,
         target: target ? { targetId: target.targetId, states: target.states, baseline: target.baseline } : null,
-        decision: decision ? publicDecision(decision) : null,
+        decision: decision && stateActionOf(decision) !== null ? publicDecision(decision) : null,
+        scoreDecision: decision?.score ? publicScoreDecision(decision.score) : null,
+        nativeScore,
         fieldsTreatment: {
           state: decision?.state ? 'proposed native entry state' : 'retained; explicit state required',
+          score: nativeScore.sourceReason,
           other: row.retainedReason,
         },
       });
@@ -333,10 +510,131 @@ export function createVndbImport(config: Config) {
       rows,
     };
   }
-  function publicDecision({ reviewId, status, targetId, state, baseline, replace }: Decision) {
-    return { reviewId, status, targetId, state, baseline, replace };
+  function publicDecision(decision: Decision) {
+    const { reviewId, status, targetId, state, baseline, replace } = decision;
+    return { reviewId, status, targetId, state, baseline, replace, action: stateActionOf(decision) };
+  }
+  function publicScoreDecision({
+    reviewId,
+    status,
+    targetId,
+    action,
+    units,
+    question,
+    currentVote,
+    consent,
+    sourceReason,
+    nativeAdmission,
+  }: ScoreDecision): NativeScoreReviewResult {
+    return { reviewId, status, targetId, action, units, question, currentVote, consent, sourceReason, nativeAdmission };
+  }
+  async function reviewScore(
+    actor: Actor,
+    id: string,
+    choice: Extract<VndbChoice, { action: 'score' }>,
+    key: string,
+  ) {
+    const upload = await load(actor, id),
+      row = upload.rows[choice.ordinal];
+    if (!row || row.kind !== 'vn') throw new ProblemError('invalid_request');
+    const matching = await match(actor, row);
+    const targetId = choice.targetId ?? (matching.candidates.length === 1 ? matching.candidates[0] : undefined);
+    const target = targetId ? await current(actor, targetId) : null;
+    if (!target) throw new ProblemError('invalid_request');
+    const preview = await nativeScorePreview(actor, row.fields.score, target.targetId);
+    if (!preview.question || preview.question.meaning === null || preview.currentVote.state === 'unavailable')
+      return mutation(actor, 'review-score', key, { id, choice }, async () => ({
+        status: 'unavailable' as const,
+        reason: preview.question ? ('native-current-vote-unavailable' as const) : ('native-question-unavailable' as const),
+      }));
+    if (
+      preview.question.id !== STANDARD_QUESTION_ID ||
+      preview.question.revision !== 1 ||
+      preview.question.scale.min !== 0 ||
+      preview.question.scale.max !== 20 ||
+      preview.question.scale.step !== 1
+    )
+      throw new ProblemError('conflict');
+    if (choice.questionId !== preview.question.id || choice.questionRevision !== preview.question.revision)
+      throw new ProblemError('conflict');
+    if (
+      (choice.selection.kind === 'vote' && choice.consent !== 'adopt-native-vote') ||
+      (choice.selection.kind === 'clear' && choice.consent !== 'clear-native-vote')
+    )
+      throw new ProblemError('invalid_request');
+    if (choice.selection.kind === 'vote') {
+      const source = row.fields.score;
+      if (
+        !source ||
+        source.kind !== 'value' ||
+        typeof source.value !== 'number' ||
+        source.scale?.min !== 1 ||
+        source.scale.max !== 10 ||
+        source.scale.step !== 0.1 ||
+        !Number.isSafeInteger(choice.selection.units) ||
+        choice.selection.units < preview.question.scale.min ||
+        choice.selection.units > preview.question.scale.max ||
+        (choice.selection.units - preview.question.scale.min) % preview.question.scale.step !== 0
+      )
+        throw new ProblemError('invalid_request');
+    }
+    const scoreReviewId = randomUUID(),
+      matchDigest = entryImportMetadataDigest(matching),
+      sourceScore = row.fields.score ?? { kind: 'missing' as const, raw: null },
+      treatment = sourceScoreReason(sourceScore),
+      scoreDecision: ScoreDecision = {
+        reviewId: scoreReviewId,
+        status: 'reviewed',
+        targetId: target.targetId,
+        action: choice.selection.kind === 'vote' ? 'vote' : 'clear',
+        units: choice.selection.kind === 'vote' ? choice.selection.units : null,
+        question: preview.question,
+        currentVote: preview.currentVote,
+        consent: choice.consent,
+        sourceScore,
+        sourceReason: treatment.reason,
+        targetFingerprint: target.source,
+        commandKey: `vndb:${id}:score:${scoreReviewId}`,
+        guard: { uploadId: id, ordinal: choice.ordinal, reviewId: scoreReviewId, source: target.source },
+        nativeAdmission: 'unavailable',
+      };
+    return mutation(actor, 'review-score', key, { id, choice }, async (tx, account) => {
+      const stored = await tx.query<Upload>(
+        `SELECT * FROM library.vndb_import
+        WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
+        [requireRoute(account.accountId), account.accountId, id],
+      );
+      if (!stored.rows[0]) throw new ProblemError('conflict');
+      const before = stored.rows[0].decisions[choice.ordinal];
+      if (before?.status === 'applying' || ['applying', 'applied', 'failed'].includes(before?.score?.status ?? ''))
+        throw new ProblemError('conflict');
+      const compatible =
+        before?.targetId === target.targetId &&
+        before.matchDigest === matchDigest &&
+        before.guard?.source === target.source;
+      const parentReviewId = compatible && before ? before.reviewId : randomUUID();
+      const plan: Decision = compatible && before
+        ? { ...before }
+        : {
+            reviewId: parentReviewId,
+            status: 'reviewed',
+            stateAction: null,
+            targetId: target.targetId,
+            state: null,
+            baseline: null,
+            replace: false,
+            commandKey: `vndb:${id}:${parentReviewId}`,
+            guard: { uploadId: id, ordinal: choice.ordinal, reviewId: parentReviewId, source: target.source },
+            matchDigest,
+            metadata: [],
+          };
+      plan.score = scoreDecision;
+      await save(tx, account, id, choice.ordinal, plan);
+      return publicScoreDecision(scoreDecision);
+    });
   }
   async function review(actor: Actor, id: string, choice: VndbChoice, key: string) {
+    if (choice.action === 'score') return reviewScore(actor, id, choice, key);
     const upload = await load(actor, id),
       row = upload.rows[choice.ordinal];
     if (!row) throw new ProblemError('invalid_request');
@@ -363,6 +661,7 @@ export function createVndbImport(config: Config) {
       const decision: Decision = {
         reviewId,
         status: choice.action === 'skip' ? 'skipped' : choice.action === 'retain' ? 'unsupported' : 'reviewed',
+        stateAction: choice.action === 'state' ? 'state' : choice.action,
         targetId: target?.targetId ?? null,
         state: choice.action === 'state' ? choice.state! : null,
         baseline: target?.baseline ?? null,
@@ -651,15 +950,149 @@ export function createVndbImport(config: Config) {
     );
     if (saved.rowCount !== 1) throw new ProblemError('conflict');
   }
+  async function applyEntry(
+    actor: Actor,
+    id: string,
+    item: { ordinal: number; reviewId: string },
+    initial: Decision | undefined,
+    record: (outcome: CommandOutcome<unknown>) => void,
+  ) {
+    let decision = initial;
+    if (!decision || decision.reviewId !== item.reviewId || stateActionOf(decision) === null)
+      return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'stale' as const };
+    if (['applied', 'skipped', 'unsupported', 'stale'].includes(decision.status))
+      return { ordinal: item.ordinal, reviewId: item.reviewId, status: decision.status };
+    if (decision.baseline && !decision.replace)
+      return { ordinal: item.ordinal, reviewId: item.reviewId, status: 'skipped' as const };
+    const started = await mutation(
+      actor,
+      'start',
+      `${decision.commandKey}:start`,
+      { id, item },
+      async (tx, account) => {
+        const locked = await tx.query<Upload>(
+          `SELECT * FROM library.vndb_import
+          WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
+          [requireRoute(account.accountId), account.accountId, id],
+        );
+        const found = locked.rows[0]?.decisions[item.ordinal];
+        if (!found || found.reviewId !== item.reviewId) throw new ProblemError('conflict');
+        found.status = 'applying';
+        await save(tx, account, id, item.ordinal, found);
+        return { reviewId: found.reviewId };
+      },
+    );
+    record(started);
+    // Reload frozen operands even when the start command was replayed.
+    decision = (await load(actor, id)).decisions[item.ordinal]!;
+    let status: Decision['status'] = 'failed';
+    try {
+      const result = await entries.putEntry(
+        actor,
+        decision.targetId!,
+        {
+          state: decision.state!,
+          ...(decision.baseline
+            ? {
+                revision: decision.baseline.revision,
+                ...(decision.baseline.incarnationId ? { incarnationId: decision.baseline.incarnationId } : {}),
+              }
+            : {}),
+        },
+        decision.commandKey,
+        decision.guard!,
+      );
+      record(result);
+      status = 'applied';
+    } catch (error) {
+      if (error instanceof GrantDeniedError) throw error;
+      if (error instanceof LibraryConflictError || error instanceof LibraryNotFoundError) status = 'stale';
+      else if (
+        error instanceof LibraryEntryInvalidError ||
+        (error instanceof ProblemError && error.code === 'unsupported_library_profile')
+      )
+        status = 'unsupported';
+      // Transport/unknown failures retain the original operands and command for retry.
+    }
+    const finished = await mutation(
+      actor,
+      'finish',
+      `${decision.commandKey}:finish:${status}`,
+      { id, item, status },
+      async (tx, account) => {
+        const locked = await tx.query<Upload>(
+          'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
+          [requireRoute(account.accountId), account.accountId, id],
+        );
+        const found = locked.rows[0]?.decisions[item.ordinal];
+        if (found?.reviewId === item.reviewId && found.status !== 'applied') {
+          found.status = status;
+          await save(tx, account, id, item.ordinal, found);
+        }
+        return { status: found?.status ?? status };
+      },
+    );
+    record(finished);
+    return { ordinal: item.ordinal, reviewId: item.reviewId, status: finished.value.status };
+  }
+  async function applyScore(
+    actor: Actor,
+    id: string,
+    item: { ordinal: number; scoreReviewId: string },
+    initial: Decision | undefined,
+    record: (outcome: CommandOutcome<unknown>) => void,
+  ) {
+    const score = initial?.score;
+    if (!score || score.reviewId !== item.scoreReviewId)
+      return { outcome: { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: 'stale' as const } };
+    if (score.status === 'unavailable' || ['applied', 'skipped', 'stale', 'failed'].includes(score.status))
+      return { outcome: { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: score.status } };
+    const result = await mutation(
+      actor,
+      'score-unavailable',
+      `${score.commandKey}:admission-unavailable`,
+      { id, scoreReviewId: item.scoreReviewId },
+      async (tx, account) => {
+        const locked = await tx.query<Upload>(
+          `SELECT * FROM library.vndb_import
+          WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [requireRoute(account.accountId), account.accountId, id],
+        );
+        const stored = locked.rows[0];
+        if (!stored || stored.state !== 'active' || stored.expires_at.getTime() <= Date.now())
+          return { status: 'cancelled' as const };
+        const found = stored.decisions[item.ordinal];
+        if (!found?.score || found.score.reviewId !== item.scoreReviewId) return { status: 'stale' as const };
+        if (['applied', 'skipped', 'stale', 'failed', 'unavailable'].includes(found.score.status))
+          return { status: found.score.status };
+        found.score.status = 'unavailable';
+        await save(tx, account, id, item.ordinal, found);
+        return { status: 'unavailable' as const };
+      },
+    );
+    record(result);
+    if (result.value.status === 'cancelled') return { stopped: 'cancelled' as const };
+    return {
+      outcome: { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId, status: result.value.status },
+    };
+  }
   async function apply(
     actor: Actor,
     id: string,
-    selected: { ordinal: number; reviewId: string }[],
+    selected: { ordinal: number; reviewId?: string; scoreReviewId?: string }[],
     record: (outcome: CommandOutcome<unknown>) => void,
     signal?: AbortSignal,
   ) {
     const deadline = Date.now() + VNDB_LIMITS.applyMs,
-      outcomes = [];
+      outcomes: Array<{ ordinal: number; reviewId?: string; scoreReviewId?: string; status: string }> = [];
+    if (
+      !selected.length ||
+      selected.length > VNDB_LIMITS.page ||
+      new Set(selected.map((item) => item.ordinal)).size !== selected.length ||
+      selected.some((item) => (!item.reviewId && !item.scoreReviewId) || (item.reviewId && item.reviewId === item.scoreReviewId)) ||
+      selected.reduce((total, item) => total + Number(!!item.reviewId) + Number(!!item.scoreReviewId), 0) > VNDB_LIMITS.page
+    )
+      throw new ProblemError('invalid_request');
     let stopped: 'deadline' | 'cancelled' | null = null;
     for (const item of selected) {
       if (signal?.aborted || Date.now() >= deadline) {
@@ -671,89 +1104,26 @@ export function createVndbImport(config: Config) {
         stopped = 'cancelled';
         break;
       }
-      let decision = upload.decisions[item.ordinal];
-      if (!decision || decision.reviewId !== item.reviewId) {
-        outcomes.push({ ...item, status: 'stale' });
-        continue;
+      const decision = upload.decisions[item.ordinal];
+      if (item.reviewId)
+        outcomes.push(await applyEntry(actor, id, { ordinal: item.ordinal, reviewId: item.reviewId }, decision, record));
+      if (!item.scoreReviewId) continue;
+      if (signal?.aborted || Date.now() >= deadline) {
+        stopped = signal?.aborted ? 'cancelled' : 'deadline';
+        break;
       }
-      if (['applied', 'skipped', 'unsupported', 'stale'].includes(decision.status)) {
-        outcomes.push({ ...item, status: decision.status });
-        continue;
-      }
-      if (decision.baseline && !decision.replace) {
-        outcomes.push({ ...item, status: 'skipped' });
-        continue;
-      }
-      const started = await mutation(
+      const scoreResult = await applyScore(
         actor,
-        'start',
-        `${decision.commandKey}:start`,
-        { id, item },
-        async (tx, account) => {
-          const locked = await tx.query<Upload>(
-            `SELECT * FROM library.vndb_import
-          WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='active' AND expires_at>clock_timestamp() FOR UPDATE`,
-            [requireRoute(account.accountId), account.accountId, id],
-          );
-          const found = locked.rows[0]?.decisions[item.ordinal];
-          if (!found || found.reviewId !== item.reviewId) throw new ProblemError('conflict');
-          found.status = 'applying';
-          await save(tx, account, id, item.ordinal, found);
-          return { reviewId: found.reviewId };
-        },
+        id,
+        { ordinal: item.ordinal, scoreReviewId: item.scoreReviewId },
+        decision,
+        record,
       );
-      record(started);
-      // Reload frozen operands even when the start command was replayed.
-      decision = (await load(actor, id)).decisions[item.ordinal]!;
-      let status: Decision['status'] = 'failed';
-      try {
-        const result = await entries.putEntry(
-          actor,
-          decision.targetId!,
-          {
-            state: decision.state!,
-            ...(decision.baseline
-              ? {
-                  revision: decision.baseline.revision,
-                  ...(decision.baseline.incarnationId ? { incarnationId: decision.baseline.incarnationId } : {}),
-                }
-              : {}),
-          },
-          decision.commandKey,
-          decision.guard!,
-        );
-        record(result);
-        status = 'applied';
-      } catch (error) {
-        if (error instanceof GrantDeniedError) throw error;
-        if (error instanceof LibraryConflictError || error instanceof LibraryNotFoundError) status = 'stale';
-        else if (
-          error instanceof LibraryEntryInvalidError ||
-          (error instanceof ProblemError && error.code === 'unsupported_library_profile')
-        )
-          status = 'unsupported';
-        // Transport/unknown failures retain the original operands and command for retry.
+      if (scoreResult.outcome) outcomes.push(scoreResult.outcome);
+      if (scoreResult.stopped) {
+        stopped = scoreResult.stopped;
+        break;
       }
-      const finished = await mutation(
-        actor,
-        'finish',
-        `${decision.commandKey}:finish:${status}`,
-        { id, item, status },
-        async (tx, account) => {
-          const locked = await tx.query<Upload>(
-            'SELECT * FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE',
-            [requireRoute(account.accountId), account.accountId, id],
-          );
-          const found = locked.rows[0]?.decisions[item.ordinal];
-          if (found?.reviewId === item.reviewId && found.status !== 'applied') {
-            found.status = status;
-            await save(tx, account, id, item.ordinal, found);
-          }
-          return { status: found?.status ?? status };
-        },
-      );
-      record(finished);
-      outcomes.push({ ...item, status: finished.value.status });
     }
     await authorized(actor);
     return { uploadId: id, outcomes, stopped };

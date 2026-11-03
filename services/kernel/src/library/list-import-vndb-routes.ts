@@ -14,10 +14,10 @@ import { VNDB_LIMITS, VndbInvalid } from './list-import-vndb-parser.ts';
 import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
 import {
   vndbApplySchema,
-  vndbDecisionSchema,
   vndbPageSchema,
   vndbPreviewSchema,
   vndbRemovalSchema,
+  vndbReviewSchema,
   vndbSourceSchema,
 } from './list-import-vndb-http.ts';
 
@@ -42,6 +42,38 @@ const metadataSelection = t.Object(
   },
   closed,
 );
+const scoreSelection = t.Union([
+  t.Object({ kind: t.Literal('vote'), units: t.Integer({ minimum: 0, maximum: 20 }) }, closed),
+  t.Object({ kind: t.Literal('clear') }, closed),
+]);
+const reviewChoice = t.Union([
+  t.Object(
+    { ordinal, action: t.Union([t.Literal('skip'), t.Literal('retain')]), targetId: t.Optional(uuid) },
+    closed,
+  ),
+  t.Object(
+    {
+      ordinal,
+      action: t.Literal('state'),
+      targetId: t.Optional(uuid),
+      state: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }),
+      replace: t.Optional(t.Boolean()),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ordinal,
+      action: t.Literal('score'),
+      targetId: t.Optional(uuid),
+      questionId: uuid,
+      questionRevision: t.Integer({ minimum: 1 }),
+      selection: scoreSelection,
+      consent: t.Union([t.Literal('adopt-native-vote'), t.Literal('clear-native-vote')]),
+    },
+    closed,
+  ),
+]);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const failures = {
   400: problemSchema('invalid_request'),
@@ -132,17 +164,8 @@ export function vndbImportRoutes(
       {
         params,
         headers,
-        body: t.Object(
-          {
-            ordinal,
-            action: t.Union([t.Literal('skip'), t.Literal('retain'), t.Literal('state')]),
-            targetId: t.Optional(uuid),
-            state: t.Optional(t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' })),
-            replace: t.Optional(t.Boolean()),
-          },
-          closed,
-        ),
-        response: { 200: t.Unsafe<Output<'review'>['value']>(vndbDecisionSchema), ...failures },
+        body: reviewChoice,
+        response: { 200: t.Unsafe<Output<'review'>['value']>(vndbReviewSchema), ...failures },
         detail: detail('review'),
       },
       ({ actor, params, body, headers, admission, job, session, set }) =>
@@ -232,7 +255,12 @@ export function vndbImportRoutes(
       {
         params,
         body: t.Object(
-          { rows: t.Array(t.Object({ ordinal, reviewId: uuid }, closed), { minItems: 1, maxItems: VNDB_LIMITS.page }) },
+          {
+            rows: t.Array(
+              t.Object({ ordinal, reviewId: t.Optional(uuid), scoreReviewId: t.Optional(uuid) }, closed),
+              { minItems: 1, maxItems: VNDB_LIMITS.page },
+            ),
+          },
           closed,
         ),
         response: response('apply'),

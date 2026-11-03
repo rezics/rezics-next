@@ -11,6 +11,7 @@ export const VNDB_LIMITS = {
   lifetimeMs: 86400000,
   applyMs: 5000,
 } as const;
+const VNDB_SCORE_PAGE_RESERVE = VNDB_LIMITS.page * 32_768;
 export class VndbInvalid extends Error {
   constructor() {
     super('Invalid or oversized VNDB version 1.0 export');
@@ -54,6 +55,10 @@ const field = (nodes: Node[], tag: string): string | null => {
   const node = children(nodes, tag)[0];
   return node ? text(node).trim() : null;
 };
+const rawField = (nodes: Node[], tag: string): string | null => {
+  const node = children(nodes, tag)[0];
+  return node ? text(node) : null;
+};
 function value(raw: string | null): SourceValue {
   return {
     kind: raw === null ? 'missing' : raw === '' || raw === 'unknown' ? 'unknown' : 'value',
@@ -84,10 +89,11 @@ function date(raw: string | null): SourceValue {
   };
 }
 function vote(raw: string | null): SourceValue {
-  const result = value(raw);
-  if (result.kind !== 'value') return result;
-  const score = Number(raw);
-  return /^\d+(?:\.\d)?$/.test(raw!) && score >= 1 && score <= 10
+  if (raw === null) return { kind: 'missing', raw: null };
+  const lexeme = raw.trim();
+  if (lexeme === '' || lexeme === 'unknown') return { kind: 'unknown', raw };
+  const score = Number(lexeme);
+  return /^\d+(?:\.\d)?$/.test(lexeme) && score >= 1 && score <= 10
     ? { kind: 'value', raw, value: score, scale: { min: 1, max: 10, step: 0.1 } }
     : { kind: 'invalid', raw };
 }
@@ -154,7 +160,7 @@ export function parseVndb(xml: string): VndbRow[] {
       suggestedRole: suggested.length === 1 ? suggested[0]! : null,
       fields: {
         status: value(labels.length ? labels.join(', ') : null),
-        score: vote(field(nodes, 'vote')),
+        score: vote(rawField(nodes, 'vote')),
         started: date(field(nodes, 'started')),
         finished: date(field(nodes, 'finished')),
         progress: value(field(nodes, 'progress')),
@@ -199,6 +205,7 @@ export function parseVndb(xml: string): VndbRow[] {
     retainedReason: 'Export metadata and exact original XML remain private source evidence.',
     evidence: { attributes: root[':@'] ?? {} },
   });
-  if (Buffer.byteLength(JSON.stringify(rows)) > VNDB_LIMITS.evidenceBytes) throw new VndbInvalid();
+  if (Buffer.byteLength(JSON.stringify(rows)) + VNDB_SCORE_PAGE_RESERVE > VNDB_LIMITS.evidenceBytes)
+    throw new VndbInvalid();
   return rows;
 }

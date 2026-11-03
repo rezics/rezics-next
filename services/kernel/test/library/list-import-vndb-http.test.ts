@@ -3,6 +3,7 @@ import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from '
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { parseVndb, VNDB_LIMITS } from '../../src/library/list-import-vndb-parser.ts';
 import { OWNED_PHASES } from '../../src/library/erasure-owned-graph.ts';
 let f: NativeProfileFixture, matched: string;
@@ -170,6 +171,126 @@ test('reviewed conflicts preserve facts, revision and release guards reject stal
   expect((await apply(next.uploadId, [{ ordinal: 0, reviewId: stale.reviewId }])).outcomes[0].status).toBe('stale');
   await json('DELETE', `${base}/${next.uploadId}`);
   await f.activate(f.originalDigest);
+}, 120000);
+
+test('VNDB score review preserves unsupported precision, explicit native units and clear consent without effects', async () => {
+  const scorer = await f.identity([
+    'subject:create',
+    'subject:read',
+    'library_entry:read',
+    'library_entry:list',
+    'library_entry:update',
+    'library_entry:delete',
+    'rating:vote',
+  ]);
+  await f.grantLibraryGate(scorer.actor.accountId);
+  const source = xml(vn(vnId, '<vote>7.3</vote>'), '<reviews><review id="r1"><text>private</text></review></reviews>');
+  const created = await f.send(scorer.bearer, 'POST', base + ':preview', { xml: source }, entryKey());
+  expect(created.status).toBe(200);
+  const { uploadId } = await created.json();
+  const pageResponse = await f.send(scorer.bearer, 'GET', `${base}/${uploadId}`);
+  expect(pageResponse.status).toBe(200);
+  const page = await pageResponse.json();
+  expect(page.rows[0].fields.score).toEqual({
+    kind: 'value',
+    raw: '7.3',
+    value: 7.3,
+    scale: { min: 1, max: 10, step: 0.1 },
+  });
+  expect(page.rows[0].nativeScore).toMatchObject({
+    question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { min: 0, max: 20, step: 1 } },
+    currentVote: { state: 'absent' },
+    exactUnits: null,
+    admission: { status: 'unavailable', reason: 'conditional-admission-unavailable' },
+  });
+  expect(page.rows[0].nativeScore.sourceReason).toContain('no exact standard half-point value');
+  expect(page.rows[1].nativeScore.admission.reason).toBe('source-not-vn-score');
+
+  const missingConsent = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:review`,
+    {
+      ordinal: 0,
+      action: 'score',
+      targetId: matched,
+      questionId: STANDARD_QUESTION_ID,
+      questionRevision: 1,
+      selection: { kind: 'vote', units: 0 },
+    },
+    entryKey(),
+  );
+  expect(missingConsent.status).toBe(422);
+
+  const adopted = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:review`,
+    {
+      ordinal: 0,
+      action: 'score',
+      targetId: matched,
+      questionId: STANDARD_QUESTION_ID,
+      questionRevision: 1,
+      selection: { kind: 'vote', units: 0 },
+      consent: 'adopt-native-vote',
+    },
+    entryKey(),
+  );
+  expect(adopted.status).toBe(200);
+  const adoptedReview = await adopted.json();
+  expect(adoptedReview).toMatchObject({
+    status: 'reviewed',
+    action: 'vote',
+    units: 0,
+    consent: 'adopt-native-vote',
+    nativeAdmission: 'unavailable',
+  });
+
+  const cleared = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:review`,
+    {
+      ordinal: 0,
+      action: 'score',
+      targetId: matched,
+      questionId: STANDARD_QUESTION_ID,
+      questionRevision: 1,
+      selection: { kind: 'clear' },
+      consent: 'clear-native-vote',
+    },
+    entryKey(),
+  );
+  expect(cleared.status).toBe(200);
+  const clearReview = await cleared.json();
+  expect(clearReview).toMatchObject({ action: 'clear', units: null, consent: 'clear-native-vote' });
+  const oldConfirmation = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:apply`,
+    { rows: [{ ordinal: 0, scoreReviewId: adoptedReview.reviewId }] },
+    entryKey(),
+  );
+  expect((await oldConfirmation.json()).outcomes[0].status).toBe('stale');
+  const result = await f.send(
+    scorer.bearer,
+    'POST',
+    `${base}/${uploadId}:apply`,
+    { rows: [{ ordinal: 0, scoreReviewId: clearReview.reviewId }] },
+    entryKey(),
+  );
+  expect(result.status).toBe(200);
+  expect(await result.json()).toMatchObject({
+    outcomes: [{ ordinal: 0, scoreReviewId: clearReview.reviewId, status: 'unavailable' }],
+  });
+  expect(
+    await createVoteCommands({ pool: f.pool, access: f.access }).readOwnVote(
+      scorer.actor,
+      STANDARD_QUESTION_ID,
+      matched,
+    ),
+  ).toBeNull();
 }, 120000);
 test('XML bounds, exact identifier kinds, missing/zero/invalid evidence and native terminal denial', async () => {
   const zero = parseVndb(xml(vn('v1', '<vote>0</vote><started>bad</started><finished>0000-00-00</finished>')))[0]!;
