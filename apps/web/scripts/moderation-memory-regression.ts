@@ -91,7 +91,10 @@ function readProcess(pid: number): ProcSample | null {
     const vmRss = status.match(/^VmRSS:\s+(\d+)\s+kB$/mu);
     const vmHwm = status.match(/^VmHWM:\s+(\d+)\s+kB$/mu);
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const tail = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/u);
+    const tail = stat
+      .slice(stat.lastIndexOf(')') + 2)
+      .trim()
+      .split(/\s+/u);
     const start = tail[19];
     if (!vmRss || !vmHwm || !start) return null;
     return { start, rss: Number(vmRss[1]) * 1024, highWater: Number(vmHwm[1]) * 1024 };
@@ -146,7 +149,9 @@ function createProcessSampler(rootPid: number): () => ProcessPeak | null {
 
 function cgroupDirectory(): string | null {
   try {
-    const entry = readFileSync('/proc/self/cgroup', 'utf8').split('\n').find((line) => line.startsWith('0::'));
+    const entry = readFileSync('/proc/self/cgroup', 'utf8')
+      .split('\n')
+      .find((line) => line.startsWith('0::'));
     if (!entry) return null;
     const path = entry.slice(3).replace(/^\/+|\/+$/gu, '');
     return resolve('/sys/fs/cgroup', path);
@@ -230,10 +235,7 @@ function printResult(result: RunResult): void {
 async function stopGroup(pid: number, exited: Promise<number>): Promise<void> {
   if (!groupAlive(pid)) return;
   signalGroup(pid, 'SIGTERM');
-  const ended = await Promise.race([
-    exited.then(() => true),
-    Bun.sleep(terminationGraceMs).then(() => false),
-  ]);
+  const ended = await Promise.race([exited.then(() => true), Bun.sleep(terminationGraceMs).then(() => false)]);
   if (!ended || groupAlive(pid)) signalGroup(pid, 'SIGKILL');
   if (!(await waitForGroup(pid, performance.now() + terminationGraceMs)))
     throw new Error(`child process group ${pid} remained alive after SIGKILL`);
@@ -308,13 +310,9 @@ async function runCommand(
       if (initialCgroup && cgroup.oomEvents > initialCgroup.oomEvents) failure = 'cgroup recorded an OOM event';
     }
     if (!peakRssBytes && !cgroup) failure = 'physical RSS measurement is unavailable';
-    if (
-      (peakRssBytes ?? 0) >= memoryLimitBytes ||
-      (rssHighWaterBoundBytes ?? 0) >= memoryLimitBytes
-    )
+    if ((peakRssBytes ?? 0) >= memoryLimitBytes || (rssHighWaterBoundBytes ?? 0) >= memoryLimitBytes)
       failure = `process-tree RSS reached ${memoryLimitBytes} bytes`;
-    if ((peakCgroupBytes ?? 0) >= memoryLimitBytes)
-      failure = `sampled cgroup usage reached ${memoryLimitBytes} bytes`;
+    if ((peakCgroupBytes ?? 0) >= memoryLimitBytes) failure = `sampled cgroup usage reached ${memoryLimitBytes} bytes`;
     if (receivedSignal) failure = `interrupted by ${receivedSignal}`;
     if (performance.now() >= deadline) failure = 'command deadline expired';
     if (failure) {
@@ -350,7 +348,10 @@ async function runCommand(
   else if (result.signal) result.failure = `child terminated by ${result.signal}`;
   else if (result.exitCode !== 0) result.failure = `child exited with ${result.exitCode}`;
   else if (peakRssBytes === null) result.failure = 'physical RSS measurement is unavailable';
-  else if (mode === 'complete-suite' && (testCounts.pass === null || testCounts.fail === null || testCounts.skip === null))
+  else if (
+    mode === 'complete-suite' &&
+    (testCounts.pass === null || testCounts.fail === null || testCounts.skip === null)
+  )
     result.failure = 'test summary was missing; skipped-test status cannot be established';
   else if (mode === 'complete-suite' && testCounts.fail !== 0) result.failure = 'one or more tests failed';
   else if (mode === 'complete-suite' && testCounts.skip !== 0) result.failure = 'one or more tests were skipped';
@@ -408,9 +409,7 @@ async function main(): Promise<number> {
       ))
     )
       return 1;
-    if (
-      !(await runCommand(['bun', 'test', ...moderationFiles], combinedDeadlineMs, overallDeadline, 'complete-suite'))
-    )
+    if (!(await runCommand(['bun', 'test', ...moderationFiles], combinedDeadlineMs, overallDeadline, 'complete-suite')))
       return 1;
     return receivedSignal ? 128 : 0;
   } finally {
