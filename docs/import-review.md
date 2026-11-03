@@ -13,6 +13,9 @@ relations, capped at 256 works per franchise. Collaboration, catch-all related-t
 staff credits, episodes, releases and `chars.main` / `releases_supersedes.rid` endpoints stay referenced rather
 than expanding through unrelated filmography. A synopsis mentioning another franchise does not elect a work. The
 command consumes dump records; it does not replace them with live API records or fabricated catalogue examples.
+Decision: Status, episode-kind, tag, trait, staff-role and appearance-role values resolve only through exact source taxonomy/code and caller-supplied released Concept and Scheme identities; missing bindings produce field-specific gaps without fallback.
+
+Decision: Status, episode-kind, tag, trait, staff-role and appearance-role values resolve only through exact source taxonomy/code and caller-supplied released Concept and Scheme identities; missing bindings produce field-specific gaps without fallback.
 
 Decision: seed each provider under separate `cross_media` source aliases, match franchise titles only, and report
 unmapped source rows as explicit gaps without merging identities by name.

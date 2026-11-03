@@ -680,8 +680,14 @@ files:
             - https://www.wikidata.org/wiki/Property:P361
       - id: type
         mapping:
-          status: omitted
-          reason: The source episode-kind enumeration has no shared episode property with the same meaning.
+          status: proposed
+          term: schema:keywords
+          'on': schema:Episode
+          value: skos:Concept
+          meaning: The source episode kind is an exact Bangumi concept resolved from the released episode-type scheme.
+          sources:
+            - https://schema.org/keywords
+            - https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType
   - id: subject-relations
     type:
       status: proposed

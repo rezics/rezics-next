@@ -3,6 +3,7 @@ import canonicalize from 'canonicalize';
 import { FIELD_GROUPS, SourceSchema, type FieldGroup, type Source } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest } from '@rezics/definitions/media-import';
 import { documentVersion, normalizeDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import type { SourceVocabularyRequest } from './source-vocabulary.ts';
 
 /** Immutable caller configuration; resolutions and media IDs confer no authority. */
 export type ConversionContext = {
@@ -10,6 +11,8 @@ export type ConversionContext = {
   readonly resolvedReferences?: Readonly<Record<string, string>>;
   readonly mediaIds?: Readonly<Record<string, string>>;
   readonly source?: string;
+  /** Caller-owned normalized graph rows and explicit immutable native bindings. */
+  readonly sourceVocabulary?: SourceVocabularyRequest;
 };
 
 /** Canonical BCP 47 syntax, without source-specific language mappings. */

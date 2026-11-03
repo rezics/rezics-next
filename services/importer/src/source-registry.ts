@@ -1,4 +1,4 @@
-import { SourceSchema } from '@rezics/definitions/bulk';
+import { BATCH_LIMIT, SourceSchema } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import {
   converter_revision as bangumiRevision,
@@ -23,6 +23,9 @@ import {
   bangumiRecordUrl,
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
+import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
+import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
+import type { SourceVocabularyGap, SourceVocabularyInput } from '@rezics/conversion';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
 import type {
@@ -37,6 +40,7 @@ import type {
 export type SourceAssets = {
   readonly coverAssets: Omit<MediaImportRequest, 'containerId'>[];
   readonly mediaImportIntents: MediaImportRequest[];
+  readonly sourceVocabularyGaps?: readonly SourceVocabularyGap[];
 };
 
 type NativeConversion = BangumiConversion | VndbConversion | WikidataConversion | OpenLibraryConversion;
@@ -132,7 +136,12 @@ function validateSourceField(field: SourceField, value: unknown): asserts value 
     throw new TypeError(`Invalid source ${field}`);
 }
 
-function addAliases(result: NativeConversion, sourceAlias: string): ImportConversion<SourceAssets> {
+function addAliases(
+  result: NativeConversion,
+  sourceAlias: string,
+  sourceKind: SourceId,
+  context: ConversionContext,
+): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
   let sourceStatistic: ImportSourceStatistic | undefined;
@@ -163,14 +172,54 @@ function addAliases(result: NativeConversion, sourceAlias: string): ImportConver
       };
     }
   }
+  const vocabulary = context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
+    ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary)
+    : undefined;
   return {
     ...result,
+    ...(vocabulary === undefined ? {} : {
+      proposals: [...result.proposals, ...vocabulary.proposals],
+      diagnostics: [
+        ...result.diagnostics,
+        ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
+      ],
+      sourceVocabularyGaps: vocabulary.gaps,
+    }),
     normalized: result.normalizedRecord,
     coverAssets,
     mediaImportIntents,
     ...(sourceStatistic === undefined ? {} : { sourceStatistic }),
     ...(sourceStatisticClear === undefined ? {} : { sourceStatisticClear }),
   };
+}
+
+function sourceVocabularyResult(
+  result: NativeConversion,
+  sourceAlias: string,
+  sourceKind: 'bangumi' | 'vndb',
+  request: NonNullable<ConversionContext['sourceVocabulary']>,
+) {
+  const metadata = describeSourceRecord(sourceKind, result.external_id);
+  const recordUrl = sourceKind === 'bangumi'
+    ? (result as BangumiConversion).sourceMetadata.recordUrl
+    : `https://vndb.org/${result.external_id}.${result.record_revision}`;
+  const input: SourceVocabularyInput = {
+    metadata: {
+      provider: sourceKind,
+      sourceAlias,
+      externalId: result.external_id,
+      recordRevision: result.record_revision,
+      digest: result.digest,
+      converterRevision: result.converter_revision,
+      recordUrl,
+      license: metadata.licence?.id ?? '',
+      attribution: metadata.attribution ?? '',
+    },
+    bindings: request.bindings,
+    rows: request.rows,
+    commandLimit: Math.max(0, BATCH_LIMIT - result.proposals.length),
+  };
+  return sourceKind === 'bangumi' ? mapBangumiVocabulary(input) : mapVndbVocabulary(input);
 }
 
 /** Register one of the four pure native converters under trusted application metadata. */
@@ -203,7 +252,7 @@ export function createSourceRegistration(
         }
       }
       const result = native.convert(input, context, { converterRevision });
-      return addAliases(result, source);
+      return addAliases(result, source, sourceKind, context);
     },
   };
 }
