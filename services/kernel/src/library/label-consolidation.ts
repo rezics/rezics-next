@@ -1153,7 +1153,7 @@ export function createLabelConsolidationCommands(deps: {
 
 /** Scheduled native expiry cleanup. One ordered due-index page per owner partition; parent cascade removes <=16 items. */
 export async function purgeExpiredLabelConsolidations(
-  { pool, clock }: { pool: Pool; clock?: KernelClock },
+  { pool, clock = systemClock }: { pool: Pool; clock?: KernelClock },
   { partition, limit, after }: { partition: number; limit: number; after: string | null },
 ) {
   if (!Number.isInteger(partition) || partition < 0 || partition >= 4096) throw new RangeError('Invalid partition');
