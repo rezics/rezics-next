@@ -55,13 +55,13 @@ test('installed watch inventory preserves sparse cursors, unavailable retry and 
   });
   const inventory = client.accounts({ accountId }).watches;
   const query = { kind: 'thread' as const, limit: 1 };
-  expect((await inventory.get({ query })).data).toEqual(pages[0]);
+  expect((await inventory.get({ query })).data).toEqual(pages[0]!);
   const resumed = { query: { ...query, cursor: pages[0]!.next! } };
   expect((await inventory.get(resumed)).status).toBe(503);
-  expect((await inventory.get(resumed)).data).toEqual(pages[1]);
+  expect((await inventory.get(resumed)).data).toEqual(pages[1]!);
   expect(sent[1]!.url).toBe(sent[2]!.url);
   expect(new URL(sent[2]!.url).searchParams.get('cursor')).toBe(pages[0]!.next);
-  expect((await inventory.get({ query: { ...query, cursor: 'next' } })).data).toEqual(pages[2]);
+  expect((await inventory.get({ query: { ...query, cursor: 'next' } })).data).toEqual(pages[2]!);
   expect(
     (
       await inventory({ watchId }).delete(

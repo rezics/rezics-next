@@ -3340,6 +3340,7 @@ options are `{fetch?, headers?, session?, onSession?}`. The generated inventory 
 `client.accounts({accountId}).watches.get({query: {kind, limit?, cursor?}})`;
 removal is `client.accounts({accountId}).watches({watchId}).delete({expectedRevision}, {query: {kind}, headers: {'idempotency-key': key}})`.
 The package exports `WatchManagementKind`, `WatchManagementItem` and `WatchManagementPage` for these consumers.
+Until the KernelClient generator can emit the mounted route declarations, `packages/client/src/index.ts` carries this documented type seam.
 
 The Web transport factory is
 `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`.

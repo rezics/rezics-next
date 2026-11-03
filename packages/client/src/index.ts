@@ -31,7 +31,24 @@ export type {
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
-export type { WatchManagementItem, WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
+export type WatchManagementKind = 'thread' | 'board';
+type WatchManagementIdentity = {
+  id: string;
+  kind: WatchManagementKind;
+  revision: number;
+  createdAt: string;
+};
+export type WatchManagementItem =
+  | (WatchManagementIdentity & {
+      state: 'available';
+      resourceId: string;
+      title: string | null;
+    })
+  | (WatchManagementIdentity & { state: 'unavailable' });
+export type WatchManagementPage = {
+  items: WatchManagementItem[];
+  next: string | null;
+};
 export type {
   RealmClaimReviewApprovalAdvice,
   RealmClaimReviewClaimant,
@@ -216,6 +233,20 @@ type PersonalEntryEndpoints = {
     }>;
   };
 };
+type WatchManagementEndpoints = {
+  get(options: {
+    query: { kind: WatchManagementKind; limit?: number; cursor?: string };
+  } & PersonalReadOptions): PersonalEntryCall<WatchManagementPage>;
+  (params: { watchId: string }): {
+    delete(
+      body: { expectedRevision: number },
+      options: { query: { kind: WatchManagementKind } } & PersonalWriteOptions,
+    ): PersonalEntryCall<{ removed: boolean }>;
+  };
+};
+type AccountsClient = Omit<GeneratedKernelClient['accounts'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['accounts']>) =>
+    ReturnType<GeneratedKernelClient['accounts']> & { watches: WatchManagementEndpoints });
 export type {
   OwnCountedVoteAccountObservation,
   OwnCountedVoteIdentity,
@@ -263,11 +294,12 @@ type SourceClassificationsClient = import('./kernel/rating/source-classification
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms'
+  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions' | 'realms' | 'accounts'
 > & {
   posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
+  accounts: AccountsClient;
   subjects: KernelSubjectsClient;
   'moderation-decisions': DecisionPages;
   realms: RealmsClient;
