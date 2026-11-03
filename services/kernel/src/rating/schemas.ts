@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { SourceFiguresSchema } from './source-figures.ts';
 import { SourceFenceQuerySchema, strictContentSchema } from '../content/schemas.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -144,6 +145,7 @@ export const SourceStatisticInputSchema = strictContentSchema(
       expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
       sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
       sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+      figures: t.Optional(SourceFiguresSchema),
       scale: sourceScale,
       mean: t.Number(),
       count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
@@ -176,6 +178,7 @@ export const SourceStatisticResponseSchema = t.Object(
     ),
     sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
     sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+    figures: t.Optional(SourceFiguresSchema),
     scale: sourceScale,
     mean: t.Number(),
     count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
