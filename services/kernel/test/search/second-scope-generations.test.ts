@@ -23,9 +23,7 @@ test('a generation with missing public metadata producers is rejected before all
     ],
   } as unknown as DiscoveryRegistry;
 
-  await expect(
-    allocateDiscovery(pool, 'search', registry, SECOND_SCOPE_PUBLIC_METADATA_KINDS),
-  ).rejects.toMatchObject({
+  await expect(allocateDiscovery(pool, 'search', registry, SECOND_SCOPE_PUBLIC_METADATA_KINDS)).rejects.toMatchObject({
     missingKinds: [...SECOND_SCOPE_PUBLIC_METADATA_KINDS],
     unsupportedKinds: [],
     duplicateKinds: [],
