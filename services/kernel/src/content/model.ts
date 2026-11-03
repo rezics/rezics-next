@@ -119,12 +119,12 @@ export type ThreadInput = Readonly<{
   licence: string;
   subjectIds: readonly ContentId[];
   boardId: BoardId;
-  visibility: 'published' | 'draft';
+  visibility: 'published' | 'draft' | 'protected';
   voteCitation?: ReviewVoteCitation;
 }>;
 export type PostInput = Readonly<{
   threadId: ThreadId;
-  visibility?: 'published' | 'draft';
+  visibility?: 'published' | 'draft' | 'protected';
   body: unknown;
   licence: string;
   subjectIds?: readonly ContentId[];
