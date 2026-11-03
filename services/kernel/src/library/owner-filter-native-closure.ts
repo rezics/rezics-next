@@ -267,7 +267,10 @@ export async function readNativeOwnerFilterClosure(
     retainOwnerFilterOriginal(binding, original, subjectId);
   }
   for (const original of originalIds) {
-    await disclose(original);
+    // Enclosing readers cannot disclose any result before the retained population passes its final guards.
+    // Keep point consumers' immediate guards; do not spend the page's same guard allocation twice.
+    if (deferDisclosure) retainOwnerFilterOriginal(binding, original, subjectId);
+    else await disclose(original);
     const facts: OwnerFilterFactLocator[] = [];
     if (admission.owner) {
       if (
