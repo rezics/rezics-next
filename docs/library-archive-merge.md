@@ -4,9 +4,10 @@ Collection archive recovery is owned by [Native Library archive Collection recov
 The installed v1 export and its producer-side guarantees remain owned by [Library export](library-export.md).
 
 The [installed personal export](library-export.md) produces a completed local `{manifest,records}` file.
-Its V1 and V2 manifest, section order and encoded-record limits are shared by the producer and archive decoder;
-there is no second archive schema. Export coverage and its integration evidence status remain unchanged. V2 personal
-fact recovery is specified in [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
+Its V1, V2 and V3 manifest, section order and encoded-record limits are shared by the producer and archive decoder;
+there is no second archive schema. Export coverage and its integration evidence status remain unchanged. V2/V3
+personal fact recovery is specified in
+[Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md).
 
 ## Delivered validation boundary
 
@@ -16,14 +17,17 @@ private consumer is `POST /v1/libraryArchiveMerges`, owner status `GET /:id`, in
 evidence pruning `POST /:id/prune`. These methods do not change the producer's export interface or claim Web UI
 completion.
 
-Decision: accept completed V1 and V2 artifacts within 34 MiB and depth 32, reject duplicate rows and exact stored label
-names, and keep expired capture timestamps as evidence rather than treating them as permission or file expiry.
+Decision: accept completed V1, V2 and V3 artifacts with their exact installed manifests within 34 MiB and depth 32;
+preserve the V1/V2 inventories, reject duplicate rows and exact stored label names, and keep expired capture timestamps
+as evidence rather than treating them as permission or file expiry.
+V3 keeps the exact V2 section order and adds journal assessment; V4's appended provider sections are refused as a whole
+until their consumer coverage is explicitly installed.
 
 Decision: retain one seven-day archive per account; cap preview/result pages and review/apply batches at 100/20;
 replay uncertain effects with journaled native request keys and prune expired evidence in 100-row pages.
 
 Validation requires the producer's final manifest, all version-declared installed sections in producer order, the
-global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. V2 section totals
+global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. V2/V3 section totals
 are verified against the records. A missing final manifest, missing section declaration or absent assignment label
 parent is incomplete, never explicitly empty.
 Malformed envelopes, unsupported formats/versions, inconsistent counts, duplicate JSON keys, invalid Unicode,
@@ -60,7 +64,8 @@ current incarnation/revision, canonical identity and operands, and revalidate th
 owners, including entry History. No replace-all, implicit label removal, inferred holding, progress completion,
 vote or publication is supported.
 
-V2 annotation and journal rows use the same retained item, review epoch, cancellation and pruning lifecycle.
+V2/V3 annotation and journal rows use the same retained item, review epoch, cancellation and pruning lifecycle; V3
+assessment is part of its exact journal evidence and supported-field review.
 Supported fields, private visibility behavior, native setters, and exact per-item outcomes are owned by
 [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
@@ -81,7 +86,7 @@ accepted receipts can be retried after cancellation, while expiry/pruning never 
 The route producer declares the revised `KernelClient.libraryArchiveMerges` upload, preview, review and apply contract. Upload's declared body is
 `string | {manifest: Record<string,unknown>, records: Record<string,unknown>[]}`. Original JSON text is sent unchanged;
 ingress still preserves raw bytes and the
-strict bounded decoder alone admits the artifact. Web's canonical archive consumer8bb retains the existing
+strict bounded decoder alone admits the artifact. Web's canonical archive consumer retains the existing
 `/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
 a handwritten client, proxy cast or alternate upload route.
 
@@ -127,8 +132,10 @@ incomplete, duplicate and unsupported evidence; no export assertion is removed.
 For a complete caller, use `C_decode(U,N) + C_archive_operations + C_review_targets +
 C_native_dispatches + C_serialization + C_cleanup`. Raw U≤34 MiB, compact evidence≤32 MiB, N≤100,000
 and depth≤32 remain unchanged. Producer pages of 16 rows/120,000 record bytes do not bound consumer
-preview/results: those read P+1≤101 complete retained items and return P≤100. Review/apply R≤20 and personal
-fields F≤2 do not replace the nested owners' profile, Entry, Session or History bounds.
+preview/results: those read P+1≤101 complete retained items and return P≤100. Review/apply R≤20; annotation choices
+are capped at two fields and journal choices at F≤4 (two dates, reflection and assessment). A selected page therefore
+has at most 80 journal field choices; these explicit caps do not replace the nested owners' profile, Entry, Session or
+History bounds.
 
 For actual attempted calls, archive `operation()` invocations are bounded by
 `2*n_upload + n_status + n_preview + n_results + 2*n_review + n_assignment_mapping +
@@ -178,6 +185,6 @@ runtime acceptance belongs to the controller's complete Kernel suite; focused ch
 
 ## Web ownership
 
-Web323 retains the private export interface. Commerce has sent the exact mounted consumer methods and supported
+Web retains the private export interface. Commerce has sent the exact mounted consumer methods and supported
 coverage for an adjacent explicit import/recovery allocation. Web must adopt that contract before any UI completion
 is claimed. The decoder does not change the export producer's interface.

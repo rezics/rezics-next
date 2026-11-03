@@ -37,8 +37,8 @@ export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
 export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
 export type LibraryExportSectionV4 = (typeof exportSectionsV4)[number];
-/** The archive recovery consumer shares the installed V1 and V2 section vocabulary. */
-export type LibraryExportSection = LibraryExportSectionV2;
+/** V2/V3 share the archive consumer inventory; V4 provider sections remain unsupported for recovery. */
+export type LibraryExportSection = LibraryExportSectionV2 | LibraryExportSectionV3;
 
 export function sectionsForVersion(version: LibraryExportVersion) {
   return version === 1
@@ -78,7 +78,7 @@ const v2Omissions = {
 const v3Omissions = {
   ...v2Omissions,
   reimport:
-    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; version 3 manifests, including assessments, and provenance are unsupported',
+    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection and supported version 3 occurrence assessments; provenance remains unsupported',
 } as const;
 
 const v4Omissions = {
@@ -86,7 +86,7 @@ const v4Omissions = {
   personalImportEvidence:
     'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
   reimport:
-    'version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+    'version 4 recovery unavailable to the installed V1/V2/V3 archive consumer; evidence never authorizes execution',
 } as const;
 
 export type LibraryExportManifestV1 = {
@@ -225,5 +225,8 @@ export function libraryExportManifest(
   };
 }
 
-/** The native archive decoder recognizes completed V1 and V2 manifests; V3 assessment import is not installed. */
-export type LibraryArchiveManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2;
+/** The native archive decoder recognizes the exact completed V1, V2, and V3 manifests. */
+export type LibraryArchiveManifest =
+  | LibraryExportFinalManifestV1
+  | LibraryExportFinalManifestV2
+  | LibraryExportFinalManifestV3;

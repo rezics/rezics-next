@@ -5,9 +5,9 @@ records how the delivered personal-entry and progress-session fields cross that 
 export endpoint, archive store, importer, or Web page. Web323 remains the sole private export interface at
 `/library/export`.
 
-## Version 3 records
+## Stored version 3 records
 
-New captures use format version 3. It keeps version 2's independent `annotations`, `provenance` and `journals`
+Stored version 3 captures keep version 2's independent `annotations`, `provenance` and `journals`
 sections. Its `annotations` section includes one record for each retained personal
 annotation revision, including values the owner explicitly cleared. A missing annotation fact or revision zero is
 not emitted. The record contains `accountId`, `subjectId`, nullable `entryIncarnationId` and
@@ -36,6 +36,9 @@ does not deliver a separate journal audit timestamp, so the export does not inve
 remains separately represented under `malEvidence`; the format does not claim an adoption link or infer a session
 from provider evidence.
 
+New captures use version 4, which appends provider sections and preserves these assessment records. V3 remains a
+supported completed artifact and is the only producer version with assessment records and no provider sections.
+
 Retired occurrences remain excluded even though their private history remains available to account erasure.
 Reopen, retirement, journal correction/clear, annotation edits, reviewed provenance changes, entry-incarnation
 replacement and terminal account changes use the installed native source-fence and account lifecycle owners. A
@@ -49,10 +52,10 @@ those three independently counted sections with the earlier journal shape and no
 assessment to each journal record while keeping the same fixed sections and `fullExport:false`. A missing assessment
 in version 1 or 2 means that the archive predates this field; it is not an inferred null or a public vote. Other
 private account families and Commerce data remain unavailable. It does not claim public permission from source
-privacy. The existing archive recovery accepts V2 annotation and journal-date evidence through the native
-personal-fact journey. It accepts only V1 and V2 manifests, so V3 journals and assessments are unsupported; provenance
-remains unsupported as well. See
-[Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
+privacy. The existing archive recovery accepts V2 annotation and journal-date evidence and V3 journal assessments
+through the native personal-fact journey. It accepts exact V1/V2/V3 manifests; V2 absence remains legacy absence, and
+V3 values with unknown meaning revisions remain unsupported evidence. Provenance remains unsupported. See
+[Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md).
 
 Version 2 and 3 manifests report row and UTF-8 record-byte totals for every declared section, including empty
 sections. They appear only after the complete bounded traversal. Each returned page carries no more than 16 records;
