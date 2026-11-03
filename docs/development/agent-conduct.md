@@ -74,6 +74,12 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
 - A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
   tasks) and turns it into decisions and the next briefs. Workers do not read other workers' tasks; the manager reads
   them once for all.
+- You own the product experience of your area, not only its contracts. Before you brief, write down what a person
+  should see and be able to do there, and judge it against the two earlier REZICS apps and the reference platforms
+  in `docs/research/`. Whatever an earlier REZICS app had is the minimum. Design each API from what its page shows,
+  including the viewer's state and allowed actions in one bounded request, not from the data your Goal stores.
+  Challenge a contract that is complete on paper but wrong for users. After a task lands, look at the result as a
+  user (Storybook, screenshots, the running app) before you call the outcome done; passing tests are not enough.
 - Your outputs are ready briefs and decisions. Keep at least eight ready briefs in your Goal's backlog while your road
   has unowned approved outcomes. Scope additions go to the supermanager as candidates naming the scope line they
   extend.
