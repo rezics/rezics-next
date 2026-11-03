@@ -1530,7 +1530,9 @@ every limit above.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
-harvests only regular files created after that attempt started (creation time, not modification time). Older files
+harvests only untracked regular files created after that attempt started (creation time, not modification time).
+Decision: preserve tracked continuation files and directories containing them so harvesting cannot dirty retained
+source or remove another outcome's briefs. Older untracked files
 are dropped with a recorded reason, including files inherited from another attempt. Valid briefs keep the source
 Goal and manager; a foreign Goal is dropped with its reason. Before a brief becomes ready, its paths and normalized
 title are compared with the same Goal's ready, running, held, landing and stopped tasks and its ready, held, claimed

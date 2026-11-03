@@ -18,6 +18,7 @@ import {
 import { classifyTask } from './routing.ts';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task } from './types.ts';
+import { git } from './merge.ts';
 
 /** Where a worker writes the rest of an outcome that does not fit its attempt, inside its own worktree. */
 export const CONTINUATION_DIRECTORY = '.temp/continuation';
@@ -295,7 +296,8 @@ function invalidReason(
 /**
  * Move the continuation briefs an attempt left under `.temp/continuation/` into its Goal's backlog, where they are
  * dispatched like any other brief. A brief must parse with the ordinary brief parser and keep the task's goal and
- * manager; any other file is removed and its reason recorded on the attempt. A backlog name that already holds the
+ * manager; other untracked files are removed and their reasons recorded on the attempt. Tracked sources remain
+ * untouched, including inherited briefs belonging to other outcomes. A backlog name that already holds the
  * same brief is left untouched. A different brief is published under the next stable distinct name. The source is
  * removed only after that publication, so an interrupted harvest neither drops nor overwrites a wanted continuation.
  */
@@ -317,6 +319,14 @@ export function harvestContinuations(
   } catch {
     return result;
   }
+  // Settlement must not turn a clean source dirty by harvesting inherited repository files. Protect containing
+  // directories too: dropping a non-Markdown directory recursively must not remove a tracked descendant.
+  const trackedNames = new Set(
+    git(task.worktree, 'ls-files', '-z', '--', CONTINUATION_DIRECTORY)
+      .split('\0')
+      .filter(Boolean)
+      .map((path) => path.slice(CONTINUATION_DIRECTORY.length + 1).split('/')[0]),
+  );
   const known = new Set(store.taskIds());
   let ownership: RiskOwnership | undefined;
   try {
@@ -339,6 +349,7 @@ export function harvestContinuations(
   );
   try {
     for (const name of names) {
+      if (trackedNames.has(name)) continue;
       const path = join(source, name);
       const drop = (reason: string) => {
         rmSync(path, { recursive: true, force: true });

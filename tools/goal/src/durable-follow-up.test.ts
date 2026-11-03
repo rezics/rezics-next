@@ -7,6 +7,7 @@ import { readControlPolicy } from './policy.ts';
 import { WorkerJob } from './job.ts';
 import { readRiskOwnership } from './briefs.ts';
 import { harness, markdown } from './test-support.ts';
+import { git } from './merge.ts';
 
 test("a gate failure's automatic retry survives the process that recorded it exiting before it ran", async () => {
   const h = harness();
@@ -232,6 +233,11 @@ test('harvest attributes new files to the attempt and proposes overlapping Goal 
     const ref = { taskId: task.id, attempt: attempt.attempt };
     const source = join(task.worktree, '.temp/continuation');
     mkdirSync(source, { recursive: true });
+    const inherited = join(source, 'inherited.md');
+    const inheritedBrief = markdown.replace('goal: fixture', 'goal: web');
+    writeFileSync(inherited, inheritedBrief);
+    git(task.worktree, 'add', '-f', '--', '.temp/continuation/inherited.md');
+    git(task.worktree, 'commit', '-m', 'Preserve another outcome');
     writeFileSync(join(source, 'old.md'), markdown);
     // Touching an inherited file cannot make it this attempt's output.
     h.store.updateAttempt(ref, (current) => {
@@ -241,6 +247,8 @@ test('harvest attributes new files to the attempt and proposes overlapping Goal 
     expect(harvestContinuations(h.store, h.settings, task, ref).dropped[0]?.reason).toBe(
       'file was not created during this attempt',
     );
+    expect(readFileSync(inherited, 'utf8')).toBe(inheritedBrief);
+    expect(git(task.worktree, 'status', '--porcelain', '--untracked-files=all')).toBe('');
     h.store.updateAttempt(ref, (current) => {
       current.startedAt = attempt.startedAt;
     });
