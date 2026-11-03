@@ -2,8 +2,12 @@ import type { PoolClient } from 'pg';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { accessCheck } from '../request/access.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
+import { readSubjectReference } from '../semantic/references.ts';
 import { feedExcerpt } from './feed-summary.ts';
 import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, type ThreadView } from './reads.ts';
 import type { ReadContext } from './model.ts';
@@ -60,7 +64,8 @@ export const REVIEW_DISCOVERY_BOUNDS = Object.freeze({
   pageLimit: REVIEW_DISCOVERY_PAGE_LIMIT,
   candidatesPerResult: REVIEW_DISCOVERY_CANDIDATE_FACTOR,
   maxPageCandidates: REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES,
-  currentOwnerReadsPerOperation: REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES,
+  currentOwnerReadsPerCandidate: 2,
+  currentOwnerReadsPerOperation: REVIEW_DISCOVERY_MAX_PAGE_CANDIDATES * 2,
   countCandidateReads: 0,
 });
 
@@ -230,6 +235,25 @@ async function hydrateCandidate(
     thread.subjectIds[0] !== value.subjectId
   )
     return null;
+  const subjectRoute = routeOf(value.subjectId);
+  if (subjectRoute === null) return null;
+  const subjectResource = {
+    route: subjectRoute,
+    id: value.subjectId,
+    eligibility: subjectReadEligibility({ route: subjectRoute, id: value.subjectId }),
+  };
+  const subjectAccess = await accessCheck(dependencies.access, currentContext.actor, 'subject:read', subjectResource, {
+    pool: dependencies.pool,
+    deadline: currentContext.deadline,
+  });
+  let subject: Awaited<ReturnType<typeof readSubjectReference>>;
+  try {
+    subject = await readSubjectReference(dependencies.pool, value.subjectId, (client) => subjectAccess(client));
+  } catch (error) {
+    if (error instanceof SubjectRedirectError) return null;
+    throw error;
+  }
+  if (!subject || subject.id !== value.subjectId) return null;
   const post = thread.firstPost;
   if (
     post.availability !== 'available' ||

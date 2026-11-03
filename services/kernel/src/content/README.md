@@ -481,21 +481,22 @@ boards live in other partitions.
 The index candidate contains only the subject ID, current title, a 160-code-point excerpt and the opening revision
 ID; author IDs and presentation stay out of the indexed document. Final hydration returns the current author ID,
 title and excerpt through Content's `readSubjectThread`; Search resolves current author presentation through
-Accounts.
+Accounts. Semantic's `readSubjectReference` separately requires the pinned subject to remain visible and readable
+without following redirects.
 
 Every source operation reads `core.partition.position` and its native rows in one repeatable-read snapshot. Anonymous
-`readSubjectThread` supplies the final current board, Realm/Space, subject/Context, source-fence, review lifecycle,
-author-standing and opening-post checks. Protected or stale candidates are omitted, so a hit that is no longer
-eligible becomes a native deletion when Search refreshes that thread ID. Content create, revision, restore,
-erasure and moderation events remain the incremental change inputs; external gate owners must refresh affected IDs
-on their own native changes.
+`readSubjectThread` supplies the final current board, Realm/Space, placement, source-fence, review lifecycle,
+author-standing and opening-post checks. The separate Semantic reference read enforces current subject visibility and
+anonymous `subject:read`. Protected or stale candidates are omitted, so a hit that is no longer eligible becomes a
+native deletion when Search refreshes that thread ID. Content create, revision, restore, erasure and moderation events
+remain the incremental change inputs; external gate owners must refresh affected IDs on their own native changes.
 
 `read` and `hydrate` accept at most 100 IDs from one partition. `page` accepts limits 1–25, examines at most four
 candidates per requested result (100 maximum), and advances its full `(route, thread ID)` key past every examined
 candidate, including sparse or empty pages. The partial thread index supports that keyset. Each examined candidate
-gets one current Content read; no reply/history walk or review text table is added. Count reports unavailable until
-a bounded native census can prove every anonymous gate without exposing a protected population. Realm discussion-
-popularity counts continue to exclude reviews.
+gets one current Content read and one current Semantic subject read; no reply/history walk or review text table is
+added. Count reports unavailable until a bounded native census can prove every anonymous gate without exposing a
+protected population. Realm discussion-popularity counts continue to exclude reviews.
 
 Search owns the closed kind union, generation writer and query integration; its consumer maps unavailable review
 counts to its existing unavailable count evidence and hydrates author presentation through Accounts.
