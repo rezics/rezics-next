@@ -841,6 +841,31 @@ CREATE TABLE content.board_report_candidate (
 
 
 --
+-- Name: board_slow_actor; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_slow_actor (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    actor_key bytea NOT NULL,
+    posted_at timestamp with time zone NOT NULL,
+    CONSTRAINT board_slow_actor_actor_key_check CHECK ((octet_length(actor_key) = 32))
+);
+
+
+--
+-- Name: board_slow_mode; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.board_slow_mode (
+    route integer NOT NULL,
+    board_id uuid NOT NULL,
+    interval_seconds integer NOT NULL,
+    CONSTRAINT board_slow_mode_interval_seconds_check CHECK (((interval_seconds >= 0) AND (interval_seconds <= 86400)))
+);
+
+
+--
 -- Name: board_thread; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1894,6 +1919,22 @@ ALTER TABLE ONLY content.board_report_candidate
 
 
 --
+-- Name: board_slow_actor board_slow_actor_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_slow_actor
+    ADD CONSTRAINT board_slow_actor_pkey PRIMARY KEY (route, board_id, actor_key);
+
+
+--
+-- Name: board_slow_mode board_slow_mode_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_slow_mode
+    ADD CONSTRAINT board_slow_mode_pkey PRIMARY KEY (route, board_id);
+
+
+--
 -- Name: board_thread board_thread_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -2726,6 +2767,22 @@ ALTER TABLE ONLY content.authored_field_purge
 
 ALTER TABLE ONLY content.board
     ADD CONSTRAINT board_realm_fk FOREIGN KEY (route, realm_id) REFERENCES community.realm(route, realm_id);
+
+
+--
+-- Name: board_slow_actor board_slow_actor_route_board_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_slow_actor
+    ADD CONSTRAINT board_slow_actor_route_board_id_fkey FOREIGN KEY (route, board_id) REFERENCES content.board(route, board_id) ON DELETE CASCADE;
+
+
+--
+-- Name: board_slow_mode board_slow_mode_route_board_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_slow_mode
+    ADD CONSTRAINT board_slow_mode_route_board_id_fkey FOREIGN KEY (route, board_id) REFERENCES content.board(route, board_id) ON DELETE CASCADE;
 
 
 --
