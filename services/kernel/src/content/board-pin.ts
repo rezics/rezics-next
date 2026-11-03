@@ -47,7 +47,7 @@ export class BoardPinLimitError extends Error {
   }
 }
 
-type ContentRow = (typeof readChain)['~reylo']['element'];
+type ContentRow = Parameters<typeof readResource>[0];
 type PinSlot = Readonly<{ thread_id: string; pin_slot: number }>;
 type PreparedCheck = Readonly<{ authorization: AccessCommandAuthorization; evidence: unknown }>;
 
@@ -61,14 +61,14 @@ async function readContentRow(
   const route = routeOf(id);
   if (route === null) return null;
   return withConnection(pool, async (client) => {
-    const result = await readChain.run(deadlineClient(client, deadline), {
+    const rows = await readChain.run(deadlineClient(client, deadline), {
       route,
       id,
       kind,
       thread_id: threadId,
       include_body: false,
     });
-    return result.rows[0] ?? null;
+    return (rows[0] as ContentRow | undefined) ?? null;
   });
 }
 

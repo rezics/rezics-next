@@ -120,6 +120,13 @@ const fixtures = {
     sourceEpoch: 1,
     sourcePosition: '9223372036854775807',
   },
+  'com.rezics.content.board-thread.pin.changed.v1': {
+    boardId: containerId,
+    threadId,
+    actorId,
+    pinned: true,
+    pinPosition: 1,
+  },
   'com.rezics.content.author-item.projected.v1': {
     authorAccountId: actorId,
     itemKind: 'thread',
