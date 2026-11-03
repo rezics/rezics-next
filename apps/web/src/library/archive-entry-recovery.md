@@ -7,8 +7,9 @@ It is separate from [private export](private-export/contract.ts) and provider-li
 
 ## Current admission
 
-Decision: expose recovery from Library with file selection disabled until the generated merge client and an exact
-review-version confirmation operand are delivered; explain scope and keep the person's completed file on their device.
+Decision: keep production file selection disabled until generated merge methods and exact review-version confirmation
+are both available; the transport-neutral visit seam never claims artifact admission or native results. Explain scope
+and keep the person's completed file on their device.
 
 The server mounts `libraryArchiveMergeRoutes` and includes it in its source composition. However, the installed
 `packages/client/src/kernel/http/kernel.d.ts` omits that composition member and there is no generated archive merge
