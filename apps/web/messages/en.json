@@ -6562,5 +6562,7 @@
   "revision_history_erased_explanation": "This revision’s document has been removed. Only the returned metadata and provenance are shown. Another revision cannot supply its text.",
   "revision_history_added": "{count} returned revisions added to loaded history.",
   "revision_history_body_unavailable": "Document unavailable",
-  "revision_history_unavailable_explanation": "This revision’s document is not available to this reader. Only returned metadata and provenance are shown. No text is recovered from another revision."
+  "revision_history_unavailable_explanation": "This revision’s document is not available to this reader. Only returned metadata and provenance are shown. No text is recovered from another revision.",
+  "revision_history_back_to_navigator": "Back to loaded revision navigator",
+  "revision_history_end": "End of returned history. These numbers still refer only to the loaded revisions."
 }

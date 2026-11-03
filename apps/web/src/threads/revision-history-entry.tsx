@@ -11,6 +11,7 @@ import { revisionDocumentImage } from './exact-revision-media';
 import { RevisionProvenance } from './revision-provenance-view';
 import { CopyDiscussionLink } from './copy-discussion-link';
 import type { HistoryPage } from './post-history-lifetime';
+import type { PageAuthor } from '../identity/read';
 import {
   revisionHistoryAnchor,
   type HistoryRevision as Revision,
@@ -137,10 +138,13 @@ export function RevisionSummaryRow({
   mentions,
   subjects,
   currentVote,
+  inspectorAuthor,
+  now,
   review,
   focusBoundary,
   onInspect,
   onCollapse,
+  onNavigate,
 }: {
   summary: RevisionSummary;
   entry: { revision: Revision; documentMedia: HistoryPage['documentMedia'] };
@@ -151,10 +155,13 @@ export function RevisionSummaryRow({
   mentions: HistoryPage['mentions'];
   subjects: HistoryPage['subjects'];
   currentVote: HistoryPage['reviewVotes'][string] | undefined;
+  inspectorAuthor: PageAuthor | undefined;
+  now: string;
   review: boolean;
   focusBoundary: boolean;
   onInspect: () => void;
   onCollapse: () => void;
+  onNavigate: () => void;
 }) {
   const locale = getLocale();
   const headingId = `${triggerId}-heading`;
@@ -289,6 +296,12 @@ export function RevisionSummaryRow({
                   : m.revision_history_unavailable_explanation()}
               </p>
             ) : null}
+            <Byline
+              author={inspectorAuthor}
+              createdAt={summary.recordedAt}
+              now={now}
+              className="[&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
+            />
             <RevisionInspector
               revision={entry.revision}
               mentions={mentions}
@@ -303,6 +316,14 @@ export function RevisionSummaryRow({
                   {m.revision_history_open_exact()}
                 </a>
                 <CopyDiscussionLink href={href} copyOnly />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={onNavigate}
+                  className="h-auto min-h-11 min-w-11 max-w-full py-2 text-start whitespace-normal [overflow-wrap:anywhere]"
+                >
+                  {m.revision_history_back_to_navigator()}
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">{m.revision_history_return_help()}</p>
             </footer>

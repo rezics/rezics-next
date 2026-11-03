@@ -6512,5 +6512,7 @@
   "revision_history_erased_explanation": "此修订的文档已移除。仅显示返回的元数据与来源信息，不会以其他修订的文字替代。",
   "revision_history_added": "已将返回的 {count} 个修订加入已加载历史。",
   "revision_history_body_unavailable": "文档无法获取",
-  "revision_history_unavailable_explanation": "当前读者无法获取此修订的文档。仅显示返回的元数据与来源信息，不会从其他修订恢复文字。"
+  "revision_history_unavailable_explanation": "当前读者无法获取此修订的文档。仅显示返回的元数据与来源信息，不会从其他修订恢复文字。",
+  "revision_history_back_to_navigator": "返回已加载修订导航",
+  "revision_history_end": "已到达返回历史的末尾。这些编号仍仅表示已加载的修订。"
 }

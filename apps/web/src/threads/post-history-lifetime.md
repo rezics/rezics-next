@@ -110,3 +110,8 @@ returned boundary (or an empty-page boundary), while pointer activation retains 
 An additional live announcement counts only returned additions. Retry does not discard readable summaries or
 move the inspector. Empty history, initial transport error, sparse continuation, failed continuation and terminal
 history retain their original meanings; loaded counts never claim to be a total.
+
+The compact author label is bounded, while the selected inspector retains the original full Byline disclosure
+from the admitted identity. Explicit navigator inspection scrolls its focused row into view; continuation keeps
+the owner's existing no-scroll focus handoff. A footer action returns focus to the loaded-only selector without
+collapsing the document. Terminal pages explain the end of returned history while keeping ordinal scope local.

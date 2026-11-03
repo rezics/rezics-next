@@ -6512,5 +6512,7 @@
   "revision_history_erased_explanation": "Le document de cette révision a été supprimé. Seules les métadonnées et la provenance reçues sont affichées. Le texte d’une autre révision ne peut pas le remplacer.",
   "revision_history_added": "{count} révisions reçues ajoutées à l’historique chargé.",
   "revision_history_body_unavailable": "Document indisponible",
-  "revision_history_unavailable_explanation": "Le document de cette révision n’est pas accessible à ce lecteur. Seules les métadonnées et la provenance reçues sont affichées. Aucun texte n’est récupéré d’une autre révision."
+  "revision_history_unavailable_explanation": "Le document de cette révision n’est pas accessible à ce lecteur. Seules les métadonnées et la provenance reçues sont affichées. Aucun texte n’est récupéré d’une autre révision.",
+  "revision_history_back_to_navigator": "Revenir à la navigation des révisions chargées",
+  "revision_history_end": "Fin de l’historique reçu. Ces numéros désignent toujours uniquement les révisions chargées."
 }

@@ -40,6 +40,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
     mentions,
     subjects,
     reviewVotes,
+    now,
     viewerId,
     review,
     active,
@@ -51,7 +52,6 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
   const prefix = `history-inspection-${useId().replaceAll(':', '')}`;
   const helpId = `${prefix}-help`;
   const statusId = `${prefix}-status`;
-  const list = useRef<HTMLOListElement>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [destination, setDestination] = useState('');
   const focusIntent = useRef<FocusIntent | null>(null);
@@ -78,7 +78,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
     const intent = focusIntent.current;
     focusIntent.current = null;
     if (!intent || !active || !isCurrent() || document.activeElement !== intent.source) return;
-    document.getElementById(`${prefix}-inspect-${intent.index}`)?.focus({ preventScroll: true });
+    document.getElementById(`${prefix}-inspect-${intent.index}`)?.focus();
   }, [selected, active, isCurrent, prefix]);
 
   function ownsInteraction() {
@@ -92,7 +92,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
     // Jumping to the inspected row still needs a focus handoff even when React can retain the same index.
     if (index === selected && handoff) {
       focusIntent.current = null;
-      document.getElementById(`${prefix}-inspect-${index}`)?.focus({ preventScroll: true });
+      document.getElementById(`${prefix}-inspect-${index}`)?.focus();
     }
     setSelected(index);
     setDestination(String(index));
@@ -104,7 +104,7 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
     const trigger = document.getElementById(`${prefix}-inspect-${index}`);
     const inspector = document.getElementById(`${prefix}-detail-${index}`);
     // Do not steal focus from another control when a retained callback runs after focus moved away.
-    if (inspector?.contains(document.activeElement)) trigger?.focus({ preventScroll: true });
+    if (inspector?.contains(document.activeElement)) trigger?.focus();
     setSelected(null);
   }
 
@@ -210,10 +210,11 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
             ? m.revision_history_none()
             : m.revision_history_inspecting({ number: number(inspecting + 1), count: number(summaries.length) })}
         </p>
-        {hasMore ? <p className="text-xs text-muted-foreground">{m.revision_history_more_help()}</p> : null}
+        <p className="text-xs text-muted-foreground">
+          {hasMore ? m.revision_history_more_help() : m.revision_history_end()}
+        </p>
       </div>
       <ol
-        ref={list}
         aria-label={m.thread_history_heading()}
         aria-describedby={helpId}
         className="min-w-0 divide-y divide-border/60"
@@ -233,10 +234,17 @@ export function RevisionHistoryNavigation(props: RevisionHistoryNavigationProps)
               mentions={mentions}
               subjects={subjects}
               currentVote={viewerId === entry.revision.authorId ? reviewVotes[entry.revision.id] : undefined}
+              inspectorAuthor={
+                entry.revision.availability === 'available' ? authors?.[entry.revision.authorId] : entry.summaryAuthor
+              }
+              now={now}
               review={review}
               focusBoundary={boundaryRevisionId === summary.revisionId}
               onInspect={() => inspect(summary.index)}
               onCollapse={() => collapse(summary.index)}
+              onNavigate={() => {
+                if (ownsInteraction()) document.getElementById(`${prefix}-destination`)?.focus();
+              }}
             />
           );
         })}
