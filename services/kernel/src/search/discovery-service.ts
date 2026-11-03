@@ -242,14 +242,14 @@ function executeDiscoverySearch(
   retain: (page: DiscoveryPage, current: RetainedPrimaryReader) => Promise<void>,
 ): DiscoverySearch {
   const execute: DiscoverySearch = async (principal, request, context) => {
+    const { registry, release, digest } = await config.resolve(request);
+    const admitted = admitDiscoveryRequest(request, registry, release);
     const spacePopulation = (context as DiscoveryContextWithSpace).spacePopulation;
     if (
       (request.spaceId === undefined) !== (spacePopulation === undefined) ||
       (spacePopulation && spacePopulation.observation.spaceId !== request.spaceId)
     )
       throw new ProblemError('dependency_unavailable');
-    const { registry, release, digest } = await config.resolve(request);
-    const admitted = admitDiscoveryRequest(request, registry, release);
     const registryDigest = createHash('sha256')
       .update(
         canonicalize(

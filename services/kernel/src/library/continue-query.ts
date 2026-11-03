@@ -290,7 +290,7 @@ export async function readContinueOwnerPage(
           selectionSummaries.get(row.subjectId)?.type !== input.kind
         )
           throw new ProblemError('semantic_not_ready');
-      summaries = finalSummaries;
+      if (input.view === 'FULL') summaries = finalSummaries;
     }
     await input.spacePopulation?.finish();
     return {
