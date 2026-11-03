@@ -27,12 +27,12 @@ paths:
   - apps/web/messages/*.json
   - docs/goals/web.md
 acceptance:
-  precondition: "The mounted generated KernelClient.me.realms.get contract and recorded my-realms.json example expose the native current-entry, presentation, media, membership-episode and action-advice fields. Do not invent a browser DTO or widen a cast while they are absent."
+  precondition: 'The mounted generated KernelClient.me.realms.get contract and recorded my-realms.json example expose the native current-entry, presentation, media, membership-episode and action-advice fields. Do not invent a browser DTO or widen a cast while they are absent.'
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/my-realms-current-entry.test.tsx
@@ -41,10 +41,10 @@ acceptance:
   placement: default
   tests:
     - Bind the expanded generated /v1/me/realms response and real examples without an invented browser DTO or widened cast.
-    - "Mounted journeys cover admitted presentation/media, readable and unavailable entry, actual manager, selected leave review, pending/unknown/rejected results and current-page return."
+    - 'Mounted journeys cover admitted presentation/media, readable and unavailable entry, actual manager, selected leave review, pending/unknown/rejected results and current-page return.'
     - Readback and retry remain bound to the original operation and membership episode; replacement advice and all retirement boundaries discard stale actions and late effects.
-    - "Sparse continuation, same-cursor retry and restart preserve inventory; one 1/10/20-row page receives O(N) formatting and one selected action with no per-row enrichment."
-    - "Stories cover the named states; phone390/desktop1280 light/dark, keyboard flows, 44px controls and all eight locales remain legible and operable."
+    - 'Sparse continuation, same-cursor retry and restart preserve inventory; one 1/10/20-row page receives O(N) formatting and one selected action with no per-row enrichment.'
+    - 'Stories cover the named states; phone390/desktop1280 light/dark, keyboard flows, 44px controls and all eight locales remain legible and operable.'
   failing: true
 estimate:
   lines: 2450
