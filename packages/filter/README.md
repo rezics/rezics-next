@@ -70,7 +70,10 @@ limit, plus the native fixed string schema's `minLength`, `maxLength` and option
 present, with the native string schema's pattern semantics. The 128-code-unit catalogue code-facet limit does not apply to qualifiers. Equality preserves exact
 bytes: no coercion, trimming, case folding, Unicode normalization, language guessing or label lookup. Canonical
 language and SHA-256 patterns retain their exact spelling. Monolingual text, quantity and range qualifiers remain
-unsupported. The existing qualified-relation admission barrier remains until a complete native plan supports it.
+unsupported. Released item/string relation qualifiers use the same admission rules. Search forwards the entire
+conjunction to its bounded native current-evidence probes, retaining uncertainty under NOT; see
+[qualified credit evidence](../../services/kernel/src/search/character-person.md). This extension does not certify
+complete negative evidence or whole-page preparation.
 
 Native `subjectSource` retains concrete item and string qualifiers from each selected statement's pinned release
 on that same statement, for both compact and expanded storage. Existing nested keyword terms and the current pure

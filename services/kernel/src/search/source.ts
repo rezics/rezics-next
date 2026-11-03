@@ -1,3 +1,4 @@
+import type { FilterQualifier } from '@rezics/filter';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
@@ -7,11 +8,12 @@ export type LanguageValue = { language: string; value: string };
 export const MAX_RELATION_FACET_VALUES = 128;
 export const MAX_RELATION_FACET_PROBES = 256;
 
-/** Unqualified adopted Global relation membership for one subject, property and value. */
+/** Adopted Global relation membership; all qualifiers constrain the same native statement. */
 export type RelationFacetProbe = {
   subject: string;
   property: string;
   value: string;
+  qualifiers?: readonly FilterQualifier[];
 };
 
 /** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */
@@ -78,10 +80,13 @@ export interface SubjectSource {
   /** Visible, non-redirected subjects of the partition and its position, in one snapshot. */
   count(partition: number): Promise<{ position: bigint; count: number }>;
   /**
-   * Match unqualified membership in full adopted Global relations, applying current source fences and moderation.
+   * Match membership in full adopted Global relations, applying current source fences and moderation.
    * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;
-   * invalid input, including a qualifiers field, rejects. The aligned boolean array preserves probe order
-   * and duplicates; each result matches only the probe's subject, property and value.
+   * Invalid structural input rejects. Qualifiers use the bounded shared filter grammar and must be
+   * admitted by the subject's current release; unsupported evidence remains not_proven. The aligned
+   * array preserves order and duplicates. Value and every qualifier must hold on one statement;
+   * evidence from repeated credits must never be combined. Qualified probes sharing a value share
+   * one bounded native seek, retaining separate truth results.
    * Missing, hidden, taken-down and redirected subjects return false.
    * `true` and `false` are definitive current truth and absence. `not_proven` is bounded witness
    * uncertainty: the source could not prove membership within its bound, and it is never `false`.

@@ -129,19 +129,19 @@ async function call(filter: unknown, method = 'search') {
   return { status: response.status, body: await response.json() };
 }
 
-test('qualified relation facet filters are 400 invalid_request without reaching the engine', async () => {
+test('undeclared relation qualifiers are unsupported without reaching the engine', async () => {
   for (const method of ['search', 'facets']) {
-    for (const qualifier of [role, 'rezics:episode', 'schema:unknown']) {
+    for (const qualifier of ['rezics:episode', 'schema:unknown']) {
       engineRequests = 0;
       const result = await call(
         { statement: { property: relationProperty, in: [author], qualifiers: [{ property: qualifier, in: [lead] }] } },
         method,
       );
-      expect(result.status).toBe(400);
+      expect(result.status).toBe(422);
       expect(result.body).toMatchObject({
-        code: 'invalid_request',
+        code: 'unsupported_query',
         effect_status: 'not_applicable',
-        errors: [{ pointer: '/filter/statement/qualifiers', code: 'unsupported' }],
+        errors: [{ pointer: '/filter/statement/qualifiers/0/property', code: 'unsupported' }],
       });
       expect(engineRequests).toBe(0);
     }
@@ -155,6 +155,11 @@ test('unqualified relation facets and descriptive qualifiers retain their semant
     return (result.body.subjects as { id: string }[]).map((entry) => entry.id);
   };
   expect(await ids({ statement: { property: relationProperty, in: [author] } })).toEqual([id(1), id(2)]);
+  expect(
+    await ids({
+      statement: { property: relationProperty, in: [author], qualifiers: [{ property: role, in: [lead] }] },
+    }),
+  ).toEqual([id(1)]);
   const descriptive = { property: descriptiveProperty, in: [author] };
   expect(await ids({ statement: descriptive })).toEqual([id(1), id(2), id(4)]);
   const qualified = { ...descriptive, qualifiers: [{ property: role, in: [lead] }] };

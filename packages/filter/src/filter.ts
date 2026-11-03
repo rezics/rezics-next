@@ -770,13 +770,6 @@ function admitConstructed(
     const properties = dataField(release, 'properties');
     const definition = propertyDefinition(properties, statement.property);
     if (!definition) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
-    if (statement.qualifiers !== undefined && relationFacetProperty(release, statement.property))
-      reject(
-        appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'),
-        source,
-        'unsupported',
-        'invalid_request',
-      );
     const datatype = dataField(definition, 'datatype');
 
     if ('in' in statement) {

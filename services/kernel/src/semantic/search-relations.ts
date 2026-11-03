@@ -1,6 +1,12 @@
 import { releaseDigest, type Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
-import { facetProperties, relationFacetProperty } from '@rezics/filter';
+import {
+  createFilterConstruction,
+  facetProperties,
+  FilterError,
+  parseFilter,
+  relationFacetProperty,
+} from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -15,6 +21,7 @@ import {
 } from '../search/source.ts';
 import { readRelease } from './definitions.ts';
 import { sourceTuple } from './fences.ts';
+import { holdsCurrentStatements } from '../search/current-leaf.ts';
 import { indexedStatement, inSearchSnapshot } from './search-source.ts';
 import readSubjects from './search-source-subjects.sql';
 import readBatch from './search-selected-batch.sql';
@@ -280,17 +287,29 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         const route = routeOf(probe?.subject);
         if (
           !probe ||
-          Object.keys(probe).some((key) => !['subject', 'property', 'value'].includes(key)) ||
+          Object.keys(probe).some((key) => !['subject', 'property', 'value', 'qualifiers'].includes(key)) ||
           route === null ||
           partitionOf(route) !== partition ||
           typeof probe.property !== 'string' ||
           typeof probe.value !== 'string'
         )
           throw new TypeError('Invalid relation probe');
+        if (probe.qualifiers !== undefined) {
+          // Parse only the extension: historical unqualified source callers retain their grammar.
+          try {
+            parseFilter({ statement: { property: probe.property, in: [probe.value], qualifiers: probe.qualifiers } });
+          } catch (error) {
+            if (error instanceof FilterError) throw new TypeError('Invalid relation probe');
+            throw error;
+          }
+        }
       }
       if (!probes.length) return [];
-      const keyOf = (p: RelationFacetProbe) => JSON.stringify([p.subject, p.property, p.value]);
+      const nativeKey = (p: RelationFacetProbe) => JSON.stringify([p.subject, p.property, p.value]);
+      const keyOf = (p: RelationFacetProbe) => JSON.stringify([nativeKey(p), p.qualifiers ?? []]);
       const unique = [...new Map(probes.map((p) => [keyOf(p), p])).values()];
+      const admitted = new Map<string, RelationFacetProbe[]>();
+      const constructions = new Map<Release, ReturnType<typeof createFilterConstruction>>();
       const results = new Map<string, RelationFacetMatch>();
       const snapshot = await inSearchSnapshot(pool, async (client) => {
         const home = await readPartition(client, partition);
@@ -328,6 +347,32 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             results.set(keyOf(probe), 'not_proven');
             continue;
           }
+          if (probe.qualifiers !== undefined) {
+            try {
+              let construction = constructions.get(release);
+              if (!construction) {
+                construction = createFilterConstruction(release);
+                constructions.set(release, construction);
+              }
+              construction.admitFilter({
+                and: [
+                  { type: { in: [subject.type] } },
+                  { statement: { property: probe.property, in: [probe.value], qualifiers: probe.qualifiers } },
+                ],
+              });
+            } catch (error) {
+              if (!(error instanceof FilterError)) throw error;
+              results.set(keyOf(probe), 'not_proven');
+              continue;
+            }
+          }
+          const key = nativeKey(probe);
+          const alternatives = admitted.get(key);
+          if (alternatives) {
+            alternatives.push(probe);
+            continue;
+          }
+          admitted.set(key, [probe]);
           requests.push({
             route: subject.route,
             subject_id: subject.id,
@@ -380,7 +425,18 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       if (pending) await rebuild.run(pool, { route: pending.route, subject_id: pending.id });
       const disclosedStatements = await disclosed(rows, releases, subjects);
       for (const { subject, statement } of disclosedStatements) {
-        results.set(keyOf({ subject, property: statement.property, value: statement.value }), true);
+        const key = nativeKey({ subject, property: statement.property, value: statement.value });
+        for (const probe of admitted.get(key) ?? []) {
+          if (
+            holdsCurrentStatements([statement], {
+              facet: 'statement',
+              property: probe.property,
+              values: [probe.value],
+              ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
+            })
+          )
+            results.set(keyOf(probe), true);
+        }
       }
       const progress: {
         route: number;
@@ -395,7 +451,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       }[] = [];
       for (const cursor of cursors) {
         const probe = { subject: cursor.subject_id, property: cursor.property, value: cursor.value };
-        if (results.get(keyOf(probe)) === true) continue;
+        if (admitted.get(nativeKey(probe))?.every((entry) => results.get(keyOf(entry)) === true)) continue;
         const consumed = rows.filter(
           (row) =>
             row.subject_id === cursor.subject_id &&
