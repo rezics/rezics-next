@@ -1412,6 +1412,9 @@ declare const productEventTypes: {
     readonly 'com.rezics.content.report.evidence-erased.v1': Type.TObject<{
         reportId: Type.TString;
     }>;
+    readonly 'com.rezics.library.bangumi.changed.v1': Type.TObject<{
+        operation: Type.TString;
+    }>;
     readonly 'com.rezics.library.bulk.confirmed.v1': Type.TObject<{
         operationId: Type.TString;
     }>;

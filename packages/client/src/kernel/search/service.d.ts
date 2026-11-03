@@ -7,7 +7,8 @@ export { validateSearchLimit } from './hits.ts';
 import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
 import { type PublicRatingSource } from './rating-source.ts';
-import type { RealmSubjectSource } from './realm-scope.ts';
+import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
+import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { SubjectSource } from './source.ts';
@@ -56,7 +57,7 @@ type Result = {
 export declare function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
-export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, realmRatings, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, realmRatings, realmSubjectCapabilities, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
@@ -64,6 +65,7 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     ratings?: PublicRatingSource;
     realmSubjects?: RealmSubjectSource;
     realmRatings?: RealmRatingSource;
+    realmSubjectCapabilities?: RealmSubjectCapabilities;
     cursors: KeyRing;
     clock?: KernelClock;
     release?: () => Promise<FilterRelease | null>;

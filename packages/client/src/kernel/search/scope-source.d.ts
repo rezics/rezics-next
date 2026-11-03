@@ -9,7 +9,8 @@ import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf
 import { type ScopeLeafPosition } from './scope-progress.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchHit } from './query.ts';
-import { type RealmSubjectSource } from './realm-scope.ts';
+import { type RealmSubjectCapabilities } from './realm-scope.ts';
+import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import { type RelationFacetMatch, type SubjectSource } from './source.ts';
 import { type ScopeNativeOrder, type ScopeOrderedPrefixRequest, type SearchScopeOrderedPrefix } from './scope-ordered.ts';
 export type { ScopeNativeOrder, ScopeNameSortTuple, ScopeCollectionsSortTuple, ScopeOrderedPrefixRequest, SearchScopeOrderedPrefix, } from './scope-ordered.ts';
@@ -91,7 +92,7 @@ export type SearchScopeEvaluation = {
 /** Native service runtime, immutable admission and factory-local handles. Native producers
  * own structural capture, current authorization and evidence; this module owns execution.
  */
-export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, evidence, realmSubjects, clock, }: {
+export declare function createSearchScopeSource({ pool, client, prefix, source: _source, release, evidence, realmSubjects, realmSubjectCapabilities, clock, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
@@ -99,6 +100,7 @@ export declare function createSearchScopeSource({ pool, client, prefix, source: 
     release?: () => Promise<FilterRelease | null>;
     evidence?: LeafOptions;
     realmSubjects?: RealmSubjectSource;
+    realmSubjectCapabilities?: RealmSubjectCapabilities;
     clock?: KernelClock;
 }): {
     realm: {
