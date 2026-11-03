@@ -85,7 +85,9 @@ test('an exact private read retires across appeal creation and resolution, then 
   const contextObserver = observeSql(fixture.system.database.pool);
   try {
     contextObserver.armFault({
-      match: { statement: postHeaders.sql }, boundary: 'before', error: new CommandUnavailableError('overloaded', 0),
+      match: { statement: postHeaders.sql },
+      boundary: 'before',
+      error: new CommandUnavailableError('overloaded', 0),
     });
     const unavailable = await open();
     expect(unavailable.response.status).toBe(200);
@@ -168,13 +170,21 @@ test('current advice uses the command clock at the inclusive boundary and does n
     const late = await fixture.call('GET', path, { bearer: fixture.author.bearer });
     expect(late.value?.viewer.appeal).toEqual({ state: 'unavailable', reason: 'deadline_passed' });
     expect(late.value?.appeal).toBeNull();
-    expect((await fixture.call('POST', `${path}:appeal`, {
-      bearer: fixture.author.bearer, key: crypto.randomUUID(), body: { statement: 'Too late' },
-    })).response.status).toBe(422);
+    expect(
+      (
+        await fixture.call('POST', `${path}:appeal`, {
+          bearer: fixture.author.bearer,
+          key: crypto.randomUUID(),
+          body: { statement: 'Too late' },
+        })
+      ).response.status,
+    ).toBe(422);
     await fixture.system.clock.setCommandTime(deadline);
     await fixture.command('POST', `${path}:appeal`, { statement: 'At the deadline' });
-    expect((await fixture.call('GET', path, { bearer: fixture.author.bearer })).value?.viewer.appeal)
-      .toEqual({ state: 'unavailable', reason: 'already_appealed' });
+    expect((await fixture.call('GET', path, { bearer: fixture.author.bearer })).value?.viewer.appeal).toEqual({
+      state: 'unavailable',
+      reason: 'already_appealed',
+    });
   } finally {
     await fixture.system.clock.setCommandTime(new Date().toISOString());
   }
@@ -184,21 +194,33 @@ test('independent reversal exposes only current header context and keeps the ori
   const { path, target } = await decide('Current context after reversal');
   const appeal = await fixture.command<{ id: string }>('POST', `${path}:appeal`, { statement: 'Please restore' });
   await fixture.grant(target.postId, ['moderation:takedown'], fixture.other.accountId);
-  await fixture.command('POST', `/v1/moderation-appeals/${appeal.id}:resolve`, {
-    outcome: 'reverse', statement: 'Restore this post',
-  }, { bearer: fixture.other.bearer, expectedStatus: 200 });
+  await fixture.command(
+    'POST',
+    `/v1/moderation-appeals/${appeal.id}:resolve`,
+    {
+      outcome: 'reverse',
+      statement: 'Restore this post',
+    },
+    { bearer: fixture.other.bearer, expectedStatus: 200 },
+  );
   const author = await fixture.call('GET', path, { bearer: fixture.author.bearer });
   expect(author.response.status).toBe(200);
   expect(author.value?.targetContext).toEqual({
-    state: 'available', kind: 'thread', threadId: target.threadId, postId: target.postId,
-    boardId: target.boardId, threadTitle: 'Current context after reversal', boardTitle: expect.any(String),
+    state: 'available',
+    kind: 'thread',
+    threadId: target.threadId,
+    postId: target.postId,
+    boardId: target.boardId,
+    threadTitle: 'Current context after reversal',
+    boardTitle: expect.any(String),
   });
   expect(author.value?.targetId).toBe(target.postId);
   expect(author.value?.statement).toBe('Retained private statement');
   expect(author.value?.targetContext).not.toHaveProperty('body');
   const moderator = await fixture.call('GET', path, { bearer: fixture.moderator.bearer });
   expect(moderator.value?.viewer).toMatchObject({
-    affectedAuthor: false, appeal: { state: 'unavailable', reason: 'not_affected_author' },
+    affectedAuthor: false,
+    appeal: { state: 'unavailable', reason: 'not_affected_author' },
   });
   for (const bearer of [undefined, fixture.system.actors.suspended.bearer]) {
     const denied = await fixture.call('GET', path, { bearer });
@@ -243,9 +265,15 @@ test('failure of the final exact source withholds the retained response and its 
 test('a board decision has no affected author or appeal deadline', async () => {
   const target = await fixture.createRealmTarget('Decision board advice', 'public');
   await fixture.grant(target.boardId, ['moderation:takedown']);
-  await fixture.command('POST', `/v1/boards/${target.boardId}:takeDown`, { reason: 'Board decision' }, {
-    bearer: fixture.moderator.bearer, expectedStatus: 200,
-  });
+  await fixture.command(
+    'POST',
+    `/v1/boards/${target.boardId}:takeDown`,
+    { reason: 'Board decision' },
+    {
+      bearer: fixture.moderator.bearer,
+      expectedStatus: 200,
+    },
+  );
   const { rows } = await fixture.system.database.pool.query<{ decision_id: string }>(
     'SELECT decision_id FROM content.moderation_decision WHERE route=$1 AND target_id=$2',
     [target.boardRoute, target.boardId],
@@ -255,7 +283,10 @@ test('a board decision has no affected author or appeal deadline', async () => {
   const result = await fixture.call('GET', path, { bearer: fixture.moderator.bearer });
   expect(result.response.status).toBe(200);
   expect(result.value).toMatchObject({
-    targetKind: 'board', targetId: target.boardId, appealDeadline: null, appeal: null,
+    targetKind: 'board',
+    targetId: target.boardId,
+    appealDeadline: null,
+    appeal: null,
     viewer: { affectedAuthor: false, appeal: { state: 'unsupported', reason: 'board' } },
   });
   expect((await fixture.call('GET', path, { bearer: fixture.author.bearer })).response.status).toBe(404);
@@ -264,9 +295,15 @@ test('a board decision has no affected author or appeal deadline', async () => {
 test('suspending the independent author during selection retires disclosure and session provenance', async () => {
   const { path } = await decide('Revoked native author session');
   await changeDuringRead(path, fixture.author.bearer, () =>
-    fixture.command('POST', `/v1/accounts/${fixture.author.accountId}:suspend`, { reason: 'Revoke current admission' }, {
-      bearer: fixture.governance.bearer, expectedStatus: 200,
-    }),
+    fixture.command(
+      'POST',
+      `/v1/accounts/${fixture.author.accountId}:suspend`,
+      { reason: 'Revoke current admission' },
+      {
+        bearer: fixture.governance.bearer,
+        expectedStatus: 200,
+      },
+    ),
   );
   expect((await fixture.call('GET', path, { bearer: fixture.moderator.bearer })).response.status).toBe(200);
 }, 120_000);

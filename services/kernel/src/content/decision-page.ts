@@ -69,7 +69,10 @@ export const DecisionPageSchema = t.Object(
 
 type Advice =
   | { state: 'permitted' }
-  | { state: 'unavailable'; reason: 'not_affected_author' | 'already_appealed' | 'deadline_passed' | 'command_unavailable' }
+  | {
+      state: 'unavailable';
+      reason: 'not_affected_author' | 'already_appealed' | 'deadline_passed' | 'command_unavailable';
+    }
   | { state: 'unsupported'; reason: 'board' };
 type TargetContext =
   | ({ state: 'available'; kind: 'board' } & NoticeBoardContext)
@@ -86,7 +89,10 @@ function dependencyFailure(error: unknown) {
 async function identityWitness(deps: ContentReadDependencies, actor: Actor, deadline: number) {
   if (actor.kind !== 'account') return null;
   const assignment = await readAssignment(
-    deadlineClient(deps.pool, deadline), actor.requestedBy, actor.accountId, deps.clock ?? accessClock(deps.access),
+    deadlineClient(deps.pool, deadline),
+    actor.requestedBy,
+    actor.accountId,
+    deps.clock ?? accessClock(deps.access),
   );
   if (assignment.kind === 'unresolved') return null;
   const ids = [...new Set([actor.accountId, ...(assignment.kind === 'resolved' ? [assignment.principalId] : [])])];
@@ -139,7 +145,10 @@ export async function readDecisionPage(
         const value = contexts.get(`${ref.threadId}/${ref.postId ?? ''}`);
         return value ? { state: 'available', kind: 'thread', ...value } : { state: 'concealed' };
       } catch (error) {
-        if (!dependencyFailure(error) && !(error instanceof RangeError && error.message === 'Invalid read decision actions'))
+        if (
+          !dependencyFailure(error) &&
+          !(error instanceof RangeError && error.message === 'Invalid read decision actions')
+        )
           throw error;
         return { state: 'unavailable' };
       }
@@ -164,23 +173,25 @@ export async function readDecisionPage(
     return {
       async observe() {
         const currentContext = await readContext();
-        targetContext = JSON.stringify(initialContext) === JSON.stringify(currentContext)
-          ? currentContext
-          : { state: 'unavailable' };
+        targetContext =
+          JSON.stringify(initialContext) === JSON.stringify(currentContext) ? currentContext : { state: 'unavailable' };
         // Reuse the actual request authenticator, including native session floors,
         // assignment/client constraints and bearer expiry. Never reconstruct Actor.
         let currentActor: Actor;
         try {
           currentActor = await actorOf(deps.access, request, { pool: deps.pool, deadline: context.deadline });
         } catch (error) {
-          if (error instanceof AuthenticationError || (error instanceof ProblemError && error.code === 'account_suspended'))
+          if (
+            error instanceof AuthenticationError ||
+            (error instanceof ProblemError && error.code === 'account_suspended')
+          )
             return false;
           throw error;
         }
         if (JSON.stringify(currentActor) !== JSON.stringify(actor)) return false;
         if (currentActor.kind !== 'account') return false;
         observedActor = currentActor;
-        return identity !== null && identity === await identityWitness(deps, actor, context.deadline);
+        return identity !== null && identity === (await identityWitness(deps, actor, context.deadline));
       },
       async value(client, finalSource) {
         try {
@@ -200,7 +211,7 @@ export async function readDecisionPage(
         else {
           let allowed = false;
           try {
-            allowed = !!selfCheck && await selfCheck(client);
+            allowed = !!selfCheck && (await selfCheck(client));
           } catch (error) {
             if (!dependencyFailure(error)) throw error;
           }
