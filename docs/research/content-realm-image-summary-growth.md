@@ -42,7 +42,9 @@ preserves the existing optional schema and excludes original URLs, storage keys,
 `assertGrowthAccessPaths` classifier. Each sweep uses 256, 1024 and 4096, one warmup and three measured repetitions.
 The first grows unrelated same-home Spaces, Realms, native-shaped media and derivative rows. The second holds that
 population at 4096 and grows an independent retained Realm revision chain, disjoint expired grants/bans and erased
-media with derivatives. Only pressure rows use bulk SQL; they never change selected claims, publication or authority.
+media with derivatives. It also appends selected Realm revisions through the ordinary native settings HTTP command,
+retaining the same selected assets. Only unrelated pressure rows use bulk SQL; they never change selected claims,
+publication or authority.
 The unrelated history head advances to its retained chain tip. Selected home/partition, neighbourhood, identities,
 bytes, variant facts and input/page limits remain fixed. No planner, TTL or production budget is altered.
 

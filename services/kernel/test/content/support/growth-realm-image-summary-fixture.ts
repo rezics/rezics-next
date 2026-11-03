@@ -155,6 +155,7 @@ export async function realmImageSummaryFixture() {
         const historyHead = newId(route);
         let previous: string | null = null;
         let last = historyHead;
+        let selectedHead: string = published.value.realm.headRevisionId;
         return {
           name: `realm-image-summary-${axis}`, hotPartition: partition, hotShare: 1,
           rows({ ordinal }) {
@@ -194,11 +195,22 @@ export async function realmImageSummaryFixture() {
             last = revision;
             return rows;
           },
-          async finish(admin) {
-            if (axis === 'history') await admin.query(
-              'UPDATE community.realm SET head_revision_id=$3 WHERE route=$1 AND realm_id=$2',
-              [route, historyRealm, last],
-            );
+          async finish(admin, range) {
+            if (axis !== 'history') return;
+            await admin.query('UPDATE community.realm SET head_revision_id=$3 WHERE route=$1 AND realm_id=$2',
+              [route, historyRealm, last]);
+            // Selected immutable history must come from its ordinary settings writer.
+            // Only unrelated pressure is bulk SQL; selected publication and claims stay native.
+            for (let ordinal = range.from; ordinal < range.to; ordinal++) {
+              const changed = await native.checked('PATCH', `/v1/realms/${realmId}`, {
+                summary: `Retained image history ${String(ordinal).padStart(4, '0')}`,
+              }, 200, { headers: { 'if-match': JSON.stringify(selectedHead) } });
+              selectedHead = changed.realm.headRevisionId;
+            }
+            const current = await native.readRealm(realmId, governor.bearer);
+            expect(current.value.realm.presentation).toMatchObject({
+              avatarMediaId: selected.avatarMediaId, bannerMediaId: selected.bannerMediaId,
+            });
           },
         };
       },
