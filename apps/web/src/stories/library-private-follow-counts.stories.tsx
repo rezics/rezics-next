@@ -76,9 +76,7 @@ export const Loading: Story = {
   render: () => <CountsStory mode="loading" />,
   play: async ({ canvasElement }) => {
     await pageReady({ canvasElement });
-    await expect(await within(canvasElement).findByRole('status')).toHaveTextContent(
-      m.library_follow_counts_loading(),
-    );
+    await expect(await within(canvasElement).findByRole('status')).toHaveTextContent(m.library_follow_counts_loading());
   },
 };
 export const InvalidContext: Story = {
