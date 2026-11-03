@@ -28,14 +28,16 @@ import type { RealmParticipationReadDecision } from '../community/participation.
 export type BoardOpeningSort = 'new' | 'active' | 'hot';
 export type BoardOpeningInput = Readonly<{ cursor?: string; sort?: BoardOpeningSort }>;
 export type BoardAdvice = 'allowed' | 'denied' | 'sign-in' | 'unavailable';
-export type BoardOpeningAuthor = Readonly<{
-  state: 'available';
-  id: string;
-  kind: 'actor' | 'organization';
-  handle: string | null;
-  displayName: string | null;
-  automated: boolean;
-}> | Readonly<{ state: 'unavailable' }>;
+export type BoardOpeningAuthor =
+  | Readonly<{
+      state: 'available';
+      id: string;
+      kind: 'actor' | 'organization';
+      handle: string | null;
+      displayName: string | null;
+      automated: boolean;
+    }>
+  | Readonly<{ state: 'unavailable' }>;
 export type BoardOpeningMedia = Readonly<
   | { state: 'none'; images: readonly [] }
   | { state: 'available'; images: readonly DocumentImagePresentation[] }
@@ -51,9 +53,7 @@ export type BoardOpeningCard = Readonly<{
     counts:
       | Readonly<{ state: 'as-of'; values: Readonly<Partial<Record<string, number>>>; source: ReactionCountFreshness }>
       | Readonly<{ state: 'unavailable' }>;
-    viewer:
-      | Readonly<{ state: 'current'; reaction: string | null }>
-      | Readonly<{ state: 'not-applicable' }>;
+    viewer: Readonly<{ state: 'current'; reaction: string | null }> | Readonly<{ state: 'not-applicable' }>;
   }>;
   comments: Readonly<{ state: 'unavailable' }>;
   actions: Readonly<{ reply: BoardAdvice; react: BoardAdvice; share: 'available' }>;
@@ -70,7 +70,8 @@ export type BoardOpeningPage = Readonly<{
   anchors: readonly AnchoredPosition[];
 }>;
 
-type BoardOpeningDependencies = ContentBoardDependencies & Pick<ContentCommandDependencies, 'realmParticipation' | 'routeKey'>;
+type BoardOpeningDependencies = ContentBoardDependencies &
+  Pick<ContentCommandDependencies, 'realmParticipation' | 'routeKey'>;
 type ActiveIdentity = Extract<PublicIdentity, { state: 'active' }>;
 
 export class BoardOpeningChangedError extends Error {
@@ -111,7 +112,9 @@ async function readAuthors(
     withConnection(dependencies.pool, (client) => readPublicIdentities(client, routes as number[], ids)),
   );
   const found = new Map<string, ActiveIdentity>(
-    identities.filter((identity): identity is ActiveIdentity => identity.state === 'active').map((identity) => [identity.id, identity]),
+    identities
+      .filter((identity): identity is ActiveIdentity => identity.state === 'active')
+      .map((identity) => [identity.id, identity]),
   );
   return new Map(
     ids.map((id) => {
@@ -187,7 +190,10 @@ function advice(actor: Actor, participation: BoardAdvice, allowed: boolean): Boa
   return allowed ? 'allowed' : 'denied';
 }
 
-function imageProjection(thread: ThreadView, images: ReadonlyMap<string, DocumentImagePresentation>): BoardOpeningMedia {
+function imageProjection(
+  thread: ThreadView,
+  images: ReadonlyMap<string, DocumentImagePresentation>,
+): BoardOpeningMedia {
   const post = availablePost(thread);
   if (!post || post.mediaIds.length === 0) return { state: 'none', images: [] };
   const selected = post.mediaIds.map((id) => images.get(id));
@@ -203,10 +209,7 @@ function assertSamePage(
 ): void {
   if (!currentBoard || !isDeepStrictEqual(board, currentBoard)) throw new BoardOpeningChangedError();
   if (
-    !isDeepStrictEqual(
-      first.pinnedThreads,
-      current.pinnedThreads,
-    ) ||
+    !isDeepStrictEqual(first.pinnedThreads, current.pinnedThreads) ||
     !isDeepStrictEqual(first.entries, current.entries) ||
     (first.nextCursor === null) !== (current.nextCursor === null) ||
     first.rankRefreshedAt !== current.rankRefreshedAt
@@ -290,10 +293,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
         media: imageProjection(thread, currentImages),
         interaction: {
           target: { kind: 'thread', id: thread.id },
-          counts:
-            source && aggregate
-              ? { state: 'as-of', values: aggregate, source }
-              : { state: 'unavailable' },
+          counts: source && aggregate ? { state: 'as-of', values: aggregate, source } : { state: 'unavailable' },
           viewer:
             context.actor.kind === 'account' && interactionReady
               ? { state: 'current', reaction: viewerThread?.viewerReaction ?? null }
@@ -325,11 +325,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
       reactionsAsOf: counted.reactionsAsOf,
       viewer: { participation: participation.status },
       actions: {
-        createThread: advice(
-          context.actor,
-          participation.status,
-          actionEvidence.createThread,
-        ),
+        createThread: advice(context.actor, participation.status, actionEvidence.createThread),
       },
       anchors: [
         selectedBoard.anchor,

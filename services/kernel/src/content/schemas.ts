@@ -448,10 +448,7 @@ const boardOpeningCounts = t.Union([
         },
         closed,
       ),
-      source: t.Object(
-        { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
-        closed,
-      ),
+      source: t.Object({ epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) }, closed),
     },
     closed,
   ),
@@ -459,7 +456,10 @@ const boardOpeningCounts = t.Union([
 ]);
 const boardOpeningMedia = t.Union([
   t.Object({ state: t.Literal('none'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
-  t.Object({ state: t.Literal('available'), images: t.Array(RealmPresentationImageSchema, { minItems: 1, maxItems: 32 }) }, closed),
+  t.Object(
+    { state: t.Literal('available'), images: t.Array(RealmPresentationImageSchema, { minItems: 1, maxItems: 32 }) },
+    closed,
+  ),
   t.Object({ state: t.Literal('unavailable'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
 ]);
 export const BoardOpeningCardSchema = t.Object(

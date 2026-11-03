@@ -1236,7 +1236,11 @@ export async function readBoardPageActionEvidence(
     const parent = await decideBoardAndRealms(client, decisions, context.actor, [board], realms);
     if (!parent.boards.get(boardId) || (board.realm_id && !parent.realms.get(board.realm_id))) return null;
 
-    const threads = await batchRows(client, 'thread', unique.map((id) => batchKey(id)));
+    const threads = await batchRows(
+      client,
+      'thread',
+      unique.map((id) => batchKey(id)),
+    );
     const current = new Map(
       threads.map((row) => [
         row.id,
@@ -1271,10 +1275,7 @@ export async function readBoardPageActionEvidence(
     return {
       createThread: boardCreate[boardId]?.allowed === true,
       threads: new Map(
-        unique.map((id) => [
-          id,
-          { reply: reply[id]?.allowed === true, react: react[id]?.allowed === true },
-        ]),
+        unique.map((id) => [id, { reply: reply[id]?.allowed === true, react: react[id]?.allowed === true }]),
       ),
     };
   });

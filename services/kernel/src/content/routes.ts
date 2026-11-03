@@ -5,11 +5,7 @@ import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listOwnDrafts, resumeOwnDraft } from './own-drafts.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
-import {
-  BoardOpeningChangedError,
-  createBoardPageReader,
-  type BoardOpeningPage,
-} from './board-page.ts';
+import { BoardOpeningChangedError, createBoardPageReader, type BoardOpeningPage } from './board-page.ts';
 import { BoardPinLimitError, setBoardThreadPin } from './board-pin.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
 import { listSubjectThreads } from './subject-threads.ts';
