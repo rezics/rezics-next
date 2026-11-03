@@ -1,9 +1,10 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ComponentProps } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
 import type { FeedReaction } from '../src/features/feed/vote-control';
+import type { ReactionSnapshot } from '../src/threads/reaction-request';
 
 const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
 const window = new Window({ url: 'https://site.test/en/' });
@@ -25,6 +26,7 @@ const { createRoot } = await import('react-dom/client');
 const { HomeFeed } = await import('../src/features/pages/home-feed');
 const { homeReactionAdmission } = await import('../src/features/feed/home-reaction-admission');
 const { m } = await import('../src/paraglide/messages.js');
+const nativeFetch = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected native request'));
 const id = '00000000-0000-7000-8000-000000000001';
 function row(index = 0): FeedItem {
   return {
@@ -71,24 +73,42 @@ beforeEach(() => {
   client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
   props = { result: { state: 'ready', page: page() }, locale: 'en', signedIn: true, preparedReactionTransport: transport };
-  writes.length = 0; reads = 0; value = null; failure = undefined;
+  writes.length = 0; reads = 0; value = null; failure = undefined; nativeFetch.mockClear();
   root = createRoot(host);
 });
 afterEach(async () => { await act(async () => root.unmount()); client.clear(); });
 afterAll(async () => {
-  mock.restore(); await window.happyDOM.close();
+  nativeFetch.mockRestore(); mock.restore(); await window.happyDOM.close();
   for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }
 });
 
 test.each([1, 10, 20])('%i duplicate targets and mixed unsupported rows do not read reactions on mount', async count => {
   const native = page(count);
-  native.feedItems = native.feedItems.map((item, index) => index % 3 ? item : {
+  native.feedItems = native.feedItems.map((item, index) => index % 3 !== 2 ? item : {
     id: item.id, source: 'following', occurredAt: null, key: { owner: 'library', kind: 'collection', route: 0, id },
     summary: { id, title: 'Collection', description: null }, destination: { kind: 'collection', id, title: 'Collection' },
   });
   await paint({ result: { state: 'ready', page: native } });
   expect(host.querySelectorAll('[data-feed-id]')).toHaveLength(count);
+  expect(host.querySelectorAll('[data-slot="vote-control"]')).toHaveLength(count - Math.floor(count / 3));
+  expect(nativeFetch).not.toHaveBeenCalled();
   expect(reads).toBe(0); expect(writes).toHaveLength(0);
+});
+
+test('post and reply targets require their supplied post and thread destination relationship', () => {
+  const item: FeedItem = {
+    id: 'reply', source: 'following', occurredAt: null,
+    key: { owner: 'content', kind: 'post', route: 0, id },
+    summary: { id: 'other-summary-id', threadId: 'parent', title: 'Reply', createdAt: '2026-11-04T00:00:00Z',
+      reactionTarget: { targetKind: 'post', targetId: id }, reactions: {}, viewerReaction: null },
+    destination: { kind: 'post', id, postId: id, threadId: 'parent', title: 'Reply' },
+  };
+  expect(homeReactionAdmission(item, true)?.target).toEqual({ kind: 'post', id });
+  item.destination.threadId = 'different-parent';
+  expect(homeReactionAdmission(item, true)).toBeUndefined();
+  item.destination.threadId = 'parent';
+  item.summary.reactionTarget = { targetKind: 'post', targetId: 'different-target' };
+  expect(homeReactionAdmission(item, true)).toBeUndefined();
 });
 
 test('known empty, unavailable, anonymous omission and signed-in null stay distinct', async () => {
@@ -139,4 +159,19 @@ test('request, source watermark and equal session replacement retire old private
   await click(buttons()[0]!);
   await act(async () => { client.setQueryData(['session'], { state: 'signed-in', subject: 'reader', csrfToken: 'csrf' }); });
   expect(pressed()).toHaveLength(0); expect(host.querySelector('[data-slot="vote-unavailable"]')).not.toBeNull();
+});
+
+test('a retired point read cannot restore old private state into a replacement page', async () => {
+  let resolve!: (snapshot: ReactionSnapshot) => void;
+  const readback = new Promise<ReactionSnapshot>(done => { resolve = done; });
+  await paint({ preparedReactionTransport: { ...transport, read: async () => { reads++; return readback; } } });
+  await click(buttons()[0]!);
+  const replacement = page();
+  const item = replacement.feedItems[0]!;
+  if ('viewerReaction' in item.summary) item.summary.viewerReaction = 'downvote';
+  await paint({ result: { state: 'ready', page: replacement } });
+  await act(async () => { resolve({ ok: true, counts: { upvote: 999 }, value: 'upvote' }); });
+  expect(pressed()).toHaveLength(1);
+  expect(pressed()[0]?.getAttribute('aria-label')).toContain(m.reaction_downvote());
+  expect(host.textContent).not.toContain('999');
 });
