@@ -23,6 +23,7 @@ import { CatalogueCurrentReading } from './editor-lifetime';
 import type { CreateResult } from './create-subject';
 import { CharacterProfileCreate } from './character-profile-create';
 import { CharacterClassifications } from './character-profile-classification';
+import { CharacterRelationshipsEntry } from './character-relationships/entry';
 import { DefinitionMeaning } from './definition-meaning';
 import {
   characterFacts,
@@ -450,6 +451,16 @@ function CharacterProfileLive({
                   </AuthoringDepartureBoundary>
                 </CatalogueCurrentReading>
               </div>
+              <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+                <h2 className="text-xl font-semibold">{m.character_relationships_title({}, o)}</h2>
+                <p>{m.character_relationships_profile_intro({}, o)}</p>
+                <CharacterRelationshipsEntry
+                  id={character.subject.id}
+                  label={label.text}
+                  locale={locale}
+                  {...(work ? { work } : {})}
+                />
+              </section>
             </>
           )}
           <AuthoringDepartureBoundary>

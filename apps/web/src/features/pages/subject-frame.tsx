@@ -11,6 +11,7 @@ import { WorkPartsEntry } from '../catalogue/work-parts-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
+import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
 import { isScreenType } from '../catalogue/screen-profile';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
@@ -322,7 +323,12 @@ export function SubjectFrame({
               {frame.type === 'wd:Q2620972' && (
                 <StoryArcProfileEntry id={frame.id} label={title} locale={locale} realm={realm} />
               )}
-              {frame.type === 'wd:Q95074' && <CharacterProfileEntry id={frame.id} label={title} locale={locale} />}
+              {frame.type === 'wd:Q95074' && (
+                <>
+                  <CharacterProfileEntry id={frame.id} label={title} locale={locale} />
+                  <CharacterRelationshipsEntry id={frame.id} label={title} locale={locale} />
+                </>
+              )}
               {(view === 'characters' || view === 'credits') && frame.type !== 'wd:Q95074' && (
                 <CharacterProfileEntry work={frame.id} locale={locale} />
               )}

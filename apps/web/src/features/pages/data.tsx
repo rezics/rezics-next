@@ -31,7 +31,7 @@ import * as accounts from './account';
 import { accountOf } from './account-read';
 import * as overview from './overview';
 import { SubjectPageCover } from './subject-page-cover';
-import { SubjectPurchaseSlot } from './subject-slots';
+import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import {
@@ -437,7 +437,17 @@ function subjectHeader(read: SubjectRead, creators: Creator[], date: string | nu
         )}
       </div>
       {options.subject === subject.id && (
-        <SubjectPurchaseSlot context={{ subjectId: subject.id, subjectType: subject.type, locale: options.locale }} />
+        <>
+          <SubjectPurchaseSlot context={{ subjectId: subject.id, subjectType: subject.type, locale: options.locale }} />
+          <CharacterRelationshipsSlot
+            context={{
+              subjectId: subject.id,
+              subjectType: subject.type,
+              locale: options.locale,
+              label: title,
+            }}
+          />
+        </>
       )}
     </div>
   );

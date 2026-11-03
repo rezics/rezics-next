@@ -4,6 +4,9 @@ import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
+import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
+import { CharacterRelationshipsGroups } from './character-relationships';
+import type { CharacterRelationshipsRead } from '../catalogue/character-relationships/reading';
 
 /** Only fields from the successful public subject read; no Library state or private commerce DTO. */
 export type SubjectPurchaseContext = Readonly<{ subjectId: string; subjectType: string; locale: string }>;
@@ -77,5 +80,33 @@ export function OrganizationHistorySlot({
         {entry.label}
       </a>
     </section>
+  );
+}
+
+const characterType = 'wd:Q95074';
+
+export type CharacterRelationshipsSlotContext = Readonly<{
+  subjectId: string;
+  subjectType: string;
+  locale: string;
+  label: string;
+  reading?: Extract<CharacterRelationshipsRead, { ok: true }>;
+}>;
+
+/** Discoverable Character appearance/relationship entry; optional grouped reading when the owner already loaded it. */
+export function CharacterRelationshipsSlot({ context }: { context: CharacterRelationshipsSlotContext }) {
+  if (context.subjectType !== characterType) return null;
+  return (
+    <div data-slot="character-relationships-entry" className="min-w-0 space-y-3">
+      <CharacterRelationshipsEntry id={context.subjectId} label={context.label} locale={context.locale} />
+      {context.reading && (
+        <CharacterRelationshipsGroups
+          id={context.subjectId}
+          locale={context.locale}
+          read={context.reading}
+          streamId={`${context.subjectId}-appearances`}
+        />
+      )}
+    </div>
   );
 }

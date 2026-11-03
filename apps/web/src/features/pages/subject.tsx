@@ -8,6 +8,7 @@ import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
+import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
 import { isScreenType } from '../catalogue/screen-profile';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
@@ -560,7 +561,14 @@ export function SubjectPage({
             />
           )}
           {read.subject.type === 'wd:Q95074' && (
-            <CharacterProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+            <>
+              <CharacterProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
+              <CharacterRelationshipsEntry
+                id={read.subject.id}
+                label={subjectPageTitle(page, locale)}
+                locale={locale}
+              />
+            </>
           )}
           {page.views?.includes('characters') && read.subject.type !== 'wd:Q95074' && (
             <CharacterProfileEntry work={read.subject.id} locale={locale} />

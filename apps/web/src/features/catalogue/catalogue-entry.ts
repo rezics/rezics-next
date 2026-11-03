@@ -112,6 +112,16 @@ export const catalogueEntries = {
       ? `${subject({ id, label: label ?? '', locale })}/character`
       : `/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`,
   }),
+  characterRelationships: ({
+    id,
+    label,
+    locale,
+    work,
+  }: Locale & { id: string; label: string; work?: string | undefined }): CatalogueEntry => ({
+    group: 'read',
+    label: m.character_relationships_title({}, options(locale)),
+    href: `${subject({ id, label, locale })}/character-relationships${work ? `?work=${encodeURIComponent(work)}` : ''}`,
+  }),
   changes: ({ id, title, locale }: Locale & { id: string; title: string }): CatalogueEntry => ({
     group: 'read',
     label: m.changes_title({}, options(locale)),

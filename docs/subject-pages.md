@@ -1012,6 +1012,36 @@ Relation reveal consent follows the statement occurrence, delivered content, pag
 Custom relation types from a selected Context appear in their own group under their own label, after the bundled
 groups, and are labelled with the Context they come from.
 
+## Character appearances and relationships
+
+A Character page distinguishes appearing in a work from a directed character-to-character relationship. Appearances
+are the inverse of admitted `schema:character` statements on works. Role, credited name, spoiler level, part and any
+admitted appearance-specific quantity (including age at that appearance) stay on that exact work statement. They never
+overwrite the character's timeless biography, traits or measurements, and they never imply another character identity.
+Voice credits (`wdt:P725` with the character qualifier) remain an independent stream.
+
+Relationships are admitted association or world item properties whose targets include the character Type, read forward
+and inverse from the current release. Direction uses the property's labels and inverse labels. No relationship type,
+privacy inference or automatic merge is invented on the page. Classification ballots and source figures stay with their
+existing owner.
+
+The dedicated appearances-and-relationships reading is a finite native page with an explicit continuation. Unavailable
+configuration (age-at-appearance, main-character linkage, character-to-character properties the current release does
+not admit) is named on the page. An independently unreadable stream keeps the character identity and the other groups.
+A vanished endpoint keeps its count semantics and drops the unreadable summary rather than substituting another
+subject. Type descriptors for holders on the current page are read at most four at a time, deduplicated within that
+page, and not retained between calls.
+
+Correction opens the existing qualified relation editor with the selected statement, slot and holder, then returns to
+the same character, stream, cursor and selected work. Candidate review and Changes remain their existing surfaces.
+Changing the character, the selected work, the release or refusing the current reading retires previous rows and
+action authority before recovery. The Character identity editor keeps its existing groups; this reading does not fork
+the descriptor producer or the generic relation editor.
+
+Decision: appearance-specific age, role and main marks stay on the work's appearance statement; VNDB age-at-appearance
+and main-character linkage and Bangumi direct character-to-character types remain named unavailable until the current
+release admits them.
+
 ## Scores on pages
 
 A score is never shown without its population, question, scale and count. The installed public headline is the
