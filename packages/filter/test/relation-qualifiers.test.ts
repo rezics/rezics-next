@@ -93,6 +93,7 @@ test('qualified relations retain nested/saved meaning and declaration/type ancho
     'unsupported_query',
   );
   refuses({ saved: 'books/qualified' }, release, '/saved', 'unsupported_query');
+  refuses({ and: [book, { saved: 'books/qualified' }] }, release, '/and/1/saved', 'unsupported_query');
   refuses(
     { and: [{ type: { in: ['schema:Recipe'] } }, qualified] },
     release,
