@@ -348,8 +348,11 @@ private no-store responses and retirement.
 Decision: use only the installed revisions/next response until Content publishes generated current-context
 and historical-enrichment variants. Current names are presentation, never immutable authorship; current votes
 cannot supply an absent recorded citation or denominator. The existing exact reader retains authorization and
-media inspection. Native context, historical scales and original/terminal target disclosure, one-page retention,
-comparison return and connected current-context stories remain integration gaps, not inferred capabilities.
+media inspection. Native context, historical scales and original/terminal target disclosure, comparison return and connected
+current-context stories remain integration gaps, not inferred capabilities.
+
+Decision: requesting a new cursor retires the previous page immediately; failed and denied pages retry that
+exact cursor, while account/provenance replacement starts a new visit.
 
 Post history uses a compact ordered list around the existing HistoryDisclosure and
 [history lifetime](post-history-lifetime.md#loaded-revision-inspection). Each summary contains only admitted
@@ -367,8 +370,10 @@ honest explanation. The review citation and the author's differing current vote 
 
 Summary projection is O(N) small metadata records for N supplied revisions. Generated author/licence text fits
 within 240 code points; documents are neither flattened nor duplicated. Inspection state is constant in N.
-The original disclosure owns page reads, authors/mentions/media, exact failed-cursor retry and continuation
-focus. The presentation is keyed by its connection and retires with the session, account, read authority,
+The original disclosure owns one replacing page, authors/mentions/media, exact failed-cursor retry and
+continuation focus. Starting a cursor request synchronously clears the former rows, labels, media and selection;
+a failed request keeps only its exact address. Author and mention keys share at most two deduplicated public
+identity batches, and the selected inspector shows the immutable revision and author account references. The presentation is keyed by its connection and retires with the session, account, read authority,
 QueryClient, route and locale. Returning through an A–B–A identity change cannot restore old disclosure.
 
 Exact-address actions keep every canonical post/revision link. Opening a new tab leaves the original position

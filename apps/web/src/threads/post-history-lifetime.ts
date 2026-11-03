@@ -28,6 +28,9 @@ export function historySessionReady(source: HistoricalReaderSource | undefined, 
 }
 
 export type HistoryView = {
+  /** A request replaces the entire page, including its local interactions. */
+  pageGeneration: number;
+  cursor: string | undefined;
   open: boolean;
   loading: boolean;
   loaded: boolean;
@@ -49,6 +52,8 @@ export type HistoryView = {
 
 function emptyHistory(): HistoryView {
   return {
+    pageGeneration: 0,
+    cursor: undefined,
     open: false,
     loading: false,
     loaded: false,
@@ -150,15 +155,55 @@ export class PostHistoryLifetime {
       read,
       expectedSubject,
     );
-    return (this.pending = {
+    const request = (this.pending = {
       connection: ticket,
       read,
       ...(cursor !== undefined ? { cursor } : {}),
       binding,
     });
+    // Retire the previous cursor synchronously, before the queued transport can run.
+    // Keep the action's position and failure address for explicit retry, never its rows or joins.
+    this.view = {
+      ...emptyHistory(),
+      pageGeneration: read,
+      cursor,
+      open: this.view.open,
+      loading: true,
+      loaded: this.view.loaded,
+      available: this.view.available,
+      failedCursor: this.view.failedCursor,
+      next: cursor ?? null,
+    };
+    this.notify();
+    return request;
   }
 
   owns = (request: HistoryRequest) => this.ownsConnection(request.connection) && this.pending === request;
+
+  ownsPage = (ticket: number, generation: number) =>
+    this.ownsConnection(ticket) && this.view.pageGeneration === generation;
+
+  /** Replace one admitted native envelope; no page data is merged with another cursor. */
+  acceptPage(request: HistoryRequest, page: HistoryPage) {
+    if (!this.owns(request)) return;
+    this.update(request.connection, (view) => ({
+      ...view,
+      revisions: page.revisions.map((revision) => ({
+        revision,
+        documentMedia: page.documentMedia,
+        summaryAuthor: page.authors?.[revision.authorId],
+      })),
+      authors: page.authors,
+      mentions: page.mentions,
+      subjects: page.subjects,
+      reviewVotes: page.reviewVotes,
+      next: page.next,
+      now: page.now,
+      loaded: true,
+      available: true,
+      failedCursor: undefined,
+    }));
+  }
 
   acceptReader(request: HistoryRequest, actualReader: HistoricalActualReader) {
     if (!this.owns(request) || !historicalActualMatches(request.binding, actualReader)) return false;
@@ -186,12 +231,12 @@ export class PostHistoryLifetime {
     this.notify();
   }
 
-  /** A failed transport has no new authority over the already admitted window. */
+  /** A failed page retains only its exact retry address, never a previous cursor's disclosure. */
   failPage(request: HistoryRequest) {
     if (!this.owns(request)) return;
     this.update(request.connection, (view) => ({
       ...view,
-      available: view.available && view.loaded && request.cursor !== undefined,
+      available: false,
       loaded: true,
       failedCursor: request.cursor,
     }));

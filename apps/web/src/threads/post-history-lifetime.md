@@ -15,23 +15,36 @@ The installed `RevisionPageResponseSchema` and generated revisions GET still con
 They supply no admitted conversation/head context, author disclosure variant, historical question scale,
 original/terminal Subject proof, per-revision enrichment source or navigation advice. Existing optional joins
 and exact-reader media inspection remain in use. Their availability cannot establish those missing facts.
-This seam is a partial implementation: the current-context visit, removal of redundant joins, one-page
-replacement and comparison return still require the native publication and consumer continuation.
+This seam is a partial implementation: native current-context and historical-enrichment presentation and
+comparison return require the native publication and consumer continuation. One-page retention and shared
+author/mention hydration work against the installed contract without manufacturing native context.
 
 ### Cost
 
-- **Touches:** one revisions GET at default 20 with the prepared credential and exact opaque cursor. Admission
-  scans N revision identities once before the existing bounded optional page helpers. No current-head read,
-  cursor decoding, history walk or automatic retry supplies missing context.
-- **Bound:** the schema admits at most 100 revisions, 128 Subject keys and 32 media keys per revision. Native
-  document validation caps canonical bytes at 2 MiB per document: at most 40 MiB for 20 bodies and 200 MiB for
-  100, before metadata and transport serialization. UTF-8 canonical bytes already include multibyte text;
-  server-function escaping, parsed-object memory and the unpublished context/enrichment need separate bounds.
-  The existing disclosure still accumulates explicit pages; this loader does not claim bounded retained memory.
-- **Growth check:** supplied-client regressions consume 1/20/100 revisions with repeated maximum Subject/media
-  keys, preserve historical zero and native order, and reject cross-address/duplicate/oversized pages before
-  hydration. These checks do not establish producer scans, represented homes, currentness or native growth at
-  256/1024/4096. Full envelope bytes, O(N+K) enrichment projection and one retained page remain required.
+- **Touches:** one revisions GET at default 20, maximum 100, with the prepared credential and exact opaque
+  cursor. Admission scans N revision identities before dependent reads. A single author/mention index admits
+  at most 100 author keys and the first 100 distinct nested mention keys. Their union uses at most two public
+  batches of 100; overlapping identities are never hydrated twice. Existing optional joins retain at most four
+  Subject reads, one independent presentation batch of at most 32 referenced media keys, and at most N distinct
+  author-private Subject/question vote reads. None supplies historical scales or current-context authority.
+- **Bound:** each revision admits 128 Subject and 32 declared media keys. At maximum100 that is 12,800 and
+  3,200 keys, respectively (576,000 raw ASCII bytes for UUIDs, excluding JSON punctuation). Native canonical
+  document bytes are capped at 2 MiB each: 40 MiB at20 and 200 MiB at100, before row metadata. Those UTF-8
+  caps already account for multibyte text. The prepared cursor input admits 4,096 UTF-16 code units: at most
+  12 KiB raw UTF-8 or 24 KiB of JSON-escaped contents, before string delimiters and additional serialization.
+  Escaping an additional string layer can expand affected control characters to six ASCII bytes per code unit;
+  canonical document size is therefore not a complete server-function wire bound. No installed context cap or
+  aggregate wire/parsed-object byte cap is published; presentation placeholder strings also lack a size cap.
+- **Retained memory:** one parsed native page and its optional joins, one O(N) summary array, at most one
+  inspector and bounded key indexes. A cursor request drops the previous page before transport; failure retains
+  only the exact retry address. Projection is O(N+K), plus original document traversal/rendering, for admitted
+  nested keys K. No copies of bodies, accumulated pages, refill, history store or polling are introduced.
+  JavaScript object/node overhead and UTF-16 storage prevent treating canonical UTF-8 bytes as heap bytes.
+- **Growth check:** supplied-client and local lifetime regressions cover 1/20/100, overlapping nested identity
+  keys, replacement, delayed retirement and exact cursor retry. Existing page admission regressions preserve
+  historical zero, native order and rejection before hydration. Producer scans, represented homes, currentness,
+  access/media work and native growth256/1024/4096 remain producer evidence. Complete native envelope bytes,
+  variants and browser/Storybook acceptance remain integration obligations.
 
 ## Prepared reader and disclosure
 
@@ -61,10 +74,10 @@ Returning to the old account or tuple cannot revive them.
 Server and browser caches share an owner only when QueryClient dehydration preserves the same session-query
 lineage and generation. A matching account tuple alone cannot adopt old private disclosure.
 
-Every page request is fenced before its queued call to `readPostHistory`, after its response, before merge and on
+Every page request is fenced before its queued call to `readPostHistory`, after its response, before replacement and on
 failure/finally. A request owns one connection, cursor and read ticket; an obsolete callback cannot mutate the
 current view or clear a successor's pending work. A page must match the visit's actual originating reader before
-it can merge. A provenance mismatch clears the disclosure and offers a retry from the first page.
+it can be admitted. A provenance mismatch clears the disclosure and offers a retry from the first page.
 
 Layout cleanup invalidates the connection immediately. Same-visit Strict Mode replay can reconnect, while each
 old callback and request keeps its former connection generation. A still-disconnected visit is permanently
@@ -77,7 +90,8 @@ pages with a next cursor. Version links, document-before-provenance order, licen
 media disclosure use the existing renderers. Work grows only with explicitly requested pages and their bounded
 related data.
 
-Transport failures on a continuation keep the admitted window and retry the exact cursor; native unavailable or denied responses clear it and restart from the first page.
+Decision: requesting a new cursor retires the previous page immediately; failed and denied pages retry that
+exact cursor, while account/provenance replacement starts a new visit.
 
 The connected [composition regression](../../tests/historical-reader-compatibility.test.tsx) joins the actual
 exact and history wrappers, cache admissions and callers through a real server-function serialization roundtrip
@@ -93,9 +107,9 @@ window, page media, labels, subjects and author-private vote comparisons. It can
 history. Selection, keyboard movement, collapse and exact-address copying perform no native calls. Only the
 original History, More and Retry controls request a bounded page, with the original binding and failed cursor.
 
-The navigation subtree is keyed by the disclosure's connection inside its already lifetime-keyed parent.
+The navigation subtree is keyed by connection and page generation inside its already lifetime-keyed parent.
 Retirement therefore clears the selected index, destination, inspector, pending focus and clipboard interaction
-without matching an old account tuple. Local callbacks also check the live connection immediately before acting.
+without matching an old account tuple. Local callbacks also check the live connection and page generation immediately before acting.
 A retired callback cannot select or collapse a successor's body. Closing unmounts the inspector and its copy
 helper but retains the selected loaded position; reopening uses the owner's admitted window without another
 read. A native unavailable response clears that window and its navigation state.
@@ -115,7 +129,8 @@ only admitted metadata, without comparing neighbouring revisions or deriving an 
 Removed and unavailable rows use only their originating page's author disclosure, retained by the history
 owner beside that entry. A merged identity batch from another page cannot fill in a missing author.
 
-One selected index and one destination value describe the entire inspection state. No expansion map or per-body
+The selected inspector exposes the admitted revision ID and immutable author account ID separately from current
+Byline presentation. One selected index and one destination value describe the entire inspection state. No expansion map or per-body
 cache is created. At most one inspector mounts, using the original DocumentBody, media authorization and
 RevisionProvenance composition, in document-before-provenance order. The complete admitted snapshot goes to the
 installed renderer; the presentation does not trim documents or replace removed bodies. Removed revisions show
@@ -140,10 +155,10 @@ button can reach any returned position, while Previous/Next stop at the ends of 
 collapse returns focus to its row only when focus was inside that inspector. It never steals focus from another
 control. Each target has a 44px minimum and labels wrap at phone width.
 
-Continuation retains the selected index and destination. The original keyboard intent still focuses the first
-returned boundary (or an empty-page boundary), while pointer activation retains its original focus behaviour.
-An additional live announcement counts only returned additions. Retry does not discard readable summaries or
-move the inspector. Empty history, initial transport error, sparse continuation, failed continuation and terminal
+Continuation clears the selected index, destination and full inspector before requesting the new page. The
+original keyboard intent still focuses the first returned boundary (or an empty-page boundary), while pointer
+activation retains its original focus behaviour. A live announcement describes the newly loaded page without
+claiming accumulated additions. Retry preserves its exact address without reviving former summaries. Empty history, initial transport error, sparse continuation, failed continuation and terminal
 history retain their original meanings; loaded counts never claim to be a total.
 
 The compact author label is bounded, while the selected inspector retains the original full Byline disclosure

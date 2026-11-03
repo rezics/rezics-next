@@ -361,9 +361,13 @@ describe('Complete accessible immutable historical reading controls', () => {
       expect(view.host.querySelectorAll('section > ol > li')).toHaveLength(3);
       for (const entry of [...view.host.querySelectorAll('section > ol > li')].slice(1))
         expect(entry.querySelector('[data-slot="document-body"], [data-slot="document-image"]')).toBeNull();
+      await click(button(view.host, m.revision_history_inspect({ number: '1' })));
+      expect(view.host.textContent).toContain(selected.revisionId);
       const more = button(view.host, m.thread_history_more());
       await click(more);
       expect(more.disabled).toBe(true);
+      expect(view.host.querySelector('[data-history-inspector]')).toBeNull();
+      expect(view.host.textContent).not.toContain(selected.revisionId);
       await click(more);
       expect(historyCalls()).toHaveLength(3);
       await finish({ code: 'dependency_unavailable' }, 503);
@@ -372,7 +376,7 @@ describe('Complete accessible immutable historical reading controls', () => {
       expect(historyCalls()).toHaveLength(3);
       await click(button(view.host, m.exact_revision_retry()));
       await finish({ revisions: [later], next: null });
-      expect(view.host.querySelectorAll('section > ol > li')).toHaveLength(4);
+      expect(view.host.querySelectorAll('section > ol > li')).toHaveLength(1);
       expect([...view.host.querySelectorAll('section > ol h4 a')].at(-1)?.getAttribute('href')).toBe(
         `/en/posts/${later.id}/revisions/${later.revisionId}`,
       );

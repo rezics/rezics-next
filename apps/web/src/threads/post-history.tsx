@@ -119,9 +119,11 @@ function HistoryDisclosure({
     reviewVotes,
     next,
     now,
+    pageGeneration,
+    cursor: admittedCursor,
   } = useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   const connection = lifetime.ticket();
-  const pageFailed = available && failedCursor !== undefined;
+  const pageFailed = failedCursor !== undefined;
   const retryPage = !available || pageFailed;
   const showHistoryAction = available ? next !== null || pageFailed : loaded;
 
@@ -179,7 +181,6 @@ function HistoryDisclosure({
     if (!request) return;
     const intent = keyboardOwner ? { connection, element: keyboardOwner } : undefined;
     continuationIntent.current = intent;
-    lifetime.update(connection, (view) => ({ ...view, loading: true }));
     try {
       // Fence the queued transport itself, before it can borrow replacement session credentials.
       await Promise.resolve();
@@ -217,18 +218,12 @@ function HistoryDisclosure({
         return;
       }
       if (!result.data.available) {
-        if (result.data.transportFailed) lifetime.failPage(request);
-        else lifetime.resetDisclosure(connection);
+        lifetime.failPage(request);
         return;
       }
       const page = result.data;
-      const entries = page.revisions.map((revision) => ({
-        revision,
-        documentMedia: page.documentMedia,
-        summaryAuthor: page.authors?.[revision.authorId],
-      }));
-      if (cursor !== undefined && entries.length > 0 && lifetime.snapshot().open) {
-        setAdditionStatus(m.revision_history_added({ count: new Intl.NumberFormat(locale).format(entries.length) }));
+      if (cursor !== undefined && page.revisions.length > 0 && lifetime.snapshot().open) {
+        setAdditionStatus(m.thread_history_page_loaded());
       }
       if (
         cursor !== undefined &&
@@ -239,11 +234,11 @@ function HistoryDisclosure({
       ) {
         continuationBoundary.current = {
           connection,
-          revisionId: entries[0]?.revision.revisionId ?? null,
+          revisionId: page.revisions[0]?.revisionId ?? null,
           intent,
         };
         setContinuationStatus(
-          entries.length === 0
+          page.revisions.length === 0
             ? page.next === null
               ? m.thread_history_complete()
               : m.thread_history_page_empty()
@@ -252,19 +247,7 @@ function HistoryDisclosure({
               : m.thread_history_page_loaded(),
         );
       }
-      lifetime.update(connection, (view) => ({
-        ...view,
-        revisions: cursor ? [...view.revisions, ...entries] : entries,
-        authors: { ...(view.authors ?? {}), ...(page.authors ?? {}) },
-        mentions: { ...view.mentions, ...page.mentions },
-        subjects: [...new Map([...view.subjects, ...page.subjects].map((subject) => [subject.id, subject])).values()],
-        reviewVotes: { ...view.reviewVotes, ...page.reviewVotes },
-        next: page.next,
-        now: page.now,
-        loaded: true,
-        available: true,
-        failedCursor: undefined,
-      }));
+      lifetime.acceptPage(request, page);
     } catch {
       lifetime.failPage(request);
     } finally {
@@ -316,14 +299,18 @@ function HistoryDisclosure({
             {m.thread_history_loading()}
           </p>
         ) : null}
-        {available && loaded && revisions.length === 0 ? (
+        {available && loaded && !loading && revisions.length === 0 ? (
           <p role="status" className="text-sm text-muted-foreground">
-            {m.thread_history_empty()}
+            {next !== null
+              ? m.thread_history_page_empty()
+              : admittedCursor !== undefined
+                ? m.thread_history_complete()
+                : m.thread_history_empty()}
           </p>
         ) : null}
         {available && revisions.length > 0 ? (
           <RevisionHistoryNavigation
-            key={connection}
+            key={`${connection}:${pageGeneration}`}
             active={open}
             entries={revisions}
             authors={authors}
@@ -334,7 +321,7 @@ function HistoryDisclosure({
             viewerId={viewerId}
             review={review}
             hasMore={next !== null}
-            isCurrent={() => lifetime.ownsConnection(connection)}
+            isCurrent={() => lifetime.ownsPage(connection, pageGeneration)}
             boundaryRevisionId={
               continuationBoundary.current?.connection === connection
                 ? continuationBoundary.current.revisionId

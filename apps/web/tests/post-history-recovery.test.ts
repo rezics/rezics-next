@@ -257,7 +257,7 @@ afterAll(async () => {
   await browser?.close();
 });
 
-test('A transport failure keeps admitted revisions readable through close, reopen and exact continuation retry without duplicates', async () => {
+test('A cursor replacement retires admitted revisions through close, reopen and exact continuation retry', async () => {
   const page = await mounted();
   try {
     await open(page);
@@ -328,23 +328,23 @@ test('A transport failure keeps admitted revisions readable through close, reope
     await page.getByText(m.thread_history_page_failed(), { exact: true }).waitFor();
     const continuationRetry = page.getByRole('button', { name: m.exact_revision_retry() });
     expect(await continuationRetry.evaluate((button) => button === document.activeElement)).toBe(true);
-    expect(await firstEntry!.isVisible()).toBe(true);
+    expect(await firstEntry!.isVisible()).toBe(false);
     await page.getByRole('button', { name: m.thread_history_hide() }).click();
     await page.getByRole('button', { name: m.thread_history_show() }).click();
     expect(await calls(page)).toHaveLength(3);
     await retry.focus();
     await retry.press('Enter');
     await pending(page);
-    expect(await firstEntry!.isVisible()).toBe(true);
+    expect(await firstEntry!.isVisible()).toBe(false);
     expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).isVisible()).toBe(true);
     await finish(page, { revisions: [second], next: null });
-    await versions(page, 2);
+    await versions(page, 1);
     const boundary = page.locator('h4[data-history-focus-boundary]');
     expect(await boundary.evaluate((heading) => heading === document.activeElement)).toBe(true);
     expect(await boundary.getAttribute('tabindex')).toBe('-1');
     expect(await page.getByText(m.thread_history_complete(), { exact: true }).count()).toBe(1);
-    expect(await page.locator('section > ol > li').count()).toBe(2);
-    expect(await firstEntry!.isVisible()).toBe(true);
+    expect(await page.locator('section > ol > li').count()).toBe(1);
+    expect(await firstEntry!.isVisible()).toBe(false);
     expect(await page.getByText(m.thread_history_page_failed(), { exact: true }).count()).toBe(0);
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
     expect((await calls(page)).map(({ cursor, limit }) => ({ cursor, limit }))).toEqual([
@@ -358,7 +358,7 @@ test('A transport failure keeps admitted revisions readable through close, reope
   }
 });
 
-test('empty continuation pages keep the admitted window, move focus to their boundary and explain the terminal page', async () => {
+test('empty continuation pages replace the admitted window, move focus to their boundary and explain the terminal page', async () => {
   const page = await mounted();
   try {
     const nextCursor = 'older/continuation';
@@ -374,7 +374,7 @@ test('empty continuation pages keep the admitted window, move focus to their bou
     expect(await emptyBoundary.evaluate((heading) => heading === document.activeElement)).toBe(true);
     expect(await emptyBoundary.textContent()).toBe(m.thread_history_page_empty());
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(1);
-    expect(await page.locator('section > ol > li').count()).toBe(1);
+    expect(await page.locator('section > ol > li').count()).toBe(0);
 
     await page.getByRole('button', { name: m.thread_history_more() }).press('Enter');
     await pending(page);
@@ -384,7 +384,7 @@ test('empty continuation pages keep the admitted window, move focus to their bou
     expect(await terminalBoundary.evaluate((heading) => heading === document.activeElement)).toBe(true);
     expect(await terminalBoundary.textContent()).toBe(m.thread_history_complete());
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
-    expect(await page.locator('section > ol > li').count()).toBe(1);
+    expect(await page.locator('section > ol > li').count()).toBe(0);
     expect((await calls(page)).map(({ cursor }) => cursor)).toEqual([null, cursor, nextCursor]);
   } finally {
     await page.close();
@@ -612,7 +612,7 @@ test('The default immutable revision history retires original session disclosure
       { cursor, limit: '20' },
     ]);
     await finish(page, { revisions: [second], next: null });
-    await versions(page, 2);
+    await versions(page, 1);
     expect(await page.getByRole('button', { name: m.thread_history_more() }).count()).toBe(0);
   } finally {
     await page.close();

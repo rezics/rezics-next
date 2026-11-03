@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
+import type { DocumentNode } from '@rezics/document';
 import type { DocumentMentions } from '@rezics/ui/document-body';
 import { readPageAuthors, type PageAuthors } from '../identity/read';
-import { readDocumentMentions } from '../kernel/mentions';
 import {
   loadRevisionDocumentMedia,
   revisionDocumentImageIds,
@@ -29,6 +29,46 @@ export type PostHistoryReadData =
 
 export const POST_HISTORY_DEFAULT_LIMIT = 20;
 export const POST_HISTORY_MAXIMUM_LIMIT = 100;
+
+/** One index for the admitted author/mention keys; overlapping identities are hydrated only once. */
+async function readHistoryIdentities(client: KernelClient, revisions: NativeHistoryPage['revisions']) {
+  const authorIds = new Set<string>();
+  const mentionIds = new Set<string>();
+  function visit(node: DocumentNode) {
+    if (mentionIds.size === 100) return;
+    if (node.type === 'mention' && typeof node.attrs?.accountId === 'string') mentionIds.add(node.attrs.accountId);
+    for (const child of node.content ?? []) {
+      if (mentionIds.size === 100) break;
+      visit(child);
+    }
+  }
+  for (const revision of revisions) {
+    authorIds.add(revision.authorId);
+    if (revision.availability === 'available' && revision.body) visit(revision.body.doc);
+  }
+  const ids = [...new Set([...authorIds, ...mentionIds])];
+  // Preserve the existing 100-identity batch cap, including at most 100 distinct body mentions.
+  const batches: Promise<PageAuthors>[] = [];
+  for (let offset = 0; offset < ids.length; offset += 100)
+    batches.push(readPageAuthors(client, ids.slice(offset, offset + 100)));
+  const authors: NonNullable<PageAuthors> = {};
+  const mentions: DocumentMentions = {};
+  let authorReadFailed = false;
+  const pages = await Promise.all(batches);
+  for (let index = 0; index < pages.length; index++) {
+    const accounts = pages[index];
+    if (!accounts) {
+      if (ids.slice(index * 100, (index + 1) * 100).some((id) => authorIds.has(id))) authorReadFailed = true;
+      continue;
+    }
+    for (const account of Object.values(accounts)) {
+      if (authorIds.has(account.id)) authors[account.id] = account;
+      if (mentionIds.has(account.id) && account.state === 'active' && account.handle)
+        mentions[account.id] = { handle: account.handle };
+    }
+  }
+  return { authors: authorReadFailed ? null : authors, mentions };
+}
 
 /**
  * Check the exact page before using its keys for identity, media or private vote reads.
@@ -73,15 +113,8 @@ export async function loadPostHistoryPage(
 
     const { revisions, next } = result.data;
     const documentMedia = await loadRevisionDocumentMedia(client, revisionDocumentImageIds(revisions), authorization);
-    const [authors, mentions, subjects, reviewVotes] = await Promise.all([
-      readPageAuthors(
-        client,
-        revisions.map(({ authorId }) => authorId),
-      ),
-      readDocumentMentions(
-        client,
-        revisions.map(({ body }) => body),
-      ),
+    const [{ authors, mentions }, subjects, reviewVotes] = await Promise.all([
+      readHistoryIdentities(client, revisions),
       readRevisionSubjects(client, revisions),
       readAuthorRevisionVotes(client, revisions, subject && authorization ? { id: subject, authorization } : null),
     ]);

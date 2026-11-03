@@ -296,6 +296,17 @@ export function RevisionSummaryRow({
                   : m.revision_history_unavailable_explanation()}
               </p>
             ) : null}
+            <p className="text-sm text-muted-foreground">{m.exact_revision_read_only()}</p>
+            <dl className="space-y-2 text-sm [overflow-wrap:anywhere]">
+              <div>
+                <dt className="font-medium">{m.exact_revision_id()}</dt>
+                <dd dir="ltr">{summary.revisionId}</dd>
+              </div>
+              <div>
+                <dt className="font-medium">{m.lifecycle_account_id()}</dt>
+                <dd dir="ltr">{entry.revision.authorId}</dd>
+              </div>
+            </dl>
             <Byline
               author={inspectorAuthor}
               createdAt={summary.recordedAt}

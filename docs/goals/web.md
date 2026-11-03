@@ -886,8 +886,13 @@ are checked before related reads. Decision: keep the typed installed revisions/n
 its closed current-context and per-revision enrichment variants in KernelClient. The current base exposes neither
 those variants nor historical question scales, admitted conversation/head context or navigation advice.
 
-The remaining visit needs that native publication, one-page replacement, revision-keyed enrichment, original
-versus terminal target disclosure, exact/comparison return, retirement and connected localized stories. Existing
+The consumer now retains one replacing page, synchronously retires its former rows/joins/selection on cursor
+requests, retries failed or denied pages at that exact cursor, shares deduplicated author/mention hydration,
+and displays the selected revision and immutable author references. Decision: cursor replacement retires the
+previous page immediately; account/provenance replacement starts a new visit.
+
+The remaining visit needs native publication, revision-keyed enrichment, original versus terminal target
+disclosure, exact/comparison return and connected localized stories, with native variant/retirement acceptance. Existing
 author/mention/Subject/current-vote joins remain until the native envelope replaces them. Supplied-client tests
 cover only this page seam; frozen acceptance, native growth and phone/desktop inspection remain integration work.
 References inspected: the earlier Work history region, the other post History page and UnitRevisionHistory,
