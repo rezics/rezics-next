@@ -28,6 +28,7 @@ import {
   type DisclosedClassificationAssociation,
 } from './subject-classification-assessment';
 import { providerStatisticLabel, type Statistic } from './subject-ratings';
+import { sourceObservationHref } from '../catalogue/source-observation/contract';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2 text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -163,11 +164,19 @@ function ClassificationSourceReports({
                 {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
               </strong>,
               m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
-              item.sourceRecordId ? (
-                <a className="text-primary underline underline-offset-4" href={sourcesHref}>
-                  {m.subject_classification_source_record({ record: item.sourceRecordId }, options)}
-                </a>
-              ) : null,
+              item.sourceRecordId
+                ? (() => {
+                    const href = sourceObservationHref(sourcesHref, item.source, item.observation?.digest);
+                    return (
+                      <a
+                        className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                        href={href ?? sourcesHref}
+                      >
+                        {m.subject_classification_source_record({ record: item.sourceRecordId }, options)}
+                      </a>
+                    );
+                  })()
+                : null,
               item.sourceAlias && item.sourceAlias !== item.source
                 ? m.subject_classification_source_alias({ alias: item.sourceAlias }, options)
                 : null,

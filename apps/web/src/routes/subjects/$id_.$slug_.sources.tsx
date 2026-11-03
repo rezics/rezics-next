@@ -10,13 +10,22 @@ import type { SourcesResult } from '../../features/catalogue/subject-sources';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, subjectHref } from '../../subject/subject-href';
+import { sourceObservationSelection } from '../../features/catalogue/source-observation/contract';
+import type { SourceObservationRequest } from '../../features/catalogue/source-observation/contract';
+import { inspectSubjectSourceObservation } from '../../features/catalogue/source-observation/action';
+
+const inspectSourceObservation = (request: SourceObservationRequest) =>
+  inspectSubjectSourceObservation({ data: request });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
   staticData: { publicCache: false },
   staleTime: 0,
   gcTime: 0,
   shouldReload: true,
-  validateSearch: (search: Record<string, unknown>) => ({ realm: validatePageRealm(search.realm) }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    realm: validatePageRealm(search.realm),
+    ...sourceObservationSelection(search),
+  }),
   loaderDeps: ({ search }) => ({ realm: search.realm }),
   loader: async ({ params, location, deps }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
@@ -47,7 +56,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/sources')({
 function SourcesRoute() {
   const { result, reader } = Route.useLoaderData();
   const { realm } = Route.useSearch();
-  const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, useSession()));
+  const session = useSession();
+  const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
   return <SourcesPresentation result={currentReader ? result : { kind: 'loading' }} reader={reader} />;
 }
 
@@ -64,8 +74,29 @@ function SourcesPresentation({
   reader?: string | null;
   reset?: () => void;
 }) {
-  const { realm } = Route.useSearch();
+  const search = Route.useSearch();
+  const { realm } = search;
   const locale = getLocale();
+  const session = useSession();
+  const selection = sourceObservationSelection(search);
+  const observation =
+    result.kind === 'ready' && selection
+      ? {
+          ...selection,
+          inspect: inspectSourceObservation,
+          visitKey: JSON.stringify([
+            result.page.id,
+            realm,
+            selection.source,
+            selection.digest,
+            locale,
+            reader,
+            session.state,
+            session.subject,
+            session.csrfToken,
+          ]),
+        }
+      : undefined;
   const retry = useSourcesRetry({
     realm,
     reader,
@@ -73,5 +104,5 @@ function SourcesPresentation({
     loading: result.kind === 'loading',
     ...(reset ? { reset } : {}),
   });
-  return <SubjectSourcesPage result={result} locale={locale} {...retry} />;
+  return <SubjectSourcesPage result={result} locale={locale} observation={observation} {...retry} />;
 }

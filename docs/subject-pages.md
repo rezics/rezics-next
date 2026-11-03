@@ -1263,6 +1263,55 @@ acceptance is `apps/web/tests/subject-classification-assessment.test.tsx` at 20,
 ballots with the selected association and two provider rows held fixed. Unknown native scan bounds remain unknown.
 No engine adapter is added; existing native engines stay producer-owned.
 
+## Provider source observation inspection
+
+The provider record link in Subject ratings and the selected Global classification assessment opens the same Subject
+Sources route with the admitted provider and the exact `observation.digest` supplied by the current public source row.
+Rows without that optional digest keep the existing generic Sources destination; the Web consumer never invents or
+accepts a guessed digest from an input field. The route retains its current Realm context and uses the canonical
+Subject identity. The URL carries provider and digest only; provider alias, record, payload and signed history cursor
+remain in the mounted reader.
+
+Decision: provider observation inspection keeps the existing `source_statistic:write` admission; a displayed record
+link grants no read or write permission.
+
+The reader presents the current head beside the exact selected retained observation. Empty head, clear tombstone,
+published payload and unavailable payload remain distinct. Provider date and committed native order have separate
+labels; native order is local commit order, not provider chronology. The content digest is labelled unversioned, not a
+provider revision. Positive payloads show provider, alias, record, as-of date, original scale/mean/count, licence,
+attribution and any supplied figures without filling missing bins or deriving a rank denominator. Public statistics,
+classification ballots and native enjoyment remain independent.
+
+History is an explicit one-page action. An empty page with a cursor is continuing, including a page whose candidate
+was concealed; it does not refill locally or claim exhaustion. A page with no cursor is exhausted. Selecting a row
+retains one selected observation beside the page's current head. Continuing replaces the page and selection. Exact or
+current concealment stays indistinguishable from missing, and failures show no provider identifiers. A `409` retains
+the original request and cursor for explicit retry. Protected responses use private no-store delivery and stay in the
+mounted reader. Subject, provider/digest, route, locale, viewer or CSRF-session replacement retires the reader, and a
+late response cannot restore its contents.
+
+The native `GET /v1/subjects/{id}/source-statistics/{source}/observations` is mounted and protected by the existing
+importer action. Its response contract supplies the current head, exact selection, one history row, payload version,
+legacy marker and unversioned digest meaning. Native history is ordered by committed `nativeOrder`; provider `asOf`
+is not that order. The current `@rezics/client` generated declaration does not yet expose this mounted GET. Web keeps
+the named unavailable seam `KernelClient GET /v1/subjects/:id/source-statistics/:source/observations`; it does not
+hand-build a request or cast the generated client. Thus the current production route opens with an unavailable state
+until generated delivery is installed. The component caller, response admission and illustrative stories are not
+generated delivery, native authorization proof or the frozen acceptance.
+
+Cost:
+
+- **Touches:** One exact selected read returns the current head and selection. One explicit history action reads the
+  current head and at most one native row. Every continuation is one further explicit request with the same opaque
+  cursor on retry. No row hydration or importer recovery command is added.
+- **Bound:** One mounted reader retains one head, one selected payload and one history page of at most one row. The
+  native contract caps each payload at 32,768 bytes, the response at 68,000 bytes, the cursor at 512 characters and
+  figures at ten bins. The current public provider array remains at most two rows.
+- **Growth:** Projection and display are O(rows + admitted bytes), with rows at most one per history page. There is no
+  accumulated history, local refill or per-row request. `apps/web/tests/subject-source-observation.test.tsx` pins
+  ten-bin payloads, the native one-row page, withheld continuation, same-input retry and retired late results. The
+  stories use illustrative responses; generated transport, native acceptance and browser geometry remain pending.
+
 ## Realm context
 
 The same subject page is reachable from the general site and from a Realm or Zone. The facts come from the

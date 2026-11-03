@@ -31,6 +31,7 @@ import {
   ClassificationAssessmentSection,
 } from './subject-classification-assessment-view';
 import { subjectHref } from '../../subject/subject-href';
+import { sourceObservationHref } from '../catalogue/source-observation/contract';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -227,6 +228,9 @@ export function RatingsView({
   const question = sources.question.kind === 'ready' ? sources.question.value : undefined;
   const headline = sources.figure.kind === 'ready' ? sources.figure.value : undefined;
   const statistics = sources.statistics.kind === 'ready' ? sources.statistics.value : [];
+  const sourcesHref =
+    (page ? viewHref(page, 'sources') : undefined) ??
+    `${subjectHref({ id: subject, label: assessmentChrome?.title || page?.subjectLabel || title }, locale).href}/sources`;
   const owner = { subject };
   const status = (source: RatingSource, result?: ReactNode) => (
     <RatingSourceStatus
@@ -402,7 +406,19 @@ export function RatingsView({
                         </strong>,
                         m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
                         item.sourceRecordId
-                          ? m.subject_classification_source_record({ record: item.sourceRecordId }, options)
+                          ? (() => {
+                              const href = sourceObservationHref(sourcesHref, item.source, item.observation?.digest);
+                              return href ? (
+                                <a
+                                  className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                  href={href}
+                                >
+                                  {m.subject_classification_source_record({ record: item.sourceRecordId }, options)}
+                                </a>
+                              ) : (
+                                m.subject_classification_source_record({ record: item.sourceRecordId }, options)
+                              );
+                            })()
                           : null,
                         item.sourceAlias && item.sourceAlias !== item.source
                           ? m.subject_classification_source_alias({ alias: item.sourceAlias }, options)
@@ -432,7 +448,7 @@ export function RatingsView({
           returnTo={assessmentChrome.returnTo}
           csrfToken={assessmentChrome.csrfToken}
           statistics={statistics}
-          sourcesHref={`${subjectHref({ id: subject, label: assessmentChrome.title || page?.subjectLabel || title }, locale).href}/sources`}
+          sourcesHref={sourcesHref}
           session={control.session}
           handlers={assessmentHandlers}
         />

@@ -10,6 +10,16 @@ import { viewTabLabels } from '../pages/route-support';
 import { defaultReader } from '../../subject/reader';
 import { m } from '../../paraglide/messages.js';
 import type { SourcePart, SourcesPageData, SourcesResult } from './subject-sources';
+import { SourceObservationReader } from './source-observation/reader';
+import type { SourceObservationInspect } from './source-observation/reader';
+import type { SourceObservationProvider } from './source-observation/contract';
+
+type SourceObservationMount = {
+  source: SourceObservationProvider;
+  digest: string;
+  visitKey: string;
+  inspect: SourceObservationInspect;
+};
 
 type Props = {
   result: SourcesResult | { kind: 'loading' };
@@ -17,6 +27,7 @@ type Props = {
   onRetry?: MouseEventHandler<HTMLButtonElement>;
   busy?: boolean;
   headingRef?: Ref<HTMLHeadingElement>;
+  observation?: SourceObservationMount;
 };
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -45,7 +56,7 @@ function CitationPart({
 }
 
 /** The detailed public reader shares the subject frame, value renderer and original Sources presentation. */
-export function SubjectSourcesPage({ result, locale, onRetry, busy = false, headingRef }: Props) {
+export function SubjectSourcesPage({ result, locale, onRetry, busy = false, headingRef, observation }: Props) {
   const headingId = useId();
   const o = { locale: locale as never };
   if (result.kind !== 'ready')
@@ -137,6 +148,17 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
         href={page.sourcesHref.split('?', 1)[0]!}
         locale={locale}
       />
+      {observation && (
+        <SourceObservationReader
+          key={observation.visitKey}
+          subjectId={page.id}
+          source={observation.source}
+          digest={observation.digest}
+          locale={locale}
+          sourcesHref={page.sourcesHref}
+          inspect={observation.inspect}
+        />
+      )}
       <div className="space-y-2">
         <ViewHeading
           label={m.subject_sources({}, o)}
