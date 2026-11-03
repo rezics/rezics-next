@@ -174,6 +174,41 @@ visibility revocation, or deletion advances the authoritative source stamp. Olde
 membership. Public reads apply the current shared eligibility and subject-access checks; stale or uncertain rows are withheld until
 the shared projection is safe.
 
+### Public Collection discovery candidates
+
+Commerce exports `publicCollectionDiscoverySource({pool})` from
+`services/kernel/src/library/collection-discovery-source.ts`, independently of viewer summaries.
+Active public curated Collections supply native index hints. Saved dynamic Collections require the installed
+selected complete Publication witness; a pending B does not replace selected complete A. Private, unlisted,
+deleted, missing and incomplete outputs never supply an indexable value. Unlisted remains direct-read only.
+The seam contains ordinary title/description/presentation, full Collection identity, revision, the actual native
+partition epoch/position and, for dynamic values, only the selected `CollectionOutputRef`. It contains no saved
+AST, expanded private terms, private facts/counts, working Source capture or unselected output.
+
+`read(partition, fullKeys)` and `page(partition, after, limit)` observe one native repeatable-read snapshot,
+process at most 100 raw `(route,id)` keys and return them in that order. A page advances past every examined key,
+including an unavailable dynamic witness. Decision: a full page returns its last raw key as `next`; a short page
+returns null, so an exact multiple can require one final empty page. The existing partial public-listing index
+bounds paging; no projection store or second clock is introduced. Snapshots are live indexing hints, not frozen
+membership or hydration authorization. Current rereads and monotonic `(epoch,position)` replacement ensure a
+delayed positive delivery cannot outrank withdrawal. Consumers use existing Collection updated/deleted/listing
+change notifications as key-only reread triggers, including title edits on an already-public Collection.
+
+`count(partition)` explicitly returns unavailable: Library has no maintained native Collection population census.
+It never scans, invents zero or supplies query-count evidence. Fenced/moved/missing partitions are unavailable;
+a public dynamic row whose selected Publication witness cannot be verified is individually unavailable and must
+be withheld. In particular `collection-source-output-head.sql` does not certify de-identified retained outputs:
+a retained-output discovery witness is still needed from the native public-output owner. This producer neither
+changes terminal retention/de-identification nor evaluates a query during deletion.
+
+Search owns its Collection union registration, shared index/planner/query and stamp-ordered replacement. Content
+owns the mixed Home consumer. Their registration is a consumer seam, not a claim that discovery runs end to end.
+Current authorized hydration is a separate Commerce delivery:
+`collection-discovery-summaries.ts` / `readPublicCollectionDiscoverySummaries(dependencies, ids, context)`;
+this candidate producer does not import, implement or emulate it. See the
+[native owner inventory](../services/kernel/src/library/README.md#public-collection-discovery-source) for exact types
+and illustrative responses.
+
 Curated listing-freshness defects remain with their current owner. Shared monotonic ordering, revoke-before-disclosure, rebuild, and
 bounded reconciliation still need closure before dynamic adoption. This spec adds no second public-membership table, event clock,
 freshness classifier, or projection engine.

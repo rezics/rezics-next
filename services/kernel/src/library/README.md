@@ -2303,6 +2303,61 @@ actual effect/workflow completion before asserting the new published count. `col
 Auth registration/suspension to prove old bearer401, no-session sign-in refusal, anonymous known-ID readability and
 current curator discovery. This slice makes no terminal erasure or legacy rollout-completion claim.
 
+### Public Collection discovery source
+
+`collection-discovery-source.ts` exports `publicCollectionDiscoverySource({pool}): CollectionDiscoverySource`
+and the local types `CollectionDiscoveryKey`, `CollectionDiscoveryPosition`,
+`CollectionDiscoveryIndexableValue`, `CollectionDiscoveryItem`, `CollectionDiscoverySnapshot`,
+`CollectionDiscoveryPage` and `CollectionDiscoveryCensus`. Search imports these directly without treating a
+Collection as a Subject. Content consumes the resulting Collection variant through Search's eventual union.
+No Search registration, index, Home engine or hydration authorization is implemented here.
+
+- `read(partition, ids)` accepts 0..100 full `{route,id}` keys in one partition, deduplicates and sorts `(route,id)`.
+  It returns `status:'available'`, a native `stamp:{partition,epoch,position}` and one item per distinct key.
+- `page(partition, after, limit)` accepts a full key or null and 1..100; it reads at most that many raw active-public
+  keys from `collection_sitemap_public_page`, in `(route,collection_id)` order. Every raw key consumes the bound,
+  even without an indexable witness. Decision: full pages continue after the last examined key; short pages end,
+  allowing one final empty page at an exact multiple. Rebuilding starts again at null using current native truth.
+- Available items are `status:'indexable'` plus `value:{kind:'collection',key,revision,title,description,
+  presentationKind,coverMediaId,membershipKind,output}`. Curated output is null. Saved dynamic output is only
+  `{route,collectionId,generation}`, verified by the installed `collection-source-output-head.sql` Publication
+  witness, its Core commit and current source fence. No rule, personal population, private totals or members cross.
+- Hidden/deleted/absent keys return `status:'withdrawn'` with the key alone. Public dynamic rows without a current
+  witness return `status:'unavailable',reason:'selected_publication_witness_unavailable'`, also without metadata.
+  Built-ins without a saved output witness and de-identified retained dynamics remain unavailable: the installed
+  head reader does not supply their needed retained-output discovery witness. Pending B leaves verified A selected.
+- Missing/fenced/moved native partitions return `status:'unavailable',reason:'native_partition_unavailable'`;
+  page `next` is null in that case and must not be interpreted as successful exhaustion.
+- `count(partition)` returns `status:'unavailable',reason:'native_collection_population_evidence_unavailable'`.
+  There is no installed maintained native census producer. This performs no scan and certifies neither zero nor
+  a query count.
+
+One repeatable-read native transaction supplies the existing public-listing stamp and values; the position is
+Core's actual partition position serialized as decimal text, never a timestamp/revision substitute. Work is
+bounded by one partition read, one key/page statement and at most 100 installed Publication point probes.
+Collection updated/deleted/listing-changed events already carry Collection IDs; use their routable keys to reread
+current truth on delivery. Search must apply snapshots by `(epoch,BigInt(position))`, withhold unavailable values,
+and never let an older positive overwrite newer withdrawal. There is no transport authority flag/store/clock.
+The existing terminal public-output custody and de-identification inventory remains unchanged.
+
+The following **constructed examples** document response shapes for Search and Content; they are not runtime
+proof. For a curated public key `K`, a read can return:
+
+```ts
+{status:'available', stamp:{partition:2,epoch:1,position:'42'}, items:[
+  {key:K,status:'indexable',value:{kind:'collection',key:K,revision:3,title:'Books',description:null,
+    presentationKind:null,coverMediaId:null,membershipKind:'curated',output:null}}
+]}
+```
+
+After withdrawal the current read can return `{status:'available',stamp:{partition:2,epoch:1,position:'43'},
+items:[{key:K,status:'withdrawn'}]}`. A public saved dynamic uses the same value shape with
+`membershipKind:'dynamic',output:{route:K.route,collectionId:K.id,generation:G}` only after native verification.
+No member count accompanies it. Current viewer hydration belongs to the separate Commerce
+`readPublicCollectionDiscoverySummaries(dependencies, ids, context)` delivery; no summary placeholder is exposed.
+`test/library/collection-discovery-source.test.ts` exercises native product-created curated/saved output,
+exclusions, selected A/pending B, replay/rebuild paging, bounds and delayed delivery after withdrawal.
+
 ### Collection sitemap candidate discovery
 
 - Touches: one partition-local route/id partial B-tree range, at most `B` active/public candidates, `B <= 4000`; no member or private-state relation and no all-partition enumeration.
