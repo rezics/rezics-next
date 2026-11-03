@@ -70,7 +70,8 @@ test('mounted shelves hydrate twelve native summaries in home batches and retain
   const publications = new Map<string, string>();
   for (let index = 0; index < 13; index++) {
     const { subject } = await post<{ subject: Subject }>(people.subjectOwner, '/v1/subjects', {
-      type: 'schema:Book', labels: { en: `Shelf book ${index}` },
+      type: 'schema:Book',
+      labels: { en: `Shelf book ${index}` },
     });
     publications.set(subject.id, (await publish(realmId, subject.id)).publication.publicationId);
   }
@@ -101,17 +102,29 @@ test('mounted shelves hydrate twelve native summaries in home batches and retain
   const second = await page(realmId, first!.next!);
   expect(second.items).toHaveLength(1);
   expect(second.next).toBeNull();
-  expect(new Set([...first!.items, ...second.items].map((item) => item.summary.id))).toEqual(new Set(publications.keys()));
-  const ordinary = await driver.request({ actor: null, method: 'GET', path: `/v1/realms/${realmId}/publications?limit=12` });
+  expect(new Set([...first!.items, ...second.items].map((item) => item.summary.id))).toEqual(
+    new Set(publications.keys()),
+  );
+  const ordinary = await driver.request({
+    actor: null,
+    method: 'GET',
+    path: `/v1/realms/${realmId}/publications?limit=12`,
+  });
   expect(ordinary.status).toBe(200);
-  const raw = await ordinary.json() as { items: { publicationId: string }[]; next: string };
-  expect(raw.items.map((item) => item.publicationId)).toEqual(first!.items.map((item) => item.publication.publicationId));
+  const raw = (await ordinary.json()) as { items: { publicationId: string }[]; next: string };
+  expect(raw.items.map((item) => item.publicationId)).toEqual(
+    first!.items.map((item) => item.publication.publicationId),
+  );
   const nativeContinuation = await page(realmId, raw.next);
   expect(nativeContinuation.items).toEqual(second.items);
   expect((await shelf(realmId, first!.next!, people.member)).status).toBe(400);
   const fault = observeSql(runtime.system.database.pool);
   try {
-    fault.armFault({ match: { statement: readSummaries.sql }, boundary: 'before', error: new AccessUnavailableError('overloaded') });
+    fault.armFault({
+      match: { statement: readSummaries.sql },
+      boundary: 'before',
+      error: new AccessUnavailableError('overloaded'),
+    });
     const failed = await shelf(realmId, first!.next!);
     expect(failed.status).toBe(503);
     expect(await failed.text()).not.toContain('Shelf book');
@@ -135,8 +148,12 @@ test('current head association and native summary witnesses retire after publica
   expect(changed.status).toBe(201);
   expect(await observation.current()).toBe(false);
   const withdrawn = await driver.request({
-    actor: people.owner, method: 'POST', path: `/v1/realms/${realmId}/publications/${subjectId}:withdraw`,
-    key: key(), ifMatch: JSON.stringify(original.publication.publicationId), body: {},
+    actor: people.owner,
+    method: 'POST',
+    path: `/v1/realms/${realmId}/publications/${subjectId}:withdraw`,
+    key: key(),
+    ifMatch: JSON.stringify(original.publication.publicationId),
+    body: {},
   });
   expect(withdrawn.status).toBe(200);
   const replacement = await publish(realmId, subjectId);
@@ -158,6 +175,10 @@ test('concealed Subjects yield safe sparse pages and required source failure can
   expect(await observation.current()).toBe(false);
   await driver.settle();
   expect(await page(realmId)).toEqual({ items: [], next: null });
-  const response = await driver.request({ actor: null, method: 'GET', path: `/v1/realms/${realmId}/publicationShelf?limit=100` });
+  const response = await driver.request({
+    actor: null,
+    method: 'GET',
+    path: `/v1/realms/${realmId}/publicationShelf?limit=100`,
+  });
   expect(response.status).toBe(400);
 });

@@ -169,17 +169,30 @@ export async function readSubjectSummaryObservation(
           );
         }
       }
-      return withReadTransaction(deps.pool, async (client) => {
-        await partitionReadClients(client, sources.map((source) => source.partition));
-        const current = new Map((await readPartitions(client, sources.map((source) => source.partition)))
-          .map((source) => [source.partitionNo, source]));
-        for (const source of sources) {
-          const found = current.get(source.partition);
-          if (!found || found.epoch !== source.epoch || found.position !== source.position) return false;
-        }
-        for (const check of checks) if (!(await check(client))) return false;
-        return true;
-      }, deps.deadline);
+      return withReadTransaction(
+        deps.pool,
+        async (client) => {
+          await partitionReadClients(
+            client,
+            sources.map((source) => source.partition),
+          );
+          const current = new Map(
+            (
+              await readPartitions(
+                client,
+                sources.map((source) => source.partition),
+              )
+            ).map((source) => [source.partitionNo, source]),
+          );
+          for (const source of sources) {
+            const found = current.get(source.partition);
+            if (!found || found.epoch !== source.epoch || found.position !== source.position) return false;
+          }
+          for (const check of checks) if (!(await check(client))) return false;
+          return true;
+        },
+        deps.deadline,
+      );
     },
   };
 }
@@ -427,7 +440,9 @@ async function projectSummaries(
     const sourceHomes = [...new Set([...partitions, ...homes.keys()])];
     observe(
       (await readPartitions(deps.client, sourceHomes)).map((home) => ({
-        partition: home.partitionNo, epoch: home.epoch, position: home.position,
+        partition: home.partitionNo,
+        epoch: home.epoch,
+        position: home.position,
       })),
       [[...results.keys()], [...new Set(representatives.values())].filter((id) => !subjects.has(id))],
       new Set([...subjects.keys(), ...editions.keys()]),

@@ -77,8 +77,7 @@ export function createRealmHomePublicationReader(deps: PublicationDependencies) 
     // Semantic owns the source/label/media projection and each native home
     // witness. Publication owns exact selected heads and the container binding.
     // Both protocols release their connections before the other authority runs.
-    if (!(await observation.current()) || !(await selection.current()))
-      throw new AccessUnavailableError('contention');
+    if (!(await observation.current()) || !(await selection.current())) throw new AccessUnavailableError('contention');
     requireAccessDeadline(context.deadline);
     const items: RealmHomePublication[] = [];
     for (const publication of selection.page.items) {
