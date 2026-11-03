@@ -93,8 +93,13 @@ export async function listOwnRealms(
   context: Context,
   input: OwnRealmsInput = {},
 ) {
-  // Request identity and scopes cannot be replaced by an adapter during hydration.
-  const viewer = Object.freeze({ ...actor, scopes: Object.freeze([...actor.scopes]) });
+  // Authentication evidence belongs to this exact actor object. Preserve its
+  // owner identity, and retire the response if request fields change in flight.
+  const viewer = actor;
+  const identity = JSON.stringify(viewer);
+  const requireSameViewer = () => {
+    if (JSON.stringify(viewer) !== identity) throw new ProblemError('authentication_required');
+  };
   const accountRoute = routeOf(viewer.accountId);
   if (accountRoute === null) throw new ProblemError('authentication_required');
   const epoch = await snapshot(dependencies.pool, context.deadline, (client) => accountEpoch(client, viewer));
@@ -107,6 +112,7 @@ export async function listOwnRealms(
     after = cursor.after[0];
   }
   const scan = (key: string, limit: number) => snapshot(dependencies.pool, context.deadline, async (client) => {
+    requireSameViewer();
     if (await accountEpoch(client, viewer) !== epoch) throw new ProblemError('stale_cursor');
     return inversePage.run(client, { route: accountRoute, account_id: viewer.accountId, after: key, limit });
   });
@@ -142,6 +148,7 @@ export async function listOwnRealms(
   }
   // Disclosure does not refill selection, even when every selected row conceals.
   const items = await hydrateOwnRealms(dependencies, viewer, selected, context);
+  requireSameViewer();
   const at = (dependencies.clock ?? (() => new Date()))().toISOString();
   for (const member of selected) {
     const current = await observeOwnRealmMembership(dependencies, viewer, member.realmId, { ...context, at });
@@ -150,6 +157,7 @@ export async function listOwnRealms(
   await snapshot(dependencies.pool, context.deadline, async (client) => {
     if (await accountEpoch(client, viewer) !== epoch) throw new ProblemError('stale_cursor');
   });
+  requireSameViewer();
   return {
     items,
     next: nextExists && lastConsumed
