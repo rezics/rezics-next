@@ -124,7 +124,6 @@ function validPosition(
   epoch: number | null,
   phase: unknown,
   after: unknown,
-  realm = false,
 ): after is SearchSortValue[] {
   if (!Array.isArray(after)) return false;
   let name: unknown;
@@ -134,7 +133,6 @@ function validPosition(
     const score: unknown = after[0];
     if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 10) return false;
     [, name, id] = after;
-    if (realm && name !== null) return false;
   } else if (phase === 'unscored' && after.length === 2) {
     [name, id] = after;
   } else return false;
@@ -156,7 +154,7 @@ export async function encodeRatingCursor(
   if (
     !validContext(context) ||
     !cursor ||
-    !validPosition(context.priorEpoch, cursor.phase, cursor.after, !!context.realm)
+    !validPosition(context.priorEpoch, cursor.phase, cursor.after)
   )
     throw new TypeError('Invalid rating cursor');
   const frontier = context.realm ? [encryptFrontier(ring, context, cursor.phase, cursor.after)] : cursor.after;
@@ -206,6 +204,6 @@ export async function decodeRatingCursor(
   const after = realmToken
     ? decryptFrontier(ring, context, phase as RatingPhase, encodedFrontier[0] as string)
     : encodedFrontier;
-  if (!after || !validPosition(context.priorEpoch, phase, after, realmToken)) return { ok: false, reason: 'invalid' };
+  if (!after || !validPosition(context.priorEpoch, phase, after)) return { ok: false, reason: 'invalid' };
   return { ok: true, generation: decoded.generation, phase: phase as RatingPhase, after };
 }

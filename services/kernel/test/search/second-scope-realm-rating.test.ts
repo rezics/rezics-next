@@ -80,7 +80,7 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
   };
   const scores =
     priorEpoch === null ? [null, null, null, null, null, null, null, null] : [9, 9, 9, 0, null, null, 1, null];
-  const labels: (string | null)[] = ['A', 'A', null, 'B', 'C', 'C', 'E', null];
+  const labels: (string | null)[] = ['B', 'A', null, 'B', 'C', 'C', 'E', null];
   const hits: RealmRatingHit[] = scores.map((score, index) => {
     const subjectId = id(index + 1);
     names.set(subjectId, labels[index]!);
@@ -118,7 +118,7 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
               asOf: context.asOf,
             },
       ratingPhase: score === null ? 'unscored' : 'scored',
-      sort: score === null ? [labels[index]!, subjectId] : [score, null, subjectId],
+      sort: score === null ? [labels[index]!, subjectId] : [score, labels[index] ?? null, subjectId],
     };
   });
   if (withSecondPartition) {
@@ -156,7 +156,7 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
         asOf: context.asOf,
       },
       ratingPhase: 'scored',
-      sort: [10, null, subjectId],
+      sort: [10, label, subjectId],
     });
   }
   const compareFrontier = (
@@ -167,11 +167,7 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
     const a = left.after;
     const b = right.after;
     if (left.ratingPhase === 'scored' && a[0] !== b[0]) return Number(b[0]) - Number(a[0]);
-    const offset = left.ratingPhase === 'scored' ? 2 : 0;
-    if (left.ratingPhase === 'scored') {
-      const scoreCmp = Buffer.compare(Buffer.from(String(b.at(-1))), Buffer.from(String(a.at(-1))));
-      return scoreCmp;
-    }
+    const offset = left.ratingPhase === 'scored' ? 1 : 0;
     for (let index = offset; index < a.length; index++) {
       if (a[index] === b[index]) continue;
       if (a[index] === null) return 1;
@@ -356,7 +352,7 @@ test('selected native Realm traverses scored ties, zero, below-threshold and abs
       if (decoded.ok) expect(JSON.stringify(decoded.after)).not.toContain(id(1));
     }
   } while (cursor);
-  expect(seen).toEqual([3, 2, 1, 7, 4, 5, 6, 8].map(id));
+  expect(seen).toEqual([2, 1, 3, 7, 4, 5, 6, 8].map(id));
   expect(new Set(seen).size).toBe(seen.length);
   const unscored = fixture(null);
   // A known ineligible current prior makes even retained published scores unscored.
@@ -382,8 +378,9 @@ test('merges scored frontiers across partitions and consumes a sparsely denied s
   const page = await f.run(undefined, 100);
   expect(page.subjects.map((subject) => subject.id)).toEqual([
     idInSecondPartition(9),
-    id(3),
+    id(2),
     id(1),
+    id(3),
     id(7),
     id(4),
     id(5),
@@ -453,7 +450,7 @@ test('a current name change restarts the continuation without exposing its consu
   if (decoded.ok) expect(JSON.stringify(decoded.after)).not.toContain(id(1));
 });
 
-test('denial, unavailable evidence, stale figures and mismatched anchors cannot become unscored', async () => {
+test('denial, unavailable evidence, stale figures and mismatched figure anchors cannot become unscored', async () => {
   for (const fault of ['deny', 'fail'] as const) {
     const f = fixture();
     const page = await f.run();
@@ -470,13 +467,28 @@ test('denial, unavailable evidence, stale figures and mismatched anchors cannot 
     Object.assign(f.hits[0]!.figure!, patch);
     await expect(f.run()).rejects.toMatchObject({ code: 'index_not_ready' });
   }
+});
+
+test('canonical Subject and Realm figure home positions are independent', async () => {
   const f = fixture();
   const read = f.source.read.bind(f.source);
   f.source.read = async (partition, ids) => {
     const snapshot = await read(partition, ids);
     return { ...snapshot, position: snapshot.position + (ids.length ? 1n : 0n) };
   };
-  await expect(f.run()).rejects.toMatchObject({ code: 'index_not_ready' });
+  const page = await f.run(undefined, 100);
+  expect(page.subjects.map((subject) => subject.id)).toEqual([2, 1, 3, 7, 4, 5, 6, 8].map(id));
+  await page.finalize();
+});
+
+test('final currentness validation runs even when the authorized result is empty', async () => {
+  const f = fixture();
+  f.matchTextOnly([]);
+  f.query.text = parseText('no matches');
+  const page = await f.run(undefined, 100);
+  expect(page.subjects).toEqual([]);
+  f.switch({ realm: { authority: 'read-ban-2', revision: 'population-figures-1' } });
+  await expect(page.finalize()).rejects.toMatchObject({ code: 'search_restart_required' });
 });
 
 test('service forwards text and filters to the native order; only Global figures reach public output', async () => {

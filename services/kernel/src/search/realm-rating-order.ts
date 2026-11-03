@@ -219,7 +219,6 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
     tuple.length !== (scored ? 3 : 2) ||
     tuple.at(-1) !== hit.id ||
     (scored && tuple[0] !== figure!.score) ||
-    (scored && name !== null) ||
     !(name === null || (typeof name === 'string' && name.length <= 512 && name.isWellFormed()))
   )
     throw notReady();
@@ -230,16 +229,15 @@ function compare(left: SearchFrontier, right: SearchFrontier): number {
   const a = left.after!;
   const b = right.after!;
   if (left.ratingPhase === 'scored' && a[0] !== b[0]) return (b[0] as number) - (a[0] as number);
-  if (left.ratingPhase === 'scored')
-    return Buffer.compare(Buffer.from(b.at(-1) as string), Buffer.from(a.at(-1) as string));
-  const offset = 0;
-  for (let index = offset; index < a.length; index++) {
-    if (a[index] === b[index]) continue;
-    if (a[index] === null) return 1;
-    if (b[index] === null) return -1;
-    return Buffer.compare(Buffer.from(a[index] as string), Buffer.from(b[index] as string));
+  const nameIndex = left.ratingPhase === 'scored' ? 1 : 0;
+  const leftName = a[nameIndex];
+  const rightName = b[nameIndex];
+  if (leftName !== rightName) {
+    if (leftName === null) return 1;
+    if (rightName === null) return -1;
+    return Buffer.compare(Buffer.from(leftName as string), Buffer.from(rightName as string));
   }
-  return 0;
+  return Buffer.compare(Buffer.from(a.at(-1) as string), Buffer.from(b.at(-1) as string));
 }
 
 function validateReadPageContext(value: RealmRatingContext, context: RealmRatingContext, populationId: string) {
@@ -327,13 +325,11 @@ export async function readRealmRatingOrder(options: {
         ),
       ]
     : [];
-  const positions = new Map<number, bigint>();
   const source: SubjectSource = {
     ...options.source,
     async read(partition, ids) {
       const snapshot = await options.source.read(partition, ids);
       validateRequestSourceSnapshot(snapshot, partition, ids);
-      if (snapshot.position !== positions.get(partition)) throw notReady();
       return snapshot;
     },
     count: options.source.count.bind(options.source),
@@ -367,7 +363,7 @@ export async function readRealmRatingOrder(options: {
           if (!Array.isArray(page.hits) || page.hits.length > request.size - hits.length) throw notReady();
           hits = [...hits, ...page.hits];
         }
-        positions.clear();
+        const positions = new Map<number, bigint>();
         let previous: SearchFrontier | undefined = request.after ? request : undefined;
         const ids = new Map<string, RatingPhase>();
         for (const hit of hits) {

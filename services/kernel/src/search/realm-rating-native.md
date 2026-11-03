@@ -25,6 +25,12 @@ home epochs/snapshots. A figure position is not a canonical Subject position mer
 because both are numbers. Private below-threshold figures cannot affect order or readiness.
 The complete Subject domain is independent of Realm membership, threads and Spaces.
 
+Search's complete-order consumer merges scored tuples as `score DESC, name_sort ASC`
+(missing names last), then canonical ID ascending. Unscored tuples use `name_sort ASC`
+(missing last), then canonical ID ascending. Zero is a scored value. Figure and canonical
+Subject snapshots retain independent home positions; the consumer validates each source's
+snapshot without equating those positions.
+
 Final native validation must include dependencies discovered during hydration and empty
 pages. Changes to names, identity, prior, question, source or current Realm/Subject authority
 must restart or refuse before disclosure. Inactive-prior ABA requires an eligibility
@@ -32,8 +38,9 @@ interval. Missing native evidence cannot establish an unscored Subject or empty 
 
 ## Cost
 
-Touches: the installed readiness boundary issues no native statements, seeks, hydration
-or candidate retention. These zero operations describe refusal only.
+Touches: the Search consumer performs finite partition merges and bounded candidate
+checks. The installed native readiness boundary still issues no native statements, seeks,
+hydration or candidate retention; those zero operations describe refusal only.
 
 Bound: successful useful-page execution remains unadmitted. Derive partition count P,
 finite windows W, raw window size B and producer terms S, E(B), H(B) from the complete
@@ -42,8 +49,9 @@ with memory at most P*B tuples plus the finite merge frontier. Use static sums a
 LIMIT. A scored preview, local filtering or fitted refill cap does not establish W.
 Unresolved native terms require Performance review before admission.
 
-Growth check: actual 1x/4x/16x complete-order execution remains **unmeasured**.
+Growth check: actual installed-path 1x/4x/16x complete-order execution remains **unmeasured**.
 The continuation must exercise the installed service with fixed request/page limits,
 sparse rejection and currentness invalidation, recording native statements,
 examined/returned rows, seeks, actions and retained candidates. Separate per-step
-work from total resumable preparation/catch-up. Refusal tests do not prove native order.
+work from total resumable preparation/catch-up. Refusal and injected-source tests do not
+prove installed native order.

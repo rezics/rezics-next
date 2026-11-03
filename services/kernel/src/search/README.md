@@ -727,8 +727,9 @@ unscored population nor the name/filter traversal required here. Search cannot e
 by sorting those returned pages, so that partial source alone does not make this selector ready.
 Predicates without a matching native recheck adapter, including owner predicates, remain `index_not_ready`.
 
-The separate native adapter validates population, standard question, prior epoch, disclosure threshold, figure
-revision, strict tuples and matching subject-home snapshot positions. Both phases
+The separate native adapter validates population, standard question, prior epoch, disclosure threshold and strict
+tuples. Figure and canonical Subject snapshots keep independent home positions; Search validates each source's own
+snapshot and does not compare positions across homes. Both phases
 use the same eligible-epoch conjunction as Global: a proven stale/missing score or known null prior belongs
 to unscored, while failed or denied evidence fails the response. Both phases and the sealed continuation
 bind the authority and population revision within the existing eight-value cursor envelope and expiry limits;
