@@ -217,7 +217,7 @@ test('Recipe creation and current correction share complete frames with independ
   const picker = (scope: HTMLElement) =>
     retainedProps<ComponentProps<typeof EntityPicker>>(
       within(scope).getByRole('combobox'),
-      (props) => !!props.onValueChange,
+      (props) => !!props.search && !!props.onValueChange,
     ).onValueChange!;
   const cancelRemoval = async (scope: HTMLElement) => {
     const trigger = within(scope).getByRole('button', { name: m.recipe_remove_field() });
