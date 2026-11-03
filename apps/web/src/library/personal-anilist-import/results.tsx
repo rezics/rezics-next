@@ -1,10 +1,19 @@
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
 import type { AniListOutcome, AniListRowMeta } from './contract';
 import { AniListAction } from './controls';
 import { aniListOutcomeLabel } from './meaning';
 
-function Outcome({ outcome, titles }: { outcome: AniListOutcome; titles: Map<number, string> }) {
+function Outcome({
+  outcome,
+  titles,
+  admission,
+}: {
+  outcome: AniListOutcome;
+  titles: Map<number, string>;
+  admission: AniListRowMeta['sourceAdmission'];
+}) {
   const applied = outcome.status === 'applied' ? ['status'].filter((field) => !outcome.retained.includes(field)) : [];
   return (
     <li className="rounded-md border p-3" data-anilist-outcome={outcome.status} data-anilist-row={outcome.ordinal}>
@@ -26,6 +35,7 @@ function Outcome({ outcome, titles }: { outcome: AniListOutcome; titles: Map<num
       {outcome.status === 'stale' ? (
         <p className="text-sm text-muted-foreground">{m.library_anilist_stale_help()}</p>
       ) : null}
+      <ImportSourceOutcome outcome={admission} />
     </li>
   );
 }
@@ -52,6 +62,7 @@ export function AniListResultPage({
   onRefresh: () => void;
 }) {
   const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
+  const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
   const locale = getLocale();
   return (
     <section className="space-y-4" data-anilist-stage="results">
@@ -63,7 +74,12 @@ export function AniListResultPage({
       <p className="text-sm text-muted-foreground">{m.library_anilist_erasure_limit()}</p>
       <ul className="space-y-3">
         {outcomes.map((outcome) => (
-          <Outcome key={outcome.ordinal} outcome={outcome} titles={titles} />
+          <Outcome
+            key={outcome.ordinal}
+            outcome={outcome}
+            titles={titles}
+            admission={admissions.get(outcome.ordinal) ?? null}
+          />
         ))}
         {remaining.map((ordinal) => (
           <li

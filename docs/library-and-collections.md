@@ -161,9 +161,11 @@ Annotation-only facts and any reviewed provider observation participate in Every
 accepted explicit state pin. Ordinary state removal preserves annotations and provider observations. Terminal
 account fact deletion removes both, including all source observations.
 
-The four personal-list import owners use the same typed admission/read DTO. They address evidence only with an
-already-resolved canonical Subject and the provider's stable record identity; this API does not resolve provider
-IDs, parse provider payloads, or activate vocabulary. A field absent from the source is submitted as `absent`; a
+The four personal-list import owners use the same typed admission/read DTO. AniList, Bangumi and MAL confirmation
+pages submit that admission after the existing import apply, with independent provider record identities and explicit
+privacy/timestamp confirmation. VNDB remains unavailable until its generated import client is installed. They address
+evidence only with an already-resolved canonical Subject and the provider's stable record identity; this API does not
+resolve provider IDs, parse provider payloads, or activate vocabulary. A field absent from the source is submitted as `absent`; a
 present but uninterpretable field is `unknown`. An import may write a note or priority only after the owner confirms
 the value and the adapter submits the current annotation revision. Unchanged incoming values use `unchanged`; only
 an explicit owner clear uses `clear`. Duplicate source admission returns `409`, stale correction returns `409`, and

@@ -32,3 +32,7 @@ browser storage, public metadata, and diagnostics.
 
 MAL remains a separate uploaded format with its existing native prerequisite and journey owner. VNDB has a separate
 Commerce producer dependency; neither is a generic multi-provider client parser or synchronizer.
+
+AniList, Bangumi and MAL confirmation pages admit source observations through the installed
+`libraryEntries(...).sourceObservations.post` method after the existing import apply. VNDB stays unavailable until
+those generated import methods exist; this visit does not add a second parser.

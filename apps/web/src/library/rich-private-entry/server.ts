@@ -2,7 +2,9 @@ import type {
   PersonalEntry,
   PersonalEntryFieldChange,
   PersonalEntryPrivacyValue,
+  PersonalEntrySourceAdmission,
   PersonalEntrySourceCorrection,
+  PersonalEntryTimestampInput,
 } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -11,10 +13,12 @@ import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { readSubjectSlotSession } from '../subject-slot';
 import {
+  admitPrivateSourceObservation,
   correctPrivateSourceObservation,
   readPrivateEntry,
   writePrivateAnnotations,
   type AnnotationWriteResult,
+  type SourceAdmissionResult,
   type SourceCorrectionResult,
 } from './native';
 
@@ -85,6 +89,19 @@ function privacyValue(value: unknown): PersonalEntryPrivacyValue | null {
   return null;
 }
 
+function timestampValue(value: unknown): PersonalEntryTimestampInput | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('status' in value)) return null;
+  if (value.status === 'absent') return { status: 'absent' };
+  if (value.status === 'known' && 'value' in value && typeof value.value === 'string' && value.value.length <= 64)
+    return { status: 'known', value: value.value };
+  if (value.status === 'unknown') {
+    if ('sourceValue' in value && typeof value.sourceValue === 'string' && value.sourceValue.length <= 64)
+      return { status: 'unknown', sourceValue: value.sourceValue };
+    return { status: 'unknown' };
+  }
+  return null;
+}
+
 function privacyChange(value: unknown): PersonalEntryFieldChange<PersonalEntryPrivacyValue> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !('op' in value)) return null;
   if (value.op === 'clear') return { op: 'clear' };
@@ -147,6 +164,53 @@ export const savePrivateAnnotations = createServerFn({ method: 'POST' })
     if (!identity || !expectedSession(data, identity)) return { kind: 'signed-out' };
     try {
       return await writePrivateAnnotations(kernelClient(), {
+        subjectId: data.subjectId,
+        body: data.body,
+        key: data.key,
+        authorization: identity.authorization,
+      });
+    } catch {
+      return { kind: 'uncertain' };
+    }
+  });
+
+export type SourceAdmissionCommandResult = SourceAdmissionResult | { kind: 'signed-out' };
+
+export const admitPrivateSourceForSubject = createServerFn({ method: 'POST' })
+  .validator((value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid source admission');
+    const item = value as Record<string, unknown>;
+    const id = subjectId(item.subjectId);
+    const provider =
+      typeof item.provider === 'string' && item.provider.length >= 1 && item.provider.length <= 64
+        ? item.provider
+        : null;
+    const recordId =
+      typeof item.recordId === 'string' && item.recordId.length >= 1 && item.recordId.length <= 192
+        ? item.recordId
+        : null;
+    const privacy = privacyValue(item.privacy);
+    const sourceCreated = timestampValue(item.sourceCreated);
+    const sourceUpdated = timestampValue(item.sourceUpdated);
+    const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
+    if (!id || !provider || !recordId || !privacy || !sourceCreated || !sourceUpdated || !key || item.confirmReviewed !== true)
+      throw new Error('Invalid source admission');
+    const body: PersonalEntrySourceAdmission = {
+      provider,
+      recordId,
+      confirmReviewed: true,
+      privacy,
+      sourceCreated,
+      sourceUpdated,
+    };
+    return { subjectId: id, body, key };
+  })
+  .handler(async ({ data }): Promise<SourceAdmissionCommandResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const identity = await currentIdentity();
+    if (!identity) return { kind: 'signed-out' };
+    try {
+      return await admitPrivateSourceObservation(kernelClient(), {
         subjectId: data.subjectId,
         body: data.body,
         key: data.key,

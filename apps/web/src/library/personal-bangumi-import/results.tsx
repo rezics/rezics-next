@@ -1,10 +1,19 @@
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
 import type { BangumiOutcome, BangumiRowMeta } from './contract';
 import { BangumiAction } from './controls';
 import { bangumiOutcomeLabel } from './meaning';
 
-function Outcome({ outcome, titles }: { outcome: BangumiOutcome; titles: Map<number, string> }) {
+function Outcome({
+  outcome,
+  titles,
+  admission,
+}: {
+  outcome: BangumiOutcome;
+  titles: Map<number, string>;
+  admission: BangumiRowMeta['sourceAdmission'];
+}) {
   return (
     <li className="rounded-md border p-3" data-bangumi-outcome={outcome.status} data-bangumi-row={outcome.ordinal}>
       <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`}</p>
@@ -23,6 +32,7 @@ function Outcome({ outcome, titles }: { outcome: BangumiOutcome; titles: Map<num
       {outcome.status === 'stale' ? (
         <p className="text-sm text-muted-foreground">{m.library_bangumi_stale_help()}</p>
       ) : null}
+      <ImportSourceOutcome outcome={admission} />
     </li>
   );
 }
@@ -49,6 +59,7 @@ export function BangumiResultPage({
   onRefresh: () => void;
 }) {
   const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
+  const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
   const locale = getLocale();
   return (
     <section className="space-y-4" data-bangumi-stage="results">
@@ -60,7 +71,12 @@ export function BangumiResultPage({
       <p className="text-sm text-muted-foreground">{m.library_bangumi_erasure_limit()}</p>
       <ul className="space-y-3">
         {outcomes.map((outcome) => (
-          <Outcome key={outcome.ordinal} outcome={outcome} titles={titles} />
+          <Outcome
+            key={outcome.ordinal}
+            outcome={outcome}
+            titles={titles}
+            admission={admissions.get(outcome.ordinal) ?? null}
+          />
         ))}
         {remaining.map((ordinal) => (
           <li

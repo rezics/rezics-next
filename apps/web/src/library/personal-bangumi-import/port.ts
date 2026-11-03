@@ -21,6 +21,24 @@ const productionPort: BangumiImportPort = {
     const { applyBangumiImport } = await import('./server');
     return applyBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
   },
+  async admitSource(command) {
+    const { admitPrivateSourceForSubject } = await import('../rich-private-entry/server');
+    const { mapSourceAdmissionPort } = await import('../rich-private-entry/admission');
+    const result = await admitPrivateSourceForSubject({
+      data: {
+        subjectId: command.subjectId,
+        key: command.key,
+        confirmReviewed: true,
+        provider: command.body.provider,
+        recordId: command.body.recordId,
+        privacy: command.body.privacy,
+        sourceCreated: command.body.sourceCreated,
+        sourceUpdated: command.body.sourceUpdated,
+      },
+      headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' },
+    });
+    return mapSourceAdmissionPort(result, command);
+  },
   async cancel(command) {
     const { cancelBangumiImport } = await import('./server');
     return cancelBangumiImport({ data: command, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });

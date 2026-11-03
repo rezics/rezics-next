@@ -137,6 +137,16 @@ async function click(label: string) {
   await settle();
 }
 
+async function clickLabel(label: string) {
+  const target = [...host.querySelectorAll('label')].find((item) => item.textContent === label);
+  expect(target).toBeDefined();
+  await act(async () => {
+    target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+  });
+  await settle();
+}
+
 async function mount(port: MalImportPort, current = visit()) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const tree = createRootRoute({
@@ -240,6 +250,9 @@ test('explicit unmatched target, status selection, confirmation and partial resu
         },
       };
     },
+    async admitSource() {
+      return { kind: 'admitted' as const };
+    },
     async cancel() {
       return { kind: 'done', id };
     },
@@ -271,6 +284,8 @@ test('explicit unmatched target, status selection, confirmation and partial resu
   expect(reviews[0]).toMatchObject({ input: { row: 0, target: subject, skip: false, replace: false } });
   await click(m.library_mal_continue_confirm());
   expect(host.textContent).toContain(subject);
+  await clickLabel(m.library_import_source_privacy_confirm());
+  await clickLabel(m.library_import_source_timestamps_confirm());
   await click(m.library_mal_confirm());
   expect(host.textContent).toContain(m.library_mal_uncertain());
   await click(m.library_mal_retry_command());
@@ -297,6 +312,9 @@ test('a changed account retires the upload and former-account callbacks', async 
     },
     async apply() {
       return { kind: 'applied', result: { id, outcomes: [], remaining: [], stopped: false } };
+    },
+    async admitSource() {
+      return { kind: 'admitted' as const };
     },
     async cancel() {
       return { kind: 'done', id };

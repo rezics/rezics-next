@@ -213,6 +213,9 @@ function recordingPort(
         },
       };
     },
+    async admitSource() {
+      return { kind: 'admitted' as const };
+    },
     async cancel() {
       return { kind: 'cancelled', uploadId: id };
     },
@@ -238,6 +241,16 @@ function button(label: string) {
 
 async function click(label: string) {
   const target = button(label);
+  expect(target).toBeDefined();
+  await act(async () => {
+    target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+  });
+  await settle();
+}
+
+async function clickLabel(label: string) {
+  const target = [...host.querySelectorAll('label')].find((item) => item.textContent === label);
   expect(target).toBeDefined();
   await act(async () => {
     target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -317,6 +330,8 @@ test('preview does not apply, explicit target replacement and exact uncertain re
   });
   await click(m.library_bangumi_continue_confirm());
   expect(host.textContent).toContain(subject);
+  await clickLabel(m.library_import_source_privacy_confirm());
+  await clickLabel(m.library_import_source_timestamps_confirm());
   await click(m.library_bangumi_confirm());
   expect(host.textContent).toContain(m.library_bangumi_uncertain());
   await click(m.library_bangumi_retry_command());

@@ -1,3 +1,6 @@
+import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
+
 /** Native Bangumi personal-list caps, verified at Commerce delivery. */
 export const BANGUMI_UPLOAD_BYTES = 262_144;
 export const BANGUMI_ROWS = 100;
@@ -99,6 +102,8 @@ export type BangumiRowMeta = {
   reviewToken: string | null;
   choice: { state: BangumiApplyState; skip: boolean };
   outcome: BangumiOutcome | null;
+  sourcePreview: SourceAdmissionPreview;
+  sourceAdmission: SourceAdmissionOutcome | null;
 };
 
 export type BangumiFailureKind =
@@ -116,6 +121,13 @@ export type BangumiCommand =
   | { kind: 'page'; uploadId: string; after: number }
   | { kind: 'review'; key: string; uploadId: string; ordinal: number; target?: string }
   | { kind: 'apply'; uploadId: string; body: BangumiApplyBody }
+  | {
+      kind: 'admit-source';
+      key: string;
+      subjectId: string;
+      ordinal: number;
+      body: PersonalEntrySourceAdmission;
+    }
   | { kind: 'cancel'; key: string; uploadId: string }
   | { kind: 'delete'; key: string; uploadId: string };
 
@@ -135,12 +147,18 @@ export type BangumiMutateResult =
   | { kind: 'deleted' }
   | BangumiFailure
   | BangumiUnknown;
+export type BangumiAdmitResult =
+  | { kind: 'admitted' }
+  | { kind: 'conflict' }
+  | BangumiFailure
+  | BangumiUnknown;
 
 export type BangumiImportPort = {
   preview(command: Extract<BangumiCommand, { kind: 'preview' }>): Promise<BangumiPreviewResult>;
   page(command: Extract<BangumiCommand, { kind: 'page' }>): Promise<BangumiPageResult>;
   review(command: Extract<BangumiCommand, { kind: 'review' }>): Promise<BangumiReviewResult>;
   apply(command: Extract<BangumiCommand, { kind: 'apply' }>): Promise<BangumiApplyCallResult>;
+  admitSource(command: Extract<BangumiCommand, { kind: 'admit-source' }>): Promise<BangumiAdmitResult>;
   cancel(command: Extract<BangumiCommand, { kind: 'cancel' }>): Promise<BangumiMutateResult>;
   delete(command: Extract<BangumiCommand, { kind: 'delete' }>): Promise<BangumiMutateResult>;
 };

@@ -14,8 +14,10 @@ import {
   type BangumiRowMeta,
   type BangumiUnknown,
 } from './contract';
+import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry/admission';
 import { BangumiCostLedger, type BangumiCostSnapshot } from './cost';
 import { bangumiTitle } from './meaning';
+import { bangumiSourcePreview } from './source';
 import type { BangumiVisit } from './visit';
 
 export type BangumiStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
@@ -37,6 +39,8 @@ export type BangumiJourneySnapshot = {
   remaining: number[];
   applying: number;
   applied: number;
+  confirmPrivacy: boolean;
+  confirmTimestamps: boolean;
   cost: BangumiCostSnapshot;
 };
 
@@ -61,6 +65,8 @@ function metaFromRow(row: BangumiRow, previous?: BangumiRowMeta): BangumiRowMeta
     reviewToken: review?.token ?? previous?.reviewToken ?? null,
     choice: previous?.choice ?? defaultChoice(),
     outcome: row.outcome ?? previous?.outcome ?? null,
+    sourcePreview: previous?.sourcePreview ?? bangumiSourcePreview(row),
+    sourceAdmission: previous?.sourceAdmission ?? null,
   };
 }
 
@@ -86,7 +92,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   let unknown: BangumiCommand | null = null;
   let applyCommand: Extract<BangumiCommand, { kind: 'apply' }> | null = null;
   let applyQueue: BangumiChoice[][] = [];
+  let admitQueue: Extract<BangumiCommand, { kind: 'admit-source' }>[] = [];
   let stopApply = false;
+  let confirmPrivacy = false;
+  let confirmTimestamps = false;
   let generation = 0;
 
   function live(): boolean {
@@ -130,6 +139,8 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       remaining,
       applying,
       applied,
+      confirmPrivacy,
+      confirmTimestamps,
       cost: { ...cost.snapshot, calls: { ...cost.snapshot.calls } },
     };
   }
@@ -139,7 +150,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     unknown = null;
     applyCommand = null;
     applyQueue = [];
+    admitQueue = [];
     stopApply = false;
+    confirmPrivacy = false;
+    confirmTimestamps = false;
     uploadText = null;
     uploadId = null;
     count = 0;
@@ -328,6 +342,62 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     return remaining.length === 0;
   }
 
+  function queueSourceAdmissions(): void {
+    if (!confirmPrivacy || !confirmTimestamps) return;
+    for (const row of meta.values()) {
+      if (row.choice.skip || row.outcome?.status !== 'applied' || row.sourceAdmission) continue;
+      const preview = row.sourcePreview;
+      const body = preview ? sourceAdmissionBody(preview) : null;
+      const blocked = preview ? sourceAdmissionBlock(preview) : 'This provider record has no stable identity.';
+      if (!body || !row.target) {
+        row.sourceAdmission = {
+          status: 'unsupported',
+          reason: row.target ? (blocked ?? undefined) : 'This row has no canonical Subject.',
+        };
+        continue;
+      }
+      admitQueue.push({
+        kind: 'admit-source',
+        key: newCommandKey(),
+        subjectId: row.target,
+        ordinal: row.ordinal,
+        body,
+      });
+    }
+  }
+
+  async function admitQueued(): Promise<boolean> {
+    while (admitQueue.length) {
+      if (!live() || stopApply) return false;
+      const command = admitQueue[0]!;
+      if (busy) return false;
+      busy = true;
+      const response = await port.admitSource(command);
+      if (!live()) return false;
+      busy = false;
+      if (response.kind === 'unknown') {
+        unknown = response.command;
+        notice = response;
+        retain();
+        return false;
+      }
+      unknown = null;
+      const row = meta.get(command.ordinal);
+      if (response.kind === 'admitted' || response.kind === 'conflict') {
+        if (row) row.sourceAdmission = { status: response.kind === 'admitted' ? 'admitted' : 'conflict' };
+        notice = null;
+        admitQueue.shift();
+        retain();
+        continue;
+      }
+      if (row) row.sourceAdmission = { status: 'failed' };
+      notice = response;
+      retain();
+      return false;
+    }
+    return true;
+  }
+
   async function confirm(): Promise<BangumiJourneySnapshot> {
     if (!uploadId || cancelled || !live()) return snapshot();
     const rows = reviewedChoices();
@@ -344,6 +414,9 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       applyQueue.shift();
       if (!done && remaining.length) break;
     }
+    if (!live() || heldUnknown()) return snapshot();
+    queueSourceAdmissions();
+    await admitQueued();
     if (!live()) return snapshot();
     stage = cancelled ? 'cancelled' : 'results';
     retain();
@@ -372,7 +445,16 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
         applyQueue.shift();
         if (!nextDone && remaining.length) break;
       }
+      if (!heldUnknown()) {
+        queueSourceAdmissions();
+        await admitQueued();
+      }
       if (done || outcomes.length) stage = 'results';
+      return snapshot();
+    }
+    if (command.kind === 'admit-source') {
+      await admitQueued();
+      if (!heldUnknown()) stage = 'results';
       return snapshot();
     }
     if (command.kind === 'cancel') {
@@ -394,6 +476,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     const failed = command.body.rows.filter((row) => meta.get(row.ordinal)?.outcome?.status === 'failed');
     if (!failed.length) return snapshot();
     await applyBatch(failed, true);
+    if (!heldUnknown()) {
+      queueSourceAdmissions();
+      await admitQueued();
+    }
     stage = 'results';
     return snapshot();
   }
@@ -428,7 +514,16 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
 
   function openConfirm(): BangumiJourneySnapshot {
     if (!reviewedChoices().length || cancelled) return snapshot();
+    confirmPrivacy = false;
+    confirmTimestamps = false;
     stage = 'confirm';
+    return snapshot();
+  }
+
+  function confirmSource(choice: { privacy?: boolean; timestamps?: boolean }): BangumiJourneySnapshot {
+    if (stage !== 'confirm') return snapshot();
+    if (choice.privacy !== undefined) confirmPrivacy = choice.privacy;
+    if (choice.timestamps !== undefined) confirmTimestamps = choice.timestamps;
     return snapshot();
   }
 
@@ -445,6 +540,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     review,
     choose,
     confirm,
+    confirmSource,
     openConfirm,
     backToReview,
     retryUnknown,

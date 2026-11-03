@@ -19,6 +19,8 @@ import {
 } from './contract';
 import { AniListCostLedger, type AniListCostSnapshot } from './cost';
 import { aniListGroupLabel, aniListIsRepeating, aniListMediaType, aniListStatusOf, aniListTitle } from './meaning';
+import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry/admission';
+import { aniListSourcePreview } from './source';
 import type { AniListVisit } from './visit';
 
 export type AniListStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
@@ -48,6 +50,8 @@ export type AniListJourneySnapshot = {
   remaining: number[];
   applying: number;
   applied: number;
+  confirmPrivacy: boolean;
+  confirmTimestamps: boolean;
   owner: string;
   cost: AniListCostSnapshot;
 };
@@ -85,6 +89,8 @@ function metaFromRow(row: AniListRow, previous?: AniListRowMeta): AniListRowMeta
     identifiers: row.source.identifiers,
     groupLabel: aniListGroupLabel(row.source.group),
     repeating: aniListIsRepeating(status),
+    sourcePreview: previous?.sourcePreview ?? aniListSourcePreview(row),
+    sourceAdmission: previous?.sourceAdmission ?? null,
   };
 }
 
@@ -117,7 +123,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
   let unknown: AniListCommand | null = null;
   let applyCommand: Extract<AniListCommand, { kind: 'apply' }> | null = null;
   let applyQueue: AniListConfirmation[][] = [];
+  let admitQueue: Extract<AniListCommand, { kind: 'admit-source' }>[] = [];
   let stopApply = false;
+  let confirmPrivacy = false;
+  let confirmTimestamps = false;
   let generation = 0;
 
   function live(): boolean {
@@ -175,6 +184,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       remaining,
       applying,
       applied,
+      confirmPrivacy,
+      confirmTimestamps,
       owner: sender.subject,
       cost: { ...cost.snapshot, calls: { ...cost.snapshot.calls } },
     };
@@ -185,7 +196,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     unknown = null;
     applyCommand = null;
     applyQueue = [];
+    admitQueue = [];
     stopApply = false;
+    confirmPrivacy = false;
+    confirmTimestamps = false;
     uploadText = null;
     importId = null;
     count = 0;
@@ -401,6 +415,62 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     return response.result.complete && remaining.length === 0;
   }
 
+  function queueSourceAdmissions(): void {
+    if (!confirmPrivacy || !confirmTimestamps) return;
+    for (const row of meta.values()) {
+      if (row.skip || row.outcome?.status !== 'applied' || row.sourceAdmission) continue;
+      const preview = row.sourcePreview;
+      const body = preview ? sourceAdmissionBody(preview) : null;
+      const blocked = preview ? sourceAdmissionBlock(preview) : 'This provider record has no stable identity.';
+      if (!body || !row.target) {
+        row.sourceAdmission = {
+          status: 'unsupported',
+          reason: row.target ? (blocked ?? undefined) : 'This row has no canonical Subject.',
+        };
+        continue;
+      }
+      admitQueue.push({
+        kind: 'admit-source',
+        key: newCommandKey(),
+        subjectId: row.target,
+        ordinal: row.ordinal,
+        body,
+      });
+    }
+  }
+
+  async function admitQueued(): Promise<boolean> {
+    while (admitQueue.length) {
+      if (!live() || stopApply) return false;
+      const command = admitQueue[0]!;
+      if (busy) return false;
+      busy = true;
+      const response = await port.admitSource(command);
+      if (!live()) return false;
+      busy = false;
+      if (response.kind === 'unknown') {
+        unknown = response.command;
+        notice = response;
+        retain();
+        return false;
+      }
+      unknown = null;
+      const row = meta.get(command.ordinal);
+      if (response.kind === 'admitted' || response.kind === 'conflict') {
+        if (row) row.sourceAdmission = { status: response.kind === 'admitted' ? 'admitted' : 'conflict' };
+        notice = null;
+        admitQueue.shift();
+        retain();
+        continue;
+      }
+      if (row) row.sourceAdmission = { status: 'failed' };
+      notice = response;
+      retain();
+      return false;
+    }
+    return true;
+  }
+
   async function confirm(): Promise<AniListJourneySnapshot> {
     if (!importId || cancelled || !live()) return snapshot();
     const rows = reviewedConfirmations();
@@ -417,6 +487,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       applyQueue.shift();
       if (!done && remaining.length) break;
     }
+    if (!live() || heldUnknown()) return snapshot();
+    queueSourceAdmissions();
+    await admitQueued();
     if (!live()) return snapshot();
     stage = cancelled ? 'cancelled' : 'results';
     retain();
@@ -445,7 +518,16 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
         applyQueue.shift();
         if (!nextDone && remaining.length) break;
       }
+      if (!heldUnknown()) {
+        queueSourceAdmissions();
+        await admitQueued();
+      }
       if (done || outcomes.length) stage = 'results';
+      return snapshot();
+    }
+    if (command.kind === 'admit-source') {
+      await admitQueued();
+      if (!heldUnknown()) stage = 'results';
       return snapshot();
     }
     await run(command, () => port.cancel(command), true);
@@ -463,6 +545,10 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const failed = command.body.confirmations.filter((row) => meta.get(row.ordinal)?.outcome?.status === 'failed');
     if (!failed.length) return snapshot();
     await applyBatch(failed, true);
+    if (!heldUnknown()) {
+      queueSourceAdmissions();
+      await admitQueued();
+    }
     stage = 'results';
     return snapshot();
   }
@@ -503,7 +589,16 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
 
   function openConfirm(): AniListJourneySnapshot {
     if (!reviewedConfirmations().length || cancelled) return snapshot();
+    confirmPrivacy = false;
+    confirmTimestamps = false;
     stage = 'confirm';
+    return snapshot();
+  }
+
+  function confirmSource(choice: { privacy?: boolean; timestamps?: boolean }): AniListJourneySnapshot {
+    if (stage !== 'confirm') return snapshot();
+    if (choice.privacy !== undefined) confirmPrivacy = choice.privacy;
+    if (choice.timestamps !== undefined) confirmTimestamps = choice.timestamps;
     return snapshot();
   }
 
@@ -520,6 +615,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     review,
     choose,
     confirm,
+    confirmSource,
     openConfirm,
     backToReview,
     retryUnknown,

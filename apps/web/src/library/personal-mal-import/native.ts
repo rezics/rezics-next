@@ -2,6 +2,8 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
+import { mapSourceAdmissionPort } from '../rich-private-entry/admission';
+import { admitPrivateSourceObservation } from '../rich-private-entry/native';
 import {
   MAL_FIELD_CAP,
   MAL_PAGE,
@@ -259,6 +261,22 @@ export function kernelMalPort(
         },
       );
       return result;
+    },
+    async admitSource(command) {
+      const session = await withSession(request, sessionEnv, originConfigured);
+      if ('kind' in session) return session;
+      try {
+        const result = await admitPrivateSourceObservation(client, {
+          subjectId: command.subjectId,
+          body: command.body,
+          key: command.key,
+          authorization: session.authorization,
+        });
+        return mapSourceAdmissionPort(result, command);
+      } catch (error) {
+        if (isPlatformClosedError(error)) return { kind: 'unavailable' };
+        return { kind: 'unknown', command };
+      }
     },
   };
 }

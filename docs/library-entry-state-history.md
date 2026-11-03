@@ -75,11 +75,13 @@ Focused native coverage is in `services/kernel/test/library/personal-http.test.t
 
 ## Web receiving
 
-The Web client currently has no generated typed methods for
+The installed generated Kernel HTTP client still has no typed methods for
 listEntryStateHistory(actor, subjectId, {cursor?, limit?}), reviewEntryStateChange(actor, subjectId,
 changeRevision) or restoreEntryState(actor, subjectId, changeRevision, {incarnationId,currentRevision}, requestKey).
-The Subject Library visit labels this capability unavailable; it does not query a guessed route, cast a substitute
-client or treat an empty history page as complete. State history remains distinct from the occurrence diary.
+Native Kernel HTTP routes and command types exist; Web does not bind them until those generated signatures and the
+coverage contract are installed. The Subject Library visit labels this capability unavailable; it does not query a
+guessed route, cast a substitute client or treat an empty history page as complete. State history remains distinct
+from the occurrence diary. No bounded keyset history, addressed review or guarded restore is added in this increment.
 
 Before activation, install and verify the generated methods and typed problem variants, bind every request to the
 current private viewer, and retain the original restore key and operands for an explicit retry. Review must precede

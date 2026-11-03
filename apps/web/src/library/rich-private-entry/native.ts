@@ -3,6 +3,7 @@ import type {
   PersonalEntry,
   PersonalEntryAnnotationWrite,
   PersonalEntryObservation,
+  PersonalEntrySourceAdmission,
   PersonalEntrySourceCorrection,
 } from '@rezics/client';
 
@@ -37,6 +38,31 @@ export async function writePrivateAnnotations(
   });
   if (!result.error && result.data?.personalEntry?.subjectId === input.subjectId)
     return { kind: 'saved', entry: result.data.personalEntry };
+  if (result.status === 409) return { kind: 'conflict' };
+  if (result.status === 401) return { kind: 'retired' };
+  if (result.status === 403) return { kind: 'denied' };
+  if (result.status === 404) return { kind: 'missing' };
+  return { kind: 'uncertain' };
+}
+
+export type SourceAdmissionResult =
+  | { kind: 'admitted'; observation: PersonalEntryObservation }
+  | { kind: 'conflict' | 'missing' | 'denied' | 'retired' | 'uncertain' };
+
+export async function admitPrivateSourceObservation(
+  client: KernelClient,
+  input: {
+    subjectId: string;
+    body: PersonalEntrySourceAdmission;
+    key: string;
+    authorization: string;
+  },
+): Promise<SourceAdmissionResult> {
+  const result = await client.libraryEntries({ subjectId: input.subjectId }).sourceObservations.post(input.body, {
+    headers: { authorization: input.authorization, 'idempotency-key': input.key },
+  });
+  if (!result.error && result.data?.sourceObservation?.recordId === input.body.recordId)
+    return { kind: 'admitted', observation: result.data.sourceObservation };
   if (result.status === 409) return { kind: 'conflict' };
   if (result.status === 401) return { kind: 'retired' };
   if (result.status === 403) return { kind: 'denied' };

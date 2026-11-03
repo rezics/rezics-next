@@ -93,8 +93,11 @@ function AniListImportSession({ visit }: { visit: AniListVisit }) {
         <AniListConfirmPage
           rows={snap.meta}
           busy={snap.busy}
+          confirmPrivacy={snap.confirmPrivacy}
+          confirmTimestamps={snap.confirmTimestamps}
           onBack={() => act((current) => current.backToReview())}
           onConfirm={() => void act((current) => current.confirm())}
+          onConfirmSource={(choice) => act((current) => current.confirmSource(choice))}
         />
       ) : null}
       {snap.stage === 'applying' ? <AniListApplying applied={snap.applied} applying={snap.applying} /> : null}

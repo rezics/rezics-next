@@ -1,9 +1,19 @@
 import { m } from '../../paraglide/messages.js';
+import type { SourceAdmissionOutcome } from '../rich-private-entry/admission';
+import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
 import type { MalApplyPage, MalOutcome } from './contract';
 import { MalAction } from './controls';
 import { malOutcomeLabel } from './meaning';
 
-function Outcome({ outcome, titles }: { outcome: MalOutcome; titles: Map<number, string> }) {
+function Outcome({
+  outcome,
+  titles,
+  admission,
+}: {
+  outcome: MalOutcome;
+  titles: Map<number, string>;
+  admission: SourceAdmissionOutcome | null | undefined;
+}) {
   return (
     <li className="rounded-md border p-3" data-mal-outcome={outcome.status} data-mal-row={outcome.row}>
       <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.row) ?? `#${outcome.row + 1}`}</p>
@@ -18,6 +28,7 @@ function Outcome({ outcome, titles }: { outcome: MalOutcome; titles: Map<number,
         </details>
       ) : null}
       {outcome.reason ? <p className="text-sm text-muted-foreground">{outcome.reason}</p> : null}
+      <ImportSourceOutcome outcome={admission} />
     </li>
   );
 }
@@ -25,6 +36,7 @@ function Outcome({ outcome, titles }: { outcome: MalOutcome; titles: Map<number,
 export function MalResultPage({
   result,
   titles,
+  admissions,
   busy,
   canRetry,
   onRetry,
@@ -33,6 +45,7 @@ export function MalResultPage({
 }: {
   result: MalApplyPage;
   titles: Map<number, string>;
+  admissions: Map<number, SourceAdmissionOutcome | null | undefined>;
   busy: boolean;
   canRetry: boolean;
   onRetry: () => void;
@@ -44,7 +57,12 @@ export function MalResultPage({
       {result.stopped ? <p role="status">{m.library_mal_stopped()}</p> : <p role="status">{m.library_mal_partial()}</p>}
       <ul className="space-y-3">
         {result.outcomes.map((outcome) => (
-          <Outcome key={outcome.row} outcome={outcome} titles={titles} />
+          <Outcome
+            key={outcome.row}
+            outcome={outcome}
+            titles={titles}
+            admission={admissions.get(outcome.row)}
+          />
         ))}
         {result.remaining.map((row) => (
           <li

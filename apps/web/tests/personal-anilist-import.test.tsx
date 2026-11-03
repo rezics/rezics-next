@@ -272,6 +272,9 @@ function recordingPort(
         result: { outcomes: options.partial ? outcomes.slice(0, -1) : outcomes, complete: !options.partial },
       };
     },
+    async admitSource() {
+      return { kind: 'admitted' as const };
+    },
     async cancel(command) {
       cancels.push(JSON.parse(JSON.stringify(command)));
       return { kind: 'cancelled', removed: command.remove };
@@ -295,6 +298,16 @@ function button(label: string) {
 
 async function click(label: string) {
   const target = button(label);
+  expect(target).toBeDefined();
+  await act(async () => {
+    target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+  });
+  await settle();
+}
+
+async function clickLabel(label: string) {
+  const target = [...host.querySelectorAll('label')].find((item) => item.textContent === label);
   expect(target).toBeDefined();
   await act(async () => {
     target!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -385,6 +398,8 @@ test('preview does not apply, explicit replacement and exact uncertain retry kee
   await click(m.library_anilist_continue_confirm());
   expect(host.textContent).toContain(subject);
   expect(host.textContent).toContain(m.library_anilist_confirm_replace());
+  await clickLabel(m.library_import_source_privacy_confirm());
+  await clickLabel(m.library_import_source_timestamps_confirm());
   await click(m.library_anilist_confirm());
   expect(host.textContent).toContain(m.library_anilist_uncertain());
   await click(m.library_anilist_retry_command());

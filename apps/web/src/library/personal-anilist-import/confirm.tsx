@@ -1,4 +1,5 @@
 import { m } from '../../paraglide/messages.js';
+import { ImportSourceChecks, ImportSourceEvidence } from '../rich-private-entry/source-confirm';
 import type { AniListRowMeta } from './contract';
 import { AniListAction } from './controls';
 import { aniListAppliedFields, aniListMatchLabel, aniListMediaLabel } from './meaning';
@@ -6,15 +7,22 @@ import { aniListAppliedFields, aniListMatchLabel, aniListMediaLabel } from './me
 export function AniListConfirmPage({
   rows,
   busy,
+  confirmPrivacy,
+  confirmTimestamps,
   onBack,
   onConfirm,
+  onConfirmSource,
 }: {
   rows: AniListRowMeta[];
   busy: boolean;
+  confirmPrivacy: boolean;
+  confirmTimestamps: boolean;
   onBack: () => void;
   onConfirm: () => void;
+  onConfirmSource: (choice: { privacy?: boolean; timestamps?: boolean }) => void;
 }) {
   const ready = rows.filter((row) => row.reviewId);
+  const gated = busy || ready.length === 0 || !confirmPrivacy || !confirmTimestamps;
   return (
     <section className="space-y-4" data-anilist-stage="confirm">
       <p>{m.library_anilist_confirm_help({ count: ready.length })}</p>
@@ -44,15 +52,24 @@ export function AniListConfirmPage({
               ) : (
                 <p className="text-sm">{m.library_anilist_absence()}</p>
               )}
+              <ImportSourceEvidence preview={row.sourcePreview} />
             </li>
           );
         })}
       </ul>
+      <ImportSourceChecks
+        prefix="anilist"
+        privacy={confirmPrivacy}
+        timestamps={confirmTimestamps}
+        disabled={busy}
+        onPrivacy={(privacy) => onConfirmSource({ privacy })}
+        onTimestamps={(timestamps) => onConfirmSource({ timestamps })}
+      />
       <div className="flex flex-wrap gap-3">
         <AniListAction type="button" variant="outline" disabled={busy} onClick={onBack}>
           {m.library_anilist_return_review()}
         </AniListAction>
-        <AniListAction type="button" disabled={busy || ready.length === 0} onClick={onConfirm} aria-busy={busy}>
+        <AniListAction type="button" disabled={gated} onClick={onConfirm} aria-busy={busy}>
           {busy ? m.library_anilist_confirming() : m.library_anilist_confirm()}
         </AniListAction>
       </div>

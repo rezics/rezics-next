@@ -1,3 +1,6 @@
+import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
+
 /** Native AniList personal-list caps, verified at Commerce delivery. */
 export const ANILIST_UPLOAD_BYTES = 1_048_576;
 export const ANILIST_ROWS = 200;
@@ -122,6 +125,8 @@ export type AniListRowMeta = {
   identifiers: AniListIdentifier[];
   groupLabel: string | null;
   repeating: boolean;
+  sourcePreview: SourceAdmissionPreview;
+  sourceAdmission: SourceAdmissionOutcome | null;
 };
 
 export type AniListFailureKind =
@@ -148,6 +153,13 @@ export type AniListCommand =
       replace: boolean;
     }
   | { kind: 'apply'; importId: string; body: AniListApplyBody }
+  | {
+      kind: 'admit-source';
+      key: string;
+      subjectId: string;
+      ordinal: number;
+      body: PersonalEntrySourceAdmission;
+    }
   | { kind: 'cancel'; key: string; importId: string; remove: boolean };
 
 export type AniListUnknown = { kind: 'unknown'; command: AniListCommand };
@@ -162,12 +174,18 @@ export type AniListReviewResult =
   | AniListUnknown;
 export type AniListApplyCallResult = { kind: 'applied'; result: AniListApplyResult } | AniListFailure | AniListUnknown;
 export type AniListMutateResult = { kind: 'cancelled'; removed: boolean } | AniListFailure | AniListUnknown;
+export type AniListAdmitResult =
+  | { kind: 'admitted' }
+  | { kind: 'conflict' }
+  | AniListFailure
+  | AniListUnknown;
 
 export type AniListImportPort = {
   preview(command: Extract<AniListCommand, { kind: 'preview' }>): Promise<AniListPreviewResult>;
   page(command: Extract<AniListCommand, { kind: 'page' }>): Promise<AniListPageResult>;
   review(command: Extract<AniListCommand, { kind: 'review' }>): Promise<AniListReviewResult>;
   apply(command: Extract<AniListCommand, { kind: 'apply' }>): Promise<AniListApplyCallResult>;
+  admitSource(command: Extract<AniListCommand, { kind: 'admit-source' }>): Promise<AniListAdmitResult>;
   cancel(command: Extract<AniListCommand, { kind: 'cancel' }>): Promise<AniListMutateResult>;
 };
 

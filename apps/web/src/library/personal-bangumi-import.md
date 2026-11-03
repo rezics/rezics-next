@@ -21,6 +21,7 @@ Missing methods render unavailable rather than a local parser or successful fixt
 | Preview | `GET :uploadId?after=-1` pages of 10                                                    | Current page only; titles assist display/search, never automatic identity                     |
 | Review  | `POST :uploadId:review` `{ ordinal, target? }`                                          | Unmatched rows may set an explicit readable subject; titles never auto-match                  |
 | Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip }] }` batches of 5 | Default `preserve`; `replace` authorizes the reviewed revision/incarnation, including absence |
+| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply                    | Separate typed command; record id is `subject_id`; date-like failed parse is unsupported      |
 | Stop    | `POST :uploadId:cancel`                                                                 | Stops new admission; acknowledged effects remain                                              |
 | Discard | `DELETE :uploadId`                                                                      | Clears this upload's evidence and reviews now; Library facts stay                             |
 
@@ -46,7 +47,11 @@ per-row metadata for N rows and exact uncertain-command operands.
   N bounded row metadata. No client matching, parser or per-field native fan-out.
 - Formula: `1 + K + M + Q + lifecycle + R` native calls for K returned pages, M reviewed rows, Q apply batches,
   cancel/delete lifecycle calls and explicit retries R, with `M <= N`, `Q <= M`, page size `<= 10` and apply size
-  `<= 5`. Full 5-row batches reduce Q to `ceil(M/5)`; single-row choices keep `Q = M`.
+  `<= 5`. Full 5-row batches reduce Q to `ceil(M/5)`; single-row choices keep `Q = M`. Source admission is a
+  separate typed command after apply and is omitted from this import cost formula.
+
+Decision: Confirm without the two source checkboxes still applies the import; the confirmation page disables Confirm
+until both are checked. Date-like failed parses stay unsupported; non-date tokens stay unknown.
 - Retained bound: `O(U + 10 × page-row bytes + N × metadata bytes)` with U the upload during submission only.
 - Installed caps: `BANGUMI_LIMITS` in `list-import-bangumi-model.ts` (256 KiB, 100 rows, 8 KiB row, 32 KiB evidence,
   depth 16, page 10, apply 5).

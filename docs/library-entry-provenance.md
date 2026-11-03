@@ -103,13 +103,13 @@ one field operation with the observation revision, and leaves both source timest
 a fresh entry read and a deliberate review before a new correction. An uncertain correction retries the same key and
 body; accepted PATCH results are reconciled with a personal-entry readback.
 
-The existing personal-list import confirmation pages remain owned by their provider import journeys. This receiving
-increment does not translate raw provider payloads into source admissions or claim source fields were applied during
-an import. The installed adapter contract is PersonalEntrySourceAdmission / PersonalEntrySourceCorrection through
-the generated libraryEntries(...).sourceObservations methods. Import journeys must preserve each provider's exact
-record identity, confirm its native preview evidence, and retain an exact idempotent retry before admitting those
-facts. VNDB remains unavailable until its generated libraryImports.vndb client family is delivered; no second
-parser or import route is introduced.
-
-Provider source admissions are separate exact-retry commands after the owner confirms the existing provider preview;
-an uncertain source admission never replays the accepted import command.
+The existing personal-list import confirmation pages remain owned by their provider import journeys. AniList, Bangumi
+and MAL submit `PersonalEntrySourceAdmission` through the generated `libraryEntries(...).sourceObservations.post`
+method after the existing import apply, only when the owner confirms source privacy and original timestamps in that
+same confirmation flow. Record identities stay the provider's own: AniList list-entry `id` when present, otherwise the
+AniList media identifier; Bangumi `subject_id`; MAL `${kind}/${identifier.value}`. AniList unix `createdAt`/`updatedAt`
+values remain `unknown` and are never converted to dates. MAL created time is format-absent. Unsupported timestamp
+shapes are reported and not submitted. Admission is its own exact-retry command (raw UUID idempotency key); an
+uncertain admission retains sender, credentials, key and operands and never replays an accepted import. Import cost
+ledgers do not count admission calls. VNDB remains unavailable until its generated `libraryImports.vndb` client family
+is delivered; no second parser or import route is introduced.

@@ -1,3 +1,6 @@
+import type { PersonalEntrySourceAdmission } from '@rezics/client';
+import type { SourceAdmissionOutcome, SourceAdmissionPreview } from '../rich-private-entry/admission';
+
 export const MAL_UPLOAD_BYTES = 2_097_152;
 export const MAL_WIRE_BYTES = 4_194_304;
 export const MAL_PAGE = 20;
@@ -64,6 +67,8 @@ export type MalPreviewRow = {
   source: MalReview['source'];
   review: MalReview | null;
   outcome: MalOutcome | null;
+  sourcePreview?: SourceAdmissionPreview;
+  sourceAdmission?: SourceAdmissionOutcome | null;
 };
 
 export type MalLimits = {
@@ -103,6 +108,13 @@ export type MalCommand =
   | { kind: 'page'; id: string; after: number }
   | { kind: 'review'; key: string; id: string; input: MalReviewInput }
   | { kind: 'apply'; id: string; body: MalApplyBody }
+  | {
+      kind: 'admit-source';
+      key: string;
+      subjectId: string;
+      ordinal: number;
+      body: PersonalEntrySourceAdmission;
+    }
   | { kind: 'cancel'; key: string; id: string }
   | { kind: 'delete'; key: string; id: string };
 
@@ -124,12 +136,14 @@ export type MalPageResult = { kind: 'page'; page: MalPage } | MalFailure | MalUn
 export type MalReviewResult = { kind: 'reviewed'; id: string } | MalFailure | MalUnknown;
 export type MalApplyResult = { kind: 'applied'; result: MalApplyPage } | MalFailure | MalUnknown;
 export type MalMutateResult = { kind: 'done'; id: string } | MalFailure | MalUnknown;
+export type MalAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | MalFailure | MalUnknown;
 
 export type MalImportPort = {
   preview(command: Extract<MalCommand, { kind: 'preview' }>): Promise<MalPreviewResult>;
   page(command: Extract<MalCommand, { kind: 'page' }>): Promise<MalPageResult>;
   review(command: Extract<MalCommand, { kind: 'review' }>): Promise<MalReviewResult>;
   apply(command: Extract<MalCommand, { kind: 'apply' }>): Promise<MalApplyResult>;
+  admitSource(command: Extract<MalCommand, { kind: 'admit-source' }>): Promise<MalAdmitResult>;
   cancel(command: Extract<MalCommand, { kind: 'cancel' }>): Promise<MalMutateResult>;
   delete(command: Extract<MalCommand, { kind: 'delete' }>): Promise<MalMutateResult>;
 };

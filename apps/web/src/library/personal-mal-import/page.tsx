@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
+import { sourceAdmissionBlock, sourceAdmissionBody } from '../rich-private-entry/admission';
 import {
   MAL_UPLOAD_BYTES,
   newCommandKey,
   type MalApplyPage,
   type MalCommand,
   type MalFailure,
+  type MalOutcome,
   type MalPage,
+  type MalPreviewRow,
   type MalUnknown,
 } from './contract';
 import { MalConfirmPage } from './confirm';
@@ -19,6 +22,7 @@ import { useMalImportPort } from './port';
 import { MalResultPage } from './results';
 import { MalReviewPage } from './review';
 import type { RowDraft } from './row';
+import { malSourcePreview } from './source';
 import { MalUploadForm } from './upload';
 import { useMalVisit, type MalVisit } from './visit';
 
@@ -55,11 +59,15 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   const [result, setResult] = useState<MalApplyPage | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const [confirmPrivacy, setConfirmPrivacy] = useState(false);
+  const [confirmTimestamps, setConfirmTimestamps] = useState(false);
   const unknown = useRef<MalCommand | null>(null);
   const sender = useRef({ subject: visit.subject, csrfToken: visit.csrfToken });
   const titles = useRef(new Map<number, string>());
   const applyCommand = useRef<Extract<MalCommand, { kind: 'apply' }> | null>(null);
+  const admitQueue = useRef<Extract<MalCommand, { kind: 'admit-source' }>[]>([]);
   const uploadId = useRef<string | null>(null);
+  const confirmFlags = useRef({ privacy: false, timestamps: false });
 
   useEffect(() => () => visit.retire(), [visit]);
 
@@ -70,13 +78,36 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
   function resetPrivate() {
     unknown.current = null;
     applyCommand.current = null;
+    admitQueue.current = [];
     uploadId.current = null;
     titles.current = new Map();
+    confirmFlags.current = { privacy: false, timestamps: false };
     setPage(null);
     setAfter(0);
     setResult(null);
     setStage('upload');
     setNotice(null);
+    setConfirmPrivacy(false);
+    setConfirmTimestamps(false);
+  }
+
+  function withPreview(rows: MalPreviewRow[]): MalPreviewRow[] {
+    return rows.map((row) => ({
+      ...row,
+      sourcePreview: row.sourcePreview ?? malSourcePreview(row),
+      sourceAdmission: row.sourceAdmission ?? null,
+    }));
+  }
+
+  function setRowAdmission(index: number, outcome: NonNullable<MalPreviewRow['sourceAdmission']>) {
+    setPage((current) =>
+      current
+        ? {
+            ...current,
+            rows: current.rows.map((row) => (row.index === index ? { ...row, sourceAdmission: outcome } : row)),
+          }
+        : current,
+    );
   }
 
   async function run<T extends { kind: string }>(
@@ -114,8 +145,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       port.page({ kind: 'page', id, after: cursor }),
     );
     if (!response || response.kind !== 'page' || !live()) return;
-    for (const row of response.page.rows) titles.current.set(row.index, row.title);
-    setPage(response.page);
+    const rows = withPreview(response.page.rows);
+    for (const row of rows) titles.current.set(row.index, row.title);
+    setPage({ ...response.page, rows });
     setAfter(cursor);
     setStage('review');
   }
@@ -156,6 +188,59 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     await loadPage(id, after);
   }
 
+  function queueSourceAdmissions(currentPage: MalPage, outcomes: MalOutcome[]) {
+    if (!confirmFlags.current.privacy || !confirmFlags.current.timestamps) return;
+    const applied = new Set(outcomes.filter((item) => item.status === 'applied').map((item) => item.row));
+    for (const row of currentPage.rows) {
+      if (row.review?.skip || !applied.has(row.index) || row.sourceAdmission) continue;
+      const preview = row.sourcePreview ?? malSourcePreview(row);
+      const body = sourceAdmissionBody(preview);
+      const blocked = sourceAdmissionBlock(preview);
+      const target = row.review?.target ?? row.target;
+      if (!body || !target) {
+        setRowAdmission(row.index, {
+          status: 'unsupported',
+          reason: target ? (blocked ?? undefined) : 'This row has no canonical Subject.',
+        });
+        continue;
+      }
+      admitQueue.current.push({
+        kind: 'admit-source',
+        key: newCommandKey(),
+        subjectId: target,
+        ordinal: row.index,
+        body,
+      });
+    }
+  }
+
+  async function admitQueued(): Promise<boolean> {
+    while (admitQueue.current.length) {
+      if (!live()) return false;
+      const command = admitQueue.current[0]!;
+      setBusy(true);
+      const response = await port.admitSource(command);
+      if (!live()) return false;
+      setBusy(false);
+      if (response.kind === 'unknown') {
+        unknown.current = response.command;
+        setNotice(response);
+        return false;
+      }
+      unknown.current = null;
+      if (response.kind === 'admitted' || response.kind === 'conflict') {
+        setRowAdmission(command.ordinal, { status: response.kind === 'admitted' ? 'admitted' : 'conflict' });
+        setNotice(null);
+        admitQueue.current.shift();
+        continue;
+      }
+      setRowAdmission(command.ordinal, { status: 'failed' });
+      setNotice(response);
+      return false;
+    }
+    return true;
+  }
+
   async function confirm() {
     const id = uploadId.current;
     if (!id || !page) return;
@@ -170,6 +255,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     const response = await run(command, () => port.apply(command));
     if (!response || response.kind !== 'applied' || !live()) return;
     setResult(response.result);
+    queueSourceAdmissions(page, response.result.outcomes);
+    await admitQueued();
+    if (!live()) return;
     setStage('results');
   }
 
@@ -186,8 +274,13 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       const response = await run(command, () => port.apply(command));
       if (response?.kind === 'applied') {
         setResult(response.result);
-        setStage('results');
+        if (page) queueSourceAdmissions(page, response.result.outcomes);
+        await admitQueued();
+        if (live()) setStage('results');
       }
+    } else if (command.kind === 'admit-source') {
+      const done = await admitQueued();
+      if (live() && done) setStage('results');
     } else if (command.kind === 'cancel') {
       await run(command, () => port.cancel(command));
     } else {
@@ -219,28 +312,50 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
           busy={busy}
           onSave={(draft) => void saveReview(draft)}
           onNext={() => page.next !== null && uploadId.current && void loadPage(uploadId.current, page.next)}
-          onConfirm={() => setStage('confirm')}
+          onConfirm={() => {
+            confirmFlags.current = { privacy: false, timestamps: false };
+            setConfirmPrivacy(false);
+            setConfirmTimestamps(false);
+            setStage('confirm');
+          }}
         />
       ) : null}
       {stage === 'confirm' && page ? (
         <MalConfirmPage
           rows={page.rows}
           busy={busy}
+          confirmPrivacy={confirmPrivacy}
+          confirmTimestamps={confirmTimestamps}
           onBack={() => setStage('review')}
           onConfirm={() => void confirm()}
+          onConfirmSource={(choice) => {
+            if (choice.privacy !== undefined) {
+              confirmFlags.current.privacy = choice.privacy;
+              setConfirmPrivacy(choice.privacy);
+            }
+            if (choice.timestamps !== undefined) {
+              confirmFlags.current.timestamps = choice.timestamps;
+              setConfirmTimestamps(choice.timestamps);
+            }
+          }}
         />
       ) : null}
       {stage === 'results' && result ? (
         <MalResultPage
           result={result}
           titles={titles.current}
+          admissions={new Map(page?.rows.map((row) => [row.index, row.sourceAdmission]) ?? [])}
           busy={busy}
           canRetry={!!applyCommand.current && result.outcomes.some((item) => item.status === 'failed')}
           onRetry={() => {
             const command = applyCommand.current;
             if (!command) return;
-            void run(command, () => port.apply(command)).then((response) => {
-              if (response?.kind === 'applied' && live()) setResult(response.result);
+            void run(command, () => port.apply(command)).then(async (response) => {
+              if (response?.kind === 'applied' && live()) {
+                setResult(response.result);
+                if (page) queueSourceAdmissions(page, response.result.outcomes);
+                await admitQueued();
+              }
             });
           }}
           onReview={() => setStage('review')}

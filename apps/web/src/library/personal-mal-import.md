@@ -21,6 +21,7 @@ local parser or successful fixture.
 | Preview | `GET :id?after=` pages of 20                                           | Current page only; titles assist display/search, never automatic identity          |
 | Review  | `POST :id/review` `{ row, target, skip, replace }`                     | Unmatched rows may set an explicit subject; skip and replace are deliberate        |
 | Confirm | `POST :id/apply` `{ confirm: true, rows: [{ row, version, fields }] }` | Only native-admitted `status` is selectable; other fields remain retained evidence |
+| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply  | Separate typed command; record id is `${kind}/${identifier.value}`; created time is absent |
 | Stop    | `POST :id/cancel`                                                      | Stops future dispatch; acknowledged effects remain                                 |
 | Discard | `DELETE :id`                                                           | Clears this upload's evidence now                                                  |
 
@@ -35,7 +36,11 @@ stay unless `replace` was reviewed.
 
 Apply is not atomic. Partial outcomes are applied, skipped, stale, unsupported, failed and unattempted (remaining).
 Unknown delivery retries the original command, credentials, key and operands. A stale row needs a visible refresh and
-a new review version. Source timestamps are display only.
+a new review version. Source admission is its own typed command after apply; created time is format-absent, and a
+single update-time field is parsed without fabricating a date. Multiple update-time fields stay unsupported.
+
+Decision: Confirm without the two source checkboxes still applies the import; the confirmation page disables Confirm
+until both are checked. MAL privacy tokens `1`/`true`/`private` are private; `0`/`false`/`public` are source-visible.
 
 Bounds follow the native page `limits` and [personal MAL import](../../../docs/library-import-mal.md): 2 MiB XML,
 4 MiB JSON wire, 500 rows, depth 16, 20-row pages and apply batches, 64 fields, three retained uploads, seven-day
