@@ -47,14 +47,37 @@ two selected media, source bytes, derivative shape, object-prefix shape and the 
 
 ## Observations
 
-The targeted test has not yet been run on this committed source. Populate this section from the test's temporary report
-before delivery: exact Realm route and partition, fixture IDs/revisions, per-axis and per-scale statement/row/buffer
-costs, relation access paths, and runner retry/refusal observations. The controller defers the frozen acceptance check
-until integration.
+The committed source revision was `3c03f8182a`. The focused command was attempted once:
+`bun run --cwd services/kernel check test/content/growth-realm-asset-collection.test.ts`.
+
+The check stopped in its schema-consistency preflight before the test file started. Its reached failure was:
+`error: Schema dump differs from db/library/schema.sql.` The diagnostic reported expected object
+`native_public_output_binding` and actual object `members_preparation`, and said
+`Checked source commit/tree: UNKNOWN (no retained source provenance at this boundary).` No test assertion, selected
+collector operation, or physical effect was reached. The test's temporary measurement report was therefore not
+created. This change does not edit schema files; the base command was not rerun, so this preflight mismatch is not
+attributed to either source revision here.
+
+The fixture is bound to one native-created Realm route and one collector partition, two unclaimed selected media
+items (one icon and one banner), plus one icon whose old settings revision permanently claims it after a later native
+clear. The test records runtime IDs and revision numbers only after setup; they were unavailable because setup did not
+start. The independent axes and requested scales are below; no scale measurement was observed:
+
+| Independent axis | 256 | 1024 | 4096 |
+| --- | --- | --- | --- |
+| Same-home available media | Not reached | Not reached | Not reached |
+| Other-home available media | Not reached | Not reached | Not reached |
+| Retained claim/settings history | Not reached | Not reached | Not reached |
+
+Actual statements, rows, buffers, relation access paths, refusal/retry runner work, and physical deletion results are
+unavailable for all nine samples. The controller defers the frozen acceptance check until integration.
 
 ## Execution limits
 
 The measurement includes registered Content work and the refused replay's application-database statements through the
 instrumented pool. Setup HTTP, image upload/effect publication, pressure seeding, cleanup, vacuum/analyze and the
 separate Auth fixture database are outside the measured operation. The test must not be used as account-erasure
-participant acceptance; that remains with its existing owner test.
+participant acceptance; that remains with its existing owner test. The required kernel typecheck command,
+`bun run --cwd services/kernel typecheck`, also exited with code 70 before compilation: `remote-check: infrastructure
+failure` reported an absolute preparation deadline during source-artifact publication. These are execution limits;
+neither command produced a source-level diagnostic for this change.
