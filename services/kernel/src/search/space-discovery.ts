@@ -5,6 +5,8 @@ import type {
   SpaceDiscoveryKey as NativeSpaceDiscoveryKey,
   SpaceDiscoverySource as NativeSpaceDiscoverySource,
   SpaceDiscoverySummary,
+  SpaceDiscoveryTupleWitness,
+  SpaceDiscoveryTupleWitnessInput,
 } from '../community/space-discovery.ts';
 import type { SpaceDiscoveryDependencyReadiness } from '../community/space-discovery-dependencies.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
@@ -63,6 +65,9 @@ export type SpaceDiscoveryAdapter = Readonly<{
   kind: typeof SPACE_DISCOVERY_KIND;
   source: Readonly<{
     dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;
+    tupleWitnesses?(partition: number, ids: readonly string[]): Promise<ReadonlyMap<string, SpaceDiscoveryTupleWitness>>;
+    registerTupleProducer?(input: Readonly<{ generation: string; cut: string; complete: true }>): Promise<void>;
+    publishTupleWitness?(input: SpaceDiscoveryTupleWitnessInput): Promise<SpaceDiscoveryTupleWitness>;
     read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
     count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
     page(partition: number, after: NativeSpaceDiscoveryKey | null, limit: number): Promise<SpaceDiscoveryPage>;
@@ -278,6 +283,34 @@ export function createSpaceDiscoveryAdapter(
     dependencies() {
       return native.dependencies();
     },
+    ...(native.tupleWitnesses
+      ? {
+          tupleWitnesses(partition: number, ids: readonly string[]) {
+            assertPartition(partition);
+            if (!Array.isArray(ids) || ids.length > MAX_BATCH)
+              throw new RangeError('Space discovery accepts at most 100 tuple witness keys');
+            const keys = requestedKeys(
+              ids.map((id) => ({ route: routeOf(id) ?? -1, id })),
+              partition,
+            );
+            return native.tupleWitnesses!(partition, keys.map(({ id }) => id));
+          },
+        }
+      : {}),
+    ...(native.registerTupleProducer
+      ? {
+          registerTupleProducer(input: Readonly<{ generation: string; cut: string; complete: true }>) {
+            return native.registerTupleProducer!(input);
+          },
+        }
+      : {}),
+    ...(native.publishTupleWitness
+      ? {
+          publishTupleWitness(input: SpaceDiscoveryTupleWitnessInput) {
+            return native.publishTupleWitness!(input);
+          },
+        }
+      : {}),
     async read(partition: number, ids: readonly string[]) {
       assertPartition(partition);
       if (!Array.isArray(ids) || ids.length > MAX_BATCH)

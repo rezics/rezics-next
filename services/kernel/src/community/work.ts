@@ -5,6 +5,10 @@ import {
   nextSpaceDiscoveryDependencyInstall,
 } from './space-discovery-dependencies.ts';
 import {
+  nextSpaceDiscoveryTupleWitnessWork,
+  repairSpaceDiscoveryTupleWitness,
+} from './space-discovery-source-fences.ts';
+import {
   drainSpaceDiscoveryFrontier,
   openSpaceDiscoveryFrontier,
   pendingSpaceDiscoveryFrontiers,
@@ -12,7 +16,7 @@ import {
 } from './space-discovery-frontier.ts';
 import { SPACE_DISCOVERY_INVALIDATED } from './space-discovery-events.ts';
 import { maintainRealmMemberCounts } from './member-count.ts';
-import { PARTITIONS } from '../route/route.ts';
+import { PARTITIONS, partitionOf } from '../route/route.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
 import { createRevisionLocatorEffect } from './revision-locator.ts';
 import { createCommunityAccountErasureEffect, registerCommunityAccountErasureWork } from './account-erasure.ts';
@@ -208,6 +212,19 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
     },
     { name: 'community.space-dependencies.initialize', ...COMMAND_STEP_RETRIES },
   );
+  const repairTupleWitness = DBOS.registerStep(
+    async () => {
+      const locator = await nextSpaceDiscoveryTupleWitnessWork(context.pool);
+      if (!locator) return false;
+      await repairSpaceDiscoveryTupleWitness(
+        context.pool,
+        partitionOf(locator.route),
+        locator.spaceId,
+      );
+      return true;
+    },
+    { name: 'community.space-dependencies.tuple-witness', ...COMMAND_STEP_RETRIES },
+  );
   const recover = DBOS.registerStep(() => pendingSpaceDiscoveryFrontiers(context.pool), {
     name: 'community.space-dependencies.recover',
     ...COMMAND_STEP_RETRIES,
@@ -226,6 +243,7 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
   DBOS.registerWorkflow(
     async () => {
       for (let page = 0; page < 20; page++) {
+        if (await repairTupleWitness()) continue;
         if (!(await initialize())) {
           for (const key of await recover()) await enqueue(key);
           return;

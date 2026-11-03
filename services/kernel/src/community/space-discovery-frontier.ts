@@ -10,6 +10,7 @@ import {
   dependencyPageLimit,
   SPACE_DISCOVERY_DEPENDENCY_BASIS as basis,
   SPACE_DISCOVERY_DEPENDENCY_PAGE,
+  spaceDiscoveryDependencyReadiness,
 } from './space-discovery-dependencies.ts';
 import { SPACE_DISCOVERY_INVALIDATED, SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
 
@@ -63,16 +64,11 @@ export async function openSpaceDiscoveryFrontier(
   const invalidation = event.data;
   if (invalidation.target.kind === 'space') return null;
   const key = { partition: invalidation.origin.partition, obligation: spaceDiscoveryObligation(invalidation) };
-  // The delivered native contracts supply Context and selected avatar identities.
-  // Search's native routes declare search/search_advanced exposure dependencies.
-  // No producer currently supplies an imported Space source tuple. Keep that
-  // obligation explicit until the native capability connects.
-  const supported = invalidation.target.kind !== 'source-fence';
   await runCommand(pool, { partition: key.partition, basis }, async (tx) => {
     await tx.query(
       `INSERT INTO community.space_discovery_frontier(partition_no,obligation,invalidation,state)
-       VALUES($1,$2,$3::jsonb,$4) ON CONFLICT DO NOTHING`,
-      [key.partition, key.obligation, JSON.stringify(invalidation), supported ? 'preparing' : 'unavailable'],
+       VALUES($1,$2,$3::jsonb,'preparing') ON CONFLICT DO NOTHING`,
+      [key.partition, key.obligation, JSON.stringify(invalidation)],
     );
     return noEffect(null);
   });
@@ -80,6 +76,19 @@ export async function openSpaceDiscoveryFrontier(
 }
 
 async function prepareFrontier(pool: Pool, key: SpaceDiscoveryFrontier): Promise<Progress> {
+  const retained = await withConnection(pool, async (client) =>
+    (
+      await client.query<{ invalidation: SpaceDiscoveryInvalidation }>(
+        `SELECT invalidation FROM community.space_discovery_frontier
+         WHERE partition_no=$1 AND obligation=$2`,
+        [key.partition, key.obligation],
+      )
+    ).rows[0],
+  );
+  if (!retained) throw new Error('Space discovery obligation unavailable');
+  const sourceTupleReady =
+    retained.invalidation.target.kind !== 'source-fence' ||
+    (await spaceDiscoveryDependencyReadiness(pool)).state === 'ready';
   const result = await runCommand(pool, { partition: key.partition, basis }, async (tx) => {
     const row = (
       await tx.query<Progress>(
@@ -90,18 +99,33 @@ async function prepareFrontier(pool: Pool, key: SpaceDiscoveryFrontier): Promise
     ).rows[0];
     if (!row) throw new Error('Space discovery obligation unavailable');
     if (row.state !== 'preparing') return noEffect(row);
+    if (row.invalidation.target.kind === 'source-fence' && !sourceTupleReady) return noEffect(row);
     const pending = await tx.query(
       `SELECT partition_no FROM community.space_discovery_dependency_install
        WHERE NOT complete ORDER BY partition_no LIMIT 1`,
     );
     if (pending.rows.length) return noEffect(row);
-    const cut = (
-      await tx.query<{ cut: string }>(
-        `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_dependency
-         WHERE dependency=$1::jsonb ORDER BY ordinal DESC LIMIT 1),0)::text AS cut`,
-        [JSON.stringify(row.invalidation.target)],
-      )
-    ).rows[0]!.cut;
+    const cut = row.invalidation.target.kind === 'source-fence'
+      ? (
+          await tx.query<{ cut: string }>(
+            `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_tuple_inverse
+             WHERE tuple_route=$1 AND source=$2 AND external_id=$3 AND field_group=$4 AND active
+             ORDER BY ordinal DESC LIMIT 1),0)::text AS cut`,
+            [
+              row.invalidation.target.route,
+              row.invalidation.target.source,
+              row.invalidation.target.externalId,
+              row.invalidation.target.fieldGroup,
+            ],
+          )
+        ).rows[0]!.cut
+      : (
+          await tx.query<{ cut: string }>(
+            `SELECT COALESCE((SELECT ordinal FROM community.space_discovery_dependency
+             WHERE dependency=$1::jsonb ORDER BY ordinal DESC LIMIT 1),0)::text AS cut`,
+            [JSON.stringify(row.invalidation.target)],
+          )
+        ).rows[0]!.cut;
     await tx.query(
       `UPDATE community.space_discovery_frontier SET state='draining',cut=$3
        WHERE partition_no=$1 AND obligation=$2`,
@@ -159,18 +183,28 @@ export async function drainSpaceDiscoveryFrontier(
   dependencyPageLimit(limit);
   const progress = await prepareFrontier(pool, key);
   if (progress.state !== 'draining') return progress.state;
-  const page = await withConnection(
-    pool,
-    async (client) =>
-      (
-        await client.query<{ route: number; space_id: string; ordinal: string }>(
-          `SELECT d.route,d.space_id,d.ordinal::text FROM community.space_discovery_dependency d
-       WHERE d.dependency=$1::jsonb AND d.ordinal>$2::bigint AND d.ordinal<=$3::bigint
-       ORDER BY d.ordinal LIMIT $4`,
-          [JSON.stringify(progress.invalidation.target), progress.cursor, progress.cut, limit],
-        )
-      ).rows,
-  );
+  const page = await withConnection(pool, async (client) => {
+    const target = progress.invalidation.target;
+    return target.kind === 'source-fence'
+      ? (
+          await client.query<{ route: number; space_id: string; ordinal: string }>(
+            `SELECT d.space_route AS route,d.space_id,d.ordinal::text
+             FROM community.space_discovery_tuple_inverse d
+             WHERE d.tuple_route=$1 AND d.source=$2 AND d.external_id=$3 AND d.field_group=$4
+               AND d.active AND d.ordinal>$5::bigint AND d.ordinal<=$6::bigint
+             ORDER BY d.ordinal LIMIT $7`,
+            [target.route, target.source, target.externalId, target.fieldGroup, progress.cursor, progress.cut, limit],
+          )
+        ).rows
+      : (
+          await client.query<{ route: number; space_id: string; ordinal: string }>(
+            `SELECT d.route,d.space_id,d.ordinal::text FROM community.space_discovery_dependency d
+             WHERE d.dependency=$1::jsonb AND d.ordinal>$2::bigint AND d.ordinal<=$3::bigint
+             ORDER BY d.ordinal LIMIT $4`,
+            [JSON.stringify(target), progress.cursor, progress.cut, limit],
+          )
+        ).rows;
+  });
   for (const space of page) await wakeSpace(pool, key.obligation, progress.invalidation, space);
   const settled = page.length < limit;
   const cursor = settled ? progress.cut! : page.at(-1)!.ordinal;

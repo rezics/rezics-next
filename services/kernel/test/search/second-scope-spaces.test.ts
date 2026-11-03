@@ -2,6 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import type {
   SpaceDiscoverySource as NativeSource,
   SpaceDiscoverySummary,
+  SpaceDiscoveryTupleWitness,
+  SpaceDiscoveryTupleWitnessInput,
 } from '../../src/community/space-discovery.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createSpaceDiscoveryAdapter } from '../../src/search/space-discovery.ts';
@@ -46,6 +48,75 @@ function adapterFor(
 }
 
 describe('second-scope Space discovery adapter', () => {
+  it('forwards complete tuple witnesses and producer writes through the Search source boundary', async () => {
+    const witness = {
+      state: 'ready',
+      spaceId: firstId,
+      spaceRevision: firstId,
+      realmId: null,
+      realmRevision: null,
+      producerGeneration: 'source-generation',
+      producerEpoch: '1',
+      sourcePosition: '4',
+      witnessGeneration: '9',
+      generation: 'native-generation',
+      cut: 'native-cut',
+      tuples: [],
+    } satisfies SpaceDiscoveryTupleWitness;
+    const input: SpaceDiscoveryTupleWitnessInput = {
+      spaceId: firstId,
+      spaceRevision: firstId,
+      realmId: null,
+      realmRevision: null,
+      producerGeneration: 'source-generation',
+      producerEpoch: '1',
+      sourcePosition: '4',
+      tuples: [],
+      origin: {
+        partition,
+        epoch: 1,
+        position: '4',
+        eventId: '11111111-1111-7111-8111-111111111114',
+        type: 'com.rezics.search.source-tuple.changed.v1',
+        resourceId: firstId,
+      },
+    };
+    let registered = '';
+    let published: SpaceDiscoveryTupleWitnessInput | undefined;
+    const source: NativeSource = {
+      dependencies: async () => ({
+        state: 'ready',
+        generation: 'native-generation',
+        cut: 'native-cut',
+        capabilities: { context: 'connected', media: 'connected', exposure: 'connected', 'source-fence': 'connected' },
+      }),
+      tupleWitnesses: async (_partition, ids) => new Map(ids.map((id) => [id, witness])),
+      registerTupleProducer: async (value) => {
+        registered = value.generation;
+      },
+      publishTupleWitness: async (value) => {
+        published = value;
+        return witness;
+      },
+      async read(p) {
+        return { partition: p, position: 4n, spaces: [] };
+      },
+      async count(p) {
+        return { partition: p, position: 4n, count: 0 };
+      },
+      async page(p) {
+        return { partition: p, position: 4n, spaces: [], next: null };
+      },
+    };
+    const adapter = adapterFor(source, async () => new Map());
+
+    expect(await adapter.source.tupleWitnesses?.(partition, [firstId])).toEqual(new Map([[firstId, witness]]));
+    await adapter.source.registerTupleProducer?.({ generation: 'source-generation', cut: 'source-cut', complete: true });
+    expect(registered).toBe('source-generation');
+    expect(await adapter.source.publishTupleWitness?.(input)).toBe(witness);
+    expect(published).toBe(input);
+  });
+
   it('forwards native readiness without treating empty pages or censuses as complete coverage', async () => {
     let readiness = nativeReadiness('preparing');
     const source: NativeSource = {

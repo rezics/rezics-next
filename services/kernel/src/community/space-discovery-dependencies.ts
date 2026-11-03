@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -10,32 +11,114 @@ export const SPACE_DISCOVERY_DEPENDENCY_BASIS = {
   requestedBy: null,
 };
 
-export type SpaceDiscoveryDependencyReadiness = Readonly<{
-  state: 'preparing' | 'unavailable';
-  capabilities: Readonly<{
-    context: 'connected';
-    media: 'connected';
-    exposure: 'connected';
-    'source-fence': 'unavailable';
-  }>;
+type SourceFenceCapability = 'preparing' | 'unavailable' | 'connected';
+type DependencyCapabilities<T extends SourceFenceCapability> = Readonly<{
+  context: 'connected';
+  media: 'connected';
+  exposure: 'connected';
+  'source-fence': T;
 }>;
 
-/** Registration must use explicit producer capability, never infer readiness
- * from an empty eligible page or the absence of outstanding scope obligations.
- * This contract deliberately cannot report ready before a native tuple owner
- * connects; bootstrap/current hydration remain independently usable.
+export type SpaceDiscoveryDependencyReadiness =
+  | Readonly<{
+      state: 'preparing';
+      generation?: string;
+      cut?: string | null;
+      capabilities: DependencyCapabilities<'preparing' | 'unavailable'>;
+    }>
+  | Readonly<{
+      state: 'unavailable';
+      generation?: string;
+      cut?: string | null;
+      reason?: 'source-tuple-producer-missing' | 'source-tuple-coverage-incomplete';
+      capabilities: DependencyCapabilities<'unavailable'>;
+    }>
+  | Readonly<{
+      state: 'ready';
+      generation: string;
+      cut: string;
+      capabilities: DependencyCapabilities<'connected'>;
+    }>;
+
+/** A ready result is issued only for an explicit source census plus a current
+ * exact witness for every retained Space. Empty pages and empty inverse ranges
+ * never supply either proof. Generation/cut are opaque equality witnesses over
+ * the captured native installation and the current tuple coverage frontier.
  */
 export async function spaceDiscoveryDependencyReadiness(pool: Pool): Promise<SpaceDiscoveryDependencyReadiness> {
-  const installing = await nextSpaceDiscoveryDependencyInstall(pool);
-  return {
-    state: installing === null ? 'unavailable' : 'preparing',
-    capabilities: {
-      context: 'connected',
-      media: 'connected',
-      exposure: 'connected',
-      'source-fence': 'unavailable',
-    },
-  };
+  const observation = await withConnection(pool, async (client) => {
+    const row = (
+      await client.query<{
+        pending_install: string;
+        install_cut: string | null;
+        tuple_generation: string | null;
+        tuple_cut: string | null;
+        required: string;
+        witnessed: string;
+        pending: string;
+        producer_generation: string | null;
+        producer_cut: string | null;
+        producer_complete: boolean | null;
+      }>(
+        `WITH installation AS MATERIALIZED (
+           SELECT COUNT(*) FILTER (WHERE NOT complete)::text AS pending_install,
+                  md5(string_agg(partition_no::text||':'||cursor_route::text||':'||cursor_id::text||':'||
+                    cut_route::text||':'||cut_id::text||':'||complete::text,'|' ORDER BY partition_no)) AS install_cut
+           FROM community.space_discovery_dependency_install
+         ), tuple_coverage AS MATERIALIZED (
+           SELECT md5(string_agg(partition_no::text||':'||generation::text,'|' ORDER BY partition_no)) AS tuple_generation,
+                  md5(string_agg(partition_no::text||':'||cut::text||':'||required::text||':'||
+                    witnessed::text||':'||pending::text,'|' ORDER BY partition_no)) AS tuple_cut,
+                  COALESCE(SUM(required),0)::text AS required,
+                  COALESCE(SUM(witnessed),0)::text AS witnessed,
+                  COALESCE(SUM(pending),0)::text AS pending
+           FROM community.space_discovery_tuple_capability
+         ), producer AS MATERIALIZED (
+           SELECT generation AS producer_generation,cut AS producer_cut,complete AS producer_complete
+           FROM community.space_discovery_tuple_producer WHERE singleton=true
+         )
+         SELECT installation.pending_install,installation.install_cut,
+                tuple_coverage.tuple_generation,tuple_coverage.tuple_cut,
+                tuple_coverage.required,tuple_coverage.witnessed,tuple_coverage.pending,
+                producer.producer_generation,producer.producer_cut,producer.producer_complete
+         FROM installation CROSS JOIN tuple_coverage LEFT JOIN producer ON true`,
+      )
+    ).rows[0]!;
+    return row;
+  });
+  const generation = createHash('sha256')
+    .update(`${observation.install_cut ?? 'missing'}:${observation.tuple_generation ?? 'missing'}:${observation.producer_generation ?? 'missing'}`)
+    .digest('hex');
+  const cut = createHash('sha256')
+    .update(`${observation.install_cut ?? 'missing'}:${observation.tuple_cut ?? 'missing'}:${observation.producer_cut ?? 'missing'}`)
+    .digest('hex');
+  const capabilities = (sourceFence: SourceFenceCapability) => ({
+    context: 'connected' as const,
+    media: 'connected' as const,
+    exposure: 'connected' as const,
+    'source-fence': sourceFence,
+  });
+  if (BigInt(observation.pending_install) > 0n)
+    return { state: 'preparing', generation, cut, capabilities: capabilities('preparing') };
+  if (!observation.producer_complete)
+    return {
+      state: 'unavailable',
+      generation,
+      cut,
+      reason: 'source-tuple-producer-missing',
+      capabilities: capabilities('unavailable'),
+    };
+  if (BigInt(observation.pending) > 0n)
+    return { state: 'preparing', generation, cut, capabilities: capabilities('preparing') };
+  if (observation.required !== observation.witnessed)
+    return {
+      state: 'unavailable',
+      generation,
+      cut,
+      reason: 'source-tuple-coverage-incomplete',
+      capabilities: capabilities('unavailable'),
+    };
+  return { state: 'ready', generation, cut, capabilities: capabilities('connected') };
 }
 
 export function dependencyPageLimit(limit: number): void {
