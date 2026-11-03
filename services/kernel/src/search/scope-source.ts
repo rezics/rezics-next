@@ -31,10 +31,15 @@ import {
   type SearchScopeOrdinalPrefix,
 } from './service-scope-order.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { createScopePreparationStore, type ScopeCaptureDefinition } from './scope-preparation-store.ts';
+import {
+  createScopePreparationStore,
+  type ScopeCaptureDefinition,
+  type ScopeCaptureFrontier,
+} from './scope-preparation-store.ts';
 import { createScopePreparation, readPreparedScopeObservation } from './scope-preparation.ts';
 import { createOrderedScopePreparation, readOrderedScopeRows } from './scope-preparation-ordered.ts';
 import { createScopeOrderedNative } from './scope-ordered-native.ts';
+import { checkHits } from './disclosure/check.ts';
 import type { PublicFilterSourceDefinition } from '../semantic/public-filter-source-binding.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork, evaluateScopeSubjects } from './scope-execution.ts';
 import { compileCurrentOwnerFilter, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
@@ -49,9 +54,9 @@ import { isOrdinalKey } from '../library/ordinal.ts';
 import { routeOf } from '../route/route.ts';
 import type { SearchHit } from './query.ts';
 import { readSearchScopeRelease } from './scope-release.ts';
-import { createRealmScopeSource, type RealmSubjectCapabilities } from './realm-scope.ts';
+import { createRealmScopeSource, type PreparedRealmScope, type RealmSubjectCapabilities } from './realm-scope.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
-import { subjectPartition, type RelationFacetMatch, type SubjectSource } from './source.ts';
+import { subjectPartition, type IndexedSubject, type RelationFacetMatch, type SubjectSource } from './source.ts';
 import {
   readCollectionKindPreparationWorkDefinition,
   readCollectionPublicationScopeWorkDefinition,
@@ -76,6 +81,7 @@ import {
   compareScopeOrderedTuple,
   addScopePublicCost,
   emptyScopePublicCost,
+  scopeOrderedNameKey,
   validateScopeOrderedHit,
   type ScopeOrderedDefinition,
   type ScopeOrderedPreparation,
@@ -230,6 +236,7 @@ export function createSearchScopeSource({
   prefix,
   source: _source,
   release,
+  realmRelease,
   evidence,
   realmSubjects,
   realmSubjectCapabilities,
@@ -240,6 +247,7 @@ export function createSearchScopeSource({
   prefix: string;
   source: SubjectSource;
   release?: () => Promise<FilterRelease | null>;
+  realmRelease?: (digest?: string) => Promise<Readonly<{ digest: string; release: FilterRelease }> | null>;
   evidence?: LeafOptions;
   realmSubjects?: RealmSubjectSource;
   realmSubjectCapabilities?: RealmSubjectCapabilities;
@@ -422,14 +430,298 @@ export function createSearchScopeSource({
       unavailable();
     return { admission, binding: bound.binding, source: collection.source };
   }
+  const realm = createRealmScopeSource({
+    pool,
+    ...(evidence ? { reader: evidence } : {}),
+    ...(realmSubjects ? { source: realmSubjects } : {}),
+    ...(realmSubjectCapabilities ? { capabilities: realmSubjectCapabilities } : {}),
+    release: realmRelease ?? ((digest) => readSearchScopeRelease(pool, digest)),
+  });
+  function realmSearchBasis(
+    prepared: PreparedRealmScope,
+    request: {
+      text?: string;
+      textQuery?: Record<string, unknown>;
+      textBoost?: string;
+      generation: number;
+      indexUuid: string;
+    },
+  ): ScopeBasis {
+    const text = digest({
+      value: request.text ?? null,
+      query: request.textQuery ?? null,
+      boost: request.textBoost ?? null,
+    });
+    return Object.freeze({
+      release: digest(prepared.basis),
+      query: digest({ realm: prepared.basis, text, generation: request.generation, indexUuid: request.indexUuid }),
+      profile: digest({ order: 'name', text }),
+      canonical: digest({ realm: prepared.basis, indexUuid: request.indexUuid }),
+      generation: request.generation,
+      index: subjectIndexName(prefix, request.generation),
+    });
+  }
+  async function realmNamePage(
+    prepared: PreparedRealmScope,
+    request: {
+      basis: ScopeBasis;
+      text?: string;
+      textQuery?: Record<string, unknown>;
+      textBoost?: string;
+      generation: number;
+      indexUuid: string;
+      after: ScopeNameSortTuple | null;
+      quota: number;
+      allowance: WorkAllowance;
+    },
+  ) {
+    bounded(request.quota, 100, 1);
+    const basis = realmSearchBasis(prepared, request);
+    if (!isDeepStrictEqual(basis, request.basis)) throw new TypeError('Realm Search basis changed');
+    const queryId = basis.query;
+    const work = new ScopeWork(request.allowance);
+    const index = subjectIndexName(prefix, request.generation);
+    const target = async () => {
+      work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
+      if ((await discoveryIndexUuid(client, index, engineWork(work))) !== request.indexUuid)
+        throw new ProblemError('search_restart_required');
+    };
+    const readHits = async (ids: readonly string[], withText: boolean): Promise<readonly SearchHit[]> => {
+      if (!ids.length) return [];
+      work.consume({ ...zeroScopeWork(), statements: 1, candidateKeys: ids.length, bytes: 8192 + ids.length * 64 });
+      const result = await searchSubjectHits(client, prefix, {
+        generation: request.generation,
+        sort: 'name',
+        size: ids.length,
+        filter: { ids: { values: ids } },
+        ...(withText && request.textQuery
+          ? {
+              query: request.textQuery,
+              ...(request.textBoost === undefined ? {} : { boost: request.textBoost }),
+            }
+          : {}),
+        work: engineWork(work),
+      });
+      work.consume({
+        ...zeroScopeWork(),
+        nativeRows: result.hits.length,
+        bytes: Buffer.byteLength(JSON.stringify(result.hits)),
+      });
+      if (new Set(result.hits.map((hit) => hit.id)).size !== result.hits.length) unavailable();
+      for (const hit of result.hits) validateScopeOrderedHit('name', hit, index);
+      return result.hits;
+    };
+    const mapSubjects = async (ids: readonly string[], requireSelf = false): Promise<readonly string[]> => {
+      const terminals: string[] = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const batch = ids.slice(offset, offset + 100);
+        work.consume({
+          ...zeroScopeWork(),
+          candidateKeys: batch.length,
+          identityMetadataRows: batch.length * 16,
+          nativePoints: batch.length * 8,
+          statements: batch.length * 32,
+          bytes: batch.length * 8192,
+        });
+        const values = await readIdentityMappings(pool, batch);
+        if (values.length !== batch.length) unavailable();
+        for (const [position, value] of values.entries()) {
+          if (value.state === 'absent') {
+            if (requireSelf) throw new ProblemError('search_restart_required');
+            continue;
+          }
+          if (value.state !== 'mapped') unavailable();
+          if (requireSelf && value.terminal !== batch[position]) throw new ProblemError('search_restart_required');
+          terminals.push(value.terminal);
+        }
+      }
+      return terminals;
+    };
+    const currentHits = async (ids: readonly string[]): Promise<readonly SearchHit[]> => {
+      const base = await readHits(ids, false);
+      if (base.length !== ids.length || ids.some((id) => !base.some((hit) => hit.id === id)))
+        throw new ProblemError('search_restart_required');
+      const selected = request.textQuery ? await readHits(ids, true) : base;
+      if (selected.length !== ids.length) throw new ProblemError('search_restart_required');
+      const baseById = new Map(base.map((hit) => [hit.id, hit]));
+      for (const hit of selected) {
+        const prior = baseById.get(hit.id);
+        if (
+          !prior ||
+          prior.index !== hit.index ||
+          prior.partition !== hit.partition ||
+          prior.securityRevision !== hit.securityRevision ||
+          !isDeepStrictEqual(prior.sort, hit.sort)
+        )
+          throw new ProblemError('search_restart_required');
+      }
+      return selected;
+    };
+    const revalidatePage = async (stored: readonly SearchHit[]): Promise<IndexedSubject[]> => {
+      const ids = stored.map((hit) => hit.id);
+      if (ids.length) {
+        const terminals = await mapSubjects(ids, true);
+        if (terminals.length !== ids.length || terminals.some((id, index) => id !== ids[index]))
+          throw new ProblemError('search_restart_required');
+      }
+      const current = await currentHits(ids);
+      const currentById = new Map(current.map((hit) => [hit.id, hit]));
+      for (const hit of stored) {
+        const actual = currentById.get(hit.id);
+        if (
+          !actual ||
+          actual.index !== hit.index ||
+          actual.partition !== hit.partition ||
+          actual.securityRevision !== hit.securityRevision ||
+          !isDeepStrictEqual(actual.sort, hit.sort)
+        )
+          throw new ProblemError('search_restart_required');
+      }
+      work.consume({
+        ...zeroScopeWork(),
+        candidateKeys: current.length,
+        nativeRows: current.length,
+        nativePoints: current.length * 8,
+        statements: current.length * 2,
+        bytes: current.length * 8192,
+      });
+      const checked = await checkHits(_source, current, new Map());
+      if (checked.passed.length !== current.length) throw new ProblemError('search_restart_required');
+      const byId = new Map(checked.passed.map(({ subject }) => [subject.id, subject]));
+      const values: (boolean | 'not_proven')[] = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const result = await realm.evaluate(prepared, ids.slice(offset, offset + 100), work.remaining());
+        work.native(result.work);
+        if (result.basis !== prepared.basis || result.values.length !== Math.min(100, ids.length - offset))
+          unavailable();
+        values.push(...result.values);
+      }
+      if (ids.length === 0) {
+        const result = await realm.evaluate(prepared, [], work.remaining());
+        work.native(result.work);
+        if (result.basis !== prepared.basis || result.values.length !== 0) unavailable();
+      }
+      if (values.some((value) => value !== true)) throw new ProblemError('search_restart_required');
+      return ids.map((id) => {
+        const subject = byId.get(id);
+        if (!subject) throw new ProblemError('search_restart_required');
+        return subject;
+      });
+    };
+    try {
+      await target();
+      const inputRecords = [];
+      const realms = realm.realms(prepared);
+      if (!realms.length) unavailable();
+      for (const realmId of realms) {
+        const inputId = digest({ basis: queryId, realm: realmId });
+        work.consume({ ...zeroScopeWork(), statements: 2, nativeRows: 2, bytes: 32768 });
+        inputRecords.push(await store.retainRealm(inputId, queryId, realmId));
+      }
+      const pending = inputRecords.find((record) => record.frontier.kind !== 'realm' || !record.frontier.exhausted);
+      if (pending) {
+        if (pending.definition.kind !== 'realm' || pending.frontier.kind !== 'realm') unavailable();
+        const sourcePage = await realm.sourcePrefix(
+          prepared,
+          pending.definition.realm,
+          pending.frontier.after,
+          32,
+          work.remaining(),
+        );
+        work.native(sourcePage.work);
+        if (sourcePage.basis !== prepared.basis) unavailable();
+        const candidateIds = [...new Set(sourcePage.subjects)];
+        const indexedIds = [...new Set(await mapSubjects(candidateIds))];
+        const allHits = await readHits(indexedIds, false);
+        if (allHits.length !== indexedIds.length || indexedIds.some((id) => !allHits.some((hit) => hit.id === id)))
+          unavailable();
+        work.consume({
+          ...zeroScopeWork(),
+          candidateKeys: allHits.length,
+          nativeRows: allHits.length,
+          nativePoints: allHits.length * 8,
+          statements: allHits.length * 2,
+          bytes: allHits.length * 8192,
+        });
+        const checked = await checkHits(_source, allHits, new Map());
+        if (checked.passed.length !== allHits.length) unavailable();
+        const textHits = request.textQuery ? await readHits(indexedIds, true) : allHits;
+        const allById = new Map(allHits.map((hit) => [hit.id, hit]));
+        for (const hit of textHits) {
+          const prior = allById.get(hit.id);
+          if (
+            !prior ||
+            prior.index !== hit.index ||
+            prior.partition !== hit.partition ||
+            prior.securityRevision !== hit.securityRevision ||
+            !isDeepStrictEqual(prior.sort, hit.sort)
+          )
+            unavailable();
+        }
+        const evaluation = await realm.evaluate(
+          prepared,
+          textHits.map((hit) => hit.id),
+          work.remaining(),
+        );
+        work.native(evaluation.work);
+        if (
+          evaluation.basis !== prepared.basis ||
+          evaluation.values.length !== textHits.length ||
+          evaluation.values.includes('not_proven')
+        )
+          unavailable();
+        const retained = textHits.filter((_, index) => evaluation.values[index] === true);
+        const rows = retained.map((hit) => ({
+          subject: hit.id,
+          nameKey: scopeOrderedNameKey(hit.sort[0] as string | null),
+          hit: Buffer.from(JSON.stringify(hit), 'utf8'),
+        }));
+        work.consume({
+          ...zeroScopeWork(),
+          statements: 4 + rows.length,
+          nativeRows: 1 + rows.length,
+          bytes: 8192 + rows.reduce((total, row) => total + row.hit.length + row.nameKey.length, 0),
+        });
+        const next: Extract<ScopeCaptureFrontier, { kind: 'realm' }> = {
+          kind: 'realm',
+          after: sourcePage.after,
+          exhausted: sourcePage.exhausted,
+        };
+        if (!(await store.advanceRealm(pending, next, rows))) unavailable();
+        const allComplete = inputRecords.every((record) =>
+          record.scope_id === pending.scope_id
+            ? sourcePage.exhausted
+            : record.frontier.kind === 'realm' && record.frontier.exhausted,
+        );
+        if (!allComplete) return { status: 'preparing' as const, basis, work: work.receipt() };
+      }
+      await target();
+      const stored = await readOrderedScopeRows(pool, prefix, queryId, 'name', request.after, request.quota + 1, work);
+      const selected = stored.slice(0, request.quota);
+      const proof = stored.slice(0, request.quota + 1);
+      const subjects = await revalidatePage(proof);
+      await target();
+      return {
+        status: 'ready' as const,
+        basis,
+        hits: selected,
+        subjects: subjects.slice(0, selected.length),
+        after: (selected.at(-1)?.sort as unknown as ScopeNameSortTuple | undefined) ?? request.after,
+        exhausted: stored.length <= request.quota,
+        work: work.receipt(),
+      };
+    } catch (error) {
+      if (error && typeof error === 'object')
+        Object.defineProperty(error, 'work', { value: work.receipt(), configurable: true });
+      throw error;
+    }
+  }
   return {
-    realm: createRealmScopeSource({
-      pool,
-      ...(evidence ? { reader: evidence } : {}),
-      ...(realmSubjects ? { source: realmSubjects } : {}),
-      ...(realmSubjectCapabilities ? { capabilities: realmSubjectCapabilities } : {}),
-      release: (digest) => readSearchScopeRelease(pool, digest),
-    }),
+    realm: {
+      ...realm,
+      searchBasis: realmSearchBasis,
+      searchPage: realmNamePage,
+    },
     /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */
     work(result: PreparedSearchScope | SearchScopeEvaluation): WorkReceipt {
       const receipt = receipts.get(result);

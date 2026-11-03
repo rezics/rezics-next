@@ -107,17 +107,18 @@ resource references remain rejected, without recursion. No query-time account se
 
   Content's structural census is installed, but its actual current-disclosure/live-maintenance composition
   remains unavailable. Without both capabilities, the factory returns typed unavailability and supplies no
-  population or negative. The catalogue Search request now admits the request-only Realm condition and routes
-  preparation through its registered service-bound Scope with the actual reader options. A population-ready
-  preparation handle is not query readiness, so Search keeps successful results unavailable until retained
-  canonical identity preparation and indexed name windows are connected. Unknown or withheld evidence remains
-  unavailable, including under NOT or a true OR branch.
+  population or negative. Search consumes finite Content Realm prefixes into retained canonical candidates,
+  refines the complete current text/catalogue predicate, then publishes first/next/final pages from indexed
+  actual-name tuples. Raw prefixes are input only. Each request advances at most one 32-row prefix under one fixed
+  allowance; incomplete preparation stays unavailable. Search reobserves the current Realm, subject identity,
+  indexed tuple and catalogue predicate at page consumption. Unknown or withheld evidence remains unavailable,
+  including under NOT or a true OR branch.
 
-  Search still needs the complete retained Content-prefix-to-canonical-identity preparation and indexed actual-name
-  tuple windows before it can return useful pages for sparse Realm populations. A `population_ready` observation is
-  preparation input only. No raw prefix, Home Space publication membership, `subject_thread` scan or
-  known-candidate batch substitutes for that retained canonical result. Native outcomes remain deferred until
-  Content supplies the live disclosure/maintenance composition.
+  Decision: Realm-filtered Search defaults to canonical name order and supports explicit `name`; other sort orders
+  stay unsupported until their retained native tuples are delivered. A `population_ready` observation remains
+  preparation input only. No Home Space publication membership, `subject_thread` scan or known-candidate batch
+  substitutes for Content's prefix. Native discussion/review, protected-board grant, ban, withdrawal and hidden-
+  reference outcomes remain unmeasured until Content supplies the live disclosure/maintenance composition.
 
 - Review-backed Context is `{ratingQuestion:{id:UUID}}`, request-only with a server-resolved exact native
   definition revision. Original `definitions:read` precedes enumeration for every reference, including under

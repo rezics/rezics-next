@@ -150,6 +150,12 @@ export function createRealmScopeSource(input: {
     }
   }
   const api = {
+    /** Bounded anchors cover every boolean branch before separate finite source frontiers. */
+    realms(scope: PreparedRealmScope): readonly string[] {
+      const anchors = state(scope).anchors;
+      if (!anchors?.length) notReady();
+      return [...anchors].sort();
+    },
     async prepare(
       filter: DiscoveryFilterDocument,
       allowance: WorkAllowance,
