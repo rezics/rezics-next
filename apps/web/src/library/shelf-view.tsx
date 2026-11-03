@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
-import { SelectionBar as SharedSelectionBar } from '@rezics/ui/components/selection-bar';
+import { SelectionBar as SharedSelectionBar } from '@rezics/ui/selection-bar';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { EllipsisIcon } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';

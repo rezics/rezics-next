@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@rezics/ui/shadcn/dialog';
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { m } from '../paraglide/messages.js';
 
 export type SelectionReviewItem = Readonly<{
@@ -58,7 +58,7 @@ export function SelectionReviewView({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   items: readonly SelectionReviewItem[];
-  actionMeaning?: string;
+  actionMeaning?: ReactNode;
   statusChoices: readonly { id: string; label: { text: string; lang: string } }[];
   statusValue: string;
   statusAllowed: boolean;
