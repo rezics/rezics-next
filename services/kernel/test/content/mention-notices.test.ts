@@ -363,6 +363,7 @@ test('mention notices recheck current board and every post ancestor before sendi
 });
 
 test('a native first-publication mention reads the independent board anchor and reaches its recipient', async () => {
+  await fixture.close();
   const driver = await createContentNotificationDriver();
   try {
     const people = await driver.provision();
