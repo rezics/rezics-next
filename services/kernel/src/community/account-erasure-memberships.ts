@@ -65,8 +65,7 @@ async function qualifiesForSuccession(
       context: Readonly<{ deadline: number }>,
     ): Promise<'owner-or-replay' | 'not-owner'>;
   } = createRealmOwnershipCommands(deps);
-  if (!commands.qualifyErasureSuccession)
-    throw new Error('Accounts Realm erasure owner qualification is unavailable');
+  if (!commands.qualifyErasureSuccession) throw new Error('Accounts Realm erasure owner qualification is unavailable');
   const qualification = await commands.qualifyErasureSuccession(
     { resource: { route: routeOf(input.realmId)!, id: input.realmId }, accountId: input.accountId },
     context,

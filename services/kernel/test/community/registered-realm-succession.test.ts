@@ -5,8 +5,12 @@ import {
 } from './support/registered-realm-succession-fixture.ts';
 
 let f: RegisteredSuccessionFixture;
-beforeAll(async () => { f = await createRegisteredSuccessionFixture(); }, 180_000);
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await createRegisteredSuccessionFixture();
+}, 180_000);
+afterAll(async () => {
+  await f?.close();
+});
 
 // Every erasure below enters through real Auth deletion and the normally registered worker.
 // Reads observe native decisions; no test invokes the ownership adapter or assigns an orphan episode.
@@ -19,7 +23,10 @@ test('registered erasure orphans at the original root and leaves an ordinary mem
   let original: Awaited<ReturnType<typeof f.state>>;
   try {
     erased = await f.erase(owned.owner);
-    original = await f.until(() => f.state(owned), (s) => s.decisions[0]?.decision_state === 'orphaned');
+    original = await f.until(
+      () => f.state(owned),
+      (s) => s.decisions[0]?.decision_state === 'orphaned',
+    );
     expect(original.locators).toHaveLength(1);
     await f.worker.crash();
   } finally {
@@ -31,8 +38,10 @@ test('registered erasure orphans at the original root and leaves an ordinary mem
   expect(orphan.decisions).toEqual(original.decisions);
   expect(orphan.continuity).toEqual(original.continuity);
   expect(orphan.continuity).toEqual({
-    ownership_state: 'orphaned', orphaned_at: erased.at,
-    claim_eligible_at: orphan.continuity.claim_eligible_at, exact_deadline: true,
+    ownership_state: 'orphaned',
+    orphaned_at: erased.at,
+    claim_eligible_at: orphan.continuity.claim_eligible_at,
+    exact_deadline: true,
   });
   expect(orphan.decisions).toHaveLength(1);
   expect(orphan.decisions[0]).toMatchObject({ source_at: erased.at, decision_state: 'orphaned' });
@@ -51,7 +60,10 @@ test('pending retains its locator across restart; lost unlink reply replays the 
   await f.moderator(selected, successor.account);
   await f.suspend(successor.account, true);
   const erased = await f.erase(selected.owner);
-  const pending = await f.until(() => f.state(selected), (s) => s.decisions.length === 1);
+  const pending = await f.until(
+    () => f.state(selected),
+    (s) => s.decisions.length === 1,
+  );
   expect(pending.decisions[0]).toMatchObject({ source_at: erased.at, decision_state: null });
   expect(pending.locators).toHaveLength(1);
   expect(pending.continuity.ownership_state).toBe('owned');
@@ -60,7 +72,10 @@ test('pending retains its locator across restart; lost unlink reply replays the 
   try {
     await f.restartWorker();
     await f.suspend(successor.account, false, false);
-    const applied = await f.until(() => f.state(selected), (s) => s.decisions[0]?.decision_state === 'owned');
+    const applied = await f.until(
+      () => f.state(selected),
+      (s) => s.decisions[0]?.decision_state === 'owned',
+    );
     expect(applied.owners).toEqual([{ subject_id: successor.account.id }]);
     expect(applied.locators).toHaveLength(1);
     expect(applied.continuity).toMatchObject({ ownership_state: 'owned', orphaned_at: null, claim_eligible_at: null });
