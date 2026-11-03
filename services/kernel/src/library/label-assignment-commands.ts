@@ -31,6 +31,7 @@ import { unassignStoredLabelAssignment, restoreStoredLabelAssignment } from './l
 import { admitShelfRead } from './shelf-admission.ts';
 import { readLibraryEntryTiles, type LibraryEntryTile } from './library-entry-tiles.ts';
 import { readPersonalLabel } from './label-store.ts';
+import { readLibraryProfileAnchor } from './profile-source.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
 import subjectPage from './label-assignment-subject-page.sql';
@@ -38,6 +39,7 @@ import subjectPage from './label-assignment-subject-page.sql';
 type Client = Pick<PoolClient, 'query'>;
 type Assignment = { id: string; labelId: string; subjectId: string; revision: number };
 type Expected = { subjectId: string; assignmentId: string; revision: number };
+export type AssignmentReviewGuard = { subjectId: string; identityEpoch: string; labelRevision: number };
 type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' };
 const invalid = () => new ProblemError('invalid_request');
 function object(input: unknown, keys: string[]): Record<string, unknown> {
@@ -124,6 +126,7 @@ export function createLabelAssignmentCommands(deps: {
     value: unknown,
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
+    reviewGuard?: AssignmentReviewGuard,
   ) {
     const account = owner(actor, 'library_entry:update');
     id(labelId);
@@ -132,7 +135,7 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed },
+      input: { labelId, ...parsed, ...(reviewGuard === undefined ? {} : { reviewGuard }) },
       requestKey: key,
     };
     const execute = async (
@@ -147,6 +150,11 @@ export function createLabelAssignmentCommands(deps: {
         accountId: account.accountId,
         labelId,
         subjectId: operation === 'assign' ? prepared.subjectId! : parsed.subjectId,
+        ...(operation === 'assign' && reviewGuard === undefined
+          ? {}
+          : operation === 'assign'
+            ? { expectedLabelRevision: reviewGuard!.labelRevision }
+            : {}),
       };
       const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
       if (operation === 'assign') {
@@ -154,6 +162,8 @@ export function createLabelAssignmentCommands(deps: {
         switch (result.kind) {
           case 'not_found':
             throw new LibraryNotFoundError();
+          case 'stale':
+            throw new LibraryConflictError();
           case 'capacity':
             throw new ProblemError('library_label_capacity');
           case 'migration_required':
@@ -206,6 +216,20 @@ export function createLabelAssignmentCommands(deps: {
               resolveSubject(deps, account, parsed.subjectId, attempt.time),
             );
             if (!resolved) throw new LibraryNotFoundError();
+            if (reviewGuard !== undefined) {
+              const anchor = await withRequestDeadline(deadline, () =>
+                readLibraryProfileAnchor(
+                  { pool, access: deps.access, actor: account, at: attempt.time, deadline },
+                  parsed.subjectId,
+                ),
+              );
+              if (
+                !anchor ||
+                anchor.subjectId !== reviewGuard.subjectId ||
+                anchor.identityEpoch.toString() !== reviewGuard.identityEpoch
+              )
+                throw new LibraryConflictError();
+            }
             return { subjectId: resolved.subjectId };
           } catch (error) {
             return { error };
@@ -216,8 +240,14 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string) {
-    return (await mutate(actor, labelId, value, key, 'assign')) as import('../command/command.ts').CommandOutcome<
+  async function assignLabel(
+    actor: Actor,
+    labelId: string,
+    value: { subjectId: string },
+    key: string,
+    reviewGuard?: AssignmentReviewGuard,
+  ) {
+    return (await mutate(actor, labelId, value, key, 'assign', reviewGuard)) as import('../command/command.ts').CommandOutcome<
       ReturnType<typeof minimal>
     >;
   }

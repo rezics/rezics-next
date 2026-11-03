@@ -57,6 +57,7 @@ import type { ContentRuntime } from '../content/runtime.ts';
 import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
 import { malImportRoutes } from '../library/list-import-mal-routes.ts';
 import { libraryExportRoutes } from '../library/library-export-routes.ts';
+import { libraryArchiveMergeRoutes } from '../library/library-archive-merge-routes.ts';
 import { copyArchiveRoutes } from '../library/copy-archive-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
@@ -615,6 +616,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     workClient,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
+  libraryArchiveMergeRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    workClient,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
   copyArchiveRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
@@ -800,6 +808,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof malImportRoutes> &
   ReturnType<typeof aniListImportRoutes> &
   ReturnType<typeof libraryExportRoutes> &
+  ReturnType<typeof libraryArchiveMergeRoutes> &
   ReturnType<typeof copyArchiveRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
