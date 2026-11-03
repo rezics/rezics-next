@@ -377,7 +377,7 @@ export function nativeSourceCustodyFootprint(sql: string, values: readonly unkno
   const text = sameSQL(sql);
   if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(text)) return footprint(sql, [...values], 0, 0);
-  for (const [query, rows, points, metadata] of [
+  for (const [query, rows, points, metadata, keys = 0] of [
     [partitionQuery, 16, 1, 1],
     [identityPartitionQuery, 16, 1, 1],
     [accountQuery, 16, 1, 0],
@@ -391,9 +391,23 @@ export function nativeSourceCustodyFootprint(sql: string, values: readonly unkno
     [identityCapture, 32, 1, 0],
     [proofQuery, 64, 3, 1],
     [finishQuery, 80, 3, 1],
+    [holdQuery, 48, 1, 0],
+    [heldQuery, 16, 1, 0],
+    [retainedQuery, 16, 1, 0],
+    [releaseQuery, 32, 1, 0],
+    [retireSource, 16, 1, 0],
+    [retireReceipt, 16, 1, 0],
+    [terminalScope, 48, 3, 0],
+    [identityRetention, 2, 1, 0, 1],
+    [retireActive, 16, 1, 0, 1],
+    [retireHolds, 16 * 80 + 32, 1, 0, 80],
+    [retireChildren, 16 * 80, 80, 0],
+    [retireProof, 32, 2, 0],
+    [retireCapture, 32, 2, 0],
+    [nextCapture, 32, 2, 0, 1],
   ] as const) {
     if (sameSQL(query.sql) === text && query.params.length === values.length) {
-      const work = footprint(sql, [...values], rows, points, 0, metadata);
+      const work = footprint(sql, [...values], rows, points, keys, metadata);
       const projection = query === readQuery ? captureProjectionBytes : undefined;
       if (projection !== undefined) work.bytes += projection - 4096;
       return work;
@@ -425,8 +439,10 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
       query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
     // Shared original descendants can only dispatch the owner's recognized literals.
     // The explicit reservation suppresses duplicate observation, never unknown SQL.
+    const declared = nativeSourceCustodyFootprint(query.sql, args);
+    const requested = footprint(query.sql, args, rows, points, keys, metadata);
     const admitted = work.reserve(
-      strict ? nativeSourceCustodyFootprint(query.sql, args) : footprint(query.sql, args, rows, points, keys, metadata),
+      strict || !declared ? declared : { ...declared, bytes: Math.max(declared.bytes, requested.bytes) },
     );
     admitted.dispatch();
     try {
