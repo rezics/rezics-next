@@ -95,7 +95,9 @@ export const LongContent: Story = {
   render: () => FollowingStory('many'),
   play: async (context) => {
     await pageReady(context);
-    await expect(await within(context.canvasElement).findByRole('heading', { name: 'Following item 12' })).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByRole('heading', { name: 'Following item 12' }),
+    ).toBeVisible();
   },
 };
 

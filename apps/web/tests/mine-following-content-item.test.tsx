@@ -92,7 +92,9 @@ test('Following uses shared item headings and independent native actions while p
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'owner', csrfToken: 'current-csrf' });
   const admit = (admitted: string[]) =>
     client.setQueriesData(
-      { predicate: ({ queryKey }) => queryKey[0] === 'exposure' && queryKey[1] === 'viewer' && queryKey[2] === 'owner' },
+      {
+        predicate: ({ queryKey }) => queryKey[0] === 'exposure' && queryKey[1] === 'viewer' && queryKey[2] === 'owner',
+      },
       { subject: 'owner', admitted },
     );
   const write = spyOn(followActions, 'setFollow')

@@ -10,7 +10,10 @@ Object.defineProperty(globalThis, 'window', {
   value: { location: new URL('https://storybook.test/iframe.html') },
 });
 afterAll(() => {
-  for (const [key, previous] of [['window', previousWindow], ['__rezicsStoryContext', previousContext]] as const) {
+  for (const [key, previous] of [
+    ['window', previousWindow],
+    ['__rezicsStoryContext', previousContext],
+  ] as const) {
     if (previous) Object.defineProperty(globalThis, key, previous);
     else Reflect.deleteProperty(globalThis, key);
   }
