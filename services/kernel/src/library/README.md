@@ -3078,3 +3078,5 @@ transaction. Existing scalar, cursor, manual sparse units, generic history and p
 meaning. Canonical IDs are exposed only by the bounded owner reader under current source disclosure. The existing
 100-child session erasure page now shares its budget between manual and canonical children, and session deletion
 checks both. The focused mounted journey is `test/library/episode-progress.test.ts`.
+
+Canonical episode owner admission follows generic session scope, current-account and terminal fences; catalogue disclosure independently uses native Subject Access, without installing an account ACL.

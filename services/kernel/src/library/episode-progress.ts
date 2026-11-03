@@ -10,7 +10,7 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
+import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -96,7 +96,9 @@ function ownerOf(actor: Actor, action: string): AccountActor {
 /** Canonical completion is orthogonal to the existing session's scalar/cursor/manual value. */
 export function createEpisodeProgressCommands(config: Dependencies) {
   const { pool, access, tokens, clock, routeKey } = config;
-  const runner = createLibraryCommandRunner({ pool, access, ...(clock ? { clock } : {}) });
+  // Match generic sessions' native self-owner boundary. Access is separately
+  // required for the foreign Subject authority; no new account ACL is installed.
+  const runner = createLibraryCommandRunner({ pool, ...(clock ? { clock } : {}) });
   const heads = createShelfHeads(),
     activity = createProgressActivity();
   async function load(client: Pick<CommandTransaction, 'query'>, owner: AccountActor, sessionId: string) {
@@ -241,19 +243,11 @@ export function createEpisodeProgressCommands(config: Dependencies) {
     return withRequestDeadline(deadline, async () => {
       const at = await withConnection(pool, (client) => mintReadTime(client, clock));
       try {
-        const check = await accessCheck(
-          access,
-          owner,
-          'progress_session:read',
-          { route, id: owner.accountId },
-          { pool, deadline, time: at },
-        );
         const binding: CursorBinding = {
           operation: 'progress_session.episodes',
           parameters: { accountId: owner.accountId, sessionId },
         };
         const before = await snapshot(owner, sessionId, async (client, fact) => {
-          if (!(await check(client, at))) throw new GrantDeniedError();
           const partition = await readPartition(client, partitionOf(route));
           if (!partition) throw new LibraryNotFoundError();
           let after: string | null = null;
@@ -309,15 +303,7 @@ export function createEpisodeProgressCommands(config: Dependencies) {
             if (!source || source.membership !== shown.membership || source.ordinal !== shown.ordinal)
               throw new ProblemError('semantic_not_ready');
           }
-          const finalCheck = await accessCheck(
-            access,
-            owner,
-            'progress_session:read',
-            { route, id: owner.accountId },
-            { pool, deadline, time: finalTime },
-          );
           await snapshot(owner, sessionId, async (client, fact) => {
-            if (!(await finalCheck(client, finalTime))) throw new GrantDeniedError();
             const partition = await readPartition(client, partitionOf(route));
             if (fact.session.revision !== before.fact.session.revision || partition?.epoch !== before.epoch)
               throw new ProgressConflictError();

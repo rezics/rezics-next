@@ -59,8 +59,9 @@ always returns `next:null`. All owner reads use `Cache-Control: private, no-stor
 
 ## Retry, errors and lifecycle
 
-Both operations require an authenticated owner, current scopes, current native Access and an active unfenced
-account. Unknown and foreign sessions return 404, including accounts on the same route. Commands use the existing
+Both operations use generic sessions' authenticated self-owner admission: current scopes, an active unfenced
+account and current authentication epoch. Subject authority independently requires native Access. No new account
+ACL or grant is installed. Unknown and foreign sessions return 404, including accounts on the same route. Commands use the existing
 reading-progress gate, command runner, terminal barrier, owner/subject/session lock order, exact revision CAS,
 transactional receipt and session-token fence. Supply the standard `Idempotency-Key` header; retry the identical
 command with the same key. Authorized exact receipts return the original revision even after the catalogue is
