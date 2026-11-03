@@ -110,6 +110,14 @@ export type GrowthCheck = {
   /** Counts returned by the operation. `includeBackends` makes the harness-provided `connections` count available. */
   readonly counted?: CountedCheck;
   readonly includeBackends?: boolean;
+  /** Add captures from other participating databases to this invocation before costs and summaries are computed. */
+  readonly aggregateCaptures?: (
+    primary: Capture,
+    value: unknown,
+  ) => {
+    readonly capture: Capture;
+    readonly databases: readonly { readonly name: string; readonly capture: Capture }[];
+  };
   /** Number of logical top-level transaction commands in each measured run. Enables attempt-based bounds. */
   readonly attempts?: { readonly commands: number };
   readonly repetitions?: number; // measured runs per scale, default 5; the sample is their medianCost
@@ -1133,9 +1141,14 @@ async function runGrowthCheck(
         pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;
         const measured = captured.value;
+        const aggregate = check.aggregateCaptures?.(measured.capture, measured.value);
+        const measuredCapture = aggregate?.capture ?? measured.capture;
+        const catalogCaptures = aggregate?.databases ?? [{ name: 'application', capture: measured.capture }];
         const runBackends = [
           ...new Set(
-            (measured.capture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
+            (measuredCapture.statementBackends ?? []).filter(
+              (backend): backend is number => backend !== undefined,
+            ),
           ),
         ];
         const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));
@@ -1154,12 +1167,12 @@ async function runGrowthCheck(
         for (const backend of runBackends) seenBackends.add(backend);
         if (coldBackends.length > 0) coldBackendExhaustion.push(backendRepetitions.length);
         backendRepetitions.push(runBackends);
-        const cost = costOf(measured.capture);
+        const cost = costOf(measuredCapture);
         if (check.counted && countedIndex) {
           const values = check.counted.read(measured.value, scale);
           const merged = { ...values };
           if (countedIndex.declared.has('connections')) {
-            const backends = measured.capture.statementBackends;
+            const backends = measuredCapture.statementBackends;
             if (backends === undefined)
               throw new Error(
                 `Counted unit connections is unavailable at scale ${scale}: capture did not include backends`,
@@ -1168,11 +1181,12 @@ async function runGrowthCheck(
           }
           countedRuns.push(validateCountedRun(check.counted, merged, scale, countedIndex));
         }
-        assertCatalogBound(check.name, scale, measured.capture, samples);
+        for (const database of catalogCaptures)
+          assertCatalogBound(`${check.name} (${database.name})`, scale, database.capture, samples);
         costs.push(cost);
-        statementRepetitions.push(statementAttributions(measured.capture));
-        occurrenceRepetitions.push(statementOccurrences(measured.capture));
-        if (check.attempts) attemptRuns.push(attemptRecords(measured.capture, occurrenceRepetitions.at(-1)!));
+        statementRepetitions.push(statementAttributions(measuredCapture));
+        occurrenceRepetitions.push(statementOccurrences(measuredCapture));
+        if (check.attempts) attemptRuns.push(attemptRecords(measuredCapture, occurrenceRepetitions.at(-1)!));
         repetition++;
         accepted = true;
       }

@@ -36,6 +36,11 @@ export interface ContentSystemOptions {
   readonly databaseUrl: string;
   /** Optional isolated database namespace for deterministic fixture assertions. */
   readonly namespace?: string;
+  /** Supply a separately instrumented Auth database pool before the production handler is constructed. */
+  readonly authPoolFactory?: (databaseUrl: string) => Promise<{
+    readonly pool: Pool;
+    close(): Promise<void>;
+  }>;
 }
 
 export interface ContentSystem {
@@ -68,6 +73,12 @@ export interface ContentSystem {
     refresh(input: { readonly refreshToken: string }): Promise<ContentCredential>;
   };
   readonly access: Access;
+  /** Construct a fresh production verifier/cache for a cold native read sample. */
+  readonly createFreshAccess: (
+    observeJwks?: (request: Request, response: Response) => Promise<void>,
+  ) => Access;
+  /** Mount the same native routes, rate stage and fixture policy on a captured application pool. */
+  readonly createKernelForPool: (pool: Pool, access: Access) => Kernel;
   /** Catalogue derived from the routes mounted on this real Kernel. */
   readonly actions: ActionCatalogue;
   readonly clock: {
@@ -306,6 +317,8 @@ export async function createContentSystemWithOrdinaryScopes(
         refresh,
       },
       access: native.access,
+      createFreshAccess: native.createFreshAccess,
+      createKernelForPool: native.createKernelForPool,
       actions: native.actions,
       clock: native.clock,
       transport: native.transport,
