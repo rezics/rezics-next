@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createKernelClient, type RatingQuestionDirectory } from '@rezics/client';
 import type { Account, Method } from '../../../../specs/community-driver.ts';
+import { createKernel } from '../../src/http/kernel.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
 import { readSelectedQuestionDirectory } from '../../src/rating/question-directory.ts';
@@ -86,6 +87,11 @@ test('selected question pages requalify the caller and lifecycle after native so
       201,
     );
 
+    let mounted = kernel;
+    const client = createKernelClient('https://content.test', {
+      headers: { authorization: `Bearer ${fixture.member.bearer}` },
+      fetch: ((input, init) => mounted.handle(new Request(input, init))) as typeof fetch,
+    });
     const definition = {
       meaning: 'Assess this work using its stated scale.',
       label: 'Canonical question wording',
@@ -108,12 +114,12 @@ test('selected question pages requalify the caller and lifecycle after native so
       scale: definition.scale,
     });
 
-    await json(
-      await call('PUT', `/v1/rating-questions/${question.id}/label`, fixture.member, {
+    expect(
+      (await client['rating-questions']({ questionId: question.id }).label.put({
         expectedLabelRevision: 1,
         label: 'Corrected display caption',
-      }),
-    );
+      }, { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } })).status,
+    ).toBe(200);
     const corrected = await page(system.access, member, realmId, undefined, beforeLabel.lifecycleGeneration);
     expect(corrected.lifecycleGeneration).toBe(beforeLabel.lifecycleGeneration);
     expect(corrected.ratingQuestions[0]).toMatchObject({
@@ -126,10 +132,6 @@ test('selected question pages requalify the caller and lifecycle after native so
     });
 
     // The installed client reads the mounted route, not a source-only metadata port.
-    const client = createKernelClient('https://content.test', {
-      headers: { authorization: `Bearer ${fixture.member.bearer}` },
-      fetch: ((input, init) => kernel.handle(new Request(input, init))) as typeof fetch,
-    });
     const createKey = { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } };
     const author = client.realms({ realmId })['rating-questions'];
     const created = await author.post(definition, createKey);
@@ -144,9 +146,9 @@ test('selected question pages requalify the caller and lifecycle after native so
     const rawFirst = selected.ratingQuestions[0]!;
     const point = directory({ questionId: rawFirst.id });
     expect((await point.get()).data).toEqual(rawFirst);
-    await json(await call('POST', `/v1/rating-questions/${rawFirst.id}/$retire`, fixture.member, {
-      expectedLifecycleRevision: 1,
-    }));
+    expect((await point.$retire.post({ expectedLifecycleRevision: 1 }, {
+      headers: { 'idempotency-key': JSON.stringify(randomUUID()) },
+    })).status).toBe(200);
     expect((await directory.get({ query: { realm: realmId, limit: 1, cursor: selected.next! } })).status).toBe(400);
     const restart = await directory.get({ query: { realm: realmId, limit: 1 } });
     expect(restart.status).toBe(200);
@@ -165,11 +167,27 @@ test('selected question pages requalify the caller and lifecycle after native so
     const unavailable = afterSecondPreparation(system.access, 'realm:read', async () => {
       throw new ProblemError('partition_unavailable');
     });
-    const frontier = await page(system.access, member, realmId);
-    await expect(page(unavailable, member, realmId, null, frontier.lifecycleGeneration)).rejects.toMatchObject({
-      code: 'partition_unavailable',
+    const frontier = await directory.get({ query: { realm: realmId, limit: 1 } });
+    const retryInput = { query: { realm: realmId, limit: 1, cursor: frontier.data!.next! } };
+    const expectedRetry = await directory.get(retryInput);
+    mounted = createKernel({
+      pool: system.database.pool,
+      routeKey: system.routeKey,
+      tokens: system.tokenKeys,
+      access: unavailable,
     });
-    expect(await page(unavailable, member, realmId, null, frontier.lifecycleGeneration)).toEqual(frontier);
+    const failed = await directory.get(retryInput);
+    expect(failed.status).toBe(503);
+    expect(failed.error?.value).toMatchObject({ code: 'partition_unavailable', retryable: true });
+    expect(failed.data).toBeNull();
+    expect((await directory.get(retryInput)).data).toEqual(expectedRetry.data);
+    mounted = kernel;
+    const concealed = await directory.get({
+      query: { realm: realmId },
+      headers: { authorization: `Bearer ${fixture.outsider.bearer}` },
+    });
+    expect(concealed.status).toBe(404);
+    expect(concealed.error?.value).toMatchObject({ code: 'not_found' });
 
     const readGrant = {
       resource: realmResource,
