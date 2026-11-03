@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import type { NativeRealmHomeOperations, NativeRealmHomePage } from '../src/community/realm-home-native';
 import type { SpacePageData } from '../src/community/space';
+import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
 import * as start from '../.storybook/react-start';
 
 const { Window } = await import(
@@ -30,6 +31,8 @@ let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'read
 mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
 const { readNativeRealmHome, nativeRealmHomeShelves } = await import('../src/community/realm-home-native');
 const { SpacePage } = await import('../src/community/space-page');
+const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost } =
+  await import('../src/community/space-page-lifetime');
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -133,10 +136,31 @@ async function settle(action: () => void) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
-async function paint(page: SpacePageData, source = operations) {
+const target = { kind: 'space' as const, address: 'realm' };
+function capture() {
+  return captureSpacePageAdmission(client, { target, locale: 'en', credentialMode: 'session' });
+}
+async function paint(page: SpacePageData, source = operations, admission?: SpacePageAdmission) {
+  const content = <SpacePage page={page} nativeOperations={source} />;
   await settle(() =>
     root.render(
-      <Frame.Provider value={<SpacePage page={page} nativeOperations={source} />}>
+      <Frame.Provider
+        value={
+          admission ? (
+            <SpacePageLifetimeHost
+              page={page}
+              admission={admission}
+              target={target}
+              locale="en"
+              credentialMode="session"
+            >
+              {content}
+            </SpacePageLifetimeHost>
+          ) : (
+            content
+          )
+        }
+      >
         <QueryClientProvider client={client}>
           <RouterProvider router={router} />
         </QueryClientProvider>
@@ -275,4 +299,60 @@ test('anonymous advice remains localized and a missing or replaced carrier never
   await expect(
     readNativeRealmHome({ ...operations, home: async () => ({ status: 404 }) }, input),
   ).rejects.toBeDefined();
+});
+
+test('route admission retires native media and pending shelves on nested source replacement', async () => {
+  for (const replacement of ['presentation', 'observation', 'lifecycle', 'page']) {
+    client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+    const original = capture();
+    native = fixture();
+    native.presentation.banner = {
+      state: 'available',
+      value: {
+        id: id(90),
+        containerId: id(1),
+        digest: 'a'.repeat(64),
+        width: 1200,
+        height: 200,
+        variants: [{ format: 'webp', width: 1200, height: 200 }],
+        placeholder: null,
+        focalPoint: null,
+        credit: null,
+      },
+    };
+    const page = await readNativeRealmHome(operations, input);
+    const admission = bindSpacePageResult(page, original, { kind: 'signed-in', subject: session.subject })!;
+    const late = Promise.withResolvers<Awaited<ReturnType<NativeRealmHomeOperations['boardShelf']>>>();
+    boardRead = () => late.promise;
+    await paint(page, operations, admission);
+    expect(host.querySelector('[data-slot="community-banner-image"]')).not.toBeNull();
+    await settle(() =>
+      host.querySelector('#realm-boards-heading')!.closest('section')!.querySelector('button')!.click(),
+    );
+    const realm = { ...page.realm! };
+    if (replacement === 'presentation') page.realm!.presentation = { state: 'unavailable', value: null };
+    if (replacement === 'observation') page.realm!.nativeObservation = { ...page.realm!.nativeObservation! };
+    if (replacement === 'lifecycle') page.realm!.continuity = { ...page.realm!.continuity!, governanceReadOnly: true };
+    await paint(replacement === 'page' ? { ...page } : page, operations, admission);
+    await settle(() => late.resolve({ status: 200, data: { items: [], next: 'late-cursor' } }));
+    expect(host.textContent).toBe('');
+    expect(host.querySelector('img')).toBeNull();
+    Object.assign(page.realm!, realm);
+    await paint(page, operations, admission);
+    expect(host.textContent).toBe('');
+    await settle(() => root.unmount());
+    root = createRoot(host);
+  }
+});
+
+test('late initial native home cannot bind to a retired route observation', async () => {
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
+  const original = capture();
+  const late = Promise.withResolvers<Awaited<ReturnType<NativeRealmHomeOperations['home']>>>();
+  const pending = readNativeRealmHome({ ...operations, home: () => late.promise }, input);
+  client.setQueryData(sessionModule.sessionQuery.queryKey, { ...session, csrfToken: 'replacement' });
+  late.resolve({ status: 200, data: fixture() });
+  const page = await pending;
+  expect(bindSpacePageResult(page, original, { kind: 'signed-in', subject: session.subject })).toBeNull();
+  expect(host.textContent).toBe('');
 });

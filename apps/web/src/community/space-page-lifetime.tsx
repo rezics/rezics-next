@@ -748,6 +748,35 @@ export function isObsoleteSpacePageRead(error: unknown): error is ObsoleteSpaceP
   return error instanceof ObsoleteSpacePageReadError;
 }
 
+/** A mounted native response belongs to the original route admission, including
+ * its container, presentation and viewer observation. A nested replacement is
+ * a new visit even when a caller retains the outer page object. */
+function nativeHomeBinding(page: SpacePageData) {
+  const realm = page.realm;
+  const observation = realm?.nativeObservation;
+  if (!realm || !observation) return null;
+  return {
+    space: page.space,
+    spaceId: page.space.id,
+    realm,
+    realmId: realm.id,
+    presentation: realm.presentation,
+    continuity: realm.continuity,
+    lifecycle: JSON.stringify(realm.continuity),
+    observation,
+    viewer: observation.viewer,
+    actions: observation.actions,
+  };
+}
+
+function sameNativeHomeBinding(
+  original: ReturnType<typeof nativeHomeBinding>,
+  current: ReturnType<typeof nativeHomeBinding>,
+) {
+  if (!original || !current) return original === current;
+  return (Object.keys(original) as (keyof typeof original)[]).every((key) => original[key] === current[key]);
+}
+
 export class SpacePageLifetime {
   private connected = false;
   private disposed = false;
@@ -757,14 +786,22 @@ export class SpacePageLifetime {
   private readonly listeners = new Set<() => void>();
   private readonly runtime: AdmissionRuntime | null;
   private claimed = false;
+  private readonly nativeBinding: ReturnType<typeof nativeHomeBinding>;
 
   constructor(
     readonly admission: SpacePageAdmission,
     client: QueryClient,
     readonly scopeKey: string,
+    private readonly page?: SpacePageData,
   ) {
     this.runtime = resolveRuntime(admission, client);
+    this.nativeBinding = page ? nativeHomeBinding(page) : null;
   }
+
+  matchesPage = (page: SpacePageData) => {
+    if (!this.nativeBinding && !page.realm?.nativeObservation) return true;
+    return this.page === page && sameNativeHomeBinding(this.nativeBinding, nativeHomeBinding(page));
+  };
 
   private publish() {
     this.revision++;
@@ -790,6 +827,7 @@ export class SpacePageLifetime {
 
   admitted = () => {
     this.snapshot();
+    if (this.page && !this.matchesPage(this.page)) this.retire(false);
     if (!this.admission.readerOrigin) this.retire(false);
     if (!this.claimed && claimedAdmissions.has(this.admission)) this.retire(false);
     return !this.disposed;
@@ -934,13 +972,16 @@ export function SpacePageLifetimeHost({
     admission.realmId,
     admission.locale,
   ]);
-  const lifetime = useMemo(() => new SpacePageLifetime(admission, client, scopeKey), [admission, client, scopeKey]);
+  const lifetime = useMemo(
+    () => new SpacePageLifetime(admission, client, scopeKey, page),
+    [admission, client, scopeKey],
+  );
   const previous = useRef<SpacePageLifetime | null>(null);
   if (previous.current && previous.current !== lifetime) previous.current.retire(false);
   previous.current = lifetime;
   useSyncExternalStore(lifetime.subscribe, lifetime.snapshot, lifetime.snapshot);
   useEffect(() => lifetime.connect(), [lifetime]);
-  if (!attached) lifetime.retire(false);
+  if (!attached || !lifetime.matchesPage(page)) lifetime.retire(false);
   if (!attached || !lifetime.admitted()) return null;
   return <SpacePageLifetimeContext.Provider value={lifetime}>{children}</SpacePageLifetimeContext.Provider>;
 }

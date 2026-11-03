@@ -94,3 +94,11 @@ operation replacement permanently retires the old page, including pending contin
 supplied. Returning to an earlier credential tuple does not restore that page. Existing route admission remains
 required for session-cache generations, lifecycle retirement and hydration; this local rendering boundary supplies
 neither native viewer currentness nor private first-paint proof.
+
+Decision: a prepared native page uses its original route admission; replacing its container, lifecycle, presentation
+or viewer observation within that admission retires the complete visit and requires a fresh admitted response.
+
+The route lifetime captures the native page and its source references before mounting. An outer page copy cannot
+transfer the response to that lifetime, and nested observation or lifecycle replacement cannot keep its media or
+pending shelf tickets alive. These checks also apply to tickets retained by asynchronous callbacks. The standalone
+injectable rendering boundary remains for consumer fixtures and does not supply reader provenance.

@@ -386,7 +386,7 @@ export function SpacePage(props: {
       source.current.operations !== props.nativeOperations)
   )
     retired.current.add(props.page);
-  if (native && retired.current.has(props.page)) return null;
+  if (native && (retired.current.has(props.page) || (lifetime && !lifetime.matchesPage(props.page)))) return null;
   return (
     <AuthoringDepartureBoundary>
       {native && props.page.realm ? (
