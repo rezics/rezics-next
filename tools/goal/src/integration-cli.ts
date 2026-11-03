@@ -36,6 +36,7 @@ import { sameProcess, type ProcessIdentity } from './process.ts';
 import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
 import { completedUtcHour } from './efficiency-report.ts';
+import { defaultPolicy } from './policy.ts';
 
 /** Composition belongs to the caller; this module never reads worker configuration or tables. */
 export type IntegrationRuntime = {
@@ -129,7 +130,7 @@ export function singleFlight(start: () => ChildProcess): () => ChildProcess | un
 
 export function startOrphanRecoveryTimer(
   recoverOrphans: () => Promise<void>,
-  intervalMs = 60_000,
+  intervalMs = defaultPolicy.host.recoveryIntervalMs,
   onTick: () => void = () => {},
 ): ReturnType<typeof setInterval> {
   const timer = setInterval(() => {
@@ -178,20 +179,20 @@ function writeAppServerRegistry(path: string, identities: ProcessIdentity[]): vo
   }
 }
 
-async function waitForProcessExit(identity: ProcessIdentity, timeoutMs: number): Promise<boolean> {
+async function waitForProcessExit(identity: ProcessIdentity, timeoutMs: number, pollMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
-  while (sameProcess(identity) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+  while (sameProcess(identity) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, pollMs));
   return !sameProcess(identity);
 }
 
-async function stopRecordedAppServer(identity: ProcessIdentity): Promise<void> {
+async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof defaultPolicy.appServer): Promise<void> {
   if (!sameProcess(identity)) return;
   try {
     process.kill(identity.pid, 'SIGTERM');
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
   }
-  if (await waitForProcessExit(identity, 500)) return;
+  if (await waitForProcessExit(identity, policy.terminationGraceMs, policy.exitPollMs)) return;
   if (sameProcess(identity)) {
     try {
       process.kill(identity.pid, 'SIGKILL');
@@ -199,28 +200,31 @@ async function stopRecordedAppServer(identity: ProcessIdentity): Promise<void> {
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
     }
   }
-  if (!(await waitForProcessExit(identity, 5000))) throw new Error(`App-server process did not exit: ${identity.pid}`);
+  if (!(await waitForProcessExit(identity, policy.killWaitMs, policy.exitPollMs))) throw new Error(`App-server process did not exit: ${identity.pid}`);
 }
 
-async function stopRecordedAppServers(path: string): Promise<void> {
+async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
   const identities = readAppServerRegistry(path);
-  for (const identity of identities) await stopRecordedAppServer(identity);
+  for (const identity of identities) await stopRecordedAppServer(identity, policy);
   rmSync(path, { force: true });
 }
 
 export function hostRequest(
   socketPath: string,
   request: HostRequest,
-  timeoutMs = 60_000,
-  retryDelayMs = 25,
+  timeoutMs?: number,
+  retryDelayMs?: number,
+  policy = defaultPolicy.host,
 ): Promise<any> {
+  const timeout = timeoutMs ?? policy.requestTimeoutMs;
+  const retryDelay = retryDelayMs ?? policy.requestRetryMs;
   return new Promise((resolve, reject) => {
-    if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || !Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0) {
+    if (!Number.isSafeInteger(timeout) || timeout <= 0 || !Number.isSafeInteger(retryDelay) || retryDelay < 0) {
       reject(new Error('Manager host request timeout and retry delay must be valid milliseconds'));
       return;
     }
-    const deadline = Date.now() + timeoutMs;
-    const timeoutError = () => new Error(`Manager host request timed out after ${timeoutMs}ms`);
+    const deadline = Date.now() + timeout;
+    const timeoutError = () => new Error(`Manager host request timed out after ${timeout}ms`);
     let socket: ReturnType<typeof createConnection> | undefined;
     let lines: ReturnType<typeof createInterface> | undefined;
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -267,7 +271,7 @@ export function hostRequest(
         finish(timeoutError());
         return;
       }
-      retryTimer = setTimeout(connect, Math.min(retryDelayMs, remaining));
+      retryTimer = setTimeout(connect, Math.min(retryDelay, remaining));
     };
     const onLine = (line: string) => {
       try {
@@ -306,18 +310,17 @@ export function hostRequest(
       attempt.once('error', (error) => retryConnection(error as NodeJS.ErrnoException));
     };
 
-    deadlineTimer = setTimeout(() => finish(timeoutError()), timeoutMs);
+    deadlineTimer = setTimeout(() => finish(timeoutError()), timeout);
     connect();
   });
 }
 
-const HOST_RESTART_INTERVAL_MS = 10 * 60_000;
 const hostRestartPath = (stateDirectory: string) => join(stateDirectory, 'manager-host-restart.json');
-export function managerHostRestartAllowed(stateDirectory: string, now = Date.now()): boolean {
+export function managerHostRestartAllowed(stateDirectory: string, now = Date.now(), policy = defaultPolicy.host): boolean {
   const path = hostRestartPath(stateDirectory);
   try {
     const previous = JSON.parse(readFileSync(path, 'utf8')) as { at?: unknown };
-    if (typeof previous.at === 'number' && now - previous.at < HOST_RESTART_INTERVAL_MS) return false;
+    if (typeof previous.at === 'number' && now - previous.at < policy.restartIntervalMs) return false;
   } catch {
     // The first restart has no saved timestamp.
   }
@@ -334,6 +337,7 @@ export function managerHostRestartAllowed(stateDirectory: string, now = Date.now
 async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
   mkdirSync(runtime.stateDirectory, { recursive: true });
   const config = {
+    policy: runtime.managerServices.policy?.host,
     stateDirectory: runtime.stateDirectory,
     managerSocket: runtime.managerSocket,
     mainCheckout: runtime.mainCheckout,
@@ -344,7 +348,8 @@ async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
 }
 
 export async function serveManagers(runtime: IntegrationRuntime): Promise<void> {
-  const stateSweepIntervalMs = runtime.hostSweepIntervalMs ?? 60_000;
+  const policy = runtime.managerServices.policy ?? defaultPolicy;
+  const stateSweepIntervalMs = runtime.hostSweepIntervalMs ?? policy.host.stateSweepIntervalMs;
   if (!Number.isSafeInteger(stateSweepIntervalMs) || stateSweepIntervalMs <= 0)
     throw new Error('Manager host state sweep interval must be a positive integer');
   const lease = acquireDirectoryLease(`${runtime.managerSocket}.lease`);
@@ -425,7 +430,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (server.listening) server.close();
   };
   const requestRestart = () => {
-    if (!managerHostRestartAllowed(runtime.stateDirectory)) return;
+    if (!managerHostRestartAllowed(runtime.stateDirectory, Date.now(), policy.host)) return;
     restart = true;
     stopRequested = true;
     closeServer();
@@ -449,7 +454,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   };
   try {
     recordHostLiveness(runtime.stateDirectory, true);
-    await stopRecordedAppServers(registryPath);
+    await stopRecordedAppServers(registryPath, policy.appServer);
     registrySafe = true;
     const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
     const onAppServerStart = runtime.managerServices.onAppServerStart;
@@ -471,6 +476,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     });
     chmodSync(runtime.managerSocket, 0o600);
     await startHostSupervisor({
+      policy: policy.host,
       stateDirectory: runtime.stateDirectory,
       managerSocket: runtime.managerSocket,
       mainCheckout: runtime.mainCheckout,
@@ -487,7 +493,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     await Promise.race([
       recoveryProgress,
       new Promise<void>((resolve) => {
-        readinessTimer = setTimeout(resolve, 100);
+        readinessTimer = setTimeout(resolve, policy.host.recoveryReadinessMs);
       }),
     ]);
     if (readinessTimer) clearTimeout(readinessTimer);
@@ -503,7 +509,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     };
     let lastFlowReview = 0;
     const reviewFlow = () => {
-      if (Date.now() - lastFlowReview >= 3_600_000) {
+      if (Date.now() - lastFlowReview >= policy.host.flowReviewIntervalMs) {
         lastFlowReview = Date.now();
         if (runtime.evaluateFlow)
           setImmediate(() => {
@@ -592,10 +598,10 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
             () => {
               timedOut = true;
               child.kill('SIGTERM');
-              killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
+              killTimer = setTimeout(() => child.kill('SIGKILL'), policy.host.reportTerminationGraceMs);
               killTimer.unref();
             },
-            Math.min(150_000, configured.timeoutMs + 30_000),
+            Math.min(policy.host.reportTimeoutMs, configured.timeoutMs + policy.host.reportOverheadMs),
           );
           timeout.unref();
           const finish = (message: string, error = false) => {
@@ -606,7 +612,8 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
             (error ? console.error : console.info)(`Hourly report ${bucket}: ${message}`);
           };
           child.stdout?.on('data', (chunk: Buffer | string) => {
-            if (output.length < 512) output += chunk.toString().slice(0, 512 - output.length);
+            if (output.length < policy.host.reportOutputCharacters)
+              output += chunk.toString().slice(0, policy.host.reportOutputCharacters - output.length);
           });
           child.once('error', () => finish('runner could not start; no outcome recorded.', true));
           child.once('close', (code, signal) => {
@@ -624,7 +631,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
     let reapedAt = 0;
     const reap = () => {
-      if (Date.now() - reapedAt < 600_000) return;
+      if (Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
       reapedAt = Date.now();
       try {
         reapContainers(runtime.db, runtime.stateDirectory, Date.now(), runtime.managerServices.policy?.containers);
@@ -649,7 +656,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     scheduleWidthSweep();
     runBacklog();
     publishHourlyReport?.();
-    recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, 60_000, () => {
+    recoveryTimer = startOrphanRecoveryTimer(recoverOrphans, policy.host.recoveryIntervalMs, () => {
       remind();
       reviewFlow();
       scheduleWidthSweep();
@@ -667,7 +674,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
           try {
             if (!runtime.codeIsCurrent!()) requestRestart();
           } catch {}
-        }, 1000);
+        }, policy.host.codePollMs);
         codeTimer.unref();
         try {
           if (!runtime.codeIsCurrent()) requestRestart();
@@ -704,6 +711,9 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
 
 export async function runIntegration(argv: string[], runtime: IntegrationRuntime): Promise<number> {
   const [command, subcommand, id, ...flags] = argv;
+  const policy = runtime.managerServices.policy ?? defaultPolicy;
+  const requestHost = (request: HostRequest, timeoutMs?: number) =>
+    hostRequest(runtime.managerSocket, request, timeoutMs, undefined, policy.host);
   const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
   const sharedInbox = runtime.sharedInbox ?? new SharedInboxQueries(runtime.db);
   const queue = runtime.queue ?? new SqliteLandingQueue(runtime.db, runtime.fence);
@@ -791,7 +801,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     await ensureHost(runtime);
     let result: unknown;
     try {
-      result = await hostRequest(runtime.managerSocket, {
+      result = await requestHost({
         command: 'register-supermanager',
         sessionId: claudeSession,
       });
@@ -923,10 +933,10 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           await ensureHost(runtime);
           // The durable local decision is authoritative. Keep the host's legacy audit view in sync with a short,
           // isolated delivery attempt; its failure must not change the inbox-send or continuation result.
-          await hostRequest(runtime.managerSocket, { command: 'decision', manager: sender.managerId }, 500).catch(
+          await requestHost({ command: 'decision', manager: sender.managerId }, policy.host.decisionAuditTimeoutMs).catch(
             (error) => console.error(`manager decision audit delivery failed: ${String(error)}`),
           );
-          await hostRequest(runtime.managerSocket, {
+          await requestHost({
             command: 'outgoing-message',
             manager: sender.managerId,
             recipient: id,
@@ -1000,7 +1010,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await recordManagerCommand(runtime);
       console.log(
         JSON.stringify(
-          await hostRequest(runtime.managerSocket, { command: 'start', spec: runtime.manager(id, engine, budget) }),
+          await requestHost({ command: 'start', spec: runtime.manager(id, engine, budget) }),
         ),
       );
     } else if (subcommand === 'renew') {
@@ -1032,7 +1042,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
       await recordManagerCommand(runtime);
       console.log(
         JSON.stringify(
-          await hostRequest(runtime.managerSocket, {
+          await requestHost({
             command: 'renew',
             manager: id,
             spec: runtime.manager(id, (engineFlag as 'codex' | 'claude' | undefined) ?? current.engine, current.budget),
@@ -1045,7 +1055,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     } else if (subcommand && ['stop', 'complete', 'turn-start', 'turn-end'].includes(subcommand)) {
       await ensureHost(runtime);
       if (subcommand === 'complete' || subcommand === 'stop') await recordManagerCommand(runtime);
-      const result = await hostRequest(runtime.managerSocket, {
+      const result = await requestHost({
         command: subcommand as HostRequest['command'],
         manager: id,
       });

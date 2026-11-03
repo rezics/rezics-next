@@ -47,5 +47,8 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
       }),
     );
   }
-  return merge(defaultPolicy, value, 'policy') as ControlPolicy;
+  const policy = merge(defaultPolicy, value, 'policy') as ControlPolicy;
+  if (policy.host.maxBackoffMs < policy.host.minBackoffMs)
+    throw new Error('policy.host.maxBackoffMs must be at least policy.host.minBackoffMs');
+  return policy;
 }

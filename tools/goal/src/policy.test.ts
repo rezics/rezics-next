@@ -13,6 +13,8 @@ test('local policy overrides individual leaves and validates configurable notifi
     const local = JSON.parse(readFileSync(h.settings.localFile, 'utf8'));
     local.policy = {
       backlog: { lowWater: 3 },
+      host: { startupTimeoutMs: 90 },
+      process: { exitPollMs: 7 },
       validation: { hourlyReportMaxTimeoutMs: 200001 },
       worker: { toolRetryBackoffMs: [0, 7], toolRetryWindowMs: 5000 },
       workerResources: { minimumMemoryFraction: 0.5 },
@@ -25,6 +27,8 @@ test('local policy overrides individual leaves and validates configurable notifi
     expect(settings.policy).toEqual({
       ...defaults.policy,
       backlog: { ...defaults.policy.backlog, lowWater: 3 },
+      host: { ...defaults.policy.host, startupTimeoutMs: 90 },
+      process: { ...defaults.policy.process, exitPollMs: 7 },
       validation: { ...defaults.policy.validation, hourlyReportMaxTimeoutMs: 200001 },
       worker: { ...defaults.policy.worker, toolRetryBackoffMs: [0, 7], toolRetryWindowMs: 5000 },
       workerResources: { ...defaults.policy.workerResources, minimumMemoryFraction: 0.5 },
@@ -58,6 +62,10 @@ test('local policy overrides individual leaves and validates configurable notifi
 
 test('fractional and retry-list policies reject invalid leaves and copy schedules', () => {
   for (const invalid of [
+    { host: { startupLogBytes: 0 } },
+    { host: { retryFailures: 1.5 } },
+    { host: { maxBackoffMs: 1 } },
+    { process: { exitPollMs: Number.MAX_SAFE_INTEGER + 1 } },
     { workerResources: { minimumMemoryFraction: 0 } },
     { workerResources: { minimumMemoryFraction: 1.1 } },
     { containers: { maxAgeHours: -1 } },

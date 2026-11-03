@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { acquireDirectoryLease } from './lease.ts';
 import { processIdentity, sameProcess, stopProcessesUnder, terminateProcessGroup, waitForProcess } from './process.ts';
 import { tempDirectory } from './test-support.ts';
+import { readControlPolicy } from './policy.ts';
 
 test('directory leases refuse a live owner, reclaim a dead identity and never let old cleanup drop a successor', () => {
   const root = tempDirectory(),
@@ -140,15 +141,19 @@ test('a failing pidfd waiter falls back to the identity and resolves only once t
     child.once('error', reject);
   });
   const identity = processIdentity(child.pid!)!;
+  const policy = readControlPolicy({ process: { exitPollMs: 7 } }).process;
+  const timer = spyOn(globalThis, 'setTimeout');
   const path = process.env.PATH;
   try {
     process.env.PATH = `${bin}:${path}`;
     const started = Date.now();
-    await waitForProcess(identity);
+    await waitForProcess(identity, undefined, undefined, policy);
+    expect(timer.mock.calls.some((call) => call[1] === 7)).toBe(true);
     process.env.PATH = path;
     expect(sameProcess(identity)).toBe(false);
     expect(Date.now() - started).toBeGreaterThanOrEqual(150);
   } finally {
+    timer.mockRestore();
     process.env.PATH = path;
     await terminateProcessGroup(identity, 20).catch(() => {});
     rmSync(root, { recursive: true, force: true });

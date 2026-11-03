@@ -830,7 +830,7 @@ export async function launch(
   } catch (error) {
     if (unrecordedFixtureWorker) {
       try {
-        await terminateProcessGroup(unrecordedFixtureWorker, policy.worker.fixtureCleanupGraceMs);
+        await terminateProcessGroup(unrecordedFixtureWorker, policy.worker.fixtureCleanupGraceMs, policy.process);
       } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], 'fixture ownership failed and its worker could not be reaped');
       }
@@ -841,7 +841,7 @@ export async function launch(
     closeSync(err);
   }
   const saved = store.attempt(attempt);
-  const exited = waitForWorkerExit(saved.process, attempt.logPath);
+  const exited = waitForWorkerExit(saved.process, attempt.logPath, policy.process);
   void exited.catch(() => {});
   return { exited, attempt: saved, logStartOffset, resuming };
 }

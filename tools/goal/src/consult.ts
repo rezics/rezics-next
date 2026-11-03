@@ -150,6 +150,6 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
     throw asConsultationFailure(error, stderrCause(errPath));
   } finally {
     clearTimeout(timer);
-    await terminateProcessGroup(identity, tasks.settings.terminationGraceMs);
+    await terminateProcessGroup(identity, tasks.settings.terminationGraceMs, tasks.settings.policy?.process);
   }
 }

@@ -21,6 +21,7 @@ import {
 } from './host-liveness.ts';
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
+import { readControlPolicy } from './policy.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const liveness = join(import.meta.dir, 'host-liveness.ts');
@@ -303,6 +304,66 @@ test('a supervisor arriving after state teardown never recreates the removed dir
     await startHostSupervisor(config);
     expect(existsSync(dir.path)).toBe(false);
   } finally {
+    dir.close();
+  }
+});
+
+test('host startup uses the local deadline and current-output budget without changing another caller', async () => {
+  const dir = temporaryDirectory();
+  const script = join(dir.path, 'host.js');
+  const config: HostLivenessConfig = {
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, script],
+    policy: readControlPolicy({ host: { startupTimeoutMs: 200, startupLogBytes: 4 } }).host,
+  };
+  try {
+    writeFileSync(script, "process.stderr.write('prefix-tail'); process.exit(17);");
+    await expect(ensureHostRunning(config)).rejects.toThrow('showing 4 of 11 bytes:\ntail');
+    await expect(ensureHostRunning({ ...config, policy: undefined })).rejects.toThrow('prefix-tail');
+    writeFileSync(script, 'setTimeout(() => {}, 3000);');
+    await expect(ensureHostRunning(config)).rejects.toThrow('Manager host startup timed out');
+  } finally {
+    dir.close();
+  }
+});
+
+test('supervision applies local journal and health budgets while explicit intervals keep precedence', async () => {
+  const dir = temporaryDirectory();
+  const retry = join(dir.path, 'manager-host-liveness-retry.json');
+  const controller = new AbortController();
+  const diagnostics: string[] = [];
+  const previousError = console.error;
+  console.error = (...args: unknown[]) => diagnostics.push(args.map(String).join(' '));
+  const config: HostLivenessConfig = {
+    stateDirectory: dir.path,
+    managerSocket: join(dir.path, 'manager.sock'),
+    mainCheckout: dir.path,
+    command: [process.execPath, '-e', 'process.exit(1)'],
+    pollMs: 5,
+    minBackoffMs: 40,
+    maxBackoffMs: 160,
+    policy: readControlPolicy({ host: { pollMs: 10000, retryFailures: 2, healthResetMs: 1, retryDiagnosticCharacters: 1 } }).host,
+  };
+  // A mismatched start identifies a dead incarnation without signalling any process.
+  writeFileSync(join(dir.path, 'manager-host-liveness.json'), JSON.stringify({
+    identity: { ...processIdentity()!, start: '0' }, desired: true,
+  }));
+  writeFileSync(retry, '{');
+  const running = superviseHost(config, controller.signal);
+  try {
+    await until(() => diagnostics.length > 0);
+    const repaired = JSON.parse(readFileSync(retry, 'utf8'));
+    expect(repaired.failures).toBe(2);
+    expect(repaired.nextAt - Date.now()).toBeLessThanOrEqual(160);
+    expect(diagnostics[0]).toContain('journal .: .;');
+    recordHostLiveness(dir.path, true);
+    await until(() => !existsSync(retry));
+  } finally {
+    controller.abort();
+    await running;
+    console.error = previousError;
     dir.close();
   }
 });

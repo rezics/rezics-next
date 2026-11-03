@@ -422,6 +422,8 @@ Managers choose implementation estimate size; routing has no line or file estima
 Worker tuning uses `policy.workerResources`, lifecycle and retries use `policy.worker`, and transports use
 `policy.appServer` and `policy.containers`; environment memory overrides and synthetic caller overrides keep precedence.
 A host still opts into stale-container cleanup with `containers.json`, whose explicit age overrides the central age.
+Host liveness captures `policy.host` at startup and forwards it to the detached supervisor; synthetic polling and
+backoff overrides retain precedence. Process cleanup receives the same caller policy, including after recovery.
 
 | Setting                                          | Default      | Purpose                                                                |
 | ------------------------------------------------ | ------------ | ---------------------------------------------------------------------- |
@@ -503,6 +505,38 @@ A host still opts into stale-container cleanup with `containers.json`, whose exp
 | `policy.appServer.diagnosticCharacters` | `262144` | Maximum retained startup stderr characters. |
 | `policy.containers.commandTimeoutMs` | `15000` | Deadline for each worker container Docker operation (ms). |
 | `policy.containers.maxAgeHours` | `4` | Default stale-container age for opted-in hosts (hours). |
+
+| `policy.process.groupPollMs` | `1000` | Poll interval until an owned detached process group exits (ms). |
+| `policy.process.exitPollMs` | `50` | Fallback identity poll interval after a pidfd waiter fails (ms). |
+| `policy.process.signalDiagnosticCharacters` | `4096` | Maximum retained signal-helper stderr characters. |
+| `policy.process.resolverTerminationGraceMs` | `1000` | Termination grace for resolver recovery without a task runtime (ms). |
+| `policy.host.startupTimeoutMs` | `45000` | Host startup and startup-lease contention deadline (ms). |
+| `policy.host.supervisorStartupTimeoutMs` | `45000` | Detached supervisor readiness deadline (ms). |
+| `policy.host.socketTimeoutMs` | `250` | Deadline for each host socket readiness probe (ms). |
+| `policy.host.leasePollMs` | `25` | Pause between contended host startup lease probes (ms). |
+| `policy.host.pollMs` | `1000` | Supervisor host identity poll interval (ms). |
+| `policy.host.minBackoffMs` | `250` | Initial restart delay and exponential backoff base (ms). |
+| `policy.host.maxBackoffMs` | `30000` | Maximum restart backoff; at least the minimum (ms). |
+| `policy.host.retryFailures` | `30` | Saturation count for persisted host restart failures. |
+| `policy.host.healthResetMs` | `60000` | Healthy host time before clearing durable restart backoff (ms). |
+| `policy.host.startupLogBytes` | `4000` | Maximum current-launch stderr tail in startup failures (bytes). |
+| `policy.host.retryDiagnosticCharacters` | `160` | Maximum characters per retry-journal path or error excerpt. |
+| `policy.host.restartIntervalMs` | `600000` | Minimum interval between code-driven host restarts (ms). |
+| `policy.host.stateSweepIntervalMs` | `60000` | Host state-directory and code freshness sweep interval (ms). |
+| `policy.host.codePollMs` | `1000` | Fast code freshness poll interval (ms). |
+| `policy.host.recoveryIntervalMs` | `60000` | Orphan recovery and host periodic work interval (ms). |
+| `policy.host.recoveryReadinessMs` | `100` | Recovery progress wait before publishing host readiness (ms). |
+| `policy.host.requestTimeoutMs` | `60000` | Default manager host RPC deadline (ms). |
+| `policy.host.requestRetryMs` | `25` | Pause between manager host socket connection retries (ms). |
+| `policy.host.decisionAuditTimeoutMs` | `500` | Isolated continuation decision audit delivery deadline (ms). |
+| `policy.host.flowReviewIntervalMs` | `3600000` | Minimum interval between host-triggered flow reviews (ms). |
+| `policy.host.reportTimeoutMs` | `150000` | Maximum hourly report child runtime (ms). |
+| `policy.host.reportOverheadMs` | `30000` | Extra report child budget beyond its notifier deadline (ms). |
+| `policy.host.reportTerminationGraceMs` | `250` | Hourly report child SIGTERM grace before SIGKILL (ms). |
+| `policy.host.reportOutputCharacters` | `512` | Maximum hourly report child output retained for its outcome. |
+| `policy.appServer.exitPollMs` | `20` | Identity poll interval while stopping recorded app-servers (ms). |
+| `policy.appServer.killWaitMs` | `5000` | Maximum recorded app-server wait after SIGKILL (ms). |
+| `policy.containers.cleanupIntervalMs` | `600000` | Minimum interval between opted-in stale-container sweeps (ms). |
 
 ### Delivery flow telemetry
 

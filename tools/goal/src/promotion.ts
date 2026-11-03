@@ -403,7 +403,7 @@ async function gateAt(
       ),
     );
   } finally {
-    await stopProcessesUnder(tree, options.settings.terminationGraceMs);
+    await stopProcessesUnder(tree, options.settings.terminationGraceMs, undefined, options.settings.policy?.process);
     git(main, 'worktree', 'remove', '--force', tree);
   }
   return results;
