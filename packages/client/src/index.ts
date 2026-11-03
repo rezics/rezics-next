@@ -330,3 +330,9 @@ export function createKernelClient(origin: string, options: KernelClientOptions 
 export type QuestionLabelInput = Routes['rating-questions'][':questionId']['label']['put']['body'];
 export type QuestionLabelResult = Routes['rating-questions'][':questionId']['label']['put']['response'][200];
 export type QuestionLabelHistoryQuery = Routes['rating-questions'][':questionId']['labels']['get']['query'];
+
+type OwnVotesGet = KernelType['~Routes']['v1']['me']['rating-votes']['get'];
+export type OwnVotesPageQuery = OwnVotesGet['query'];
+export type OwnVotesPage = OwnVotesGet['response'][200];
+export type OwnVoteEntry = OwnVotesPage['votes'][number];
+export type OwnVoteActions = OwnVoteEntry['actions'];
