@@ -69,11 +69,13 @@ test('post history and exact revision reads keep their compatible route addresse
     page: {
       authors: { items: [{ id: authorId, state: 'concealed' }] },
       reviewScores: {
-        items: [{
-          revisionId,
-          citation: { questionId, units: 0, revision: 1 },
-          question: { id: questionId, revision: 1, scale: { min: 0, max: 20, displayStep: 1 } },
-        }],
+        items: [
+          {
+            revisionId,
+            citation: { questionId, units: 0, revision: 1 },
+            question: { id: questionId, revision: 1, scale: { min: 0, max: 20, displayStep: 1 } },
+          },
+        ],
       },
       actions: { references: [{ sourceRevisionId: revisionId, state: 'withheld' }] },
     },
