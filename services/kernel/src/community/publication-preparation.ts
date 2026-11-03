@@ -311,7 +311,7 @@ export async function readPublicationPreparation(
   if (!subject) return null;
   // No origin checkout is held while current Subject, label and Content media
   // observations run. Optional display failures do not change command advice.
-  let subjectPresentation = unavailablePresentation();
+  let subjectPresentation: SubjectPresentation = unavailablePresentation();
   let summaryObservation: Awaited<ReturnType<typeof readSubjectSummaryObservation>> | undefined;
   try {
     summaryObservation = await readSubjectSummaryObservation(
