@@ -590,7 +590,10 @@ async function prepare(
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
   const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference);
-  const accessContext = sharedContext ?? { pool: dependencies.pool, deadline: context.deadline, work: context.work };
+  const accessContext = sharedContext ?? {
+    pool: dependencies.pool, deadline: context.deadline,
+    ...(context.work ? { work: context.work } : {}),
+  };
   if (erasedProof) {
     const check = await accessExplicitCheck(
       dependencies.access,
