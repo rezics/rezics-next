@@ -3341,6 +3341,22 @@ options are `{fetch?, headers?, session?, onSession?}`. The generated inventory 
 removal is `client.accounts({accountId}).watches({watchId}).delete({expectedRevision}, {query: {kind}, headers: {'idempotency-key': key}})`.
 The package exports `WatchManagementKind`, `WatchManagementItem` and `WatchManagementPage` for these consumers.
 
+The Web transport factory is
+`createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`.
+Its options are `{fetch?, headers?, session?, onSession?}`. Create one instance per viewer; `session` is the initial
+session token and `onSession(token)` receives replacements. The package exports `WatchManagementKind`,
+`WatchManagementItem` and `WatchManagementPage` from the generated mounted schema declarations.
+Use `client.accounts({accountId}).watches.get({query:{kind,limit,cursor}})` to list and
+`client.accounts({accountId}).watches({watchId}).delete({expectedRevision},{query:{kind},headers:{'idempotency-key':key}})`
+to remove the personal row. Board state uses `client.boards({id}).watch.get()` and
+`.put({watching,expectedRevision},{headers:{'idempotency-key':key}})`. Encode the idempotency key as a JSON string
+containing the UUID, as required by the native header codec. Responses use Eden's `{data,error}` result; unavailable
+rows have no resource identifier, so removal uses their personal `id`. Retry an unavailable list request with the
+same cursor and selection; advance only after a successful response. These transport shapes do not substitute for
+native disclosure or history-growth verification.
+Client declaration generation must succeed before Web compiles these methods; publishing OpenAPI alone does not
+install the typed client.
+
 Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title}`. Denied and absent resources
 both return `{id,kind,revision,createdAt,state:'unavailable'}`. They contain no title, author, place, owner, destination
 or denial reason; the opaque personal `id` permits self-removal after a ban. Concurrent removal skips the row and
