@@ -319,7 +319,14 @@
       "reportResultCharacters": 2000,
       "failedResultCharacters": 500,
       "fixtureCleanupGraceMs": 250,
-      "blockerFingerprintCharacters": 300
+      "blockerFingerprintCharacters": 300,
+      "checkLogBytes": 4096,
+      "checkCommandCharacters": 1200,
+      "checkStatusCharacters": 80,
+      "checkSummaryCharacters": 400,
+      "recoveryCharacters": 500,
+      "retrySetupCharacters": 800,
+      "worktreeLockAgeMs": 60000
     },
     "workerResources": {
       "cpuWeight": 50,
@@ -772,6 +779,15 @@
       "journalAgeSeconds": 120,
       "clockSkewSeconds": 1,
       "connectTimeoutSeconds": 15
+    },
+    "windows": {
+      "commandTimeoutMs": 15000
+    },
+    "completion": {
+      "diagnosticCharacters": 1000
+    },
+    "maintenance": {
+      "derivedRefreshMs": 3600000
     }
   }
 }

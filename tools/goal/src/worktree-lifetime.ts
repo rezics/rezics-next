@@ -206,7 +206,7 @@ function recordPermissionFailure(
     worktreeIdentity: { dev: String(worktreeStat.dev), ino: String(worktreeStat.ino) },
     detail: String(error)
       .replace(/[\r\n]+/g, ' ')
-      .slice(0, 1000),
+      .slice(0, store.policy.worker.summaryCharacters),
     recordedAt: new Date().toISOString(),
   };
   if (store.recordWorktreeCleanup(disposition)) notify(reporter, task, disposition);

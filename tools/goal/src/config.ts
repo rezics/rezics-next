@@ -693,6 +693,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const managerLand: NonNullable<IntegrationRuntime['managerLand']> = (taskId, managerId) =>
     requestManagerLanding(taskId, managerId, store, queue, landing);
   const checkCompletion = completionChecker({
+    policy: settings.policy,
     ...settings,
     runGate,
     condition(goal) {
@@ -715,6 +716,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,
     windows: new TermspacesWindows({
+      policy: settings.policy?.windows,
       socket: settings.integration.tmuxSocket,
       session: settings.integration.tmuxSession,
       tmuxCommand: settings.integration.tmuxCommand,

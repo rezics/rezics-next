@@ -1,4 +1,5 @@
 import { defaultPolicy } from './policy.ts';
+import { defaultPolicy } from './policy.ts';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Runtime } from './config.ts';
@@ -61,7 +62,7 @@ export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runti
             } catch (error) {
               if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
             }
-            if (Date.now() - previous < 3_600_000) break;
+            if (Date.now() - previous < (runtime.settings.policy ?? defaultPolicy).maintenance.derivedRefreshMs) break;
             const head = Bun.spawnSync(['git', 'rev-parse', runtime.settings.integrationBranch], {
               cwd: runtime.mainCheckout,
               stdout: 'pipe',

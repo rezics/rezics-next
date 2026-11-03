@@ -855,6 +855,19 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.hostRoute.clockSkewSeconds` | `1` | hostRoute: clock skew seconds. |
 | `policy.hostRoute.connectTimeoutSeconds` | `15` | hostRoute: connect timeout seconds. |
 
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `policy.worker.checkLogBytes` | `4096` | worker: check log bytes. |
+| `policy.worker.checkCommandCharacters` | `1200` | worker: check command characters. |
+| `policy.worker.checkStatusCharacters` | `80` | worker: check status characters. |
+| `policy.worker.checkSummaryCharacters` | `400` | worker: check summary characters. |
+| `policy.worker.recoveryCharacters` | `500` | worker: recovery characters. |
+| `policy.worker.retrySetupCharacters` | `800` | worker: retry setup characters. |
+| `policy.worker.worktreeLockAgeMs` | `60000` | worker: worktree lock age ms. |
+| `policy.windows.commandTimeoutMs` | `15000` | windows: command timeout ms. |
+| `policy.completion.diagnosticCharacters` | `1000` | completion: diagnostic characters. |
+| `policy.maintenance.derivedRefreshMs` | `3600000` | maintenance: derived refresh ms. |
+
 ### Delivery flow telemetry
 
 `report --flow [--since <time>] [--json]` reads durable, timestamped per-task and per-attempt flow events. It reports

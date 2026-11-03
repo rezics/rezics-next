@@ -377,7 +377,7 @@ export class WorkerTasks {
     // A git process killed under load leaves its index lock behind. The attempt has ended and this retry holds the
     // task's lease, so a lock a minute old belongs to nobody.
     const lock = gitPath('index.lock');
-    if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > 60_000) rmSync(lock, { force: true });
+    if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > (this.settings.policy ?? defaultPolicy).worker.worktreeLockAgeMs) rmSync(lock, { force: true });
     for (const [state, operation] of [
       ['rebase-merge', 'rebase'],
       ['rebase-apply', 'rebase'],
@@ -1965,12 +1965,12 @@ export class WorkerTasks {
         } else if (!retryPrepared) {
           const detail = String(error)
             .replace(/[\r\n]+/g, ' ')
-            .slice(0, 800);
+            .slice(0, (this.settings.policy ?? defaultPolicy).worker.retrySetupCharacters);
           const event = {
             managerId: this.store.task(taskId).brief.manager,
             taskId,
             kind: 'environment' as const,
-            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000),
+            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, (this.settings.policy ?? defaultPolicy).worker.summaryCharacters),
           };
           new SqliteManagerInbox(
             this.store.db,
