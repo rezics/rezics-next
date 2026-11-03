@@ -37,6 +37,11 @@ All private visit data stays in component memory, outside query
 cache, route loader data, metadata, storage and diagnostics. Native disclosure still owns all account presentation.
 There is no avatar integration until admitted media grants and their caps are published.
 
+Decision: accept producer-owned lifetime observations through the optional `observe` composition seam; invalidation
+retires the entire connected visit and deferred selection/focus work without a refresh or a locally invented revision.
+The producer must supply a permanently invalidated observation after any disclosure, account, Realm or interval change.
+This seam does not publish native notifications or permit production binding before the exact interval is available.
+
 ## Actions and pending work
 
 This part supports inspection only. It admits no add, remove, role, approve, mute, ban or unban command. Successful

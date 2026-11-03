@@ -47,6 +47,16 @@ export type MemberSelectionAddress = {
 };
 
 export interface RealmMembersSource {
+  /**
+   * Optional producer-owned lifetime for one connected visit. Capture before any read.
+   * A disclosure, account, Realm or interval change permanently invalidates this observation,
+   * even if the source later returns to the same values. Notifications perform no reads.
+   * This is a composition seam, not a wire revision or a substitute for a native interval.
+   */
+  readonly observe?: () => {
+    current: () => boolean;
+    subscribe: (listener: () => void) => () => void;
+  };
   /** Set only from the installed producer's admitted caps, never from UI fixture size. */
   readonly pageBound: number;
   readonly readPage: (address: MemberAddress) => Promise<MemberPageRead>;

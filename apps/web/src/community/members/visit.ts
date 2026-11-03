@@ -32,6 +32,7 @@ export class RealmMembersVisit {
   private selectedOperation = 0;
   private pageBusy = false;
   private stop: (() => void) | undefined;
+  private observation: ReturnType<NonNullable<RealmMembersSource['observe']>> | undefined;
 
   constructor(
     private readonly realmId: string,
@@ -59,7 +60,7 @@ export class RealmMembersVisit {
   }
 
   private admitted() {
-    if (!this.current()) this.retire();
+    if (!this.current() || this.observation?.current() === false) this.retire();
     return this.connected && !this.retired;
   }
 
@@ -69,6 +70,8 @@ export class RealmMembersVisit {
     this.connection++;
     this.pageOperation++;
     this.selectedOperation++;
+    this.stop?.();
+    this.stop = undefined;
     this.rows.clear();
     this.value = {
       read: { kind: 'retired' },
@@ -82,9 +85,20 @@ export class RealmMembersVisit {
   connect = () => {
     this.connected = true;
     this.connection++;
-    this.stop = this.watch?.(() => {
-      if (!this.current()) this.retire();
-    });
+    this.observation = this.source.observe?.();
+    const changed = () => {
+      this.admitted();
+    };
+    const stopCaller = this.watch?.(changed);
+    const stopSource = this.observation?.subscribe(changed);
+    this.stop = () => {
+      stopCaller?.();
+      stopSource?.();
+    };
+    if (this.retired) {
+      this.stop();
+      this.stop = undefined;
+    }
     if (this.admitted()) void this.readPage(this.value.address);
     return () => {
       this.connected = false;

@@ -102,6 +102,43 @@ afterAll(async () => {
   }
 });
 
+test('producer lifetime retirement conceals the mounted page and delayed selection without requests or focus recovery', async () => {
+  for (const phase of ['page', 'selection'] as const) {
+    const fixture = source();
+    const pending = Promise.withResolvers<Awaited<ReturnType<typeof fixture.readPage>>>();
+    const selected = Promise.withResolvers<Awaited<ReturnType<typeof fixture.readSelected>>>();
+    let current = true;
+    let notify = () => {};
+    let stops = 0;
+    let pages = 0;
+    let selections = 0;
+    await render({
+      ...fixture,
+      observe: () => ({ current: () => current, subscribe: (listener) => {
+        notify = listener;
+        return () => { stops++; };
+      } }),
+      readPage: async (address) => { pages++; return phase === 'page' ? pending.promise : fixture.readPage(address); },
+      readSelected: async () => { selections++; return selected.promise; },
+    });
+    if (phase === 'selection') await click(m.realm_members_inspect());
+    await act(async () => { current = false; notify(); await tick(); });
+    expect(host.textContent).toContain(m.realm_members_retired());
+    expect(host.textContent).not.toContain('Similar name');
+    expect(stops).toBe(1);
+    const focus = document.activeElement;
+    await act(async () => {
+      pending.resolve(await fixture.readPage({ realmId: 'realm', cursor: null }));
+      selected.resolve(await fixture.readSelected({ realmId: 'realm', accountId: 'a', episode: 'episode', authority: 'grant' }));
+      await tick();
+    });
+    expect(host.textContent).not.toContain('Exact selected account');
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect(document.activeElement).toBe(focus);
+    expect([pages, selections]).toEqual([1, phase === 'page' ? 0 : 1]);
+  }
+});
+
 test('mounted roster inspects an exact current observation, keeps pending truthful and returns keyboard focus', async () => {
   await render(source());
   expect(host.textContent).toContain('Exact Realm');
