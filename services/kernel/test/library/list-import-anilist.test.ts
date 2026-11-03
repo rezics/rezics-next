@@ -101,6 +101,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(made.status).toBe(200);
   const result = await made.json();
   expect(result.results[0].status).toBe(201);
+  expect(result.results[1]).toMatchObject({ status: 201 });
   const subjectId = result.results[0].value.id;
   const upload = JSON.stringify([
     { ...row, mediaId, media: { ...row.media, id: mediaId } },
