@@ -278,13 +278,18 @@ describe('Actual scoped Collection authority enables owning editor and occurrenc
       await ui.expose();
       await ui.show({ page: { ...page(), memberState: 'failed' } });
       ui.refresh.mockImplementationOnce(() => read.promise);
-      const reload = () => [...ui.host.querySelectorAll('button')].find(
-        (button) => button.textContent?.trim() === m.library_collection_reload(),
-      )!;
+      const reload = () =>
+        [...ui.host.querySelectorAll('button')].find(
+          (button) => button.textContent?.trim() === m.library_collection_reload(),
+        )!;
       await settle(() => reload().click());
       expect(reload().disabled).toBe(true);
-      await settle(() => ui.client.getQueryCache().find({ queryKey: sessionQuery.queryKey })!
-        .setState({ status: 'error', error: new Error('temporarily unavailable') }));
+      await settle(() =>
+        ui.client
+          .getQueryCache()
+          .find({ queryKey: sessionQuery.queryKey })!
+          .setState({ status: 'error', error: new Error('temporarily unavailable') }),
+      );
       await settle(() => read.resolve(page()));
       expect(ui.invalidate).not.toHaveBeenCalled();
       await ui.renew();

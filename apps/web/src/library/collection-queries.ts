@@ -273,7 +273,8 @@ export function viewerCollectionPageQuery(
     refetchInterval: (query) => {
       const page = query.state.data;
       return !query.state.error && page && !('preparing' in page) && page.memberState === 'preparing' && isCurrent()
-        ? page.retryAfterMs ?? 1000 : false;
+        ? (page.retryAfterMs ?? 1000)
+        : false;
     },
     queryKey: readQueryKey(
       ['collection-page', id, cursor ?? null, search ?? null, viewerId, lifetime ?? null],

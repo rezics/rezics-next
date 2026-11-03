@@ -271,7 +271,12 @@ type BoundaryMove = {
 };
 
 /** Members read recovery shares the active editor's fence, but never starts a writer. */
-export function CollectionMembersStatus({ state, retrying, disabled, onRetry }: {
+export function CollectionMembersStatus({
+  state,
+  retrying,
+  disabled,
+  onRetry,
+}: {
   state: NonNullable<EditableCollectionPage['memberState']>;
   retrying: boolean;
   disabled: boolean;
@@ -281,8 +286,11 @@ export function CollectionMembersStatus({ state, retrying, disabled, onRetry }: 
   return (
     <div className="space-y-3" aria-busy={retrying}>
       <p role={state === 'preparing' ? 'status' : 'alert'}>
-        {state === 'preparing' ? m.library_dynamic_preparing() :
-          state === 'unavailable' ? m.library_dynamic_unavailable() : m.error_message()}
+        {state === 'preparing'
+          ? m.library_dynamic_preparing()
+          : state === 'unavailable'
+            ? m.library_dynamic_unavailable()
+            : m.error_message()}
       </p>
       <Button type="button" variant="outline" disabled={disabled || retrying} onClick={onRetry}>
         {m.library_collection_reload()}
@@ -1522,7 +1530,10 @@ function CollectionPageLifetime({
           {...(page.filterIgnored === undefined ? {} : { ignored: page.filterIgnored })}
           {...(page.filterStatus === undefined ? {} : { status: page.filterStatus })}
           {...(page.filterType === undefined ? {} : { filterType: page.filterType })}
-          empty={(editing ? members : page.filteredMembers ?? page.members).length === 0 && (page.memberState ?? 'ready') === 'ready'}
+          empty={
+            (editing ? members : (page.filteredMembers ?? page.members)).length === 0 &&
+            (page.memberState ?? 'ready') === 'ready'
+          }
           unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
@@ -1657,7 +1668,7 @@ function CollectionPageLifetime({
           />
           {!editing ? (
             <CollectionReadMembers<ReadMember>
-              members={(page.memberState ?? 'ready') !== 'ready' ? [] : page.filteredMembers ?? page.members}
+              members={(page.memberState ?? 'ready') !== 'ready' ? [] : (page.filteredMembers ?? page.members)}
               layout={layout}
               presentationKind={page.presentationKind}
               typeRatios={page.typeRatios}

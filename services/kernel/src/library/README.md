@@ -2920,5 +2920,4 @@ This is the request composition seam. The default Members reader and selected-ru
 current Source/physical binding, bounded execution, final publication and prepared-page readback before they can
 return a useful retained page. The callback, locator and allocation declaration confer none of those authorities.
 
-
 Decision: preserve native metadata reservation and immutable-definition recovery; only explicit runtime admission requires the complete C3 parent, and list previews remain read-only.

@@ -238,7 +238,7 @@ test('Members status recovery keeps the addressed Collection, filter and cursor 
         expect(page.memberState).toBe(status === 200 ? 'ready' : status === 202 ? 'preparing' : 'unavailable');
         expect(page.memberCount).toBeNull();
       }
-      const members = 'preparing' in page ? page.members : page.filteredMembers ?? page.members;
+      const members = 'preparing' in page ? page.members : (page.filteredMembers ?? page.members);
       expect(members.map((member) => member.subject?.label)).toEqual(status === 200 ? ['Completed member'] : []);
       expect(page.next).toBe(status === 200 ? 'next-cursor' : null);
       expect(calls).toHaveLength(kind === 'dynamic' ? 2 : 1);
@@ -257,29 +257,67 @@ test('Members status recovery keeps the addressed Collection, filter and cursor 
 test('curated filtered reads preserve canonical members and distinguish finite preparation from unavailable and empty', async () => {
   const filter = { type: { in: ['schema:Book'] } };
   for (const status of [200, 202, 503]) {
-    const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-      const url = new URL(new Request(input, init).url);
-      if (url.pathname === '/v1/viewerActions') return Response.json({ resources: [] });
-      if (url.pathname.endsWith('/members')) {
-        expect(JSON.parse(url.searchParams.get('filter')!)).toEqual(filter);
-        return Response.json(status === 200 ? { members: [{ kind: 'dynamic', subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000005',
-          subject: { id: '0192f3a0-6c1e-7b2a-9d4e-000000000005', label: 'A prepared member', type: 'schema:Book', cover: null } }], next: null } :
-          status === 202 ? { preparing: true } : { code: 'dependency_unavailable' },
-        { status, headers: { 'retry-after': '2' } });
-      }
-      return Response.json({ collection: { id, membershipKind: 'curated', title: 'Filtered', description: null,
-        curatorAccountId: 'someone-else', visibility: 'public', revision: 1, memberCount: 10,
-        createdAt: '2026-11-02T00:00:00Z', updatedAt: '2026-11-02T00:00:00Z' } });
-    } });
-    const page = await loadEditableCollectionPage(client, new Request(`https://rezics.test/en/collections/${id}`),
-      {}, { id, filter }, 'anonymous');
+    const client = createKernelClient('https://kernel.test', {
+      fetch: async (input, init) => {
+        const url = new URL(new Request(input, init).url);
+        if (url.pathname === '/v1/viewerActions') return Response.json({ resources: [] });
+        if (url.pathname.endsWith('/members')) {
+          expect(JSON.parse(url.searchParams.get('filter')!)).toEqual(filter);
+          return Response.json(
+            status === 200
+              ? {
+                  members: [
+                    {
+                      kind: 'dynamic',
+                      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000005',
+                      subject: {
+                        id: '0192f3a0-6c1e-7b2a-9d4e-000000000005',
+                        label: 'A prepared member',
+                        type: 'schema:Book',
+                        cover: null,
+                      },
+                    },
+                  ],
+                  next: null,
+                }
+              : status === 202
+                ? { preparing: true }
+                : { code: 'dependency_unavailable' },
+            { status, headers: { 'retry-after': '2' } },
+          );
+        }
+        return Response.json({
+          collection: {
+            id,
+            membershipKind: 'curated',
+            title: 'Filtered',
+            description: null,
+            curatorAccountId: 'someone-else',
+            visibility: 'public',
+            revision: 1,
+            memberCount: 10,
+            createdAt: '2026-11-02T00:00:00Z',
+            updatedAt: '2026-11-02T00:00:00Z',
+          },
+        });
+      },
+    });
+    const page = await loadEditableCollectionPage(
+      client,
+      new Request(`https://rezics.test/en/collections/${id}`),
+      {},
+      { id, filter },
+      'anonymous',
+    );
     if ('preparing' in page) throw new Error('Expected the existing curated Collection page');
     expect(page.memberState).toBe(status === 200 ? 'ready' : status === 202 ? 'preparing' : 'unavailable');
     expect(page.memberCount).toBeNull();
     expect(page.members).toEqual([]);
     expect(page.publicExport).toBe(false);
     if (status === 200) {
-      expect(page.filteredMembers?.map(member => member.subject?.id)).toEqual(['0192f3a0-6c1e-7b2a-9d4e-000000000005']);
+      expect(page.filteredMembers?.map((member) => member.subject?.id)).toEqual([
+        '0192f3a0-6c1e-7b2a-9d4e-000000000005',
+      ]);
       expect(page.filteredMembers?.[0]).not.toHaveProperty('id');
       expect(page.filteredMembers?.[0]).not.toHaveProperty('addedAt');
     } else {
@@ -294,22 +332,51 @@ test('Members recovery retains its Collection, filter and opaque cursor through 
   const cursor = 'opaque+/cursor==';
   const addresses: string[] = [];
   let status = 500;
-  const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-    const url = new URL(new Request(input, init).url);
-    if (url.pathname.endsWith('/members')) {
-      addresses.push(url.href);
-      if (status === 0) throw new TypeError('Network read failed');
-      return Response.json(status === 200 ? { members: [], next: null } :
-        status === 202 ? { preparing: true } : { code: 'dependency_unavailable' }, { status });
-    }
-    return Response.json({ collection: { id, membershipKind: 'curated', title: 'Retained shell',
-      description: null, curatorAccountId: 'owner', visibility: 'public', revision: 1,
-      createdAt: stamp, updatedAt: stamp } });
-  } });
-  for (const [next, state] of [[500, 'failed'], [0, 'failed'], [503, 'unavailable'], [202, 'preparing'], [200, 'ready']] as const) {
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const url = new URL(new Request(input, init).url);
+      if (url.pathname.endsWith('/members')) {
+        addresses.push(url.href);
+        if (status === 0) throw new TypeError('Network read failed');
+        return Response.json(
+          status === 200
+            ? { members: [], next: null }
+            : status === 202
+              ? { preparing: true }
+              : { code: 'dependency_unavailable' },
+          { status },
+        );
+      }
+      return Response.json({
+        collection: {
+          id,
+          membershipKind: 'curated',
+          title: 'Retained shell',
+          description: null,
+          curatorAccountId: 'owner',
+          visibility: 'public',
+          revision: 1,
+          createdAt: stamp,
+          updatedAt: stamp,
+        },
+      });
+    },
+  });
+  for (const [next, state] of [
+    [500, 'failed'],
+    [0, 'failed'],
+    [503, 'unavailable'],
+    [202, 'preparing'],
+    [200, 'ready'],
+  ] as const) {
     status = next;
-    const page = await loadEditableCollectionPage(client, new Request('https://rezics.test'), {},
-      { id, filter, cursor }, 'anonymous');
+    const page = await loadEditableCollectionPage(
+      client,
+      new Request('https://rezics.test'),
+      {},
+      { id, filter, cursor },
+      'anonymous',
+    );
     if ('preparing' in page) throw new Error('Expected the retained curated shell');
     expect([page.title, page.cursor, page.filter, page.memberState]).toEqual(['Retained shell', cursor, filter, state]);
     expect(page.publicExport).toBe(false);

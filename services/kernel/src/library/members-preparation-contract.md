@@ -194,6 +194,7 @@ This composition is a private allocation seam, not native integration or a relea
 
 Decision: use the shared native child-transfer allocator, require explicit Source and native authority, and preserve
 the existing request retry policy rather than adding a retry-count cap.
+
 ### Approved C3 composition
 
 The 16 statements are the Members-owned body allowance per preparation step. They are not the whole request cap.

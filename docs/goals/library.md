@@ -167,7 +167,6 @@ Applicable retention schedules and external source licensing follow their owners
 for Library acceptance. Local deterministic outcomes and existing public scope remain obligations while shared
 producer work completes.
 
-
 Mounted filtered reads keep the existing direct-reader cursor protocol until C3 funding and prepared/direct
 dispatch are installed; retained reader presence alone does not replace a working direct page. The status journey
 preserves the Collection header, filter and cursor across read errors and only polls genuine preparing responses.

@@ -473,17 +473,27 @@ export async function loadEditableCollectionPage(
   }
   const curatedCollection = collection as CuratedCollectionRead;
   const memberStatus = resultStatus(membersResult);
-  const memberState = memberStatus === 202 ? 'preparing' : memberStatus === 503 ? 'unavailable' :
-    memberStatus !== undefined && memberStatus >= 500 ? 'failed' : 'ready';
+  const memberState =
+    memberStatus === 202
+      ? 'preparing'
+      : memberStatus === 503
+        ? 'unavailable'
+        : memberStatus !== undefined && memberStatus >= 500
+          ? 'failed'
+          : 'ready';
   const members =
     memberState === 'ready'
       ? generatedClientDTO<CuratedMemberPage>(
           readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]),
         )
       : { members: [], next: null };
-  const canonical = input.filter ? generatedClientDTO<DynamicMembersPage>(
-    memberState === 'ready' ? readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0]) :
-      { members: [], next: null }) : null;
+  const canonical = input.filter
+    ? generatedClientDTO<DynamicMembersPage>(
+        memberState === 'ready'
+          ? readLibraryResult(membersResult as Parameters<typeof readLibraryResult>[0])
+          : { members: [], next: null },
+      )
+    : null;
   const owner = viewer !== undefined && viewer === curatedCollection.curatorAccountId;
   const following =
     authorization && !owner && curatedCollection.visibility !== 'private'
@@ -534,10 +544,14 @@ export async function loadEditableCollectionPage(
       subject: subjectOf(member.subject),
       ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
-    ...(canonical ? { filteredMembers: canonical.members.map(member => ({
-      subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
-      ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
-    })) } : {}),
+    ...(canonical
+      ? {
+          filteredMembers: canonical.members.map((member) => ({
+            subject: subjectOf(member.subject as Parameters<typeof subjectOf>[0]),
+            ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
+          })),
+        }
+      : {}),
     next: canonical?.next ?? members.next,
     revision: collection.revision,
     firstPage: first.stale || input.cursor === undefined,
