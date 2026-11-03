@@ -1,3 +1,4 @@
+import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { collectionTextIssue } from './collection-text-input';
 import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
@@ -1885,16 +1886,24 @@ function CollectionPageLifetime({
           emptyLabel={m.library_collection_empty()}
         />
         {!editing ? (
-          <BulkFilteredAdd
-            source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
-            address={JSON.stringify([page.id, cursor, search, queryKey])}
-            disabled={
-              page.filterStatus !== undefined ||
-              (page.filterIgnored?.length ?? 0) > 0 ||
-              (page.memberState ?? 'ready') !== 'ready'
-            }
-            isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
-          />
+          <>
+            <BulkFilteredAdd
+              source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
+              address={JSON.stringify([page.id, cursor, search, queryKey])}
+              disabled={
+                page.filterStatus !== undefined ||
+                (page.filterIgnored?.length ?? 0) > 0 ||
+                (page.memberState ?? 'ready') !== 'ready'
+              }
+              isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
+            />
+            <FilteredLibraryRemovalControl
+              source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
+              boundary={JSON.stringify([page.visibility, cursor, search, queryKey])}
+              eligible={(page.memberState ?? 'ready') === 'ready' && !page.filterStatus && !page.filterIgnored?.length}
+              isCurrent={() => isCurrent()}
+            />
+          </>
         ) : null}
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>

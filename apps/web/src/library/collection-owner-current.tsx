@@ -1,5 +1,5 @@
-import { useMemo, useRef, useSyncExternalStore } from 'react';
-import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useContext, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useQuery, QueryClientContext, QueryClient } from '@tanstack/react-query';
 import { operationIsAdmitted } from '../kernel/exposure';
 import {
   viewerExposureLifetime,
@@ -145,10 +145,12 @@ function ownerStore(client: QueryClient) {
   };
 }
 
+const previewClient = new QueryClient();
+
 /** Authority episodes retire permanently; intent identity survives healthy refresh/admission churn. */
 export function useCollectionOwnerCurrent(address: string, _withLabels = false) {
   useSession();
-  const client = useQueryClient();
+  const client = useContext(QueryClientContext) ?? previewClient;
   const locale = getLocale();
   const store = useMemo(() => ownerStore(client), [client, address, locale]);
   const previous = useRef(store);
@@ -157,7 +159,7 @@ export function useCollectionOwnerCurrent(address: string, _withLabels = false) 
     previous.current = store;
   }
   const snapshot = useSyncExternalStore(store.subscribe, store.read, () => serverSnapshot);
-  useQuery(viewerExposureQuery(snapshot.observation));
+  useQuery(viewerExposureQuery(snapshot.observation), client);
   const isCurrent = () => store.current(snapshot) && getLocale() === locale;
   return {
     subject: snapshot.identity.subject,
@@ -166,8 +168,8 @@ export function useCollectionOwnerCurrent(address: string, _withLabels = false) 
     isCurrent,
     isOwnerCurrent: () => store.owns(snapshot) && getLocale() === locale,
     canLabelCurrent: () => isCurrent() && snapshot.canLabel,
-    operationCurrent: (operation: Parameters<typeof operationIsAdmitted>[0]) =>
-      isCurrent() && operationIsAdmitted(operation, snapshot.operations),
+    operationCurrent: (operation: Parameters<typeof operationIsAdmitted>[0], write = false) =>
+      isCurrent() && (!write || !!snapshot.csrfToken) && operationIsAdmitted(operation, snapshot.operations),
     credential: () => (isCurrent() ? snapshot.csrfToken || null : null),
     csrfToken: snapshot.csrfToken,
     generation: snapshot.identity.generation,

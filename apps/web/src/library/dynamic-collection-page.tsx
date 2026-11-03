@@ -1,3 +1,4 @@
+import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -207,6 +208,11 @@ function DynamicCollectionPageLifetime({
             <SavedFilterReviewEntry />
           )}
         </SavedFilterReviewScopeBoundary>
+        <FilteredLibraryRemovalControl
+          source={{ id: current.id, ...(current.filter === undefined ? {} : { filter: current.filter }) }}
+          boundary={JSON.stringify([current.visibility, current.cursor, search])}
+          eligible={membersReady && !current.filterIgnored?.length}
+        />
         <CollectionFilterFeedback
           id={current.id}
           {...(current.filter === undefined ? {} : { filter: current.filter })}
