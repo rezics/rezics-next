@@ -1,14 +1,22 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
 import type { Pool } from 'pg';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import {
+  createResourceCreationManifest,
+  parentCreationAuthorization,
+} from '../../src/access/index.ts';
+import { currentCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';
-import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { revisionResource } from '../../src/semantic/authorship.ts';
+import { globalContextAnchor } from '../../src/semantic/context.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
+import type { Resource } from '../../src/request/access.ts';
 import {
   completeAgentVerification,
   finishAgentVerification,
@@ -28,7 +36,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const accountRoute = 0x5274;
@@ -161,9 +169,108 @@ async function catalogueSubject(type: 'schema:Person' | 'schema:Organization', l
   return created.body.subject.id as string;
 }
 
+function nativeCreationEntry(
+  resource: Resource,
+  type: string,
+  accountId: string,
+  subject: string,
+  revision: number,
+) {
+  return {
+    resource,
+    type,
+    creator: accountId,
+    creation: {
+      async validate(client: CommandTransaction, candidate: Readonly<Resource>): Promise<boolean> {
+        const command = currentCommand(client);
+        if (
+          candidate.route !== resource.route ||
+          candidate.id !== resource.id ||
+          command.basis?.actorAccountId !== accountId ||
+          command.authorization?.mode !== 'execute'
+        )
+          return false;
+        if (type === 'semantic.subject') {
+          const result = await client.query(
+            `SELECT 1 FROM semantic.subject s
+             JOIN semantic.revision r ON r.route=s.route AND r.subject_id=s.subject_id AND r.revision=1
+               AND r.recorded_transaction_id=s.recorded_transaction_id AND r.kind='create'
+             WHERE s.route=$1 AND s.subject_id=$2 AND s.recorded_transaction_id=$3::uuid`,
+            [resource.route, subject, command.transactionId],
+          );
+          return result.rows.length === 1;
+        }
+        const result = await client.query(
+          `SELECT 1 FROM semantic.revision r
+           WHERE r.route=$1 AND r.subject_id=$2 AND r.revision=$3
+             AND r.kind IN ('create','propose','terms') AND r.recorded_transaction_id=$4::uuid`,
+          [resource.route, subject, revision, command.transactionId],
+        );
+        return result.rows.length === 1;
+      },
+    },
+  };
+}
+
+async function ensureAgent(account: Seeded, kind: 'person' | 'organization'): Promise<void> {
+  const agentId = accountAgentId(account.id);
+  const route = routeOf(agentId)!;
+  const target = { route, id: agentId };
+  const deadline = Date.now() + 30_000;
+  const actor = await authenticateAccount(
+    access,
+    { pool, deadline },
+    {
+      accountId: staff.id,
+      clientId: 'agent-verification-test',
+      scopes: ['subject:create'],
+    },
+  );
+  const firstRevision = revisionResource(target.id, 1);
+  const subjectEntry = nativeCreationEntry(target, 'semantic.subject', actor.accountId, target.id, 1);
+  const authorization = parentCreationAuthorization({
+    access,
+    actor,
+    action: 'subject:create',
+    parent: globalContextAnchor,
+    context: {
+      pool,
+      deadline,
+      resource: target,
+      creation: subjectEntry.creation,
+      manifest: createResourceCreationManifest([
+        subjectEntry,
+        nativeCreationEntry(firstRevision, 'semantic.revision', actor.accountId, target.id, 1),
+      ]),
+    },
+  });
+  await createSubject(pool, {
+    actor,
+    target,
+    idempotencyKey: key(),
+    digest: createHash('sha256').update(key()).digest(),
+    item: {
+      type: kind === 'person' ? 'schema:Person' : 'schema:Organization',
+      labels: { en: account.displayName },
+    },
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorization,
+    deadline,
+    clock,
+  });
+  await pool.query(
+    `INSERT INTO semantic.account_agent_subject (route, account_route, subject_id, account_id, agent_id)
+     VALUES ($1, $1, $2, $3, $2)
+     ON CONFLICT (route, subject_id) DO NOTHING`,
+    [route, agentId, account.id],
+  );
+  await drain();
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase();
   pool = db.pool;
+  configureTestReceiptKeys(pool);
   await bootstrapRelease(pool, bundledRelease);
   await bootstrapProfile(pool, profile);
   const initial = createKernel({ pool, routeKey, tokens, receiptKeys, clock });
@@ -187,6 +294,12 @@ beforeAll(async () => {
   staff = await seedAccount('page_staff');
   manager = await seedAccount('page_manager');
   await bootstrapGovernance(pool, staff.id);
+  await pool.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES (0, $1, $2, 'subject:create', '(,)', $2)
+     ON CONFLICT DO NOTHING`,
+    [GLOBAL_CONTEXT, staff.id],
+  );
   expect((await post('/v1/platform/exposure/agent_verification:open', await bearer(staff))).response.status).toBe(200);
 }, 60_000);
 
@@ -203,12 +316,7 @@ async function verified(kind: 'actor' | 'organization' = 'actor') {
       [accountRoute, account.id, manager.id],
     );
   const token = await bearer(kind === 'organization' ? manager : account);
-  await ensureAccountAgent(pool, {
-    account: account.id,
-    kind: kind === 'actor' ? 'person' : 'organization',
-    name: account.displayName,
-    language: 'en',
-  });
+  await ensureAgent(account, kind === 'actor' ? 'person' : 'organization');
   const subject = await catalogueSubject(kind === 'actor' ? 'schema:Person' : 'schema:Organization', 'Catalogue');
   const applied = await request(account, subject, token);
   expect(applied.response.status).toBe(201);
@@ -297,7 +405,7 @@ test("never verified, another account's subject, and pending verification disclo
   const account = await seedAccount('page_pending');
   const other = await verified();
   const subject = await catalogueSubject('schema:Person', 'Unverified catalogue person');
-  await ensureAccountAgent(pool, { account: account.id, kind: 'person', name: account.displayName, language: 'en' });
+  await ensureAgent(account, 'person');
   await expectSubjectPage(subject);
   await drain();
   await expectSubjectPage(accountAgentId(account.id));
