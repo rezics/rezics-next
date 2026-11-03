@@ -15,15 +15,15 @@ its payload and order (`updated_at DESC, subject_id ASC`) stay unchanged. Its cu
 helper; old readable HMAC tokens are refused. `direction` and `type` without
 `orderBy` are `400 invalid_request`.
 
-| Parameter   | Values                                            |
-| ----------- | ------------------------------------------------- |
-| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore`         |
-| `direction` | `desc` (default), `asc`                           |
-| `state`     | exact validated profile state ID, optional        |
-| `type`      | exact full primary-type CURIE, optional           |
-| `view`      | `BASIC` (default), `FULL`                         |
-| `limit`     | 1 to 100, default 20. The personal page asks 100. |
-| `cursor`    | opaque, at most 4096 characters                   |
+| Parameter   | Values                                                     |
+| ----------- | ---------------------------------------------------------- |
+| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore` |
+| `direction` | `desc` (default), `asc`                                    |
+| `state`     | exact validated profile state ID, optional                 |
+| `type`      | exact full primary-type CURIE, optional                    |
+| `view`      | `BASIC` (default), `FULL`                                  |
+| `limit`     | 1 to 100, default 20. The personal page asks 100.          |
+| `cursor`    | opaque, at most 4096 characters                            |
 
 The response is `{libraryEntries, next}`. Each item has the BASIC entry fields (`subjectId`, optional nullable `incarnationId`, `state`, `revision`,
 `createdAt`, `updatedAt`) and three additions. FULL adds only `subject`, as it does today; the embedded session never gains
