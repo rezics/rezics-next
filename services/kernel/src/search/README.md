@@ -1216,7 +1216,9 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 - Bound: One identity set and adjacent tuple comparisons over `k <= 200` existing hits, `O(k)` identities and work
   linear in returned tuple bytes. No extra engine, SQL or Source request, per-hit I/O, refill round or fetch limit.
   Native sorting/counting work remains match-dependent; admission does not establish whole-index privacy.
-- Evidence: `test/search/keyset-receipts.test.ts` retains direct duplicate-root, identity, order and frontier rejection.
+- Evidence: `test/search/keyset-receipts.test.ts` retains direct duplicate-root, identity, order and frontier rejection,
+  including hit-only receipts that omit totals. `test/search/query-payload.test.ts` maps those identity, order, frontier,
+  wrong-partition and duplicate-root faults through the actual service to `503 index_not_ready` before Source.
   `test/search/query.test.ts` executes native ordinary keysets and corrupts only clones of their actual receipts;
   `test/search/service.test.ts` proves rejection before current Source or signing, valid keysets/refills/empty pages,
   and fixed returned-hit bytes, calls and Source rows at 64/512/4096 unrelated roots and overwritten native versions.
