@@ -146,9 +146,7 @@ async function readMedia(
   if (ids.length === 0) return new Map();
   const mediaDependencies = {
     pool: dependencies.pool,
-    get access() {
-      return dependencies.access;
-    },
+    access: dependencies.access,
     ...(dependencies.realmParticipation ? { realmParticipation: dependencies.realmParticipation } : {}),
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
   };
@@ -223,7 +221,9 @@ function assertSamePage(
 export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
   const readDependencies = (): ContentReadDependencies => ({
     pool: dependencies.pool,
-    access: dependencies.access,
+    get access() {
+      return dependencies.access;
+    },
     tokens: dependencies.tokens,
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
   });
