@@ -825,7 +825,7 @@ export function createDiscoveryProjection(options: {
       throw new TypeError(`Native ${kind} discovery read did not settle every requested identity`);
     const actions = prepareOwnerPageActions(kind, partition, snapshot);
     if (actions.length !== ids.length) throw new TypeError(`Native ${kind} discovery action set is incomplete`);
-    return { position: snapshot.position, actions };
+    return { position: snapshot.position, keys: snapshot.keys, records: snapshot.records, actions };
   }
   async function projectOwner(kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) {
     if (!(await hasMetadataPopulation(kind))) return;

@@ -3,7 +3,7 @@ import { subjectSource } from '../semantic/search-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import { withConnection } from '../database/pool.ts';
-import { PARTITIONS, routeOf } from '../route/route.ts';
+import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
 import type {
   DiscoveryKey,
@@ -25,6 +25,7 @@ import { discoveryIndexName, discoveryIndexUuid, discoveryAlias, createDiscovery
 import {
   discoveryDocumentActions,
   parseDiscoveryHitIdentity,
+  parseDiscoveryDocumentKey,
   validateDiscoveryDocument,
 } from './discovery-documents.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
