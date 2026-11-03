@@ -192,7 +192,8 @@ export function useCollectionCurrentAdmission(address: string, evidence = '', qu
         : operation;
     return (
       observed() &&
-      (['collection.get', 'library_operation.get', 'library_operation.outcomes'].includes(operation) || !!actual.csrfToken) &&
+      (['collection.get', 'library_operation.get', 'library_operation.outcomes'].includes(operation) ||
+        !!actual.csrfToken) &&
       operationIsAdmitted(exposedOperation, actual.admitted)
     );
   };

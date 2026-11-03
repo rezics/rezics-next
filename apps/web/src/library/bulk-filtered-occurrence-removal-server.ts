@@ -27,9 +27,16 @@ async function currentRequest(input: { viewer: string; headers: Readonly<Record<
   setResponseHeader('cache-control', 'private, no-store');
   const request = new Request(getRequest());
   const csrf = input.headers['x-csrf-token'];
-  if (!csrf || request.method !== 'POST' || (await prepareSession(request, env as Partial<SessionEnv>)) ||
-    request.headers.has('authorization') || sessionSubject(request) !== input.viewer || !viewerCredential(request) ||
-    requestCsrfToken(request) !== csrf || request.headers.get('x-csrf-token') !== csrf)
+  if (
+    !csrf ||
+    request.method !== 'POST' ||
+    (await prepareSession(request, env as Partial<SessionEnv>)) ||
+    request.headers.has('authorization') ||
+    sessionSubject(request) !== input.viewer ||
+    !viewerCredential(request) ||
+    requestCsrfToken(request) !== csrf ||
+    request.headers.get('x-csrf-token') !== csrf
+  )
     return null;
   return request;
 }
@@ -58,7 +65,8 @@ const preview = createServerFn({ method: 'POST', strict: false })
     if (!headers) return { state: 'refused' };
     const body: RemovalRequest = JSON.parse(data.body);
     const result = await kernelClient().libraryOperations.post(body, {
-      headers, fetch: { cache: 'no-store', redirect: 'manual' },
+      headers,
+      fetch: { cache: 'no-store', redirect: 'manual' },
     });
     return receiveFilteredOccurrenceRemoval(result);
   });
@@ -67,14 +75,14 @@ const confirm = createServerFn({ method: 'POST', strict: false })
   .handler(async ({ data }): Promise<RemovalResult> => {
     const headers = await originalHeaders(data);
     if (!headers) return { state: 'refused' };
-    const result = await kernelClient().libraryOperations({ operationId: data.operationId }).$confirm.post(
-      JSON.parse(data.body), { headers, fetch: { cache: 'no-store', redirect: 'manual' } },
-    );
+    const result = await kernelClient()
+      .libraryOperations({ operationId: data.operationId })
+      .$confirm.post(JSON.parse(data.body), { headers, fetch: { cache: 'no-store', redirect: 'manual' } });
     return receiveFilteredOccurrenceRemoval(result);
   });
 
 export const filteredOccurrenceRemovalSender: RemovalSender = {
-  prepare: input => prepare({ data: input, headers: new Headers(input.headers) }),
-  preview: call => preview({ data: call, headers: new Headers(call.headers) }),
-  confirm: call => confirm({ data: call, headers: new Headers(call.headers) }),
+  prepare: (input) => prepare({ data: input, headers: new Headers(input.headers) }),
+  preview: (call) => preview({ data: call, headers: new Headers(call.headers) }),
+  confirm: (call) => confirm({ data: call, headers: new Headers(call.headers) }),
 };

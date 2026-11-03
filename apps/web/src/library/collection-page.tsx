@@ -1216,29 +1216,61 @@ function CollectionPageLifetime({
   }
 
   function previewFilteredOccurrenceRemoval() {
-    if (!owner || !isCurrent('collection_member.batch_remove') ||
-      !admission.current('library_operation.preview') || pending || draftFrozen || conflict ||
-      memberDraftChanged || transfer !== null || bulkOccurrenceRemoveRef.current || filteredRemovalRef.current ||
-      page.filterStatus || page.filterIgnored?.length || (page.filterActive && !page.filter)) return;
+    if (
+      !owner ||
+      !isCurrent('collection_member.batch_remove') ||
+      !admission.current('library_operation.preview') ||
+      pending ||
+      draftFrozen ||
+      conflict ||
+      memberDraftChanged ||
+      transfer !== null ||
+      bulkOccurrenceRemoveRef.current ||
+      filteredRemovalRef.current ||
+      page.filterStatus ||
+      page.filterIgnored?.length ||
+      (page.filterActive && !page.filter)
+    )
+      return;
     const viewer = session.state === 'signed-in' ? session.subject : null;
     if (!viewer) return;
     try {
-      const requestHeaders = Object.fromEntries(new Headers({
-        ...headers('collection_member.batch_remove'), 'accept-language': getLocale(), 'content-type': 'application/json',
-      }).entries());
-      const manifest = filteredOccurrenceRemovalManifest(
-        { id: page.id, title: page.title }, page.filter, viewer, requestHeaders, filteredOccurrenceRemovalSender,
+      const requestHeaders = Object.fromEntries(
+        new Headers({
+          ...headers('collection_member.batch_remove'),
+          'accept-language': getLocale(),
+          'content-type': 'application/json',
+        }).entries(),
       );
-      const journey = new FilteredOccurrenceRemoval(manifest, {
-        context: () => admission.retained() && admission.observed() && current(),
-        read: () => isCurrent() && admission.current('library_operation.get') && admission.current('library_operation.outcomes'),
-        preview: () => isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview'),
-        confirm: () => isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm'),
-      }, address => readBulkOperation({ data: address }), () => refreshFilteredRemoval(value => value + 1));
+      const manifest = filteredOccurrenceRemovalManifest(
+        { id: page.id, title: page.title },
+        page.filter,
+        viewer,
+        requestHeaders,
+        filteredOccurrenceRemovalSender,
+      );
+      const journey = new FilteredOccurrenceRemoval(
+        manifest,
+        {
+          context: () => admission.retained() && admission.observed() && current(),
+          read: () =>
+            isCurrent() &&
+            admission.current('library_operation.get') &&
+            admission.current('library_operation.outcomes'),
+          preview: () => isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview'),
+          confirm: () => isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm'),
+        },
+        (address) => readBulkOperation({ data: address }),
+        () => refreshFilteredRemoval((value) => value + 1),
+      );
       filteredRemovalRef.current = journey;
       setFilteredRemoval(journey);
-      void journey.preview().then(ok => { if (ok) void journey.read(); });
-    } catch { setFailure(m.library_filtered_occurrence_remove_unavailable()); }
+      void journey.preview().then((ok) => {
+        if (ok) void journey.read();
+      });
+    } catch {
+      setFailure(m.library_filtered_occurrence_remove_unavailable());
+    }
   }
 
   function previewSelectedOccurrenceRemoval() {
@@ -1522,16 +1554,34 @@ function CollectionPageLifetime({
           <p role="status">{m.library_collection_actions_unavailable()}</p>
         ) : null}
         {owner && isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview') ? (
-          <Button type="button" variant="outline" className="my-3" onClick={previewFilteredOccurrenceRemoval}
-            disabled={pending || draftFrozen || conflict || memberDraftChanged || transfer !== null ||
-              !!bulkOccurrenceRemove || !!filteredRemoval || !!page.filterStatus || !!page.filterIgnored?.length ||
-              (!!page.filterActive && !page.filter)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="my-3"
+            onClick={previewFilteredOccurrenceRemoval}
+            disabled={
+              pending ||
+              draftFrozen ||
+              conflict ||
+              memberDraftChanged ||
+              transfer !== null ||
+              !!bulkOccurrenceRemove ||
+              !!filteredRemoval ||
+              !!page.filterStatus ||
+              !!page.filterIgnored?.length ||
+              (!!page.filterActive && !page.filter)
+            }
+          >
             {m.library_filtered_occurrence_remove_action()}
           </Button>
         ) : null}
-        {filteredRemoval && isCurrent() ? <FilteredOccurrenceRemovalReview journey={filteredRemoval}
-          canPreview={isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview')}
-          canConfirm={isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm')} /> : null}
+        {filteredRemoval && isCurrent() ? (
+          <FilteredOccurrenceRemovalReview
+            journey={filteredRemoval}
+            canPreview={isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview')}
+            canConfirm={isCurrent('collection_member.batch_remove') && admission.current('library_operation.confirm')}
+          />
+        ) : null}
         <AlertDialog
           open={deletion !== null}
           onOpenChange={(open, details) => {
