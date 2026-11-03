@@ -57,7 +57,15 @@ function origin(event: CloudEvent): SpaceDiscoveryInvalidation['origin'] {
     position > 9223372036854775807n
   )
     throw new TypeError('Invalid Space discovery log origin');
-  return { partition, epoch, position: position.toString(), eventId: event.id, type: event.type };
+  const data = event.data as Record<string, unknown>;
+  return {
+    partition,
+    epoch,
+    position: position.toString(),
+    eventId: event.id,
+    type: event.type,
+    resourceId: (data.spaceId ?? data.realmId ?? data.id ?? data.mediaId ?? null) as string | null,
+  };
 }
 
 /** Consumes committed native events only. The reader/bootstrap task owns population and hydration.

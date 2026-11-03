@@ -126,6 +126,7 @@ test('native edits, protected Realm gates and removal/restoration deliver only v
   for (const event of delivered) {
     const data = event.data as SpaceDiscoveryInvalidation;
     expect(data.target).toEqual({ kind: 'space', id: space.spaceId });
+    expect([space.spaceId, realm.realmId]).toContain(data.origin.resourceId);
     expect(native.find((source) => source.id === data.origin.eventId)!.source).toBe(
       `urn:rezics:log:${data.origin.partition}.${data.origin.epoch}`,
     );

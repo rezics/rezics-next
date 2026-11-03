@@ -96,7 +96,7 @@ field: the carried Realm is independently guarded enrichment of that Space ident
 discussion activity and its source-contribution fences are unrelated and are not consumed here.
 
 The closed `com.rezics.community.space-discovery.invalidated.v1` payload names a Space or a dependency scope,
-the original log `(partition, epoch, position, eventId, type)`, and any native revision/lifecycle/security version.
+the original log `(partition, epoch, position, eventId, type, resourceId)`, and any native revision/lifecycle/security version.
 All positions remain decimal strings. It contains no title, description, image, removal reason or eligibility
 claim. A Realm delta resolves its immutable host with one exact native identity read, including removed Realms;
 an unavailable binding retries rather than losing a removal. Direct invalidations commit in the target Space home;

@@ -29,6 +29,7 @@ export const SpaceDiscoveryInvalidation = Type.Object(
         epoch: Type.Integer({ minimum: 1 }),
         position: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }),
         eventId: id,
+        resourceId: Type.Union([id, Type.Null()]),
         type: Type.String({ minLength: 1, maxLength: 256 }),
       },
       closed,
