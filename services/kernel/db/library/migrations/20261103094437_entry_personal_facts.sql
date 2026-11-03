@@ -1,3 +1,4 @@
+-- migrate:up
 CREATE TABLE library.entry_personal_fact (
     route integer NOT NULL,
     account_id uuid NOT NULL,
@@ -168,3 +169,6 @@ CREATE TRIGGER zz_entry_source_observation_owner_scope_update AFTER UPDATE ON li
 
 CREATE INDEX entry_source_observation_owner ON library.entry_source_observation USING btree
   (route, account_id, subject_id, provider COLLATE pg_catalog."C", record_id COLLATE pg_catalog."C");
+
+-- migrate:down
+-- Forward only: retain owner-entered annotations and reviewed provider evidence.
