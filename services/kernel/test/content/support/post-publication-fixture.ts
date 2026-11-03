@@ -75,7 +75,7 @@ export async function postPublicationFixture() {
     };
   }
   async function command(path: string, body: unknown, status = 201, method = 'POST', head?: string) {
-    const result = await call(method, path, body, { head });
+    const result = await call(method, path, body, head === undefined ? {} : { head });
     expect(result.status, JSON.stringify(result.value)).toBe(status);
     return result.value;
   }
