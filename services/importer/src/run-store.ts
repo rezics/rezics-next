@@ -138,6 +138,133 @@ export const RUN_TABLES = [
   'run_retention_work',
 ] as const;
 
+const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly string[]> = {
+  run_sources: ['source', 'sequence', 'lease_run', 'generation', 'present_count'],
+  run_generations: [
+    'source',
+    'id',
+    'seq',
+    'lease',
+    'status',
+    'threshold',
+    'prior',
+    'supplied',
+    'survivors',
+    'invalid',
+    'classified',
+    'resolved',
+    'expected',
+    'changed',
+    'prepared',
+    'cursor',
+  ],
+  run_entries: [
+    'source',
+    'run_id',
+    'record_key',
+    'row_json',
+    'projection_json',
+    'kind',
+    'resolved',
+    'bytes',
+    'keys_json',
+    'omissions_json',
+    'pending',
+    'remaining',
+    'cover_pending',
+  ],
+  run_members: ['source', 'record_key', 'active', 'seen', 'row_json'],
+  run_acknowledged: ['source', 'record_key', 'row_json', 'projection_json'],
+  run_commands: ['source', 'run_id', 'command_key', 'record_key', 'field_group', 'op', 'envelope_index', 'done'],
+  run_payloads: ['source', 'command_key', 'body'],
+  run_envelopes: [
+    'source',
+    'run_id',
+    'record_key',
+    'envelope_index',
+    'multi',
+    'bytes',
+    'keys_json',
+    'remaining',
+    'pending',
+  ],
+  run_conversion_diagnostics: [
+    'source',
+    'run_id',
+    'record_key',
+    'phase',
+    'digest',
+    'converter_revision',
+    'record_revision',
+    'diagnostic_count',
+    'diagnostics_json',
+  ],
+  run_conversion_diagnostic_records: ['source', 'run_id', 'record_key'],
+  run_aggregate_operations: [
+    'source',
+    'run_id',
+    'operation_id',
+    'record_key',
+    'subject_id',
+    'provider',
+    'source_alias',
+    'source_record_id',
+    'kind',
+    'command_key',
+    'request_bytes',
+    'intended_json',
+    'status',
+  ],
+  run_aggregate_heads: ['source', 'subject_id', 'provider', 'digest', 'head_json'],
+  run_staging_checkpoints: [
+    'source',
+    'run_id',
+    'version',
+    'sha256',
+    'bytes',
+    'source_alias',
+    'source_kind',
+    'converter_revision',
+    'decoder_id',
+    'disappearance_threshold',
+    'committed_ordinal',
+    'skipped',
+    'rolling_digest',
+  ],
+  run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest'],
+};
+
+const REQUIRED_EXISTING_INDEXES = [
+  ['run_pending', 'run_entries'],
+  ['run_cover_pending', 'run_entries'],
+  ['run_envelope_pending', 'run_envelopes'],
+] as const;
+
+/** Existing resume must not create missing run tables; a gap is damaged storage, not an empty source. */
+export function assertExistingRunSchema(database: Database): void {
+  for (const table of RUN_TABLES) {
+    const found = database.query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?').get('table', table) as
+      | { found: number }
+      | null;
+    if (!found) throw new Error(`Importer state schema is missing table ${table}.`);
+    const columns = REQUIRED_EXISTING_COLUMNS[table];
+    const actual = new Set(
+      database
+        .query(`PRAGMA table_info(${table})`)
+        .all()
+        .map((row) => (row as { name: string }).name),
+    );
+    const missing = columns.find((column) => !actual.has(column));
+    if (missing) throw new Error(`Importer state schema is missing column ${table}.${missing}.`);
+  }
+  for (const [index, table] of REQUIRED_EXISTING_INDEXES) {
+    const found = database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=? AND tbl_name=?')
+      .get('index', index, table) as { found: number } | null;
+    if (!found) throw new Error(`Importer state schema is missing index ${index}.`);
+  }
+}
+
 export type AggregateOperation = Readonly<{
   operationId: string;
   recordKey: string;
@@ -355,16 +482,27 @@ export class RunStore<Projection = BatchStatement[]> {
       instrumentDatabase?: (database: Database) => Database;
       projectionMode?: 'source-record';
       create?: boolean;
+      /** Open a retained file without creating tables; resume uses this after inode admission. */
+      existing?: boolean;
     } = {},
   ) {
     if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
+    if (options.existing !== undefined && options.existing !== true) fail();
+    if (options.existing && options.create === true) fail();
     this.projectionMode = options.projectionMode;
-    const db = typeof path === 'string' ? new Database(path, { create: options.create !== false, strict: true }) : path;
+    const db =
+      typeof path === 'string'
+        ? new Database(path, { create: options.existing || options.create === false ? false : true, strict: true })
+        : path;
     try {
       this.database = options.instrumentDatabase?.(db) ?? db;
       this.database.exec('PRAGMA journal_mode=WAL');
       this.database.exec('PRAGMA busy_timeout=5000');
       this.database.exec('PRAGMA synchronous=NORMAL');
+      if (options.existing) {
+        assertExistingRunSchema(this.database);
+        return;
+      }
       // Schema initialization happens once per connection, never in a run operation.
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_sources (
         source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT,
@@ -732,6 +870,22 @@ export class RunStore<Projection = BatchStatement[]> {
       source,
     );
     return active ? { source, id: active.id, lease: active.lease } : null;
+  }
+  /**
+   * Exact-source active generation without rotating its lease. Admission uses this
+   * after exclusive ownership so a staging probe cannot mint a replacement capability.
+   */
+  peekActive(source: string): { run: Run; status: string; skipped: number } | null {
+    sourceId(source);
+    const active = this.get<{ id: string; lease: string; status: string; skipped: number | null }>(
+      `SELECT g.id,g.lease,g.status,g.skipped FROM run_sources AS s
+      JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
+      WHERE s.source=? AND s.lease_run IS NOT NULL`,
+      source,
+    );
+    return active
+      ? { run: { source, id: active.id, lease: active.lease }, status: active.status, skipped: active.skipped ?? 0 }
+      : null;
   }
   /** Exact identity lookup for the bounded count sealed with this acquisition. */
   skipped(run: Run): number {

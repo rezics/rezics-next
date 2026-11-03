@@ -344,9 +344,9 @@ terminal phases identify committed, invalid, mass-disappearance, busy, interrupt
 observation-conflict outcomes.
 Progress contains no account credentials, request bodies, raw record keys, provider text, URLs or private error
 bodies. A broken sink stops this invocation through the existing cancellation path and reports a sanitized output
-failure. SIGINT and SIGTERM preserve the durable journal and original pending request. Rerun the ordinary import
-command with the same state file and complete source input to recover it; progress does not add an acknowledge,
-abandon or force-release operation.
+failure. SIGINT and SIGTERM preserve the durable journal and original pending request. Rerun `rezics-import resume` for
+sealed work without the dump, or the ordinary import command with complete source input; progress does not add an
+acknowledge, abandon or force-release operation.
 
 Decision: human and JSONL progress both use stderr so the existing final stdout summary stays compatible.
 
@@ -372,8 +372,62 @@ prefix hashes are not that identity. A failed hash creates no capture and does n
 re-hashes the same file, then re-decodes from the first record to verify the committed prefix, and converts only the
 remaining records. Changed bytes, a same-size rewrite, a different converter or alias, an old uncheckpointed staging
 row, a missing database and live ownership never resume. After a valid seal the checkpoint is deleted so it cannot
-compete with sealed recovery. An interruption after sealing uses the ordinary import command with the original
-requests; `--resume-staging` does not replace that path.
+compete with sealed recovery. An interruption after sealing uses `rezics-import resume` without the dump, or the
+ordinary import command with the original requests; `--resume-staging` does not replace that path.
+
+## Resume a sealed generation without its dump
+
+`rezics-import resume` finishes an existing sealed (`ready` or `finalizing`) generation from the state file after the
+original dump or archive has been removed. It does not open stdin, construct a decoder, materialize a VNDB archive,
+fetch a provider dump or synthesize an empty record stream. `--dump`, `--dump-set` and `--disappearance-threshold` are
+rejected. Help prints without I/O:
+
+```sh
+bun services/importer/src/cli.ts resume --help
+```
+
+Built-in Wikidata registration:
+
+```sh
+bun services/importer/src/cli.ts resume \
+  --source wikidata \
+  --state /var/lib/rezics/importer.sqlite \
+  --api https://api.rezics.example \
+  --account-key /run/secrets/rezics-importer-account.jwk \
+  --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
+  --client rezics-importer \
+  --auth https://auth.rezics.example
+```
+
+Configured alias (the alias is the exact durable source identity, not a profile selector):
+
+```sh
+bun services/importer/src/cli.ts resume \
+  --source bangumi \
+  --source-alias community-bangumi \
+  --state /var/lib/rezics/importer.sqlite \
+  --api https://api.rezics.example \
+  --account-key /run/secrets/rezics-importer-account.jwk \
+  --account 6b147e8d-1762-4717-9a65-aeb435cb843e \
+  --client rezics-importer \
+  --auth https://auth.rezics.example
+```
+
+A missing state path does not create a database. No active generation and incomplete staging leave the generation,
+baseline, entries, requests and fence state untouched and perform no catalogue or credential HTTP work; the diagnostic
+points at ordinary complete-input import or `rezics-import inspect` without running either. A live owner exits busy.
+An unprepared staged projection whose stored source kind or converter revision does not match the current registration,
+or that the current converter cannot reproduce, is incompatible: resume does not start a replacement run.
+
+Current-authority retry is the same command with the same state after restoring grants. Pending envelopes keep their
+original body and key; native response and current grants still decide what can resolve. A second interruption may
+resume the same durable work again. Resume is not inspect (read-only pages), preview (offline dump comparison), backup
+or restore. Existing sealed disappearance thresholds remain authoritative; this command does not supply a new threshold.
+
+Decision: unprepared staged rows must match the current registration's source kind and converter revision exactly;
+pending envelopes still drain under their original bytes. Stored projections without source-kind provenance are
+incompatible rather than treated as verified. Sealed resume opens an existing state file without creating tables or
+applying additive migrations; missing required run schema is unsupported rather than repaired.
 
 Decision: checkpointed staging commits each accepted record with its prefix cursor in one SQLite transaction so a
 crash keeps either the previous complete checkpoint or the new one. Ordinary acquisition keeps the existing 100-record
@@ -1161,6 +1215,12 @@ bindings or native published state. Authoritative lifecycle work and its
 bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
+
+### Resume a sealed generation without its dump
+
+- Touches: exact-source owner/status admission and existing indexed post-seal reconciliation, envelopes, deferred media and finalization pages. Let N be remaining staged/vanished entries, P pending envelope/cover rows, E their remaining effects, H unrelated retained generations, and W the existing admitted record concurrency.
+- Bound: admission performs a constant number of exact-source/indexed generation lookups, independent of H. Resume visits existing bounded pages of at most 100 and uses the coordinator's existing indexed paths, including necessary joins and dependency reconversion. Ordinary traversal is O((N+P+E) log M) indexed storage work for relevant store size M, with bounded page/concurrency retention and no dump-size memory or archive materialization. Unknown retry retains the same finite per-logical-write budget eight. Owned-candidate review stays at the existing cap of 300 current candidates per record. No added polling, historical hydration or per-reference HTTP request.
+- Growth check: `tests/resume-growth.test.ts` executes the production resume path at 32/128/512 valid sealed-entry populations using equal scale ratio four and shared production observers. It records database visits, pages/retention and actual transport effect invocations against the bound, independently increases unrelated retained generations, and includes a bounded pending-envelope population and a finalization cursor.
 
 ### Compare two retained complete captures
 

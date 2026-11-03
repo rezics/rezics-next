@@ -37,6 +37,7 @@ import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
 import { captureComparisonUsage, runCaptureComparisonCli } from './capture-comparison-cli.ts';
 import { runBindingInspectionCli } from './binding-inspection-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
+import { resumeUsage, runResumeCli } from './resume-cli.ts';
 import { observationsUsage, runObservationsCli } from './source-observation-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
 import { runCompareCli } from './compare-cli.ts';
@@ -152,6 +153,9 @@ function usage(): string {
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
     '       [--compression none|gzip|zstd] [--decode-budget <bytes>] [--zstd-executable <absolute-path>]',
     '       [--checkpoint-staging] [--resume-staging --generation <id>]',
+    '       rezics-import resume --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
+    '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
+    '       [--source-alias <name>] [--progress <human|jsonl>]',
     '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>] [--decode-budget <bytes>]',
@@ -411,6 +415,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
     });
+  if (Array.isArray(argv) && argv[0] === 'resume') return runResumeCli(argv.slice(1), options);
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'resume')
+    return { code: 0, stdout: `${resumeUsage()}\n`, stderr: '', openHandles: 0 };
   if (Array.isArray(argv) && argv[0] === 'inspect')
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
   if (Array.isArray(argv) && argv[0] === 'capture-comparison')
