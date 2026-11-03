@@ -14,24 +14,25 @@ export type ReportedYearCounts = Readonly<{
   completedOccurrencesWithUnknownProfile: string;
   finishPrecision: Readonly<{ year: string; month: string; day: string }>;
 }>;
-export type ReportedYearSummary = ReportedYearCounts & Readonly<{
-  scope: 'retained_native_sessions';
-  year: number;
-  calendar: 'gregorian';
-  dateSource: 'explicitly_reported_journal_finish';
-  months: readonly (ReportedYearCounts & { month: number })[];
-  monthUnallocated: ReportedYearCounts;
-  coverage: Readonly<{
-    nativeSessions: 'complete';
-    initializedSessions: string;
-    retainedSessions: string;
-    completedOccurrencesWithMissingFinish: string;
-    completedOccurrencesWithUnsupportedFinish: string;
-    otherHistory: 'unavailable';
-    unitMeaning: 'not_evaluated';
+export type ReportedYearSummary = ReportedYearCounts &
+  Readonly<{
+    scope: 'retained_native_sessions';
+    year: number;
+    calendar: 'gregorian';
+    dateSource: 'explicitly_reported_journal_finish';
+    months: readonly (ReportedYearCounts & { month: number })[];
+    monthUnallocated: ReportedYearCounts;
+    coverage: Readonly<{
+      nativeSessions: 'complete';
+      initializedSessions: string;
+      retainedSessions: string;
+      completedOccurrencesWithMissingFinish: string;
+      completedOccurrencesWithUnsupportedFinish: string;
+      otherHistory: 'unavailable';
+      unitMeaning: 'not_evaluated';
+    }>;
+    currentness: Readonly<{ state: 'snapshot'; revision: string }>;
   }>;
-  currentness: Readonly<{ state: 'snapshot'; revision: string }>;
-}>;
 
 type Head = {
   complete: boolean;
@@ -83,7 +84,10 @@ function counts(row?: Bucket): ReportedYearCounts {
 export function createReportedYearSummaryReads(deps: { pool: Pool }) {
   return {
     async summary<T = ReportedYearSummary>(
-      actor: Actor, year: number, deadline: number, signal?: AbortSignal,
+      actor: Actor,
+      year: number,
+      deadline: number,
+      signal?: AbortSignal,
       deliver?: (value: ReportedYearSummary, encoded: string) => T,
     ): Promise<T> {
       if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
@@ -94,66 +98,97 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }) {
         if (signal?.aborted || Date.now() >= deadline) throw new ProblemError('deadline_exceeded');
       };
       alive();
-      return within(deadline, () => withConnection(deps.pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        let committed = false;
-        try {
-          // Hold native lifecycle authority through response preparation. Source writers
-          // already share this owner; this adds no maintenance or write effect.
-          await client.query('BEGIN');
-          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE',
-            [route, actor.accountId]);
-          const authorize = async () => {
-            const owner = await readAccount(client, route, actor.accountId);
-            if (!owner || owner.kind !== 'actor' || owner.state !== 'active' || owner.fenced ||
-              !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
-              owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)) throw new ProblemError('forbidden');
-          };
-          await authorize();
-          // One statement snapshot covers both heads and the 14 fixed keys. A
-          // later source mutation is a later snapshot, never partial receiving.
-          const result = await client.query<{ head: Head; buckets: Bucket[] }>(
-            `WITH head AS (${headSql}), buckets AS (${bucketsSql})
+      return within(deadline, () =>
+        withConnection(deps.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          let committed = false;
+          try {
+            // Hold native lifecycle authority through response preparation. Source writers
+            // already share this owner; this adds no maintenance or write effect.
+            await client.query('BEGIN');
+            await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE', [
+              route,
+              actor.accountId,
+            ]);
+            const authorize = async () => {
+              const owner = await readAccount(client, route, actor.accountId);
+              if (
+                !owner ||
+                owner.kind !== 'actor' ||
+                owner.state !== 'active' ||
+                owner.fenced ||
+                !Number.isSafeInteger(actor.authnEpoch) ||
+                actor.authnEpoch < 1 ||
+                owner.minimumAuthnEpoch > BigInt(actor.authnEpoch)
+              )
+                throw new ProblemError('forbidden');
+            };
+            await authorize();
+            // One statement snapshot covers both heads and the 14 fixed keys. A
+            // later source mutation is a later snapshot, never partial receiving.
+            const result = await client.query<{ head: Head; buckets: Bucket[] }>(
+              `WITH head AS (${headSql}), buckets AS (${bucketsSql})
              SELECT row_to_json(head) AS head,
                COALESCE((SELECT json_agg(buckets ORDER BY bucket) FROM buckets),'[]'::json) AS buckets FROM head`,
-            [route, actor.accountId, year]);
-          const row = result.rows[0];
-          if (!row?.head.complete || !row.head.ready || row.head.initialized !== row.head.retained)
-            throw new ProblemError('dependency_unavailable');
-          const indexed = new Map(row.buckets.map((bucket) => [bucket.bucket, bucket]));
-          const value: ReportedYearSummary = {
-            ...counts(indexed.get(0)), scope: 'retained_native_sessions', year, calendar: 'gregorian',
-            dateSource: 'explicitly_reported_journal_finish',
-            months: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, ...counts(indexed.get(index + 1)) })),
-            monthUnallocated: counts(indexed.get(13)),
-            coverage: {
-              nativeSessions: 'complete', initializedSessions: row.head.initialized, retainedSessions: row.head.retained,
-              completedOccurrencesWithMissingFinish: row.head.missing,
-              completedOccurrencesWithUnsupportedFinish: row.head.unsupported,
-              otherHistory: 'unavailable', unitMeaning: 'not_evaluated',
-            },
-            currentness: { state: 'snapshot', revision: row.head.revision },
-          };
-          const encoded = JSON.stringify(value);
-          if (new TextEncoder().encode(encoded).byteLength > MAX_REPORTED_YEAR_SUMMARY_BYTES)
-            throw new ProblemError('dependency_unavailable');
-          await authorize();
-          const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
-          if (!latest?.complete || !latest.ready || latest.initialized !== latest.retained ||
-            latest.revision !== row.head.revision) throw new ProblemError('dependency_unavailable');
-          alive();
-          await client.query('COMMIT');
-          committed = true;
-          // No await between the actual delivery check and HTTP encoding.
-          alive();
-          return deliver ? deliver(value, encoded) : value as T;
-        } catch (error) {
-          if (!committed) await connection.query('ROLLBACK');
-          if (typeof error === 'object' && error !== null && 'code' in error &&
-            (error.code === '42P01' || error.code === '42703')) throw new ProblemError('dependency_unavailable');
-          throw error;
-        }
-      }));
+              [route, actor.accountId, year],
+            );
+            const row = result.rows[0];
+            if (!row?.head.complete || !row.head.ready || row.head.initialized !== row.head.retained)
+              throw new ProblemError('dependency_unavailable');
+            const indexed = new Map(row.buckets.map((bucket) => [bucket.bucket, bucket]));
+            const value: ReportedYearSummary = {
+              ...counts(indexed.get(0)),
+              scope: 'retained_native_sessions',
+              year,
+              calendar: 'gregorian',
+              dateSource: 'explicitly_reported_journal_finish',
+              months: Array.from({ length: 12 }, (_, index) => ({
+                month: index + 1,
+                ...counts(indexed.get(index + 1)),
+              })),
+              monthUnallocated: counts(indexed.get(13)),
+              coverage: {
+                nativeSessions: 'complete',
+                initializedSessions: row.head.initialized,
+                retainedSessions: row.head.retained,
+                completedOccurrencesWithMissingFinish: row.head.missing,
+                completedOccurrencesWithUnsupportedFinish: row.head.unsupported,
+                otherHistory: 'unavailable',
+                unitMeaning: 'not_evaluated',
+              },
+              currentness: { state: 'snapshot', revision: row.head.revision },
+            };
+            const encoded = JSON.stringify(value);
+            if (new TextEncoder().encode(encoded).byteLength > MAX_REPORTED_YEAR_SUMMARY_BYTES)
+              throw new ProblemError('dependency_unavailable');
+            await authorize();
+            const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
+            if (
+              !latest?.complete ||
+              !latest.ready ||
+              latest.initialized !== latest.retained ||
+              latest.revision !== row.head.revision
+            )
+              throw new ProblemError('dependency_unavailable');
+            alive();
+            await client.query('COMMIT');
+            committed = true;
+            // No await between the actual delivery check and HTTP encoding.
+            alive();
+            return deliver ? deliver(value, encoded) : (value as T);
+          } catch (error) {
+            if (!committed) await connection.query('ROLLBACK');
+            if (
+              typeof error === 'object' &&
+              error !== null &&
+              'code' in error &&
+              (error.code === '42P01' || error.code === '42703')
+            )
+              throw new ProblemError('dependency_unavailable');
+            throw error;
+          }
+        }),
+      );
     },
   };
 }

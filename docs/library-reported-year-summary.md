@@ -22,13 +22,13 @@ The response includes `scope: retained_native_sessions`, `calendar: gregorian`, 
 `dateSource: explicitly_reported_journal_finish`, year totals, twelve ordered `months` with numeric month 1..12,
 and `monthUnallocated`. Every displayed count set has these unsigned decimal strings:
 
-| Field | Meaning within that displayed year or bucket |
-| --- | --- |
-| `completedOccurrences` | Retained native completed session identities |
-| `distinctCompletedSubjects` | Distinct stored native Subject identities among those occurrences |
-| `repeatOccurrences` | Completed occurrences minus distinct completed Subjects |
-| `completedOccurrencesWithUnknownProfile` | Included occurrences without an accepted historic profile pin |
-| `finishPrecision.year/month/day` | Included occurrences at each explicitly reported finish precision |
+| Field                                    | Meaning within that displayed year or bucket                      |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `completedOccurrences`                   | Retained native completed session identities                      |
+| `distinctCompletedSubjects`              | Distinct stored native Subject identities among those occurrences |
+| `repeatOccurrences`                      | Completed occurrences minus distinct completed Subjects           |
+| `completedOccurrencesWithUnknownProfile` | Included occurrences without an accepted historic profile pin     |
+| `finishPrecision.year/month/day`         | Included occurrences at each explicitly reported finish precision |
 
 Distinctness and repeats are calculated independently for the year and every bucket. A Subject completed once in
 February and once in March contributes two occurrences, one distinct Subject and one repeat to the year; each month
