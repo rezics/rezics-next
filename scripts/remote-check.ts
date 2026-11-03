@@ -1717,14 +1717,7 @@ def validate_producer_controls(root,run,host,stage):
     if slot_value<1 or slot_value>50000 or not re.fullmatch(r'[1-9][0-9]{0,4}\n?',slot_text):
         raise SystemExit('producer slot identity is malformed')
 
-    if stage=='source':
-        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor','bun-runtime-transpiler-cache'}
-    elif stage=='prepared':
-        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
-                 '.bun-install-complete','.preparation-started','preparation-install.json',
-                 'bun-runtime-transpiler-cache'}
-        if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
-            raise SystemExit('producer install completion is missing')
+    if stage=='prepared' or os.path.lexists(root/'.preparation-started'):
         preparation=read_control_json(root,'.preparation-started')
         if set(preparation)!={'schema','host','run','deadline','limitMs'}:
             raise SystemExit('producer preparation identity has an invalid shape')
@@ -1732,6 +1725,16 @@ def validate_producer_controls(root,run,host,stage):
                 type(preparation.get('deadline')) not in (int,float) or not math.isfinite(preparation['deadline']) or
                 type(preparation.get('limitMs')) is not int or not 1<=preparation['limitMs']<=7200000):
             raise SystemExit('producer preparation identity is foreign or malformed')
+
+    if stage=='source':
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
+                 '.preparation-started','bun-runtime-transpiler-cache'}
+    elif stage=='prepared':
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
+                 '.bun-install-complete','.preparation-started','preparation-install.json',
+                 'bun-runtime-transpiler-cache'}
+        if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
+            raise SystemExit('producer install completion is missing')
         installed=read_control_json(root,'preparation-install.json')
         if set(installed)!={'schema','host','run','cache','nativeCache','key','packages','nativeChecks'}:
             raise SystemExit('producer install receipt has an invalid shape')
