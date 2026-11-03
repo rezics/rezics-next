@@ -127,7 +127,9 @@ export function AddonCreateReview({
     ]),
   ];
   const included = addonIncludedBase(item.statements, chosen?.subject ?? suggested?.subject);
-  const suggestionShown = suggested && suggested.subject.id !== included?.statement.value.content;
+  const includedTarget =
+    included?.statement.value.type === 'value' ? String(included.statement.value.content) : undefined;
+  const suggestionShown = suggested && suggested.subject.id !== includedTarget;
   const withdrawn = addonUnsupportedProperties(release, item.statements);
   const admitted = addonFields(release);
   return (
