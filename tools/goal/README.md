@@ -2439,8 +2439,14 @@ detect` runs stall and shared-incident detection. `goal maintenance regenerate` 
 most hourly using the existing detached-worktree and compare-and-swap implementation. `goal maintenance all` runs
 every job and reports failures after attempting the others. Daily audit dispatch stays with manager recovery.
 
-Decision: cp-sync compares ten-minute mean live-worker width, successful gate-outcome counts and successful landing
-counts on each side of publication; any decrease restores the previous main control-plane tree in a forward commit.
+Decision: cp-sync records ten-minute mean live-worker width and successful gates and landings before and after
+publication; only failed host readiness, zero live workers while ready tasks were observed, or zero landings while
+current undelivered landing requests were observed restores the previous tree in a forward commit. Lower nonzero
+counts and quiet windows are normal. Demand is sampled throughout the post-publication window.
+After publishing, a missing environment file or host unit triggers `goal service install` from the newly published
+main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
+unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual
+recorded processes, never worker groups or name patterns. cp-sync also completes migration when legacy state remains.
 It restarts the host through systemd after publication and rollback. No ref rewinding is needed. Status, restart and
 logs show each unit's systemd state and result, including watchdog failure and timer health. Diagnostics live in the
 user journal; consult `systemd.service(5)` and `systemd.exec(5)` for service and environment semantics.

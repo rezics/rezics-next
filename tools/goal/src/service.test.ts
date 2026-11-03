@@ -3,7 +3,14 @@ import { processIdentity, sameProcess } from './process.ts';
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { installService, reportServices, SERVICE_UNITS, startHostHeartbeat, type ServiceCommand } from './service.ts';
+import {
+  installService,
+  stopLegacySupervisor,
+  reportServices,
+  SERVICE_UNITS,
+  startHostHeartbeat,
+  type ServiceCommand,
+} from './service.ts';
 import { runMaintenance } from './maintenance.ts';
 import { temporaryDirectory } from './test-support.ts';
 import type { Runtime } from './config.ts';
@@ -12,7 +19,10 @@ function recorder() {
   const calls: string[][] = [];
   const run: ServiceCommand = async (argv) => {
     calls.push(argv);
-    return { code: 0, output: 'ActiveState=active\nResult=success\n' };
+    return {
+      code: 0,
+      output: argv.includes('--property=LoadState') ? 'loaded' : 'ActiveState=active\nResult=success\n',
+    };
   };
   return { calls, run };
 }
@@ -62,10 +72,39 @@ test('install renders repository units, one private environment file, linger and
     expect(calls).toEqual([
       ['systemctl', '--user', 'daemon-reload'],
       ['loginctl', 'enable-linger', 'fixture'],
-      ['systemctl', '--user', 'enable', '--now', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3]],
+      ['systemctl', '--user', 'enable', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3]],
+      ['systemctl', '--user', 'show', '--property=LoadState', '--value', 'rezics-goal-supervisor.service'],
+      ['systemctl', '--user', 'stop', 'rezics-goal-supervisor.service'],
+      ['systemctl', '--user', 'start', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3]],
       ['systemctl', '--user', 'start', SERVICE_UNITS[2]],
     ]);
   } finally {
+    dir.close();
+  }
+});
+
+test('legacy shutdown uses supervisor and host birth identities and leaves worker processes alive', async () => {
+  const dir = temporaryDirectory();
+  const children = [0, 1, 2].map(() =>
+    spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' }),
+  );
+  const exited = children.map((child) => new Promise<void>((resolve) => child.once('exit', () => resolve())));
+  try {
+    const identities = children.map((child) => processIdentity(child.pid!)!);
+    const lease = join(dir.path, 'manager-host-supervisor.lease');
+    mkdirSync(lease);
+    writeFileSync(join(lease, 'owner.json'), JSON.stringify({ ...identities[0], token: 'owner' }));
+    writeFileSync(join(lease, 'stale.json'), JSON.stringify({ ...identities[2], start: '0', token: 'stale' }));
+    writeFileSync(
+      join(dir.path, 'manager-host-liveness.json'),
+      JSON.stringify({ identity: identities[1], desired: true }),
+    );
+    await stopLegacySupervisor(dir.path, async () => ({ code: 1, output: 'not-found' }));
+    await Promise.all(exited.slice(0, 2));
+    expect(identities.map((identity) => sameProcess(identity))).toEqual([false, false, true]);
+  } finally {
+    for (const child of children) if (child.exitCode == null && child.signalCode == null) child.kill('SIGKILL');
+    await Promise.all(exited);
     dir.close();
   }
 });

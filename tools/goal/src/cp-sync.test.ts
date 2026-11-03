@@ -1,4 +1,5 @@
 import { processIdentity } from './process.ts';
+import { installService } from './service.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { spawnSync } from 'node:child_process';
@@ -21,6 +22,7 @@ import {
   sync,
   syncChecks,
   residentRegression,
+  restartResident,
   observeResident,
   type Check,
 } from '../scripts/cp-sync.ts';
@@ -484,7 +486,7 @@ test('test output and arguments parse', () => {
 });
 
 test('resident regressions roll back the published tree and restart the restored host through systemd', async () => {
-  for (const metric of ['liveWorkers', 'passedGates', 'landings'] as const) {
+  for (const metric of ['liveWorkers', 'landings', 'readiness'] as const) {
     const f = fixture();
     let observations = 0,
       restarts = 0;
@@ -492,10 +494,17 @@ test('resident regressions roll back the published tree and restart the restored
       ...f.options,
       resident: {
         async observe() {
-          return { liveWorkers: 2, passedGates: 2, landings: 2, ...(observations++ === 0 ? {} : { [metric]: 1 }) };
+          return {
+            workReady: true,
+            landingsRequested: true,
+            liveWorkers: 2,
+            passedGates: 2,
+            landings: 2,
+            ...(observations++ === 0 ? {} : { [metric]: 0 }),
+          };
         },
         async restart() {
-          restarts++;
+          if (++restarts === 1 && metric === 'readiness') throw new Error('Goal host did not become ready.');
         },
       },
     });
@@ -512,13 +521,116 @@ test('resident regressions roll back the published tree and restart the restored
   ).toBe(false);
 });
 
+test('resident comparison tolerates lower counts and idle windows without rolling back', async () => {
+  const f = fixture();
+  let observations = 0;
+  expect(
+    await sync({
+      ...f.options,
+      resident: {
+        async restart() {},
+        async observe() {
+          return observations++ === 0
+            ? { liveWorkers: 5, passedGates: 5, landings: 5 }
+            : { liveWorkers: 1, passedGates: 0, landings: 1, workReady: true, landingsRequested: true };
+        },
+      },
+    }),
+  ).toBe(0);
+  expect(history(f.repo).map((entry) => entry.action)).toEqual(['sync']);
+  expect(
+    residentRegression(
+      { liveWorkers: 5, passedGates: 5, landings: 5 },
+      { liveWorkers: 0, passedGates: 0, landings: 0, workReady: false, landingsRequested: false },
+    ),
+  ).toBe(false);
+});
+
+test('cp-sync bootstraps missing service state from published main before legacy shutdown and observation', async () => {
+  for (const missing of ['environment', 'unit', 'neither']) {
+    const f = fixture();
+    if (missing !== 'environment') write(f.repo, '.temp/goal/goal.env', 'fixture');
+    const calls: string[][] = [];
+    let legacy = missing === 'environment',
+      installed = missing === 'neither',
+      observations = 0;
+    const run = async (argv: string[]) => {
+      calls.push(argv);
+      if (argv.includes('--property=LoadState')) {
+        const loaded = argv.at(-1) === 'rezics-goal-supervisor.service' ? legacy : missing !== 'unit' || installed;
+        return { code: loaded ? 0 : 1, output: loaded ? 'loaded' : 'not-found' };
+      }
+      if (argv.includes('stop')) legacy = false;
+      return { code: 0, output: argv.includes('--property=ActiveState') ? 'active' : '' };
+    };
+    expect(
+      await sync({
+        ...f.options,
+        resident: {
+          async observe() {
+            if (observations++ === 0) expect(git(f.repo, 'rev-parse', 'main')).toBe(f.main);
+            else {
+              expect(legacy).toBe(false);
+              expect(installed).toBe(true);
+            }
+            return { liveWorkers: 1, passedGates: 1, landings: 1 };
+          },
+          async restart(checkout) {
+            await restartResident(checkout, async (argv, cwd) => {
+              expect(cwd).toBe(f.repo);
+              if (argv.includes('install')) {
+                expect(readFileSync(join(cwd, 'tools/goal/src/new.ts'), 'utf8')).toContain('added');
+                calls.push(argv);
+                await installService(
+                  {
+                    mainCheckout: cwd,
+                    localConfig: join(cwd, '.temp/goal/local.json'),
+                    unitDirectory: join(f.root, 'units'),
+                    user: 'fixture',
+                  },
+                  run,
+                );
+                installed = true;
+                return { code: 0, output: '' };
+              }
+              return run(argv);
+            });
+          },
+        },
+      }),
+    ).toBe(0);
+    expect(calls.filter((call) => call.includes('install'))).toHaveLength(missing === 'neither' ? 0 : 1);
+    if (missing === 'environment') {
+      expect(calls.findIndex((call) => call.includes('stop'))).toBeLessThan(
+        calls.findIndex((call) => call.includes('start')),
+      );
+    }
+    expect(calls.at(-1)).toEqual([
+      'systemctl',
+      '--user',
+      'show',
+      '--property=ActiveState',
+      '--value',
+      'rezics-goal-host.service',
+    ]);
+    expect(history(f.repo).map((entry) => entry.action)).toEqual(['sync']);
+  }
+  await expect(
+    restartResident(fixture().repo, async (argv) => ({
+      code: 0,
+      output: argv.includes('--property=LoadState') ? 'not-found' : 'inactive',
+    })),
+  ).rejects.toThrow('did not become ready');
+});
+
 test('resident observation counts living current workers and successful gates and landings in its window', async () => {
   const dir = temporaryDirectory();
   const state = join(dir.path, '.temp/goal');
   mkdirSync(state, { recursive: true });
   const db = new Database(join(state, 'goal.sqlite'));
   try {
-    db.exec(`CREATE TABLE worker_tasks(id TEXT, current_attempt INTEGER);
+    db.exec(`CREATE TABLE worker_tasks(id TEXT, current_attempt INTEGER, body TEXT);
+      CREATE TABLE landing_queue(task TEXT, attempt INTEGER, delivered INTEGER, outcome TEXT);
       CREATE TABLE worker_attempts(task_id TEXT, attempt INTEGER, body TEXT);
       CREATE TABLE worker_events(kind TEXT, at TEXT, body TEXT);`);
     const identity = processIdentity(process.pid)!;
@@ -528,7 +640,7 @@ test('resident observation counts living current workers and successful gates an
       ['stale', 1, { ...identity, start: '0' }],
       ['absent', 1, null],
     ] as const) {
-      db.query('INSERT INTO worker_tasks VALUES (?,?)').run(id, current);
+      db.query('INSERT INTO worker_tasks VALUES (?,?,?)').run(id, current, JSON.stringify({ state: 'running' }));
       db.query('INSERT INTO worker_attempts VALUES (?,1,?)').run(id, JSON.stringify({ state: 'running', process }));
     }
     db.query('INSERT INTO worker_events VALUES (?,?,?)').run(
@@ -536,6 +648,9 @@ test('resident observation counts living current workers and successful gates an
       '2000-01-01T00:00:00.000Z',
       JSON.stringify({ passed: true }),
     );
+    db.query('INSERT INTO worker_tasks VALUES (?,?,?)').run('ready', 0, JSON.stringify({ state: 'ready' }));
+    db.query('INSERT INTO worker_tasks VALUES (?,?,?)').run('landing', 2, JSON.stringify({ state: 'landing' }));
+    db.query('INSERT INTO landing_queue VALUES (?,1,0,NULL)').run('landing'); // Old attempt is not demand.
     let pauses = 0;
     const observed = await observeResident(dir.path, async (milliseconds) => {
       expect(milliseconds).toBe(60_000);
@@ -554,7 +669,19 @@ test('resident observation counts living current workers and successful gates an
       await Bun.sleep(1);
     });
     expect(pauses).toBe(10);
-    expect(observed).toEqual({ liveWorkers: 1, passedGates: 2, landings: 1 });
+    expect(observed).toEqual({
+      liveWorkers: 1,
+      passedGates: 2,
+      landings: 1,
+      workReady: true,
+      landingsRequested: false,
+    });
+    db.query('INSERT INTO landing_queue VALUES (?,2,0,NULL)').run('landing');
+    db.query("UPDATE worker_tasks SET body = ? WHERE id = 'ready'").run(JSON.stringify({ state: 'held' }));
+    expect(await observeResident(dir.path, async () => {})).toMatchObject({
+      workReady: false,
+      landingsRequested: true,
+    });
   } finally {
     db.close();
     dir.close();

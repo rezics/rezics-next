@@ -1,9 +1,10 @@
 import { defaultPolicy } from './policy.ts';
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { homedir, userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { sameProcess, signalProcessIdentity, waitForProcess, type ProcessIdentity } from './process.ts';
 
 export const HOST_UNIT = 'rezics-goal-host.service';
 export const SERVICE_UNITS = [
@@ -32,7 +33,8 @@ export const serviceCommand: ServiceCommand = async ([command, ...args]) => {
 
 async function checked(argv: string[], run: ServiceCommand): Promise<string> {
   const result = await run(argv);
-  if (result.code !== 0) throw new Error(result.output.trim() || `${argv.join(' ')}: exit ${result.code}`);
+  if (result.code !== 0 && !(argv.includes('--property=LoadState') && result.output.trim() === 'not-found'))
+    throw new Error(result.output.trim() || `${argv.join(' ')}: exit ${result.code}`);
   return result.output;
 }
 
@@ -97,11 +99,54 @@ export async function installService(options: ServiceInstall, run = serviceComma
   }
   await checked(['systemctl', '--user', 'daemon-reload'], run);
   await checked(['loginctl', 'enable-linger', options.user ?? userInfo().username], run);
-  await checked(['systemctl', '--user', 'enable', '--now', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
+  await checked(['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
+  await stopLegacySupervisor(join(main, '.temp/goal'), run);
+  // Wait for the notify host only after the old supervisor and host have relinquished the socket.
+  await checked(['systemctl', '--user', 'start', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
   await checked(['systemctl', '--user', 'start', SERVICE_UNITS[2]], run);
-  // No legacy supervisor is launched or signalled during installation.
   for (const file of ['manager-host-liveness.json', 'manager-host-liveness-retry.json', 'manager-host-restart.json'])
     rmSync(join(main, '.temp/goal', file), { force: true });
+}
+
+/** Retire only recorded legacy identities and the named transient unit; never signal a worker group. */
+export async function stopLegacySupervisor(directory: string, run = serviceCommand): Promise<void> {
+  const unit = 'rezics-goal-supervisor.service';
+  const loaded = await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', unit], run);
+  if (loaded.trim() !== 'not-found') await checked(['systemctl', '--user', 'stop', unit], run);
+  const lease = join(directory, 'manager-host-supervisor.lease');
+  let files: string[] = [];
+  try {
+    files = readdirSync(lease)
+      .filter((file) => file.endsWith('.json'))
+      .map((file) => join(lease, file));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  // The supervisor lease records its own identity; the liveness journal records the old host's identity.
+  files.push(join(directory, 'manager-host-liveness.json'));
+  for (const file of files) {
+    let record;
+    try {
+      record = JSON.parse(readFileSync(file, 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    const identity = (record.identity ?? record) as ProcessIdentity;
+    if (
+      !Number.isSafeInteger(identity.pid) ||
+      identity.pid <= 0 ||
+      typeof identity.start !== 'string' ||
+      typeof identity.boot !== 'string' ||
+      !Number.isSafeInteger(identity.group) ||
+      identity.group <= 0
+    )
+      throw new Error(`Invalid legacy process identity in ${file}`);
+    if (!(await signalProcessIdentity(identity, 'SIGTERM'))) continue;
+    await waitForProcess(identity, AbortSignal.timeout(30_000));
+    if (sameProcess(identity)) throw new Error(`Legacy process ${identity.pid} did not stop`);
+  }
+  rmSync(lease, { recursive: true, force: true });
 }
 
 export async function reportServices(

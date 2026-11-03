@@ -884,7 +884,13 @@ async function reinstall(
 // ---------------------------------------------------------------------------------------------------------------
 // Commands
 
-export type ResidentHealth = { liveWorkers: number; passedGates: number; landings: number };
+export type ResidentHealth = {
+  liveWorkers: number;
+  passedGates: number;
+  landings: number;
+  workReady?: boolean;
+  landingsRequested?: boolean;
+};
 export type ResidentControl = {
   observe(checkout: string): Promise<ResidentHealth>;
   restart(checkout: string): Promise<void>;
@@ -899,9 +905,21 @@ export async function observeResident(
   const db = new Database(file, { readonly: true });
   const start = new Date().toISOString();
   let workers = 0;
+  let workReady = false,
+    landingsRequested = false;
   try {
     const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+    const hasQueue = !!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landing_queue'").get();
     for (let minute = 0; minute < scriptPolicy().cpSync.residentSamples; minute++) {
+      workReady ||= !!db
+        .query("SELECT 1 FROM worker_tasks WHERE json_extract(body, '$.state') = 'ready' LIMIT 1")
+        .get();
+      if (hasQueue)
+        landingsRequested ||= !!db
+          .query(`SELECT 1 FROM landing_queue q JOIN worker_tasks t
+          ON t.id = q.task AND t.current_attempt = q.attempt
+          WHERE q.delivered = 0 AND q.outcome IS NULL AND json_extract(t.body, '$.state') = 'landing' LIMIT 1`)
+          .get();
       const rows = db
         .query(`SELECT a.body FROM worker_attempts a JOIN worker_tasks t ON t.id = a.task_id
         AND t.current_attempt = a.attempt WHERE json_extract(a.body, '$.state') = 'running'`)
@@ -928,6 +946,8 @@ export async function observeResident(
     const passed = events.map((row) => JSON.parse(row.body)).filter((outcome) => outcome.passed);
     return {
       liveWorkers: workers / scriptPolicy().cpSync.residentSamples,
+      workReady,
+      landingsRequested,
       passedGates: passed.length,
       landings: passed.filter((outcome) => outcome.stage === 'merge' && outcome.mergedCommit).length,
     };
@@ -936,10 +956,16 @@ export async function observeResident(
   }
 }
 
-export async function restartResident(checkout: string): Promise<void> {
-  const envFile = join(checkout, '.temp/goal/goal.env');
-  if (!existsSync(envFile)) throw new Refusal(`Goal service is not installed (${envFile}); run goal service install.`);
-  const child = Bun.spawn(['systemctl', '--user', 'restart', 'rezics-goal-host.service'], {
+export type ResidentCommand = (argv: string[], checkout: string) => Promise<{ code: number; output: string }>;
+const residentCommand: ResidentCommand = async (argv, checkout) => {
+  const env = Object.fromEntries(
+    ['HOME', 'PATH', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'KERNEL_CHECK_REMOTE'].flatMap((key) =>
+      process.env[key] === undefined ? [] : [[key, process.env[key]!]],
+    ),
+  );
+  const child = Bun.spawn(argv, {
+    cwd: checkout,
+    env: { ...env, GOAL_MAIN_CHECKOUT: checkout, GOAL_LOCAL_CONFIG: join(checkout, '.temp/goal/local.json') },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -948,12 +974,44 @@ export async function restartResident(checkout: string): Promise<void> {
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
   ]);
-  if (code !== 0) throw new Refusal((err || out).trim() || `systemctl restart: exit ${code}`);
+  return { code, output: out + err };
+};
+
+/** Run only after publication: the newly published main supplies the installer. */
+export async function restartResident(checkout: string, run: ResidentCommand = residentCommand): Promise<void> {
+  const host = 'rezics-goal-host.service';
+  const checked = async (argv: string[]) => {
+    const result = await run(argv, checkout);
+    if (result.code !== 0 && !(argv.includes('--property=LoadState') && result.output.trim() === 'not-found'))
+      throw new Refusal(result.output.trim() || `${argv.join(' ')}: exit ${result.code}`);
+    return result.output.trim();
+  };
+  const load = await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', host]);
+  const legacy = await checked([
+    'systemctl',
+    '--user',
+    'show',
+    '--property=LoadState',
+    '--value',
+    'rezics-goal-supervisor.service',
+  ]);
+  if (
+    !existsSync(join(checkout, '.temp/goal/goal.env')) ||
+    load === 'not-found' ||
+    legacy === 'loaded' ||
+    existsSync(join(checkout, '.temp/goal/manager-host-supervisor.lease')) ||
+    existsSync(join(checkout, '.temp/goal/manager-host-liveness.json'))
+  )
+    await checked([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
+  // Type=notify makes this wait for READY=1; only the host unit is restarted, preserving worker scopes.
+  await checked(['systemctl', '--user', 'restart', host]);
+  if ((await checked(['systemctl', '--user', 'show', '--property=ActiveState', '--value', host])) !== 'active')
+    throw new Refusal('Goal host did not become ready.');
 }
 
-export function residentRegression(before: ResidentHealth, after: ResidentHealth): boolean {
+export function residentRegression(_before: ResidentHealth, after: ResidentHealth): boolean {
   return (
-    after.liveWorkers < before.liveWorkers || after.passedGates < before.passedGates || after.landings < before.landings
+    (after.workReady === true && after.liveWorkers === 0) || (after.landingsRequested === true && after.landings === 0)
   );
 }
 const residentControl: ResidentControl = { observe: observeResident, restart: restartResident };
@@ -1252,7 +1310,9 @@ export async function sync(options: Options = {}): Promise<number> {
           const after = await resident.observe(checkout);
           print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
           if (residentRegression(before, after))
-            throw new Refusal('Resident workers, successful gate outcomes or landings dropped.');
+            throw new Refusal(
+              'Resident produced no live workers with ready work or no landings with pending requests.',
+            );
         } catch (error) {
           print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);
           // Release this sync's lock before invoking the ordinary forward-only rollback transaction.
