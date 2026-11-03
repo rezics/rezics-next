@@ -11,7 +11,10 @@ afterAll(async () => {
 });
 
 test('driver binds delayed draft A to native first publication B, preserving its revision across later edits and replay', async () => {
-  const { mentioned: a, readers: [b, c] } = f.people;
+  const {
+    mentioned: a,
+    readers: [b, c],
+  } = f.people;
   const thread = await f.thread();
   const created = await f.post(thread.id, [a], 'draft');
   const draft = ok(created, 201);
@@ -48,7 +51,10 @@ test('driver binds delayed draft A to native first publication B, preserving its
 });
 
 test('driver forwards draft visibility, immediate publication and silent later edits', async () => {
-  const { mentioned, readers: [later] } = f.people;
+  const {
+    mentioned,
+    readers: [later],
+  } = f.people;
   const thread = await f.thread();
   const draft = ok(await f.post(thread.id, [mentioned], 'draft'), 201);
   const edited = await f.revise(draft, [mentioned], 'draft');
@@ -69,7 +75,10 @@ test('driver forwards draft visibility, immediate publication and silent later e
 });
 
 test('registered driver delivery applies current membership and preferences without backfilling on replay', async () => {
-  const { mentioned, readers: [preferenceRecipient, controlRecipient] } = f.people;
+  const {
+    mentioned,
+    readers: [preferenceRecipient, controlRecipient],
+  } = f.people;
   const protectedThread = await f.thread(true);
   const denied = ok(await f.post(protectedThread.id, [mentioned]), 201);
   ok(await f.driver.readPost(denied, mentioned));

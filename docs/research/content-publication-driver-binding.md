@@ -4,13 +4,13 @@ The notification outcome adapter binds [Done-when 6](../goals/content.md#done-wh
 authoring and registered delivery. Its method signatures remain those of
 [the frozen driver contract](../../specs/content-notification-driver.ts).
 
-| Driver operation | Native operation | Binding |
-| --- | --- | --- |
-| `createThread` | `POST /v1/threads` | Forward the supplied opening visibility; preserve the opening post's native revision ID. |
-| `createPost` | `POST /v1/threads/:id/posts` | Forward the supplied post visibility and parent; preserve the native revision ID. |
-| `revise` | `POST /v1/posts/:id/revisions` | Forward the supplied visibility and the input post snapshot's revision ID as quoted `If-Match`; preserve the returned revision ID. |
-| `readPost` | `GET /v1/posts/:id` | Preserve the current native revision ID. |
-| `effects` | Registered notification effect host | Drain or replay committed outbox envelopes through production relays and notice effects. |
+| Driver operation | Native operation                    | Binding                                                                                                                            |
+| ---------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `createThread`   | `POST /v1/threads`                  | Forward the supplied opening visibility; preserve the opening post's native revision ID.                                           |
+| `createPost`     | `POST /v1/threads/:id/posts`        | Forward the supplied post visibility and parent; preserve the native revision ID.                                                  |
+| `revise`         | `POST /v1/posts/:id/revisions`      | Forward the supplied visibility and the input post snapshot's revision ID as quoted `If-Match`; preserve the returned revision ID. |
+| `readPost`       | `GET /v1/posts/:id`                 | Preserve the current native revision ID.                                                                                           |
+| `effects`        | Registered notification effect host | Drain or replay committed outbox envelopes through production relays and notice effects.                                           |
 
 The expected head belongs to the input snapshot. Fetching a newer head would conceal stale writes and change
 idempotent replay semantics. A successful replay retains its original revision even after a newer head exists.
