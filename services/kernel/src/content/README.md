@@ -2223,7 +2223,7 @@ Web retains the page/composer consumer and its phone/desktop recovery review; th
 
 ### Cost: listOwnDrafts
 
-- Touches: three native account snapshots around one prepared account Access check; one actor-home selection
+- Touches: two native account snapshots around one prepared account Access check; one actor-home selection
   snapshot with a partition point, two disjoint draft-index seeks, one progress point and one pending-prefix
   probe. For each of L raw candidates, two ordinary metadata disclosures, one two-action Access snapshot and
   original-Subject identity preparation plus three identity observations. Each metadata disclosure uses two

@@ -218,6 +218,7 @@ export const EVENT_CLASSIFICATIONS = Object.freeze({
   'com.rezics.community.realm.restored.v1': nonPersonal,
   'com.rezics.content.author-erasure.requested.v1': personal('author', 'durable-initiator'),
   'com.rezics.content.author-item.projected.v1': personal('author'),
+  'com.rezics.content.own-drafts.repaired.v1': nonPersonal,
   'com.rezics.content.edition.created.v1': personal('creator'),
   'com.rezics.content.edition.published.v1': personal('creator', 'durable-initiator'),
   'com.rezics.content.edition.unpublished.v1': personal('creator'),

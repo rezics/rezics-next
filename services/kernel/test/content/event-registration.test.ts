@@ -163,6 +163,7 @@ const fixtures = {
   },
   'com.rezics.content.realm-discovery.prepared.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
   'com.rezics.content.realm-discovery.outcome.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
+  'com.rezics.content.own-drafts.repaired.v1': {},
 } satisfies { [T in ContentEventType]: ContentEventData<T> };
 const entries = Object.entries(fixtures);
 let nextPartition = 1400;

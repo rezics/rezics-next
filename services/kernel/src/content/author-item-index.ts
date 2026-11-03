@@ -88,7 +88,7 @@ export function createAuthorItemEffect(pool: Pool): Effect {
             })
           : null;
       if (event.type === postRestored && !restored) return;
-      const authorId = restored
+      const authorId = draft?.author_account_id ?? (restored
         ? restored.author_account_id
         : creation
           ? creation.actorId
@@ -97,7 +97,7 @@ export function createAuthorItemEffect(pool: Pool): Effect {
               if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
               return (await readAuthor.run(client, { route: change.sourceRoute, post_id: change.id }))
                 ?.author_account_id;
-            });
+            }));
       if (!authorId) return;
       const authorRoute = route(authorId);
       const items: { itemKind: 'thread' | 'post'; itemId: string }[] =

@@ -41,7 +41,7 @@ function scope(accountId: string, context: ReadContext, limit: number): CursorBi
   if (context.actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   return { operation: 'content.own-drafts.list', parameters: { accountId, limit,
     viewer: context.actor.accountId, clientId: context.actor.clientId, requestedBy: context.actor.requestedBy,
-    authnEpoch: context.actor.authnEpoch, scopes: [...context.actor.scopes].sort() } };
+    authnEpoch: context.actor.authnEpoch, scopes: [...context.actor.scopes].sort().join(' ') } };
 }
 
 async function subjects(deps: ContentReadDependencies, metadata: NativeDraftMetadata, context: ReadContext) {
