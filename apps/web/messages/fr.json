@@ -6388,6 +6388,8 @@
   "library_export_section_occurrences": "Vos lignes d’adhésion curatées vivantes.",
   "library_export_section_bangumi": "Identité d’envoi Bangumi conservée et preuves de lignes, y compris les identifiants de fournisseur stockés.",
   "library_export_section_mal": "Identité d’envoi MyAnimeList non expirée et lignes sources indexées, y compris les identifiants de fournisseur stockés.",
+  "library_export_section_vndb": "Identité des envois VNDB non expirés et lignes analysées conservées, y compris les envois annulés. Les valeurs absentes, invalides et nulles restent distinctes.",
+  "library_export_section_anilist": "Identité des envois AniList conservés et lignes source analysées, y compris les envois annulés. Les identifiants d’origine, le format des notes, les valeurs inconnues et les dates partielles restent inchangés.",
   "library_export_section_other": "Section native {section}.",
   "library_export_section_journals": "Les journaux des occurrences actives conservent leurs identifiants natifs d’occurrence et de session, avec des révisions distinctes pour le journal et la progression. Les dates restent partielles ; une date effacée vaut null et une réflexion vide reste distincte de null. Aucun lien entre import et journal n’est déduit. La version 3 ajoute l’évaluation privée avec la révision de sens 1 et des unités de 0 à 20 ou null ; une évaluation absente des versions 1 ou 2 reste absente.",
   "library_export_section_provenance": "Les observations de source acceptées conservent les identifiants natifs du fournisseur et de l’enregistrement. Les valeurs inconnues, absentes, effacées, privées et visibles à la source restent distinctes ; leur visibilité à la source ne publie jamais cette bibliothèque.",

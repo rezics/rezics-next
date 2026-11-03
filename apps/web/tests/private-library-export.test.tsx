@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import type { LibraryExportStatus } from '@rezics/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import {
@@ -10,8 +11,10 @@ import {
   EXPORT_SECTIONS_V1,
   EXPORT_SECTIONS_V2,
   EXPORT_SECTIONS_V3,
+  EXPORT_SECTIONS_V4,
   EXPORT_V2_COVERAGE,
   EXPORT_V3_COVERAGE,
+  EXPORT_V4_COVERAGE,
   EXPORT_VERSION,
   type ExportArtifact,
   type ExportCommand,
@@ -21,9 +24,11 @@ import {
   type ExportRecord,
   type ExportStatus,
   type ExportSectionTotals,
+  type ExportSection,
   type ExportVersion,
   encodedRecordBytes,
   isExportStatus,
+  sectionsForExportVersion,
 } from '../src/library/private-export/contract';
 import { exportCallTotal, expectedExportCalls } from '../src/library/private-export/cost';
 import { createExportJourney } from '../src/library/private-export/controller';
@@ -113,14 +118,16 @@ function coverage(extra: Partial<ExportStatus> = {}, version: ExportVersion = EX
       ? { ...common, version: 1 as const, sections: [...EXPORT_SECTIONS_V1] }
       : version === 2
         ? { ...common, version: 2 as const, coverage: EXPORT_V2_COVERAGE, sections: [...EXPORT_SECTIONS_V2] }
-        : { ...common, version: 3 as const, coverage: EXPORT_V3_COVERAGE, sections: [...EXPORT_SECTIONS_V3] };
+        : version === 3
+          ? { ...common, version: 3 as const, coverage: EXPORT_V3_COVERAGE, sections: [...EXPORT_SECTIONS_V3] }
+          : { ...common, version: 4 as const, coverage: EXPORT_V4_COVERAGE, sections: [...EXPORT_SECTIONS_V4] };
   return { ...versioned, ...extra } as ExportStatus;
 }
 
 function manifest(records: readonly ExportRecord[], version: ExportVersion = EXPORT_VERSION): ExportManifest {
   const status = coverage({ state: 'ready', first: null }, version);
   const { state: _state, first: _first, ...base } = status;
-  const sections = version === 1 ? [] : version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
+  const sections = version === 1 ? [] : sectionsForExportVersion(version);
   const sectionTotals = Object.fromEntries(
     sections.map((section) => [
       section,
@@ -132,7 +139,7 @@ function manifest(records: readonly ExportRecord[], version: ExportVersion = EXP
         { rows: 0, recordBytes: 0 },
       ),
     ]),
-  ) as ExportSectionTotals;
+  ) as ExportSectionTotals<ExportSection>;
   const recordBytes = records.reduce((sum, record) => sum + encodedRecordBytes(record), 0);
   if (base.version === 1) return { ...base, rows: records.length, recordBytes };
   return { ...base, rows: records.length, recordBytes, sectionTotals };
@@ -222,6 +229,7 @@ function recordingPort(
   options: {
     create?: ExportPort['create'];
     status?: ExportStatus;
+    version?: ExportVersion;
     failCreateOnce?: boolean;
     failPageOnce?: boolean;
     staleOnStatus?: boolean;
@@ -251,12 +259,13 @@ function recordingPort(
       createAttempts += 1;
       if (options.failCreateOnce && createAttempts === 1) return { kind: 'unknown', command };
       if (options.create) return options.create(command);
-      return { kind: 'status', status: coverage() };
+      return { kind: 'status', status: coverage({}, options.version) };
     },
     async status(command) {
       statuses.push(command.exportId);
-      if (options.staleOnStatus) return { kind: 'status', status: coverage({ state: 'stale', first: null }) };
-      return { kind: 'status', status: options.status ?? coverage({ state: 'ready', first }) };
+      if (options.staleOnStatus)
+        return { kind: 'status', status: coverage({ state: 'stale', first: null }, options.version) };
+      return { kind: 'status', status: options.status ?? coverage({ state: 'ready', first }, options.version) };
     },
     async page(command) {
       pageCursors.push(command.cursor);
@@ -267,7 +276,7 @@ function recordingPort(
     },
     async cancel(command) {
       cancels.push(command.exportId);
-      return { kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) };
+      return { kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }, options.version) };
     },
   };
   return { port, creates, pageCursors, cancels, statuses };
@@ -420,13 +429,13 @@ test('version 3 preserves owner records and assessments, then verifies every sec
     journalRecord(2, 0),
     journalRecord(3, null),
   ];
-  const finalManifest = manifest(records);
+  const finalManifest = manifest(records, 3);
   const pages = [
     pageOf(records.slice(0, 2), { next: 'cursor-empty', state: 'collecting' }),
     pageOf([], { next: 'cursor-final', state: 'collecting' }),
     pageOf(records.slice(2), { state: 'ready', manifest: finalManifest }),
   ];
-  const ready = recordingPort(pages);
+  const ready = recordingPort(pages, { version: 3 });
   const delivered: Uint8Array[] = [];
   const journey = createExportJourney({
     port: ready.port,
@@ -463,7 +472,7 @@ test('version 3 preserves owner records and assessments, then verifies every sec
   expect(parseAssembledArtifact(delivered[0]!)).toEqual({ manifest: finalManifest, records });
 });
 
-test('mounted version 3 coverage reaches the completed download state with all 17 totals', async () => {
+test('mounted version 4 coverage reaches the completed download state with all 21 totals', async () => {
   const originalCreate = URL.createObjectURL;
   const originalRevoke = URL.revokeObjectURL;
   URL.createObjectURL = () => 'blob:https://site.test/private-export';
@@ -471,10 +480,12 @@ test('mounted version 3 coverage reaches the completed download state with all 1
   try {
     const { port } = recordingPort(pagesFor(16, 1));
     await mount(port);
-    expect(host.textContent).toContain(m.library_export_version({ version: 3 }));
+    expect(host.textContent).toContain(m.library_export_version({ version: 4 }));
     expect(host.textContent).toContain(m.library_export_section_annotations());
     expect(host.textContent).toContain(m.library_export_section_provenance());
     expect(host.textContent).toContain(m.library_export_section_journals());
+    expect(host.textContent).toContain(m.library_export_section_vndb());
+    expect(host.textContent).toContain(m.library_export_section_anilist());
     await click(m.library_export_capture());
     await waitFor(m.library_export_ready());
     expect(host.textContent).toContain(m.library_export_section_total({ rows: 0, bytes: 0 }));
@@ -539,8 +550,8 @@ test('stored version 2 keeps its original journal shape, totals and exact retry 
 
 test('version 3 refuses missing or malformed journal assessment fields', async () => {
   for (const record of [journalRecord(8), journalRecord(9, 21)]) {
-    const page = pageOf([record], { state: 'ready', manifest: manifest([record]) });
-    const journey = createExportJourney({ port: recordingPort([page]).port, visit: visit() });
+    const page = pageOf([record], { state: 'ready', manifest: manifest([record], 3) });
+    const journey = createExportJourney({ port: recordingPort([page], { version: 3 }).port, visit: visit() });
     const snap = await journey.capture();
     expect(snap.stage).toBe('unavailable');
     expect(snap.hasArtifact).toBe(false);
@@ -550,7 +561,7 @@ test('version 3 refuses missing or malformed journal assessment fields', async (
 test('mixed versions, captures and section totals refuse the final artifact', async () => {
   const records = [recordOf(11)];
   const good = manifest(records);
-  if (good.version !== 3) throw new Error('Expected a version 3 fixture');
+  if (good.version !== 4) throw new Error('Expected a version 4 fixture');
   const wrongTotals = {
     ...good,
     sectionTotals: {
@@ -563,7 +574,13 @@ test('mixed versions, captures and section totals refuse the final artifact', as
     ...good,
     exportId: '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb',
   };
-  const mismatches: ExportManifest[] = [manifest(records, 1), manifest(records, 2), wrongCapture, wrongTotals];
+  const mismatches: ExportManifest[] = [
+    manifest(records, 1),
+    manifest(records, 2),
+    manifest(records, 3),
+    wrongCapture,
+    wrongTotals,
+  ];
   for (const mismatched of mismatches) {
     const page = pageOf(records, { state: 'ready', manifest: mismatched });
     const journey = createExportJourney({ port: recordingPort([page]).port, visit: visit() });
@@ -579,8 +596,97 @@ test('mixed versions, captures and section totals refuse the final artifact', as
   expect(terminalSnap.hasArtifact).toBe(false);
 });
 
-test('unsupported version 4 provider responses stay unavailable', () => {
-  expect(isExportStatus({ ...coverage(), version: 4, coverage: 'private-library-owner-facts-v4' })).toBe(false);
+test('V4 requires its exact inventory and coverage; V3 cannot append providers and unknown versions stay unavailable', () => {
+  expect(EXPORT_SECTIONS_V3).toHaveLength(17);
+  expect(EXPORT_SECTIONS_V4.slice(17)).toEqual(['vndbUploads', 'vndbEvidence', 'anilistUploads', 'anilistEvidence']);
+  const installed: LibraryExportStatus = {
+    ...coverage(),
+    version: 4,
+    coverage: EXPORT_V4_COVERAGE,
+    sections: [...EXPORT_SECTIONS_V4],
+  };
+  expect(isExportStatus(installed)).toBe(true);
+  for (const status of [
+    { ...coverage(), version: 5 },
+    { ...coverage(), coverage: EXPORT_V3_COVERAGE },
+    { ...coverage(), sections: EXPORT_SECTIONS_V3 },
+    { ...coverage({}, 3), sections: EXPORT_SECTIONS_V4 },
+    { ...coverage(), sections: [...EXPORT_SECTIONS_V4].reverse() },
+  ])
+    expect(isExportStatus(status)).toBe(false);
+});
+
+test('V4 keeps provider records opaque and retries the exact page and completed bytes without adoption', async () => {
+  // Published shapes: docs/library-export.md, Version 4 provider evidence and assessment seam.
+  // These are illustrative inputs, not a recorded native capture.
+  const records: ExportRecord[] = [
+    journalRecord(1, 0),
+    journalRecord(2, null),
+    { section: 'vndbUploads', upload_id: exportId, state: 'cancelled', expires_at: expiresAt },
+    {
+      section: 'vndbEvidence',
+      upload_id: exportId,
+      ordinal: 0,
+      evidence: {
+        identifier: { provider: 'vndb', value: 'v1' },
+        fields: { score: { kind: 'invalid', raw: '0' }, finished: { kind: 'missing', raw: null } },
+      },
+    },
+    { section: 'anilistUploads', upload_id: exportId, score_format: null, cancelled: true, row_count: 1 },
+    {
+      section: 'anilistEvidence',
+      upload_id: exportId,
+      ordinal: 0,
+      evidence: {
+        identifiers: [{ source: 'anilist', externalId: '1' }],
+        evidence: { score: 0, notes: null, status: 'FUTURE_STATUS', startedAt: { year: 2004, month: null, day: 0 } },
+      },
+    },
+  ];
+  const final = manifest(records, 4);
+  const calls = recordingPort([pageOf(records, { state: 'ready', manifest: final })], { failPageOnce: true });
+  const files: Uint8Array[] = [];
+  const journey = createExportJourney({
+    port: calls.port,
+    visit: visit(),
+    deliver(file) {
+      files.push(file.bytes);
+      return files.length > 1;
+    },
+  });
+  expect((await journey.capture()).hasArtifact).toBe(false);
+  expect((await journey.retryUnknown()).stage).toBe('ready');
+  expect(calls.pageCursors).toEqual([first, first]);
+  expect((await journey.download()).stage).toBe('save-failed');
+  await journey.download();
+  expect(files[0] === files[1]).toBe(true);
+  expect(new TextDecoder().decode(files[0])).toBe(JSON.stringify({ manifest: final, records }));
+  expect(calls.creates).toHaveLength(1);
+  expect(calls.cancels).toEqual([]);
+  expect(calls.statuses).toEqual([]);
+});
+
+test('definite page failure and credential retirement clear an incomplete V4 stream', async () => {
+  for (const outcome of ['unavailable', 'retire'] as const) {
+    const current = visit();
+    let pageNo = 0;
+    let journey: ReturnType<typeof createExportJourney>;
+    const calls = recordingPort([]);
+    const port: ExportPort = {
+      ...calls.port,
+      async page() {
+        if (pageNo++ === 0) return { kind: 'page', page: pageOf([recordOf(0)], { next: 'next' }) };
+        expect(journey.snapshot().records).toBe(1);
+        if (outcome === 'retire') current.retire();
+        return { kind: 'unavailable' };
+      },
+    };
+    journey = createExportJourney({ port, visit: current });
+    const snap = await journey.capture();
+    expect(snap.records).toBe(0);
+    expect(snap.cost.retainedBytes).toBe(0);
+    expect(snap.hasArtifact).toBe(false);
+  }
 });
 
 test('fixed expiry and viewer retirement discard late private pages', async () => {

@@ -6388,6 +6388,8 @@
   "library_export_section_occurrences": "Deine kuratierten lebenden Mitgliedschaftszeilen.",
   "library_export_section_bangumi": "Behaltene Bangumi-Upload-Identität und Zeilenbelege, einschließlich gespeicherter Anbieterkennungen.",
   "library_export_section_mal": "Nicht abgelaufene MyAnimeList-Upload-Identität und indexierte Quellzeilen, einschließlich gespeicherter Anbieterkennungen.",
+  "library_export_section_vndb": "Identität nicht abgelaufener VNDB-Uploads und gespeicherte eingelesene Zeilen, auch aus abgebrochenen Uploads. Fehlende, ungültige und Nullwerte bleiben unterscheidbar.",
+  "library_export_section_anilist": "Identität gespeicherter AniList-Uploads und eingelesene Quellzeilen, auch aus abgebrochenen Uploads. Ursprüngliche Kennungen, Bewertungsformat, unbekannte Werte und unvollständige Daten bleiben erhalten.",
   "library_export_section_other": "Nativer Abschnitt {section}.",
   "library_export_section_journals": "Journale zu aktiven Vorkommen behalten native Vorkommens- und Sitzungs-IDs sowie getrennte Journal- und Fortschrittsrevisionen. Daten bleiben unvollständig; ein gelöschtes Datum ist null, und eine leere Reflexion unterscheidet sich von null. Eine Verknüpfung zwischen Import und Journal wird nicht abgeleitet. Version 3 ergänzt die private Einschätzung mit Bedeutungsrevision 1 und Einheiten von 0 bis 20 oder null; eine fehlende Einschätzung in Version 1 oder 2 bleibt abwesend.",
   "library_export_section_provenance": "Akzeptierte Quellenbeobachtungen behalten native Anbieter- und Datensatz-IDs. Unbekannte, fehlende, gelöschte, private und an der Quelle sichtbare Werte bleiben unterscheidbar; Quellensichtbarkeit veröffentlicht diese Bibliothek nicht.",

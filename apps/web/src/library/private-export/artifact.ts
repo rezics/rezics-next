@@ -2,15 +2,13 @@ import {
   EXPORT_PAGE_RECORD_BYTES,
   EXPORT_PAGE_ROWS,
   EXPORT_ROW_BYTES,
-  EXPORT_SECTIONS_V1,
-  EXPORT_SECTIONS_V2,
-  EXPORT_SECTIONS_V3,
   EXPORT_STREAM_BYTES,
   EXPORT_STREAM_RECORDS,
   artifactFilename,
   encodedBytes,
   encodedRecordBytes,
   isExportRecord,
+  sectionsForExportVersion,
   type ExportArtifact,
   type ExportManifest,
   type ExportRecord,
@@ -34,7 +32,7 @@ export class ExportAssembly {
     if (this.version !== null && this.version !== version) return { kind: 'invalid' };
     this.version = version;
     if (this.sectionTotals.size === 0) {
-      const sections = version === 1 ? EXPORT_SECTIONS_V1 : version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
+      const sections = sectionsForExportVersion(version);
       for (const section of sections) this.sectionTotals.set(section, { rows: 0, recordBytes: 0 });
     }
     return null;
@@ -80,10 +78,13 @@ export class ExportAssembly {
       return { kind: 'invalid' };
 
     if (manifest.version !== 1) {
-      const sections = manifest.version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
+      const sections = manifest.sections;
       for (const section of sections) {
         const actual = this.sectionTotals.get(section);
-        const declared = manifest.sectionTotals[section];
+        const declared =
+          manifest.version === 4
+            ? manifest.sectionTotals[section]
+            : manifest.sectionTotals[section as keyof typeof manifest.sectionTotals];
         if (!actual || declared.rows !== actual.rows || declared.recordBytes !== actual.recordBytes)
           return { kind: 'invalid' };
       }
@@ -147,7 +148,7 @@ function recordMatchesVersion(record: ExportRecord, version: ExportVersion): boo
   if (!journal || typeof journal !== 'object' || Array.isArray(journal)) return false;
   const value = journal as Record<string, unknown>;
   const hasAssessment = Object.hasOwn(value, 'assessment');
-  if (version !== 3) return !hasAssessment;
+  if (version < 3) return !hasAssessment;
   const assessment = value.assessment;
   if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) return false;
   const details = assessment as Record<string, unknown>;

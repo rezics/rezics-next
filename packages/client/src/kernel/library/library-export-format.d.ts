@@ -29,16 +29,25 @@ export declare const exportSectionsV2: readonly [
   'journals',
 ];
 export declare const exportSectionsV3: readonly [...typeof exportSectionsV2];
-export type LibraryExportVersion = 1 | 2 | 3;
+export declare const exportSectionsV4: readonly [
+  ...typeof exportSectionsV3,
+  'vndbUploads',
+  'vndbEvidence',
+  'anilistUploads',
+  'anilistEvidence',
+];
+export type LibraryExportVersion = 1 | 2 | 3 | 4;
 export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
 export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
+export type LibraryExportSectionV4 = (typeof exportSectionsV4)[number];
 /** Archive recovery shares the installed V1 and V2 section vocabulary. */
 export type LibraryExportSection = LibraryExportSectionV2;
 export declare function sectionsForVersion(version: LibraryExportVersion):
   | typeof exportSections
   | typeof exportSectionsV2
-  | typeof exportSectionsV3;
+  | typeof exportSectionsV3
+  | typeof exportSectionsV4;
 
 export type LibraryExportManifestV1 = {
   format: typeof LIBRARY_EXPORT_FORMAT;
@@ -96,7 +105,16 @@ export type LibraryExportManifestV3 = {
     readonly reimport: string;
   };
 };
-export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2 | LibraryExportManifestV3;
+export type LibraryExportManifestV4 = Omit<LibraryExportManifestV3, 'version' | 'coverage' | 'sections'> & {
+  version: 4;
+  coverage: 'private-library-owner-facts-v4';
+  sections: LibraryExportSectionV4[];
+};
+export type LibraryExportManifest =
+  | LibraryExportManifestV1
+  | LibraryExportManifestV2
+  | LibraryExportManifestV3
+  | LibraryExportManifestV4;
 export type LibraryExportFinalManifestV1 = LibraryExportManifestV1 & {
   fullExport: false;
   rows: number;
@@ -115,10 +133,17 @@ export type LibraryExportFinalManifestV3 = LibraryExportManifestV3 & {
   recordBytes: number;
   sectionTotals: LibraryExportSectionTotals;
 };
+export type LibraryExportFinalManifestV4 = LibraryExportManifestV4 & {
+  fullExport: false;
+  rows: number;
+  recordBytes: number;
+  sectionTotals: Record<LibraryExportSectionV4, { rows: number; recordBytes: number }>;
+};
 export type LibraryExportFinalManifest =
   | LibraryExportFinalManifestV1
   | LibraryExportFinalManifestV2
-  | LibraryExportFinalManifestV3;
+  | LibraryExportFinalManifestV3
+  | LibraryExportFinalManifestV4;
 export type LibraryArchiveManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2;
 
 export declare function libraryExportManifest(capture: {
@@ -139,6 +164,12 @@ export declare function libraryExportManifest(capture: {
   expires_at: string;
   format_version: 3;
 }): LibraryExportManifestV3;
+export declare function libraryExportManifest(capture: {
+  export_id: string;
+  created_at: string;
+  expires_at: string;
+  format_version: 4;
+}): LibraryExportManifestV4;
 export declare function libraryExportManifest(capture: {
   export_id: string;
   created_at: string;

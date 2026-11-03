@@ -8,12 +8,15 @@ import {
   EXPORT_SECTIONS_V1,
   EXPORT_SECTIONS_V2,
   EXPORT_SECTIONS_V3,
+  EXPORT_SECTIONS_V4,
   EXPORT_V2_COVERAGE,
   EXPORT_V3_COVERAGE,
+  EXPORT_V4_COVERAGE,
   type ExportSectionTotals,
   type ExportManifestV1,
   type ExportManifestV2,
   type ExportManifestV3,
+  type ExportManifestV4,
 } from '../library/private-export/contract';
 import { ExportCoverage } from '../library/private-export/coverage';
 import { ExportTerminal } from '../library/private-export/states';
@@ -98,10 +101,10 @@ const v3Manifest: ExportManifestV3 = {
   sectionTotals: zeroSectionTotals,
 };
 
-export const Version3Coverage: Story = {
+export const Version4Coverage: Story = {
   name: 'New capture coverage (illustrative)',
   parameters: {
-    docs: { description: { story: 'Illustrative version 3 coverage; no native response was recorded.' } },
+    docs: { description: { story: 'Illustrative version 4 coverage; no native response was recorded.' } },
   },
   render: () => (
     <Shell>
@@ -217,19 +220,48 @@ export const Version3FinalTotalsRefusal: Story = {
   ),
 };
 
-export const Version4Unavailable: Story = {
-  name: 'Version 4 provider evidence unavailable',
+const v4Manifest: ExportManifestV4 = {
+  ...v3Manifest,
+  version: 4,
+  coverage: EXPORT_V4_COVERAGE,
+  sections: [...EXPORT_SECTIONS_V4],
+  omissions: {
+    ...v3Manifest.omissions,
+    personalImportEvidence:
+      'Retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
+    reimport:
+      'Version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+  },
+  sectionTotals: {
+    ...zeroSectionTotals,
+    vndbUploads: { rows: 0, recordBytes: 0 },
+    vndbEvidence: { rows: 0, recordBytes: 0 },
+    anilistUploads: { rows: 0, recordBytes: 0 },
+    anilistEvidence: { rows: 0, recordBytes: 0 },
+  },
+};
+
+export const Version4Empty: Story = {
+  name: 'Version 4 empty section totals (illustrative)',
   parameters: {
     docs: {
       description: {
         story:
-          'No compatible V4 producer manifest or generated request is installed. The visit stays unavailable and offers no evidence file or write action.',
+          'Published V4 inventory and all 21 totals. Provider evidence remains private and inert; recovery is unavailable. This is illustrative, not a native recording.',
       },
     },
   },
   render: () => (
     <Shell>
-      <ExportTerminal stage="unavailable" />
+      <ExportReady
+        empty
+        saveFailed={false}
+        bytesLost={false}
+        manifest={v4Manifest}
+        busy={false}
+        onDownload={() => {}}
+        onReplay={() => {}}
+      />
     </Shell>
   ),
 };

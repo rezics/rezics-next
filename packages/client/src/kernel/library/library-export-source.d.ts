@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { LibraryExportSectionV1, LibraryExportSectionV2, LibraryExportVersion } from './library-export-format.ts';
-export { exportSections, exportSectionsV2, exportSectionsV3 } from './library-export-format.ts';
+export { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
 
 export type JournalDate =
   | { year: number }
@@ -73,11 +73,22 @@ export type JournalExportRecordV3 = Omit<JournalExportRecordV2, 'journal'> & {
 };
 export type JournalExportRecord = JournalExportRecordV2 | JournalExportRecordV3;
 export type ExistingExportRecord = Record<string, unknown> & { section: LibraryExportSectionV1 };
+export type ProviderExportRecord =
+  | { section: 'vndbUploads'; upload_id: string; state: 'active' | 'cancelled'; expires_at: string }
+  | {
+      section: 'anilistUploads';
+      upload_id: string;
+      cancelled: boolean | null;
+      score_format: string | null;
+      row_count: number | null;
+    }
+  | { section: 'vndbEvidence' | 'anilistEvidence'; upload_id: string; ordinal: number; evidence: unknown };
 export type ExportRecord =
   | ExistingExportRecord
   | AnnotationExportRecord
   | ProvenanceExportRecord
-  | JournalExportRecord;
+  | JournalExportRecord
+  | ProviderExportRecord;
 export type ExportSeek = {
   section: number;
   parent: string;

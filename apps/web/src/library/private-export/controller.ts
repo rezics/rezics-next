@@ -108,6 +108,7 @@ export function createExportJourney(input: {
   }
 
   function snapshot(): ExportJourneySnapshot {
+    if (!live()) retire();
     retain();
     const artifact = assembly.current();
     return {
@@ -194,8 +195,8 @@ export function createExportJourney(input: {
     if (response.kind === 'denied') return enterTerminal('denied');
     if (response.kind === 'conflict') return enterTerminal('conflict');
     if (response.kind === 'not-found') return enterTerminal('unavailable');
+    if (stage === 'preparing' || stage === 'capturing') return enterTerminal('unavailable');
     busy = false;
-    if (stage === 'preparing' || stage === 'capturing') stage = 'unavailable';
     retain();
     return emit();
   }
@@ -439,6 +440,7 @@ export function createExportJourney(input: {
   }
 
   function retire(): void {
+    visit.controller.signal.removeEventListener('abort', retire);
     generation += 1;
     stop = true;
     busy = false;
@@ -457,6 +459,8 @@ export function createExportJourney(input: {
     stage = 'coverage';
     retain();
   }
+
+  visit.controller.signal.addEventListener('abort', retire, { once: true });
 
   return {
     snapshot,

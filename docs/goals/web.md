@@ -317,13 +317,14 @@ distinct from public Collection ItemList export and from personal-list import wr
 native coverage, creates only on explicit intent, traverses pages sequentially, assembles a local versioned JSON
 file after the final manifest, and offers download, save retry, replay of the original first cursor, cancellation and
 deliberate restart. Native storage, fences, expiry, limits and admission stay with Commerce. Missing typed methods
-or unsupported versions render unavailable. Decision: new captures use version 3, with the version 2 inventory and
-section totals, and each journal assessment preserves `meaningRevision: 1` and `units` from 0 through 20 or `null`.
-Stored version 1
-and 2 captures retain their original sections, record shapes, manifest fields, byte accounting and cursor epochs;
-missing legacy assessments remain absent. Provider evidence stays unavailable until Commerce publishes the exact V4
-coverage, section order, manifest, cursor epoch and generated request. A V3 capture with provider sections is not
-accepted as V4. Version 3 assessments and version 4 provider evidence remain unsupported by archive recovery, and
+or unsupported versions render unavailable. Decision: admit the published V4 vocabulary through the installed client
+declarations while treating provider records as opaque JSON and replaying cursor tokens unchanged. New captures use
+version 4, appending `vndbUploads`, `vndbEvidence`, `anilistUploads`, and `anilistEvidence` after V3's exact 17 sections.
+All 21 section totals and the original coverage must match before creating a file. V3/V4 journal assessments preserve
+`meaningRevision: 1` and `units` from 0 through 20 or `null`. Stored versions 1, 2 and 3 retain their original sections,
+record shapes, manifest fields, byte accounting and opaque cursor epochs; missing legacy assessments remain absent.
+Native V4 capture/page recordings are not installed in this base; connected producer stories and recorded-byte
+comparisons remain continuation work. Version 3 assessments and version 4 provider evidence remain unsupported by archive recovery, and
 downloading them grants no vote, journal, label or progress action. Bind only the installed `libraryExports` surface;
 do not add a second export engine or copy missing fields from other private reads. The
 [Web consumer guide](../../apps/web/src/library/private-export/README.md) and

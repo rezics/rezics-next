@@ -6388,6 +6388,8 @@
   "library_export_section_occurrences": "你策展的现存成员行。",
   "library_export_section_bangumi": "保留的 Bangumi 上传身份与行证据，包括已存储的提供者标识。",
   "library_export_section_mal": "未过期的 MyAnimeList 上传身份与已索引源行，包括已存储的提供者标识。",
+  "library_export_section_vndb": "未过期的 VNDB 上传标识及保留的解析行，包括已取消的上传。缺失、无效与零值保持区别。",
+  "library_export_section_anilist": "保留的 AniList 上传标识及解析后的来源行，包括已取消的上传。原始标识、评分格式、未知值与不完整日期保持原样。",
   "library_export_section_other": "原生分区 {section}。",
   "library_export_section_journals": "有效 occurrence 的日志会保留原生 occurrence 与会话 ID，并分别记录日志修订和进度修订。报告日期保留部分精度；已清除的日期为 null，空反思也不同于 null。不会推断导入记录与日志之间的关联。版本 3 会添加私有评估，包含含义修订 1 和 0–20 或 null 的单位数；版本 1 和 2 中缺失的评估仍保持缺失。",
   "library_export_section_provenance": "已接受的来源观察会保留原生提供方 ID 与记录 ID。未知、缺失、已清除、私密和来源可见的值彼此有别；来源可见不会发布此资料库。",
