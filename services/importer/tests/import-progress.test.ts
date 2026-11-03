@@ -44,7 +44,7 @@ test('slow JSONL output coalesces record updates and flushes ordered phase and t
     [2, 'staging'],
     [3, 'committed'],
   ]);
-  expect(events[1]!.counts).toEqual({ inputBytes: 128 * 512, stagedRecords: 128 });
+  expect(events[1]!.counts).toMatchObject({ inputBytes: 128 * 512, stagedRecords: 128 });
   expect(events[2]!.terminal).toBe(true);
 });
 

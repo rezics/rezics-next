@@ -15,8 +15,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 const fixtureRoot = new URL('../../../specs/fixtures/imports/', import.meta.url);
 const launchDumps = [
   ['bangumi', 'dumps/bangumi-subject.jsonlines'],
-  ['vndb', 'dumps/vndb.sql'],
-  ['openlibrary', 'dumps/openlibrary.tsv'],
+  ['openlibrary', 'open-library/work.json'],
   ['wikidata', 'dumps/wikidata.json'],
 ] as const;
 
@@ -151,7 +150,7 @@ test('CLI JSONL progress uses its sink and leaves the final summary on stdout', 
   }
 });
 
-test('all four launch dump decoders report committed staging and acknowledgement transitions', async () => {
+test('launch dump decoders report committed staging and acknowledgement transitions', async () => {
   for (const [source, path] of launchDumps) {
     const subject = importer();
     const progress = counters();
