@@ -50,14 +50,14 @@ The native review and HTTP route remain pure. The same Labels module now install
 all require `library_entry:read`, `library_entry:update` and current `personal_library` exposure. Responses are
 `Cache-Control: private, no-store`.
 
-| Method | Input and result |
-| --- | --- |
-| `POST /v1/libraryLabels/{id}:selectConsolidation` | Supply `{sourceLabel,targetLabel,items}` by joining the exact review pages, retaining their order and observations. An idempotency key is required. Returns `{id,digest,expiresAt}`. |
-| `GET /v1/libraryLabelConsolidations/{id}` | Returns immutable captured evidence, original per-item `operations`, current state and accepted partial item results. |
-| `POST /v1/libraryLabelConsolidations/{id}:confirm` | Explicit `{digest}` and an idempotency key bind the captured selection. Returns `{id,digest,confirmed:true}`. |
-| `POST /v1/libraryLabelConsolidations/{id}:apply` | `{ordinal}` applies one selected item, in order. Repeating the ordinal uses its original native assign/unassign receipts. No new client operation key is accepted. |
-| `POST /v1/libraryLabelConsolidations/{id}:cancel` | An idempotency key cancels new effects and returns accepted partial results. |
-| `DELETE /v1/libraryLabelConsolidations/{id}` | An idempotency key removes the finite retained composition; it does not undo accepted effects or remove either label. |
+| Method                                             | Input and result                                                                                                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /v1/libraryLabels/{id}:selectConsolidation`  | Supply `{sourceLabel,targetLabel,items}` by joining the exact review pages, retaining their order and observations. An idempotency key is required. Returns `{id,digest,expiresAt}`. |
+| `GET /v1/libraryLabelConsolidations/{id}`          | Returns immutable captured evidence, original per-item `operations`, current state and accepted partial item results.                                                                |
+| `POST /v1/libraryLabelConsolidations/{id}:confirm` | Explicit `{digest}` and an idempotency key bind the captured selection. Returns `{id,digest,confirmed:true}`.                                                                        |
+| `POST /v1/libraryLabelConsolidations/{id}:apply`   | `{ordinal}` applies one selected item, in order. Repeating the ordinal uses its original native assign/unassign receipts. No new client operation key is accepted.                   |
+| `POST /v1/libraryLabelConsolidations/{id}:cancel`  | An idempotency key cancels new effects and returns accepted partial results.                                                                                                         |
+| `DELETE /v1/libraryLabelConsolidations/{id}`       | An idempotency key removes the finite retained composition; it does not undo accepted effects or remove either label.                                                                |
 
 Selection re-runs bounded native review and rejects changed visible evidence, nonmovable items and substituted
 labels. It captures distinct live parent IDs/revisions, exact source and target assignment incarnations/revisions,
