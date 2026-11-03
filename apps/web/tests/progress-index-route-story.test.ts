@@ -42,9 +42,7 @@ test('the routed Progress story uses constructed response examples without chang
     expect(rows.every((row) => !('unitLabel' in row))).toBe(true);
     const label = sessionsRecording.progressSessions[0]!.subject!.label;
     expect(rows[0]!.subject?.label).toBe(libraryProgressStoryLongSubjectLabel);
-    expect(libraryProgressStoryLongSubjectLabel).toBe(
-      `${label} — ${label} — ${label} — ${label}`,
-    );
+    expect(libraryProgressStoryLongSubjectLabel).toBe(`${label} — ${label} — ${label} — ${label}`);
   } finally {
     setLibraryProgressStoryMode('recorded');
   }
