@@ -16,7 +16,11 @@ import type {
   PublicFilterQueriedObservation,
 } from './public-filter-consumer-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
-import { type FacetNativeOperations, type FacetNativePlan, type FacetNativePageResult } from './facet-discovery-native.ts';
+import {
+  type FacetNativeOperations,
+  type FacetNativePlan,
+  type FacetNativePageResult,
+} from './facet-discovery-native.ts';
 import { createFacetDiscoveryStorage } from './facet-discovery-storage.ts';
 
 type Meter = { -readonly [K in keyof PublicFilterCost]: number };
@@ -150,9 +154,7 @@ export function createFacetNativeOperations(
         const pit = await config.capture(input, 'pit', context);
         if (pit.status !== 'captured' || pit.queried.snapshot.kind !== 'pit') {
           if (pit.status === 'preparing') await config.repair(pit.repair, context).catch(() => {});
-          return pit.status === 'captured'
-            ? { status: 'preparing' as const, repair: pit.repair, cost: pit.cost }
-            : pit;
+          return pit.status === 'captured' ? { status: 'preparing' as const, repair: pit.repair, cost: pit.cost } : pit;
         }
         textObservation = pit.queried;
       }
