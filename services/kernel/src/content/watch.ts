@@ -76,9 +76,10 @@ export async function unwatchThread(dependencies: Dependencies, actor: Actor, th
   if (route === null || ownerRoute === null) throw new ProblemError('not_found');
   await withWritableNoticeRoute(dependencies.pool, ownerRoute, async (client) => {
     await requireLiveAccount(client, actor.accountId);
-    await client.query(
-      `DELETE FROM content.thread_watch WHERE route=$1 AND thread_id=$2 AND watcher_account_id=$3`,
-      [ownerRoute, threadId, actor.accountId],
-    );
+    await client.query(`DELETE FROM content.thread_watch WHERE route=$1 AND thread_id=$2 AND watcher_account_id=$3`, [
+      ownerRoute,
+      threadId,
+      actor.accountId,
+    ]);
   });
 }

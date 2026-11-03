@@ -33,11 +33,10 @@ test('readers can privately watch a visible thread and clear their watch after a
   expect(await f.call(reader, 'DELETE', path)).toMatchObject({ status: 204 });
   expect(
     (
-      await f.db.admin.query('SELECT 1 FROM content.thread_watch WHERE route=$1 AND thread_id=$2 AND watcher_account_id=$3', [
-        routeOf(thread.id),
-        thread.id,
-        reader,
-      ])
+      await f.db.admin.query(
+        'SELECT 1 FROM content.thread_watch WHERE route=$1 AND thread_id=$2 AND watcher_account_id=$3',
+        [routeOf(thread.id), thread.id, reader],
+      )
     ).rows,
   ).toHaveLength(0);
 });
@@ -94,5 +93,7 @@ test('later replies reach current watchers once, and unwatch or a durable prefer
     const page = await eraseAccountNoticesPage({ pool: f.db.pool }, reader, cursor);
     cursor = page.next;
   } while (cursor !== null);
-  expect((await f.db.admin.query('SELECT 1 FROM content.thread_watch WHERE watcher_account_id=$1', [reader])).rows).toHaveLength(0);
+  expect(
+    (await f.db.admin.query('SELECT 1 FROM content.thread_watch WHERE watcher_account_id=$1', [reader])).rows,
+  ).toHaveLength(0);
 }, 120_000);

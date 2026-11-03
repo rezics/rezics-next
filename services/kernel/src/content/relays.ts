@@ -227,5 +227,9 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
 
 /** Default registration supplies the same fully mounted worker Access as Content work. */
 export function contentNoticeEffects(pool: Pool, access: Access): Effect[] {
-  return [createMentionNoticeEffect(pool, access), createReplyNoticeEffect(pool, access), createThreadWatchNoticeEffect(pool, access)];
+  return [
+    createMentionNoticeEffect(pool, access),
+    createReplyNoticeEffect(pool, access),
+    createThreadWatchNoticeEffect(pool, access),
+  ];
 }

@@ -43,7 +43,10 @@ function validateEvent(event: CloudEvent): { source: WatchSource; route: number;
   return { source, route, publishedAt };
 }
 
-async function loadPage(pool: Pool, input: ReturnType<typeof validateEvent>): Promise<{ rows: WatchRow[]; done: boolean }> {
+async function loadPage(
+  pool: Pool,
+  input: ReturnType<typeof validateEvent>,
+): Promise<{ rows: WatchRow[]; done: boolean }> {
   const { source, route, publishedAt } = input;
   return withWritableNoticeRoute(pool, route, async (client) => {
     await client.query(
@@ -73,12 +76,7 @@ async function loadPage(pool: Pool, input: ReturnType<typeof validateEvent>): Pr
   });
 }
 
-async function advancePage(
-  pool: Pool,
-  route: number,
-  postId: string,
-  rows: readonly WatchRow[],
-): Promise<boolean> {
+async function advancePage(pool: Pool, route: number, postId: string, rows: readonly WatchRow[]): Promise<boolean> {
   const last = rows.at(-1);
   const done = rows.length < WATCH_PAGE_SIZE;
   await withWritableNoticeRoute(pool, route, async (client) => {
@@ -112,7 +110,7 @@ async function sourceIsReply(pool: Pool, input: ReturnType<typeof validateEvent>
       revision_id: source.revisionId,
       actor_id: source.actorId,
     });
-    return rows.length === 1;
+    return rows !== null;
   });
 }
 

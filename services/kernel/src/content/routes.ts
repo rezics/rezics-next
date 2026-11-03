@@ -17,7 +17,6 @@ import { restorePost } from './restore-post.ts';
 import { readCurrentRestorationConflict } from './restoration-conflict.ts';
 import { postEraseReceiptAccess } from './operations.ts';
 import { appealRoutes } from './appeal-routes.ts';
-import { threadWatchRoutes } from './watch-routes.ts';
 import { moderationRoutes } from './moderation-routes.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -58,6 +57,7 @@ import { reportRoutes } from './report-routes.ts';
 import { isErasedPlaceholder } from './model.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
+import { readThreadWatchState, unwatchThread, watchThread } from './watch.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
@@ -1414,7 +1414,79 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
     );
 
-  return threadWatchRoutes(routes, dependencies);
+  return routes
+    .get(
+      '/v1/threads/:id/watch',
+      {
+        params,
+        response: {
+          200: withHeaders(t.Object({ watching: t.Boolean() }, { additionalProperties: false }), sessionHeader),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'thread.watch_state',
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const state = await admission.run('normal', job, () =>
+            readThreadWatchState(dependencies, actor, id, job.deadline),
+          );
+          session.record(sessionComponent(state.anchor));
+          set.headers['cache-control'] = 'private, no-store';
+          return { watching: state.watching };
+        } catch (error) {
+          if (error instanceof ReadNotFoundError) throw new ProblemError('not_found');
+          throw error;
+        }
+      },
+    )
+    .put(
+      '/v1/threads/:id/watch',
+      {
+        params,
+        response: { 204: withHeaders(t.Void(), sessionHeader), ...readFailures },
+        detail: {
+          operationId: 'thread.watch',
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const anchor = await admission.run('normal', job, () => watchThread(dependencies, actor, id, job.deadline));
+          session.record(sessionComponent(anchor));
+          set.status = 204;
+        } catch (error) {
+          if (error instanceof ReadNotFoundError) throw new ProblemError('not_found');
+          throw error;
+        }
+      },
+    )
+    .delete(
+      '/v1/threads/:id/watch',
+      {
+        params,
+        response: { 204: t.Void(), ...readFailures },
+        detail: {
+          operationId: 'thread.unwatch',
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id }, actor, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        await admission.run('normal', job, () => unwatchThread(dependencies, actor, id));
+        set.status = 204;
+      },
+    );
 }
 
 export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, dependencies: Dependencies) {
