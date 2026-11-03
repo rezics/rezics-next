@@ -233,6 +233,25 @@ export const MappedCurrentUse: Story = {
   },
 };
 
+export const MappedRefundedPage: Story = {
+  name: 'Buyer, paid receipt with refunded access (constructed responses)',
+  beforeEach() {
+    setMappedCheckoutStory(true);
+    setEntitlementStoryMode('mapped-refunded');
+    return () => {
+      setMappedCheckoutStory(false);
+      setEntitlementStoryMode('active');
+    };
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths['order-paid']} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: m.order_paid(), level: 1 });
+    await canvas.findByText(m.order_entitlement_revoked());
+    await expect(canvas.queryByRole('link', { name: m.benefit_open_reader() })).toBeNull();
+  },
+};
+
 function ReconciliationPreview({ send }: { send: ReconciliationSender }) {
   const order = pendingRecording.order;
   return (
