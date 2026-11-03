@@ -138,31 +138,39 @@ an open ban overrides every independent grant, while public boards and Global bo
 
 `POST /v1/boards/{id}/threads/{threadId}/pin` accepts `{ pinned: boolean }` with an `Idempotency-Key` and returns
 `{ boardId, threadId, pinned, pinPosition }`. It is a desired-state native command: repeating the same request is
-safe, and requesting the current state does not change ordering. At most three threads are pinned on a board. New
-pins lead the section; existing pins keep their position; unpinning compacts the remaining positions. `409 conflict`
-means the three slots are full.
+safe, and requesting the current state does not change ordering. At most five same-board threads are pinned.
+New pins lead the section; existing pins keep their position; unpinning compacts the remaining positions.
+`409 conflict` means the five slots are full. The board row lock serializes competing commands.
 
-The board page response includes `pinnedThreads`, bounded to three, followed by the existing `threads` page. The
-active, hot, newest and oldest feed excludes every pin selected from the same candidate snapshot, so a thread occurs
-in only one section. Sparse progress records every scanned candidate, including pinned and undisclosed candidates.
-The sealed cursor binds `pinned-section-v1`; an earlier listing cursor cannot continue under the changed
-representation. The page query applies to both sections. Pins are projection hints, never visibility authority:
-current board, Realm, thread, opening-post and Access checks disclose each result, and a removed or newly hidden
-thread stays out of both sections.
+Only an initial board page includes current `pinnedThreads` (at most five), newest pin first. Continuations return
+`pinnedThreads: []`. All four sorts exclude the same cohort observed with the initial ordinary candidate range.
+The page query applies to both sections. Sparse progress records every scanned candidate, including pinned and
+undisclosed candidates, and can continue past the fixed 200-candidate window without unbounded refill.
+
+Decision: effective pin/unpin operations increment a board-home `pin_revision` atomically with the slots;
+no-ops, receipt replays, slow mode and feed/rank updates leave it unchanged. The versioned `pinned-cohort-v2`
+cursor authenticates that revision together with board, normalized query, sort, viewer, home epoch and exact ordinary
+keyset. Its scanned key is encrypted, since even a hidden pin may be the last scanned row. No cohort identities or
+client-selected cohort flags appear in its readable payload. Old representations or any changed revision return
+`400 invalid_cursor`: discard the cursor and restart from an initial request. Pin/unpin ABA also requires restart.
+
+Pins are projection hints, never visibility authority: current board, Realm, thread, opening-post and Access checks
+disclose each result. Concealed pins are withheld from both sections and never supply author/body fields. All native
+snapshots release before the final board/Realm read and pin-revision comparison; a changed cohort or home epoch
+fails closed with `invalid_cursor`, even on an initial request. That request can be retried without a cursor.
 
 The command checks current `moderation:takedown` authority on the Realm for a Realm board or the board for a Global
 board. Before receipt lookup, it also rechecks current board, Realm (when present), thread and opening-post reads;
 protected Realm board checks retain current ban and account-standing behavior. A replay repeats these checks. Web
-owns pin controls and consumes the disclosed pin state.
+owns pin controls and restart UI; its existing deduplicating pin-author hydration consumes only disclosed threads.
 
-Pin listing adds one partial-index range for at most three projection rows and the existing bounded disclosure for
-those candidates. A mutation locks one board row, one target row and at most three pinned rows, then updates at most
-four projection rows; the fixed command receipt and event envelope add constant work. This does not enumerate or
-rescore board threads. The order decision is: Board pins are capped at three; new pins lead, existing pins keep
-their order, and unpinning compacts the remaining slots.
+Actual shared callsites: `boards.ts` alone reads the pin projection and uses the created/rank cursor encoders and
+decoders; `board-cursor.test.ts` exercises their format. The mounted `routes.ts` board page and pin command retain
+the existing native bindings. `schemas.ts` bounds both pin responses, and `board-events.ts` registers pin positions
+through five. These schemas change together with the projection; command authority and receipt protocol do not.
 
-Focused outcomes in `test/content/board-pin-http.test.ts` cover moderator, member, banned and hidden-thread behavior,
-cap and order, idempotent requests and sparse continuation.
+Focused outcomes in `test/content/board-pin-http.test.ts` cover capacity races, newest-first ordering, unpin/re-pin,
+initial-only sections, all four ordinary sorts, stale cohorts, sparse continuation and current concealment.
 
 The `readResource` public-eligibility callbacks declare native work through
 `ResourceEligibilityOptions.work.prepare/verify`. Preparation returns the already captured evidence and performs
@@ -1621,12 +1629,24 @@ check uses scales [256, 1024, 4096] with the series rule.
 
 ### Board pins
 
-- **Touches:** One indexed read of at most three pin slots per board page, then bounded disclosure for those threads.
-  A pin command locks one board, its target and at most three current pins; it updates at most four projection rows.
-- **Bound:** Constant rows and statements for a pin or unpin, plus the existing fixed command and Access costs; no
-  thread enumeration or rank refresh. Page work adds at most three candidates to the existing 200-candidate bound.
-- **Focused outcomes:** `test/content/board-pin-http.test.ts` covers moderator, member, banned and hidden-thread cases,
-  cap/order, replay authorization and sparse continuation.
+#### Pin and unpin
+
+- **Touches:** One board row lock, one target and at most five current pin rows; at most six projection writes and
+  one counter update, plus the existing command receipt, Access and registered event envelope.
+- **Bound:** Constant rows/statements; indexed board and slot probes grow logarithmically. No thread enumeration,
+  rank refresh or history reconstruction. True no-ops leave the pin counter unchanged.
+- **Growth check:** Structural fixed-key/slot bound; focused capacity/concurrency outcomes in
+  `test/content/board-pin-http.test.ts`. Broader growth verification is deferred.
+
+#### Initial section and ordinary continuation
+
+- **Touches:** One indexed range of at most five pins in the candidate snapshot; one board revision point read there
+  and another in a released final board/Realm snapshot. Initial pages disclose at most five pin candidates;
+  continuations disclose none. Ordinary work retains its fixed 200-candidate, two-round limit and exact sort key.
+- **Bound:** Constant rows/statements beyond existing disclosure/Access costs, logarithmic indexed probes; no
+  pinned-content cache, unlimited refill or other index. Cursors carry one encrypted key and authenticate one counter.
+- **Growth check:** Structural fixed-window bound; focused sparse continuation beyond 200 raw rows and four-sort
+  traversal in `test/content/board-pin-http.test.ts`. Broader growth verification is deferred.
 
 ### Mention notices
 

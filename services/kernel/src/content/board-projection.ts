@@ -11,6 +11,7 @@ import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
 import type { BoardId, ThreadId } from './model.ts';
 import activePage from './board-rank-page.sql';
 import pinPage from './board-pin-page.sql';
+import pinRevision from './board-pin-revision.sql';
 import page from './page-board-threads.sql';
 import readSourceActivity from './read-source-activity.sql';
 import upsert from './board-rank-upsert.sql';
@@ -49,7 +50,7 @@ const sourceTypes = [
 ] as const;
 const projected = 'com.rezics.content.board-thread.projected.v1';
 const maxPosition = 9223372036854775807n;
-export const MAX_BOARD_PINS = 3;
+export const MAX_BOARD_PINS = 5;
 
 function route(id: string): number {
   const value = routeOf(id);
@@ -67,6 +68,20 @@ export async function readBoardPins(client: Pick<PoolClient, 'query'>, boardId: 
   if (rows.length > MAX_BOARD_PINS || rows.some((row, index) => row.pin_slot !== index + 1))
     throw new Error('Board pin positions are inconsistent');
   return rows.map((row) => row.thread_id);
+}
+
+/** A board-home counter changes only with the pin cohort, never with rank/feed activity.
+ * Call inside the same released native snapshot as the pin range/candidate read. */
+export async function readBoardPinRevision(
+  client: Pick<PoolClient, 'query'>,
+  boardId: BoardId,
+): Promise<string | null> {
+  const parameters = { route: route(boardId), board_id: boardId };
+  const { rows } = await client.query<{ pin_revision: string }>(
+    pinRevision.sql,
+    pinRevision.params.map((name) => parameters[name as keyof typeof parameters]),
+  );
+  return rows[0]?.pin_revision ?? null;
 }
 
 function timestamp(value: string): string {

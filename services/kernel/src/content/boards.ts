@@ -5,7 +5,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import { realmReadEligibility } from '../community/realm.ts';
-import { readBoardPins } from './board-projection.ts';
+import { readBoardPins, readBoardPinRevision } from './board-projection.ts';
 import {
   decodeBoardCursor,
   decodeBoardRankCursor,
@@ -218,12 +218,6 @@ export async function listBoardThreads(
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
   if (sort !== 'newest' && sort !== 'oldest' && sort !== 'active' && sort !== 'hot')
     throw new TypeError('Invalid content cursor');
-  const binding: BoardCursorBinding = {
-    boardId,
-    query,
-    sort,
-    viewer: context.actor,
-  };
   const now = (dependencies.cursorNow ?? Date.now)();
   const decisions = await prepareBoardPageDecisions(dependencies, context);
   const candidateSnapshot = await readBoardPageCandidateSnapshot(
@@ -232,6 +226,15 @@ export async function listBoardThreads(
     context,
     decisions,
     async (client, partition) => {
+      // Pins, revision and the ordinary range share one board-home observation.
+      const pinRevision = await readBoardPinRevision(client, boardId);
+      const binding: BoardCursorBinding = {
+        boardId,
+        query,
+        sort,
+        viewer: context.actor,
+        pinRevision: pinRevision ?? '0',
+      };
       let after: BoardPageAfter | null = null;
       let invalidCursor = false;
       if (input.cursor !== undefined) {
@@ -298,6 +301,8 @@ export async function listBoardThreads(
       return {
         candidates,
         pinnedIds,
+        pinRevision,
+        binding,
         hasMore: candidates.length === 200,
         invalidCursor,
         epoch: partition.epoch,
@@ -309,6 +314,8 @@ export async function listBoardThreads(
   const board = candidateSnapshot.board;
   const boardAnchor = candidateSnapshot.anchor.anchor;
   const selected = candidateSnapshot.candidate;
+  const binding = selected.binding;
+  if (selected.pinRevision === null) throw new ContentNotFoundError();
   if (selected.invalidCursor) throw new TypeError('Invalid content cursor');
   if (selected.epoch !== boardAnchor.epoch) throw new TypeError('Invalid content cursor');
   const candidates: readonly ListedBoardCandidate[] = selected.candidates;
@@ -382,7 +389,7 @@ export async function listBoardThreads(
   const pinnedSelection = await selectBoardThreadCandidates(
     dependencies,
     boardId,
-    selected.pinnedIds,
+    input.cursor === undefined ? selected.pinnedIds : [],
     context,
     decisions,
     query,
@@ -407,6 +414,17 @@ export async function listBoardThreads(
     if (!pinnedFinalState.parentAllowed) throw new ContentNotFoundError();
     pinnedThreads = pinnedItems.flatMap((result) => (result.value?.boardId === boardId ? [result.value] : []));
   }
+  // Release every thread/parent disclosure snapshot before taking the final
+  // board-home observation. A changed cohort (including pin/unpin ABA) cannot
+  // issue a token under an old exclusion set. Parent access is current here too.
+  const finalObservation = await readBoardPageCandidateSnapshot(dependencies, boardId, context, decisions, (client) =>
+    readBoardPinRevision(client, boardId),
+  );
+  if (!finalObservation) throw new ContentNotFoundError();
+  if (finalObservation.candidate !== selected.pinRevision || finalObservation.anchor.anchor.epoch !== selected.epoch)
+    throw new TypeError('Invalid content cursor');
+  anchors.push(finalObservation.anchor.anchor);
+
   const hasVisibleMore = current.length > limit;
   const more = hasVisibleMore || scanned < candidates.length || selected.hasMore;
   const cursorAfter =

@@ -27,6 +27,7 @@ import lockBoard from './board-pin-lock-board.sql';
 import lockTarget from './board-pin-lock-target.sql';
 import lockSlots from './board-pin-lock-slots.sql';
 import setSlot from './board-pin-set.sql';
+import advanceRevision from './board-pin-advance.sql';
 import { MAX_BOARD_PINS } from './board-projection.ts';
 
 export type BoardPinDependencies = Pick<ContentReadDependencies, 'pool' | 'access'> & {
@@ -42,7 +43,7 @@ export type BoardPinValue = Readonly<{
 
 export class BoardPinLimitError extends Error {
   constructor() {
-    super('A board can have at most three pinned threads');
+    super('A board can have at most five pinned threads');
     this.name = 'BoardPinLimitError';
   }
 }
@@ -292,6 +293,16 @@ export async function setBoardThreadPin(
           );
         }
         pinPosition = null;
+      }
+
+      // The board lock serializes capacity and this counter in the same command
+      // transaction. Desired-state no-ops and receipt replays keep traversals valid.
+      if (input.pinned !== Boolean(current)) {
+        const advanced = await tx.query(
+          advanceRevision.sql,
+          advanceRevision.params.map((name) => boardParameters[name as keyof typeof boardParameters]),
+        );
+        if (advanced.rows.length !== 1) throw new ContentNotFoundError();
       }
 
       const value: BoardPinValue = {
