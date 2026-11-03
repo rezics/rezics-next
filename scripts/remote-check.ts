@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Runs a command against a copy of a workspace on a development check host, so the check's containers and test lanes
-// stay off the machine the agents run on.
+// run inside an admitted, resource-bounded check run, including loopback placement.
 // Runs share the host package cache through hardlinks. An in-place write into an installed package fails the run and
 // removes its cache entry; patch dependencies through patchedDependencies in package.json, never at run time.
 //
@@ -22,7 +22,7 @@
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--max-ms <n>] [--gate] <workspace> -- <command...>
 //
-// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot }] }.
+// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot, performance: true }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
@@ -72,7 +72,8 @@ import {
   CHECK_HOST_SUPERVISOR_MARKER_SCHEMA,
   checkHostRunSliceUnitName,
   checkHostScopeUnitStem,
-  PERFORMANCE_HOST_NAMES,
+  CHECK_HOST_NAME_PATTERN,
+  performanceHosts,
 } from './check-placement.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
@@ -227,12 +228,15 @@ export type Host = {
   cpuQuotaPercent: number;
   slots: number;
   fallback?: boolean;
+  performance?: boolean;
   processorsPerSlot: number;
 };
 
+export type PinnedBun = { binary: string; version: string; revision: string };
+
 export type RemoteCheck = {
   hosts: Host[];
-  /** Heavy checks are limited to the two performance-approved hosts. */
+  /** An optional narrowing of the configured performance pool. */
   allowedHosts?: string[];
   workspace: string;
   cwd?: string;
@@ -299,6 +303,13 @@ export type RemoteCheck = {
    * the run directory is removed. A path that is not on the host is skipped.
    */
   returns?: string[];
+  /**
+   * Installed bun artifact root when `workspace` is a frozen snapshot without `node_modules`.
+   * Pin identity still comes from the candidate workspace package.json.
+   */
+  runtimeProducer?: string;
+  /** Admitted candidate runtime; when set, it must match the candidate pin and producer artifact. */
+  runtime?: PinnedBun;
 };
 
 export type RemotePreparedInputsEvidence = {
@@ -567,23 +578,29 @@ export function parseCommandPhases(contents: string): { durations: Record<string
   for (const phase of open.keys()) problems.push(`unmatched start for ${phase}`);
   return { durations, problems };
 }
-let pinnedBun: { version: string; revision: string } | undefined;
+const pinnedBunByIdentity = new Map<string, PinnedBun>();
 
-/** Resolve an installed pinned package through normal ancestor lookup, without installing into frozen source. */
-export function repositoryBun(root: string): { binary: string; version: string; revision: string } {
-  const manifest = join(root, 'package.json');
+function candidateBunPin(manifest: string): string {
   const pin = JSON.parse(readFileSync(manifest, 'utf8')).packageManager as unknown;
   if (typeof pin !== 'string' || !/^bun@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(pin))
     throw new Error(`pinned Bun: ${manifest} packageManager must pin an exact Bun version`);
+  return pin;
+}
+
+/** Resolve an installed pinned package from the candidate or an explicit producer, without ancestor lookup. */
+export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBun {
+  const manifest = join(resolve(pinRoot), 'package.json');
+  const pin = candidateBunPin(manifest);
   const version = pin.slice(4);
-  let packagePath: string;
-  try {
-    packagePath = Bun.resolveSync('bun/package.json', root);
-  } catch {
+  const producer = resolve(artifactRoot);
+  const packagePath = join(producer, 'node_modules/bun/package.json');
+  const key = `${pin}\0${packagePath}`;
+  const cached = pinnedBunByIdentity.get(key);
+  if (cached) return cached;
+  if (!existsSync(packagePath))
     throw new Error(
-      `pinned Bun: absent installed package for ${pin}; producer=${root}; install dependencies in the launch checkout, not the frozen source`,
+      `pinned Bun: absent installed package for ${pin}; producer=${producer}; install dependencies in the candidate or its producer, not the frozen source`,
     );
-  }
   const installed = JSON.parse(readFileSync(packagePath, 'utf8')) as { version?: string };
   // npm adds build metadata to canary package versions; packageManager may omit that metadata.
   if (installed.version !== version && !(!version.includes('+') && installed.version?.split('+')[0] === version))
@@ -591,7 +608,8 @@ export function repositoryBun(root: string): { binary: string; version: string; 
       `pinned Bun: package identity mismatch for ${pin}; package=${packagePath}; installed=${installed.version}`,
     );
   const binary = join(dirname(packagePath), 'bin/bun.exe');
-  if (!existsSync(binary)) throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${root}`);
+  if (!existsSync(binary))
+    throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${producer}`);
   let output: string;
   try {
     const result = Bun.spawnSync(
@@ -608,7 +626,7 @@ export function repositoryBun(root: string): { binary: string; version: string; 
     output = result.stdout.toString().trim();
   } catch (error) {
     throw new Error(
-      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${root}; ${error instanceof Error ? error.message : error}`,
+      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${producer}; ${error instanceof Error ? error.message : error}`,
     );
   }
   let identity: { version?: unknown; revision?: unknown };
@@ -632,14 +650,22 @@ export function repositoryBun(root: string): { binary: string; version: string; 
     throw new Error(
       `pinned Bun: runtime identity mismatch for ${pin}; binary=${binary}; version=${identity.version}; revision=${identity.revision}`,
     );
-  return { binary, version, revision: identity.revision as string };
+  const resolved = { binary, version, revision: identity.revision as string };
+  pinnedBunByIdentity.set(key, resolved);
+  return resolved;
 }
 
-/** Resolve the repository-pinned Bun only when a remote run is actually generated. */
-function getPinnedBun(): { version: string; revision: string } {
-  if (pinnedBun) return pinnedBun;
-  pinnedBun = repositoryBun(resolve(import.meta.dir, '..'));
-  return pinnedBun;
+/** Candidate pin and producer artifact, before placement, upload, or a held host slot. */
+function admitRemoteRuntime(options: Pick<RemoteCheck, 'workspace' | 'runtimeProducer' | 'runtime'>): PinnedBun {
+  const admitted = repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
+  if (
+    options.runtime &&
+    (options.runtime.version !== admitted.version || options.runtime.revision !== admitted.revision)
+  )
+    throw new Error(
+      `pinned Bun: supplied runtime does not match the candidate pin; supplied=${options.runtime.version}/${options.runtime.revision}; admitted=${admitted.version}/${admitted.revision}`,
+    );
+  return admitted;
 }
 
 /** Transport discriminator only. Source/binding admission and the child's full schema remain authoritative. */
@@ -675,8 +701,7 @@ export async function transportLifecycleControl(
   run: string,
   request: LifecycleHostControl,
 ): Promise<string> {
-  if (!(PERFORMANCE_HOST_NAMES as readonly string[]).includes(host.name))
-    throw new Error('lifecycle: unapproved control host');
+  if (performanceHosts([host]).length === 0) throw new Error('lifecycle: unapproved control host');
   const script = await lifecycleControlScript(run, request);
   const connection = randomUUID();
   try {
@@ -892,17 +917,19 @@ export function readHosts(file: string): Host[] {
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as { hosts?: unknown };
   if (!Array.isArray(parsed.hosts) || parsed.hosts.length === 0) throw new Error(`${file} lists no hosts`);
   return parsed.hosts.map((entry: Record<string, unknown>, index) => {
-    const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback } = entry;
+    const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback, performance } = entry;
     const processorsPerSlot = entry.processorsPerSlot === undefined ? CHECK_SLOT_PROCESSORS : entry.processorsPerSlot;
     // An address starting with a dash would be read as an ssh option.
     if (typeof address !== 'string' || !/^[\w.-]+@[\w.:-]+$/.test(address))
       throw new Error(`host ${index}: bad address`);
-    if (typeof name !== 'string' || !name) throw new Error(`host ${index}: name is required`);
+    if (typeof name !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(name))
+      throw new Error(`host ${index}: name is required`);
     if (typeof identity !== 'string' || !identity) throw new Error(`host ${name}: identity is required`);
     if (typeof memoryMaxGiB !== 'number' || !(memoryMaxGiB > 0)) throw new Error(`host ${name}: bad memoryMaxGiB`);
     if (typeof cpuQuotaPercent !== 'number' || !(cpuQuotaPercent > 0))
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
+    if (performance !== undefined && typeof performance !== 'boolean') throw new Error(`host ${name}: bad performance`);
     if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
     if (typeof processorsPerSlot !== 'number' || !Number.isFinite(processorsPerSlot) || processorsPerSlot <= 0)
       throw new Error(`host ${name}: bad processorsPerSlot`);
@@ -914,6 +941,7 @@ export function readHosts(file: string): Host[] {
       cpuQuotaPercent,
       slots: slots as number,
       ...(fallback ? { fallback: true } : {}),
+      ...(performance === undefined ? {} : { performance }),
       processorsPerSlot,
     };
   });
@@ -1656,7 +1684,7 @@ def validate_cache_tree(root,name):
     return True
 
 def validate_producer_controls(root,run,host,stage):
-    if not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'],run) or not isinstance(host,str) or host not in SUPERVISOR_SCHEMA['hosts']:
+    if not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'],run) or not isinstance(host,str) or not re.fullmatch(SUPERVISOR_SCHEMA['hostNamePattern'],host):
         raise SystemExit('producer control run identity is invalid')
     try: root_info=os.lstat(root)
     except OSError: raise SystemExit('producer control workspace is unavailable')
@@ -2648,7 +2676,7 @@ def lifetime():
     limit_ms = int(limit_ms)
     if not 0 < limit_ms <= 7200000:
         raise RuntimeError('invalid host lifetime')
-    if host not in SUPERVISOR_SCHEMA['hosts'] or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
+    if not re.fullmatch(SUPERVISOR_SCHEMA['hostNamePattern'],host) or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
         raise RuntimeError('invalid host lifetime identity')
     root = Path(directory)
     # Capture producer code before the command can modify its private wrapper files.
@@ -3067,6 +3095,7 @@ export function runScript(
   cwd: string,
   command: string[],
   hostName: string,
+  runtime: Pick<PinnedBun, 'version' | 'revision'>,
   progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
   priorityClass = 'ordinary',
   preparationTimeoutMs = configuredTimeout(
@@ -3082,7 +3111,7 @@ export function runScript(
   expectedSourceSha256?: string,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
-  const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
+  const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
   const gitManifestPath =
@@ -3615,7 +3644,9 @@ type RankedHost = {
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
-  const processorSlots = Math.floor(probe.sliceProcessors / host.processorsPerSlot);
+  const processorSlots = Math.floor(
+    Math.min(probe.sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot,
+  );
   return Math.min(host.slots, processorSlots);
 }
 
@@ -4157,17 +4188,17 @@ type HostProvider = () => Host[];
 type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
 
 /** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
-function liveHosts(
-  initial: Host[],
-  file?: string,
-  requested: readonly string[] = PERFORMANCE_HOST_NAMES,
-): HostProvider {
-  const allowed = new Set(requested.filter((name) => (PERFORMANCE_HOST_NAMES as readonly string[]).includes(name)));
-  const eligible = (hosts: Host[]) => hosts.filter(({ name }) => allowed.has(name));
+function liveHosts(initial: Host[], file?: string, requested?: readonly string[]): HostProvider {
+  const allowed = requested === undefined ? undefined : new Set(requested);
+  const eligible = (hosts: Host[]) => performanceHosts(hosts).filter(({ name }) => !allowed || allowed.has(name));
   let lastValid = eligible(initial);
   let reportedInvalidRewrite = false;
+  const available = () => {
+    if (lastValid.length === 0) throw new Error('remote-check: no performance-approved host is configured');
+    return lastValid;
+  };
   return () => {
-    if (!file) return lastValid;
+    if (!file) return available();
     try {
       lastValid = eligible(readHosts(file));
     } catch (error) {
@@ -4177,7 +4208,7 @@ function liveHosts(
         reportedInvalidRewrite = true;
       }
     }
-    return lastValid;
+    return available();
   };
 }
 
@@ -5765,11 +5796,11 @@ export async function reconcileRemoteRun(
   signal: AbortSignal = new AbortController().signal,
 ): Promise<RemoteCheckSettlement> {
   const { host: hostName, run: runId } = options.physical;
-  if (!(PERFORMANCE_HOST_NAMES as readonly string[]).includes(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
+  if (!new RegExp(CHECK_HOST_NAME_PATTERN).test(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
     throw new Error('remote-check: reconciliation requires a known original host and run identity');
   if (options.allowedHosts && !options.allowedHosts.includes(hostName))
     throw new Error('remote-check: reconciliation host is outside the approved host set');
-  const host = options.hosts.find(({ name }) => name === hostName);
+  const host = performanceHosts(options.hosts).find(({ name }) => name === hostName);
   if (!host) throw new Error(`remote-check: original host ${hostName} is unavailable for reconciliation`);
   const prepared: PreparedRun = {
     host,
@@ -5998,6 +6029,7 @@ async function runLeased(
         options.cwd ?? '.',
         options.command,
         host.name,
+        admitRemoteRuntime(options),
         options.progressIntervalMs,
         options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
         configuredTimeout(
@@ -6260,7 +6292,7 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
+  admitRemoteRuntime(options); // Local runtime verification precedes placement/upload/admission, never a held host slot.
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) =>
@@ -6406,7 +6438,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  getPinnedBun();
+  admitRemoteRuntime(options);
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) =>
@@ -6419,6 +6451,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
 
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
+  admitRemoteRuntime(options);
   return withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
   );
@@ -6432,7 +6465,7 @@ async function tryRemoteCheckOwned(
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  getPinnedBun();
+  admitRemoteRuntime(options);
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
@@ -6524,7 +6557,7 @@ function parse(argv: string[]): RemoteCheck {
   let maxMs: number | undefined;
   let gate = false;
   let returns: string[] | undefined;
-  let allowedHosts: string[] = [...PERFORMANCE_HOST_NAMES];
+  let allowedHosts: string[] | undefined;
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
@@ -6542,13 +6575,10 @@ function parse(argv: string[]): RemoteCheck {
     }
     if (flag === '--allowed-hosts') {
       const value = rest.shift();
-      if (!value) throw new Error('--allowed-hosts needs a comma-separated a/b host list');
+      if (!value) throw new Error('--allowed-hosts needs a comma-separated host list');
       allowedHosts = value.split(',');
-      if (
-        allowedHosts.length === 0 ||
-        allowedHosts.some((name) => !(PERFORMANCE_HOST_NAMES as readonly string[]).includes(name))
-      )
-        throw new Error('--allowed-hosts may contain only a and b');
+      if (allowedHosts.length === 0 || allowedHosts.some((name) => !new RegExp(CHECK_HOST_NAME_PATTERN).test(name)))
+        throw new Error('--allowed-hosts contains an invalid host name');
       continue;
     }
     if (flag === '--gate') {
@@ -6602,7 +6632,7 @@ function parse(argv: string[]): RemoteCheck {
   const cancellation = executionCancellationFromEnvironment();
   return {
     hosts: readHosts(hostsFile),
-    allowedHosts,
+    ...(allowedHosts === undefined ? {} : { allowedHosts }),
     ...(cancellation === undefined ? {} : { cancellation }),
     completed: cliPhysicalReceipt,
     workspace,

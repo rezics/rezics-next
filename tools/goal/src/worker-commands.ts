@@ -98,7 +98,11 @@ export async function runWorkerCommand(
   const runtime =
     options.runtime ??
     (!options.store && !options.tasks && !options.landing && !options.inbox ? createRuntime({ settings }) : undefined);
-  const store = runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(databasePath));
+  const store =
+    runtime?.store ??
+    options.store ??
+    options.tasks?.store ??
+    new WorkerStore(openDb(databasePath, settings.policy?.storage), settings.policy);
   const tasks = runtime?.tasks ?? options.tasks ?? new WorkerTasks(settings, store);
   const print = options.print ?? console.log;
   const job =
@@ -156,6 +160,7 @@ export async function runWorkerCommand(
                 (id) => (dependencies.find((dependency) => dependency.id === id)?.ready ? 'merged' : undefined),
                 Date.now(),
                 settings.stateDirectory,
+                settings.policy,
               ) ?? {
                 reason: 'start',
               })
@@ -238,7 +243,7 @@ export async function runWorkerCommand(
       const { flow, since, json } = parsedArguments;
       if (flow) {
         const now = new Date();
-        const metrics = lifecycleMetrics(store.db, now);
+        const metrics = lifecycleMetrics(store.db, now, settings.policy);
         const result = {
           ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
           lifecycle: metrics,

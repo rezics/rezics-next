@@ -1,3 +1,5 @@
+import { gitOutputError, policyGit } from './merge.ts';
+import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -11,15 +13,15 @@ import type { Brief, Settings, Task } from './types.ts';
 export type ModuleWorkspace = { module: string; branch: string; worktree: string; base: string };
 const glob = (path: string): boolean => /[*?]/.test(path);
 /** Conservative glob containment; never guess that a broader task glob fits a module. */
-function inside(path: string, patterns: readonly string[]): boolean {
+function inside(path: string, patterns: readonly string[], policy = defaultPolicy.brief): boolean {
   return patterns.some(
     (pattern) =>
       path === pattern ||
-      (!glob(path) && matchesPath(path, [pattern])) ||
+      (!glob(path) && matchesPath(path, [pattern], policy)) ||
       (pattern.endsWith('/**') && (path === pattern.slice(0, -3) || path.startsWith(pattern.slice(0, -2)))),
   );
 }
-export function readWebModules(value: unknown): Record<string, string[]> {
+export function readWebModules(value: unknown, policy = defaultPolicy.brief): Record<string, string[]> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('sharedWebModules must be a module to path-globs object');
   const modules: Record<string, string[]> = {};
@@ -28,31 +30,36 @@ export function readWebModules(value: unknown): Record<string, string[]> {
       throw new Error('invalid shared module');
     for (const path of paths) {
       if (typeof path !== 'string') throw new Error('invalid module path');
-      validatePath(path);
+      validatePath(path, policy);
     }
     modules[module] = [...paths];
   }
   const entries = Object.entries(modules);
   for (const [i, [, paths]] of entries.entries())
     for (const [, other] of entries.slice(i + 1))
-      if (paths.some((p) => other.some((q) => pathsOverlap(p, q)))) throw new Error('shared modules overlap');
+      if (paths.some((p) => other.some((q) => pathsOverlap(p, q, policy)))) throw new Error('shared modules overlap');
   return modules;
 }
 export function webModule(brief: Brief, settings: Settings): string | undefined {
   if (brief.target || !brief.paths.length) return;
   const modules = Object.entries(settings.sharedWebModules ?? {}).filter(([, patterns]) =>
-    brief.paths.every((path) => inside(path, patterns)),
+    brief.paths.every((path) => inside(path, patterns, settings.policy?.brief)),
   );
   return modules.length === 1 ? modules[0]![0] : undefined;
 }
 function git(cwd: string, ...args: string[]): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || 'git failed');
-  return result.stdout.trimEnd();
+  return policyGit(cwd, args);
 }
-export function isAncestor(cwd: string, commit: string, head: string): boolean {
+export function isAncestor(cwd: string, commit: string, head: string, policy = defaultPolicy.merge): boolean {
   const args = ['merge-base', '--is-ancestor', commit, head];
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+  });
+  const overflow = gitOutputError(result, policy.gitBufferBytes);
+  if (overflow) throw overflow;
   if (result.status === 0) return true;
   if (result.status === 1) return false;
   const cause =
@@ -62,15 +69,23 @@ export function isAncestor(cwd: string, commit: string, head: string): boolean {
   throw new Error(`git ${args.join(' ')} failed: ${cause}`);
 }
 /** Git's trailer parser excludes matching text in the subject or ordinary message body. */
-export function workspaceCommits(cwd: string, base: string, head = 'HEAD'): Map<string, string[]> {
+export function workspaceCommits(
+  cwd: string,
+  base: string,
+  head = 'HEAD',
+  policy = defaultPolicy.merge,
+): Map<string, string[]> {
   const byTask = new Map<string, string[]>();
-  const log = git(
+  const log = policyGit(
     cwd,
-    'log',
-    '--reverse',
-    '--no-merges',
-    '--format=%H%x09%(trailers:key=Goal-Task,valueonly,separator=%x09)',
-    `${base}..${head}`,
+    [
+      'log',
+      '--reverse',
+      '--no-merges',
+      '--format=%H%x09%(trailers:key=Goal-Task,valueonly,separator=%x09)',
+      `${base}..${head}`,
+    ],
+    policy,
   );
   for (const line of log.split('\n')) {
     const [commit, ...tasks] = line.split('\t');
@@ -80,14 +95,18 @@ export function workspaceCommits(cwd: string, base: string, head = 'HEAD'): Map<
   }
   return byTask;
 }
-export function taskCommits(task: Task, head = 'HEAD'): string[] {
-  return workspaceCommits(task.worktree, task.base, head).get(task.id) ?? [];
+export function taskCommits(task: Task, head = 'HEAD', policy = defaultPolicy.merge): string[] {
+  return workspaceCommits(task.worktree, task.base, head, policy).get(task.id) ?? [];
 }
-export function taskChangedPaths(task: Task, head = 'HEAD'): string[] {
+export function taskChangedPaths(task: Task, head = 'HEAD', policy = defaultPolicy.merge): string[] {
   return [
     ...new Set(
-      taskCommits(task, head).flatMap((commit) =>
-        git(task.worktree, 'diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', commit)
+      taskCommits(task, head, policy).flatMap((commit) =>
+        policyGit(
+          task.worktree,
+          ['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', commit],
+          policy,
+        )
           .split('\0')
           .filter(Boolean),
       ),
@@ -97,10 +116,14 @@ export function taskChangedPaths(task: Task, head = 'HEAD'): string[] {
 
 /** Workers edit and commit directly. The module lease only guards idle dev merges against worker launch. */
 export class WorkspaceController {
+  private git(cwd: string, ...args: string[]): string {
+    return policyGit(cwd, args, this.settings.policy?.merge);
+  }
+
   constructor(
     readonly settings: Pick<
       Settings,
-      'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'sharedWebModules'
+      'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'sharedWebModules' | 'policy'
     >,
     readonly store: WorkerStore,
   ) {
@@ -127,7 +150,7 @@ export class WorkspaceController {
       base,
     };
     mkdirSync(dirname(workspace.worktree), { recursive: true });
-    git(this.settings.mainCheckout, 'worktree', 'add', '-b', workspace.branch, workspace.worktree, base);
+    this.git(this.settings.mainCheckout, 'worktree', 'add', '-b', workspace.branch, workspace.worktree, base);
     this.store.db.query('INSERT INTO module_workspaces VALUES (?,?)').run(module, JSON.stringify(workspace));
     return workspace;
   }
@@ -136,11 +159,13 @@ export class WorkspaceController {
     let lease: DirectoryLease;
     for (;;) {
       try {
-        lease = acquireDirectoryLease(path);
+        lease = acquireDirectoryLease(path, this.settings.policy?.leases);
         break;
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise((resolve) =>
+          setTimeout(resolve, (this.settings.policy ?? defaultPolicy).leases.workspacePollMs),
+        );
       }
     }
     try {
@@ -167,14 +192,14 @@ export class WorkspaceController {
                 (attempt.process !== null && sameProcess(attempt.process)),
             ),
       );
-    if (busy || git(workspace.worktree, 'status', '--porcelain')) return false;
+    if (busy || this.git(workspace.worktree, 'status', '--porcelain')) return false;
     const dev = `refs/heads/${this.settings.integrationBranch}`;
-    if (isAncestor(workspace.worktree, dev, 'HEAD')) return true;
+    if (isAncestor(workspace.worktree, dev, 'HEAD', this.settings.policy?.merge)) return true;
     try {
-      git(workspace.worktree, 'merge', '--no-edit', dev);
+      this.git(workspace.worktree, 'merge', '--no-edit', dev);
     } catch (error) {
       try {
-        git(workspace.worktree, 'merge', '--abort');
+        this.git(workspace.worktree, 'merge', '--abort');
       } catch (abortError) {
         throw new AggregateError(
           [error, abortError],
@@ -189,13 +214,17 @@ export class WorkspaceController {
   /** Publication preserves source commits, so attribution is ancestry, never a whole-branch diff. */
   integrated(module: string, dev: string): Task[] {
     const workspace = this.workspace(module);
-    const commits = workspaceCommits(workspace.worktree, workspace.base);
+    const commits = workspaceCommits(workspace.worktree, workspace.base, undefined, this.settings.policy?.merge);
     const integrated: Task[] = [];
     for (const task of this.store
       .tasks()
       .filter((task) => task.workspace?.module === module && !['cancelled', 'merged'].includes(task.state))) {
       const own = commits.get(task.id) ?? [];
-      if (!own.length || !own.every((commit) => isAncestor(workspace.worktree, commit, dev))) continue;
+      if (
+        !own.length ||
+        !own.every((commit) => isAncestor(workspace.worktree, commit, dev, this.settings.policy?.merge))
+      )
+        continue;
       // A stopped worker may have been integrated by a peer's earlier landing. Do not rewrite its terminal
       // attempt or move an already recorded integration to an unrelated, later dev head.
       if (

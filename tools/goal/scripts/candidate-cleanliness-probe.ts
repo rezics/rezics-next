@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
+import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
@@ -14,7 +16,7 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import {
   assertCandidateIntegrity,
-  CONTROL_PLANE_CHECKS,
+  controlPlaneChecks,
   failingTestFiles,
   runIntegrationChecks,
 } from '../src/merge-train.ts';
@@ -38,14 +40,11 @@ type CandidateSnapshot = {
   untracked: string[];
 };
 
-const OUTPUT_LIMIT = 1024 * 1024;
-const MAX_PATHS = 64;
-
 function git(cwd: string, args: readonly string[]): GitResult {
   const result = spawnSync('git', [...args], {
     cwd,
     encoding: 'utf8',
-    maxBuffer: OUTPUT_LIMIT,
+    maxBuffer: scriptPolicy().candidateProbe.gitBufferBytes,
   });
   return {
     status: result.status,
@@ -64,7 +63,8 @@ function gitText(cwd: string, ...args: string[]): string {
 }
 
 function gitDetails(result: GitResult): string {
-  const bounded = (value: string) => JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, 800));
+  const bounded = (value: string) =>
+    JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, scriptPolicy().candidateProbe.gitDetailCharacters));
   return [
     `exit=${result.status === null ? 'null' : result.status}`,
     `signal=${result.signal ?? 'none'}`,
@@ -90,8 +90,10 @@ function statusPaths(result: GitResult): string[] {
 
 function boundedPaths(values: readonly string[]): string[] {
   return [
-    ...values.slice(0, MAX_PATHS),
-    ...(values.length > MAX_PATHS ? [`… ${values.length - MAX_PATHS} omitted`] : []),
+    ...values.slice(0, scriptPolicy().candidateProbe.paths),
+    ...(values.length > scriptPolicy().candidateProbe.paths
+      ? [`… ${values.length - scriptPolicy().candidateProbe.paths} omitted`]
+      : []),
   ];
 }
 
@@ -99,7 +101,7 @@ function sanitizedDetail(value: unknown): string {
   return (value instanceof Error ? value.message : String(value))
     .replace(/(token|password|secret|api[_-]?key)\s*[=:]\s*[^\s,;]+/gi, '$1=[redacted]')
     .replace(/[\r\n\t]+/g, ' ')
-    .slice(0, 1200);
+    .slice(0, scriptPolicy().candidateProbe.diagnosticCharacters);
 }
 
 function safeEnvironment(): NodeJS.ProcessEnv {
@@ -161,7 +163,7 @@ function assertNoOutsideTempUntracked(snapshot: CandidateSnapshot, phase: string
 
 function boundary(cwd: string, expected: string, phase: string, evidencePath: string): CandidateSnapshot {
   const snapshot = takeSnapshot(cwd, phase, evidencePath);
-  assertCandidateIntegrity(cwd, expected, phase, evidencePath);
+  assertCandidateIntegrity(cwd, expected, phase, evidencePath, undefined, scriptPolicy().integration);
   assertNoOutsideTempUntracked(snapshot, phase);
   return snapshot;
 }
@@ -277,7 +279,7 @@ async function compareSuiteFailures(
   evidencePath: string,
   checkLog: string,
 ): Promise<boolean> {
-  const suite = CONTROL_PLANE_CHECKS.at(-1)!;
+  const suite = controlPlaneChecks(scriptPolicy().controlPlane).at(-1)!;
   if (result.passed || result.timedOut || JSON.stringify(result.failedCommand) !== JSON.stringify(suite))
     return result.passed;
 
@@ -288,7 +290,7 @@ async function compareSuiteFailures(
   }
 
   const candidateRunner = instrumentedGate(
-    gateRunner(600_000, isolatedState),
+    gateRunner(scriptPolicy().controlPlane.checkTimeoutMs, isolatedState, undefined, undefined, scriptPolicy().merge),
     candidateHead,
     evidencePath,
     'candidate failing-file reruns',
@@ -296,7 +298,7 @@ async function compareSuiteFailures(
   const branchFailures: { file: string; output: string }[] = [];
   for (const file of files) {
     const one = await runCommands(
-      [['bun', 'test', '--timeout', '30000', file]],
+      [['bun', 'test', '--timeout', String(scriptPolicy().controlPlane.testTimeoutMs), file]],
       candidateRoot,
       checkLog,
       evidencePath,
@@ -323,13 +325,13 @@ async function compareSuiteFailures(
     installIsolatedLocalConfig(clone, baselineRoot, baselineState);
     boundary(baselineRoot, base, 'base initial checkout', evidencePath);
     const baselineRunner = instrumentedGate(
-      gateRunner(600_000, baselineState),
+      gateRunner(scriptPolicy().controlPlane.checkTimeoutMs, baselineState, undefined, undefined, scriptPolicy().merge),
       base,
       evidencePath,
       'base comparison installs',
     );
     const installs = await runCommands(
-      CONTROL_PLANE_CHECKS.slice(0, 2),
+      controlPlaneChecks(scriptPolicy().controlPlane).slice(0, 2),
       baselineRoot,
       baselineLog,
       evidencePath,
@@ -352,13 +354,19 @@ async function compareSuiteFailures(
         continue;
       }
       const runner = instrumentedGate(
-        gateRunner(600_000, baselineState),
+        gateRunner(
+          scriptPolicy().controlPlane.checkTimeoutMs,
+          baselineState,
+          undefined,
+          undefined,
+          scriptPolicy().merge,
+        ),
         base,
         evidencePath,
         `base test ${failure.file}`,
       );
       const baseline = await runCommands(
-        [['bun', 'test', '--timeout', '30000', failure.file]],
+        [['bun', 'test', '--timeout', String(scriptPolicy().controlPlane.testTimeoutMs), failure.file]],
         baselineRoot,
         baselineLog,
         evidencePath,
@@ -388,7 +396,15 @@ async function compareSuiteFailures(
   }
 }
 
-export async function runCandidateCleanlinessProbe(root = resolve(import.meta.dir, '../../..')): Promise<void> {
+export async function runCandidateCleanlinessProbe(
+  root = resolve(import.meta.dir, '../../..'),
+  policy?: ControlPolicy,
+): Promise<void> {
+  const sourceSettings = loadSettings({ cwd: resolve(root), env: safeEnvironment() });
+  return withScriptPolicy(policy ?? sourceSettings.policy ?? defaultPolicy, () => runCandidateProbe(root));
+}
+
+async function runCandidateProbe(root: string): Promise<void> {
   const worktreeRoot = resolve(root);
   const sourceRoot = mainCheckout(worktreeRoot);
   const sourceHead = gitText(worktreeRoot, 'rev-parse', 'HEAD');
@@ -408,7 +424,7 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
   };
   if (metadata.sourceTreeStatus)
     throw new Error(
-      `Probe source worktree must be clean before cloning candidate: ${metadata.sourceTreeStatus.slice(0, 500)}`,
+      `Probe source worktree must be clean before cloning candidate: ${metadata.sourceTreeStatus.slice(0, scriptPolicy().candidateProbe.statusCharacters)}`,
     );
 
   const evidenceDirectory = join(worktreeRoot, '.temp/goal');
@@ -470,13 +486,13 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     });
 
     const installRunner = instrumentedGate(
-      gateRunner(600_000, isolatedState),
+      gateRunner(scriptPolicy().controlPlane.checkTimeoutMs, isolatedState, undefined, undefined, scriptPolicy().merge),
       expected,
       evidencePath,
       'control-plane dependency installs',
     );
     const installs = await runCommands(
-      CONTROL_PLANE_CHECKS.slice(0, 2),
+      controlPlaneChecks(scriptPolicy().controlPlane).slice(0, 2),
       candidateRoot,
       checkLog,
       evidencePath,
@@ -488,14 +504,14 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     boundary(candidateRoot, expected, 'control-plane dependency installs complete', evidencePath);
 
     const validationRunner = instrumentedGate(
-      gateRunner(600_000, isolatedState),
+      gateRunner(scriptPolicy().controlPlane.checkTimeoutMs, isolatedState, undefined, undefined, scriptPolicy().merge),
       expected,
       evidencePath,
       'control-plane typecheck and full test suite',
       { deferIntegrity: true },
     );
     const validation = await runCommands(
-      CONTROL_PLANE_CHECKS.slice(2),
+      controlPlaneChecks(scriptPolicy().controlPlane).slice(2),
       candidateRoot,
       checkLog,
       evidencePath,
@@ -517,7 +533,7 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     if (
       !combined.passed &&
       !combined.timedOut &&
-      JSON.stringify(combined.failedCommand) === JSON.stringify(CONTROL_PLANE_CHECKS.at(-1))
+      JSON.stringify(combined.failedCommand) === JSON.stringify(controlPlaneChecks(scriptPolicy().controlPlane).at(-1))
     ) {
       controlPlanePassed = await compareSuiteFailures(
         combined,
@@ -541,7 +557,13 @@ export async function runCandidateCleanlinessProbe(root = resolve(import.meta.di
     });
 
     const smokeRunner = instrumentedGate(
-      gateRunner(300_000, isolatedState),
+      gateRunner(
+        scriptPolicy().controlPlane.launchSmokeTimeoutMs,
+        isolatedState,
+        undefined,
+        undefined,
+        scriptPolicy().merge,
+      ),
       expected,
       evidencePath,
       'real launch smoke on candidate',

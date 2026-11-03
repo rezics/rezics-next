@@ -8,11 +8,10 @@ import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
 import { listOpenToolIncidents } from './tool-incidents.ts';
 import { WorkerStore } from './store.ts';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
+type ReportPolicy = ControlPolicy['hourlyReport'];
 
-const HOUR_MS = 60 * 60_000;
-const MAX_NOTIFIER_OUTPUT_BYTES = 4096;
-const MAX_REPORT_BYTES = 32_000;
-const INTERRUPTED_SEND_GRACE_MS = 5000;
+const HOUR_MS = 60 * 60_000; // UTC bucket and duration unit conversion.
 
 export const efficiencyReportMigrations = [
   {
@@ -48,6 +47,7 @@ export function parseUtcHour(value: string): UtcHour {
 }
 
 type ReportOptions = {
+  policy?: ControlPolicy | undefined;
   bucket?: string;
   now?: Date | number;
 };
@@ -67,12 +67,12 @@ function hasTable(db: Database, name: string): boolean {
   return Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
 }
 
-function clean(value: unknown): string {
+function clean(value: unknown, characters: number): string {
   return (
     String(value ?? 'unknown')
       .replace(/[\r\n\t]/g, ' ')
       .trim()
-      .slice(0, 160) || 'unknown'
+      .slice(0, characters) || 'unknown'
   );
 }
 
@@ -138,7 +138,7 @@ function hourEvents(db: Database, bucket: UtcHour, available: boolean): FlowEven
   }));
 }
 
-function landedSummary(db: Database, bucket: UtcHour, available: boolean): string[] {
+function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy: ReportPolicy): string[] {
   if (!available || !hasTable(db, 'worker_tasks'))
     return [
       'Landings: unknown (timestamped integration history unavailable).',
@@ -178,21 +178,21 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean): strin
   const goals = new Map<string, number>();
   for (const row of byTask.values()) {
     totals[targetFor(row)]++;
-    const goal = clean(row.goal);
+    const goal = clean(row.goal, policy.fieldCharacters);
     goals.set(goal, (goals.get(goal) ?? 0) + 1);
   }
   const perGoal = [...goals]
     .sort(([a], [b]) => a.localeCompare(b))
-    .slice(0, 8)
+    .slice(0, policy.goalRows)
     .map(([goal, count]) => `${goal} ${count}`)
     .join(', ');
-  const omittedGoals = Math.max(0, goals.size - 8);
+  const omittedGoals = Math.max(0, goals.size - policy.goalRows);
   const landings = [...byTask.values()].sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
   const landingIdentities = landings
-    .slice(0, 8)
-    .map((row) => `${clean(row.task_id)}#${row.attempt} at ${row.at} (${targetFor(row)})`)
+    .slice(0, policy.landingRows)
+    .map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt} at ${row.at} (${targetFor(row)})`)
     .join('; ');
-  const omittedLandings = Math.max(0, landings.length - 8);
+  const omittedLandings = Math.max(0, landings.length - policy.landingRows);
   return [
     `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`,
     `Landings by Goal: ${perGoal || (rows.length ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`,
@@ -200,7 +200,7 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean): strin
   ];
 }
 
-function latestUsefulLanding(db: Database, end: string, available: boolean): string {
+function latestUsefulLanding(db: Database, end: string, available: boolean, policy: ReportPolicy): string {
   if (!available) return 'Last useful landing: unknown (timestamped integration history unavailable).';
   const row = db
     .query(
@@ -210,11 +210,11 @@ function latestUsefulLanding(db: Database, end: string, available: boolean): str
     )
     .get(end) as { task_id: string; attempt: number; at: string } | null;
   return row
-    ? `Last useful landing: ${clean(row.task_id)}#${row.attempt} at ${row.at}.`
+    ? `Last useful landing: ${clean(row.task_id, policy.fieldCharacters)}#${row.attempt} at ${row.at}.`
     : 'Last useful landing: none recorded by the report cutoff.';
 }
 
-function workSummary(db: Database, available: boolean): string {
+function workSummary(db: Database, available: boolean, policy: ReportPolicy): string {
   if (!available || !hasTable(db, 'worker_tasks')) return 'Open work: unknown (current task state unavailable).';
   const rows = db
     .query(
@@ -224,7 +224,7 @@ function workSummary(db: Database, available: boolean): string {
        GROUP BY goal, state ORDER BY goal, state`,
     )
     .all() as { goal: string | null; state: string; count: number }[];
-  return `Open work: ${rows.length ? rows.map((row) => `${clean(row.goal)} ${row.state} ${row.count}`).join('; ') : 'none recorded'}.`;
+  return `Open work: ${rows.length ? rows.map((row) => `${clean(row.goal, policy.fieldCharacters)} ${row.state} ${row.count}`).join('; ') : 'none recorded'}.`;
 }
 
 function landingQueueAge(metrics: ReturnType<typeof lifecycleMetrics> | null, available: boolean): string {
@@ -239,14 +239,18 @@ function landingQueueAge(metrics: ReturnType<typeof lifecycleMetrics> | null, av
     : `Current landing queue age: ${entries.length} queued attempts; oldest ${oldest.toFixed(0)} ms.`;
 }
 
-function waitIdentities(metrics: ReturnType<typeof lifecycleMetrics> | null, available: boolean): string {
+function waitIdentities(
+  metrics: ReturnType<typeof lifecycleMetrics> | null,
+  available: boolean,
+  policy: ReportPolicy,
+): string {
   if (!available) return 'Current wait identities: unknown (current task state unavailable).';
   if (!metrics) return 'Current wait identities: unknown (current task state unavailable).';
   if (!metrics.waiting.entries.length) return 'Current wait identities: none recorded.';
-  const entries = metrics.waiting.entries.slice(0, 5).map((entry) => {
+  const entries = metrics.waiting.entries.slice(0, policy.waitRows).map((entry) => {
     const stage = entry.stage ?? entry.kind;
     const age = entry.ageMs === null ? 'age unknown' : `age ${Math.round(entry.ageMs / 60_000)}m`;
-    return `${clean(entry.taskId)}#${entry.attempt} ${clean(stage)} (${age})`;
+    return `${clean(entry.taskId, policy.fieldCharacters)}#${entry.attempt} ${clean(stage, policy.fieldCharacters)} (${age})`;
   });
   const omitted = metrics.waiting.entries.length - entries.length;
   return `Current wait identities: ${entries.join('; ')}${omitted ? `; ${omitted} more omitted` : ''}.`;
@@ -331,18 +335,20 @@ function promotionSummary(db: Database, metrics: ReturnType<typeof lifecycleMetr
   return `Promotion: ${disposition}; phase ${phase}; ${result}; phase age ${age === null ? 'unknown' : `${Math.round(age / 60_000)}m`}.`;
 }
 
-function operatorAttention(metrics: ReturnType<typeof lifecycleMetrics> | null): string {
+function operatorAttention(metrics: ReturnType<typeof lifecycleMetrics> | null, policy: ReportPolicy): string {
   if (!metrics)
     return 'Current incidents: unknown (current task state unavailable); unavailable evidence: orphaned landings, promotion timing, quarantine history.';
   const incidents: string[] = [];
   const unavailable: string[] = [];
   const summarize = (values: string[]) =>
-    values.length > 5 ? `${values.slice(0, 5).join(', ')} (+${values.length - 5} more)` : values.join(', ');
+    values.length > policy.incidentTaskExamples
+      ? `${values.slice(0, policy.incidentTaskExamples).join(', ')} (+${values.length - policy.incidentTaskExamples} more)`
+      : values.join(', ');
 
   const orphaned = metrics.orphanedLandings;
   if (!orphaned.available || orphaned.count === null) unavailable.push('orphaned landing history');
   else if (orphaned.count > 0) {
-    const taskIds = [...new Set(orphaned.taskIds.map(clean))];
+    const taskIds = [...new Set(orphaned.taskIds.map((value) => clean(value, policy.fieldCharacters)))];
     incidents.push(`orphaned landings ${orphaned.count}${taskIds.length ? ` [${summarize(taskIds)}]` : ''}`);
   }
 
@@ -357,9 +363,9 @@ function operatorAttention(metrics: ReturnType<typeof lifecycleMetrics> | null):
   } else if (quarantines.currentCount > 0) {
     const byTask = new Map<string, Set<string>>();
     for (const row of quarantines.current) {
-      const key = `${clean(row.taskId)}/${row.attempt}`;
+      const key = `${clean(row.taskId, policy.fieldCharacters)}/${row.attempt}`;
       const causes = byTask.get(key) ?? new Set<string>();
-      causes.add(clean(row.cause));
+      causes.add(clean(row.cause, policy.fieldCharacters));
       byTask.set(key, causes);
     }
     const entries = [...byTask]
@@ -376,12 +382,18 @@ function sharedIncidentLine(db: Database): { available: boolean; incidents: Retu
   return { available: true, incidents: listOpenToolIncidents(new WorkerStore(db)) };
 }
 
-function sharedIncidentSummary(incidents: ReturnType<typeof listOpenToolIncidents>, available: boolean): string {
+function sharedIncidentSummary(
+  incidents: ReturnType<typeof listOpenToolIncidents>,
+  available: boolean,
+  policy: ReportPolicy,
+): string {
   if (!available) return 'Shared tool incidents: unknown (incident history unavailable).';
   if (!incidents.length) return 'Shared tool incidents: none open.';
-  const rows = incidents.slice(0, 5).map((incident) => {
-    const tasks = incident.exampleTasks.map((task) => `${clean(task.taskId)}#${task.attempt}`).join(', ');
-    return `${clean(incident.line)}; probe ${clean(incident.probe.taskId)}#${incident.probe.attempt}${tasks ? `; examples ${tasks}` : ''}`;
+  const rows = incidents.slice(0, policy.incidentRows).map((incident) => {
+    const tasks = incident.exampleTasks
+      .map((task) => `${clean(task.taskId, policy.fieldCharacters)}#${task.attempt}`)
+      .join(', ');
+    return `${clean(incident.line, policy.fieldCharacters)}; probe ${clean(incident.probe.taskId, policy.fieldCharacters)}#${incident.probe.attempt}${tasks ? `; examples ${tasks}` : ''}`;
   });
   const omitted = incidents.length - rows.length;
   return `Shared tool incidents: ${rows.join(' | ')}${omitted ? ` | ${omitted} more omitted` : ''}.`;
@@ -390,41 +402,45 @@ function sharedIncidentSummary(incidents: ReturnType<typeof listOpenToolIncident
 function nextActions(
   metrics: ReturnType<typeof lifecycleMetrics> | null,
   incidents: ReturnType<typeof listOpenToolIncidents>,
+  policy: ReportPolicy,
 ): string[] {
   const actions: string[] = [];
   if (metrics) {
     const orphaned = metrics.orphanedLandings;
     if (orphaned.available && (orphaned.count ?? 0) > 0 && orphaned.taskIds[0])
-      actions.push(`Inspect orphaned landing ${clean(orphaned.taskIds[0])} with Goal status before retrying it.`);
+      actions.push(
+        `Inspect orphaned landing ${clean(orphaned.taskIds[0], policy.fieldCharacters)} with Goal status before retrying it.`,
+      );
     if (metrics.promotion.available && ['blocked', 'stabilize-blocked'].includes(metrics.promotion.phase ?? ''))
       actions.push('Resolve the recorded promotion gate or blocker, then run Goal promote.');
     const oldestWait = metrics.waiting.entries[0];
     if (oldestWait)
       actions.push(
-        `Inspect ${clean(oldestWait.taskId)}#${oldestWait.attempt} (${clean(oldestWait.stage ?? oldestWait.kind)}) with Goal status.`,
+        `Inspect ${clean(oldestWait.taskId, policy.fieldCharacters)}#${oldestWait.attempt} (${clean(oldestWait.stage ?? oldestWait.kind, policy.fieldCharacters)}) with Goal status.`,
       );
     const firstQuarantine = metrics.quarantines.current?.[0];
     if (firstQuarantine)
       actions.push(
-        `Review quarantined task ${clean(firstQuarantine.taskId)}#${firstQuarantine.attempt} before retrying it.`,
+        `Review quarantined task ${clean(firstQuarantine.taskId, policy.fieldCharacters)}#${firstQuarantine.attempt} before retrying it.`,
       );
   }
   const incident = incidents[0];
   if (incident)
     actions.push(
-      `Review the shared blocker at probe ${clean(incident.probe.taskId)}#${incident.probe.attempt}; delivery operations owns follow-up.`,
+      `Review the shared blocker at probe ${clean(incident.probe.taskId, policy.fieldCharacters)}#${incident.probe.attempt}; delivery operations owns follow-up.`,
     );
   return actions.length ? actions.map((action, index) => `${index + 1}. ${action}`) : ['None from recorded evidence.'];
 }
 
 export async function renderHourlyEfficiencyReport(db: Database, options: ReportOptions): Promise<string> {
+  const policy = (options.policy ?? defaultPolicy).hourlyReport;
   const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
   const flowAvailable = hasTable(db, 'flow_events');
   if (flowAvailable) ensureFlow(db);
   const events = hourEvents(db, bucket, flowAvailable);
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
-  const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf) : null;
+  const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf, options.policy) : null;
   const starts = events.filter((event) => event.stage === 'worker' && event.action === 'started').length;
   const finishes = new Set(
     events
@@ -460,8 +476,10 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
         flowAvailable
           ? (aggregateLines[0] ?? 'Launches in trailing hour: unknown.')
           : 'Launches in trailing hour: unknown (flow history unavailable).',
-        ...launchTaskLines.slice(0, 8),
-        ...(launchTaskLines.length > 8 ? [`  … ${launchTaskLines.length - 8} additional task rows.`] : []),
+        ...launchTaskLines.slice(0, policy.launchRows),
+        ...(launchTaskLines.length > policy.launchRows
+          ? [`  … ${launchTaskLines.length - policy.launchRows} additional task rows.`]
+          : []),
         ...aggregateLines.slice(1),
       ]
     : [
@@ -470,36 +488,41 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
         'Orphaned landings: unknown (current task state unavailable).',
         'Quarantines: unknown (current task state unavailable).',
       ];
-  const landed = landedSummary(db, bucket, flowAvailable);
+  const landed = landedSummary(db, bucket, flowAvailable, policy);
   const incidents = sharedIncidentLine(db);
   const waitsAvailable = openWorkAvailable;
   const landingQueueAvailable = flowAvailable && openWorkAvailable && hasTable(db, 'landing_queue');
   const lines = [
     `Hourly operations report — ${bucket.start} to ${bucket.end} UTC`,
     ...landed,
-    latestUsefulLanding(db, bucket.end, flowAvailable),
+    latestUsefulLanding(db, bucket.end, flowAvailable, policy),
     flowAvailable
       ? `Worker starts / finishes in bucket: ${starts} starts (including resumes) / ${finishes} finished attempts.`
       : 'Worker starts / finishes in bucket: unknown (flow history unavailable).',
-    workSummary(db, openWorkAvailable),
+    workSummary(db, openWorkAvailable, policy),
     landingQueueAge(metrics, landingQueueAvailable),
-    waitIdentities(metrics, waitsAvailable),
+    waitIdentities(metrics, waitsAvailable, policy),
     checkWaitLine,
     ...lifecycleLines,
     promotionSummary(db, metrics),
-    operatorAttention(metrics),
-    sharedIncidentSummary(incidents.incidents, incidents.available),
+    operatorAttention(metrics, policy),
+    sharedIncidentSummary(incidents.incidents, incidents.available, policy),
     'Next actions:',
-    ...nextActions(metrics, incidents.incidents),
+    ...nextActions(metrics, incidents.incidents, policy),
     usageSummary(db, bucket),
   ];
   const report = lines.join('\n');
-  if (Buffer.byteLength(report) <= MAX_REPORT_BYTES) return report;
-  const prefix = Buffer.from(report)
-    .subarray(0, MAX_REPORT_BYTES - 40)
-    .toString('utf8')
-    .replace(/\uFFFD$/, '');
-  return `${prefix}\n… report truncated at ${MAX_REPORT_BYTES} bytes.`;
+  if (Buffer.byteLength(report) <= policy.reportBytes) return report;
+  const suffix = Buffer.from(`\n… report truncated at ${policy.reportBytes} bytes.`);
+  // Reserve the encoded suffix, including when an operator requests less than one full marker.
+  const prefix = Buffer.from(report).subarray(0, Math.max(0, policy.reportBytes - suffix.length));
+  return (
+    prefix.toString('utf8').replace(/\uFFFD$/, '') +
+    suffix
+      .subarray(0, policy.reportBytes)
+      .toString('utf8')
+      .replace(/\uFFFD$/, '')
+  );
 }
 
 export type DeliveryDisposition =
@@ -542,6 +565,7 @@ function invokeNotifier(
   argv: readonly string[],
   report: string,
   timeoutMs: number,
+  policy: ReportPolicy,
 ): Promise<{ status: 'sent' | 'failed' | 'unknown'; detail: string }> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
@@ -569,10 +593,10 @@ function invokeNotifier(
     const watchOutput = (bytes: number): boolean => {
       if (outputLimitHit) return false;
       outputBytes += bytes;
-      if (outputBytes <= MAX_NOTIFIER_OUTPUT_BYTES) return true;
+      if (outputBytes <= policy.notifierOutputBytes) return true;
       outputLimitHit = true;
       child.kill('SIGTERM');
-      killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
+      killTimer = setTimeout(() => child.kill('SIGKILL'), policy.notifierTerminationGraceMs);
       killTimer.unref();
       return false;
     };
@@ -580,7 +604,7 @@ function invokeNotifier(
     drainBounded(child.stderr, watchOutput);
     const timeout = setTimeout(() => {
       child.kill('SIGTERM');
-      killTimer = setTimeout(() => child.kill('SIGKILL'), 250);
+      killTimer = setTimeout(() => child.kill('SIGKILL'), policy.notifierTerminationGraceMs);
       killTimer.unref();
       if (!settled) {
         settled = true;
@@ -606,11 +630,12 @@ export async function sendHourlyEfficiencyReport(
   notifier: readonly string[] | undefined,
   timeoutMs: number,
   now = new Date(),
+  policy: ControlPolicy = defaultPolicy,
 ): Promise<DeliveryResult> {
   const bucket = parseUtcHour(bucketValue);
   if (!notifier?.length)
     return { disposition: 'disabled', bucket: bucket.start, reportRef: null, detail: 'notifier unconfigured' };
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000)
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > policy.validation.hourlyReportMaxTimeoutMs)
     throw new Error('invalid hourly report notifier timeout');
   const reportRef = createHash('sha256').update(report).digest('hex');
   migrate(db, efficiencyReportMigrations);
@@ -636,7 +661,8 @@ export async function sendHourlyEfficiencyReport(
       const claimTime = row.claimed_at ? Date.parse(row.claimed_at) : Number.NaN;
       if (
         row.status === 'claimed' &&
-        (!Number.isFinite(claimTime) || now.getTime() - claimTime > timeoutMs + INTERRUPTED_SEND_GRACE_MS)
+        (!Number.isFinite(claimTime) ||
+          now.getTime() - claimTime > timeoutMs + policy.hourlyReport.interruptedSendGraceMs)
       ) {
         db.query(
           `UPDATE efficiency_report_deliveries SET status='unknown', finished_at=?, detail='previous notifier outcome unknown after interruption'
@@ -673,7 +699,7 @@ export async function sendHourlyEfficiencyReport(
   }
 
   // A successful send belongs only to this exact first persisted report; later sweeps never replace its identity.
-  const outcome = await invokeNotifier(notifier, claimed.report, timeoutMs);
+  const outcome = await invokeNotifier(notifier, claimed.report, timeoutMs, policy.hourlyReport);
   saveOutcome(db, bucket.start, outcome.status, outcome.detail, new Date());
   return {
     disposition: outcome.status,

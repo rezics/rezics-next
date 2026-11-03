@@ -1,4 +1,5 @@
 import defaults from '../defaults.json';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { migrate } from './db.ts';
 import type { Task } from './types.ts';
@@ -377,6 +378,7 @@ export function checkFlowAlarms(
   inbox: (summary: string) => void,
   now = new Date(),
   thresholds = DEFAULT_FLOW_THRESHOLDS,
+  policy: ControlPolicy = defaultPolicy,
 ): string[] {
   ensureFlow(db);
   const breaches: [string, string, string][] = [];
@@ -399,11 +401,11 @@ export function checkFlowAlarms(
     const old = db.query('SELECT sent_at FROM flow_alarm_sends WHERE threshold=?').get(key) as {
       sent_at: string;
     } | null;
-    if (old && now.getTime() - Date.parse(old.sent_at) < 3600000) continue;
+    if (old && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs) continue;
     const top = [...report.queues]
       .sort((a, b) => b.oldestAgeMs - a.oldestAgeMs)
       .flatMap((q) => q.tasks)
-      .slice(0, 3);
+      .slice(0, policy.flow.waitingTaskExamples);
     inbox(`Flow alarm: stage ${stage}; measurement ${measurement}; top waiting tasks ${top.join(', ') || 'none'}`);
     db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at) VALUES (?,?)').run(key, now.toISOString());
     sent.push(key);
