@@ -110,3 +110,33 @@ test.serial(
   },
   120_000,
 );
+
+test.serial(
+  'concealed selected rules retain only their reference; removed hosts retire settings',
+  async () => {
+    const s = await f.select();
+    const selected = await f.patch(s, { presentation: s.presentation });
+    expect(selected.response.status, selected.text).toBe(200);
+    const hidden = await f.call('POST', `/v1/posts/${s.postId}:takeDown`, {
+      bearer: f.base.governance.bearer,
+      body: { reason: 'Conceal the selected native rules' },
+    });
+    expect(hidden.response.status, hidden.text).toBe(200);
+    const page = await f.call('GET', `/v1/realms/${s.realmId}/settings`);
+    expect(page.response.status, page.text).toBe(200);
+    expect(page.value.snapshot.presentation.rules).toEqual(s.pin);
+    expect(page.value.snapshot.rules).toEqual({ state: 'none', value: null });
+    expect(page.text).not.toContain(s.post.sha256);
+    const lifecycle = await f.call('GET', `/v1/spaces/${s.spaceId}/lifecycle`);
+    expect(lifecycle.response.status, lifecycle.text).toBe(200);
+    const removal = await f.call('POST', `/v1/spaces/${s.spaceId}/removal`, {
+      body: { expectedVersion: lifecycle.value.container.version, reason: 'Remove the settings host' },
+      headers: { 'if-match': JSON.stringify(lifecycle.value.container.headRevisionId) },
+    });
+    expect(removal.response.status, removal.text).toBe(200);
+    const removed = await f.call('GET', `/v1/realms/${s.realmId}/settings`);
+    expect(removed.response.status, removed.text).toBe(404);
+    expect(removed.text).not.toContain(s.pin.revisionId);
+  },
+  120_000,
+);
