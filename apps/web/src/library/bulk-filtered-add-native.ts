@@ -15,7 +15,14 @@ export type FilteredAddCommand = Readonly<{
   previewKey: string;
   confirmKey: string;
 }>;
-export type FilteredAddFailure = 'preparing' | 'unsupported' | 'limit' | 'changed' | 'forbidden' | 'unavailable' | 'uncertain';
+export type FilteredAddFailure =
+  | 'preparing'
+  | 'unsupported'
+  | 'limit'
+  | 'changed'
+  | 'forbidden'
+  | 'unavailable'
+  | 'uncertain';
 export type FilteredAddResult = { state: 'ready'; operation: FilteredAddOperation } | { state: FilteredAddFailure };
 export type FilteredAddRead =
   | { state: 'ready'; operation: FilteredAddOperation; page: FilteredAddPage }
@@ -37,9 +44,10 @@ export async function sendFilteredAdd(
       },
       fetch: { cache: 'no-store', redirect: 'manual' } as const,
     };
-    const result = operationId === undefined
-      ? await client.libraryOperations.post(command.capture.request, options)
-      : await client.libraryOperations({ operationId }).$confirm.post({}, options);
+    const result =
+      operationId === undefined
+        ? await client.libraryOperations.post(command.capture.request, options)
+        : await client.libraryOperations({ operationId }).$confirm.post({}, options);
     if (result.data && 'operation' in result.data && !result.error)
       return { state: 'ready', operation: result.data.operation };
     if (result.status === 202 && result.data && 'preparing' in result.data && result.data.preparing === true)
@@ -50,7 +58,13 @@ export async function sendFilteredAdd(
     if (result.status === 400 || result.status === 422) return { state: 'unsupported' };
     // Native dependency_unavailable explicitly declines preparation; it is not an empty capture.
     const problem = result.error?.value;
-    if (result.status === 503 && problem && typeof problem === 'object' && 'code' in problem && problem.code === 'dependency_unavailable')
+    if (
+      result.status === 503 &&
+      problem &&
+      typeof problem === 'object' &&
+      'code' in problem &&
+      problem.code === 'dependency_unavailable'
+    )
       return { state: 'unavailable' };
     return { state: 'uncertain' };
   } catch {

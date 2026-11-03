@@ -375,6 +375,7 @@ function CollectionPageLifetime({
   cursor,
   layout = 'list',
   search,
+  isCurrent: sourceCurrent,
   current,
   admission,
 }: CollectionPageProps & { current: (operation?: CollectionOperation) => boolean; admission: CollectionAdmission }) {
@@ -1883,12 +1884,18 @@ function CollectionPageLifetime({
           unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
-        {!editing ? <BulkFilteredAdd
-          source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
-          address={JSON.stringify([page.id, cursor, search, queryKey])}
-          disabled={page.filterStatus !== undefined || (page.filterIgnored?.length ?? 0) > 0 || (page.memberState ?? 'ready') !== 'ready'}
-          isCurrent={() => current()}
-        /> : null}
+        {!editing ? (
+          <BulkFilteredAdd
+            source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
+            address={JSON.stringify([page.id, cursor, search, queryKey])}
+            disabled={
+              page.filterStatus !== undefined ||
+              (page.filterIgnored?.length ?? 0) > 0 ||
+              (page.memberState ?? 'ready') !== 'ready'
+            }
+            isCurrent={() => admission.retained() && (sourceCurrent?.() ?? true)}
+          />
+        ) : null}
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
           {editing && boundaryAdmitted ? (
