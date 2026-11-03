@@ -1,14 +1,7 @@
 import { expect } from 'bun:test';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { decodeCursor, encodeCursor } from '../../../src/tokens/cursor.ts';
-import {
-  capture,
-  costOf,
-  seed,
-  type Capture,
-  type Cost,
-  type GrowthDatabase,
-} from '../../support/growth.ts';
+import { capture, costOf, seed, type Capture, type Cost, type GrowthDatabase } from '../../support/growth.ts';
 import { purchaseHistoryFixture } from './purchase-history-fixture.ts';
 
 export const pageLimit = 5;

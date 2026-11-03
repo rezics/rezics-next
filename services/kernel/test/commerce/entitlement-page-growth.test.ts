@@ -1,11 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
-import {
-  axes,
-  entitlementPageGrowth,
-  scales,
-  type EntitlementPageGrowth,
-} from './support/entitlement-page-growth.ts';
+import { axes, entitlementPageGrowth, scales, type EntitlementPageGrowth } from './support/entitlement-page-growth.ts';
 
 setDefaultTimeout(1_800_000);
 let world: EntitlementPageGrowth;
