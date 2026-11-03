@@ -382,6 +382,23 @@ CREATE TABLE rating.population_vote (
 
 
 --
+-- Name: population_vote_removal; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.population_vote_removal (
+    route integer NOT NULL,
+    question_id uuid NOT NULL,
+    population_id uuid NOT NULL,
+    target_id uuid NOT NULL,
+    voter_id uuid NOT NULL,
+    revision integer NOT NULL,
+    CONSTRAINT population_vote_removal_check CHECK ((route = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT population_vote_removal_revision_check CHECK ((revision >= 1)),
+    CONSTRAINT population_vote_removal_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: public_figure; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -734,6 +751,14 @@ ALTER TABLE ONLY rating.population_total_source
 
 ALTER TABLE ONLY rating.population_vote
     ADD CONSTRAINT population_vote_pkey PRIMARY KEY (route, question_id, population_id, target_id, voter_id);
+
+
+--
+-- Name: population_vote_removal population_vote_removal_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.population_vote_removal
+    ADD CONSTRAINT population_vote_removal_pkey PRIMARY KEY (route, question_id, population_id, target_id, voter_id);
 
 
 --
