@@ -74,3 +74,13 @@ bun run --cwd services/kernel check test/community/growth-realm-member-count-mai
 Native/browser/acceptance launch admission belongs to the controller. Authored assertions and source inspection
 are not measured passes. Until the focused native command executes on the controller-bound source, there are
 no reached native assertions or three-scale observations to report and no promotion claim.
+
+Both commands above were submitted for source `3a4d960e34385f0674a9aec38bb643cc74e1054d`.
+Typecheck exited 70 before compilation: `remote-check: infrastructure failure`, reason
+`absolute preparation deadline exceeded`, stalled phase `source-artifact-publication`.
+The focused run exited 1 in schema preflight: `error: Schema dump differs from db/library/schema.sql.`
+Its diagnostic reported `Checked source commit/tree: UNKNOWN (no retained source provenance at this boundary).`
+The library schema/migration inputs and check runner are unchanged from the inspected base. The owning repair
+seam is the library schema snapshot/migrations and the runner's retained-source provenance, outside this slice.
+Neither run reached the authored native assertions; there are no measured three-scale observations or passes.
+Controller acceptance remains deferred. No schema check was weakened and no production path was changed.
