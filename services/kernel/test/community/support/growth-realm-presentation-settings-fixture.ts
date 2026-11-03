@@ -61,10 +61,13 @@ export async function presentationSettingsFixture() {
     headers.set('authorization', `Bearer ${options.bearer ?? base.author.bearer}`);
     if (method !== 'GET') headers.set('idempotency-key', JSON.stringify(options.key ?? crypto.randomUUID()));
     if (options.body !== undefined) headers.set('content-type', 'application/json');
-    const response = await kernel.handle(new Request(`https://content.test${path}`, {
-      method, headers,
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-    }));
+    const response = await kernel.handle(
+      new Request(`https://content.test${path}`, {
+        method,
+        headers,
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      }),
+    );
     const text = await response.text();
     return { response, text, value: text ? JSON.parse(text) : null };
   }
@@ -87,7 +90,10 @@ export async function presentationSettingsFixture() {
     const realm = await call('GET', `/v1/realms/${target.realmId}`);
     expect(realm.response.status, realm.text).toBe(200);
     return {
-      ...target, pin, post, postHead: later.value.post.revisionId as string,
+      ...target,
+      pin,
+      post,
+      postHead: later.value.post.revisionId as string,
       head: realm.value.realm.headRevisionId as string,
       spaceId: realm.value.realm.spaceId as string,
       presentation: { ...empty, rules: pin } as Presentation,
@@ -96,7 +102,10 @@ export async function presentationSettingsFixture() {
   type Selected = Awaited<ReturnType<typeof select>>;
   async function patch(s: Selected, body: unknown, head = s.head, key = crypto.randomUUID(), actor = base.author) {
     return call('PATCH', `/v1/realms/${s.realmId}`, {
-      bearer: actor.bearer, body, key, headers: { 'if-match': JSON.stringify(head) },
+      bearer: actor.bearer,
+      body,
+      key,
+      headers: { 'if-match': JSON.stringify(head) },
     });
   }
   async function manage(s: Selected, actor: NativePerson, revoke = false) {
@@ -104,13 +113,15 @@ export async function presentationSettingsFixture() {
       body: {
         resource: { route: routeOf(s.realmId), id: s.realmId },
         subject: { kind: 'account', id: actor.accountId },
-        actions: ['realm:manage'], valid: '(,)',
+        actions: ['realm:manage'],
+        valid: '(,)',
       },
     });
     expect(result.response.status, result.text).toBe(revoke ? 200 : 201);
   }
   async function snapshot(s: Selected) {
-    const result = await db.admin.query(`SELECT
+    const result = await db.admin.query(
+      `SELECT
       (SELECT head_revision_id FROM community.realm WHERE route=$1 AND realm_id=$2) AS head,
       (SELECT count(*)::int FROM community.realm_revision WHERE route=$1 AND realm_id=$2) AS revisions,
       (SELECT count(*)::int FROM core.receipt WHERE command_kind='community.realm.update'
@@ -118,7 +129,8 @@ export async function presentationSettingsFixture() {
       (SELECT count(*)::int FROM core.outbox WHERE subject=$2::text
         AND type='com.rezics.community.realm.updated.v1') AS events,
       (SELECT head_revision_id FROM content.post WHERE route=$3 AND post_id=$4) AS post_head`,
-    [routeOf(s.realmId), s.realmId, routeOf(s.postId), s.postId]);
+      [routeOf(s.realmId), s.realmId, routeOf(s.postId), s.postId],
+    );
     return result.rows[0] as { head: string; revisions: number; receipts: number; events: number; post_head: string };
   }
   async function measure(name: string, s: Selected, axis: Axis, operation: () => Promise<unknown>) {
@@ -136,7 +148,9 @@ export async function presentationSettingsFixture() {
     let predecessor = s.head;
     const seededIds: string[] = [];
     const population: Population = {
-      name: `${name}-${axis}-${s.realmId}`, hotPartition: partitionOf(route), hotShare: 1,
+      name: `${name}-${axis}-${s.realmId}`,
+      hotPartition: partitionOf(route),
+      hotShare: 1,
       rows() {
         if (axis === 'rules-revisions') {
           const id = newId(postRoute);
@@ -150,18 +164,25 @@ export async function presentationSettingsFixture() {
           seededIds.push(revisionId);
           return { 'community.realm_revision': [{ ...realmRevision, revision_id: revisionId, predecessor: previous }] };
         }
-        const spaceId = newId(route), realmId = newId(route), spaceHead = newId(route);
+        const spaceId = newId(route),
+          realmId = newId(route),
+          spaceHead = newId(route);
         seededIds.push(realmId);
         return {
           'community.space': [{ ...space, space_id: spaceId, head_revision_id: spaceHead }],
-          'community.space_revision': [{ ...spaceRevision, space_id: spaceId, revision_id: spaceHead, predecessor: null }],
+          'community.space_revision': [
+            { ...spaceRevision, space_id: spaceId, revision_id: spaceHead, predecessor: null },
+          ],
           'community.realm': [{ ...realm, realm_id: realmId, space_id: spaceId, head_revision_id: revisionId }],
-          'community.realm_revision': [{ ...realmRevision, realm_id: realmId, revision_id: revisionId, predecessor: null, presentation: empty }],
+          'community.realm_revision': [
+            { ...realmRevision, realm_id: realmId, revision_id: revisionId, predecessor: null, presentation: empty },
+          ],
         };
       },
     };
     const report = await checkGrowth(db, {
-      name: `Realm settings ${name} ${axis}`, scales,
+      name: `Realm settings ${name} ${axis}`,
+      scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       async grow(_, scale, previous) {
@@ -172,38 +193,56 @@ export async function presentationSettingsFixture() {
         expect(after.post_head).toBe(s.postHead);
         expect(after.receipts).toBe(before.receipts);
         expect(after.events).toBe(before.events);
-        const [table, column, atRoute] = axis === 'unrelated-realms'
-          ? ['community.realm', 'realm_id', route] as const
-          : axis === 'realm-revisions'
-            ? ['community.realm_revision', 'revision_id', route] as const
-            : ['content.revision', 'revision_id', postRoute] as const;
-        const count = await db.admin.query(`SELECT count(*)::int AS n FROM ${table} WHERE route=$1 AND ${column}=ANY($2::uuid[])`, [atRoute, seededIds]);
+        const [table, column, atRoute] =
+          axis === 'unrelated-realms'
+            ? (['community.realm', 'realm_id', route] as const)
+            : axis === 'realm-revisions'
+              ? (['community.realm_revision', 'revision_id', route] as const)
+              : (['content.revision', 'revision_id', postRoute] as const);
+        const count = await db.admin.query(
+          `SELECT count(*)::int AS n FROM ${table} WHERE route=$1 AND ${column}=ANY($2::uuid[])`,
+          [atRoute, seededIds],
+        );
         expect(count.rows[0].n).toBe(scale);
       },
       operation,
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
-    for (const sample of report.samples) for (const cost of sample.repetitions) {
-      expect(cost.statements).toBeGreaterThan(0);
-      expect(cost.blocks).toBeGreaterThan(0);
-      if (name !== 'denied' && name !== 'revoked-replay')
-        expect(cost.relations['community.realm']?.rows).toBeGreaterThan(0);
-      // One root post, two rounds: current head, exact pin metadata and exact pin body.
-      expect(cost.relations['content.revision']?.rows ?? 0).toBeLessThanOrEqual(6);
-      expect(cost.relations['content.post']?.rows ?? 0).toBeLessThanOrEqual(66);
-      if (name === 'adopt' || name === 'replay')
-        expect(cost.relations['content.revision']?.rows).toBeGreaterThan(0);
-    }
-    const growing = axis === 'unrelated-realms' ? 'community.realm'
-      : axis === 'realm-revisions' ? 'community.realm_revision' : 'content.revision';
+    for (const sample of report.samples)
+      for (const cost of sample.repetitions) {
+        expect(cost.statements).toBeGreaterThan(0);
+        expect(cost.blocks).toBeGreaterThan(0);
+        if (name !== 'denied' && name !== 'revoked-replay')
+          expect(cost.relations['community.realm']?.rows).toBeGreaterThan(0);
+        // One root post, two rounds: current head, exact pin metadata and exact pin body.
+        expect(cost.relations['content.revision']?.rows ?? 0).toBeLessThanOrEqual(6);
+        expect(cost.relations['content.post']?.rows ?? 0).toBeLessThanOrEqual(66);
+        if (name === 'adopt' || name === 'replay') expect(cost.relations['content.revision']?.rows).toBeGreaterThan(0);
+      }
+    const growing =
+      axis === 'unrelated-realms'
+        ? 'community.realm'
+        : axis === 'realm-revisions'
+          ? 'community.realm_revision'
+          : 'content.revision';
     if (report.samples.every(({ cost }) => cost.relations[growing]))
       assertGrowthAccessPaths(`Realm settings ${name} ${axis}`, report.samples, [growing]);
     return report;
   }
   return {
-    base, db, call, select, patch, manage, snapshot, measure,
-    async close() { await db.close(); await base.system.close(); },
+    base,
+    db,
+    call,
+    select,
+    patch,
+    manage,
+    snapshot,
+    measure,
+    async close() {
+      await db.close();
+      await base.system.close();
+    },
   };
 }
 

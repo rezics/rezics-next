@@ -31,11 +31,11 @@ board disclosure checks are separate, unmeasured operations. A header/home read 
 Every branch has a fresh isolated native database, selected Realm and post, so earlier series cannot mask growth.
 Each axis seeds 256, 1,024 and 4,096 rows outside observation:
 
-| Axis | Pressure | Fixed selected neighborhood |
-| --- | --- | --- |
-| Unrelated Realms | New same-route Realm/Space identities and revisions | One selected Realm, host, board, post and pin |
-| Realm revisions | A retained revision branch of the selected Realm | Current Realm head and rules pin |
-| Rules revisions | Retained revisions of the selected post | Current post head, exact selected revision and Realm |
+| Axis             | Pressure                                            | Fixed selected neighborhood                          |
+| ---------------- | --------------------------------------------------- | ---------------------------------------------------- |
+| Unrelated Realms | New same-route Realm/Space identities and revisions | One selected Realm, host, board, post and pin        |
+| Realm revisions  | A retained revision branch of the selected Realm    | Current Realm head and rules pin                     |
+| Rules revisions  | Retained revisions of the selected post             | Current post head, exact selected revision and Realm |
 
 Historical pressure clones native small revision snapshots, without moving either selected head, manufacturing
 command outcomes or emitting events. Realm history retains predecessor links; native Content revision storage has no
