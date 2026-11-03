@@ -8,7 +8,7 @@ import {
   type OwnDraftSelectionRequest,
 } from '../src/threads/own-drafts/model';
 
-import { accountId, identity, postId, row, threadId } from './own-drafts-fixture';
+import { accountId, identity, mountOwnDrafts, postId, row, selected, threadId } from './own-drafts-fixture';
 const revisionId = row().revisionId;
 
 test('explicit selection reads one exact current draft; stale or concealed revisions stay unavailable', async () => {
@@ -21,7 +21,13 @@ test('explicit selection reads one exact current draft; stale or concealed revis
       calls.push(request);
       return {
         revision: stale ? 'newer-revision' : revisionId,
-        post: { id: postId, threadId, body: fromPlainText('Only this chosen body', 'blocks') },
+        post: {
+          id: postId,
+          threadId,
+          parentId: null,
+          mediaIds: entry.mediaIds,
+          body: fromPlainText('Only this chosen body', 'blocks'),
+        },
       };
     },
   };
@@ -77,7 +83,7 @@ test('mounted inventory bounds selected reads and retires bodies, advice and lat
   let selectedSignal: AbortSignal | undefined;
   const selection = {
     revision: revisionId,
-    post: { id: postId, threadId, body: fromPlainText('Private selected bytes', 'blocks') },
+    post: { id: postId, threadId, parentId: null, mediaIds: row().mediaIds, body: fromPlainText('Private selected bytes', 'blocks') },
   };
   const reader = (size: number): OwnDraftReader => ({
     async list(request) {
@@ -156,5 +162,63 @@ test('mounted inventory bounds selected reads and retires bodies, advice and lat
       else Reflect.deleteProperty(globalThis, key);
     }
     await window.happyDOM.close();
+  }
+});
+
+test('browser writing stays separate until the person names it as the editor source', async () => {
+  const entry = row();
+  const native = selected(entry, 'Server-saved body');
+  const browser = {
+    slot: 0,
+    actor: accountId,
+    scope: { kind: 'thread' as const, boardId: entry.board.id, subjects: [] },
+    revision: 'browser-local-revision',
+    updated: 1_798_000_000_000,
+    bytes: 0,
+    state: 'unsent' as const,
+    payload: {
+      title: 'Browser-only title',
+      body: fromPlainText('Independent browser body', 'blocks'),
+      text: 'Independent browser body',
+      attachmentRepair: false,
+    },
+  };
+  const reader: OwnDraftReader = {
+    list: async () => ({ state: 'ready', viewer: { accountId, authnEpoch: 2 }, drafts: [entry], next: null }),
+    resume: async () => native,
+  };
+  const writes: unknown[] = [];
+  const fixture = await mountOwnDrafts();
+  try {
+    await fixture.render({
+      identity,
+      active: true,
+      reader,
+      localWritingReader: { load: async () => browser },
+      commands: {
+        async write(input) {
+          writes.push(input);
+          return { ok: false, reason: 'unavailable' };
+        },
+        async erase() {
+          return { ok: true };
+        },
+        async readback() {
+          return 'unavailable';
+        },
+      },
+    });
+    await fixture.click('Inspect draft privately');
+    expect(fixture.host.textContent).toContain('Server-saved body');
+    expect(fixture.host.textContent).toContain('Independent browser body');
+    expect(fixture.host.textContent).toContain('Choose which writing to open');
+    expect(writes).toHaveLength(0);
+    await fixture.click('Use browser-saved body in editor');
+    expect(fixture.host.textContent).toContain('Saved in this browser');
+    expect(fixture.host.textContent).toContain('Independent browser body');
+    expect(fixture.host.textContent).not.toContain('Server-saved body');
+    expect(writes).toHaveLength(0);
+  } finally {
+    await fixture.close();
   }
 });

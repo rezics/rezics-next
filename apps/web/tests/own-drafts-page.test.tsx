@@ -6,6 +6,7 @@ import {
   ownDraftRequestKey,
   type OwnDraftIdentity,
 } from '../src/threads/own-drafts/model';
+import { resolveNavigation } from '../src/shell/navigation';
 
 import { accountId, postId, row } from './own-drafts-fixture';
 
@@ -69,4 +70,16 @@ test('binds the in-memory page address to account, credentials, locale, source a
   expect(ownDraftIdentityKey({ ...identity, callerEpoch: 'caller-2' })).not.toBe(key);
   expect(ownDraftIdentityKey({ ...identity, accountId: 'other-account' })).not.toBe(key);
   expect(ownDraftIdentityKey({ ...identity, locale: 'ja' })).not.toBe(key);
+});
+
+test('signed-in account navigation opens the exact localized private drafts destination', async () => {
+  const { defaultNavigation } = await import('../src/shell/navigation-view');
+  const resolved = resolveNavigation(defaultNavigation, { locale: 'ja', pathname: '/ja/drafts' });
+  expect(resolved.find((item) => item.id === 'shell.drafts')).toMatchObject({
+    path: '/drafts',
+    href: '/ja/drafts',
+    current: true,
+    group: 'personal',
+    signedIn: true,
+  });
 });

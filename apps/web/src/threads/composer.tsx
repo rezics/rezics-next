@@ -1306,12 +1306,26 @@ export function postEditFailureText(failure: EditFailure): string {
 type InlinePostEditorProps = {
   initialBody: DocumentSnapshot;
   initialMediaIds?: readonly string[];
+  allowPublish?: boolean;
+  ownDraftContext?: Readonly<{
+    postId: string;
+    threadId: string;
+    language: string | null;
+    licence: string;
+    subjectIds: readonly string[];
+  }>;
   /** Optional original native reader admission, separate from the editor's session lifetime. */
   inspectionAdmission?: { authority: object; current: () => boolean };
   revisionId: string;
   idempotencyKey: string;
   containerId: string;
   onSubmit: (input: {
+    body: DocumentSnapshot;
+    revisionId: string;
+    idempotencyKey: string;
+    mediaIds: string[];
+  }) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
+  onPublish?: (input: {
     body: DocumentSnapshot;
     revisionId: string;
     idempotencyKey: string;
@@ -1332,11 +1346,14 @@ export function InlinePostEditor(props: InlinePostEditorProps) {
 function InlinePostEditorContent({
   initialBody,
   initialMediaIds = [],
+  allowPublish = false,
+  ownDraftContext,
   inspectionAdmission,
   revisionId: initialRevisionId,
   idempotencyKey,
   containerId,
   onSubmit,
+  onPublish,
   onCancel,
   onSuccess,
 }: InlinePostEditorProps) {
@@ -1352,6 +1369,7 @@ function InlinePostEditorContent({
   const [snapshotPhase, setSnapshotPhase] = useState<'ready' | 'pending' | 'failed'>('ready');
   const snapshotPhaseRef = useRef(snapshotPhase);
   const [revisionId, setRevisionId] = useState(initialRevisionId);
+  const [commandAction, setCommandAction] = useState<'save' | 'publish'>('save');
   const [failure, setFailure] = useState<EditFailure | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1366,11 +1384,12 @@ function InlinePostEditorContent({
   const editIntent = useRef(new ReplyIntent(idempotencyKey));
   const sessionClient = useContext(QueryClientContext);
   const session = sessionClient?.getQueryData(sessionQuery.queryKey);
-  const commandContext = JSON.stringify([containerId, revisionId, session?.subject, session?.csrfToken]);
+  const commandContext = (action: 'save' | 'publish') =>
+    JSON.stringify([containerId, revisionId, session?.subject, session?.csrfToken, action]);
   const uncertainChanged = !editIntent.current.canPrepare(
     { title: '', body, mediaIds: mediaIdsFromSources(imageSources(body)) },
     null,
-    commandContext,
+    commandContext(commandAction),
   );
   const ready =
     snapshotPhase === 'ready' && hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
@@ -1594,20 +1613,26 @@ function InlinePostEditorContent({
     }
     const mediaIds = mediaIdsFromSources(sources);
     const draft = { title: '', body: bodyRef.current, mediaIds };
-    if (!editIntent.current.canPrepare(draft, null, commandContext)) return;
-    const command = editIntent.current.prepare(draft, null, commandContext);
+    const submitter = (event?.nativeEvent as SubmitEvent | undefined)?.submitter;
+    const action = submitter instanceof HTMLButtonElement && submitter.value === 'publish' ? 'publish' : 'save';
+    if (editIntent.current.unresolved && action !== commandAction) return;
+    const context = commandContext(action);
+    if (!editIntent.current.canPrepare(draft, null, context) || (action === 'publish' && !onPublish)) return;
+    setCommandAction(action);
+    const command = editIntent.current.prepare(draft, null, context);
     editIntent.current.settle(false);
     submittingRef.current = true;
     setSubmitting(true);
     setFailure(null);
     const owner = lifetime.controller.signal;
     try {
-      const result = await onSubmit({
+      const input = {
         body: command.body,
         revisionId,
         idempotencyKey: command.idempotencyKey,
         mediaIds: command.mediaIds,
-      });
+      };
+      const result = action === 'publish' ? await onPublish!(input) : await onSubmit(input);
       if (!lifetime.current(owner)) return;
       if (!result.ok) {
         editIntent.current.settle(result.reason !== 'unavailable');
@@ -1712,6 +1737,19 @@ function InlinePostEditorContent({
           {m.editor_uploading()}
         </p>
       ) : null}
+      {ownDraftContext ? (
+        <section aria-label={m.own_drafts_edit_context()} className="space-y-1 text-sm text-muted-foreground">
+          <h2 className="font-medium text-foreground">{m.own_drafts_edit_context()}</h2>
+          <p>{m.own_drafts_post()}: {ownDraftContext.postId}</p>
+          <p>{m.own_drafts_thread()}: {ownDraftContext.threadId}</p>
+          <p>{m.own_drafts_revision()}: {initialRevisionId}</p>
+          <p>{m.own_drafts_language()}: {ownDraftContext.language ?? m.own_drafts_language_unknown()}</p>
+          <p>{m.own_drafts_licence()}: {ownDraftContext.licence}</p>
+          <p>
+            {m.own_drafts_subjects()}: {ownDraftContext.subjectIds.length ? ownDraftContext.subjectIds.join(', ') : m.own_drafts_no_references()}
+          </p>
+        </section>
+      ) : null}
       <form className="min-w-0 space-y-4 [overflow-wrap:anywhere]" onSubmit={submit}>
         <p className="text-sm font-medium">{m.thread_reply_body_label()}</p>
         {submitting ? (
@@ -1780,14 +1818,30 @@ function InlinePostEditorContent({
         ) : null}
         <div className="flex min-w-0 flex-wrap gap-2 [overflow-wrap:anywhere]">
           {inspection ? <WritingInspectionToolbar inspection={inspection} /> : null}
-          <Button
-            type="submit"
-            className={authoringActionClassName}
-            disabled={!ready || submitting || pendingUploads > 0}
-          >
-            {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
-            {m.thread_edit_save()}
-          </Button>
+          {!editIntent.current.unresolved || commandAction === 'save' ? (
+            <Button
+              type="submit"
+              name="own-draft-action"
+              value="save"
+              className={authoringActionClassName}
+              disabled={!ready || submitting || pendingUploads > 0 || editIntent.current.unresolved && commandAction !== 'save'}
+            >
+              {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
+              {editIntent.current.unresolved ? m.own_drafts_retry_save() : m.thread_edit_save()}
+            </Button>
+          ) : null}
+          {allowPublish && (!editIntent.current.unresolved || commandAction === 'publish') ? (
+            <Button
+              type="submit"
+              name="own-draft-action"
+              value="publish"
+              className={authoringActionClassName}
+              disabled={!ready || submitting || pendingUploads > 0 || editIntent.current.unresolved && commandAction !== 'publish'}
+            >
+              {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
+              {editIntent.current.unresolved ? m.own_drafts_retry_publish() : m.own_drafts_publish()}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"

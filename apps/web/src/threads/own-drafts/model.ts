@@ -1,6 +1,7 @@
 import type { DocumentSnapshot } from '@rezics/document';
-import type { CurrentPost } from '../actions';
+import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from '../actions';
 import type { locales } from '../../paraglide/runtime.js';
+import type { SavedWriting } from '../local-writing-draft';
 
 export type OwnDraftLocale = (typeof locales)[number];
 
@@ -38,8 +39,53 @@ export type OwnDraftPageData = Readonly<{
 }>;
 
 export type OwnDraftSelection = Readonly<{
-  post: Readonly<Pick<CurrentPost, 'id' | 'threadId'> & { body: DocumentSnapshot }>;
+  post: Readonly<
+    Pick<CurrentPost, 'id' | 'threadId' | 'parentId'> & { body: DocumentSnapshot; mediaIds: readonly string[] }
+  >;
   revision: string;
+}>;
+
+export type OwnDraftWriteAction = 'save' | 'publish';
+export type OwnDraftWriteInput = Readonly<{
+  action: OwnDraftWriteAction;
+  postId: string;
+  threadId: string;
+  body: DocumentSnapshot;
+  revisionId: string;
+  idempotencyKey: string;
+  mediaIds: readonly string[];
+}>;
+export type OwnDraftEraseInput = Readonly<{
+  postId: string;
+  threadId: string;
+  opening: boolean;
+  revisionId: string;
+  idempotencyKey: string;
+}>;
+export type OwnDraftReadback =
+  | Readonly<{
+      state: 'available';
+      revision: string;
+      visibility: 'draft' | 'published' | 'other';
+      body: DocumentSnapshot | null;
+      mediaIds: readonly string[];
+    }>
+  | 'denied'
+  | 'concealed'
+  | 'unavailable';
+export type OwnDraftCommands = Readonly<{
+  write: (
+    input: OwnDraftWriteInput,
+    signal: AbortSignal,
+  ) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
+  erase: (input: OwnDraftEraseInput, signal: AbortSignal) => Promise<{ ok: true } | WriteFailure>;
+  readback: (postId: string, signal: AbortSignal) => Promise<OwnDraftReadback>;
+}>;
+export type OwnDraftLocalWritingReader = Readonly<{
+  load: (
+    request: Readonly<{ identity: OwnDraftIdentity; entry: OwnDraftEntry; selection: OwnDraftSelection }>,
+    signal: AbortSignal,
+  ) => Promise<SavedWriting | null | 'unavailable'>;
 }>;
 
 export type OwnDraftIdentity = Readonly<{
@@ -144,10 +190,17 @@ export async function readSelectedOwnDraft(
   if (signal.aborted) return 'unavailable';
   if (typeof result === 'string') return result;
   if (result.post.id !== entry.id || result.post.threadId !== entry.threadId) return 'concealed';
-  if (result.post.body === null || result.revision !== entry.revisionId) return 'stale';
+  if (!result.post.body || result.revision !== entry.revisionId) return 'stale';
+  if (JSON.stringify(result.post.mediaIds) !== JSON.stringify(entry.mediaIds)) return 'stale';
   return {
     revision: result.revision,
-    post: { id: result.post.id, threadId: result.post.threadId, body: result.post.body },
+    post: {
+      id: result.post.id,
+      threadId: result.post.threadId,
+      parentId: result.post.parentId,
+      body: result.post.body,
+      mediaIds: [...result.post.mediaIds],
+    },
   };
 }
 

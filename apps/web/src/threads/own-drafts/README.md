@@ -12,12 +12,18 @@ focuses the inspection heading and returning restores focus to the corresponding
 Decision: resume inspection through a typed `OwnDraftReader` seam and bind it only after Content publishes its
 generated own-draft client methods; browser-local writing is not read or replaced by this consumer.
 
-The installed Content routes and schemas are present in `services/kernel`, and the owner README documents their
-wire page and exact action paths. The checked-in `@rezics/client` declaration does not yet include the generated
-`own_drafts.list` and `own_drafts.resume` methods. The Web component therefore does not construct native URLs as
-fetch destinations. Signed-in `/drafts` route and navigation binding, composer resume, save/publish/erase commands,
-readback, browser-local recovery choice, and their mounted tests remain in
-`.temp/continuation/own-drafts-journey.md`.
+Decision: Keep browser and server writing as independent sources after every command acknowledgement. Require a
+named body choice before opening the editor, retain the browser copy, and report a later current read separately.
+
+Decision: Keep the selected revision in the private erase retry intent and use the existing typed DELETE command,
+whose native contract accepts an idempotency key but no revision precondition.
+
+The signed-in localized route, account navigation, composer choice, save/publish/erase controls, and current-post
+readback are connected through typed Web actions. The checked-in `@rezics/client` declaration still lacks the
+generated `own_drafts.list` and `own_drafts.resume` methods, so `ownDraftNativeReader` returns unavailable until
+those typed methods are delivered. No advice path becomes a browser fetch destination. Binding that generated
+reader and completing the deferred controller acceptance are in
+`.temp/continuation/own-drafts-native-reader.md`.
 
 ## Cost
 
