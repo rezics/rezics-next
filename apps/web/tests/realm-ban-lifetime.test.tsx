@@ -129,6 +129,8 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { sessionQuery } = await import('../src/session/query');
 const { RealmBansPanel } = await import('../src/community/realm-bans-panel');
 const { RealmBansControl } = await import('../src/community/realm-bans-control');
+const { CommunityManagementContext } = await import('../src/community/community-management');
+const { getLocale, setLocale, locales } = await import('../src/paraglide/runtime.js');
 const actions = await import('../src/community/space-actions');
 const { m } = await import('../src/paraglide/messages.js');
 const host = window.document.createElement('main') as unknown as HTMLElement;
@@ -157,14 +159,14 @@ async function close() {
   mounted = false;
   client.clear();
 }
-async function mount(session: unknown = viewer()) {
+async function mount(session: unknown = viewer(), content?: Parameters<typeof paint>[0]) {
   await close();
   currentRealm = realmId;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session);
   root = createRoot(host);
   mounted = true;
-  await paint();
+  await paint(content);
 }
 function button(label: string) {
   const node = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
@@ -702,3 +704,65 @@ test('Default Realm ban management retains original reader and command lifetime 
   clean();
   expect(writes).toHaveLength(sends);
 }, 60_000);
+
+test('default caller retires private facts and late reads on locale replacement without borrowing the original visit', async () => {
+  const original = getLocale();
+  try {
+    for (const locale of locales) {
+      setLocale(locale, { reload: false });
+      await mount();
+      await list();
+      await review();
+      await click(m.realm_bans_refresh());
+      const obsolete = lists.at(-1)!;
+      const replacement = locales.find((value) => value !== locale)!;
+      setLocale(replacement, { reload: false });
+      // A locale change fences settlement even before React rerenders the Panel.
+      await list(obsolete);
+      expect(host.textContent).not.toContain(row.reason);
+      expect(host.textContent).not.toContain(account.displayName);
+      await paint();
+      expect(host.textContent).not.toContain(row.reason);
+      expect(host.querySelector('input')?.value).toBe('');
+      await list();
+      expect(host.textContent).toContain(row.reason);
+    }
+  } finally {
+    setLocale(original, { reload: false });
+  }
+});
+
+test('default management exposure preserves positive admission, retires on close and fences late settlement on reentry', async () => {
+  const admissions: boolean[] = [];
+  const report = (_operation: unknown, admitted: boolean) => {
+    admissions.push(admitted);
+  };
+  const content = (entered: boolean) => (
+    <CommunityManagementContext.Provider value={{ entered, report }}>
+      <RealmBansPanel realmId={realmId} />
+    </CommunityManagementContext.Provider>
+  );
+  const before = lists.length;
+  await mount(viewer(), content(false));
+  expect(lists).toHaveLength(before + 1);
+  await list();
+  expect(admissions).toContain(true);
+  expect(host.textContent).not.toContain(row.reason);
+  await paint(content(true));
+  expect(host.textContent).toContain(row.reason);
+  await review();
+  await click(m.realm_bans_confirm_ban());
+  await lookup();
+  const obsoleteWrite = writes.at(-1)!;
+  await paint(content(false));
+  hidden();
+  const afterClose = lists.length;
+  await settle(obsoleteWrite, Response.json({ ban: receipt }));
+  hidden();
+  expect(lists).toHaveLength(afterClose);
+  await paint(content(true));
+  expect(lists).toHaveLength(afterClose + 1);
+  await list();
+  clean();
+  expect(host.textContent).toContain(row.reason);
+});

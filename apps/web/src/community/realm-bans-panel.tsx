@@ -2,6 +2,8 @@ import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } fr
 import { QueryClientContext } from '@tanstack/react-query';
 import { useSession } from '../session/query';
 import { changeRealmBan, readRealmBans, resolveRealmBanTarget } from './space-actions';
+import { getLocale } from '../paraglide/runtime.js';
+import { CommunityManagementContext } from './community-management';
 import { RealmBansControl } from './realm-bans-control';
 import { RealmBanLifetime, realmBanSessionSource } from './realm-ban-lifetime';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
@@ -14,16 +16,24 @@ const serverRevision = () => 0;
 export function RealmBansPanel({ realmId }: { realmId: string }) {
   const { state, csrfToken, subject } = useSession();
   const client = useContext(QueryClientContext);
+  const region = useContext(CommunityManagementContext);
+  const entered = useRef(false);
+  if (region?.entered) entered.current = true;
+  // Keep the original positive admission read before entry; a later close retires the visit.
+  const exposed = !entered.current || region?.entered !== false;
   const source = client && typeof window !== 'undefined' ? realmBanSessionSource(client) : undefined;
   const revision = useSyncExternalStore(
     source?.subscribe ?? subscribe,
     source?.snapshot ?? serverRevision,
     serverRevision,
   );
+  const locale = getLocale();
   const binding = useMemo(() => {
     const lifetime = new RealmBanLifetime(() => {
       const session = source?.read();
       return (
+        exposed &&
+        getLocale() === locale &&
         !!source &&
         source.snapshot() === revision &&
         state === 'signed-in' &&
@@ -55,13 +65,13 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
         return lifetime.owns(ticket) && !signal.aborted ? next : { state: 'signed-out' };
       }) satisfies ResolveBanTarget,
     };
-  }, [realmId, source, revision, state, subject, csrfToken]);
+  }, [realmId, source, revision, state, subject, csrfToken, locale, exposed]);
   const previous = useRef(binding);
   if (previous.current !== binding) {
     previous.current.lifetime.retire();
     previous.current = binding;
   }
   useLayoutEffect(() => binding.lifetime.connect(), [binding]);
-  if (state !== 'signed-in' || !subject) return null;
+  if (state !== 'signed-in' || !subject || !exposed) return null;
   return <RealmBansControl key={`${realmId}:${subject}`} realmId={realmId} {...binding} ready={!!csrfToken} />;
 }

@@ -23,6 +23,13 @@ receipt. Returning an old tuple does not restore them. A replacement ready calle
 native list. A repeated initial read object cannot seed another visit after replacement or disconnection;
 a distinct initial object is an explicitly supplied new read generation for standalone callers.
 
+The Panel and standalone Control also bind the original locale. A locale change fences pending sends
+and settlements before rerender; rendering the new locale starts a fresh visit. Management exposure
+retains the initial native admission read before entry, so a permitted user can still open the original
+management region. Once entered, closing the region retires its private visit; reentry reads afresh.
+
+Decision: retain the initial hidden-region admission read, then retire private ban facts, drafts and late work when an entered management region closes.
+
 Layout cleanup disconnects synchronously and invalidates connection tickets. Strict Mode may reconnect the same
 visit, restarting its outstanding read; previously disconnected work remains obsolete. A weak initial-read
 retirement marker prevents a genuinely new mount from borrowing a disconnected visit's initial page even
@@ -84,7 +91,9 @@ authority and reauthorizes every mutation.
 Decision: until Content installs the composed identity fields, use the native target and actor account IDs as fallbacks; render native `actor: null` as an erased moderator identity, never as anonymous.
 
 The new composed current-ban reader remains unbound until Content publishes its generated methods,
-response types and native examples. The selected inspection will retain the list frontier, bind the
+response types and native examples. Decision: the future exact selected-account review accepts an account ID independently of authoring handle lookup without moving the list frontier.
+
+The selected inspection will retain the list frontier, bind the
 Realm/account/current episode, and keep absent, denied and unavailable outcomes distinct only where
 the native response admits them. An unavailable inspection retains selection for explicit retry; it
 does not certify absence. A definitive unban receipt stays independent from readback, and neither
