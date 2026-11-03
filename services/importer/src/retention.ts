@@ -536,7 +536,7 @@ export async function listRetentionGenerations(
     const database = wrapDatabase(store.database, options);
     return listRetentionOnDatabase(
       database,
-      { source: input.source, after: input.after, limit },
+      { source: input.source, limit, ...(input.after !== undefined ? { after: input.after } : {}) },
       retentionCatalog(database),
       store.path,
     );
