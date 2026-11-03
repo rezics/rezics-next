@@ -4,7 +4,12 @@ import { documentActions } from '../../src/search/document.ts';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 import type { PublicRatingFigure, PublicRatingSnapshot, PublicRatingSource } from '../../src/search/rating-source.ts';
 import { withPublicRatings } from '../../src/search/rating-subject-source.ts';
-import type { IndexedSubject, NativeWorkLinkEvidence, SubjectSnapshot, SubjectSource } from '../../src/search/source.ts';
+import type {
+  IndexedSubject,
+  NativeWorkLinkEvidence,
+  SubjectSnapshot,
+  SubjectSource,
+} from '../../src/search/source.ts';
 
 const partition = 10;
 const binding = { questionId: '00000000-0000-8000-8000-000000000001', populationId: GLOBAL_CONTEXT.id };
