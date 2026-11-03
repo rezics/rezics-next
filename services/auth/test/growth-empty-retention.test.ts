@@ -10,7 +10,7 @@ import {
 } from '../src/retention.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
-const scales = [256, 1024, 4096];
+const scales = [256, 1024, 4096] as const;
 const fixture = testDatabase();
 const now = new Date();
 const cutoff = now.getTime() - 30 * 86400000;
@@ -64,7 +64,7 @@ function assertMeasuredCost(
   report: Awaited<ReturnType<typeof checkGrowth>>,
   { requests, removedRows }: { requests: boolean; removedRows: number },
 ) {
-  expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   for (const { scale, cost } of report.samples) {
     expect(cost.statements).toBeGreaterThan(0);
     expect(cost.plans).toBeGreaterThan(0);
