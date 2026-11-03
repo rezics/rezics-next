@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { createKernelClient } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { episodeIds, episodeIntent } from '../../src/library/episode-progress.ts';
+import { createEpisodeProgressCommands, episodeIds, episodeIntent } from '../../src/library/episode-progress.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
@@ -163,7 +164,13 @@ test('catalogue withdrawal and concealment retain facts while correction and exa
     path = `/v1/progressSessions/${first.id}`;
   const retryKey = entryKey(),
     body = { revision: 1, add: [episode.id] };
-  await send('POST', `${path}:recordEpisodes`, body, 200, retryKey);
+  const commands = createEpisodeProgressCommands({
+    pool: native.pool,
+    access: native.access,
+    tokens: native.tokens,
+    routeKey: testRouteKey(),
+  });
+  expect((await commands.recordEpisodes(owner.actor, first.id, body, retryKey)).value).toEqual({ revision: 2 });
   // Removing the admitted parent statement changes current membership, never the personal fact.
   const relation = episode.statements['schema:isPartOf'][0].id;
   await send(
