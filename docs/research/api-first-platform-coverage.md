@@ -1,0 +1,479 @@
+# Reference platform coverage, from the API to the web
+
+Research date: 2026-11-03. Repository baseline: `1ba6956c02f4e28dae2ab41ea016666eac41bcd5`.
+This is a source-based capability assessment, not a deployment verification or an adopted design.
+
+REZICS already has most of the catalogue primitives a VNDB or Bangumi reader expects:
+works, releases, episodes, people, organizations, fictional characters, qualified credits,
+spoiler-qualified classifications and a relation graph. Its personal library, votes, reviews,
+collections, labels, copies and progress are implemented APIs with web consumers. The main
+uncertainties are narrower than a missing generic graph: faithful personal-data migration,
+episode-specific consumption, richer list-entry semantics and incomplete domain configuration.
+An imported source's aggregate rating is a separate capability from a native user's vote.
+
+## Reference set and classification
+
+The discussion's [provider inventory](https://github.com/rezics/rezics-next-discussion/blob/f0850c4de99e6f2aea0ac9ea9bf771cd2b88ada4/research/round-2/source-providers-and-rights.md)
+names VNDB, Bangumi, MusicBrainz, Open Library, Wikidata, AniDB, AniList, MyAnimeList,
+TMDb and IGDB. The repository's [library comparison](library-abstraction.md) and
+[subject-page comparison](subject-page-ia-current.md) additionally use Steam, Goodreads,
+Letterboxd, Discogs and IMDb. These fifteen catalogue and tracker references form the set below.
+The broader [backend survey](backend-design-catalogue-search.md) also examines general
+community, search and document products; that survey is not a second provider integration list.
+
+Decision: use the union of the provider inventory and the repository's catalogue/library
+comparison set; an import inventory's omission does not make native data out of scope.
+
+| Class | Meaning in this report |
+| --- | --- |
+| **A — covered** | Current implementation accepts a native write and exposes a corresponding read, using an existing catalogue term or an explicitly named product model. Authorization, the active definition release and ordinary validation still apply. |
+| **B — configuration** | Current definition machinery and value types can support the feature, but a type, property admission, qualifier, concept seed or library profile must be released. It is not writable merely by submitting an unknown field. |
+| **C — new capability** | A new operation, product state model, datatype, integration or projection is required. Keeping arbitrary source JSON or text is not equivalent coverage. |
+| **D — out of scope** | Explicitly deferred or closed in [scope](../scope.md). This does not mean the external product lacks it. |
+
+The tables classify the smallest meaningful feature, rather than assigning a single grade to a
+platform. A row containing A and B names the already supported part and the required configuration
+separately. All mappings and web assessments are REZICS-specific inferences from the cited source.
+“Presented” means a route and component consume or edit the capability in source; it does not
+claim that an empty deployment contains the relevant catalogue data or that a gated feature is public.
+
+## Shared API evidence
+
+These evidence keys are used in every platform table. They identify implemented operations,
+not just interfaces. The client is the Eden client derived from the mounted kernel in
+[packages/client/src/index.ts](../../packages/client/src/index.ts); its semantic wire model is
+[item.d.ts](../../packages/client/src/kernel/semantic/item.d.ts). Kernel mounting is in
+[kernel.ts](../../services/kernel/src/http/kernel.ts).
+
+| Key | Write, read and vocabulary/model boundary |
+| --- | --- |
+| **S** | [Subject routes][S]: `POST /v1/subjects`, `PATCH /v1/subjects/:id/terms`, `POST /v1/subjects/:id/candidates`, `POST /v1/subjects/:id/candidates/:candidate:accept`, `GET /v1/subjects/:id`, candidate and revision reads. Types and properties must be admitted by the active release. Labels, descriptions and aliases are multilingual terms; statements have qualifiers, references and rank. Proposal and acceptance are distinct operations. |
+| **G** | [Relation routes][S] and [graph implementation][G]: `GET /v1/subjects/:id/relations`, `/links`, `/graph`, `/counts`. Relations are statements written through **S**, with declared inverse, symmetry, order and slot keys. Graph reads are bounded, not unrestricted traversal or SPARQL. |
+| **V** | [Definition routes][V] and [portable definition/value schema][T]: `POST /v1/definitions/releases`, `GET /v1/definitions/releases/:digest`, `POST /v1/definitions/releases/:digest:activate`; context extensions have their own activation. This is the **B** path, followed by **S** writes. Catalogue publication and vocabulary expansion require platform grants under scope. |
+| **L** | [Personal library routes][L]: `PUT/GET/DELETE /v1/libraryEntries/:subjectId`, `GET /v1/libraryEntries`; native `Entry.state` from a subject's released library profile. [Labels][LL]: create/read `/v1/libraryLabels`, assignment commands and `/v1/libraryLabelAssignments`. These are product models, not RDF statements. |
+| **K** | [Collections][K]: `POST/GET /v1/collections`, `GET/PATCH /v1/collections/:collectionId`, `POST/GET /v1/collections/:collectionId/members`, member edit/removal and publication commands. Native collection visibility and member notes support overlapping lists; publication is distinct from a private collection. |
+| **H** | [Copies][L] and [copy model][E]: `POST/GET /v1/copies`, `GET/PATCH /v1/copies/:copyId`. Released profiles admit physical/digital kinds; a copy has status, location, source, acquisition/disposal dates and note. A copy is not a DRM licence or a provider-authenticated ownership assertion. |
+| **P** | [Progress routes][P], [model][PM] and [profile admission][PP]: `POST/GET /v1/progressSessions`, `GET /v1/progressSessions/:sessionId`, `POST /v1/progressSessions/:sessionId:record`, `:complete`, `:abandon`, and completed-unit/change reads. Native fields include subject, versionSubjectId, mode, unit, amount, position and state. `/v1/publishedLogs` publishes a session snapshot with an optional note. |
+| **R** | [Rating routes][R]: `PUT/GET/DELETE /v1/subjects/:id/ratings/:questionId/vote`, question reads, subject `/figure`, `/ratings` and `/ratings/populations`. Native vote/question/population models, not catalogue predicates. [Source statistics][RS] expose `GET/PUT /v1/subjects/:id/source-statistics[/ :source]` (without the space); the current admitted source is specifically `vndb`. Mean, count, scale, asOf, licence and attribution stay separate from native votes. |
+| **C** | [Content routes][C]: `POST /v1/threads`, `GET /v1/threads/:id`, `POST/GET /v1/threads/:id/posts`, revision writes/reads, `GET /v1/subjects/:id/threads`, subject/thread/post reaction routes. Reviews use the review board/thread contract; this is not a catalogue statement or a progress event. |
+| **F** | [Follow routes][L]: `PUT/DELETE/GET /v1/follows/:targetId`, list reads. Native follow edges are distinct from library states. Following and collection membership cover different user intentions. |
+| **Q** | [Search routes][Q]: `POST /v1/subjects:search`, `:suggest`, `:facets`; [public filter source][QF] reads real semantic/library/rating producers. Search is implemented but grant-gated; advanced facets/scopes/rating sorts are second scope. |
+| **I** | [Source-record metadata][I], [VNDB inventory][VN] and [Bangumi inventory][BG] describe provenance and source mappings. The inventories' `proposed`/`omitted` labels are import decisions, not proof of a current kernel gap or a scope exclusion. Only Bangumi, VNDB, Open Library and Wikidata imports are in the launch scope. A metadata endpoint is not an authenticated personal-list importer. |
+
+The exact source-statistic operations are `GET /v1/subjects/:id/source-statistics` and
+`PUT /v1/subjects/:id/source-statistics/:source`. Public custom-method notation is `:verb`;
+[custom-method.ts](../../services/kernel/src/http/custom-method.ts) registers the internal `/$verb` form.
+
+The semantic value schema admits item, string, external-id, URL, monolingual text, quantity,
+time, document and media. Time supports Gregorian year/month/day precision, not every Wikidata
+calendar and precision. `somevalue` and `novalue` exist in the client model. Neither a URL to
+an external ID nor a JSON attachment supplies the missing behavior of a provider integration.
+
+## Shared web evidence
+
+In the platform tables, **yes** means an existing reader/editor, **partial** identifies a
+specific limitation, and **no** means no dedicated presentation is established by these bindings.
+For B, “conditional” means the generic reader/editor can consume a released configuration;
+it is not an assertion that the new profile, term or view is already shipped.
+
+| Key | Route and component |
+| --- | --- |
+| **W1** | `/subjects/:id/:slug` → [SubjectPage][W1], with `/details` and finite subject views via [the view route][WV] and [view selection][WT]. [PageData][WD] renders facts, terms, classifications and source data; [SpoilerGate][WS] and classification rendering in **WD** respect spoiler levels. The page obtains composed reads through `POST /v1/pages:read` in [presentation routes][WP]. |
+| **W2** | Subject `/relations`, `/credits`, `/characters`, `/appearances`, `/works`, `/contents`, `/editions` → [RelationsView][W2], [QualifiedCredit][WC] and **WD**. A finite view appears when its composition and data warrant it; every possible new property does not automatically get a useful dedicated tab. |
+| **W3** | Subject `/edit`, `/relation-edit`, `/terms`, `/changes`, `/identifiers`, `/sources` → **W1**'s `SubjectFactsEntry`, [RelationEditor][WE] and source components in **WD**. Generic fields support admitted statements, qualifiers and references. This is the conditional fallback for B; it is not a replacement for a domain workflow. |
+| **W4** | Subject `/character`, `/people`, `/game`, `/screen`, `/work-parts` and other profile routes → [CharacterProfileSession][W4], [PeopleProfileSession][WPE], [GameProfileSession][WGA], [ScreenProfileSession][WSC], [WorkPartsSession][WWP]. [Character profile grouping][WCG] explicitly covers traits, measurements and identifiers. |
+| **W5** | Subject personal controls → [SubjectLibraryLeaf][WL]; `/library/` → [PersonalLibraryPage][WLI]; `/library/labels` → [LabelsPageView][WLL]; `/library/copies` → [CopiesPage][WH]. This already includes digital as well as physical copies. |
+| **W6** | `/library/progress/` and `/library/progress/:id` → [CurrentViewerProgressIndexPage and progress components][W6]; `/library/logs` and `/logs/:id` → [published log view][WLOG]. Native sessions and published snapshots are presented. A scalar episode count does not become an episode checklist. |
+| **W7** | `/library/collections`, `/collections/:id`, `/collections/:id/publish` → [CollectionPage][W7] and [CollectionPublicationPage][W7P]. Visibility and member notes are presented; user-saved dynamic rules remain second scope. |
+| **W8** | Subject overview/reviews → [SubjectRatingsView and source-statistic rendering][W8], [rating reads][WR], own-vote controls and review actions through **WV**. Imported VNDB mean/count/scale/date/licence/attribution are already displayed separately. `/threads/:id/:slug` presents the underlying thread. |
+| **W9** | `/search` → [search route][W9]. The existence of a search UI does not open a scope gate or imply support for every provider's advanced filter language. |
+
+### Shared user capabilities, applied to every relevant platform below
+
+| Expectation | API classification and term/model evidence | Web pass |
+| --- | --- | --- |
+| Browse a catalogue entry, translations, alternative titles, descriptions, images, IDs; follow linked credits and relations | **A S/G**, `schema:name`, `schema:image`, `schema:url`, `schema:sameAs`, multilingual terms and existing domain predicates in [core][CO]. New provider-specific typed ID predicates are **B V/S** on `external-id` [T], while a plain deep link is already A. | **Yes W1–W4** for admitted profiles; a new ID's provider formatter is conditional W3. |
+| Contribute/correct facts and inspect history/provenance | **A S/I**, candidate statements, references, revisions and sourceRecords [S][I]. Merge/identity mutation is gated, not an unrestricted editor operation. | **Yes W3**. Provider-site edit permissions are not inherited. |
+| Plan/start/finish/pause/drop, organize overlapping shelves, keep private/public lists, own copies | **A L/K/H**, native profile states, labels, collection visibility/member notes and copy fields [L][LL][K][E]. A new domain's state/progress/copy profile is **B V** [T][PP]. | **Yes W5/W7**; a new profile is conditional. |
+| Score, review, discuss, react and follow | **A R/C/F**, native votes, review threads, reactions and follows [R][C][L]. Native scale is the question's scale, not automatically the provider's scale. | **Yes W8**, subject views and `/library/following`; exact provider social graphs require a separate importer. |
+| Track one progress measure, repeat a session and publish a snapshot | **A P** for already configured profiles [P][PM]; **B V/P** for another manual profile [PP][T]. Multiple sessions already exist. | **Yes W6**. It is not a dated diary with a per-occurrence rating. |
+| Provider-authenticated import/export/synchronization of private lists, votes, labels and progress | **C**: account linking/consent, source identity reconciliation, loss-aware field mapping, idempotent merge and export/sync operations. **I** does not supply this. A source link and manual entry are A, not migration. | **No** complete provider migration flow established by W5–W8. |
+| Personalized recommendations; advanced search facets/scopes/rating sorts; user-saved dynamic queries; email reminders | **D** under [scope][SC]. Basic search, static collections, a bounded following feed and minimal in-app notifications are distinct in-scope features. | Scope-gated or deferred; do not count these as missing basic catalogue representation. |
+
+## Platform-by-platform mapping
+
+### VNDB
+
+Primary inventory: [Kana API](https://api.vndb.org/kana), especially `/vn`, `/release`,
+`/producer`, `/staff`, `/character`, `/tag`, `/trait`, `/ulist`, `/ulist_labels` and `/rlist`;
+[dump documentation](https://vndb.org/d14). The public data model includes spoiler-bearing
+tags/traits, qualified appearances and credits, release variants, votes and personal lists.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Visual novel; translated/original names, synopsis, links and covers | **A S**, `wd:Q689445`, `schema:abstract`, `wdt:P3180` [VNCL][CO]. | **Yes W1/W3/W4**, game editor. |
+| Release, language, platform, publisher/developer, date, format, age rating, identifiers; release → work | **A S/G**, `wd:Q20631656`, `schema:exampleOfWork`, `schema:gamePlatform`, `schema:inLanguage`, `schema:datePublished`, `schema:publisher`, `wdt:P178`, `wdt:P2899`, `wdt:P437` [GA][CO]. Year/month/day precision is A [T]; an explicit TBA/status concept is **B V/S** [CL][T], not a fabricated date. | **Yes W1–W4** for releases/editions; TBA conditional W3. |
+| Producer and staff identities, aliases and credited names; developer/publisher/writer/artist/composer/translator roles | **A S/G**, `schema:Organization`, `schema:Person`, role predicates and `wdt:P1932` (creditedAs) [CO][GA]. | **Yes W1/W2/W4**, people and credits. |
+| Producer parent/predecessor/successor; staff language/occupation; long person biography | **B V/S**, add/admit `wdt:P749`, `wdt:P1365`, `wdt:P1366`, `schema:knowsLanguage`, an occupation property and person `schema:abstract`. Existing organization/person/item/document shapes suffice [CO][T][VN]. | **Conditional W1/W3**; no complete organization-history/occupation workflow in W4. |
+| Characters, names, portraits, gender, birthday, height, weight, blood type and trait classifications | **A S**, `wd:Q95074`, `schema:gender`, `schema:birthDate`, `schema:height`, `schema:weight`, `wdt:P1853`, `schema:keywords` [CH][CL]. Traits are concepts, not free-text person fields. | **Yes W1/W3/W4**, character editor and classification chooser. |
+| Work appearances, roles, voice actors and spoilers | **A S/G**, `schema:character`, `wdt:P725`, `wdt:P453` characterRole, `wdt:P3831` detailedRole, `rezics:spoilerLevel`; characterRole is a credit slot key [CO][VNCL]. | **Yes W2/W4**, qualified credit/appearance and spoiler rendering W1. |
+| Source-specific age-at-appearance, main-character linkage and additional trait categories | **B V/S**, add typed properties/qualifiers and concept seeds to the character/appearance profile [CH][CO][CL][T]; omission from [VN] is not an engine limitation. | **Conditional W3**; no dedicated age/main-character workflow established. |
+| Sequel/prequel, parent/part, alternative/based-on/spin-off and cross-media relations | **A S/G**, `wdt:P155`, `wdt:P361`, `wdt:P1889`, `wdt:P144`, `rezics:spinOffOf` and core relation family [VNCL][CO]. Release-to-release relation admissions absent from that work mapping are **B V/S** [GA][T][VN]. | **Yes W2**, relation editor W3; release relations conditional. No graph visualizer is required to read these lists. |
+| Tag/trait hierarchy, aliases and per-assertion spoiler level | **A S/G**, `skos:Concept`, `skos:ConceptScheme`, `skos:broader`, `skos:inScheme`, `schema:keywords`, `rezics:spoilerLevel` [CL][CO]. Exact source schemes, role/trait concepts and mappings are **B V/S** [CL][T][VN]. | **Yes W1/W4** for classifications and spoilers; conditional source seed browsing W1/W3. |
+| Tag popularity/confidence, user tag ballots and lie flags | **C**: a classification-ballot model and aggregate/provenance projection. A native work rating or selection of a tag statement is not a tag vote [R][S][VN]. | No equivalent ballot UI. |
+| User VN lists, labels, votes; release ownership/play state | **A L/K/R/H/P**, native states, labels, lists, votes, digital/physical copies and VN percent progress [VNCL][GA][L][LL][R]. Exact release-specific state labels are **B V** [GA][T]. | **Yes W5–W8** for native equivalents; conditional release state labels. |
+| Per-list-entry priority/notes/privacy flags and source timestamps; faithful private-list transfer | **C**: entry-level provider semantics and personal importer. Collection notes/visibility and copy notes are A [K][E], but `Entry` has no provider note/priority/per-entry privacy fields [E]. | Native collection alternative **yes W7**; full VNDB list-entry workflow absent. |
+| Display VNDB vote count/mean with source and timestamp, without creating local voters | **A R**, fixed `vndb` SourceStatistic [RS]. | **Yes W8**, including attribution and scale. |
+| Quotes and their character/work/voice context | **B V/S**, add `schema:Quotation` and admitted speaker/work/media predicates on current document/item/media values [T][CO][VN]. This is catalogue text, not licensed voice-file acquisition. | **Conditional W1/W3**; no dedicated quote browser/player. |
+
+### Bangumi
+
+Primary inventory: official [OpenAPI schema](https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml)
+and [Archive dumps](https://github.com/bangumi/Archive). Subjects cover books, animation,
+music, games and live action; episodes, persons and characters have separate identities.
+Subject collections and episode collections are different resources.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Book, animation and game subjects, titles/infobox facts, images, IDs and tags | **A S**, book `schema:Book`, `schema:TVSeries`/`schema:Movie`, game `schema:VideoGame`, `wdt:P5732`, `schema:keywords` [BK][AN][GA][CL]. The source infobox must be mapped to admitted facts, not treated as an arbitrary object [BG]. | **Yes W1/W3/W4**, literary, screen and game routes. |
+| Music subjects and live-action subjects | Music album identity is **A S**, `schema:MusicAlbum` [MU]; track/recording/release metadata and library profile are **B V/S/P** [MU][T][PP]. Live-action type/field/presentation admissions are **B V/S** against existing screen shapes [AN][T]. The initial source inventory omits type 3/6: extending that adapter is **C**, not a graph rewrite [BG]. | Album identity **yes W1**; music details/progress and live-action composition conditional W1/W3. No claim of complete music/live-action import. |
+| Episodes, specials, order, duration, air date and subject membership | **A S/G**, `schema:Episode`, `schema:episodeNumber`, `schema:isPartOf`, `schema:duration`, `schema:datePublished` [AN]. Additional source episode-kind concepts are **B V/S** [CL][T][BG]. | **Yes W1/W2/W4**, contents and work-parts editor; kind concepts conditional. |
+| Persons/organizations, professions, pseudonyms and qualified subject credits | Identity/credits **A S/G**, `schema:Person`, `schema:Organization`, `rezics:penNameOf`, role/creditedAs/characterRole predicates [CO]. Profession concepts/property admissions and extra biographical infobox fields are **B V/S** [CO][T][BG]. | **Yes W2/W4** for existing credits; conditional W3 for extra profile fields. |
+| Characters, subject appearances and person/voice associations | **A S/G**, `wd:Q95074`, `schema:character`, `wdt:P725` + `wdt:P453` and detailedRole [CH][CO]. Direct character-to-character relationships need **B V/S** properties/ranges/inverses [CH][T]. Do not encode them as work membership. | Existing appearances/voice credits **yes W2/W4**; character relationship editor conditional W3, no dedicated relationship view established. |
+| Subject relations including adaptations, sequels, summaries, same setting/characters and side stories | **A S/G**, core named relation family, including `rezics:crossMediaCounterpart`, `rezics:summaryOf`, `rezics:sideStoryOf`, `rezics:sameCharacters`, `rezics:sameSetting`, `rezics:bangumiRelatedTo` [CO]. Unknown source codes need **B V/S** explicit meanings, not silent aliasing [BG][T]. | **Yes W2/W3**; new codes conditional. |
+| Five subject collection states, user tags, rating and comment | States/labels/vote **A L/R** with current profiles [BK][AN][GA][LL][R]; comment as a native review **A C**, or collection member note **A K**. Exact collection-comment identity and private flag are **C** entry semantics [E]. | Native alternatives **yes W5/W7/W8**; no complete source collection-entry editor. |
+| Per-episode watched/queued/dropped states, sparse history, manga volume and chapter counters together | **C**: subject-bound structural progress and multiple simultaneous measures. Manual `completed_units` with session-local identities is only **B V/P** [PP][T]; it cannot resolve a Bangumi episode ID or preserve an episode-state map. | Manual progress **conditional W6**; no canonical episode checklist. |
+| Collect a character/person, build an Index/list, react, discuss, review and follow | **A K/C/F/R**, subject membership, native reactions/discussion/reviews/follows [K][C][L][R]. Bookmark collections can hold these subject types without pretending they are consumption sessions. | **Yes W7/W8**, subject views and following; no source-specific Index importer. |
+| Community edits/revisions and provenance | **A S/I**, terms, candidates, acceptance, revision reads and sourceRecords [S][I]. Existing source imports do not transfer Bangumi user authorship/permissions. | **Yes W3**. |
+| Bangumi score distribution/rank/popularity and private collection transfer | **C**: a Bangumi source-statistic contract (current SourceStatistic is VNDB-only), distribution/rank projection and authenticated personal importer [RS][BG]. Local votes remain **A R**. | Native rating **yes W8**; provider aggregate and transfer absent. |
+
+### AniList
+
+Primary inventory: [official GraphQL reference](https://github.com/AniList/docs/tree/03281c0a4bbf0c7f2097e0c935cddaed1096aa65/docs/reference),
+especially `object/media.md`, `medialist.md`, `character.md`, `staff.md`, `mediaedge.md`,
+`airingschedule.md` and `review.md`. Media and MediaList are separate types.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Anime, manga, staff, characters, studios, credits, relations, tags and genres | **A S/G**, screen types, `schema:ComicSeries`, `schema:PublicationVolume`, person/organization/character and credit/classification predicates [AN][MG][CO][CH][CL]. Exact AniList ID and source format/role concepts are **B V/S**, external-id/item values [T][CL]. | **Yes W1–W4** for existing shapes; provider-specific configuration conditional W3. |
+| Airing schedules, next episode, status, streaming/external links | Static episode date/link **A S**, `schema:datePublished`, `schema:url`, `wdt:P973` [AN][CO]; new source status/schedule predicates **B V/S** [AN][T]. Live schedule refresh, countdown projection and alerts are **C** integration/automation; email alerts **D SC**. | Dates/links **yes W1/W2**; new facts conditional; no complete airing-calendar workflow. |
+| List status, progress, custom lists, score and review | Anime scalar episodes and lists/votes/reviews **A L/P/K/R/C** [AN][L][P][K][R][C]. Manga chapter/volume library configuration is **B V/P** [MG][PP][T]. | **Yes W5–W8**; manga progress conditional. |
+| Simultaneous chapter/volume progress, repeat totals, advanced category scores, list priority/private notes and fuzzy start/finish dates | **C** product-model extensions [E][PM][R]. Partial dates on catalogue statements are **A S/T**, but do not add historical personal-session date inputs. Custom list membership is already A K. | Catalogue dates **yes W1/W3**; full MediaList editing absent. |
+| Activities, favourites, likes, replies and follows | Native posts/reactions/follows/collections **A C/F/K** [C][L][K]; an AniList activity stream importer and exact activity-type semantics are **C**. | **Yes W7/W8** and following for native actions. Personalized recommendations **D SC**. |
+
+### MyAnimeList
+
+Primary inventory: [official API v2 reference](https://myanimelist.net/apiconfig/references/api/v2),
+including anime/manga detail, user list and `my_list_status` operations. The reference was
+retrieved directly when the browser reader could not parse it; no unofficial API was substituted.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Anime/manga titles, pictures, summaries, genres, studios/authors, related works and external identity | **A S/G**, current screen/manga/person/organization/classification types and roles [AN][MG][CO][CL]; typed MAL ID and exact format/status concepts **B V/S** [T][CL]. | **Yes W1–W4**; source IDs/concepts conditional W3. |
+| Watching/reading states, score, watched episode count, lists and comments | **A L/P/R/K/C** for anime episodes, list membership, native score and review [AN][P][R][K][C]. Manga profiles are **B V/P** [MG][PP][T]. | **Yes W5–W8**; manga counters conditional. |
+| Volumes and chapters together, priority, repeat counters/rewatch value, private entry comments, original list timestamps | **C** multi-measure progress and richer entry/history fields [E][PM]; a repeat session is already A P but is not the provider's repeat-total field. Provider score distribution/rank also needs **C** source statistics [RS]. | Existing repeated sessions **yes W6**; full MAL entry migration/editing absent. |
+| Forum/review/social participation | Native discussion/review/reaction/follow **A C/F** [C][L]; importing forum identities, moderation states and subscriptions is **C**. Personalized recommendations **D SC**. | **Yes W8** and native following; no provider social sync. |
+
+### AniDB
+
+Primary API pages are [HTTP API](https://wiki.anidb.net/HTTP_API_Definition) and
+[UDP API](https://wiki.anidb.net/UDP_API_Definition). They returned HTTP 403 through both
+browser and direct/raw retrieval. The bounded fallback is established open-source
+[ShokoServer's AniDB provider](https://github.com/ShokoAnime/ShokoServer/tree/93dfaba4fa82547765fb1dbfc791672fb997a1f5/Shoko.Server/Providers/AniDB)
+and its [AniDB models](https://github.com/ShokoAnime/ShokoServer/tree/93dfaba4fa82547765fb1dbfc791672fb997a1f5/Shoko.Server/Models/AniDB).
+This establishes client-visible entities and operations, not a claim about unrestricted current API access.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Anime, normal/special episodes, titles/dates, creators, characters, tags and anime relations | Existing screen/credit/character/classification shapes **A S/G** [AN][CO][CH][CL]; AniDB ID, episode kinds and source-specific relation/creator concepts **B V/S** [T][CL]. | **Yes W1–W4**; source concepts conditional. |
+| Release group, file identity, hashes, size, codec/language/quality and file → episode association | **B V/S** for catalogue file/group types and typed external-id/quantity/item metadata [T][CO][AN]. Do not collapse a file into an AnimeRelease. Authenticated file ownership and verified file matching are **C** operations. | **Conditional W1/W3** for metadata; no file identification/release-group workflow. |
+| MyList state, viewed flag/date, storage/source/notes, identified by file ID or hash/size or anime/episode | Own copy storage/source/note **A H** [E][L]; exact per-file MyList identity, historical watched dates and episode-specific states **C** [PM][PP]. Source evidence: `UDP/User/RequestAddMylist.cs` and `UDP/Info/RequestGetFile.cs` in the pinned provider. | Native copies **yes W5**; no MyList-compatible file/episode tracker. |
+| Anime/episode votes, reviews and watch state | Native vote/review **A R/C** [R][C]; anime scalar progress **A P** [AN][P]. Distinct temporary/permanent provider votes, imported aggregates and user synchronization **C** [RS][PM]. | **Yes W6/W8** for native equivalents. |
+
+### Open Library
+
+Primary inventory: [APIs](https://openlibrary.org/developers/api),
+[monthly dumps](https://openlibrary.org/developers/dumps), and pinned
+[Open Library source](https://github.com/internetarchive/openlibrary/tree/37e446827465be2febad416de1bc18753b66997d).
+Works, editions, authors and subjects are catalogue data; reading logs, ratings and lists are user data.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Work, edition, author, ISBN/OL ID, language, publisher, pages, covers and subjects | **A S/G**, `schema:Book`, `bf:Instance`, `schema:Person`, `schema:exampleOfWork`, `schema:isbn`, `wdt:P648`, `schema:inLanguage`, `schema:numberOfPages`, `schema:genre`/`keywords` [BK][CO][CL]. | **Yes W1–W4**, literary/edition views. |
+| Multiple author names, series/edition relations and contribution history | **A S/G**, multilingual aliases, `schema:author`, `wdt:P179`, `rezics:representativeEdition`, revisions [BK][CO][S]. Exact source subject/facet schemes **B V/S** [CL][T]. | **Yes W1–W3**; schemes conditional. |
+| Want-to-read/currently-reading/read shelves, custom lists, ratings, progress and owned copies | **A L/K/R/P/H**, book/edition page profiles [BK][P][L][K][R]. Source corroboration: `openlibrary/core/bookshelves.py` and work/edition templates in the pinned clone. | **Yes W5–W8**. |
+| Source ratings/reading-log counts and historical personal imports | **C** provider-statistic extension and loss-aware user import; fixed VNDB statistics cannot accept Open Library by relabeling [RS][PM]. | Native figures/logs **yes W6/W8**, provider figures/import absent. |
+| Borrow/read a provider-hosted scan or synchronize a lending entitlement | **D SC**, external participation and hosted-work delivery are closed/deferred. A catalogue link (`schema:url`) is **A S** [CO], not a loan. | External link **yes W1**; no claim to a lending reader. |
+
+### Goodreads
+
+Primary evidence: official [multiple-shelf help](https://help.goodreads.com/s/announcements/a031H00000OfCxDQAV/helpful-goodreads-hack-viewing-books-on-multiple-shelves)
+and [account/import-export announcement](https://help.goodreads.com/s/announcements/a038V00000XKLxSQAX/faqs-duplicate-accounts-incorrect-email-addresses-and-password-resets).
+The [API page](https://www.goodreads.com/api) returned a script challenge; a current public
+API or dump was not verified. Product/export evidence must not be presented as API access permission.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Books/editions/authors, series, cover, ISBN, language and subjects | **A S/G**, book/edition/person/series model [BK][CO][SE][CL]; typed Goodreads IDs **B V/S** on external-id values [T]. | **Yes W1–W4**; provider ID conditional W3. |
+| Exclusive reading state plus overlapping user shelves, lists, score/review and page progress | **A L/K/R/C/P**, current book profiles and native models [BK][L][LL][K][R][C][P]. | **Yes W5–W8**. |
+| Reread history with historical dates, per-read reviews/scores, yearly reading challenge and private entry notes | **C** occurrence/date model and challenge aggregate, plus entry extension [PM][E][R]. Existing repeated sessions and collection notes **A P/K** do not supply all these semantics. | Sessions/collection notes **yes W6/W7**; no challenge or complete reading diary. |
+| Library export/import and friends' activity | Manual native lists/follows/posts **A K/F/C** [K][L][C]; Goodreads export parser, reconciliation and social import **C**. Personalized recommendations **D SC**. | Native lists/following **yes W7/W8**; no verified Goodreads migration flow. |
+
+### Wikidata
+
+Primary inventory: [REST API](https://www.wikidata.org/wiki/Wikidata:REST_API),
+[statement model](https://www.wikidata.org/wiki/Help:Statements) and
+[database downloads](https://www.wikidata.org/wiki/Wikidata:Database_download).
+Items, properties, qualified/referenced/ranked statements and multilingual terms are distinct
+from lexicographical data and from the SPARQL query service.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Items, multilingual labels/descriptions/aliases, multiple claims, rank, qualifiers, references, unknown/no value | **A S**, current Item/Statement/Snak model [S][T]; admitted item/string/ID/URL/text/quantity/time facts are writable. | **Yes W1/W3**, generic facts, candidates and source views. |
+| More item types and properties, property constraints expressible by current ranges/qualifiers, external IDs and relation semantics | **B V/S**, bounded portable type/property/facet definitions, datatype/range/qualifier admission [T][V]. A Wikidata property record is not automatically a published REZICS property. | **Conditional W1/W3**; no general ontology-authoring workbench is established. |
+| Linked graph navigation and inverse relations | **A G/S**, item-valued declared relations [G][T]. | Lists **yes W2**; **no** general interactive graph visualizer in the cited subject bindings. |
+| Lossless arbitrary Wikidata import: all calendars/precisions, globe coordinates, lexeme/form/sense semantics and complete constraint language | **C** missing datatypes/semantics and translator validation. Current time has Gregorian precision 9–11 and finite definitions [T]; new types alone are insufficient for full fidelity. Simple lexeme-like labels/relations would only be **B V/S**, not lossless Wikibase. | Generic configured facts conditional W3; no lexical or geographic workflow. |
+| Edit/history/discuss/watch | Contributions/history **A S/C**, native follows **A F** [S][C][L]. Wikidata watchlist change semantics and cross-site writeback **C**; a universal partner-facing SPARQL/API offering **D SC**. | **Yes W3/W8** for native actions; no Wikidata watchlist/writeback. |
+
+### MusicBrainz
+
+Primary inventory: [API](https://musicbrainz.org/doc/MusicBrainz_API) and
+[database downloads](https://musicbrainz.org/doc/MusicBrainz_Database/Download).
+Its thirteen core resources are area, artist, event, genre, instrument, label, place,
+recording, release, release-group, series, work and URL. Track/medium structure, credits,
+identifiers, relationships, collections, tags and ratings matter beyond an album title.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Artist/person/group, label, genre, series, URL and album identity | **A S/G**, `schema:Person`, `schema:Organization`, `skos:Concept`, series types, `schema:url`, `schema:MusicAlbum` and shared credits [CO][CL][SE][MU]. Typed MBIDs and exact artist/group/label roles **B V/S** [T][CO]. | Existing identities **yes W1–W3**; music-specific role/ID configuration conditional. |
+| Recording, release, release-group, musical work, ordered media/tracks; area, event, place and instrument | **B V/S**, add distinct profiles and ordered part/credit/location relations using current item/quantity/time/document values [T][CO][MU]. Album identity does not cover these distinctions. Globe-coordinate values, if required losslessly, are **C** [T]. | **Conditional W1–W3**; no complete release/recording/medium/track editor or location view. |
+| Artist credits, join phrases, roles, dates and recording/work relationships; disc IDs, ISRC and ISWC | Existing role, creditedAs and position qualifiers **A S/G** [CO]; join phrase, source relationship admissions and typed identifiers **B V/S** [T][CO]. | Credits **yes W2**; exact music credits/IDs conditional W3. |
+| Collections, personal ratings/tags and editing history | Collections/votes/native history **A K/R/S** [K][R][S]. Music consumption/copy profiles **B V/P/H** [MU][PP][T]. Personal source-tag up/down/withdraw ballots and imported aggregates **C**, not a native work vote [RS]. | Native actions **yes W3/W7/W8**; music library controls conditional W5/W6. |
+| Streaming or delivering recordings and personalized listening recommendations | **D SC**, hosted works/external participation and personalized recommendations. Deep links **A S**, `schema:url` [CO]. | Links **yes W1**; no player implied. |
+
+### TMDb
+
+Primary inventory: [API introduction](https://developer.themoviedb.org/docs/getting-started),
+[movie detail](https://developer.themoviedb.org/reference/movie-details),
+[watchlist operation](https://developer.themoviedb.org/reference/account-add-to-watchlist) and
+[daily ID exports](https://developer.themoviedb.org/docs/daily-id-exports).
+ID exports are identity inventories, not complete metadata dumps.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Movies, TV series/seasons/episodes, people, companies, credits, genres, keywords, dates and images | Screen/people/credit primitives **A S/G** [AN][CO][CL]. General live-action admissions/compositions, networks/production-country concepts and typed TMDb IDs **B V/S** [AN][T][CL]; current anime profile wording is not a universal film contract. | Existing screen pages **yes W1/W2/W4**; full live-action profile conditional. |
+| Film collections, alternative versions, translations, videos and external links | Native lists/terms/relations/links **A K/S/G**, `rezics:alternativeVersion`, `schema:url` [CO][K]. Exact provider collection, video/trailer and regional release/certification structures **B V/S** [T][AN]. Licensed video acquisition/hosting is not implied. | Existing lists/relations **yes W1/W2/W7**; new structures conditional W3. |
+| Watchlist, favourite, score, review, personal lists | **A K/R/C**, native membership/reaction/vote/review [K][R][C]. Account synchronization and non-VNDB provider aggregate figures **C** [RS]. | **Yes W7/W8** for native actions; provider sync absent. |
+
+### Letterboxd
+
+Primary inventory: [official API](https://api-docs.letterboxd.com/), particularly Film,
+DiaryEntry, LogEntry, List, ListEntry, Member and watchlist operations. A diary occurrence
+is different from a film's current watched flag, rating or a list membership.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Film, credits, cast, genres, release/version identity and external IDs | Existing screen/credit/character/classification facts **A S/G** [AN][CO][CL]; general film/version bindings and Letterboxd ID **B V/S** [AN][T]. | **Yes W1/W2/W4** for current screen profiles; film configuration conditional. |
+| Watchlist, lists, likes, current score/review, comments and follows | **A K/R/C/F**, native product models [K][R][C][L]. List member note and visibility are already A K. | **Yes W7/W8**, native following. |
+| Dated diary, rewatches, film version per occurrence and per-occurrence review/rating | Repeated/version-linked sessions and published snapshots **A P** [PM][P]; a lossless dated diary is **C** historical/partial dates, occurrence model and occurrence-bound review/vote. A collection member is not a diary entry. | Sessions/logs **yes W6**; no equivalent diary calendar/editor. |
+| Stats, yearly challenges, imported community averages and provider sync | **C** derived personal analytics/challenge model, source-statistic extension and authorized integration [PM][RS]. Personalized recommendations **D SC**. | Native figures **yes W8**; full provider statistics absent. |
+
+### IGDB
+
+Primary inventory: [official API](https://api-docs.igdb.com/), including games, game versions,
+release dates, platforms, involved companies, franchises, genres/themes, external games and media.
+This is catalogue metadata; it is not evidence that a user owns or has played a game.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Game, add-on/expansion, release, company, platform, credits, genres, images and links | **A S/G**, `schema:VideoGame`, `wd:Q209163`, `wd:Q20631656`, `wdt:P8646`, `schema:gamePlatform`, organization/credit/classification terms [GA][CO][CL]. | **Yes W1–W4**, game/add-on and relations. |
+| Versions, parent games/franchises, engines, modes, perspectives and regional release dates | Current alternativeVersion/part/series/engine facts **A S/G** [GA][CO]; exact provider ID, franchise/type/mode concepts, regional qualifiers and relation admissions **B V/S** [T][CL][GA]. | Existing facts **yes W1/W2/W4**; source-specific detail conditional W3. |
+| Ratings, follows and user collections | Native vote/follow/list **A R/F/K** [R][L][K]; IGDB aggregate score/popularity and synchronized user actions **C** [RS]. | **Yes W7/W8** for native actions. |
+
+### Steam
+
+Primary inventory: [IPlayerService](https://partner.steamgames.com/doc/webapi/IPlayerService)
+and [ISteamUserStats](https://partner.steamgames.com/doc/webapi/ISteamUserStats).
+Owned games/playtime and game stats/achievements are authenticated user observations,
+not interchangeable with the public game catalogue.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| App/game, DLC, release, developer/publisher, platform, tags and store links | **A S/G**, game/add-on/release/organization/classification predicates [GA][CO][CL]; explicit Steam App ID and app-kind concepts **B V/S** [T][CL]. | **Yes W1–W4**; ID/kinds conditional. |
+| Owned games, wishlist, personal collections, play state and elapsed minutes | Manual digital copies/list membership/state/minutes **A H/K/L/P** with game profiles [GA][L][K][P]. Authenticated ownership receipts and imported lifetime/recent playtime snapshots **C** integration/observation model [E][PM]. | **Yes W5–W7** for manual equivalents; no Steam-owned-games sync or lifetime projection. |
+| Achievement definitions and per-player unlock/stat/time data | Catalogue definitions/typed fields **B V/S** [T][GA]; authenticated player observations, aggregation and achievement progress **C**. A subject fact must not become one user's unlock state. | Definitions conditional W1/W3; no achievement dashboard. |
+| Reviews/discussions, social follows and discovery | Native review/thread/reaction/follow **A C/F/R** [C][L][R]. Personalized recommendations **D SC**; exact Steam community/import behavior **C**. | **Yes W8** and following for native participation. |
+| Install/launch/DRM, Steam entitlement delivery and multiplayer services | **D SC** external participation/hosted delivery. REZICS commerce being in scope does not implement Steam's delivery platform. Store URL **A S**, `schema:url` [CO]. | Link **yes W1**; no launcher implied. |
+
+### Discogs
+
+Primary evidence: [master/release guidelines](https://support.discogs.com/hc/en-us/articles/360005055493-Database-Guidelines-16-Master-Release)
+and [collection help](https://support.discogs.com/hc/en-us/articles/360007331534-How-To-Use-The-Collection-Feature).
+The [developer documentation](https://www.discogs.com/developers) and dump host returned
+access errors; current bulk/API availability was not verified. The comparison concerns
+the documented product distinctions, not permission to collect its database.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Artists, labels, master grouping, concrete releases, tracks and credits | Person/organization/album/credit primitives **A S/G** [CO][MU]; distinct master/release/track profiles, catalogue numbers, formats and Discogs IDs **B V/S** [T][MU]. A master must not be flattened into an owned release. | Existing identities **yes W1/W2**; release/track configuration conditional W3, no complete record-cataloguing workflow. |
+| Collection, wantlist, multiple copies, folders/notes and score/review | Lists/labels/copies/votes/reviews **A K/L/H/R/C** [K][LL][E][R][C]; music copy profile **B V/H** [MU][T]. Structured media/sleeve condition and custom per-copy fields **C** model extension, not just an untyped note [E]. | Native lists/notes **yes W5/W7/W8**; music copy controls conditional; condition editor absent. |
+| Marketplace sellers, listings, orders and provider synchronization | Cross-service marketplace participation **D SC**. Generic native offers/orders/entitlements being in scope does not deliver Discogs account integration. Catalogue import/sync is **C** outside the four launch adapters. | No Discogs marketplace UI claimed. |
+
+### IMDb
+
+Primary inventory: [non-commercial datasets](https://developer.imdb.com/non-commercial-datasets/):
+title basics/AKAs, episode links, principals, crew, names and ratings. These files do not
+constitute a dump of members' private watchlists, reviews or viewing histories.
+
+| Data or user capability | API first | Web pass for A/B |
+| --- | --- | --- |
+| Titles, episodes, alternate names, genres, people, crew and principal characters | Screen/person/credit/character/classification primitives **A S/G** [AN][CO][CH][CL]; live-action/title-kind admissions, IMDb typed IDs and exact principal ordering/role mappings **B V/S** [AN][T][CO]. | Existing screen/credits **yes W1–W4**; general title profile and source IDs conditional. |
+| Rating count/mean | **C** IMDb source-statistic extension and provenance projection; **R** currently admits only VNDB [RS]. Native score/review **A R/C** [R][C]. | Native rating **yes W8**; IMDb aggregate absent. |
+| Watchlists, lists, score/review and community actions | Native **A K/R/C/F** [K][R][C][L]; authorized member-data migration **C**, and not available from the documented public datasets. Personalized recommendations **D SC**. | **Yes W7/W8** for native equivalents. |
+
+## Gaps ranked for VNDB and Bangumi users
+
+This ranking separates new engine/product work from configured data that the web still needs
+to make useful. The first six items directly affect the expected catalogue-and-tracker journey.
+The remaining items matter when expanding beyond that promise; they should not delay the
+already supported catalogue merely because another reference platform has them.
+
+| Rank | Gap and class | User-visible completion criterion |
+| --- | --- | --- |
+| 1 | **C — personal data portability and richer entries.** Provider consent/linking, identity resolution, list states/labels/votes, entry notes/priority/privacy and original timestamps. Evidence: native entries/copies differ [E], imports [VN][BG] omit private data. | A user can preview and import a VNDB/Bangumi library, see every lossy or unsupported field, correct matches and export it again without inventing local voters or making private entries public. Existing W5–W8 remain the native editing surfaces. |
+| 2 | **C — canonical episode and multi-measure progress.** Current native profile admission permits no structure and only none/session-local unit identities [PP]; current screen profiles use scalar episodes [AN]. | A Bangumi user can mark episodes 1 and 3 watched while 2 is queued, keep specials distinct, and track manga chapters and volumes independently. Render a checklist linked to actual Episode subjects, not a counter or opaque token list. |
+| 3 | **B plus unpresented configuration — complete people/producer/character profiles.** Organization history, occupations/languages, character-to-character relationships and source-specific appearance facts [CO][CH][VN][BG]. | Release explicit properties/concepts and add field groups to W4 or a clear W3 path; show relationships in W2 with direction and qualifiers. Generic capacity alone should not require a user to know property IDs. |
+| 4 | **B/C plus unpresented configuration — Bangumi music/live-action completeness.** Album identity exists, but release/track/consumption profiles and live-action bindings need configuration; the initial adapter excludes subject types 3/6 [MU][AN][BG]. | Every Bangumi subject type has a distinct, useful page and relevant library controls. Preserve music release/track boundaries; extend the source mapping separately from profile publication. |
+| 5 | **C — source classification ballots and aggregate figures.** VNDB tag confidence/lie flags are not native ratings, and provider figures other than VNDB have no admitted SourceStatistic [RS][VN]. | Show native votes and source figures with clear provenance; support classification voting only with an explicit ballot and aggregate contract. Do not report a Bangumi mean as a REZICS public figure. VNDB mean/count display is already A and presented. |
+| 6 | **B plus unpresented configuration — release and source vocabulary fidelity.** Release-to-release relations, TBA/status and exact role/tag/trait/episode-kind concepts [GA][CO][CL][VN][BG]. | Seed and release the required concepts/qualifiers, preserve unknown source codes for review, and make the configured facts discoverable in W1–W4. Do not silently coerce a source relationship or TBA into a different existing meaning. |
+| 7 | **C — occurrence history and personal analytics.** Historical dates, per-occurrence rating/review, repeat totals, challenges and library statistics [PM][E][R]. | A diary and import preserve the difference between a current state and each past consumption event. Existing repeated sessions/log snapshots are retained; add only the missing occurrence semantics. |
+| 8 | **A unpresented / B conditional — optional richer graph, quote and domain browsing.** Graph read A [G] lacks a general visualizer; quotations and music/file/location profiles are B [T][MU]. | Add these surfaces when a concrete reader task needs them. Current finite relation/credit/appearance lists already satisfy the basic VNDB/Bangumi relation-reading expectation. A visual graph alone is not a parity blocker. |
+| 9 | **C — other-provider integrations and specialized observations.** Steam ownership/achievements, AniDB file matching, non-launch catalogue adapters and lossless Wikidata datatypes. | Each integration has an explicit rights/consent and fidelity contract; current catalogue/API breadth is not represented as an existing synchronizer. |
+
+No deferred recommendation engine, advanced search sort, email reminder, launcher, scan reader
+or external marketplace should be counted as a blocker to the launch catalogue-and-library
+scope. They remain D until the owning scope changes. Basic source/API/web omissions above
+remain visible even when their source site cannot currently be fetched.
+
+## Shared patterns and recommendation
+
+The sources repeatedly separate four boundaries: a work from its edition/release, people and
+characters from their qualified contributions, public catalogue facts from personal state,
+and a user's individual vote from a provider's published aggregate. VNDB release lists,
+Bangumi episode collections, AniDB file MyList, book editions and music recordings expose
+different failures when these boundaries are collapsed. REZICS's graph already models the
+first two well; its typed library/progress/rating APIs should continue to own the other two.
+
+The manager can adopt an API-first coverage rule: require an admitted type/property/profile,
+a native write/read pair, a source-field mapping where imports are promised, and a named
+web reader/editor before claiming platform coverage. Maintain configuration work separately
+from new product operations. This report's A/B/C/D tables are a starting inventory, not a
+reason to publish arbitrary new vocabulary without the grants required by scope.
+
+For this Bun/TypeScript stack, extend released definitions and generated typed consumers for
+the B items; extend kernel product models and the Eden client together for C items. Reuse
+SubjectPage, finite views and the existing profile editors rather than introducing a second
+platform-specific catalogue. Add a subject-bound progress seam before an episode-checklist UI,
+and a loss-aware personal import contract before promising migration. Preserve source records,
+licences and source aggregates separately from local statements/votes. Recommend these designs,
+not copied upstream implementation code. Adoption belongs in the relevant owner documents.
+
+## Source provenance, access and licences
+
+All external references were consulted for data shapes and product behavior. No cloned project
+was installed, built or executed, and no upstream implementation code was copied. A software
+licence does not license a provider's data, images, descriptions or API access. The following
+are research boundaries, not new rights policy; [source-data-rights](source-data-rights.md)
+remains the repository research on that topic.
+
+| Source | Primary documentation and licence/access boundary |
+| --- | --- |
+| VNDB | [Kana](https://api.vndb.org/kana), [dumps](https://vndb.org/d14), [licensing](https://vndb.org/d17#4): database ODbL/DbCL; exceptions and service terms remain separate. |
+| Bangumi | Official [API schema](https://github.com/bangumi/api), [Archive](https://github.com/bangumi/Archive), [developer terms](https://bgm.tv/about/api): data/content and images have separate terms; no repository-wide software licence found in the inspected API clone. |
+| AniList | Official [docs source](https://github.com/AniList/docs) and [API terms](https://docs.anilist.co/guide/terms-of-use): no repository-wide licence found in the docs clone; no data-republication grant inferred. Documentation website returned 403, official Git source was readable. |
+| MyAnimeList | [Official v2 documentation](https://myanimelist.net/apiconfig/references/api/v2): service/API terms, not an open-data dump licence. Direct HTML retrieval succeeded. |
+| AniDB / ShokoServer | AniDB wiki returned 403 after alternate retrievals; Shoko's [source](https://github.com/ShokoAnime/ShokoServer) is GPL-3.0 (`LICENSE`). That software licence does not grant rights to AniDB records. No current AniDB licence claim is inferred from failed access. |
+| Open Library | [API](https://openlibrary.org/developers/api), [dumps](https://openlibrary.org/developers/dumps), [source](https://github.com/internetarchive/openlibrary): AGPL-3.0 software; database and cover rights separate. Dump documentation succeeded by direct retrieval. |
+| Goodreads | Official help/export pages above; API challenge prevented verification. No public database or software licence inferred. |
+| Wikidata | [Downloads](https://www.wikidata.org/wiki/Wikidata:Database_download): structured data CC0; documentation/prose has its own attribution/share-alike terms. |
+| MusicBrainz | [API](https://musicbrainz.org/doc/MusicBrainz_API), [data licence](https://musicbrainz.org/doc/About/Data_License): core CC0 and supplementary data under separate terms; do not apply the core licence to everything. |
+| TMDb | [Developer documentation](https://developer.themoviedb.org/docs/getting-started) and its API terms; proprietary service access, attribution and commercial conditions, not an open database licence. |
+| Letterboxd | [Official API](https://api-docs.letterboxd.com/): documented authenticated/service access does not establish open access or an open-data licence. |
+| IGDB | [API](https://api-docs.igdb.com/): Twitch-authenticated service and terms; no open database licence inferred. |
+| Steam | Valve [Web API documentation](https://partner.steamgames.com/doc/webapi): API/Steam terms and user visibility govern observations; not an open ownership dataset. |
+| Discogs | Official support documentation above; developer/dump access failed. No current bulk grant or blanket data licence inferred. |
+| IMDb | [Non-commercial datasets](https://developer.imdb.com/non-commercial-datasets/): stated personal/non-commercial conditions; not a general redistribution grant. |
+
+The reference registry at `/home/edge/projects/rezics/rezics-next/.reference/INDEX.md` records
+these inspected clones. Paths below are relative to that `.reference/` directory; commit pins
+make the source citations reproducible without treating clones as trusted programs.
+
+| Clone path | Commit | Inspected primary files / licence |
+| --- | --- | --- |
+| `rezics/rezics-next-discussion` (reused) | `f0850c4de99e6f2aea0ac9ea9bf771cd2b88ada4` | `research/round-2/source-providers-and-rights.md`, `docs/engineering/07-whole-system-and-product-capabilities.md`; no repository-wide licence found. |
+| `search-header-and-scopes/bangumi-api` (reused) | `65d29cff2331e08c0110d30d515f7f1b6488f845` | `open-api/v0.yaml`; no repository-wide licence found. |
+| `partitioned-sitemap-feeds/openlibrary` (reused) | `37e446827465be2febad416de1bc18753b66997d` | `openlibrary/core/bookshelves.py`, `openlibrary/templates/type/work/`, `edition/`, `author/`; `LICENSE` AGPL-3.0. |
+| `api-first-platform-coverage/anilist-docs` (shallow clone) | `03281c0a4bbf0c7f2097e0c935cddaed1096aa65` | `docs/reference/object/media.md`, `medialist.md`, `docs/guide/graphql/index.md`; no repository-wide licence found. |
+| `api-first-platform-coverage/shokoserver` (shallow clone) | `93dfaba4fa82547765fb1dbfc791672fb997a1f5` | `Shoko.Server/Models/AniDB/AniDB_Anime.cs`, `Providers/AniDB/UDP/User/RequestAddMylist.cs`, `UDP/Info/RequestGetFile.cs`, HTTP/UDP request inventory; `LICENSE` GPL-3.0. |
+
+Only this report changes in the repository. The external reference INDEX was updated for
+the required clone provenance. No code workspace or test file changed; typechecks and
+changed-test runs therefore do not apply. Frozen acceptance and integration checks are
+deferred to the controller as instructed; runtime behavior was not verified in this attempt.
+
+[S]: ../../services/kernel/src/semantic/http/subjects.ts
+[G]: ../../services/kernel/src/semantic/graph.ts
+[V]: ../../services/kernel/src/semantic/http/definitions.ts
+[T]: ../../packages/definitions/src/portable.ts
+[L]: ../../services/kernel/src/library/personal-routes.ts
+[LL]: ../../services/kernel/src/library/label-routes.ts
+[K]: ../../services/kernel/src/library/collection-routes.ts
+[E]: ../../services/kernel/src/library/entry-model.ts
+[P]: ../../services/kernel/src/library/progress-routes.ts
+[PM]: ../../services/kernel/src/library/progress-model.ts
+[PP]: ../../services/kernel/src/library/profile.ts
+[R]: ../../services/kernel/src/rating/routes.ts
+[RS]: ../../services/kernel/src/rating/source-statistics.ts
+[C]: ../../services/kernel/src/content/routes.ts
+[Q]: ../../services/kernel/src/search/http/routes.ts
+[QF]: ../../services/kernel/src/semantic/public-filter-source.ts
+[I]: ../../services/kernel/src/semantic/http/source-records.ts
+[SC]: ../scope.md
+[CO]: ../../packages/definitions/catalogue/core.yaml
+[VNCL]: ../../packages/definitions/catalogue/visual-novel.yaml
+[VN]: ../../packages/definitions/sources/vndb.yaml
+[BG]: ../../packages/definitions/sources/bangumi.yaml
+[GA]: ../../packages/definitions/catalogue/game.yaml
+[CH]: ../../packages/definitions/catalogue/character.yaml
+[CL]: ../../packages/definitions/catalogue/classification.yaml
+[AN]: ../../packages/definitions/catalogue/anime.yaml
+[BK]: ../../packages/definitions/catalogue/book.yaml
+[MG]: ../../packages/definitions/catalogue/manga.yaml
+[SE]: ../../packages/definitions/catalogue/series.yaml
+[MU]: ../../packages/definitions/catalogue/works.yaml
+[W1]: ../../apps/web/src/features/pages/subject.tsx
+[WV]: ../../apps/web/src/routes/subjects/$id_.$slug_.$view.tsx
+[WT]: ../../apps/web/src/features/pages/views.ts
+[WD]: ../../apps/web/src/features/pages/data.tsx
+[WS]: ../../apps/web/src/features/pages/values.tsx
+[WP]: ../../services/kernel/src/presentation/http/pages.ts
+[W2]: ../../apps/web/src/features/pages/relations-view.tsx
+[WC]: ../../apps/web/src/features/pages/qualified-credit.tsx
+[WE]: ../../apps/web/src/features/catalogue/relation-editor.tsx
+[W4]: ../../apps/web/src/features/catalogue/character-profile-session.tsx
+[WCG]: ../../apps/web/src/features/catalogue/character-profile.ts
+[WPE]: ../../apps/web/src/features/catalogue/people-profile-session.tsx
+[WGA]: ../../apps/web/src/features/catalogue/game-profile-session.tsx
+[WSC]: ../../apps/web/src/features/catalogue/screen-profile-session.tsx
+[WWP]: ../../apps/web/src/features/catalogue/work-parts-session.tsx
+[WL]: ../../apps/web/src/features/pages/subject-library-leaf.tsx
+[WLI]: ../../apps/web/src/library/entries-page.tsx
+[WLL]: ../../apps/web/src/library/labels-page.tsx
+[WH]: ../../apps/web/src/library/copies-page.tsx
+[W6]: ../../apps/web/src/library/progress-page.tsx
+[WLOG]: ../../apps/web/src/library/log-page.tsx
+[W7]: ../../apps/web/src/library/collection-page.tsx
+[W7P]: ../../apps/web/src/library/collection-publication-page.tsx
+[W8]: ../../apps/web/src/features/pages/subject-ratings-view.tsx
+[WR]: ../../apps/web/src/features/pages/subject-ratings.ts
+[W9]: ../../apps/web/src/routes/search.tsx
