@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import type { GateOutcome } from './contracts.ts';
 import type { Attempt, AttemptRecord, FailureClass, Task } from './types.ts';
 import type { Route } from './routing.ts';
@@ -7,12 +8,16 @@ import { devProductBrief, matchesPath } from './briefs.ts';
 export const ESTIMATE_TOLERANCE = 2;
 
 /** The diff size counted against the brief's estimate: declared paths only for product work on dev. */
-function estimatedSize(outcome: GateOutcome, task: Task): { lines: number; files: number } {
+function estimatedSize(
+  outcome: GateOutcome,
+  task: Task,
+  policy = defaultPolicy.brief,
+): { lines: number; files: number } {
   const devProduct = devProductBrief(task.brief);
   return {
     lines: outcome.nonGeneratedDiffLines ?? outcome.diffLines,
     files: (outcome.nonGeneratedChangedFiles ?? outcome.changedFiles).filter(
-      (path) => !devProduct || matchesPath(path, task.brief.paths),
+      (path) => !devProduct || matchesPath(path, task.brief.paths, policy),
     ).length,
   };
 }
@@ -24,8 +29,9 @@ function estimatedSize(outcome: GateOutcome, task: Task): { lines: number; files
 export function estimateOverrun(
   outcome: GateOutcome,
   task: Task,
+  policy = defaultPolicy.brief,
 ): { lines: number; files: number; estimate: { lines: number; files: number } } | undefined {
-  const size = estimatedSize(outcome, task);
+  const size = estimatedSize(outcome, task, policy);
   const { estimate } = task.brief;
   if (size.lines <= ESTIMATE_TOLERANCE * estimate.lines && size.files <= ESTIMATE_TOLERANCE * estimate.files)
     return undefined;
@@ -40,6 +46,7 @@ export function classifyFailure(
   record: AttemptRecord,
   limits: Route,
   hasCommit: boolean,
+  policy = defaultPolicy.brief,
 ): FailureClass {
   if (
     attempt.failureKind === 'spec-conflict' ||
@@ -57,7 +64,8 @@ export function classifyFailure(
   if (
     outcome.stage === 'scope' ||
     (!devProduct &&
-      (outcome.changedFiles.some((path) => !matchesPath(path, task.brief.paths)) || estimateOverrun(outcome, task)))
+      (outcome.changedFiles.some((path) => !matchesPath(path, task.brief.paths, policy)) ||
+        estimateOverrun(outcome, task, policy)))
   )
     return 'scope-growth';
   if (

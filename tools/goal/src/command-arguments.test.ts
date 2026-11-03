@@ -6,7 +6,7 @@ test('Reject invalid worker commands before recovery', async () => {
   const cases = [
     { argv: ['retry', 'task-1', '--typo', 'value'], usage: 'Error: invalid retry option: --typo' },
     { argv: ['stop', 'task-1', 'extra'], usage: 'Error: usage: stop <task>' },
-    { argv: ['dispatch', 'brief.md', 'extra'], usage: 'Error: usage: dispatch <brief>' },
+    { argv: ['dispatch', 'brief.md', 'extra'], usage: 'Error: usage: dispatch [--urgent] <brief>' },
     { argv: ['retry', 'task-1', '--brief'], usage: 'Error: missing value for --brief' },
     { argv: ['retry', 'task-1', '--expected-attempt', '-1'], usage: 'Error: invalid retry option: --expected-attempt' },
     { argv: ['retry', 'task-1', '--proof-start'], usage: 'Error: --proof-start requires --expected-attempt' },
