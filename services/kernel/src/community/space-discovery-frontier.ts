@@ -159,9 +159,9 @@ export async function drainSpaceDiscoveryFrontier(
   if (progress.state !== 'draining') return progress.state;
   const page = await withConnection(pool, async (client) => (
     await client.query<{ route: number; space_id: string; ordinal: string }>(
-      `SELECT route,space_id,ordinal::text FROM community.space_discovery_dependency
-       WHERE dependency=$1::jsonb AND ordinal>$2::bigint AND ordinal<=$3::bigint
-       ORDER BY ordinal LIMIT $4`,
+      `SELECT d.route,d.space_id,d.ordinal::text FROM community.space_discovery_dependency d
+       WHERE d.dependency=$1::jsonb AND d.ordinal>$2::bigint AND d.ordinal<=$3::bigint
+       ORDER BY d.ordinal LIMIT $4`,
       [JSON.stringify(progress.invalidation.target), progress.cursor, progress.cut, limit],
     )
   ).rows);

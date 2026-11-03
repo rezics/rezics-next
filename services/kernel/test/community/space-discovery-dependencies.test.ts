@@ -121,7 +121,7 @@ test('shared native Context changes drain sparse retained identities, survive re
   }
   const progress = (await readSpaceDiscoveryFrontier(pool, key))!;
   expect(progress.state).toBe('settled');
-  expect(progress.cursor).toBe(progress.cut);
+  expect(progress.cursor).toBe(progress.cut!);
   expect(BigInt(progress.examined)).toBe(2n);
   await call('POST', `/v1/contexts/${context.id}:restore`, {});
   await relay.run(native); // reordered old removal, after current restoration
