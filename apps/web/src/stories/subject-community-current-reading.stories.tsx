@@ -52,7 +52,7 @@ function CurrentCommunityReading({
             units: scenario === 'zero' ? 0 : 14,
             revision: 2,
           };
-          post.voteCitation = kind === 'review' ? recorded : null;
+          const opening = { ...post, voteCitation: kind === 'review' ? recorded : null };
           const card: CommunityCard = {
             version: 1,
             threadId: thread.id,
@@ -86,6 +86,7 @@ function CurrentCommunityReading({
           // This consumer seam is deliberately independent of the installed current-question reviewContext.
           const native = {
             ...thread,
+            firstPost: opening,
             card,
             ...(scenario === 'changed-scale'
               ? {
