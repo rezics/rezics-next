@@ -193,7 +193,7 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
           (Number(source[2]) === partition.epoch && BigInt(event.sequence) > partition.position)
         )
           throw new Error('Moderation decision source unavailable');
-        const row = await readHistorySource.run(client, {
+        const [row] = await readHistorySource.run(client, {
           route,
           target_kind: data.targetKind,
           target_id: data.targetId,

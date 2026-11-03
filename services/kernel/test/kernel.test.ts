@@ -268,6 +268,7 @@ const typed = [
   'POST /v1/moderation-decisions/:id/$appeal',
   'POST /v1/moderation-appeals/:id/$resolve',
   'GET /v1/boards/:id/appeals',
+  'GET /v1/boards/:id/moderation-history',
   'GET /v1/threads/:id/appeals',
   'GET /v1/threads/:id/reports',
   'GET /v1/posts/:id/reports',
