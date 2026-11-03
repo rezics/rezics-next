@@ -24,7 +24,11 @@ import {
   type PublicationTarget,
 } from './publication-subject-picker';
 import type { PublicationChange } from './publication-controls';
-import { admittedPublicationCommand, unavailablePublicationPreparation, type PublicationPrepare } from './realm-publication-preparation';
+import {
+  admittedPublicationCommand,
+  unavailablePublicationPreparation,
+  type PublicationPrepare,
+} from './realm-publication-preparation';
 import type { PublishedSubject } from './space';
 import { sessionQuery, useSession } from '../session/query';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
@@ -167,16 +171,24 @@ export function usePublicationControls(
         JSON.stringify([live?.state ?? 'unknown', live?.subject ?? null, live?.csrfToken ?? null]) === cacheIdentity
       );
     };
-    return createPublicationDraft(realmId, send, saved, () => subjects.current, enabled, {
-      current,
-      ...(source ? { watch: source.subscribe } : {}),
-      startDisconnected: true,
-    }, async (input) => {
-      const result = await prepare(input);
-      return result.kind === 'ready' && reader && result.preparation.viewer.accountId !== reader
-        ? { kind: 'denied' }
-        : result;
-    });
+    return createPublicationDraft(
+      realmId,
+      send,
+      saved,
+      () => subjects.current,
+      enabled,
+      {
+        current,
+        ...(source ? { watch: source.subscribe } : {}),
+        startDisconnected: true,
+      },
+      async (input) => {
+        const result = await prepare(input);
+        return result.kind === 'ready' && reader && result.preparation.viewer.accountId !== reader
+          ? { kind: 'denied' }
+          : result;
+      },
+    );
   }, [realmId, identity, transportIdentity]);
   const previousDraft = useRef(draft);
   usePublicationLayoutEffect(() => {
@@ -227,7 +239,9 @@ export function PublicationControls({
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
   const selected = control.target;
   const preparation = control.preparation;
-  useEffect(() => { if (control.reviewAction) setOpen(true); }, [control.reviewAction, control.target?.id]);
+  useEffect(() => {
+    if (control.reviewAction) setOpen(true);
+  }, [control.reviewAction, control.target?.id]);
   const opener = useRef<HTMLButtonElement>(null);
   const picker = useRef<HTMLDivElement>(null);
   const summary = useRef<HTMLDivElement>(null);
@@ -398,24 +412,52 @@ export function PublicationControls({
             )}
             {preparation ? (
               <div className="min-w-0 space-y-2" aria-label={m.realm_publication_read()}>
-                <p>{m.realm_publication_prepared_realm({ realm: preparation.realm.title, host: preparation.realm.hostTitle })}</p>
-                <p className="text-sm">{m.realm_publication_prepared_subject({ original: preparation.subject.originalId, current: preparation.subject.currentId })}</p>
-                <p>{preparation.current === null ? m.realm_publication_no_decision()
-                  : preparation.current.verdict === 'adopt' ? m.realm_publication_current_adopted()
-                  : preparation.current.verdict === 'withdraw' ? m.realm_publication_current_withdrawn()
-                  : m.realm_publication_current_rejected()}</p>
-                {preparation.current ? <p><time dateTime={preparation.current.decidedAt}>{m.realm_publication_decided_at({ at: preparation.current.decidedAt })}</time></p> : null}
+                <p>
+                  {m.realm_publication_prepared_realm({
+                    realm: preparation.realm.title,
+                    host: preparation.realm.hostTitle,
+                  })}
+                </p>
+                <p className="text-sm">
+                  {m.realm_publication_prepared_subject({
+                    original: preparation.subject.originalId,
+                    current: preparation.subject.currentId,
+                  })}
+                </p>
+                <p>
+                  {preparation.current === null
+                    ? m.realm_publication_no_decision()
+                    : preparation.current.verdict === 'adopt'
+                      ? m.realm_publication_current_adopted()
+                      : preparation.current.verdict === 'withdraw'
+                        ? m.realm_publication_current_withdrawn()
+                        : m.realm_publication_current_rejected()}
+                </p>
+                {preparation.current ? (
+                  <p>
+                    <time dateTime={preparation.current.decidedAt}>
+                      {m.realm_publication_decided_at({ at: preparation.current.decidedAt })}
+                    </time>
+                  </p>
+                ) : null}
                 <p className="text-sm text-muted-foreground">{m.realm_publication_presentation_unavailable()}</p>
               </div>
             ) : null}
             <ListRowControl data-content-item-slot="actions" className="flex flex-wrap gap-2">
               {(['publish', 'withdraw', 'reject'] as const).map((action) => (
-                <Button key={action}
+                <Button
+                  key={action}
                   className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
-                  disabled={!selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)}
+                  disabled={
+                    !selected || control.locked || !preparation || !admittedPublicationCommand(preparation, action)
+                  }
                   onClick={() => void control.change(action)}
                 >
-                  {action === 'publish' ? m.realm_publication_publish() : action === 'withdraw' ? m.realm_publication_review_withdraw() : m.realm_publication_review_reject()}
+                  {action === 'publish'
+                    ? m.realm_publication_publish()
+                    : action === 'withdraw'
+                      ? m.realm_publication_review_withdraw()
+                      : m.realm_publication_review_reject()}
                 </Button>
               ))}
             </ListRowControl>
@@ -424,14 +466,22 @@ export function PublicationControls({
       ) : null}
       {control.preparationState && control.preparationState !== 'ready' ? (
         <div role="status" className="min-w-0 space-y-2 text-sm">
-          {control.preparationState === 'loading' ? m.realm_publication_reading()
-            : control.preparationState === 'denied' ? m.realm_publication_denied()
-            : control.preparationState === 'unavailable' ? m.realm_publication_preparation_unavailable() : null}
+          {control.preparationState === 'loading'
+            ? m.realm_publication_reading()
+            : control.preparationState === 'denied'
+              ? m.realm_publication_denied()
+              : control.preparationState === 'unavailable'
+                ? m.realm_publication_preparation_unavailable()
+                : null}
         </div>
       ) : null}
       {(selected || control.preparationState || control.outcome?.kind === 'unavailable') && !control.busy ? (
-        <Button className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal" variant="outline"
-          disabled={control.preparationState === 'loading'} onClick={() => void control.inspect()}>
+        <Button
+          className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+          variant="outline"
+          disabled={control.preparationState === 'loading'}
+          onClick={() => void control.inspect()}
+        >
           {m.realm_publication_read()}
         </Button>
       ) : null}
@@ -471,8 +521,12 @@ export function PublicationControls({
             <>
               <p>{m.realm_publication_conflict()}</p>
               <ListRowControl data-content-item-slot="actions">
-                <Button className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal" variant="outline"
-                  disabled={control.preparationState === 'loading'} onClick={() => void control.review()}>
+                <Button
+                  className="min-h-11 min-w-11 h-auto max-w-full whitespace-normal"
+                  variant="outline"
+                  disabled={control.preparationState === 'loading'}
+                  onClick={() => void control.review()}
+                >
                   {m.realm_publication_review()}
                 </Button>
               </ListRowControl>

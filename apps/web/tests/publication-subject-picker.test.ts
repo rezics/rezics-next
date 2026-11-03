@@ -79,7 +79,10 @@ test('Realm curation chooses a real disclosed subject before native publish', as
     (_input, chosen, head) => {
       shelf = [{ ...chosen, publicationId: head }];
     },
-    () => shelf, true, undefined, preparationFixture('curator', () => shelf[0]?.publicationId ?? null),
+    () => shelf,
+    true,
+    undefined,
+    preparationFixture('curator', () => shelf[0]?.publicationId ?? null),
   );
   await draft.choose({ ...target(), id: subject!.id, title: subject!.title });
   expect(calls).toHaveLength(0);
@@ -129,7 +132,10 @@ test('uncertain commands retain subject, head, action and key; conflict recovery
         return writes.length === 1 ? first.promise : response;
       },
       () => {},
-      () => shelf, true, undefined, preparationFixture('curator', () => shelf[0]?.publicationId ?? null),
+      () => shelf,
+      true,
+      undefined,
+      preparationFixture('curator', () => shelf[0]?.publicationId ?? null),
     );
     const selected = target();
     await draft.choose(selected);
@@ -204,7 +210,10 @@ test('Search failure, late queries and retired Realm or reader drafts cannot dis
     () => {
       saved += 1;
     },
-    () => [], true, undefined, preparationFixture('curator', () => null),
+    () => [],
+    true,
+    undefined,
+    preparationFixture('curator', () => null),
   );
   await draft.choose(target());
   const pending = draft.change('publish');
@@ -224,7 +233,10 @@ test('Search failure, late queries and retired Realm or reader drafts cannot dis
       return { kind: 'denied' };
     },
     () => {},
-    () => [], true, undefined, preparationFixture('curator', () => null),
+    () => [],
+    true,
+    undefined,
+    preparationFixture('curator', () => null),
   );
   expect(next.getSnapshot().target).toBeNull();
   await next.change('publish');
@@ -244,7 +256,10 @@ test('retirement is irreversible and duplicate explicit actions cross transport 
     () => {
       saved += 1;
     },
-    () => [], true, undefined, preparationFixture('curator', () => null),
+    () => [],
+    true,
+    undefined,
+    preparationFixture('curator', () => null),
   );
   await draft.choose(target());
   const pending = draft.change('publish');
@@ -273,7 +288,8 @@ test('a caller retired during the busy publication boundary never reaches transp
     () => {},
     () => [],
     true,
-    { current: () => valid }, preparationFixture('curator', () => null),
+    { current: () => valid },
+    preparationFixture('curator', () => null),
   );
   await draft.choose(target());
   const unsubscribe = draft.subscribe(() => {

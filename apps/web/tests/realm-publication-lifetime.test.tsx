@@ -80,7 +80,10 @@ let activeCredential = 'csrf-one';
 let latestControl: ReturnType<typeof import('../src/community/publication-controls-view').usePublicationControls>;
 let rerenderMarker = 0;
 let shelfSubjects = subjects();
-const prepare = preparationFixture(reader, () => shelfSubjects.find((item) => item.id === target().id)?.publicationId ?? null);
+const prepare = preparationFixture(
+  reader,
+  () => shelfSubjects.find((item) => item.id === target().id)?.publicationId ?? null,
+);
 
 function HookHarness() {
   const send = useCallback(
@@ -229,7 +232,10 @@ describe('Complete Realm publication original caller lifetime', () => {
         return { kind: 'unavailable' as const };
       },
       () => undefined,
-      subjects, true, undefined, prepare,
+      subjects,
+      true,
+      undefined,
+      prepare,
     );
     draft.connect();
     await draft.choose(target());
@@ -362,7 +368,9 @@ describe('Complete Realm publication original caller lifetime', () => {
     });
     await review;
     expect(writes).toHaveLength(2);
-    await act(async () => { review = latestControl.change('withdraw'); });
+    await act(async () => {
+      review = latestControl.change('withdraw');
+    });
     expect(writes[2]!.input).toMatchObject({
       realmId,
       subjectId: target().id,
@@ -472,7 +480,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     boards: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
     publications: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
     prepare,
-          change: (input: Write['input']) => {
+    change: (input: Write['input']) => {
       const call = { ...deferred<PublicationOutcome>(), input: structuredClone(input) };
       hostWrites.push(call);
       return call.promise;

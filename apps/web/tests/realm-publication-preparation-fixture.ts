@@ -21,7 +21,11 @@ export function preparationFixture(
         realm: { realmId, spaceId: realmId, contextId: realmId, title: 'Selected Realm', hostTitle: 'Selected host' },
         subject: { originalId: subjectId, currentId: subjectId, presentation: { state: 'unavailable' } },
         current: current === null ? null : { publicationId: current, verdict, decidedAt: '2026-11-04T00:00:00Z' },
-        commands: { publish: command('publish'), withdraw: current === null ? null : command('withdraw'), reject: current === null ? null : command('reject') },
+        commands: {
+          publish: command('publish'),
+          withdraw: current === null ? null : command('withdraw'),
+          reject: current === null ? null : command('reject'),
+        },
         viewer: { accountId, clientId: 'fixture', authnEpoch: 1 },
         recovery: { requestIdentity: 'unknown', replay: 'original-command' },
       },

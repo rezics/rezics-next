@@ -13,7 +13,11 @@ export type RealmPublicationPreparation = {
   realm: { realmId: string; spaceId: string; contextId: string; title: string; hostTitle: string };
   subject: { originalId: string; currentId: string; presentation: { state: 'unavailable' } };
   current: { publicationId: string; verdict: 'adopt' | 'withdraw' | 'reject'; decidedAt: string } | null;
-  commands: { publish: PublicationCommand | null; withdraw: PublicationCommand | null; reject: PublicationCommand | null };
+  commands: {
+    publish: PublicationCommand | null;
+    withdraw: PublicationCommand | null;
+    reject: PublicationCommand | null;
+  };
   viewer: { accountId: string; clientId: string; authnEpoch: number };
   recovery: { requestIdentity: 'unknown'; replay: 'original-command' };
 };
@@ -44,10 +48,14 @@ export function admittedPublicationCommand(
   const command = preparation.commands[action];
   const head = preparation.current?.publicationId ?? null;
   if (
-    !command || command.method !== 'POST' || command.subjectId !== preparation.subject.originalId ||
+    !command ||
+    command.method !== 'POST' ||
+    command.subjectId !== preparation.subject.originalId ||
     command.href !== publicationCommandHref(preparation.realm.realmId, preparation.subject.originalId, action) ||
-    command.expectedHead !== head || command.ifMatch !== (head === null ? null : JSON.stringify(head)) ||
+    command.expectedHead !== head ||
+    command.ifMatch !== (head === null ? null : JSON.stringify(head)) ||
     (action !== 'publish' && head === null)
-  ) return null;
+  )
+    return null;
   return command;
 }

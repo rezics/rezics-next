@@ -66,17 +66,29 @@ const subjects: PublishedSubject[] = Object.entries(subjectsRecording.subjects).
 const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
   const head = publicationsRecording.items[0]!.publicationId;
   const command = (action: 'publish' | 'withdraw' | 'reject') => ({
-    method: 'POST' as const, subjectId, expectedHead: head, ifMatch: JSON.stringify(head),
+    method: 'POST' as const,
+    subjectId,
+    expectedHead: head,
+    ifMatch: JSON.stringify(head),
     href: `/v1/realms/${realmId}/publications${action === 'publish' ? '' : `/${subjectId}:${action}`}`,
   });
-  return { kind: 'ready', preparation: {
-    realm: { realmId, spaceId: realmId, contextId: realmId, title: realmRecording.realm.title, hostTitle: realmRecording.realm.title },
-    subject: { originalId: subjectId, currentId: subjectId, presentation: { state: 'unavailable' } },
-    current: { publicationId: head, verdict: 'adopt', decidedAt: publicationsRecording.items[0]!.publishedAt },
-    commands: { publish: command('publish'), withdraw: command('withdraw'), reject: command('reject') },
-    viewer: { accountId: 'story-viewer', clientId: 'fixture', authnEpoch: 1 },
-    recovery: { requestIdentity: 'unknown', replay: 'original-command' },
-  } };
+  return {
+    kind: 'ready',
+    preparation: {
+      realm: {
+        realmId,
+        spaceId: realmId,
+        contextId: realmId,
+        title: realmRecording.realm.title,
+        hostTitle: realmRecording.realm.title,
+      },
+      subject: { originalId: subjectId, currentId: subjectId, presentation: { state: 'unavailable' } },
+      current: { publicationId: head, verdict: 'adopt', decidedAt: publicationsRecording.items[0]!.publishedAt },
+      commands: { publish: command('publish'), withdraw: command('withdraw'), reject: command('reject') },
+      viewer: { accountId: 'story-viewer', clientId: 'fixture', authnEpoch: 1 },
+      recovery: { requestIdentity: 'unknown', replay: 'original-command' },
+    },
+  };
 };
 const sendUnavailable = async () => ({ kind: 'unavailable' as const });
 function Example({ mode = 'ready', signedOut = false }: { mode?: Mode; signedOut?: boolean }) {
@@ -131,7 +143,9 @@ async function withdraw(canvasElement: HTMLElement) {
   trigger.focus();
   await userEvent.keyboard('{Enter}');
   await userEvent.click(await screen.findByText(m.realm_publication_withdraw()));
-  await userEvent.click(await within(canvasElement).findByRole('button', { name: m.realm_publication_review_withdraw() }));
+  await userEvent.click(
+    await within(canvasElement).findByRole('button', { name: m.realm_publication_review_withdraw() }),
+  );
 }
 export const Rest: Story = { render: () => <Example signedOut /> };
 export const LaterItems: Story = {

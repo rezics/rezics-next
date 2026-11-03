@@ -25,8 +25,10 @@ export async function changePublication(
 ): Promise<PublicationOutcome> {
   if (!authorization) return { kind: 'denied' };
   if (input.action !== 'publish' && !input.expectedHead) return { kind: 'invalid' };
-  if ((input.href !== undefined && input.href !== publicationCommandHref(input.realmId, input.subjectId, input.action)) ||
-      (input.ifMatch !== undefined && input.ifMatch !== (input.expectedHead ? JSON.stringify(input.expectedHead) : null)))
+  if (
+    (input.href !== undefined && input.href !== publicationCommandHref(input.realmId, input.subjectId, input.action)) ||
+    (input.ifMatch !== undefined && input.ifMatch !== (input.expectedHead ? JSON.stringify(input.expectedHead) : null))
+  )
     return { kind: 'invalid' };
   const realm = client.realms({ realmId: input.realmId });
   const headers = {
@@ -41,16 +43,16 @@ export async function changePublication(
             {
               headers: {
                 ...headers,
-                ...(input.expectedHead ? { 'if-match': (input.ifMatch ?? JSON.stringify(input.expectedHead)) } : {}),
+                ...(input.expectedHead ? { 'if-match': input.ifMatch ?? JSON.stringify(input.expectedHead) } : {}),
               },
             },
           )
         : input.action === 'withdraw'
           ? await realm.publications({ subjectId: input.subjectId }).$withdraw.post(undefined, {
-              headers: { ...headers, 'if-match': (input.ifMatch ?? JSON.stringify(input.expectedHead)) },
+              headers: { ...headers, 'if-match': input.ifMatch ?? JSON.stringify(input.expectedHead) },
             })
           : await realm.publications({ subjectId: input.subjectId }).$reject.post(undefined, {
-              headers: { ...headers, 'if-match': (input.ifMatch ?? JSON.stringify(input.expectedHead)) },
+              headers: { ...headers, 'if-match': input.ifMatch ?? JSON.stringify(input.expectedHead) },
             });
     if (!result.error && result.data && result.status < 400)
       return { kind: 'saved', head: result.data.publication.publicationId };

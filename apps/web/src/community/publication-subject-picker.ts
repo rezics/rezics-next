@@ -1,4 +1,10 @@
-import { admittedPublicationCommand, unavailablePublicationPreparation, type PublicationPrepare, type PublicationPreparationResult, type RealmPublicationPreparation } from './realm-publication-preparation';
+import {
+  admittedPublicationCommand,
+  unavailablePublicationPreparation,
+  type PublicationPrepare,
+  type PublicationPreparationResult,
+  type RealmPublicationPreparation,
+} from './realm-publication-preparation';
 import { pickText } from '@rezics/composition';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { coverOf, coverSubject } from '../media/summary';
@@ -39,7 +45,7 @@ type Draft = {
   busy: boolean;
   action?: PublicationChange['action'];
   preparation?: RealmPublicationPreparation | null;
-  preparationState?: 'loading' | 'ready' | 'denied' | 'unavailable';
+  preparationState?: 'loading' | 'ready' | 'denied' | 'unavailable' | undefined;
   reviewAction?: PublicationChange['action'];
 };
 type DraftBinding = {
@@ -113,29 +119,48 @@ export function createPublicationDraft(
       result = { kind: 'unavailable' };
     }
     if (!current(ticket) || read !== reading) return;
-    if (result.kind === 'ready' &&
-        (result.preparation.realm.realmId !== realmId || result.preparation.subject.originalId !== target.id)) {
+    if (
+      result.kind === 'ready' &&
+      (result.preparation.realm.realmId !== realmId || result.preparation.subject.originalId !== target.id)
+    ) {
       result = { kind: 'denied' };
     }
     if (result.kind !== 'ready') {
       update({ ...state, target: null, preparation: null, preparationState: result.kind });
       return;
     }
-    update({ ...state, target: structuredClone(target), preparation: structuredClone(result.preparation), preparationState: 'ready' });
+    update({
+      ...state,
+      target: structuredClone(target),
+      preparation: structuredClone(result.preparation),
+      preparationState: 'ready',
+    });
   }
   function choose(next: PublicationTarget | null, ticket = serial, action?: PublicationChange['action']) {
     if (locked(ticket)) return;
     request = null;
     selected = next ? structuredClone(next) : null;
     reading++;
-    update({ target: next ? structuredClone(next) : null, outcome: null, busy: false, ...(action ? { reviewAction: action } : {}) });
+    update({
+      target: next ? structuredClone(next) : null,
+      outcome: null,
+      busy: false,
+      ...(action ? { reviewAction: action } : {}),
+    });
     if (next) return inspect(ticket);
   }
   async function performIntent(intent: { input: PublicationChange; target: PublicationTarget }, ticket: number) {
     if (!current(ticket) || state.busy) return;
     request = intent;
     reading++;
-    update({ ...state, preparation: null, preparationState: undefined, outcome: null, busy: true, action: intent.input.action });
+    update({
+      ...state,
+      preparation: null,
+      preparationState: undefined,
+      outcome: null,
+      busy: true,
+      action: intent.input.action,
+    });
     if (!current(ticket)) return;
     let result: PublicationOutcome;
     try {
@@ -153,8 +178,13 @@ export function createPublicationDraft(
     // Any definitive outcome consumes the preparation and the old command.
     if (!unknown) request = null;
     update({
-      target: result.kind === 'denied' ? null : { ...structuredClone(intent.target), ...(result.kind === 'saved' ? { publicationId: result.head } : {}) },
-      outcome: Object.freeze({ ...result }), busy: false, action: intent.input.action,
+      target:
+        result.kind === 'denied'
+          ? null
+          : { ...structuredClone(intent.target), ...(result.kind === 'saved' ? { publicationId: result.head } : {}) },
+      outcome: Object.freeze({ ...result }),
+      busy: false,
+      action: intent.input.action,
       preparation: null,
     });
   }
@@ -166,10 +196,13 @@ export function createPublicationDraft(
     const command = admittedPublicationCommand(preparation, action);
     if (!command) return;
     const input: PublicationChange = Object.freeze({
-      realmId, subjectId: preparation.subject.originalId, action,
+      realmId,
+      subjectId: preparation.subject.originalId,
+      action,
       idempotencyKey: crypto.randomUUID(),
       ...(command.expectedHead === null ? {} : { expectedHead: command.expectedHead }),
-      href: command.href, ifMatch: command.ifMatch,
+      href: command.href,
+      ifMatch: command.ifMatch,
     });
     return performIntent({ input, target: structuredClone(subject) }, ticket);
   }
@@ -185,7 +218,9 @@ export function createPublicationDraft(
     if (retired) return () => {};
     connected = true;
     serial++;
-    stopWatching = binding?.watch?.(() => { if (!binding.current()) retire(); });
+    stopWatching = binding?.watch?.(() => {
+      if (!binding.current()) retire();
+    });
     if (binding && !binding.current()) retire();
     else update({ ...state });
     let disconnected = false;
@@ -200,7 +235,9 @@ export function createPublicationDraft(
       request = null;
       selected = null;
       update({ target: null, outcome: null, busy: false });
-      queueMicrotask(() => { if (!connected) retire(); });
+      queueMicrotask(() => {
+        if (!connected) retire();
+      });
     };
   }
   function bind() {
@@ -208,13 +245,31 @@ export function createPublicationDraft(
     return {
       choose: (next: PublicationTarget | null, action?: PublicationChange['action']) => choose(next, ticket, action),
       change: (action: PublicationChange['action'], subject = state.target) => change(action, subject, ticket),
-      retry: () => retry(ticket), review: () => review(ticket), inspect: () => inspect(ticket),
+      retry: () => retry(ticket),
+      review: () => review(ticket),
+      inspect: () => inspect(ticket),
     };
   }
   return {
-    id, getSnapshot: () => state,
-    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    choose, change, retry, review, inspect, bind, current: () => current(), connect, retire,
-    activate() { if (!retired) active = true; },
+    id,
+    getSnapshot: () => state,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    choose,
+    change,
+    retry,
+    review,
+    inspect,
+    bind,
+    current: () => current(),
+    connect,
+    retire,
+    activate() {
+      if (!retired) active = true;
+    },
   };
 }

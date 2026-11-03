@@ -370,8 +370,13 @@ export const readRealmPublications = createServerFn({ method: 'GET' })
 export const readRealmPublicationPreparation = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     const { realmId } = validateRealm(input);
-    if (!input || typeof input !== 'object' || !('subjectId' in input) ||
-        typeof input.subjectId !== 'string' || !idempotencyKeyPattern.test(input.subjectId))
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('subjectId' in input) ||
+      typeof input.subjectId !== 'string' ||
+      !idempotencyKeyPattern.test(input.subjectId)
+    )
       throw new Error('Invalid Realm publication selection');
     return { realmId, subjectId: input.subjectId };
   })
@@ -407,7 +412,9 @@ export const changeRealmPublication = createServerFn({ method: 'POST' })
       action: input.action,
       idempotencyKey: input.idempotencyKey,
       ...('href' in input && typeof input.href === 'string' ? { href: input.href } : {}),
-      ...('ifMatch' in input && (typeof input.ifMatch === 'string' || input.ifMatch === null) ? { ifMatch: input.ifMatch } : {}),
+      ...('ifMatch' in input && (typeof input.ifMatch === 'string' || input.ifMatch === null)
+        ? { ifMatch: input.ifMatch }
+        : {}),
       ...('expectedHead' in input && typeof input.expectedHead === 'string'
         ? { expectedHead: input.expectedHead }
         : {}),

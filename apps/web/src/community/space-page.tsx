@@ -18,7 +18,12 @@ import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
 import { useShelfList } from './space-queries';
 import { useSpacePageLifetime } from './space-page-lifetime';
-import { changeRealmPublication, readRealmBoards, readRealmPublications, readRealmPublicationPreparation } from './space-actions';
+import {
+  changeRealmPublication,
+  readRealmBoards,
+  readRealmPublications,
+  readRealmPublicationPreparation,
+} from './space-actions';
 import {
   PublicationControls,
   ShelfContinuation,
@@ -266,7 +271,7 @@ export function RealmShelf({
     [transport?.change, csrfToken],
   );
   const preparePublication = useCallback<PublicationPrepare>(
-    (input) => transport?.prepare ? transport.prepare(input) : readRealmPublicationPreparation({ data: input }),
+    (input) => (transport?.prepare ? transport.prepare(input) : readRealmPublicationPreparation({ data: input })),
     [transport?.prepare],
   );
   const control = usePublicationControls(
