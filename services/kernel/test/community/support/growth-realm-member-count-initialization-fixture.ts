@@ -85,13 +85,13 @@ export async function createRealmMemberCountInitializationFixture(): Promise<Rea
     client = await createWorkClient(database.url, database.pool);
 
     const originalRegisterStep = DBOS.registerStep;
-    const interceptedRegisterStep = (...args: Parameters<typeof DBOS.registerStep>) => {
-      const step = originalRegisterStep.apply(DBOS, args);
+    const interceptedRegisterStep = ((...args: unknown[]) => {
+      const step = Reflect.apply(originalRegisterStep, DBOS, args) as (partition: number) => Promise<boolean>;
       const options = args[1] as { name?: string } | undefined;
       if (options?.name === 'community.member-count.segment')
-        registeredSegment = step as (partition: number) => Promise<boolean>;
+        registeredSegment = step;
       return step;
-    };
+    }) as typeof DBOS.registerStep;
     const dbos = DBOS as unknown as { registerStep: typeof DBOS.registerStep };
     dbos.registerStep = interceptedRegisterStep;
     try {
