@@ -2,10 +2,14 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { testReceiptKeys } from './support/receipt-keys.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../src/database/pool.ts';
-import { createKernel, type Kernel } from '../src/http/kernel.ts';
+import { createKernel as composeKernel, type Kernel } from '../src/http/kernel.ts';
 import { openApiDocument } from '../src/http/openapi.ts';
 import { actionCatalogue } from '../src/http/request.ts';
 import { bootstrapRelease } from '../src/semantic/definitions.ts';
+
+import { testReceiptKeys } from './support/receipt-keys.ts';
+const createKernel = (deps: Parameters<typeof composeKernel>[0]) =>
+  composeKernel({ receiptKeys: testReceiptKeys(), ...deps });
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');

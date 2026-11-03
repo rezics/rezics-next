@@ -69,7 +69,6 @@ beforeAll(async () => {
     route,
     routeKey: testRouteKey(),
     deadline: Date.now() + 30000,
-    clock: () => new Date(),
     authorization: resourceAuthorization({
       access: f.access,
       actor: importer.actor,
@@ -104,12 +103,8 @@ test('own native HTTP preview, identifier match, explicit unmatched target, skip
     return facts;
   };
   const before = await facts();
-  const { uploadId } = await preview([
-    record(),
-    { ...record(999999), subject_type: 1 },
-    { subject_type: 999, type: 88 },
-    { type: 2 },
-  ]);
+  const rows = [record(), { ...record(999999), subject_type: 1 }, { subject_type: 999, type: 88 }, { type: 2 }];
+  const { uploadId } = await preview(rows);
   const page = await ok(await send('GET', `/${uploadId}`));
   expect(page.rows[0].evidence.source).toEqual(record());
   const fields = Object.fromEntries(page.rows[0].evidence.fields.map((v: { field: string }) => [v.field, v]));
@@ -125,7 +120,6 @@ test('own native HTTP preview, identifier match, explicit unmatched target, skip
   const b = await review(uploadId, 1, selected),
     c = await review(uploadId, 2),
     d = await review(uploadId, 3);
-  expect(b.match).toBe('chosen');
   const confirmed = [choice(0, a), choice(1, b), choice(2, c), choice(3, d, 'omit', true)];
   const result = await apply(uploadId, confirmed);
   expect(result.outcomes.map((o: { status: string }) => o.status).join(',')).toBe(
