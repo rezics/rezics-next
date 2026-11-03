@@ -612,8 +612,6 @@ require explicit current subject/state/label or Entry/Session review, and delega
 annotation and journal date/reflection effects to native commands with a per-item replay journal, cancellation, seven-day
 retention and owned-graph erasure. V2 provenance remains retained unsupported evidence. Focused native scenarios
 cover actual V2 producer compatibility, private fact recovery, stale targets, replay, cancellation and denial paths.
-The generated client now types raw JSON text or `{manifest, records}` upload, preview and review `reviewRevision`,
-and apply items bound to those returned revisions; the canonical Web owner retains the sole recovery interface.
 Web adoption, frozen acceptance and measured native64/512/4096 cost evidence remain deferred; the existing export
 evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
 supported fields, immutable review confirmations, exact native PATCH replay and visibility decision. Reflection
