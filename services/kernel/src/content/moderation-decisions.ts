@@ -13,7 +13,8 @@ import { CONTENT_EVENTS } from './events.ts';
 import { createAppealEffect } from './appeals.ts';
 import { writeNotices } from './notices.ts';
 import readDecision from './read-moderation-decision.sql';
-import findDecision from './find-moderation-decision.sql';
+import readHistorySource from './moderation-history-source.sql';
+import projectHistory from './project-moderation-history.sql';
 import author from './author-moderation-decision.sql';
 
 const takedownType = 'com.rezics.content.moderation.takedown.v1';
@@ -133,6 +134,39 @@ export async function readModerationDecision(
   };
 }
 
+async function writeOnRoute<T>(
+  pool: Pool,
+  route: number,
+  deadline: number,
+  work: (client: AccessClient) => Promise<T>,
+): Promise<T> {
+  return withConnection(pool, async (connection) => {
+    const client = deadlineClient(connection, deadline);
+    try {
+      await client.query('BEGIN');
+      const partitionNo = partitionOf(route);
+      const partition = await readPartition(client, partitionNo);
+      if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
+      if (partition.writeState !== 'active')
+        throw new CommandUnavailableError(
+          partition.writeState === 'moved' ? 'moved' : 'fenced',
+          partitionNo,
+          partition.movedTo,
+        );
+      const value = await work(client);
+      await client.query('COMMIT');
+      return value;
+    } catch (error) {
+      try {
+        await connection.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(connection, rollbackError as Error);
+      }
+      throw error;
+    }
+  });
+}
+
 export function createModerationDecisionEffect(pool: Pool): Effect {
   const appeals = createAppealEffect(pool);
   return {
@@ -153,63 +187,52 @@ export function createModerationDecisionEffect(pool: Pool): Effect {
       if (route === null || !source || Number(source[1]) !== partitionOf(route) || !/^\d{19}$/.test(event.sequence))
         throw new TypeError('Invalid moderation decision source');
       const deadline = Date.now() + 30_000;
-      const { value } = await snapshot(pool, route, deadline, async (client, partition) => {
+      const { value: decision } = await snapshot(pool, route, deadline, async (client, partition) => {
         if (
           Number(source[2]) > partition.epoch ||
           (Number(source[2]) === partition.epoch && BigInt(event.sequence) > partition.position)
         )
           throw new Error('Moderation decision source unavailable');
-        const decision = await findDecision.run(client, {
+        const row = await readHistorySource.run(client, {
           route,
           target_kind: data.targetKind,
           target_id: data.targetId,
           security_revision: data.securityRevision,
         });
-        if (!decision) throw new Error('Moderation decision source missing');
-        const [target] = await author.run(client, { route, target_kind: data.targetKind, target_id: data.targetId });
-        return target ? { decision, target } : null;
+        if (!row) throw new Error('Moderation decision source missing');
+        return row;
       });
-      if (!value) return;
-      const { decision, target } = value;
-      // Release the source partition before checking the recipient and writing its notice.
-      await withConnection(pool, async (connection) => {
-        const client = deadlineClient(connection, deadline);
-        try {
-          await client.query('BEGIN');
-          const recipientRoute = routeOf(target.author_account_id)!;
-          const partitionNo = partitionOf(recipientRoute);
-          const partition = await readPartition(client, partitionNo);
-          if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
-          if (partition.writeState !== 'active')
-            throw new CommandUnavailableError(
-              partition.writeState === 'moved' ? 'moved' : 'fenced',
-              partitionNo,
-              partition.movedTo,
-            );
-          if (await notificationAllowed(client, { recipient: target.author_account_id, kind: 'moderation_decision' }))
-            await writeNotices(client, [
-              {
-                recipientId: target.author_account_id,
-                noticeId: newId(recipientRoute),
-                kind: 'moderation_decision',
-                actorId: null,
-                threadId: target.thread_id,
-                postId: target.post_id,
-                decisionId: decision.decision_id,
-                reportId: null,
-                sourceId: decision.decision_id,
-                createdAt: new Date(decision.decided_at),
-              },
-            ]);
-          await client.query('COMMIT');
-        } catch (error) {
-          try {
-            await connection.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(connection, rollbackError as Error);
-          }
-          throw error;
-        }
+      if (decision.board_id === null || decision.author_account_id === null) return;
+      const boardRoute = routeOf(decision.board_id);
+      if (boardRoute === null) throw new TypeError('Invalid moderation history board');
+      // The source snapshot is released before projecting references onto the board partition.
+      await writeOnRoute(pool, boardRoute, deadline, (client) =>
+        projectHistory.run(client, {
+          route: boardRoute,
+          board_id: decision.board_id,
+          decision_id: decision.decision_id,
+          target_kind: decision.target_kind,
+          target_id: decision.target_id,
+          decided_at: decision.decided_at,
+        }),
+      );
+      const recipientRoute = routeOf(decision.author_account_id)!;
+      await writeOnRoute(pool, recipientRoute, deadline, async (client) => {
+        if (await notificationAllowed(client, { recipient: decision.author_account_id, kind: 'moderation_decision' }))
+          await writeNotices(client, [
+            {
+              recipientId: decision.author_account_id,
+              noticeId: newId(recipientRoute),
+              kind: 'moderation_decision',
+              actorId: null,
+              threadId: decision.thread_id,
+              postId: decision.post_id,
+              decisionId: decision.decision_id,
+              reportId: null,
+              sourceId: decision.decision_id,
+              createdAt: new Date(decision.decided_at),
+            },
+          ]);
       });
     },
   };

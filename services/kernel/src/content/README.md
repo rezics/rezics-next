@@ -405,6 +405,30 @@ Notification costs are bounded independently of inbox or thread size:
 - Retention deletes bounded batches on recipient routes. The Content erasure participant removes notices, watch
   edges and the one seen marker in bounded batches; neither cleanup requires one transaction over an inbox or thread.
 
+## Board moderation decision history
+
+`GET /v1/boards/{id}/moderation-history` returns `{ entries, nextCursor }`, newest first, with `limit` 1–100
+(default 20) and optional `targetKind=all|thread|post`. Each entry is the existing exact decision response, so Web
+opens it with `GET /v1/moderation-decisions/{decisionId}`. The signed cursor binds the board, target-kind selection,
+limit, current account/client authority and board partition epoch.
+
+Decision: board history covers thread/post takedowns whose current target remains on that board; board-target decisions are excluded because the existing exact decision read supports thread/post targets only.
+
+The `content.moderation_decision` effect projects `content.moderation_decision_board` from committed takedown events.
+The board index stores only decision and target references plus decision time; it contains no statement, report
+evidence, reporter identity or decider identity. Projection upserts converge on replay. A page admits at most
+`limit + 1` board-index candidates and hydrates at most `limit`; it rechecks board `moderation:takedown`, target
+`moderation:takedown`, current target ancestry and the existing exact decision disclosure for every returned entry.
+Denied, erased, stale or out-of-board targets are omitted while the cursor advances past examined candidates.
+No descendant, partition, report, grant or account scan discovers a page.
+
+At a fixed page limit L, a page uses at most `3 + 3L` anchored snapshots: board authority before and after, one
+board-index seek, and up to three bounded target/source/authority snapshots per selected candidate. The index seek
+reads at most L + 1 rows; each target check and exact decision read is a point access with existing finite Access
+evidence. A duplicate event keeps one candidate. Erased decider identity is never indexed or returned; existing
+account-erasure processing retains the statement under its 183-day rule and blanks it at the existing expiry.
+Responses are private/no-store and the history is not a public feed or search source.
+
 ## Appeals
 
 Each thread or post takedown stores a decision with its target, action, moderator's statement (the takedown
