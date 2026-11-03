@@ -11,6 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { useCurrentReadingActive, useCurrentReadingVisible } from './editor-lifetime';
+import { catalogueEditor } from './editor-lifetime';
 import { RichTextEditor } from '@rezics/ui';
 import { DocumentBody } from '../../document-body';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -231,7 +232,7 @@ export function AuthoredField(props: Omit<ComponentProps<typeof AuthoredFieldLiv
   const active = useCurrentReadingActive();
   const work = useMemo(() => ({ ...mount, live: () => mount.live() && active() }), [mount, active]);
   if (!mount.live()) return null;
-  return <AuthoredFieldLive key={mount.generation} {...props} work={work} />;
+  return <AuthoredFieldEditor key={mount.generation} {...props} work={work} />;
 }
 
 function AuthoredFieldLive({
@@ -1330,3 +1331,5 @@ function AuthoredFieldLive({
     </article>
   );
 }
+
+const AuthoredFieldEditor = catalogueEditor(AuthoredFieldLive);
