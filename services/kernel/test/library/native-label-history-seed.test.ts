@@ -64,15 +64,13 @@ test(
     const driver = await createLibraryLabelsDriver();
     try {
       const everythingId = builtinCollectionId(driver.accounts.owner.id, { kind: 'everything' });
+      const subject = await driver.provisionSubject();
       const commands: NativeLabelHistoryCommand[] = [];
       let last: NativeLabelHistorySeed | undefined;
-      let finalCommands: NativeLabelHistoryCommand[] = [];
 
       for (const scale of scales) {
-        const subject = await driver.provisionSubject();
         last = await seedNativeLabelHistory(driver, subject.id, scale);
         commands.push(...last.commands);
-        finalCommands = last.commands;
         if (scale === scales[0]) expect(last.baseline.retainedAssignments).toEqual([]);
         checkSeed(last, scale);
 
@@ -98,14 +96,21 @@ test(
       expect(reservationIds.every((id): id is string => typeof id === 'string')).toBe(true);
       expect(new Set(reservationIds).size).toBe(32);
 
-      const parentLabelIds = new Set(
-        finalCommands
-          .filter((command) => command.action === 'library_label.delete')
-          .map((command) => command.input.labelId),
-      );
-      const expectedReservationIds = finalCommands
-        .filter((command) => command.action === 'library_label.assign' && parentLabelIds.has(command.input.labelId))
-        .map(assignmentId)
+      const assignmentIds = new Map<string, string>();
+      const reservedLabelIds = new Set<string>();
+      for (const command of commands) {
+        const labelId = command.input.labelId;
+        if (typeof labelId !== 'string') continue;
+        if (command.action === 'library_label.assign') assignmentIds.set(labelId, assignmentId(command));
+        if (command.action === 'library_label.delete') reservedLabelIds.add(labelId);
+        if (command.action === 'library_label.unassign') reservedLabelIds.delete(labelId);
+      }
+      const expectedReservationIds = [...reservedLabelIds]
+        .map((labelId) => {
+          const id = assignmentIds.get(labelId);
+          if (!id) throw new Error(`Native reservation ${labelId} has no original assignment receipt`);
+          return id;
+        })
         .sort();
       expect(expectedReservationIds).toHaveLength(32);
       expect(reservationIds.sort()).toEqual(expectedReservationIds);

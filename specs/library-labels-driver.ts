@@ -281,9 +281,10 @@ export interface LibraryLabelsDriver {
   /** Instrument the actual shared reservation path in Collection reads or assignment admission, including current parents. */
   measureLabelSource<T>(operation: () => Promise<T>): Promise<LabelSourceObservation<T>>;
   /** Grow TO totalCount inactive same-subject history through production commands, interspersing parent
-   * tombstones and individual unassigns inside the ordinary undo window; leave one reserved slot available
-   * until the final parent tombstone so every unassign uses real assignment capacity. End with 32 stale
-   * reservations and no effective label. Never insert fixture rows or require deferred legal-hold ports. */
+   * tombstones and individual unassigns inside the ordinary undo window; keep one reserved slot available
+   * until the final parent tombstone so every unassign uses real assignment capacity. When extending a full
+   * seed, release one prior tombstone with a public unassign first. End with 32 stale reservations and no
+   * effective label. Never insert fixture rows or require deferred legal-hold ports. */
   growInactiveHistory(subjectId: string, totalCount: number): Promise<void>;
   now(): string;
   setTime(instant: string): Promise<void>;

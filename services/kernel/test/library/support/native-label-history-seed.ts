@@ -93,19 +93,6 @@ export async function seedNativeLabelHistory(
   );
   if (effectiveBefore.length > 0) throw new Error('Native label history seed requires an inactive baseline subject');
 
-  const existingReservations = existing.filter(({ assignment }) => assignment.slotNo !== null).length;
-  if (existingReservations > 32) throw new Error('Native label history baseline already exceeds 32 reserved slots');
-
-  const missingCount = Math.max(0, totalCount - existing.length);
-  const parentTombstonesNeeded = 32 - existingReservations;
-  if (parentTombstonesNeeded > missingCount)
-    throw new Error('Native label history cannot reach 32 reservations without exceeding the requested total');
-  if (missingCount > 0 && existingReservations === 32)
-    throw new Error('Native label history cannot add assignments after all 32 reserved slots are occupied');
-  const finalParentTombstone = parentTombstonesNeeded > 0;
-  const distributedParentTombstones = parentTombstonesNeeded - Number(finalParentTombstone);
-  const distributedRows = missingCount - 1;
-
   const commands: NativeLabelHistoryCommand[] = [];
   async function command(action: Mutation, input: Record<string, unknown>, expectedStatus: number) {
     const key = requestKey().slice(1, -1);
@@ -133,6 +120,36 @@ export async function seedNativeLabelHistory(
     commands.push(recorded);
     return recorded;
   }
+
+  let existingReservations = existing.filter(({ assignment }) => assignment.slotNo !== null).length;
+  if (existingReservations > 32) throw new Error('Native label history baseline already exceeds 32 reserved slots');
+
+  const missingCount = Math.max(0, totalCount - existing.length);
+  if (missingCount > 0 && existingReservations === 32) {
+    const release = existing.find(
+      ({ assignment, parent }) =>
+        assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt !== null,
+    );
+    if (!release) throw new Error('Native label history cannot free a reserved slot through an inactive parent');
+    await command(
+      'library_label.unassign',
+      {
+        labelId: release.assignment.labelId,
+        subjectId,
+        assignmentId: requiredString(release.assignment.assignmentId, 'assignment ID'),
+        expectedRevision: requiredRevision(release.assignment.revision, 'assignment revision'),
+      },
+      200,
+    );
+    existingReservations -= 1;
+  }
+
+  const parentTombstonesNeeded = 32 - existingReservations;
+  if (parentTombstonesNeeded > missingCount)
+    throw new Error('Native label history cannot reach 32 reservations without exceeding the requested total');
+  const finalParentTombstone = parentTombstonesNeeded > 0;
+  const distributedParentTombstones = parentTombstonesNeeded - Number(finalParentTombstone);
+  const distributedRows = missingCount - 1;
 
   for (let offset = 0; offset < missingCount; offset++) {
     const index = existing.length + offset;
