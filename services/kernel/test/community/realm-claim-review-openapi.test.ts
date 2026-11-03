@@ -28,9 +28,11 @@ type Operation = {
 
 function alternatives(schema: Schema): Schema[] {
   const options = schema.oneOf ?? schema.anyOf ?? [schema];
-  return options.filter(
-    (option) => option.type !== 'null' && !(Array.isArray(option.type) && option.type.includes('null')),
-  );
+  return options.filter((option) => {
+    if (option.type === 'null') return false;
+    if (option.properties) return true;
+    return !(Array.isArray(option.type) && option.type.includes('null'));
+  });
 }
 
 function literal(schema: Schema | undefined): unknown {
