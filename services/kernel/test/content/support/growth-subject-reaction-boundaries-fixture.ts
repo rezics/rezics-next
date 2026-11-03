@@ -155,7 +155,7 @@ export async function openSubjectReactionBoundaryObservation(
     const kernel = createKernel({
       pool: database.pool,
       routeKey: fixture.base.system.routeKey,
-      tokens: fixture.base.system.tokens,
+      tokens: fixture.base.system.tokenKeys,
       access: fixture.base.system.access,
       writeRate: createWriteRateLimiter({
         secret: 'subject-reaction-boundary-read-rate-secret',
@@ -168,7 +168,7 @@ export async function openSubjectReactionBoundaryObservation(
       readDependencies: {
         pool: database.pool,
         access: fixture.base.system.access,
-        tokens: fixture.base.system.tokens,
+        tokens: fixture.base.system.tokenKeys,
       },
       async call(method, path, options = {}) {
         const headers = new Headers();
