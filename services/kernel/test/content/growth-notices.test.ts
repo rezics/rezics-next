@@ -4,6 +4,7 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import {
   deleteAccountNoticePage,
   deleteExpiredNoticesPage,
+  eraseAccountNoticesPage,
   NOTICE_PAGE_SIZE,
   writeNotices,
 } from '../../src/content/notices.ts';
@@ -41,6 +42,18 @@ async function seedNotices(account: string, count: number, createdAt: Date): Pro
      SELECT $1, $2, requested.id, 'reply', requested.id, $4::timestamptz
      FROM unnest($3::uuid[]) AS requested(id)`,
     [routeFor(account), account, ids, createdAt],
+  );
+}
+
+async function seedFinalizations(account: string, count: number, createdAt: Date): Promise<void> {
+  if (count === 0) return;
+  const route = routeFor(account);
+  const ids = Array.from({ length: count }, () => newId(route));
+  await db.admin.query(
+    `INSERT INTO content.notice_finalization(route,recipient_id,kind,source_id,sent,created_at)
+     SELECT $1,$2,'reply',requested.id,false,$4::timestamptz
+     FROM unnest($3::uuid[]) AS requested(id)`,
+    [route, account, ids, createdAt],
   );
 }
 
@@ -243,3 +256,130 @@ test('notice writes and bounded pages stay constant while other recipients and p
   });
   expectConstantNoticeCost(erasureReport, NOTICE_PAGE_SIZE);
 }, 180_000);
+
+test('finalization cleanup and empty terminal lifecycle pages stay bounded at the seeded scales', async () => {
+  const warmupAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const measuredAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const cutoff = new Date('2000-01-02T00:00:00Z');
+  const expired = new Date('1999-12-31T00:00:00Z');
+  const cleanup = await checkGrowth(db, {
+    name: 'Expired notice finalization cleanup',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    async grow(_growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      await seedFinalizations(warmupAccounts.get(scale)!, NOTICE_PAGE_SIZE, expired);
+      await seedFinalizations(measuredAccounts.get(scale)!, NOTICE_PAGE_SIZE, expired);
+      for (const account of recipients(atRoute)) await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of otherPartitionRecipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+    },
+    async warmup(growthDb, scale) {
+      expect(await deleteExpiredNoticesPage(growthDb.pool, routeAtScale(scale), cutoff)).toBe(NOTICE_PAGE_SIZE);
+    },
+    async operation(growthDb, scale) {
+      expect(await deleteExpiredNoticesPage(growthDb.pool, routeAtScale(scale), cutoff)).toBe(NOTICE_PAGE_SIZE);
+      return scale;
+    },
+  });
+  expect(cleanup.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  for (const sample of cleanup.samples) {
+    expect(sample.cost.rows).toBe(cleanup.samples[0]!.cost.rows);
+    expect(sample.cost.statements).toBe(cleanup.samples[0]!.cost.statements);
+    const table = sample.cost.relations?.['content.notice_finalization'];
+    expect(table).toBeDefined();
+    expect(table!.rows).toBeLessThanOrEqual(NOTICE_PAGE_SIZE + 16);
+    expect(table!.sequentialScans).toBe(0);
+  }
+  console.info(JSON.stringify(cleanup));
+
+  const emptyExpired = await checkGrowth(db, {
+    name: 'Empty expired notice terminal page',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    async grow(_growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      for (const account of recipients(atRoute)) await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of otherPartitionRecipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+    },
+    async operation(growthDb, scale) {
+      expect(await deleteExpiredNoticesPage(growthDb.pool, routeAtScale(scale), cutoff)).toBe(0);
+      return scale;
+    },
+  });
+  expect(emptyExpired.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  console.info(JSON.stringify(emptyExpired));
+
+  const emptyErasure = await checkGrowth(db, {
+    name: 'Empty notice erasure terminal page',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    async grow(_growthDb, scale) {
+      const atRoute = routeAtScale(scale);
+      for (const account of recipients(atRoute)) await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+      for (const account of otherPartitionRecipients(atRoute))
+        await seedNotices(account, scale, new Date('2026-10-01T00:00:00Z'));
+    },
+    async operation(growthDb, scale) {
+      const result = await eraseAccountNoticesPage({ pool: growthDb.pool }, newId(routeAtScale(scale)), null);
+      expect(result).toEqual({ next: null, found: 0, pending: 0 });
+      return scale;
+    },
+  });
+  expect(emptyErasure.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  console.info(JSON.stringify(emptyErasure));
+
+  const pressureAccounts = new Map<number, string>(scales.map((scale) => [scale, newId(routeAtScale(scale))]));
+  const eraseAll = async (pool: typeof db.pool, account: string): Promise<number> => {
+    let after: string | null = null;
+    let found = 0;
+    for (;;) {
+      const page = await eraseAccountNoticesPage({ pool }, account, after);
+      found += page.found;
+      if (page.next === null) {
+        expect(page.pending).toBe(0);
+        return found;
+      }
+      expect(page.pending).toBeGreaterThan(0);
+      after = page.next;
+    }
+  };
+  const completeParticipant = await checkGrowth(db, {
+    name: 'Complete notice-erasure participant pages',
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    async grow(_growthDb, scale, previous) {
+      const account = pressureAccounts.get(scale)!;
+      await seedNotices(account, scale - previous, new Date('2026-10-01T00:00:00Z'));
+      await seedFinalizations(account, scale - previous, new Date('2026-10-01T00:00:00Z'));
+    },
+    async warmup(growthDb, scale) {
+      const account = newId(routeAtScale(scale));
+      await seedNotices(account, 55, new Date('2026-10-01T00:00:00Z'));
+      await seedFinalizations(account, 55, new Date('2026-10-01T00:00:00Z'));
+      expect(await eraseAll(growthDb.pool, account)).toBe(110);
+    },
+    async prepare(_growthDb, scale) {
+      const account = newId(routeAtScale(scale));
+      pressureAccounts.set(scale, account);
+      await seedNotices(account, 55, new Date('2026-10-01T00:00:00Z'));
+      await seedFinalizations(account, 55, new Date('2026-10-01T00:00:00Z'));
+    },
+    async operation(growthDb, scale) {
+      const account = pressureAccounts.get(scale)!;
+      expect(await eraseAll(growthDb.pool, account)).toBe(110);
+      return scale;
+    },
+  });
+  expect(completeParticipant.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  console.info(JSON.stringify(completeParticipant));
+}, 300_000);

@@ -113,3 +113,72 @@ test('native inbox disclosure of a real post notice stays bounded as the recipie
     await native.close();
   }
 }, 300_000);
+
+test('native unread counts classify empty, exact-100, capped and retained-frontier states at three scales', async () => {
+  const native = await replyNoticeFixture();
+  try {
+    const recipient = native.accounts.recipient;
+    const route = routeOf(recipient)!;
+    const path = `/v1/accounts/${recipient}/notifications`;
+    const profiles = [
+      { name: 'empty', pending: 0, expected: { count: 0, capped: false }, removeMarker: false },
+      { name: 'exact-100', pending: 100, expected: { count: 100, capped: false }, removeMarker: false },
+      { name: 'capped', pending: 101, expected: { count: 100, capped: true }, removeMarker: false },
+      { name: 'retained-frontier', pending: 1, expected: { count: 1, capped: false }, removeMarker: true },
+    ] as const;
+
+    for (const profile of profiles) {
+      await native.db.admin.query('DELETE FROM content.notice WHERE route=$1 AND recipient_id=$2', [route, recipient]);
+      await native.db.admin.query('DELETE FROM content.notice_seen WHERE route=$1 AND account_id=$2', [
+        route,
+        recipient,
+      ]);
+      const marker = newId(route);
+      await native.db.admin.query(
+        `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+         VALUES($1,$2,$3,'reply',$3,'2026-10-02T00:00:00Z')`,
+        [route, recipient, marker],
+      );
+      const marked = await native.call(recipient, 'POST', `${path}:markSeen`, { through: marker });
+      expect(marked.status).toBe(204);
+      if (profile.removeMarker)
+        await native.db.admin.query('DELETE FROM content.notice WHERE route=$1 AND notice_id=$2', [route, marker]);
+      if (profile.pending > 0) {
+        const ids = Array.from({ length: profile.pending }, () => newId(route));
+        await native.db.admin.query(
+          `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+           SELECT $1,$2,id,'reply',id,'2026-10-03T00:00:00Z' FROM unnest($3::uuid[]) AS n(id)`,
+          [route, recipient, ids],
+        );
+      }
+
+      const report = await checkGrowth(native.db, {
+        name: `Native unread count ${profile.name}`,
+        scales: [256, 1024, 4096],
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        repetitions: 1,
+        warmups: 1,
+        grow: async (_db, scale, previous) => {
+          const ids = Array.from({ length: scale - previous }, () => newId(route));
+          await native.db.admin.query(
+            `INSERT INTO content.notice(route,recipient_id,notice_id,kind,source_id,created_at)
+             SELECT $1,$2,id,'moderation_decision',id,'2026-10-01T00:00:00Z'::timestamptz +
+                    ordinality * interval '1 millisecond'
+             FROM unnest($3::uuid[]) WITH ORDINALITY AS n(id,ordinality)`,
+            [route, recipient, ids],
+          );
+        },
+        operation: async () => {
+          const result = await native.call(recipient, 'GET', `${path}/count`);
+          expect(result.status).toBe(200);
+          expect(result.value).toEqual(profile.expected);
+          return result.value.count;
+        },
+      });
+      expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
+      console.info(JSON.stringify(report));
+    }
+  } finally {
+    await native.close();
+  }
+}, 300_000);
