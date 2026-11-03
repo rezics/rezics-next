@@ -19,7 +19,7 @@ test('Copies form review frames AppShell, exposes create refusal, and keeps the 
   expect(source).toContain('<PatternStory visitor="Signed In" path={path}>');
   expect(source).toContain("phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }");
   expect(source).toContain("desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' }");
-  expect(source).not.toContain('phone: { name: \'Phone\'');
+  expect(source).not.toContain("phone: { name: 'Phone'");
   expect(source).toContain('m.library_copy_edition()');
   expect(source).not.toContain('/Edition|版本/');
   expect(storyBlock(source, 'CreateRefused')).not.toContain('!dev');
@@ -40,11 +40,13 @@ test('Copies form review frames AppShell, exposes create refusal, and keeps the 
 
   expect(recordedEdition).toBe('The Little Prince');
   setCopiesStoryMode('refusal');
-  const created = routes.find((route) => route.method === 'POST' && route.path === '/v1/copies')?.story?.({
-    request: new Request('http://kernel.local/v1/copies', { method: 'POST' }),
-    recordings: {},
-    match: null,
-  });
+  const created = routes
+    .find((route) => route.method === 'POST' && route.path === '/v1/copies')
+    ?.story?.({
+      request: new Request('http://kernel.local/v1/copies', { method: 'POST' }),
+      recordings: {},
+      match: null,
+    });
   expect(created).toEqual({
     status: 422,
     type: 'https://rezics.com/problems/invalid_request',
