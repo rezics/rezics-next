@@ -51,7 +51,7 @@ export async function growthEditionPublicationFixture() {
       method = 'GET',
       body?: unknown,
       version?: string,
-      key = randomUUID(),
+      key: string = randomUUID(),
     ) =>
       app.handle(
         new Request(`https://content.test${path}`, {
@@ -147,7 +147,7 @@ export async function growthEditionPublicationFixture() {
       body,
       targetSubjectId: concept.subject.id,
       selectedScopeCount: author.actor.scopes.length,
-      async createDraft(key = randomUUID()) {
+      async createDraft(key: string = randomUUID()) {
         return checked<{ editionId: string; editionRevision: string }>(
           call(
             '/v1/contentEditions',

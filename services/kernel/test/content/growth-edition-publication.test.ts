@@ -135,7 +135,7 @@ async function assertCommandCommitted(fixture: Fixture, mode: Mode, run: Command
   expect(publications.rows).toHaveLength(1);
   expect(publications.rows[0]!.initiator_account_id).toBe(fixture.author.actor.accountId);
   expect(publications.rows[0]!.actor_client_id).toBe(fixture.author.actor.clientId);
-  expect(publications.rows[0]!.actor_scopes).toEqual(fixture.author.actor.scopes);
+  expect(publications.rows[0]!.actor_scopes).toEqual([...fixture.author.actor.scopes]);
   expect(publications.rows[0]!.actor_scopes.length).toBeLessThanOrEqual(512);
   expect(publications.rows[0]!.source_digest).toMatch(/^[0-9a-f]{64}$/);
 
