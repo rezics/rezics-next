@@ -44,8 +44,8 @@ Web owns `/library/export` as the signed-in Library portability visit. Commerce 
 fences, expiry and artifact semantics. The page binds `KernelClient.libraryExports` when post, status GET, pages GET
 and DELETE are present. Decision: export adoption remains unavailable until complete generated declarations and
 installed client typing agree on V4 coverage, all 21 sections and the journal assessment contract. Missing methods
-render unavailable rather than a local engine or successful fixture. Decision: use the create response's original `first` cursor on the
-happy path and call status GET only to replay lost bytes or reread a still-valid capture.
+render unavailable rather than a local engine or successful fixture. Decision: use the create response's original
+`first` cursor on the happy path and call status GET only to replay lost bytes or reread a still-valid capture.
 
 Before capture, the page explains supported-native-facts coverage and `fullExport:false` in product language. Entries,
 labels, sessions, copies and permitted Collection metadata stay independent facts; stored rules are references;
