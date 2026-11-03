@@ -70,6 +70,13 @@ currentness. No dominant Type is inferred from member counts, previews or comple
 and member disclosure and authorization, explicit Type/catalogue publication and independent cover readiness retain
 their existing contracts.
 
+Private [Collection archive recovery](library-archive-collection-recovery.md) now exposes an explicit receiving
+choice through the native create command. Mixed stays the default; archived or alternative Type IDs require current
+admission and deliberate review. Recovery binds the chosen current release digest and original canonical create
+operands to its immutable confirmation. A changed release refuses a new create; an accepted receipt replays without
+readmitting its historical choice. Later Type disappearance retains the stored override and existing fallback.
+Archived raw identifiers remain evidence, alternatives are new choices, and `fullRestoration:false` remains explicit.
+
 ## FULL member key fact values
 
 Existing Semantic `SubjectSummary` has no facts. The selected common FULL member response may add optional

@@ -11,6 +11,7 @@ import { newId } from '../route/route.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { activeRelease } from '../semantic/definitions.ts';
 import { createCollectionCommands } from './collections.ts';
 import {
   ArchiveValidationError,
@@ -72,6 +73,7 @@ type RecoveryRoot = {
   reviewRequestDigest: string | null;
   reviewDigest: string | null;
   reviewSnapshot: ReviewSnapshot | null;
+  createFailure: string | null;
   nativeCollectionId: string | null;
   lastAddedMemberId: string | null;
   pinState: 'none' | 'pending' | 'applied' | 'unsupported';
@@ -110,7 +112,15 @@ type ReviewMapping = {
   currentSubjectId: string | null;
   state: 'mapped' | 'unresolved' | 'canonical-changed';
 };
+type PresentationReview = { kind: string | null; releaseDigest: string | null; source: 'mixed' | 'archived' | 'alternative' };
+type CreateCommand = {
+  input: { title: string; description: string | null; visibility: 'private'; presentationKind?: string | null };
+  key: string;
+  reviewedReleaseDigest?: string;
+};
 type ReviewSnapshot = {
+  presentation?: PresentationReview;
+  createCommand?: CreateCommand;
   reviewId: string;
   reviewEpoch: number;
   collection: {
@@ -157,6 +167,7 @@ type RootRow = {
   review_request_digest: string | null;
   review_digest: string | null;
   review_snapshot: ReviewSnapshot | null;
+  create_failure: string | null;
   native_collection_id: string | null;
   last_added_member_id: string | null;
   pin_state: RecoveryRoot['pinState'];
@@ -179,6 +190,8 @@ type RecoveryDependencies = {
   afterNativeEffect?: (kind: 'create' | 'member' | 'note' | 'order' | 'pin', sourceId?: string) => Promise<void>;
 };
 type ReviewInput = {
+  /** Omitted or null deliberately keeps the former mixed create. */
+  presentationKind?: string | null;
   collectionId: string;
   selectedOccurrenceIds: string[];
   mappings: Array<{ sourceSubjectId: string; targetSubjectId: string | null }>;
@@ -254,6 +267,7 @@ function rowValue(row: RootRow): RecoveryRoot {
     reviewRequestDigest: row.review_request_digest,
     reviewDigest: row.review_digest,
     reviewSnapshot: row.review_snapshot,
+    createFailure: row.create_failure,
     nativeCollectionId: row.native_collection_id,
     lastAddedMemberId: row.last_added_member_id,
     pinState: row.pin_state,
@@ -272,7 +286,7 @@ function rootSelect() {
   return `SELECT upload_id::text,account_id::text,request_key,upload_digest,manifest,coverage,source_pins,
     created_at::text,expires_at::text,state,source_record_count,source_membership_complete,
     selected_collection_id::text,selected_count,review_id::text,review_epoch::text,review_key,
-    review_request_digest,review_digest,review_snapshot,native_collection_id::text,last_added_member_id::text,
+    review_request_digest,review_digest,review_snapshot,create_failure,native_collection_id::text,last_added_member_id::text,
     pin_state,pin_reason,pin_revision::text,pin_after::text,cancel_requested,inflight_action,inflight_source_id::text,
     lease_id::text,lease_until::text
     FROM library.collection_archive_recovery`;
@@ -297,7 +311,7 @@ async function expireRoot(pool: Pool, row: RecoveryRoot) {
     `UPDATE library.collection_archive_recovery SET state='expired',source_record_count=0,
        source_membership_complete=false,manifest='{}'::jsonb,coverage='[]'::jsonb,source_pins=NULL,
        upload_digest=repeat('0',64),selected_collection_id=NULL,selected_count=0,review_id=NULL,
-       review_key=NULL,review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,
+       review_key=NULL,review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,create_failure=NULL,
        native_collection_id=NULL,last_added_member_id=NULL,pin_state='none',pin_reason='evidence_expired',
        pin_revision=NULL,pin_after=NULL,
        cancel_requested=true,inflight_action=NULL,inflight_source_id=NULL,lease_id=NULL,lease_until=NULL
@@ -317,7 +331,7 @@ async function expireOwnerEvidence(
     `UPDATE library.collection_archive_recovery SET state='expired',source_record_count=0,
        source_membership_complete=false,manifest='{}'::jsonb,coverage='[]'::jsonb,source_pins=NULL,
        upload_digest=repeat('0',64),selected_collection_id=NULL,selected_count=0,review_id=NULL,
-       review_key=NULL,review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,
+       review_key=NULL,review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,create_failure=NULL,
        native_collection_id=NULL,last_added_member_id=NULL,pin_state='none',pin_reason='evidence_expired',
        pin_revision=NULL,pin_after=NULL,
        cancel_requested=true,inflight_action=NULL,inflight_source_id=NULL,lease_id=NULL,lease_until=NULL
@@ -368,6 +382,16 @@ function recoveryStatus(root: RecoveryRoot) {
     cancelRequested: root.cancelRequested,
     confirmation: root.reviewId && root.reviewDigest ? { reviewId: root.reviewId, digest: root.reviewDigest } : null,
     pin: { state: expired ? 'unsupported' : root.pinState, reason: expired ? 'evidence_expired' : root.pinReason },
+    fullRestoration: false as const,
+    presentation: {
+      state: root.createFailure ? 'unsupported_or_stale' as const
+        : root.nativeCollectionId ? (root.reviewSnapshot?.presentation?.kind ? 'adopted' as const : 'mixed' as const)
+        : 'unattempted' as const,
+      kind: expired ? null : root.reviewSnapshot?.presentation?.kind ?? null,
+      source: expired ? null : root.reviewSnapshot?.presentation?.source ?? null,
+      releaseDigest: expired ? null : root.reviewSnapshot?.presentation?.releaseDigest ?? null,
+      reason: expired ? 'evidence_expired' : root.createFailure,
+    },
     sectionReasons,
   };
 }
@@ -835,6 +859,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const last = occurrences.at(-1);
     const next =
       hasMore && last ? collectionCursor(root, collectionId, [last.orderKey, last.sourceOccurrenceId], limit) : null;
+    const active = found.presentationKind === null ? null : await activeRelease(deps.pool);
+    const presentationAdmissible = found.presentationKind !== null && !!active &&
+      Object.hasOwn(active.release.types, found.presentationKind);
     const current = await currentRoot(owner, uploadId, signal);
     if (current.state === 'expired')
       return { ...recoveryStatus(current), collection: null, occurrences: [], next: null };
@@ -853,7 +880,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             : found.builtinKind
               ? 'built_in_not_restored'
               : null,
-        presentationDisposition: found.presentationKind === null ? 'none' : 'unsupported_current_meaning',
+        presentationDisposition: found.presentationKind === null ? 'none' : presentationAdmissible ? 'available_explicit_choice' : 'unsupported_current_meaning',
+        presentationAdmissible,
+        presentationReleaseDigest: active?.digest ?? null,
       },
       occurrences,
       next,
@@ -892,6 +921,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     abortIfRequested(signal);
     const root = await load(owner, uploadId);
     if (
+      (input.presentationKind != null && !validText(input.presentationKind, 128, 512, false)) ||
       !UUID.test(input.collectionId) ||
       !Array.isArray(input.selectedOccurrenceIds) ||
       input.selectedOccurrenceIds.length > LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences ||
@@ -1005,7 +1035,22 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const sourceOrderComplete = selected.rows.every((row) => row.orderPresent);
     const completeMembership =
       root.sourceMembershipComplete && input.selectedOccurrenceIds.length === collection.memberCount;
+    const kind = input.presentationKind ?? null;
+    const active = kind === null ? null : await activeRelease(deps.pool);
+    if (kind !== null && (!active || !Object.hasOwn(active.release.types, kind)))
+      throw new ProblemError('invalid_request');
+    const presentation: PresentationReview = {
+      kind, releaseDigest: active?.digest ?? null,
+      source: kind === null ? 'mixed' : kind === collection.presentationKind ? 'archived' : 'alternative',
+    };
     const snapshot: ReviewSnapshot = {
+      presentation,
+      createCommand: {
+        input: { title: collection.title, description: collection.description, visibility: 'private',
+          ...(kind === null ? {} : { presentationKind: kind }) },
+        key: commandKey({ ...root, reviewId }, 'create'),
+        ...(active ? { reviewedReleaseDigest: active.digest } : {}),
+      },
       reviewId,
       reviewEpoch,
       collection: {
@@ -1144,7 +1189,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
              selected_count=$5,review_id=$6::uuid,review_epoch=review_epoch+1,review_key=$7,
              review_request_digest=$8,review_digest=$9,review_snapshot=$10::jsonb,native_collection_id=NULL,
              last_added_member_id=NULL,pin_state=$11,pin_reason=$12,pin_revision=$13::bigint,pin_after=$14::uuid,
-             cancel_requested=false
+             cancel_requested=false,create_failure=NULL
            WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
           [
             root.route,
@@ -1183,6 +1228,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               reviewId: root.reviewSnapshot.reviewId,
               digest: root.reviewDigest,
               epoch: root.reviewSnapshot.reviewEpoch,
+              presentation: root.reviewSnapshot.presentation ?? { kind: null, releaseDigest: null, source: 'mixed' as const },
               completeOrder: root.reviewSnapshot.completeOrder,
               completeMembership: root.reviewSnapshot.completeMembership,
               selectedOccurrences: root.reviewSnapshot.selectedOccurrenceIds.length,
@@ -1357,18 +1403,31 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         const snapshot = root.reviewSnapshot;
         if (!root.nativeCollectionId) {
           if (!(await beginEffect(root, leaseId, 'create'))) break;
-          const created = await commands.createCollection(
-            owner,
-            { title: snapshot.collection.title, description: snapshot.collection.description, visibility: 'private' },
-            commandKey(root, 'create'),
-          );
+          // New reviews persist canonical operands and the key before effect. Historical reviews
+          // reconstruct only their original mixed operands; current releases never rewrite this command.
+          const original: CreateCommand = snapshot.createCommand ?? {
+            input: { title: snapshot.collection.title, description: snapshot.collection.description, visibility: 'private' },
+            key: commandKey(root, 'create'),
+          };
+          let created: Awaited<ReturnType<typeof commands.createCollection>>;
+          try {
+            created = await commands.createCollection(owner, original.input, original.key, original.reviewedReleaseDigest);
+          } catch (error) {
+            if (!snapshot.presentation?.kind || !(error instanceof ProblemError) ||
+                !['invalid_request', 'conflict'].includes(error.code)) throw error;
+            await checkpointEffect(root, leaseId,
+              `UPDATE library.collection_archive_recovery SET state='reviewed',create_failure='unsupported_or_stale'
+               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
+              [root.route, owner.accountId, uploadId, leaseId]);
+            break;
+          }
           await deps.afterNativeEffect?.('create');
           await admit(owner);
           abortIfRequested(signal);
           await checkpointEffect(
             root,
             leaseId,
-            `UPDATE library.collection_archive_recovery SET native_collection_id=$4::uuid
+            `UPDATE library.collection_archive_recovery SET native_collection_id=$4::uuid,create_failure=NULL
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$5::uuid`,
             [root.route, owner.accountId, uploadId, created.value.id, leaseId],
           );

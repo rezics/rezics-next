@@ -9,6 +9,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { KernelClock } from '../clock.ts';
 import { LIBRARY_ARCHIVE_LIMITS, LIBRARY_ARCHIVE_RECOVERY_LIMITS } from './library-archive.ts';
+import { exportSectionsV2 } from './library-export-format.ts';
 import { exportAuthorityTypes } from './library-export.ts';
 import { createLibraryArchiveCollectionRecovery } from './library-archive-collection-recovery.ts';
 
@@ -31,8 +32,11 @@ const exportSection = t.Union([
   t.Literal('history'),
   t.Literal('occurrences'),
   t.Literal('malEvidence'),
+  t.Literal('annotations'),
+  t.Literal('provenance'),
+  t.Literal('journals'),
 ]);
-const manifestSchema = t.Object(
+const manifestV1 = t.Object(
   {
     format: t.Literal('https://rezics.com/formats/library-export'),
     version: t.Literal(1),
@@ -59,6 +63,29 @@ const manifestSchema = t.Object(
   },
   closed,
 );
+const manifestSchema = t.Union([
+  manifestV1,
+  t.Object({
+    ...manifestV1.properties,
+    version: t.Literal(2),
+    coverage: t.Literal('private-library-owner-facts-v2'),
+    sectionTotals: t.Object(Object.fromEntries(exportSectionsV2.map(section => [section,
+      t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
+    ])), closed),
+  }, closed),
+]);
+const presentationReview = t.Object({
+  kind: nullableText,
+  releaseDigest: nullableText,
+  source: t.Union([t.Literal('mixed'), t.Literal('archived'), t.Literal('alternative')]),
+}, closed);
+const presentationStatus = t.Object({
+  state: t.Union([t.Literal('mixed'), t.Literal('adopted'), t.Literal('unsupported_or_stale'), t.Literal('unattempted')]),
+  kind: nullableText,
+  source: t.Union([presentationReview.properties.source, t.Null()]),
+  releaseDigest: nullableText,
+  reason: nullableText,
+}, closed);
 const coverage = t.Object(
   {
     section: exportSection,
@@ -120,6 +147,8 @@ const statusFields = {
   cancelRequested: t.Boolean(),
   collectionId: t.Union([id, t.Null()]),
   confirmation,
+  fullRestoration: t.Literal(false),
+  presentation: presentationStatus,
   pin: pinStatus,
   sectionReasons: t.Record(t.String(), t.String()),
 };
@@ -141,6 +170,7 @@ const uploadBody = t.Object(
 const reviewBody = t.Object(
   {
     collectionId: id,
+    presentationKind: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 128 }), t.Null()])),
     selectedOccurrenceIds: t.Array(id, {
       maxItems: LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences,
       uniqueItems: true,
@@ -195,6 +225,8 @@ const collectionPreview = t.Object(
   {
     ...collectionSummary.properties,
     presentationDisposition: text,
+    presentationAdmissible: t.Boolean(),
+    presentationReleaseDigest: nullableText,
   },
   closed,
 );
@@ -231,6 +263,7 @@ const reviewSummary = t.Object(
     reviewId: id,
     digest: t.String(),
     epoch: t.Integer(),
+    presentation: presentationReview,
     completeOrder: t.Boolean(),
     completeMembership: t.Boolean(),
     selectedOccurrences: t.Integer(),

@@ -447,6 +447,7 @@ export function createCollectionCommands(config: {
         | { membershipKind: 'dynamic'; rule: unknown }
       ),
     requestKey: string,
+    reviewedReleaseDigest?: string,
   ): Promise<CommandOutcome<Collection>> {
     const title = requiredText(draft.title, TITLE_LIMIT);
     const description = draft.description === undefined ? null : optionalText(draft.description, DESCRIPTION_LIMIT);
@@ -458,6 +459,7 @@ export function createCollectionCommands(config: {
       description,
       visibility,
       ...selection,
+      ...(reviewedReleaseDigest === undefined ? {} : { reviewedReleaseDigest }),
       ...(draft.membershipKind === 'dynamic' ? { membershipKind: 'dynamic', rule: draft.rule } : {}),
     };
     const route = actor.kind === 'account' ? routeOf(actor.accountId) : null;
@@ -522,6 +524,7 @@ export function createCollectionCommands(config: {
             actor,
             selection,
             deadlineFor(WORK_STEP_DEADLINE_MS),
+            reviewedReleaseDigest,
           );
           const admitted = rule ? await admitCollectionRule(pool, rule) : null;
           const checks =
