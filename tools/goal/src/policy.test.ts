@@ -48,8 +48,9 @@ test('local policy overrides individual leaves and validates configurable notifi
     const retrySettings = settings;
     const task = h.tasks.dispatch(h.briefFile),
       ref = { taskId: task.id, attempt: 0 };
-    h.store.event({ taskId: task.id, attempt: 1 }, 'gate-outcome', { stage: 'rebase' });
-    h.store.event({ taskId: task.id, attempt: 2 }, 'gate-outcome', { stage: 'rebase' });
+    const other = h.tasks.dispatch(h.briefFile);
+    h.store.event({ taskId: task.id, attempt: 0 }, 'gate-outcome', { stage: 'rebase' });
+    h.store.event({ taskId: other.id, attempt: 0 }, 'gate-outcome', { stage: 'rebase' });
     expect(lifecycleMetrics(h.store.db, new Date(), settings.policy).conflicts.recordedOutcomes).toMatchObject({
       complete: false,
       unclassifiedCount: 1,

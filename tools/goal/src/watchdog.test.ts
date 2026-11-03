@@ -678,7 +678,7 @@ test('watchdog overrides govern idle boundaries, alert repetition and host-outag
   }
 });
 
-test('SSH probe policy bounds connection, runtime and diagnostics without changing explicit deadline precedence', async () => {
+test('SSH probe policy bounds connection, runtime and diagnostics', async () => {
   const child = new EventEmitter() as EventEmitter & { stderr: PassThrough; kill(): boolean; unref(): void };
   child.stderr = new PassThrough();
   let killed = 0;
