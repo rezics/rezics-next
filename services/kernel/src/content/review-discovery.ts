@@ -110,7 +110,7 @@ const eligibleReviewJoins = `
     ON p.route = t.route AND p.thread_id = t.thread_id AND p.post_id = t.first_post_id
   WHERE t.kind = 'review' AND t.review_live AND t.availability = 'available'
     AND t.visibility = 'published' AND b.purpose = 'reviews'
-    AND b.availability = 'available' AND b.visibility = 'published'
+    AND b.visibility = 'published'
     AND p.availability = 'available' AND p.visibility = 'published'
     AND p.deleted_at IS NULL AND p.head_revision_id IS NOT NULL`;
 
