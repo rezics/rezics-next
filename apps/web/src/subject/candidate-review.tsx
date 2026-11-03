@@ -21,12 +21,25 @@ import {
   type CandidateResult,
   type CandidateSlot,
 } from './candidates';
+import { ContributionLifecycle } from '../features/catalogue/contribution-lifecycle-view';
+import type {
+  ContributionAddress,
+  ContributionAvailability,
+  ContributionCommand,
+  ContributionResult,
+} from '../features/catalogue/contribution-lifecycle';
 
 export type CandidateTransport = {
   /** Explicit fixture observation; production inherits the prepared session boundary. */
   reader?: string;
   read: (property?: string, cursor?: string, session?: string, work?: CandidateWork) => Promise<CandidateRead>;
   confirm: (command: CandidateCommand, work?: CandidateWork) => Promise<CandidateResult>;
+};
+
+/** Session BFF for own-contribution delete/restore. Native author evidence remains authoritative. */
+export type CandidateLifecycle = {
+  change: (command: ContributionCommand, work: CandidateWork) => Promise<ContributionResult>;
+  read: (address: ContributionAddress, work: CandidateWork) => Promise<ContributionAvailability>;
 };
 
 /** A session-only region: the owning subject route mounts it only after sign-in hydration. */
@@ -44,6 +57,7 @@ function CandidateReviewLive({
   id,
   locale,
   transport,
+  lifecycle,
   initialProperty,
   exactCandidate,
   context,
@@ -55,6 +69,7 @@ function CandidateReviewLive({
   id: string;
   locale: string;
   transport: CandidateTransport;
+  lifecycle?: CandidateLifecycle;
   initialProperty?: string | undefined;
   exactCandidate?: string;
   context?: string;
@@ -66,6 +81,7 @@ function CandidateReviewLive({
   const [read, setRead] = useState<CandidateRead>();
   const [property, setProperty] = useState(initialProperty ?? '');
   const [candidate, setCandidate] = useState<Candidate>();
+  const [lifecycleCandidate, setLifecycleCandidate] = useState(exactCandidate);
   const [confirmation, setConfirmation] = useState<CandidateCommand['operation'] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, CandidateDraft>>({});
   const [modes, setModes] = useState<Record<string, 'inherit' | 'replace' | 'suppress'>>({});
@@ -177,8 +193,10 @@ function CandidateReviewLive({
               : publicCandidateSelection(next.public, field),
           ),
         }));
-      if (exactCandidate)
+      if (exactCandidate) {
+        setLifecycleCandidate(exactCandidate);
         setCandidate(next.page?.candidates.find((item) => item.id === exactCandidate && item.retracted === null));
+      }
     } catch {
       if (!work.live()) return;
       setRead(undefined);
@@ -477,8 +495,10 @@ function CandidateReviewLive({
                   disabled={locked || !!exactCandidate || !!slot}
                   onChange={(event) => {
                     if (!work.live()) return;
-                    setProperty(event.target.value);
-                    void load(event.target.value);
+                    const field = event.target.value;
+                    setProperty(field);
+                    setLifecycleCandidate(exactCandidate && field === initialProperty ? exactCandidate : undefined);
+                    void load(field);
                   }}
                 >
                   <NativeSelectOption value="">{m.candidate_choose_field({}, options)}</NativeSelectOption>
@@ -519,7 +539,11 @@ function CandidateReviewLive({
                                   variant="outline"
                                   className="min-h-11"
                                   disabled={locked || item.retracted !== null}
-                                  onClick={() => work.live() && setCandidate(item)}
+                                  onClick={() => {
+                                    if (!work.live()) return;
+                                    setCandidate(item);
+                                    setLifecycleCandidate(item.id);
+                                  }}
                                 >
                                   {m.candidate_review({}, options)}
                                 </Button>
@@ -773,6 +797,42 @@ function CandidateReviewLive({
                     </section>
                   )}
                 </>
+              )}
+              {lifecycle && property && lifecycleCandidate && (
+                <ContributionLifecycle
+                  address={{
+                    id,
+                    candidate: lifecycleCandidate,
+                    property,
+                    ...(session.current ? { session: session.current } : {}),
+                  }}
+                  locale={locale}
+                  transport={{
+                    change: (command) =>
+                      work.live()
+                        ? lifecycle.change(command, work)
+                        : Promise.resolve({ ok: false, reason: 'denied' }),
+                    read: (address) =>
+                      work.live()
+                        ? lifecycle.read(address, work)
+                        : Promise.resolve({ subject: 'unavailable', candidate: 'unconfirmed', selected: null }),
+                  }}
+                  onClear={async () => {
+                    if (!work.live()) return;
+                    const withdrawn = lifecycleCandidate;
+                    setCandidate((current) => (current?.id === withdrawn ? undefined : current));
+                    setRead((current) => {
+                      if (!current?.ok || !current.page) return current;
+                      return {
+                        ...current,
+                        page: {
+                          ...current.page,
+                          candidates: current.page.candidates.filter((item) => item.id !== withdrawn),
+                        },
+                      };
+                    });
+                  }}
+                />
               )}
             </>
           )}

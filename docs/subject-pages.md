@@ -599,6 +599,8 @@ the existing comparison and subject link. The confirmation addresses that contri
 native `DELETE /v1/subjects/{id}/candidates/{candidate}` through the session BFF; original write-revision authorship
 and current `statement:delete` authority remain native decisions. Source provenance, subject creation, adoption and
 target identity never establish ownership. An unserved lifecycle route remains unavailable, with no local tombstone.
+The subject candidate reader offers the same withdrawal and restore for the exact reviewed candidate; native author
+evidence remains the only ownership basis.
 
 A confirmed deletion clears the correction draft, private comparison and cached subject/candidate payloads. The BFF
 rereads the current subject and candidate slot in parallel and returns only availability, without the removed text or

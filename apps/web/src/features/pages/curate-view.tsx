@@ -6,6 +6,8 @@ import { getLocale } from '../../paraglide/runtime';
 import { csrfHeaders } from '../../threads/composer';
 import { publishCuration, readCuration, type CurationRead } from './curate-actions';
 import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
+import { changeOwnContribution, rereadOwnContribution } from '../catalogue/contribution-lifecycle-actions';
+import { editorRequest } from '../catalogue/editor-request';
 import { CandidateReview } from '../../subject/candidate-review';
 import { useSession } from '../../session/query';
 import { PresentationViewEditor } from './curate-view-editor';
@@ -43,6 +45,12 @@ function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: stri
           !work?.live()
             ? Promise.resolve({ ok: false, reason: 'denied' })
             : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+      }}
+      lifecycle={{
+        change: (command, work) =>
+          changeOwnContribution({ data: editorRequest(command, work), headers: csrfHeaders() }),
+        read: (address, work) =>
+          rereadOwnContribution({ data: editorRequest(address, work), headers: csrfHeaders() }),
       }}
     />
   );
