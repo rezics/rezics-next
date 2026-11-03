@@ -1191,12 +1191,12 @@ function renderResults(
   onRetry?: (() => void) | undefined,
   retryState = data?.queryState,
   retryFocus?: ReturnType<typeof useSearchRetryFocus>,
-  searchHref?: string | undefined,
+  currentSearchHref?: string | undefined,
 ) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
-  const subjectHrefFor = searchHref
-    ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, searchHref)
+  const subjectHrefFor = currentSearchHref
+    ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, currentSearchHref)
     : undefined;
   const next = continuationAllowed
     ? data?.discovery?.status === 'ready'
