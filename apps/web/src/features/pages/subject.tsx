@@ -533,11 +533,7 @@ export function SubjectPage({
             <PeopleProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}
           {read.subject.type === 'schema:Organization' && (
-            <ProducerHistoryEntry
-              id={read.subject.id}
-              label={subjectPageTitle(page, locale)}
-              locale={locale}
-            />
+            <ProducerHistoryEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
           )}
           {page.views?.includes('credits') && <PeopleProfileEntry work={read.subject.id} locale={locale} />}
           <GameProfileEntry

@@ -16,12 +16,7 @@ export const producerParentId = '00000000-0000-4000-8000-00000000e102';
 export const producerSimilarId = '00000000-0000-4000-8000-00000000e103';
 export type ProducerHistoryScenario = 'current' | 'partial' | 'empty' | 'denied' | 'unavailable' | 'concealed';
 
-function relationProperty(
-  id: string,
-  label: string,
-  inverse: string,
-  inverseLabel: string,
-): PropertyDefinition {
+function relationProperty(id: string, label: string, inverse: string, inverseLabel: string): PropertyDefinition {
   const labels = { en: label, ja: label };
   return {
     iri: `http://www.wikidata.org/prop/direct/${id.slice(4)}`,
@@ -59,8 +54,13 @@ export function admitProducerHistory(release: Release) {
 /** Typed HTTP seam for bounded producer history; no native authority. */
 export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'current', locale = 'en') {
   const release = admitProducerHistory(structuredClone(definitions.release) as Release);
-  const calls: { path: string; method: string; query: Record<string, string>; authorization: string | null; session: string | null }[] =
-    [];
+  const calls: {
+    path: string;
+    method: string;
+    query: Record<string, string>;
+    authorization: string | null;
+    session: string | null;
+  }[] = [];
   const subject = (id: string, labels: Record<string, string>): SubjectRead => ({
     subject: {
       id,
@@ -89,12 +89,20 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
     property: { id: 'wdt:P749', data_type: 'wikibase-item' as const },
     value: { type: 'value' as const, content: target },
     qualifiers: [
-      { property: { id: 'schema:startDate', data_type: 'time' as const }, value: { type: 'value' as const, content: '1999' } },
+      {
+        property: { id: 'schema:startDate', data_type: 'time' as const },
+        value: { type: 'value' as const, content: '1999' },
+      },
     ],
     references: [
       {
         hash: 'parent-source',
-        parts: [{ property: { id: 'schema:url', data_type: 'url' as const }, value: { type: 'value' as const, content: 'https://example.org/history' } }],
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' as const },
+            value: { type: 'value' as const, content: 'https://example.org/history' },
+          },
+        ],
       },
     ],
     rezics: { release: definitions.digest, revision: 1 },
@@ -179,7 +187,9 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
               statement: similarStatement.id,
               ...(scenario === 'concealed' ? {} : { assertion: similarStatement }),
               summary: summary(similar),
-              related: { [producerStudioId]: { ...summary(studio), type: studio.subject.type, types: [studio.subject.type] } },
+              related: {
+                [producerStudioId]: { ...summary(studio), type: studio.subject.type, types: [studio.subject.type] },
+              },
             },
           ],
           next: null,
@@ -216,5 +226,16 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
       session: 'producer-session',
     };
   }
-  return { id: producerStudioId, release, studio, parent, similar, client, calls, transport, snapshot, search: async () => [] };
+  return {
+    id: producerStudioId,
+    release,
+    studio,
+    parent,
+    similar,
+    client,
+    calls,
+    transport,
+    snapshot,
+    search: async () => [],
+  };
 }

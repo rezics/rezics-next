@@ -27,7 +27,13 @@ test('producer history binds admitted direction and inverse, keeps similar names
     'successor',
   ]);
   const fixture = producerHistoryFixture('partial');
-  expect(producerHistoryStreams(fixture.release, 'schema:Organization', 'en').map((stream) => [stream.meaning, stream.direction, stream.property])).toEqual([
+  expect(
+    producerHistoryStreams(fixture.release, 'schema:Organization', 'en').map((stream) => [
+      stream.meaning,
+      stream.direction,
+      stream.property,
+    ]),
+  ).toEqual([
     ['parent', 'forward', 'wdt:P749'],
     ['subsidiary', 'inverse', 'wdt:P749'],
     ['predecessor', 'forward', 'wdt:P1365'],
@@ -50,7 +56,15 @@ test('producer history binds admitted direction and inverse, keeps similar names
     'native-next',
   ]);
   expect(
-    await readProducerHistory(fixture.client, 'Bearer contributor', fixture.release, producerStudioId, 'en', undefined, 'native-next'),
+    await readProducerHistory(
+      fixture.client,
+      'Bearer contributor',
+      fixture.release,
+      producerStudioId,
+      'en',
+      undefined,
+      'native-next',
+    ),
   ).toEqual({ ok: false, reason: 'invalid' });
   const inverse = await fixture.transport.read('inverse:wdt:P749');
   expect(inverse.ok && inverse.stream?.meaning).toBe('subsidiary');
@@ -60,9 +74,9 @@ test('producer history binds admitted direction and inverse, keeps similar names
   expect(hidden.ok && hidden.rows[0]?.statement).toBeUndefined();
   expect(hidden.ok && hidden.stream && producerHistoryCorrection(hidden.rows[0]!, hidden.stream)).toBeUndefined();
   expect(await producerHistoryFixture('denied').transport.read()).toEqual({ ok: false, reason: 'denied' });
-  expect(catalogueEntries.producerHistory({ id: producerStudioId, label: 'Lantern Studio', locale: 'en' }).href).toContain(
-    '/producer',
-  );
+  expect(
+    catalogueEntries.producerHistory({ id: producerStudioId, label: 'Lantern Studio', locale: 'en' }).href,
+  ).toContain('/producer');
 });
 
 test('producer history page names unreleased fields, similar organizations, continuation and stale reselection', async () => {
@@ -158,14 +172,17 @@ test('producer history page names unreleased fields, similar organizations, cont
     expect(host.textContent).toContain('Lantern Studio Inc');
     expect(host.textContent).toContain(m.producer_history_incomplete());
     expect([...host.querySelectorAll('a')].some((link) => link.getAttribute('href')?.endsWith('/producer'))).toBe(true);
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.producer_history_more())).toBe(
-      true,
-    );
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.producer_history_more()),
+    ).toBe(true);
     expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.producer_history_return())).toBe(true);
-    const correct = [...host.querySelectorAll('button')].find((button) => button.textContent === m.producer_history_correct())!;
+    const correct = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.producer_history_correct(),
+    )!;
     await act(async () => correct.click());
     const buttons = [...host.querySelectorAll('button')].filter(
-      (button) => button.textContent === m.producer_history_correct() || button.textContent === m.producer_history_stale(),
+      (button) =>
+        button.textContent === m.producer_history_correct() || button.textContent === m.producer_history_stale(),
     );
     expect(buttons.some((button) => button.textContent === m.producer_history_stale() && button.disabled)).toBe(true);
   } finally {

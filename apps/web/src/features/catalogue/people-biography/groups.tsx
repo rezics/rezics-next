@@ -7,12 +7,7 @@ import type { FactsCurrent, FactsTransport } from '../subject-facts';
 import { catalogueEntries } from '../catalogue-entry';
 import { PeopleBiographyDocuments } from './biography';
 import { PeopleSelectedItems } from './items';
-import {
-  peopleAgentType,
-  peopleBiographyGroups,
-  type PeopleBiographyGroup,
-  type PeopleBiographyKind,
-} from './index';
+import { peopleAgentType, peopleBiographyGroups, type PeopleBiographyGroup, type PeopleBiographyKind } from './index';
 
 const actionClass =
   'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] underline md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
@@ -127,10 +122,7 @@ export function PeopleBiographyGroups({
             {m.producer_history_title({}, o)}
           </ContentItemHeading>
           <p className="text-sm text-muted-foreground">{m.producer_history_intro({}, o)}</p>
-          <a
-            className={actionClass}
-            href={`${subjectHref({ id: subject.id, label: title }, locale).href}/producer`}
-          >
+          <a className={actionClass} href={`${subjectHref({ id: subject.id, label: title }, locale).href}/producer`}>
             {m.producer_history_title({}, o)}
           </a>
         </section>

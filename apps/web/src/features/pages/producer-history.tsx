@@ -136,7 +136,8 @@ function ProducerHistoryPageLive({
       event,
       () => lifetime.active() && readSequence.current === sequence && sliceRevision.current === revision,
       () => {
-        const survives = opener?.isConnected && !opener.disabled && !opener.closest('[hidden], [inert], [aria-hidden="true"]');
+        const survives =
+          opener?.isConnected && !opener.disabled && !opener.closest('[hidden], [inert], [aria-hidden="true"]');
         if (survives) return opener;
         const boundary = outcome === 'slice' ? sliceStatus.current : readFailure.current;
         return boundary?.closest('[hidden]') ? null : boundary;
@@ -146,7 +147,11 @@ function ProducerHistoryPageLive({
     running.current = true;
     setBusy(true);
     try {
-      const value = await transport.read(key, next, session.current ?? (query.data?.ok ? query.data.session : undefined));
+      const value = await transport.read(
+        key,
+        next,
+        session.current ?? (query.data?.ok ? query.data.session : undefined),
+      );
       if (!lifetime.active()) return;
       if (!value.ok) {
         outcome = 'failure';
@@ -228,7 +233,10 @@ function ProducerHistoryPageLive({
           ? m.candidate_invalid({}, o)
           : m.producer_history_concealed({}, o);
   return (
-    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={busy || query.isPending}>
+    <article
+      className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]"
+      aria-busy={busy || query.isPending}
+    >
       <ViewHeading label={m.producer_history_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.producer_history_intro({}, o)}</p>
       {query.isPending && <p role="status">{m.candidate_loading({}, o)}</p>}

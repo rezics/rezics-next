@@ -142,7 +142,12 @@ export function producerHistoryStreams(release: Definitions, type: string, local
 
 export function producerHistoryUnreleased(release: Definitions, type: string) {
   if (!producerOrganizationType(release, type)) return [];
-  return (Object.entries(producerHistoryRequested) as [Exclude<ProducerHistoryMeaning, 'subsidiary' | 'credited-role'>, string][])
+  return (
+    Object.entries(producerHistoryRequested) as [
+      Exclude<ProducerHistoryMeaning, 'subsidiary' | 'credited-role'>,
+      string,
+    ][]
+  )
     .filter(([, id]) => {
       const property = release.properties[id];
       const admitted =

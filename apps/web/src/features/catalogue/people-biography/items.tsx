@@ -10,7 +10,15 @@ import { subjectHref } from '../../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../../subject/candidate-review';
 import { pageText } from '../../pages/data';
 import { useCurrentReadingActive, useCurrentReadingVisible } from '../editor-lifetime';
-import { factChanged, factLocked, sealFacts, sendFacts, type FactDraft, type FactsCurrent, type FactsTransport } from '../subject-facts';
+import {
+  factChanged,
+  factLocked,
+  sealFacts,
+  sendFacts,
+  type FactDraft,
+  type FactsCurrent,
+  type FactsTransport,
+} from '../subject-facts';
 import { statementInput, type StatementInput } from '../statement-editor';
 import { PartValue, StatementFields } from '../statement-editor-view';
 import { peopleSelectedFact, peopleRelationHref, type PeopleBiographyField } from './index';
@@ -28,7 +36,11 @@ function hasContent(value: unknown): boolean {
 function populated(statement: StatementInput): boolean {
   const part = (item: { value: { type: string; content?: unknown } }) =>
     item.value.type !== 'value' || hasContent(item.value.content);
-  return part(statement) || statement.qualifiers?.some(part) === true || statement.references.some((reference) => reference.parts.some(part));
+  return (
+    part(statement) ||
+    statement.qualifiers?.some(part) === true ||
+    statement.references.some((reference) => reference.parts.some(part))
+  );
 }
 
 /** Independently selected admitted occupation or language items; a stale choice must be reselected. */
@@ -86,7 +98,13 @@ export function PeopleSelectedItems({
       included: true,
       statement: baseline
         ? structuredClone(baseline)
-        : { property: { id: field.id }, value: { type: 'value', content: '' }, qualifiers: [], references: [], rank: 'normal' },
+        : {
+            property: { id: field.id },
+            value: { type: 'value', content: '' },
+            qualifiers: [],
+            references: [],
+            rank: 'normal',
+          },
     });
   }
   function change(statement: StatementInput) {
@@ -125,7 +143,10 @@ export function PeopleSelectedItems({
         <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
           {label.text}
         </ContentItemHeading>
-        <a className={actionClass + ' inline-flex items-center underline'} href={peopleRelationHref(read.public.subject.id, title, locale)}>
+        <a
+          className={actionClass + ' inline-flex items-center underline'}
+          href={peopleRelationHref(read.public.subject.id, title, locale)}
+        >
           {m.people_biography_edit({}, o)}
         </a>
       </ContentItemFrame>
@@ -245,10 +266,20 @@ export function PeopleSelectedItems({
             />
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button className={actionClass} type="button" disabled={!factChanged(draft) || !populated(draft.statement)} onClick={() => void submit()}>
+            <Button
+              className={actionClass}
+              type="button"
+              disabled={!factChanged(draft) || !populated(draft.statement)}
+              onClick={() => void submit()}
+            >
               {m.correction_submit({}, o)}
             </Button>
-            <Button className={actionClass} type="button" variant="outline" onClick={() => usable() && setDraft(undefined)}>
+            <Button
+              className={actionClass}
+              type="button"
+              variant="outline"
+              onClick={() => usable() && setDraft(undefined)}
+            >
               {m.candidate_cancel({}, o)}
             </Button>
           </div>
@@ -260,4 +291,3 @@ export function PeopleSelectedItems({
     </ContentItemFrame>
   );
 }
-

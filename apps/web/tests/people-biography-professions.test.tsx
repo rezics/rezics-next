@@ -52,7 +52,12 @@ function statement(
     references: [
       {
         hash: 'bio-source',
-        parts: [{ property: { id: 'schema:url', data_type: 'url' as const }, value: { type: 'value' as const, content: 'https://example.org/bio' } }],
+        parts: [
+          {
+            property: { id: 'schema:url', data_type: 'url' as const },
+            value: { type: 'value' as const, content: 'https://example.org/bio' },
+          },
+        ],
       },
     ],
     rezics: { release: 'sha256:fixture', revision: 1 },
@@ -70,7 +75,9 @@ test('Person biography groups bind admitted multilingual documents, occupations 
       .every((field) => field.status === 'unsupported'),
   ).toBe(true);
   expect(peopleScalarFields(fixture.release, 'schema:Person', 'en')).toContain('schema:url');
-  expect(peopleBiographyHref(peoplePersonId, 'Mira Sato', 'en', 'schema:abstract')).toContain('/authored?property=schema%3Aabstract');
+  expect(peopleBiographyHref(peoplePersonId, 'Mira Sato', 'en', 'schema:abstract')).toContain(
+    '/authored?property=schema%3Aabstract',
+  );
 
   admitPeopleBiography(fixture.release);
   const occupation = '00000000-0000-4000-8000-00000000d201';
@@ -78,8 +85,18 @@ test('Person biography groups bind admitted multilingual documents, occupations 
   const japanese = '00000000-0000-4000-8000-00000000d203';
   const english = '00000000-0000-4000-8000-00000000d204';
   fixture.person.subject.statements['schema:abstract'] = [
-    statement('00000000-0000-4000-8000-00000000d211', 'schema:abstract', { language: 'en', document: { id: 'en-bio' } }, 'document'),
-    statement('00000000-0000-4000-8000-00000000d212', 'schema:abstract', { language: 'ja', document: { id: 'ja-bio' } }, 'document'),
+    statement(
+      '00000000-0000-4000-8000-00000000d211',
+      'schema:abstract',
+      { language: 'en', document: { id: 'en-bio' } },
+      'document',
+    ),
+    statement(
+      '00000000-0000-4000-8000-00000000d212',
+      'schema:abstract',
+      { language: 'ja', document: { id: 'ja-bio' } },
+      'document',
+    ),
   ];
   fixture.person.subject.statements['wdt:P106'] = [
     statement('00000000-0000-4000-8000-00000000d221', 'wdt:P106', occupation, 'wikibase-item'),
@@ -112,7 +129,9 @@ test('Person biography groups bind admitted multilingual documents, occupations 
   expect(occupations.fields.find((field) => field.id === 'schema:hasOccupation')?.status).toBe('unsupported');
   const hidden = structuredClone(fixture.person);
   delete hidden.related[occupation];
-  expect(peopleBiographyGroups(fixture.release, 'schema:Person', 'en', hidden)[1]!.fields[0]!.status).toBe('unreadable');
+  expect(peopleBiographyGroups(fixture.release, 'schema:Person', 'en', hidden)[1]!.fields[0]!.status).toBe(
+    'unreadable',
+  );
   expect(peopleSelectedFact('00000000-0000-4000-8000-00000000d221', occupations.fields[0]!.facts)?.id).toBe(
     '00000000-0000-4000-8000-00000000d221',
   );
@@ -135,7 +154,11 @@ test('Person biography groups bind admitted multilingual documents, occupations 
       property: { id: 'wdt:P106' },
       value: { type: 'value', content: writer },
       qualifiers: [],
-      references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/credits' } }] }],
+      references: [
+        {
+          parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/credits' } }],
+        },
+      ],
       rank: 'normal',
     },
   };
@@ -153,7 +176,16 @@ test('labelled People groups show admitted occupations, unreleased fields and re
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.invalid/en/subjects/person/mira' });
-  const keys = ['window', 'document', 'navigator', 'HTMLElement', 'Element', 'Node', 'Document', 'IS_REACT_ACT_ENVIRONMENT'];
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'Element',
+    'Node',
+    'Document',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
@@ -187,13 +219,20 @@ test('labelled People groups show admitted occupations, unreleased fields and re
             observed: { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'token' },
             address: 'people-biography',
           },
-          h(CatalogueCurrentReading, { visible: true, ready: true, revision: '1' }, h(PeopleBiographyGroups, {
-            read: { ok: true, public: fixture.person, release: fixture.release, source: null },
-            locale: 'en',
-            search: async () => [],
-            transport: { propose: fixture.propose, read: async () => ({ ok: false as const, reason: 'unavailable' as const }) },
-            review: fixture.review,
-          }) as ReactNode) as ReactNode,
+          h(
+            CatalogueCurrentReading,
+            { visible: true, ready: true, revision: '1' },
+            h(PeopleBiographyGroups, {
+              read: { ok: true, public: fixture.person, release: fixture.release, source: null },
+              locale: 'en',
+              search: async () => [],
+              transport: {
+                propose: fixture.propose,
+                read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+              },
+              review: fixture.review,
+            }) as ReactNode,
+          ) as ReactNode,
         ),
       ),
     );

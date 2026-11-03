@@ -75,11 +75,7 @@ function factStatus(
   return statements?.length ? 'current' : 'absent';
 }
 
-function itemFacts(
-  property: string,
-  subject: SubjectRead | null,
-  locale: string,
-): PeopleBiographyFact[] {
+function itemFacts(property: string, subject: SubjectRead | null, locale: string): PeopleBiographyFact[] {
   if (!subject) return [];
   return (subject.subject.statements[property] ?? []).map((statement) => {
     const content = statement.value.type === 'value' ? statement.value.content : undefined;
@@ -109,7 +105,9 @@ function requestedField(
 ): PeopleBiographyField {
   const definition = admittedProperty(release, type, id);
   const facts = definition ? itemFacts(id, subject, locale) : [];
-  const unreadable = definition ? facts.some((fact) => fact.statement.value.type === 'value' && !disclosedOrScalar(fact)) : false;
+  const unreadable = definition
+    ? facts.some((fact) => fact.statement.value.type === 'value' && !disclosedOrScalar(fact))
+    : false;
   return {
     id,
     kind,
@@ -179,7 +177,9 @@ function affiliationFields(
     return (
       property?.datatype === 'wikibase-item' &&
       !!property.relation &&
-      property.targets?.some((target) => isType(release, target, 'schema:Organization') || target === 'schema:Organization')
+      property.targets?.some(
+        (target) => isType(release, target, 'schema:Organization') || target === 'schema:Organization',
+      )
     );
   });
   return {
@@ -211,6 +211,9 @@ export function peopleRelationHref(id: string, label: string, locale: string): s
 }
 
 /** A previously chosen assertion is editable only while that exact statement remains selected. */
-export function peopleSelectedFact(source: string, facts: readonly PeopleBiographyFact[]): PeopleBiographyFact | undefined {
+export function peopleSelectedFact(
+  source: string,
+  facts: readonly PeopleBiographyFact[],
+): PeopleBiographyFact | undefined {
   return facts.find((fact) => fact.id === source);
 }
