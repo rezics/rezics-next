@@ -51,7 +51,7 @@ function BiographyGroup({
   group: PeopleBiographyGroup;
   read: FactsCurrent;
   locale: string;
-  search?: EntityPickerSearch;
+  search?: EntityPickerSearch | undefined;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
   returnHref: string;
@@ -97,7 +97,7 @@ export function PeopleBiographyGroups({
 }: {
   read: FactsCurrent;
   locale: string;
-  search?: EntityPickerSearch;
+  search?: EntityPickerSearch | undefined;
   transport: FactsTransport;
   review: (property: string, session?: string) => CandidateTransport;
 }) {
@@ -115,7 +115,7 @@ export function PeopleBiographyGroups({
           group={group}
           read={read}
           locale={locale}
-          search={search}
+          {...(search ? { search } : {})}
           transport={transport}
           review={review}
           returnHref={returnHref}

@@ -121,7 +121,7 @@ export function PeopleSelectedItems({
   if (!visible) return null;
   if (field.editor === 'relation') {
     return (
-      <ContentItemFrame as="section" data-slot="people-selected-items" className="min-w-0 space-y-3 py-3 sm:py-4">
+      <ContentItemFrame as="article" data-slot="people-selected-items" className="min-w-0 space-y-3 py-3 sm:py-4">
         <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
           {label.text}
         </ContentItemHeading>
@@ -132,7 +132,7 @@ export function PeopleSelectedItems({
     );
   }
   return (
-    <ContentItemFrame as="section" data-slot="people-selected-items" className="min-w-0 space-y-3 py-3 sm:py-4">
+    <ContentItemFrame as="article" data-slot="people-selected-items" className="min-w-0 space-y-3 py-3 sm:py-4">
       <ContentItemHeading level={3} className="text-lg font-semibold" lang={label.lang ?? undefined}>
         {label.text}
       </ContentItemHeading>

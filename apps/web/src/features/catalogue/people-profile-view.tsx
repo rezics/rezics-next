@@ -1088,7 +1088,7 @@ function PeopleProfileEditorLive({
           <PeopleBiographyGroups
             read={{ ok: true, public: privateRead.public!, release: privateRead.release, source: null }}
             locale={locale}
-            search={search}
+            {...(search ? { search } : {})}
             transport={{
               propose,
               read: async () => {

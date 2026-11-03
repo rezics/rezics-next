@@ -26,7 +26,7 @@ export function PeopleBiographyDocuments({
   const title = Object.values(subject.labels)[0] ?? '';
   const href = peopleBiographyHref(subject.id, title, locale, field.editor === 'authored' ? field.id : undefined);
   return (
-    <ContentItemFrame as="section" data-slot="people-biography" className="min-w-0 space-y-3 py-3 sm:py-4">
+    <ContentItemFrame as="article" data-slot="people-biography" className="min-w-0 space-y-3 py-3 sm:py-4">
       <ContentItemHeading level={3} className="min-w-0 text-lg font-semibold" lang={field.label.lang ?? undefined}>
         {field.label.text || m.people_biography_title({}, o)}
       </ContentItemHeading>

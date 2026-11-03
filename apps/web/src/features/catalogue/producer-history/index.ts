@@ -161,7 +161,7 @@ export function producerHistoryLabels(
   release: Definitions,
   rows: ProducerHistoryRow[],
   locale: string,
-): ProducerHistoryRead extends { ok: true } ? ProducerHistoryRead['labels'] : never {
+): Record<string, ReturnType<typeof pickText>> {
   const labels: Record<string, ReturnType<typeof pickText>> = {};
   for (const row of rows) {
     if (!row.statement) continue;

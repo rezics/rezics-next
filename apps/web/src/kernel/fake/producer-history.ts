@@ -207,7 +207,7 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
       public: studio,
       streams,
       unreleased: [],
-      stream: streams[0],
+      ...(streams[0] ? { stream: streams[0] } : {}),
       rows: listed,
       labels: producerHistoryLabels(release, listed, locale),
       next: scenario === 'partial' ? 'native-next' : null,
