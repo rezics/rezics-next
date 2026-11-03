@@ -27,6 +27,7 @@ import {
   type CredentialsObserver,
 } from './credentials.ts';
 import { runInspectCli } from './inspect-cli.ts';
+import { runBackupCli } from './backup-cli.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -530,6 +531,8 @@ function diagnostic(
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
   if (Array.isArray(argv) && argv[0] === 'inspect')
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
+  if (Array.isArray(argv) && (argv[0] === 'backup' || argv[0] === 'validate-snapshot' || argv[0] === 'restore'))
+    return runBackupCli(argv, options.signal ? { signal: options.signal } : {});
 
   let config: Config;
   try {

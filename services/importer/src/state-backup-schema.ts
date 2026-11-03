@@ -1,0 +1,294 @@
+import type { Database } from 'bun:sqlite';
+import { importOwnerIsBusy } from './import-session.ts';
+import { StateBackupFailure } from './state-backup-errors.ts';
+
+export const SNAPSHOT_FORMAT = 'rezics-importer-stopped-state';
+export const SNAPSHOT_FORMAT_VERSION = 1;
+export const SCHEMA_COMPATIBILITY = 'importer-required-tables-v1';
+const MAX_SUMMARY_SOURCES = 32;
+const OWNER_PAGE = 32;
+
+export const REQUIRED_TABLES: Record<string, readonly string[]> = {
+  import_owners: ['source', 'pid', 'birth', 'capability'],
+  run_sources: ['source', 'sequence', 'lease_run', 'generation', 'present_count'],
+  run_generations: [
+    'source',
+    'id',
+    'seq',
+    'lease',
+    'status',
+    'threshold',
+    'prior',
+    'supplied',
+    'survivors',
+    'invalid',
+    'classified',
+    'resolved',
+    'expected',
+    'changed',
+    'prepared',
+    'cursor',
+    'skipped',
+  ],
+  run_entries: [
+    'source',
+    'run_id',
+    'record_key',
+    'row_json',
+    'projection_json',
+    'kind',
+    'resolved',
+    'bytes',
+    'keys_json',
+    'omissions_json',
+    'pending',
+    'remaining',
+    'cover_pending',
+  ],
+  run_members: ['source', 'record_key', 'active', 'seen', 'row_json'],
+  run_acknowledged: ['source', 'record_key', 'row_json', 'projection_json'],
+  run_commands: ['source', 'run_id', 'command_key', 'record_key', 'field_group', 'op', 'envelope_index', 'done'],
+  run_payloads: ['source', 'command_key', 'body'],
+  run_envelopes: [
+    'source',
+    'run_id',
+    'record_key',
+    'envelope_index',
+    'multi',
+    'bytes',
+    'keys_json',
+    'remaining',
+    'pending',
+  ],
+  binding_records: ['source', 'external_id', 'state', 'subject', 'bootstrap_key', 'candidate_count', 'cover_key'],
+  binding_groups: ['source', 'external_id', 'field_group', 'candidate_count'],
+  binding_journal: ['source', 'external_id', 'key', 'bytes', 'signature', 'acknowledgement'],
+  binding_candidates: ['source', 'external_id', 'field_group', 'candidate', 'subject', 'key', 'bytes', 'signature'],
+  binding_media: ['source', 'external_id', 'key', 'bytes', 'signature', 'accepted', 'status'],
+  binding_metadata_journal: ['source', 'external_id', 'key', 'bytes', 'signature', 'acknowledgement'],
+  binding_metadata_current: ['source', 'external_id', 'key'],
+};
+
+const REQUIRED_INDEXES = [
+  ['run_envelope_pending', 'run_envelopes'],
+  ['run_cover_pending', 'run_entries'],
+] as const;
+
+export type RunBaseline = Readonly<{
+  source: string;
+  activeGeneration: string | null;
+  baselineGeneration: string | null;
+  status: string | null;
+  presentCount: number;
+  ownerRow: 'absent' | 'stopped';
+}>;
+
+export type SnapshotManifest = Readonly<{
+  version: typeof SNAPSHOT_FORMAT_VERSION;
+  format: typeof SNAPSHOT_FORMAT;
+  createdAt: string;
+  sqliteCompatibility: Readonly<{ pageSize: number; pageCount: number; userVersion: number }>;
+  schemaCompatibility: typeof SCHEMA_COMPATIBILITY;
+  content: Readonly<{ file: 'importer-state.sqlite'; bytes: number; sha256: string }>;
+  runs: readonly RunBaseline[];
+}>;
+
+export type SchemaObserver = Readonly<{ onSql?(sql: string): void }>;
+
+function sql(database: Database, text: string, observer?: SchemaObserver) {
+  observer?.onSql?.(text);
+  return database.query(text);
+}
+
+export function validateImporterSchema(database: Database, observer?: SchemaObserver): void {
+  const tables = sql(database, 'SELECT name FROM sqlite_schema WHERE type=? ORDER BY name', observer).all('table') as {
+    name: string;
+  }[];
+  if (tables.length === 0)
+    throw new StateBackupFailure('File is not a supported importer state database.', 'incompatible');
+  if (!tables.some((row) => row.name === 'import_owners'))
+    throw new StateBackupFailure(
+      'Owner safety cannot be established; this schema has no import_owners table.',
+      'incompatible',
+    );
+  for (const [table, columns] of Object.entries(REQUIRED_TABLES)) {
+    const found = sql(database, 'SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?', observer).get(
+      'table',
+      table,
+    ) as { found: number } | null;
+    if (!found)
+      throw new StateBackupFailure(`Unsupported importer state schema: table ${table} is missing.`, 'incompatible');
+    const actual = new Set(
+      sql(database, `PRAGMA table_info(${table})`, observer).all().map((row) => (row as { name: string }).name),
+    );
+    const missing = columns.find((column) => !actual.has(column));
+    if (missing)
+      throw new StateBackupFailure(
+        `Older unsupported importer schema: column ${table}.${missing} is missing.`,
+        'incompatible',
+      );
+  }
+  for (const [index, table] of REQUIRED_INDEXES) {
+    const found = sql(
+      database,
+      'SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=? AND tbl_name=?',
+      observer,
+    ).get('index', index, table) as { found: number } | null;
+    if (!found)
+      throw new StateBackupFailure(`Unsupported importer state schema: required index ${index} is missing.`, 'incompatible');
+  }
+}
+
+export function refuseBusyOwners(database: Database, observer?: SchemaObserver): void {
+  let after = '';
+  for (;;) {
+    const rows = sql(
+      database,
+      'SELECT source,pid,birth FROM import_owners WHERE source>? ORDER BY source LIMIT ?',
+      observer,
+    ).all(after, OWNER_PAGE) as { source: unknown; pid: unknown; birth: unknown }[];
+    if (rows.length === 0) return;
+    for (const row of rows) {
+      if (typeof row.source !== 'string' || typeof row.pid !== 'number' || typeof row.birth !== 'string')
+        throw new StateBackupFailure('Owner evidence is malformed and cannot be verified.', 'busy');
+      if (importOwnerIsBusy({ pid: row.pid, birth: row.birth }))
+        throw new StateBackupFailure('Importer state has a live or unverifiable owner and is busy.', 'busy');
+      after = row.source;
+    }
+    if (rows.length < OWNER_PAGE) return;
+  }
+}
+
+function generationStatus(database: Database, source: string, id: string | null, observer?: SchemaObserver): string | null {
+  if (id === null) return null;
+  const row = sql(database, 'SELECT status FROM run_generations WHERE source=? AND id=?', observer).get(source, id) as
+    | { status: unknown }
+    | null;
+  return row && typeof row.status === 'string' ? row.status : null;
+}
+
+export function readRunBaselines(database: Database, observer?: SchemaObserver): RunBaseline[] {
+  const sources = sql(
+    database,
+    'SELECT source,lease_run,generation,present_count FROM run_sources ORDER BY source LIMIT ?',
+    observer,
+  ).all(MAX_SUMMARY_SOURCES + 1) as {
+    source: unknown;
+    lease_run: unknown;
+    generation: unknown;
+    present_count: unknown;
+  }[];
+  const listed = sources.slice(0, MAX_SUMMARY_SOURCES);
+  const runs: RunBaseline[] = [];
+  for (const row of listed) {
+    if (typeof row.source !== 'string' || typeof row.present_count !== 'number')
+      throw new StateBackupFailure('Malformed source summary row.', 'corrupt');
+    const active = typeof row.lease_run === 'string' ? row.lease_run : null;
+    const baseline = typeof row.generation === 'string' ? row.generation : null;
+    const owner = sql(database, 'SELECT 1 AS found FROM import_owners WHERE source=?', observer).get(row.source) as {
+      found: number;
+    } | null;
+    runs.push({
+      source: row.source,
+      activeGeneration: active,
+      baselineGeneration: baseline,
+      status: generationStatus(database, row.source, active ?? baseline, observer),
+      presentCount: row.present_count,
+      ownerRow: owner ? 'stopped' : 'absent',
+    });
+  }
+  return runs;
+}
+
+export function readSqliteCompatibility(
+  database: Database,
+  observer?: SchemaObserver,
+): SnapshotManifest['sqliteCompatibility'] {
+  const pageSize = sql(database, 'PRAGMA page_size', observer).get() as { page_size: number };
+  const pageCount = sql(database, 'PRAGMA page_count', observer).get() as { page_count: number };
+  const userVersion = sql(database, 'PRAGMA user_version', observer).get() as { user_version: number };
+  return { pageSize: pageSize.page_size, pageCount: pageCount.page_count, userVersion: userVersion.user_version };
+}
+
+export function quoteSqlPath(path: string): string {
+  if (path.includes('\0')) throw new StateBackupFailure('State path contains an invalid NUL byte.', 'unsafe-file');
+  return `'${path.replaceAll("'", "''")}'`;
+}
+
+export function parseManifest(value: Record<string, unknown>): SnapshotManifest {
+  const fail = () => {
+    throw new StateBackupFailure('Snapshot manifest has the wrong shape.', 'corrupt');
+  };
+  if (value.version !== SNAPSHOT_FORMAT_VERSION || value.format !== SNAPSHOT_FORMAT) fail();
+  if (typeof value.createdAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.createdAt))
+    fail();
+  const sqlite = value.sqliteCompatibility;
+  if (!sqlite || typeof sqlite !== 'object' || Array.isArray(sqlite)) fail();
+  const sqliteCompatibility = sqlite as Record<string, unknown>;
+  if (
+    typeof sqliteCompatibility.pageSize !== 'number' ||
+    typeof sqliteCompatibility.pageCount !== 'number' ||
+    typeof sqliteCompatibility.userVersion !== 'number'
+  )
+    fail();
+  if (value.schemaCompatibility !== SCHEMA_COMPATIBILITY) fail();
+  const content = value.content;
+  if (!content || typeof content !== 'object' || Array.isArray(content)) fail();
+  const contentRecord = content as Record<string, unknown>;
+  if (
+    contentRecord.file !== 'importer-state.sqlite' ||
+    typeof contentRecord.bytes !== 'number' ||
+    !Number.isInteger(contentRecord.bytes) ||
+    contentRecord.bytes < 0 ||
+    typeof contentRecord.sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(contentRecord.sha256)
+  )
+    fail();
+  if (!Array.isArray(value.runs) || value.runs.length > MAX_SUMMARY_SOURCES) fail();
+  const runs: RunBaseline[] = [];
+  for (const entry of value.runs) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail();
+    const row = entry as Record<string, unknown>;
+    if (typeof row.source !== 'string' || typeof row.presentCount !== 'number') fail();
+    if (row.activeGeneration !== null && typeof row.activeGeneration !== 'string') fail();
+    if (row.baselineGeneration !== null && typeof row.baselineGeneration !== 'string') fail();
+    if (row.status !== null && typeof row.status !== 'string') fail();
+    if (row.ownerRow !== 'absent' && row.ownerRow !== 'stopped') fail();
+    runs.push({
+      source: row.source,
+      activeGeneration: row.activeGeneration,
+      baselineGeneration: row.baselineGeneration,
+      status: row.status,
+      presentCount: row.presentCount,
+      ownerRow: row.ownerRow,
+    });
+  }
+  return {
+    version: SNAPSHOT_FORMAT_VERSION,
+    format: SNAPSHOT_FORMAT,
+    createdAt: value.createdAt,
+    sqliteCompatibility: {
+      pageSize: sqliteCompatibility.pageSize,
+      pageCount: sqliteCompatibility.pageCount,
+      userVersion: sqliteCompatibility.userVersion,
+    },
+    schemaCompatibility: SCHEMA_COMPATIBILITY,
+    content: {
+      file: 'importer-state.sqlite',
+      bytes: contentRecord.bytes,
+      sha256: contentRecord.sha256,
+    },
+    runs,
+  };
+}
+
+export function integrityWork(
+  database: Database,
+  observer?: SchemaObserver,
+): { ok: boolean; pageCount: number; messages: string[] } {
+  const pageCount = (sql(database, 'PRAGMA page_count', observer).get() as { page_count: number }).page_count;
+  const rows = sql(database, 'PRAGMA integrity_check', observer).all() as Record<string, unknown>[];
+  const messages = rows.slice(0, 8).map((row) => String(Object.values(row)[0] ?? ''));
+  const ok = messages.length === 1 && messages[0] === 'ok';
+  return { ok, pageCount, messages };
+}
