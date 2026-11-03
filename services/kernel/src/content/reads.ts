@@ -1,3 +1,4 @@
+import { ProblemError } from '../http/problem.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { createHash } from 'node:crypto';

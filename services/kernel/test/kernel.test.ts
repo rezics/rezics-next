@@ -342,6 +342,7 @@ const typed = [
   'GET /v1/subjects/:id/reaction',
   'PUT /v1/subjects/:id/reaction',
   'DELETE /v1/subjects/:id/reaction',
+  'POST /v1/realms/:realmId/rating-questions',
   'GET /v1/rating-questions',
   'GET /v1/rating-questions/:questionId',
   'GET /v1/subjects/:id/ratings',

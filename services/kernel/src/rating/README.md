@@ -272,7 +272,7 @@ Supported scales are integer stored units with `0 <= min < max <= 20`, positive 
 `(max-min) % displayStep === 0`. Binary `0..1` and integer `0..10` questions are supported by the installed
 vote SQL, event validation and aggregate histogram path. Votes must lie on the exact selected scale. Display
 mapping is consumer-owned: custom `0..10` does not inherit the standard question's half-point display mapping.
-Brief33 owns removing the native `0..20` envelope across that delivery path; this command must consume its
+The separate scale-delivery owner removes the native `0..20` envelope across that delivery path; this command must consume its
 bounds only after that capability is delivered. A definition is never proof of ranked population readiness;
 custom-question rank publication remains with its separate owner.
 
@@ -309,6 +309,9 @@ propagates. Standard citations retain their existing behavior. Content's `reads.
 `review-context-eligibility.ts`, plus Rating's internal aggregate metadata export, change outside the declared
 paths solely to close those provenance boundaries. Search controls, query/partition coordination, Web interfaces,
 membership repair and custom rank publication are separate deliveries.
+
+`test/kernel.test.ts` adds the new command to the exhaustive typed route contract while retaining every existing
+route assertion. This is outside the declared paths because the kernel contract must include every mounted route.
 
 Focused outcomes live in `test/rating/realm-question-authoring.test.ts`: native manage grants, creation and exact
 replay, changed-input conflict, persisted author/provenance, point/selection refresh, binary and `0..10` scales,

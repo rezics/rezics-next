@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { Account } from '../../../../specs/community-driver.ts';
+import type { Account, Method } from '../../../../specs/community-driver.ts';
 import { createRealmRatingQuestion, validateQuestionDefinition } from '../../src/rating/question-authoring.ts';
 import { resolveRatingQuestionSelection } from '../../src/content/review-context-eligibility.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
@@ -18,7 +18,7 @@ test('a current native curator creates, replays, selects and votes on an immutab
   try {
     const fixture = await driver.provision();
     const { system } = communityFixtureRuntime();
-    const call = (method: string, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
+    const call = (method: Method, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
       driver.request({ method, path, actor, body, key: JSON.stringify(key) });
     const json = async (response: Response, status = 200) => {
       if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
@@ -58,7 +58,7 @@ test('a current native curator creates, replays, selects and votes on an immutab
     const actor = await system.access.authenticate(fixture.member.bearer, {
       pool: system.database.pool, deadline: Date.now() + 30_000,
     });
-    expect((await resolveRatingQuestionSelection({ pool: system.database.pool, access: system.access }, created.id,
+    expect((await resolveRatingQuestionSelection({ pool: system.database.pool, access: system.access, tokens: system.tokenKeys }, created.id,
       { actor, deadline: Date.now() + 30_000 })).question.label).toBe(definition.label);
     const binary = await json(await call('POST', path, fixture.member, {
       ...definition, label: 'Accurate translation', scale: { min: 0, max: 1, displayStep: 1 },

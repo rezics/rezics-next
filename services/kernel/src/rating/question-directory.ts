@@ -24,8 +24,11 @@ export function ratingQuestionView(row: {
   minimumUnits: number; maximumUnits: number; stepUnits: number;
   realmId?: string | null; meaning?: string | null;
 }) {
+  const grain = row.grain;
+  if (grain !== 'work' && grain !== 'release' && grain !== 'episode' && grain !== 'character')
+    throw new Error('Unknown rating question grain');
   return {
-    id: row.id, revision: row.revision, label: row.label, grain: row.grain,
+    id: row.id, revision: row.revision, label: row.label, grain,
     scale: { min: row.minimumUnits, max: row.maximumUnits, displayStep: row.stepUnits },
     ...(row.realmId == null ? {} : { realmId: row.realmId, meaning: row.meaning! }),
   };

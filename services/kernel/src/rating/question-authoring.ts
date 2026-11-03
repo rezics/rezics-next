@@ -31,7 +31,7 @@ function boundedText(value: unknown, maximum: number): value is string {
 }
 
 /** This envelope is the installed vote SQL/event capability, not a scale codec.
- * Brief33 owns expanding it across persistence, events and aggregate delivery. */
+ * Scale delivery owns expanding it across persistence, events and aggregates. */
 export function validateQuestionDefinition(input: RealmQuestionInput): void {
   if (!input || typeof input !== 'object' || routeOf(input.realmId) === null)
     throw new QuestionDefinitionInvalidError('realmId');
