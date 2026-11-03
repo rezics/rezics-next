@@ -40,6 +40,12 @@ export function policyGit(cwd: string, args: string[], policy = defaultPolicy.me
     maxBuffer: policy.gitBufferBytes,
     timeout: policy.commandTimeoutMs,
   });
+  // Bun may read a complete pipe chunk beyond maxBuffer before returning; enforce the requested result bound too.
+  if (
+    Buffer.byteLength(result.stdout ?? '') > policy.gitBufferBytes ||
+    Buffer.byteLength(result.stderr ?? '') > policy.gitBufferBytes
+  )
+    throw new Error(`git ${args[0]} output exceeds ${policy.gitBufferBytes} bytes`);
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
