@@ -9,9 +9,10 @@ import { createLibraryDriver } from './outcome-driver.ts';
 import { inspectNativeLabelCollections } from './native-labels-inspection.ts';
 import { costOf } from '../../support/growth.ts';
 import { compileProfileRelease, profileTypes } from './native-conformance-profiles.ts';
-import { json, write, setEntry, publish, requestKey, unavailable, deleteAccount } from './native-conformance.ts';
+import { json, write, setEntry, publish, unavailable, deleteAccount } from './native-conformance.ts';
 import { purgeLabelRetentionPage } from '../../../src/library/label-retention.ts';
 import { provisionOwnerUnreadableSubject } from './native-private-subject.ts';
+import { seedNativeLabelHistory } from './native-label-history-seed.ts';
 
 /** Transport mapping only: expectedRevision is the fixture interface's name for the public revision field. */
 function encode(action: LabelAction, input: Record<string, unknown>) {
@@ -330,32 +331,7 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
         return unavailable('native reservation keys/parent points and wire-byte observations');
       },
       async growInactiveHistory(subjectId, totalCount) {
-        const rows = await world.native.reader.query<{ count: string }>(
-          'SELECT count(*)::text FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND subject_id=$3',
-          [world.accounts.owner.route, world.accounts.owner.id, subjectId],
-        );
-        for (let n = Number(rows.rows[0]!.count); n < totalCount; n++) {
-          const { label } = await json<{ label: { id: string; revision: number } }>(
-            await invoke(
-              'owner',
-              'library_label.create',
-              { name: `history ${subjectId} ${n}` },
-              requestKey().slice(1, -1),
-            ),
-            201,
-          );
-          await json(
-            await invoke('owner', 'library_label.assign', { labelId: label.id, subjectId }, requestKey().slice(1, -1)),
-          );
-          await json(
-            await invoke(
-              'owner',
-              'library_label.delete',
-              { labelId: label.id, expectedRevision: label.revision },
-              requestKey().slice(1, -1),
-            ),
-          );
-        }
+        await seedNativeLabelHistory({ invoke, inspect, now: world.now }, subjectId, totalCount);
       },
       now: world.now,
       setTime: world.setTime,
