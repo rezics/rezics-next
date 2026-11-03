@@ -126,6 +126,7 @@ for (const kind of ['opening', 'reply'] as const) {
           bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
           rule: 'series',
           async grow(_db, scale, previous) {
+            await verifyCompleted();
             await f.grow(axis, scale, previous);
             await prepare(scale); // Spare warmup draft is outside capture too.
           },
