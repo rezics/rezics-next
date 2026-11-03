@@ -10,7 +10,7 @@ import {
   libraryLabels,
   libraryProfile,
   legacyProfile,
-  profileOf,
+  registryOf,
   unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
@@ -123,7 +123,8 @@ export async function compileEntryRelease(
     input.presentation[key] = JSON.stringify(labels);
   }
   const release = await compileCatalogue(input);
-  const game = gameUnits ? profileOf(release, 'ex:Parent') : null;
+  const game = gameUnits ? registryOf(release)?.['fixture.game'] : null;
+  if (gameUnits && !game) throw new Error('Fixture release is missing the game profile registry entry');
   if (game) {
     game.progress.allowed[0].units = gameUnits!.map((unit) => unitData(unit));
     Object.assign(game, compiledProfile(game));
