@@ -17,12 +17,23 @@ does not create a second eligibility or reduction store.
 
 Registry ownership follows the current scope table: `collection` uses Commerce, while `review` and `space` use Content.
 
-The retained source at this base has complete generation producers for Accounts and semantic Subjects only. The
-Collection, review and Space registry, leaf adapters and successor codec are not present here. The production worker
-and rebuild entry point therefore require all three metadata kinds before allocating a replacement; missing kinds
-return explicit `DiscoveryProducerCoverageError` readiness before a database transaction, physical target or
-population row is created. Existing active generations and their relays remain available. A registered owner outside
-the implemented Accounts and semantic population ports also stays unready.
+The default query registry binds Commerce with `createNativeCollectionDiscoveryAdapter`, reviews with
+`createNativeReviewDiscoveryAdapter` (or the worker's supplied `ReviewDiscoverySource` through
+`createReviewDiscoveryAdapter`), and Spaces with `nativeSpaceDiscoveryAdapter`. The actual query caller is
+`createDefaultDiscoverySearch`; the worker caller is `searchWorkModule.register` → `startSearchIndexing` →
+`startDiscoveryIndexing`. These adapters supply current owner reads; their registration alone is not generation
+population evidence.
+
+Decision: use the English labels “Collections”, “Reviews” and “Spaces” with the `library`, `message-square` and
+`users` icons until the owner adapters supply localized kind metadata.
+
+The retained generation runner still has population and reconciliation ports for Accounts and semantic Subjects
+only. It therefore requires all three metadata producers before allocating a replacement; missing kinds return
+explicit `DiscoveryProducerCoverageError` readiness before a database transaction, physical target or population row
+is created. Existing active generations and their relays remain available. A complete replacement must enumerate
+each registered native producer, persist exact full-key frontiers only after visible writes, catch up each producer's
+native positions, reconcile every registered kind, and match the expanded registry to the strict Format2 mapping
+before activating its physical UUID. Census and unverifiable dynamic-publication witnesses remain unavailable.
 
 Only owner-approved public metadata may enter these documents. Realm rating figures, private Collection membership
 and Collection predicates remain outside the public index. Current summaries continue to hydrate from their owners.
@@ -51,5 +62,5 @@ deletes the exact physical index incarnation, then reclaims bounded copy locator
 Account erasure retains its late-item acknowledgement protocol through retirement. Generation observations establish
 index readiness only; current owner authorization and disclosure checks remain authoritative.
 
-The default service wiring for the Collection, review and Space leaf adapters and the successor codec remains a
-continuation of this change. Until that wiring lands, no replacement generation can advertise those kinds as ready.
+The durable Collection, review and Space population, relay, reconciliation and Format2 generation binding remains a
+continuation of this change. Current owner hydration does not make an incomplete generation ready.

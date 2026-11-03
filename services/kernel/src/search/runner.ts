@@ -1,5 +1,6 @@
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
+import type { DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { withConnection } from '../database/pool.ts';
 import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
 import {
@@ -17,6 +18,7 @@ import {
   type DiscoveryGeneration,
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
+import { createDefaultDiscoveryOwnerAdapters } from './default-discovery.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
@@ -50,7 +52,13 @@ export async function startSearchIndexing(options: {
   discoverMs?: number;
   concurrency?: number;
   retireAfterMs?: number;
-  discovery?: { routeKey: Uint8Array; requiredKinds?: readonly string[]; reviewSource?: ReviewDiscoverySource };
+  discovery?: {
+    routeKey: Uint8Array;
+    requiredKinds?: readonly string[];
+    reviewSource?: ReviewDiscoverySource;
+    access?: DefaultPublicFilterRuntimeConfig['access'];
+    clock?: DefaultPublicFilterRuntimeConfig['clock'];
+  };
   publicPreparation?: PublicPreparation;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
@@ -63,6 +71,8 @@ export async function startSearchIndexing(options: {
         ...options,
         routeKey: options.discovery.routeKey,
         ...(options.discovery.reviewSource ? { reviewSource: options.discovery.reviewSource } : {}),
+        ...(options.discovery.access ? { access: options.discovery.access } : {}),
+        ...(options.discovery.clock ? { clock: options.discovery.clock } : {}),
         requiredKinds: options.discovery.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
       })
     : undefined;
@@ -309,6 +319,8 @@ export function startDiscoveryIndexing(options: {
   concurrency?: number;
   requiredKinds?: readonly string[];
   reviewSource?: ReviewDiscoverySource;
+  access?: DefaultPublicFilterRuntimeConfig['access'];
+  clock?: DefaultPublicFilterRuntimeConfig['clock'];
 }) {
   const receivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
   const incarnations = new Map<number, string>();
@@ -327,7 +339,21 @@ export function startDiscoveryIndexing(options: {
   };
   const step = async () => {
     if (stopped || paused) return;
-    const registry = await nativeDiscoveryRegistry(options.pool, options.routeKey, options.source);
+    const ownerAdapters = options.access
+      ? createDefaultDiscoveryOwnerAdapters({
+          pool: options.pool,
+          routeKey: options.routeKey,
+          access: options.access,
+          ...(options.clock ? { clock: options.clock } : {}),
+          ...(options.reviewSource ? { reviewSource: options.reviewSource } : {}),
+        })
+      : undefined;
+    const registry = await nativeDiscoveryRegistry(
+      options.pool,
+      options.routeKey,
+      options.source,
+      ownerAdapters ? { ownerAdapters } : undefined,
+    );
     let readiness: DiscoveryProducerCoverageError | undefined;
     try {
       await advanceDiscovery({ ...options, registry, requiredKinds: options.requiredKinds ?? [] });
@@ -351,7 +377,14 @@ export function startDiscoveryIndexing(options: {
       if (!relays.has(target.generation)) {
         incarnations.set(target.generation, binding);
         const projection = createDiscoveryProjection({ ...options, target, registry });
-        if (options.reviewSource)
+        const completeOwnerSet =
+          !readiness &&
+          SECOND_SCOPE_PUBLIC_METADATA_KINDS.every(
+            (kind) =>
+              target.kinds.includes(kind) &&
+              registry.ownerAdapters[kind as 'collection' | 'review' | 'space'].readiness === 'ready',
+          );
+        if (options.reviewSource && completeOwnerSet)
           receivers.set(
             target.generation,
             createReviewDiscoveryReceiving({
