@@ -622,7 +622,7 @@ test('unchanged connected CharacterProfile parent retires a pending classificati
         field()!.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!,
         replacement,
       );
-      await act(async () => button(field()!, m.correction_submit()).click());
+      await act(async () => button(host, m.facts_submit()).click());
       await act(async () => button(host, 'Retire illustrative reader').click());
       await act(async () =>
         finish({
@@ -893,14 +893,17 @@ for (const family of ['Character', 'StoryArc'] as const) {
         const holder = field()!;
         await settle(() => button(holder, m.facts_edit_field()).click());
         await enter(holder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/authored');
-        const oldSubmit = capture(button(holder, m.correction_submit()));
+        const submitControl = family === 'Character' ? button(host, m.facts_submit()) : button(holder, m.correction_submit());
+        const oldSubmit = capture(submitControl);
         await reload(withdrawn);
         expect(field()).toBe(holder);
         expect(holder.querySelector('input')).toBeNull();
         expect(holder.querySelector('pre')!.textContent).toContain('https://private.test/authored');
         expect(holder.querySelector('pre')!.textContent).toContain(concept);
         expect(beforeUnload()).toBe(true);
-        expect(button(holder, m.correction_submit()).disabled).toBe(true);
+        expect(
+          (family === 'Character' ? button(host, m.facts_submit()) : button(holder, m.correction_submit())).disabled,
+        ).toBe(true);
         await settle(oldSubmit);
         expect(commands).toHaveLength(0);
         await settle(() => button(holder, m.curation_view_discard()).click());
@@ -921,7 +924,9 @@ for (const family of ['Character', 'StoryArc'] as const) {
         const sealedHolder = field()!;
         await settle(() => button(sealedHolder, m.facts_edit_field()).click());
         await enter(sealedHolder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/sealed');
-        await settle(() => button(sealedHolder, m.correction_submit()).click());
+        await settle(() =>
+          button(family === 'Character' ? host : sealedHolder, family === 'Character' ? m.facts_submit() : m.correction_submit()).click(),
+        );
         expect(commands).toHaveLength(1);
         const exact = structuredClone(commands[0]);
         await reload(withdrawn);

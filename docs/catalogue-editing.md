@@ -156,10 +156,15 @@ read retry without another create. Unknown create delivery keeps the same body a
 
 Scalar corrections reuse the multi-field workspace, with unchanged fields excluded and independent per-field
 results. Classification targets use the existing subject picker and the same statement, qualifier, grouped-reference,
-validation and sealed-command helpers, with field-wide candidate review. Current assertions, other languages,
-qualifiers and references survive replacement drafting. Name maps link to the actual terms adapter; an unavailable
-native producer stays unavailable. Original text links to the existing authored editor with explicit language and
-licence. No candidate is presented as current publication.
+validation and sealed-command helpers. Character corrections review the exact changed classification set before
+sealing, copy a complete citation group onto other editable holders in the same visit, then propose each included
+field independently. Native candidate review and selection remain a later, deliberate step; a successful proposal
+is not a selected classification. Current assertions, other languages, qualifiers and references survive replacement
+drafting. Name maps link to the actual terms adapter; an unavailable native producer stays unavailable. Original text
+links to the existing authored editor with explicit language and licence. No candidate is presented as current
+publication.
+Decision: Character classification changed-set review and evidence reuse are opt-in on this Character caller so Album,
+Manga, Screen, StoryArc and add-on writers that share the field control keep immediate per-field confirmation.
 
 Appearances and credits are statements on the selected existing work. The existing relation editor retains separate
 emitted properties, the native `wdt:P453` character qualifier and exact target/key slots, credited names, roles,
@@ -374,6 +379,7 @@ normal Web captures and native integration acceptance remain pending. There is n
 ## Browser flow: cited fact correction review and evidence reuse
 
 Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Album and Manga classification writers that duplicate their own submit keep immediate confirmation. The Game classification caller binds the same changed-set review and reference-reuse coordinator as SubjectFacts. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path.
+Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character classification corrections on the Character caller use that same review and reuse coordinator on their per-field holders. Album, Manga, Game, Screen, StoryArc and add-on classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path.
 
 Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
 

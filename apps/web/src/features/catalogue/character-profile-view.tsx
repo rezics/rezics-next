@@ -438,6 +438,7 @@ function CharacterProfileLive({
                   <AuthoringDepartureBoundary>
                     <CharacterClassifications
                       key={character.subject.id}
+                      changedSetReview
                       properties={groups.traits.filter(
                         (property) =>
                           current.release.properties[property]?.datatype === 'wikibase-item' &&
