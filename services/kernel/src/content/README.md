@@ -522,7 +522,8 @@ empty source progress. Native subject lifecycle/identity events, account standin
 Realm bans, board schemes, subject publication verdicts, resource grants and source-fence takedowns feed the same pipeline. A gate event never supplies a public
 review document. Native reviews that began protected are present in the identity dependency directory and can become
 public on a later gate refresh. Withdrawn and physically missing reviews retain their directory entries so removal
-is delivered. Board, pinned subject, author, opening post and immutable Realm/Space ancestry supply dependency keys;
+is delivered. Originals naming a thread directly invalidate that exact identity even when it disappeared before
+the directory backfill. Board, pinned subject, author, opening post and immutable Realm/Space ancestry supply dependency keys;
 old keys remain useful for removing stale hits after native identity changes. The migration backfills these keys,
 without a second public census or eligibility projection. Source tuples use the existing native
 `semantic.source_candidate` relation and an exact `(route,source,external_id,field_group,subject_id)` index.

@@ -253,6 +253,9 @@ async function readWork(pool: Pool, ref: ReviewDiscoveryWork): Promise<WorkRow> 
 }
 
 async function candidatePage(pool: Pool, row: WorkRow, scope: Scope, subject: string | null): Promise<Key[]> {
+  // A thread original already names the complete document identity. Retain its
+  // invalidation even if the thread disappeared before the dependency backfill.
+  if (scope.kind === 'thread') return [{ route: routeOf(scope.id)!, id: scope.id }];
   // All predicates are from the closed scope union. Values are always parameters.
   let predicate: string;
   let values: unknown[];
