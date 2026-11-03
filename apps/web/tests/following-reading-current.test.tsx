@@ -69,6 +69,54 @@ test('denied, preparing, unavailable, retired and ready without a destination re
   }
 });
 
+test('a mixed twenty-row page opens its supplied subject, collection, and space destinations without row hydration', async () => {
+  let reads = 0;
+  const subject = follow('subject', 'subject-target');
+  const collection = follow('collection', 'collection-target');
+  const space = {
+    ...follow('space'),
+    destination: { kind: 'space' as const, spaceId, address: 'quiet / reading' },
+    actions: {
+      status: 'available' as const,
+      resourceType: 'community.realm' as const,
+      resourceId: realmId,
+      viewerActions: [{ action: 'realm:join', operations: ['realm.join', 'realm.leave'] }],
+    },
+  };
+  const rows = [subject, collection, space, ...Array.from({ length: 17 }, (_, i) => follow('subject', `other-${i}`))];
+  const h = await mountFollowing(page(...rows), async (input) => {
+    reads++;
+    return {
+      ...input,
+      result: {
+        state: 'ready',
+        space: { spaceId, title: 'Current space', summary: '', address: 'quiet / reading', realmId },
+      },
+    };
+  });
+  try {
+    const rendered = [...h.host.querySelectorAll<HTMLElement>('li[data-slot="list-row"]')];
+    expect(rendered).toHaveLength(20);
+    expect(rendered.slice(0, 3).map((row) => row.querySelector('h3')?.textContent)).toEqual([
+      'subject title',
+      'collection title',
+      'space title',
+    ]);
+    const rowFor = (title: string) => rendered.find((row) => row.querySelector('h3')?.textContent === title)!;
+    const subjectHref = rowFor('subject title').querySelector<HTMLAnchorElement>('a')?.getAttribute('href');
+    const collectionHref = rowFor('collection title').querySelector<HTMLAnchorElement>('a')?.getAttribute('href');
+    const spaceHref = rowFor('space title').querySelector<HTMLAnchorElement>('a')?.getAttribute('href');
+    expect(subjectHref).toContain('/subjects/');
+    expect(collectionHref).toBe('/en/collections/collection-target');
+    expect(spaceHref).toBe('/en/spaces/quiet%20%2F%20reading');
+    expect(spaceHref).not.toContain(spaceId);
+    expect(spaceHref).not.toContain(realmId);
+    expect(reads).toBe(0);
+  } finally {
+    await h.dispose();
+  }
+});
+
 test('at 1/10/20 follows initial reads stay zero and only the deliberately inspected community makes one point read', async () => {
   for (const n of [1, 10, 20]) {
     const pending = deferred<SpaceRead>();
