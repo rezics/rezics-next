@@ -68,7 +68,7 @@ describe('moderation decisions through HTTP and committed effects', () => {
         credentials.set(id, issued);
       }
     } finally {
-      fixture.access.authenticate = authenticate;
+      fixture.access.authenticate = (token, boundary) => authenticate(token, { ...boundary, pool: db.pool });
     }
     app = createKernel({
       pool: db.pool,
@@ -314,10 +314,10 @@ describe('moderation decisions through HTTP and committed effects', () => {
       expect(sparse.body).toEqual({ entries: [], nextCursor: null });
       expect(JSON.stringify(sparse.body)).not.toContain(hidden.decision_id);
       expect(JSON.stringify(sparse.body)).not.toContain(hidden.target_id);
-      await db.admin.query("UPDATE content.post SET availability='erased' WHERE route=$1 AND post_id=$2", [
-        routeOf(newer.id),
-        newer.id,
-      ]);
+      await db.admin.query(
+        "UPDATE content.post SET availability='erased',security_revision=security_revision+1 WHERE route=$1 AND post_id=$2",
+        [routeOf(newer.id), newer.id],
+      );
       const erased = await call('GET', path, undefined, undefined, fixture.principal);
       expect(erased.body.entries).toEqual([]);
       expect(typeof erased.body.nextCursor).toBe('string');
