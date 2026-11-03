@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
-import type { PublicFilterQueriedObservation, PublicFilterConsumerQuery } from '../../src/search/public-filter-consumer-contract.ts';
+import type {
+  PublicFilterQueriedObservation,
+  PublicFilterConsumerQuery,
+} from '../../src/search/public-filter-consumer-contract.ts';
 import { executeScopedSuggestions } from '../../src/search/scoped-suggestion.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
 import type { PreparedSearchScope, SearchScopeEvaluation } from '../../src/search/scope-source.ts';
@@ -49,10 +52,12 @@ function fixture(changeDuringHydration = false, changeDisplayedFields = false) {
   const queried = { consumer: {} } as PublicFilterQueriedObservation;
   const calls: { refill?: { execution: string; consumed: number; size: number }; result: string[] }[] = [];
   const operations = {
-    async queryScoped(_q: PublicFilterQueriedObservation, _context: { deadline: number }, refill?: { execution: string; consumed: number; size: number }) {
-      const hits = refill
-        ? [allowed]
-        : [deniedA, deniedB];
+    async queryScoped(
+      _q: PublicFilterQueriedObservation,
+      _context: { deadline: number },
+      refill?: { execution: string; consumed: number; size: number },
+    ) {
+      const hits = refill ? [allowed] : [deniedA, deniedB];
       calls.push({ ...(refill ? { refill } : {}), result: hits.map((hit) => hit.id) });
       const query = {
         status: 'queried',

@@ -75,7 +75,9 @@ export async function executeScopedSuggestions(options: {
   let queried = options.queried;
   let execution: string | undefined;
 
-  const check = async (hits: readonly NativeSearchHit[]): Promise<ReadonlyMap<NativeSearchHit, IndexedSubject>> => {
+  const check = async (
+    hits: readonly NativeSearchHit[],
+  ): Promise<ReadonlyMap<NativeSearchHit, IndexedSubject>> => {
     const { passed } = await options.readSource(() =>
       checkHits(
         options.source,
@@ -86,7 +88,13 @@ export async function executeScopedSuggestions(options: {
           : { filter: options.filter, relationProperties },
       ),
     );
-    const accepted = new Map(passed.map(({ hit, subject }) => [hit, subject]));
+    const acceptedById = new Map(passed.map(({ hit, subject }) => [hit.id, subject]));
+    const accepted = new Map(
+      hits.flatMap((hit) => {
+        const subject = acceptedById.get(hit.id);
+        return subject ? [[hit, subject] as const] : [];
+      }),
+    );
     if (!options.scope || !options.preparedScope || !options.scopeWork) return accepted;
 
     const ids = passed.map(({ subject }) => subject.id);
