@@ -1,3 +1,5 @@
+import { recentHistoryDestination } from './recent-replay';
+import { locales } from '../paraglide/runtime.js';
 import { CurrentTrendingSearches } from './trending-section';
 import { ChevronRight, Clock, UserRound, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -96,12 +98,24 @@ export function RecentPanel({
             <ul ref={focus.listRef}>
               {visibleEntries.map((entry, index) => {
                 const name = entry.query || entry.scope?.name || '';
+                const destination = recentHistoryDestination(entry, locales);
+                const scoped = Boolean(entry.scope);
+                const Tag = scoped && destination ? 'a' : 'button';
+                const href = scoped && destination ? `/${language}${destination}` : undefined;
                 return (
                   <li key={entry.id} className="flex items-center gap-1">
-                    <button
-                      type="button"
+                    <Tag
+                      type={Tag === 'button' ? 'button' : undefined}
+                      href={href}
+                      disabled={Tag === 'button' && scoped}
                       className={`${control} min-w-0 flex-1 text-start`}
-                      onClick={() => onSelect?.(entry)}
+                      onClick={(event) => {
+                        if (history?.owner && !history.owner()) {
+                          event.preventDefault();
+                          return;
+                        }
+                        if (!scoped) onSelect?.(entry);
+                      }}
                     >
                       {entry.scope?.image ? (
                         <img alt="" src={entry.scope.image} className="size-9 rounded-full object-cover" />
@@ -125,7 +139,7 @@ export function RecentPanel({
                           </span>
                         ) : null}
                       </span>
-                    </button>
+                    </Tag>
                     <button
                       type="button"
                       className={`${control} shrink-0`}

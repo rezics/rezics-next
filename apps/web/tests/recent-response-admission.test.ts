@@ -21,7 +21,11 @@ function memory(): RecentStorage {
   return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => void values.set(key, value) };
 }
 function queryHref(path: string, text: string, languages?: readonly string[]) {
-  return `${path}?${[`q=${encodeURIComponent(text)}`, ...(languages ?? []).map((tag) => `language=${encodeURIComponent(tag)}`)].join('&')}`;
+  const scoped = /^\/(realms|collections)\/(.+)$/.exec(path);
+  const filter = scoped
+    ? `&filter=${encodeURIComponent(JSON.stringify({ [scoped[1] === 'realms' ? 'realm' : 'collection']: { id: scoped[2] } }))}`
+    : '';
+  return `${scoped ? '/search' : path}?${[`q=${encodeURIComponent(text)}`, ...(languages ?? []).map((tag) => `language=${encodeURIComponent(tag)}`)].join('&')}${filter}`;
 }
 function item(entry: RecentItem['entry'], display: RecentItem['display'], revision = 4): RecentItem {
   return { id: crypto.randomUUID(), revision, lastUsed: new Date().toISOString(), entry, display };
@@ -182,7 +186,7 @@ test('Malformed native Recent pages never replace accepted local history or supp
     kind: 'Collection',
     id: collectionId,
     name: 'Reading',
-    searchAction: `/collections/${collectionId}`,
+    searchAction: queryHref(`/collections/${collectionId}`, 'Collection query', languages),
   });
   expect(byQuery('Collection query')?.languages).toEqual(['fr', 'en']);
   expect(byKind('Library')?.scope).toEqual({

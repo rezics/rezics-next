@@ -8,7 +8,6 @@ import { useSession } from '../session/query';
 import { useCallback, useState } from 'react';
 import {
   recentBucket,
-  recentSearchQuery,
   type RecentEntry as HistoryEntry,
   type RecentHistory,
   type RecentHistoryOwner,
@@ -20,7 +19,9 @@ import { admitRecentRetryHeaders, type RecentRetryAdmission } from './recent-ret
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { admitRecentCursor, admitRecentWrite } from './recent-request';
+import { recentHistoryDestination, recentHistoryReference, recentReplayDestination } from './recent-replay';
+import { recentItemAction } from './recent-response';
+import { admitRecentCursor, admitRecentEntry, admitRecentWrite } from './recent-request';
 export type RecentEntry = Parameters<KernelClient['recentSearches']['post']>[0]['entry'];
 export type RecentPage = NonNullable<Awaited<ReturnType<KernelClient['recentSearches']['get']>>['data']>;
 export type RecentItem = RecentPage['recentSearches'][number];
@@ -32,9 +33,9 @@ export const RECENT_STORAGE = 'rezics.search-history.v1:';
 const lifetime = 90 * 86400000;
 export const emptyRecent = (): LocalRecent => ({ revision: 0, entries: [], pending: [] });
 export const entryKey = (entry: RecentEntry) => JSON.stringify(entry);
-const queryDisplay = (text: string, languages?: readonly string[]) => {
-  const params = recentSearchQuery(text, languages);
-  return { name: text, href: `/search${params ? `?${params}` : ''}`, avatar: null };
+const queryDisplay = (entry: Extract<RecentEntry, { kind: 'query' }>) => {
+  const href = recentReplayDestination(entry);
+  return !entry.scope && href ? { name: entry.text, href, avatar: null } : null;
 };
 export function localChange(
   state: LocalRecent,
@@ -54,10 +55,7 @@ export function localChange(
         entry: change.entry,
         revision: state.revision,
         lastUsed: now.toISOString(),
-        display:
-          change.entry.kind === 'query'
-            ? queryDisplay(change.entry.text, change.entry.languages)
-            : (existing?.display ?? null),
+        display: change.entry.kind === 'query' ? queryDisplay(change.entry) : (existing?.display ?? null),
       },
       ...entries.filter((item) => entryKey(item.entry) !== entryKey(entry)),
     ].slice(0, 100);
@@ -97,21 +95,12 @@ export function restoreRecent(value: string | null, now = Date.now()): LocalRece
     const bounded = <T,>(items: T[], max: number, valid: (item: T) => boolean) =>
       Array.isArray(items) && items.length <= max && items.every(valid);
     const validEntry = (entry: RecentEntry): boolean => {
-      if (entry?.kind === 'query')
-        return (
-          text(entry.text, 256) &&
-          (entry.languages === undefined ||
-            bounded(
-              entry.languages,
-              8,
-              (language) => text(language, 35) && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(language),
-            ))
-        );
-      if (entry?.kind !== 'scope' || !entry.scope) return false;
-      const scope = entry.scope;
-      return scope.kind === 'route'
-        ? scope.route === 'library'
-        : ['realm', 'collection'].includes(scope.kind) && /^[0-9a-f-]{36}$/.test(scope.id);
+      try {
+        admitRecentEntry(entry);
+        return true;
+      } catch {
+        return false;
+      }
     };
     const validItem = (i: RecentItem) =>
       validEntry(i.entry) && text(i.id, 80) && Number.isFinite(Date.parse(i.lastUsed));
@@ -136,7 +125,7 @@ export function restoreRecent(value: string | null, now = Date.now()): LocalRece
         .filter((i) => Date.parse(i.lastUsed) > now - lifetime)
         .map((i) => ({
           ...i,
-          display: i.entry.kind === 'query' && !i.entry.scope ? queryDisplay(i.entry.text) : null,
+          display: i.entry.kind === 'query' && !i.entry.scope ? queryDisplay(i.entry) : null,
         })),
     };
   } catch {
@@ -219,44 +208,11 @@ export function useRecentSearches(): RecentHistory {
 /** Render local entries without inventing an available scoped destination. */
 function historyItem(entry: HistoryEntry): RecentItem {
   const ref = entry.scope;
-  const scope =
-    ref?.kind === 'Library'
-      ? { kind: 'route' as const, route: 'library' as const }
-      : { kind: ref?.kind === 'Realm' ? ('realm' as const) : ('collection' as const), id: ref?.id ?? '' };
-  const native: RecentEntry = ref
-    ? entry.query
-      ? {
-          kind: 'query',
-          text: entry.query,
-          ...(entry.languages !== undefined ? { languages: [...entry.languages] } : {}),
-          scope,
-        }
-      : { kind: 'scope', scope }
-    : {
-        kind: 'query',
-        text: entry.query,
-        ...(entry.languages !== undefined ? { languages: [...entry.languages] } : {}),
-      };
-  const action = ref?.searchAction;
-  const base = ref
-    ? action?.startsWith('/') && !action.startsWith('//') && !/[\\\r\n]/.test(action)
-      ? action
-      : undefined
-    : '/search';
-  let href: string | undefined;
-  if (base) {
-    const destination = new URL(base, 'https://recent-history.invalid');
-    destination.pathname = destination.pathname.replace(new RegExp(`^/(${locales.join('|')})(?=/)`), '');
-    const retained = new URLSearchParams(destination.search);
-    retained.delete('q');
-    retained.delete('cursor');
-    retained.delete('language');
-    const params = [recentSearchQuery(entry.query, entry.languages), retained.toString()].filter(Boolean).join('&');
-    href = `${destination.pathname}${params ? `?${params}` : ''}`;
-  }
+  const native = recentHistoryReference(entry);
+  const href = recentHistoryDestination(entry, locales);
   return {
     id: entry.id,
-    entry: native,
+    entry: native ?? { kind: 'query', text: entry.query },
     revision: 0,
     lastUsed: new Date(entry.visitedAt).toISOString(),
     display: href ? { name: ref?.name ?? entry.query, href, avatar: null } : null,
@@ -356,11 +312,18 @@ export function RecentHistoryView(props: NativeViewProps | (RecentHistory & { hi
               : item.entry.scope.kind === 'route' && item.display
                 ? m.nav_library()
                 : (item.display?.name ?? m.search_history_unavailable());
-          const href = item.display ? `/${locale}${item.display.href}` : undefined;
+          const action = recentItemAction(item);
+          const href = action ? `/${locale}${action}` : undefined;
           const Tag = href ? 'a' : 'span';
           return (
             <li key={item.id} className="flex min-w-0 items-center gap-1 rounded-xl hover:bg-accent">
-              <Tag href={href} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2">
+              <Tag
+                href={href}
+                onClick={(event) => {
+                  if (props.owner && !props.owner()) event.preventDefault();
+                }}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2"
+              >
                 <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-muted">
                   {item.display?.avatar ? (
                     <Cover

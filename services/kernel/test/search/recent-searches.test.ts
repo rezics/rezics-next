@@ -156,10 +156,21 @@ test('visited Collection names come from the native current owner read and disap
   expect((await use(c, entry, 0)).status).toBe(200);
   expect((await c.recentSearches.get()).data?.recentSearches[0]?.display?.name).toBe('Private current title');
   expect((await use(b.client, entry, 0)).status).toBe(404);
+  const query = { kind: 'query' as const, text: '地図 + maps & /?', languages: ['ja', 'en'], scope: entry.scope };
+  expect((await use(c, query, 1)).status).toBe(200);
+  expect((await use(b.client, query, 0)).status).toBe(404);
+  const replay = (await c.recentSearches.get()).data!.recentSearches.find((row) => row.entry.kind === 'query')!;
+  const destination = new URL(replay.display!.href, 'https://kernel.test');
+  expect(destination.pathname).toBe('/search');
+  expect(destination.searchParams.get('q')).toBe(query.text);
+  expect(destination.searchParams.getAll('language')).toEqual(['ja', 'en']);
+  expect(JSON.parse(destination.searchParams.get('filter')!)).toEqual({ collection: { id: collection.value.id } });
+
   await commands.deleteCollection(actor, collection.value.id, collection.value.revision, randomUUID());
   const current = await c.recentSearches.get();
   expect(current.status).toBe(200);
-  expect(current.data?.recentSearches[0]?.display).toBeNull();
+  expect(current.data?.recentSearches.every((row) => row.display === null)).toBe(true);
+  expect(current.data?.recentSearches.find((row) => row.entry.kind === 'query')?.entry).toEqual(query);
   expect(JSON.stringify(current.data)).not.toContain('Private current title');
 });
 

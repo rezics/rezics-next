@@ -20,6 +20,7 @@ import {
 } from '../src/search/recent-sync';
 import { RecentPanel } from '../src/search/recent-panel';
 import { RecentHistoryView, type RecentItem, type Pending } from '../src/search/recent';
+import { recentReplayDestination } from '../src/search/recent-replay';
 import { m } from '../src/paraglide/messages.js';
 
 const accountId = '019f0000-0000-7000-8000-734100000001';
@@ -44,7 +45,7 @@ function remote(text = 'Native visit', scoped = false): RecentItem {
     display: {
       name: scoped ? 'Current title' : text,
       href: scoped
-        ? `/collections/${collectionId}?q=${encodeURIComponent(text)}`
+        ? recentReplayDestination({ kind: 'query', text, scope: { kind: 'collection', id: collectionId } })!
         : `/search?q=${encodeURIComponent(text)}`,
       avatar: null,
     },
@@ -146,7 +147,7 @@ test('ordered language selections stay distinct through local sync and resume wi
         entry,
         display: {
           name: entry.scope ? 'Current title' : entry.kind === 'query' ? entry.text : '',
-          href: `${entry.scope ? `/collections/${collectionId}` : '/search'}?${params}`,
+          href: recentReplayDestination(entry)!,
           avatar: null,
         },
       };
@@ -160,6 +161,7 @@ test('ordered language selections stay distinct through local sync and resume wi
       bucket,
       currentBucket: () => bucket,
       storage,
+      transport,
       onRemote: (next) => {
         visible = next;
       },
@@ -188,8 +190,12 @@ test('ordered language selections stay distinct through local sync and resume wi
     remove() {},
   };
   const markup = renderToStaticMarkup(createElement(RecentHistoryView, { ...history, history: true }));
-  expect(markup).toContain(`/en/collections/${collectionId}?q=same%20query&amp;language=fr&amp;language=en`);
-  expect(markup).toContain(`/en/collections/${collectionId}?q=same%20query&amp;language=ja`);
+  expect(markup).toContain(
+    `/en${recentReplayDestination({ kind: 'query', text: 'same query', languages: ['fr', 'en'], scope: { kind: 'collection', id: collectionId } })!.replaceAll('&', '&amp;')}`,
+  );
+  expect(markup).toContain(
+    `/en${recentReplayDestination({ kind: 'query', text: 'same query', languages: ['ja'], scope: { kind: 'collection', id: collectionId } })!.replaceAll('&', '&amp;')}`,
+  );
   expect(markup).toContain('/en/search?q=old%20query');
   expect(markup).not.toContain('old%20query&amp;language=');
 

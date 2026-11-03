@@ -15,6 +15,7 @@ import { registerEventTypes } from '../events/catalogue.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import { strictContentSchema } from '../content/schemas.ts';
+import { recentSearchDestination } from './recent-search-destination.ts';
 import { CoverSummarySchema } from '../semantic/http/summaries.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -105,9 +106,10 @@ export async function recentDisplay(
   deadline: number,
 ): Promise<RecentSearch['display']> {
   if (entry.kind === 'query') {
-    if (!entry.scope) return { name: entry.text, href: queryHref('/search', entry), avatar: null };
+    const href = recentSearchDestination(entry);
+    if (!entry.scope) return href ? { name: entry.text, href, avatar: null } : null;
     const display = await recentDisplay(d, actor, { kind: 'scope', scope: entry.scope }, deadline);
-    return display ? { ...display, href: queryHref(display.href, entry) } : null;
+    return display && href ? { ...display, href } : null;
   }
   if (entry.scope.kind === 'route') return { name: 'Library', href: '/library', avatar: null };
   if (entry.scope.kind === 'realm') {
@@ -126,13 +128,6 @@ export async function recentDisplay(
     if (error instanceof ProblemError && error.code === 'not_found') return null;
     throw error;
   }
-}
-function queryHref(href: string, entry: Extract<RecentEntry, { kind: 'query' }>) {
-  const params = [
-    `q=${encodeURIComponent(entry.text)}`,
-    ...(entry.languages ?? []).map((language) => `language=${encodeURIComponent(language)}`),
-  ];
-  return `${href}?${params.join('&')}`;
 }
 async function authorizeRead(d: RecentDependencies, actor: AccountActor, deadline: number) {
   const { accessCheck } = await import('../request/access.ts');
@@ -240,7 +235,8 @@ export async function changeRecentSearches(
   const { shareAccount } = await import('../access/account-share.ts');
   const { principalCommandIdentity, runCommand, authoritativeTimeValue } = await import('../command/command.ts');
   const identity = principalCommandIdentity(actor);
-  const scopeAvailable = !entry?.scope || (await recentDisplay(d, actor, entry, deadline));
+  const scopeAvailable =
+    !entry?.scope || (await recentDisplay(d, actor, { kind: 'scope', scope: entry.scope }, deadline));
   const result = await runCommand(
     d.pool,
     {

@@ -70,6 +70,11 @@ function cleanScope(raw: unknown): SearchScope | undefined {
   if (!raw || typeof raw !== 'object') return;
   const value = raw as Record<string, unknown>;
   if (!kinds.has(String(value.kind)) || typeof value.id !== 'string' || typeof value.name !== 'string') return;
+  if (
+    (value.kind === 'Realm' || value.kind === 'Collection') &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.id)
+  )
+    return;
   const action = value.searchAction;
   const image = value.image;
   return {
@@ -100,10 +105,9 @@ export function readRecentHistory(storage: RecentStorage, bucket: string): Recen
       const languages = item.languages === undefined ? undefined : cleanLanguages(item.languages);
       if (item.languages !== undefined && languages === undefined) return [];
       let scope = cleanScope(item.scope);
-      if (scope && bucket.startsWith('account:') && nativeHistoryScope(scope))
-        scope = { kind: scope.kind, id: scope.id, name: '' };
+      if (scope && bucket.startsWith('account:')) scope = { kind: scope.kind, id: scope.id, name: '' };
       // Corrupt scoped history must never silently become global history.
-      if (item.scope && !scope) return [];
+      if (item.scope !== undefined && !scope) return [];
       if (!isAdmittedRecentQuery(item.query)) return [];
       const query = item.query;
       if (!query.trim() && !scope) return [];
@@ -187,7 +191,7 @@ export function readRecentDocument(storage: RecentStorage, bucket: string): Rece
 export function writeRecentDocument(storage: RecentStorage, bucket: string, document: RecentDocument): void {
   const entries = document.entries.slice(0, RECENT_HISTORY_LIMIT).map((entry) => {
     // Account scope labels/actions must be hydrated again; browser history is never their authority.
-    if (bucket.startsWith('account:') && entry.scope && nativeHistoryScope(entry.scope))
+    if (bucket.startsWith('account:') && entry.scope)
       return { ...entry, scope: { kind: entry.scope.kind, id: entry.scope.id, name: '' } };
     return entry;
   });

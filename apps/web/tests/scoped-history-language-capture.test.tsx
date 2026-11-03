@@ -195,7 +195,12 @@ test('Remembered scoped queries retain the ordered language controls used by the
     id: 'scoped-ja-en',
     query: 'Prince',
     languages: ['ja', 'en'],
-    scope: scoped,
+    scope: {
+      kind: 'Collection',
+      id: '019f0000-0000-7000-8000-734100000002',
+      name: 'Reading',
+      searchAction: '/collections/019f0000-0000-7000-8000-734100000002',
+    },
     visitedAt: 1,
   };
   const recent = await mount({
@@ -203,10 +208,14 @@ test('Remembered scoped queries retain the ordered language controls used by the
     onNavigate: (href) => resumedNav.push(href),
   });
   await act(async () => recent.input.focus());
-  const select = [...recent.host.querySelectorAll('button')].find((button) => button.textContent?.includes('Prince'))!;
-  await act(async () => select.click());
-  expect(recent.remembered).toEqual([['Prince', scoped, ['ja', 'en']]]);
-  expect(resumedNav).toEqual(['/ja/library?collection=reading&q=Prince&language=ja&language=en']);
+  const select = recent.host.querySelector<HTMLAnchorElement>('a[href*="filter="]')!;
+  const destination = new URL(select.href);
+  expect(destination.pathname).toBe('/ja/search');
+  expect(destination.searchParams.get('q')).toBe('Prince');
+  expect(destination.searchParams.getAll('language')).toEqual(['ja', 'en']);
+  expect(JSON.parse(destination.searchParams.get('filter')!)).toEqual({ collection: { id: resumed.scope!.id } });
+  expect(recent.remembered).toEqual([]);
+  expect(resumedNav).toEqual([]);
   await recent.cleanup();
 });
 
