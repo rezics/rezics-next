@@ -110,6 +110,12 @@ test('incremental client declarations match a clean emit after one source file c
     );
     writeFileSync(resolve(kernel, 'src/http/kernel.ts'), "export type { Response } from './response';\n");
     writeFileSync(resolve(kernel, 'src/http/request.ts'), 'export interface Request { id: string }\n');
+    mkdirSync(resolve(fixture, 'packages/client/src'), { recursive: true });
+    writeFileSync(
+      resolve(fixture, 'packages/client/src/index.ts'),
+      "export type { PublicOnly } from './kernel/http/public-only';\n",
+    );
+    writeFileSync(resolve(kernel, 'src/http/public-only.ts'), 'export interface PublicOnly { revision: number }\n');
     const response = resolve(kernel, 'src/http/response.ts');
     writeFileSync(response, 'export interface Response { message: string }\n');
     const checkoutCache = clientDeclarationCacheDirectory(fixture, kernel);
@@ -121,6 +127,7 @@ test('incremental client declarations match a clean emit after one source file c
     const clean = clientDeclarations(kernel, { repositoryRoot: fixture, cacheDirectory: cleanCache });
 
     expect([...incremental.entries()]).toEqual([...clean.entries()]);
+    expect(incremental.get('http/public-only.d.ts')).toContain('revision: number;');
     expect(readFileSync(resolve(incrementalCache, 'tsconfig.tsbuildinfo'), 'utf8').length).toBeGreaterThan(0);
     const config = JSON.parse(readFileSync(resolve(incrementalCache, 'tsconfig.json'), 'utf8')) as {
       compilerOptions: {

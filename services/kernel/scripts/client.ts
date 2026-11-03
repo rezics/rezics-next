@@ -177,6 +177,14 @@ export function clientDeclarations(
   const sourceRoot = resolve(outputDirectory, 'src');
   publishSqlDeclarations(sourceRoot);
   const pending = ['http/kernel.d.ts', 'http/request.d.ts'];
+  const clientIndex = resolve(repositoryRoot, 'packages/client/src/index.ts');
+  if (existsSync(clientIndex)) {
+    // Public type exports can be independent of the mounted route closure.
+    for (const specifier of declarationSpecifiers(readFileSync(clientIndex, 'utf8'))) {
+      if (specifier.startsWith('./kernel/'))
+        pending.push(`${specifier.slice('./kernel/'.length).replace(/\.ts$/, '')}.d.ts`);
+    }
+  }
   const declarations = new Map<string, string>();
   while (pending.length) {
     const key = pending.pop()!;
