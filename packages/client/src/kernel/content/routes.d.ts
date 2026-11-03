@@ -11109,6 +11109,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 revisions: {
                     post: {
                         body: {
+                            title?: string;
                             visibility?: "draft" | "published";
                             body: import("@rezics/document").DocumentSnapshot;
                             licence?: string;

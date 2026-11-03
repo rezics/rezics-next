@@ -1144,6 +1144,29 @@ declare const productEventTypes: {
         realmId: Type.TString;
         kind: Type.TUnion<[Type.TLiteral<"realm">, Type.TLiteral<"bucket">, Type.TLiteral<"thread">, Type.TLiteral<"board">]>;
     }>;
+    readonly "com.rezics.content.review-discovery.opened.v1": Type.TObject<{
+        route: Type.TInteger;
+        id: Type.TString;
+    }>;
+    readonly "com.rezics.content.review-discovery.progress.v1": Type.TObject<{
+        route: Type.TInteger;
+        id: Type.TString;
+        version: Type.TString;
+        complete: Type.TBoolean;
+    }>;
+    readonly "com.rezics.content.review-discovery.changed.v1": Type.TObject<{
+        partition: Type.TInteger;
+        through: Type.TString;
+        ids: Type.TArray<Type.TString>;
+        origin: Type.TObject<{
+            partition: Type.TInteger;
+            epoch: Type.TInteger;
+            position: Type.TString;
+            eventIndex: Type.TInteger;
+            id: Type.TString;
+            type: Type.TString;
+        }>;
+    }>;
     readonly "com.rezics.content.realm-discovery.changed.v1": Type.TObject<{
         realmId: Type.TString;
         realmEpoch: Type.TString;

@@ -149627,6 +149627,11 @@
                     "type": "array",
                     "uniqueItems": true
                   },
+                  "title": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "visibility": {
                     "enum": [
                       "published",
