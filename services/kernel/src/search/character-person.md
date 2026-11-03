@@ -58,8 +58,11 @@ revisions retire the old witness. The outer runtime activation observation cover
 
 Let U be the distinct work/character/threshold keys encountered in matching disclosed credit rows.
 This step adds ceil(U/256) native appearance batches, each subject to the existing 1000-row seek
-bound, plus one credit disclosure reanchor when U is nonzero. This describes the additional step;
-deriving U and the complete retained whole-page bound before dispatch remains continuation work.
+bound, plus one credit disclosure reanchor when U is nonzero. Decision: for one retained relation
+cut, compute K as ceil(P/256) + ceil(U/256) per touched source partition, where P is the distinct
+native subject/property/value keys and U is the distinct appearance keys derived from its retained
+disclosed credit rows. Build that bound before appearance dispatch; page-wide aggregation across
+all retained candidate cuts remains continuation work.
 
 Candidate index facts are hints. Current checks forward the complete qualifier conjunction to
 the Semantic relation source, including when the selected relation sample overflows. Qualified

@@ -1,5 +1,8 @@
 import { expect, test } from 'bun:test';
-import { matchCharacterPersonWitnesses } from '../../src/search/character-person-voice.ts';
+import {
+  matchCharacterPersonWitnesses,
+  planCharacterPersonWitnesses,
+} from '../../src/search/character-person-voice.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
 import type { IndexedStatement, IndexedSubject, RelationFacetProbe, SubjectSource } from '../../src/search/source.ts';
@@ -61,6 +64,24 @@ test('each repeated voice credit needs its own current permitted appearance at t
 
 test('appearance batches include sparse late witnesses and reanchor credits after foreign reads', async () => {
   const rows = Array.from({ length: 257 }, (_, n) => credit(id(n + 10)));
+  const plan = planCharacterPersonWitnesses([probe(0), probe(0)], [...rows, rows[0]!]);
+  expect(plan.touchedPools).toEqual([
+    {
+      partition: 10,
+      primaryKeys: 1,
+      appearanceKeys: 257,
+      primaryBatches: 1,
+      appearanceBatches: 2,
+      probeBatchBound: 3,
+    },
+  ]);
+  const twoThresholds = planCharacterPersonWitnesses([probe(0), probe(1)], rows);
+  expect(twoThresholds.touchedPools[0]).toMatchObject({
+    primaryKeys: 1,
+    appearanceKeys: 514,
+    appearanceBatches: 3,
+    probeBatchBound: 4,
+  });
   const sizes: number[] = [];
   const match = async (probes: readonly RelationFacetProbe[]) => {
     sizes.push(probes.length);

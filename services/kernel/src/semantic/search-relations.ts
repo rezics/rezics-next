@@ -645,7 +645,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       const witnesses = await matchCharacterPersonWitnesses(
         admittedProbes,
         disclosedStatements,
-        (appearances) => source.match(partition, appearances),
+        (appearances, appearancePartition) => source.match(appearancePartition, appearances),
         () => disclosed(rows, releases, subjects, runtime),
       );
       for (const [index, probe] of admittedProbes.entries())
