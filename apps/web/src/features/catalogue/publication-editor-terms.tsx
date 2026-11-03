@@ -38,14 +38,15 @@ export function PublicationTerms({
   const message = (target: string, field: keyof TermDraft, index: number) =>
     errors
       .filter((error) => error.target === target)
-      .map((error) =>
-        error.instruction ||
-        createSubjectGuidance(
-          { pointer: '', code: 'invalid_format' },
-          field,
-          { type: '', rows: terms, index },
-          locale,
-        ),
+      .map(
+        (error) =>
+          error.instruction ||
+          createSubjectGuidance(
+            { pointer: '', code: 'invalid_format' },
+            field,
+            { type: '', rows: terms, index },
+            locale,
+          ),
       )
       .filter(Boolean)
       .join(' ');
@@ -115,7 +116,9 @@ export function PublicationTerms({
                       {m.catalogue_create_duplicate_help({}, o)}
                     </FieldDescription>
                   )}
-                  {invalid(control) && <FieldError id={`${control}-error`}>{message(control, field, index)}</FieldError>}
+                  {invalid(control) && (
+                    <FieldError id={`${control}-error`}>{message(control, field, index)}</FieldError>
+                  )}
                 </Field>
               );
             })}
@@ -125,9 +128,7 @@ export function PublicationTerms({
                 populated={!!(term.language || term.label || term.description || term.aliases)}
                 rowId={rowId}
                 focusId={
-                  terms[index + 1]
-                    ? publicationTermControl(id, 'language', terms[index + 1]!.id)
-                    : `${id}-add-language`
+                  terms[index + 1] ? publicationTermControl(id, 'language', terms[index + 1]!.id) : `${id}-add-language`
                 }
                 disabled={disabled}
                 onRemove={() => onRemove(term.id)}

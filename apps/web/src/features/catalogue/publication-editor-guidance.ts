@@ -35,9 +35,18 @@ function statementControl(
   locale: string,
   id: string,
 ): { target: string; label: string; instruction: string } | undefined {
-  const presented = presentStatementViolations([{ pointer, code: 'invalid_format' }], statement, release, locale, id)[0];
+  const presented = presentStatementViolations(
+    [{ pointer, code: 'invalid_format' }],
+    statement,
+    release,
+    locale,
+    id,
+  )[0];
   if (!presented) return;
-  const nested = pointer.replace(/^\/statement/, '').split('/').filter(Boolean);
+  const nested = pointer
+    .replace(/^\/statement/, '')
+    .split('/')
+    .filter(Boolean);
   const qualifier = nested[0] === 'qualifiers' && /^(0|[1-9]\d*)$/.test(nested[1] ?? '');
   const reference =
     nested[0] === 'references' &&
@@ -59,17 +68,35 @@ function statementControl(
   }
   if (part !== statement) {
     const key = statementHolderKey(part);
-    if (key === undefined) return { target: `${id}-${nested[0]}`, label: presented.label, instruction: presented.instruction };
+    if (key === undefined)
+      return { target: `${id}-${nested[0]}`, label: presented.label, instruction: presented.instruction };
     address = `part-${key}`;
   }
   const definition = release.properties[part.property.id];
   const path = `/${nested.slice(qualifier || reference ? (qualifier ? 2 : 4) : 0).join('/')}`;
   const field = (
     ['state', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const
-  ).find((candidate) => presented.target === controlId(id, qualifier || reference ? (qualifier ? `qualifier-${nested[1]}` : `reference-${nested[1]}-part-${nested[3]}`) : 'fact', candidate));
+  ).find(
+    (candidate) =>
+      presented.target ===
+      controlId(
+        id,
+        qualifier || reference
+          ? qualifier
+            ? `qualifier-${nested[1]}`
+            : `reference-${nested[1]}-part-${nested[3]}`
+          : 'fact',
+        candidate,
+      ),
+  );
   if (definition?.datatype === 'wikibase-item' && path.endsWith('/value/content'))
     return { target: controlId(id, address, 'value'), label: presented.label, instruction: presented.instruction };
-  if (!field) return { target: `${id}-${nested[0] === 'references' ? 'references' : nested[0] === 'qualifiers' ? 'qualifiers' : 'fact'}`, label: presented.label, instruction: presented.instruction };
+  if (!field)
+    return {
+      target: `${id}-${nested[0] === 'references' ? 'references' : nested[0] === 'qualifiers' ? 'qualifiers' : 'fact'}`,
+      label: presented.label,
+      instruction: presented.instruction,
+    };
   let target = controlId(id, address, field);
   if (definition?.datatype === 'time') {
     if (path.endsWith('/value/content/precision')) target = controlId(id, address, 'precision');
@@ -133,7 +160,8 @@ export function publicationCorrections(
       const row = languages.get(language);
       if (
         !row ||
-        (segments.length !== 2 && !(segments[0] === 'aliases' && segments.length === 3 && /^(0|[1-9]\d*)$/.test(segments[2]!)))
+        (segments.length !== 2 &&
+          !(segments[0] === 'aliases' && segments.length === 3 && /^(0|[1-9]\d*)$/.test(segments[2]!)))
       )
         return fallback;
       const languageIssue =
@@ -189,7 +217,9 @@ export function publicationCorrections(
     return {
       ...fallback,
       holder,
-      target: control?.target ?? `${sectionId}-${nested[0] === 'references' ? 'references' : nested[0] === 'qualifiers' ? 'qualifiers' : 'fact'}`,
+      target:
+        control?.target ??
+        `${sectionId}-${nested[0] === 'references' ? 'references' : nested[0] === 'qualifiers' ? 'qualifiers' : 'fact'}`,
       label: `${propertyLabel} · ${control?.label ?? m.catalogue_create_invalid_field({}, o)}`,
       instruction: control?.instruction ?? m.correction_error_uneditable({}, o),
     };
@@ -200,5 +230,12 @@ export function publicationCurrentHolders(
   terms: readonly PublicationTerm[],
   facts: readonly PublicationFactRow[],
 ): Set<string> {
-  return new Set(['independent', 'relation', 'work', 'review', ...terms.map((term) => `term-${term.id}`), ...facts.map((row) => row.key)]);
+  return new Set([
+    'independent',
+    'relation',
+    'work',
+    'review',
+    ...terms.map((term) => `term-${term.id}`),
+    ...facts.map((row) => row.key),
+  ]);
 }

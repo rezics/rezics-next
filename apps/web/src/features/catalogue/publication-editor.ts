@@ -140,9 +140,7 @@ function meaningful(content: unknown): boolean {
 export function publicationAssertion(statement: StatementInput): boolean {
   if (statement.value.type !== 'value') return true;
   return (
-    meaningful(statement.value.content) ||
-    (statement.qualifiers?.length ?? 0) > 0 ||
-    statement.references.length > 0
+    meaningful(statement.value.content) || (statement.qualifiers?.length ?? 0) > 0 || statement.references.length > 0
   );
 }
 
@@ -176,10 +174,7 @@ export function publicationDraft(
   const statements: PublicationItem['statements'] = { [relation]: [link] };
   for (const fact of facts) {
     if (fact.property.id === relation) continue;
-    const prepared = creationStatement(
-      { ...fact, rank: 'normal' },
-      read.release,
-    );
+    const prepared = creationStatement({ ...fact, rank: 'normal' }, read.release);
     if (!publicationAssertion(prepared)) continue;
     (statements[prepared.property.id] ??= []).push(prepared);
   }

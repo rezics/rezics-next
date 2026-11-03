@@ -309,12 +309,16 @@ test('independent publication creation, local corrections, immutable recovery an
     });
     expect(original.item.statements['schema:exampleOfWork']![0]!.references).toEqual([
       {
-        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/work' } }],
+        parts: [
+          { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/work' } },
+        ],
       },
     ]);
     expect(original.item.statements['schema:isbn']![0]!.references).toEqual([
       {
-        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/isbn' } }],
+        parts: [
+          { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/isbn' } },
+        ],
       },
     ]);
     expect(original.item.statements['schema:datePublished']![0]!.references).toEqual([]);

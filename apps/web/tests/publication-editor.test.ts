@@ -41,18 +41,12 @@ const sessionRequest = (csrf = 'AAAAAAAAAAAAAAAAAAAAAA') =>
   });
 const workCitation = 'https://publisher.example/work';
 const isbnCitation = 'https://publisher.example/isbn';
-function statement(
-  property: string,
-  content: unknown,
-  url = '',
-): Parameters<typeof publicationDraft>[5][number] {
+function statement(property: string, content: unknown, url = ''): Parameters<typeof publicationDraft>[5][number] {
   return {
     property: { id: property },
     value: { type: 'value', content },
     qualifiers: [],
-    references: url
-      ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] }]
-      : [],
+    references: url ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] }] : [],
     rank: 'normal',
   };
 }

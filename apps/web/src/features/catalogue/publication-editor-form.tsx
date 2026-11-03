@@ -144,8 +144,7 @@ function PublicationEditorLive({
     !running.current &&
     !admission.current.disabled &&
     !admission.current.created;
-  if (read && relation && !workLink)
-    setWorkLink(publicationWorkStatement(relation, work, read.release));
+  if (read && relation && !workLink) setWorkLink(publicationWorkStatement(relation, work, read.release));
   const name = (property: string) =>
     pickText(displayRelease?.properties[property]?.labels ?? {}, locale).text || draftNames[property] || '';
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
@@ -161,8 +160,15 @@ function PublicationEditorLive({
     } satisfies StatementInput);
   const reviewErrors =
     reviewDefinitions && read && profile && currentWorkLink
-      ? publicationDraft(read, profile.id, relation, terms, currentWorkLink, facts.map((row) => row.statement), independent)
-          .errors
+      ? publicationDraft(
+          read,
+          profile.id,
+          relation,
+          terms,
+          currentWorkLink,
+          facts.map((row) => row.statement),
+          independent,
+        ).errors
       : [];
   const unsupportedRelation = reviewDefinitions && !currentProfile?.relations.includes(relation);
   const unsupportedFact = (property: string) => reviewDefinitions && !currentProfile?.fields.includes(property);
@@ -241,7 +247,9 @@ function PublicationEditorLive({
     if (!read) return;
     privateDefinitions.current = { release: read.release, profiles: read.profiles };
     if (profile) setDraftProfile(profile);
-    const properties = [relation, ...facts.map((row) => row.statement.property.id), field, 'schema:url'].filter(Boolean);
+    const properties = [relation, ...facts.map((row) => row.statement.property.id), field, 'schema:url'].filter(
+      Boolean,
+    );
     setDraftNames((names) => ({
       ...names,
       ...Object.fromEntries(
@@ -455,7 +463,12 @@ function PublicationEditorLive({
         <p className="text-muted-foreground">{m.publication_intro({}, o)}</p>
       </header>
       {created ? (
-        <ContentItemFrame as="div" role="status" aria-labelledby={`${id}-result`} className="min-w-0 space-y-4 p-4 sm:p-6">
+        <ContentItemFrame
+          as="div"
+          role="status"
+          aria-labelledby={`${id}-result`}
+          className="min-w-0 space-y-4 p-4 sm:p-6"
+        >
           <ContentItemHeading id={`${id}-result`} className="text-xl font-semibold">
             {m.catalogue_create_created({}, o)}
           </ContentItemHeading>
@@ -490,8 +503,17 @@ function PublicationEditorLive({
             query.data?.ok === false ||
             (query.data?.ok && !matchingRead) ||
             (refreshRequired && !query.isFetching)) && (
-            <ContentItemFrame as="div" role="alert" aria-labelledby={`${id}-load-error`} className="min-w-0 space-y-3 p-4">
-              <ContentItemHeading tabIndex={-1} id={`${id}-load-error`} className={cn('text-lg font-semibold', recoveryFocusClassName)}>
+            <ContentItemFrame
+              as="div"
+              role="alert"
+              aria-labelledby={`${id}-load-error`}
+              className="min-w-0 space-y-3 p-4"
+            >
+              <ContentItemHeading
+                tabIndex={-1}
+                id={`${id}-load-error`}
+                className={cn('text-lg font-semibold', recoveryFocusClassName)}
+              >
                 {query.data?.ok === false && query.data.reason === 'concealed'
                   ? m.catalogue_create_concealed({}, o)
                   : query.data?.ok === false && query.data.reason === 'invalid'
@@ -698,9 +720,7 @@ function PublicationEditorLive({
                             edit(() => {
                               const next = event.target.value;
                               setRelation(next);
-                              setWorkLink((current) =>
-                                current ? { ...current, property: { id: next } } : current,
-                              );
+                              setWorkLink((current) => (current ? { ...current, property: { id: next } } : current));
                             })
                           }
                         >

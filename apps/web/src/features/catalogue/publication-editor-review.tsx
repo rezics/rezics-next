@@ -6,7 +6,13 @@ import { pageText } from '../pages/data';
 import { PartValue, type StatementFieldsRead } from './statement-editor-view';
 import type { SnakInput, StatementInput } from './statement-editor';
 import type { PublicationItem, PublicationProfile } from './publication-editor';
-import { publicationFactId, publicationTermControl, publicationWorkId, type PublicationFactRow, type PublicationTerm } from './publication-editor-guidance';
+import {
+  publicationFactId,
+  publicationTermControl,
+  publicationWorkId,
+  type PublicationFactRow,
+  type PublicationTerm,
+} from './publication-editor-guidance';
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
@@ -41,7 +47,8 @@ function Assertion({
               className="text-muted-foreground"
               lang={pageText(read.release.properties[part.property.id]?.labels, locale).lang}
             >
-              {pageText(read.release.properties[part.property.id]?.labels, locale).text || m.subject_value_unlabelled({}, o)}
+              {pageText(read.release.properties[part.property.id]?.labels, locale).text ||
+                m.subject_value_unlabelled({}, o)}
             </dt>
             <dd>
               <PartValue part={part} read={read} locale={locale} />
@@ -141,7 +148,12 @@ export function PublicationReview({
                 {m.catalogue_create_aliases({}, o)}: {item.aliases[term.language.trim()]!.join(', ')}
               </p>
             ) : null}
-            <Button className={actionClassName} type="button" variant="outline" onClick={() => onEdit(publicationTermControl(id, 'label', term.id))}>
+            <Button
+              className={actionClassName}
+              type="button"
+              variant="outline"
+              onClick={() => onEdit(publicationTermControl(id, 'label', term.id))}
+            >
               {m.publication_edit({}, o)}
             </Button>
           </li>
@@ -153,23 +165,30 @@ export function PublicationReview({
             {m.publication_work_link({}, o)} · {name(relation).text || relation}
           </ContentItemHeading>
           <Assertion statement={workStatement} read={read} locale={locale} />
-          <Button className={actionClassName} type="button" variant="outline" onClick={() => onEdit(publicationWorkId(id))}>
+          <Button
+            className={actionClassName}
+            type="button"
+            variant="outline"
+            onClick={() => onEdit(publicationWorkId(id))}
+          >
             {m.publication_edit({}, o)}
           </Button>
         </section>
       )}
       {reviewedFacts.map((entry) => (
-        <section key={`${entry.property}-${entry.target}`} className="min-w-0 space-y-3 rounded-xl border border-border p-4">
-          <ContentItemHeading level={3} lang={name(entry.property).lang ?? undefined} className="text-base font-semibold">
+        <section
+          key={`${entry.property}-${entry.target}`}
+          className="min-w-0 space-y-3 rounded-xl border border-border p-4"
+        >
+          <ContentItemHeading
+            level={3}
+            lang={name(entry.property).lang ?? undefined}
+            className="text-base font-semibold"
+          >
             {name(entry.property).text || entry.property}
           </ContentItemHeading>
           <Assertion statement={entry.statement} read={read} locale={locale} />
-          <Button
-            className={actionClassName}
-            type="button"
-            variant="outline"
-            onClick={() => onEdit(entry.target)}
-          >
+          <Button className={actionClassName} type="button" variant="outline" onClick={() => onEdit(entry.target)}>
             {m.publication_edit({}, o)}
           </Button>
         </section>

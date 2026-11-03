@@ -154,10 +154,23 @@ function FactRemoval({
         >
           <p>{m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}</p>
           <div className="flex flex-wrap gap-2">
-            <Button ref={cancel} className={actionClassName} type="button" variant="outline" disabled={disabled} onClick={cancelRemoval}>
+            <Button
+              ref={cancel}
+              className={actionClassName}
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelRemoval}
+            >
               {m.candidate_cancel({}, o)}
             </Button>
-            <Button className={actionClassName} type="button" variant="destructive" disabled={disabled} onClick={remove}>
+            <Button
+              className={actionClassName}
+              type="button"
+              variant="destructive"
+              disabled={disabled}
+              onClick={remove}
+            >
               {m.relation_remove({}, o)}
             </Button>
           </div>
@@ -238,7 +251,10 @@ export function PublicationFacts({
       related: {
         [work]: { labels: workTitle ? { [locale]: workTitle } : {}, type: '' },
         ...Object.fromEntries(
-          Object.values(picked).map((item) => [item.id, { labels: { [locale]: item.title }, type: item.types[0] ?? '' }]),
+          Object.values(picked).map((item) => [
+            item.id,
+            { labels: { [locale]: item.title }, type: item.types[0] ?? '' },
+          ]),
         ),
       },
       subject: { type: profile.id },
@@ -277,25 +293,24 @@ export function PublicationFacts({
         }}
       />
     ) : undefined;
-  const partControl = (sectionId: string) =>
-    (part: SnakInput, change: (value: SnakInput['value']) => void) =>
-      release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
-        <ItemValue
-          id={sectionId}
-          address={`part-${statementHolderKey(part) ?? ''}`}
-          part={part}
-          release={release}
-          locale={locale}
-          search={search}
-          picked={picked}
-          disabled={disabled}
-          admit={(type) => admit(part.property.id, type)}
-          change={(value, item) => {
-            if (item) onPicked(item.id, item);
-            change(value);
-          }}
-        />
-      ) : undefined;
+  const partControl = (sectionId: string) => (part: SnakInput, change: (value: SnakInput['value']) => void) =>
+    release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
+      <ItemValue
+        id={sectionId}
+        address={`part-${statementHolderKey(part) ?? ''}`}
+        part={part}
+        release={release}
+        locale={locale}
+        search={search}
+        picked={picked}
+        disabled={disabled}
+        admit={(type) => admit(part.property.id, type)}
+        change={(value, item) => {
+          if (item) onPicked(item.id, item);
+          change(value);
+        }}
+      />
+    ) : undefined;
   const unsupported = (property: string) => reviewDefinitions && !currentProfile?.fields.includes(property);
   const fields = (readFields: string[]) =>
     readFields.filter(
@@ -380,7 +395,9 @@ export function PublicationFacts({
                   <FieldError>{m.publication_choice_review({}, o)}</FieldError>
                   <details>
                     <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
-                    <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{JSON.stringify(row.statement, null, 2)}</pre>
+                    <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                      {JSON.stringify(row.statement, null, 2)}
+                    </pre>
                   </details>
                 </>
               ) : (
@@ -395,12 +412,16 @@ export function PublicationFacts({
                   guideReturn={guideReturn}
                   heading="h4"
                   valueControl={itemControl(sectionId, row.statement, (next) =>
-                    onFactsChange(facts.map((entry) => (entry.key === row.key ? { ...entry, statement: next } : entry))),
+                    onFactsChange(
+                      facts.map((entry) => (entry.key === row.key ? { ...entry, statement: next } : entry)),
+                    ),
                   )}
                   partControl={partControl(sectionId)}
                   change={(next) =>
                     onFactsChange(
-                      facts.map((entry) => (entry.key === row.key ? { ...entry, statement: { ...next, rank: 'normal' } } : entry)),
+                      facts.map((entry) =>
+                        entry.key === row.key ? { ...entry, statement: { ...next, rank: 'normal' } } : entry,
+                      ),
                     )
                   }
                 />
@@ -423,7 +444,12 @@ export function PublicationFacts({
             <FieldLabel className={labelClassName} htmlFor={`${id}-field`}>
               {m.publication_field({}, o)}
             </FieldLabel>
-            <NativeSelect className={selectClassName} id={`${id}-field`} value={field} onChange={(event) => onFieldChoice(event.target.value)}>
+            <NativeSelect
+              className={selectClassName}
+              id={`${id}-field`}
+              value={field}
+              onChange={(event) => onFieldChoice(event.target.value)}
+            >
               <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
               {fields(currentProfile?.fields ?? profile.fields).map((property) => (
                 <NativeSelectOption key={property} value={property}>
@@ -460,7 +486,10 @@ export function PublicationFacts({
                 (!release.properties[field]?.multivalued && facts.some((row) => row.statement.property.id === field))
               )
                 return;
-              const row: PublicationFactRow = { key: crypto.randomUUID(), statement: emptyCreationStatement(field, release) };
+              const row: PublicationFactRow = {
+                key: crypto.randomUUID(),
+                statement: emptyCreationStatement(field, release),
+              };
               if (event.detail === 0) pendingFocus.current = { row, trigger: event.currentTarget };
               onFactsChange([...facts, row]);
               onFieldChoice('');
