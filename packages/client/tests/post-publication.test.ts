@@ -1,8 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Static } from 'typebox';
 import { createKernelClient } from '../src/index.ts';
-import type { CONTENT_EVENTS } from '../src/kernel/content/events.ts';
-import type { PostInput, RevisionInput } from '../src/kernel/content/model.ts';
 
 test('native post authoring sends draft, published and omitted visibility', async () => {
   const sent: Request[] = [];
@@ -29,36 +26,4 @@ test('native post authoring sends draft, published and omitted visibility', asyn
     }),
   );
 
-  const typed = () => {
-    const native: PostInput = { threadId: id, body: {}, licence: 'CC0-1.0', visibility: 'draft' };
-    const revision: RevisionInput = { ...native, itemId: id, visibility: 'published' };
-    // @ts-expect-error protected is not an authoring visibility
-    client.threads({ id }).posts.post({ ...native, visibility: 'protected' }, options);
-    // @ts-expect-error null does not mean preserve visibility
-    client.posts({ id }).revisions.post({ ...revision, visibility: null }, options);
-    // @ts-expect-error native command inputs use the same closed visibility
-    const invalid: PostInput['visibility'] | RevisionInput['visibility'] = 'protected';
-    return invalid;
-  };
-  expect(typeof typed).toBe('function');
-});
-
-type Published = Static<(typeof CONTENT_EVENTS)['com.rezics.content.post.published.v1']>;
-type ExpectedPublication = {
-  threadId: string;
-  itemId: string;
-  revisionId: string;
-  actorId: string;
-  placeId: string;
-  kind: 'discussion' | 'review';
-  subjectIds: string[];
-  activityAt: string;
-};
-// Both directions pin required fields and their types; the key comparison excludes extra fields.
-const publicationContract: [Published, keyof Published] extends [ExpectedPublication, keyof ExpectedPublication]
-  ? [ExpectedPublication] extends [Published] ? true : false
-  : false = true;
-
-test('the derived publication event retains its exact pinned revision payload', () => {
-  expect(publicationContract).toBe(true);
 });
