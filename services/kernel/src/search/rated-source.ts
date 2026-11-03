@@ -1,4 +1,7 @@
-import type { SubjectSourceKeyTraversal as SubjectSourceKeyPages } from '../semantic/subject-source-key-pages.ts';
+import type {
+  SubjectCanonicalNames,
+  SubjectSourceKeyTraversal as SubjectSourceKeyPages,
+} from '../semantic/subject-source-key-pages.ts';
 import type { Pool } from 'pg';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { ConfigError } from '../commerce/config.ts';
@@ -13,7 +16,10 @@ import type { SubjectSource } from './source.ts';
 export function createRatedSubjectSource(
   pool: Pool,
   routeKey: Uint8Array,
-): { source: SubjectSource & SubjectSourceKeyPages; ratings: PublicRatingSource } {
+): {
+  source: SubjectSource & SubjectSourceKeyPages & { canonicalNames: SubjectCanonicalNames };
+  ratings: PublicRatingSource;
+} {
   if (!(routeKey instanceof Uint8Array) || routeKey.byteLength !== 32) throw new ConfigError('KERNEL_ROUTE_KEY');
   const ratings = createPublicRatingSource(pool);
   const native = subjectSource(pool, routeKey);
@@ -21,5 +27,12 @@ export function createRatedSubjectSource(
     questionId: STANDARD_QUESTION_ID,
     populationId: GLOBAL_CONTEXT.id,
   });
-  return { source: { ...rated, readSubjectKeyPage: native.readSubjectKeyPage.bind(native) }, ratings };
+  return {
+    source: {
+      ...rated,
+      canonicalNames: native.canonicalNames,
+      readSubjectKeyPage: native.readSubjectKeyPage.bind(native),
+    },
+    ratings,
+  };
 }

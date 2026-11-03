@@ -4,7 +4,7 @@ import { documentActions } from '../../src/search/document.ts';
 import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 import type { PublicRatingFigure, PublicRatingSnapshot, PublicRatingSource } from '../../src/search/rating-source.ts';
 import { withPublicRatings } from '../../src/search/rating-subject-source.ts';
-import type { IndexedSubject, SubjectSnapshot, SubjectSource } from '../../src/search/source.ts';
+import type { IndexedSubject, NativeWorkLinkEvidence, SubjectSnapshot, SubjectSource } from '../../src/search/source.ts';
 
 const partition = 10;
 const binding = { questionId: '00000000-0000-8000-8000-000000000001', populationId: GLOBAL_CONTEXT.id };
@@ -354,6 +354,7 @@ test('read, count and optional facet probes preserve the owning port as this', a
       expect(probes).toBe(probeInput);
       return [...facetResult];
     },
+    readCompleteWorkLinks: mock(async () => new Map<string, NativeWorkLinkEvidence>()),
   };
   const native: PublicRatingSource = {
     async read(anchor, ids) {
@@ -369,6 +370,7 @@ test('read, count and optional facet probes preserve the owning port as this', a
   await wrapped.read(partition, [id()]);
   expect(await wrapped.count(partition)).toBe(countResult);
   expect(await wrapped.matchRelationFacets!(partition, probeInput)).toEqual([...facetResult]);
+  expect(await wrapped.readCompleteWorkLinks!(partition, [])).toEqual(new Map());
   const historical = withPublicRatings(source, ratings, binding);
   expect(Object.hasOwn(historical, 'matchRelationFacets')).toBe(false);
   expect(historical.matchRelationFacets).toBeUndefined();

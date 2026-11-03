@@ -95,5 +95,6 @@ export function withPublicRatings(
     count: source.count.bind(source),
     ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
     ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
+    ...(source.readCompleteWorkLinks ? { readCompleteWorkLinks: source.readCompleteWorkLinks.bind(source) } : {}),
   };
 }
