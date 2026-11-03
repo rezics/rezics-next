@@ -1172,6 +1172,8 @@ export async function advanceDiscovery(options: {
         (row) => row.state === 'active' && (!isDeepStrictEqual(row.kinds, kinds) || !activeCoverageComplete),
       ))
   ) {
+    // Let the runner drain abandoned physical targets before consuming another live slot.
+    if (generations.length >= MAX_SUBJECT_GENERATIONS) return;
     await allocateDiscovery(pool, prefix, registry, requiredKinds, producerKinds);
     generations = await discoveryGenerations(pool, prefix);
   }
