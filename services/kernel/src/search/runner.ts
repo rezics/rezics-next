@@ -362,7 +362,7 @@ export function startDiscoveryIndexing(options: {
         ...options,
         registry,
         requiredKinds: options.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
-        metadataProducers,
+        ...(metadataProducers ? { metadataProducers } : {}),
       });
     } catch (error) {
       if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))
@@ -384,7 +384,12 @@ export function startDiscoveryIndexing(options: {
       }
       if (!relays.has(target.generation)) {
         incarnations.set(target.generation, binding);
-        const projection = createDiscoveryProjection({ ...options, target, registry, metadataProducers });
+        const projection = createDiscoveryProjection({
+          ...options,
+          target,
+          registry,
+          ...(metadataProducers ? { metadataProducers } : {}),
+        });
         if (
           options.reviewSource &&
           registry.ownerAdapters?.review?.readiness === 'ready' &&
