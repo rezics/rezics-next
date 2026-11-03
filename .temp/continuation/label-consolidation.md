@@ -1,61 +1,65 @@
 ---
-{
-  'goal': 'commerce',
-  'manager': 'commerce',
-  'kind': 'implementation',
-  'paths':
-    [
-      'services/kernel/src/library/**',
-      'services/kernel/db/library/**',
-      'services/kernel/test/library/**',
-      'services/kernel/src/http/kernel.ts',
-      'packages/client/src/kernel/library*',
-      'docs/library-and-collections.md',
-      'docs/goals/library.capabilities.md',
-      'docs/library-label-consolidation.md',
-    ],
-  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
-  'criticalPath': false,
-  'waiting': [],
-  'estimate': { 'lines': 2200, 'files': 12 },
-  'after': [],
-}
+goal: commerce
+manager: commerce
+kind: implementation
+paths:
+  - services/kernel/src/library/label-consolidation*
+  - services/kernel/src/library/label-assignment-commands.ts
+  - services/kernel/db/library/**
+  - services/kernel/test/library/label-consolidation*
+  - packages/client/src/kernel/**
+  - docs/library-label-consolidation.md
+  - docs/library-and-collections.md
+  - docs/goals/library.capabilities.md
+riskAreas:
+  - authorization
+  - disclosure
+  - rights
+  - deletion
+  - account
+criticalPath: false
+waiting: []
+estimate:
+  lines: 600
+  files: 5
+after:
+  - 50504ead-c65d-4898-8b51-d433153f0de7
+acceptance:
+  - Complete typed client and Library schema generation through the kernel compiler database.
+  - Run focused native consolidation tests and changed-workspace typechecks under controller policy.
+  - Add complete-caller native64/512/4096 growth coverage with fixed selection and page sizes.
 ---
 
-# Confirm, move and reopen explicitly selected private label assignments
+# Finish delivery and composed growth for selected private label movement
 
-Read docs/library-label-consolidation.md and docs/library-labels.md. The native typed function and HTTP review
-are installed; client declaration regeneration remains pending. Review is pure, caps selection at 16 and pages
-at four, and does not authorize a write. Its advisory selection digest is not immutable confirmation. Extend
-the same Labels interface and native commands rather than introducing another editor, list engine or bulk job.
+Read docs/library-label-consolidation.md and docs/library-labels.md. The retained native composition is in
+services/kernel/src/library/label-consolidation.ts, exact fresh-effect bindings are in
+services/kernel/src/library/label-consolidation-binding.ts, and the original assignment commands remain in
+services/kernel/src/library/label-assignment-commands.ts. Expiry is in
+services/kernel/src/library/label-consolidation-retention.ts, registered by services/kernel/src/library/work-module.ts;
+shared terminal erasure is appended in services/kernel/src/library/erasure-owned-graph.ts. The source methods and
+compact native cases are present; their successful execution and generated transport/schema artifacts remain required.
+Do not infer a passing test or typecheck from the authored source.
 
-Complete the owner journey: capture exact review evidence and stable original per-item operations; explicitly
-confirm immutable bindings; apply native target assign followed only by safely addressed source unassign; retry
-unknown outcomes with original receipts; cancel before new items and expose accepted partial results; reopen both
-labels through native readers to see exactly what moved. Preserve distinct live label IDs, parent revisions,
-assignment incarnations/revisions and current Subject exposure. New review is required after changed evidence.
-Do not enumerate all assignments, use names as identities, delete source first, bypass 32-slot native admission,
-reclaim extra reservations, renew undo or remove the source label. Retained composition needs finite lifetime,
-bounded per-owner admission and native terminal/expiry cleanup. Preserve unselected facts, dynamic query operands,
-import evidence and public snapshots; grant no state, Session, follow, licence or publication.
+Finish the owner journey on verified native source: regenerate the Library schema snapshot and kernel client using
+`bun run --cwd services/kernel typecheck --emit-client --emit-schema=library`, fix every source type or native focused
+failure, then type-check the client workspace if generated declarations change. Run
+`bun run --cwd services/kernel check test/library/label-consolidation.test.ts test/library/label-consolidation-review.test.ts`
+under the current controller policy. Preserve the pure review assertions. Do not bypass migration/source preparation
+or force compiler placement to obtain a nominal pass. Return the generated typed methods to Web's existing Labels
+interface owner using the owner contract's single selection/review/confirm/retry/result/cancel/reopen flow.
 
-Install complete selection/review/confirm/retry/result APIs and typed client. Hand the contract to Web's existing
-Labels interface owner for the one consolidation flow. Update the owner document, Library reference and capability
-inventory with the actual installed boundary.
+Add the remaining composed growth evidence using real native commands at 64/512/4096 unrelated assignments and
+retained/deleted label history, holding S<=16 and P<=4 fixed. Include successful move, existing/negative target,
+capacity refusal, deep/final preview, maximum names, stale incarnation, original replay, lost acknowledgement,
+cancellation and terminal cleanup. Charge complete-caller statements, examined rows/buffers, encoded bytes and effects,
+including nested authority, all locks, original receipts, History/events, export fences, serialization and bounded
+cleanup. Explain accepted, no-effect, rollback, capacity-refusal and replay work from native index predicates; LIMIT
+or the 32 live-label cap must not conceal deleted-parent scans. Reuse the native growth support in
+services/kernel/test/support/growth.ts and existing label growth tests, adding only compact tests needed for the
+remaining outcome. Native setup failure stays failed/unmeasured. Broader acceptance remains deferred to integration.
 
-Acceptance must use real native commands and cover successful selected moves, already-on-target without duplicate
-effects, full32capacity and deleted-label reservations, stale source revision/incarnation, source delete/recreate,
-target rename, changed Subject authority/exposure, target acceptance with lost acknowledgement, original replay
-after partial success, cancellation after one accepted item, original finite undo, another owner and terminal
-erasure. Existing pure-review focused tests are services/kernel/test/library/label-consolidation-review.test.ts.
-Add compact native coverage for the remaining outcome; tests stay fewer lines than product. Do not edit frozen
-files. Run only the landing's focused tests and changed-workspace typechecks under current controller policy.
-
-This journey still owns growth acceptance: native64/512/4096 unrelated assignments and retained/deleted label
-history, with S/P fixed. Exercise successful move, existing/negative target, capacity refusal, deep/final preview,
-maximum names, stale incarnation, original replay, lost acknowledgement, cancellation and terminal cleanup.
-Measure complete-caller statements, rows/buffers, encoded bytes and effects, including nested authority, locks,
-original receipt resolution, History/events, export fences, serialization and bounded cleanup. Explain accepted,
-no-effect, rollback, capacity refusal and original retry work from native index predicates. LIMIT or 32 live
-labels cannot excuse an unindexed deleted-parent scan. Native setup failure remains failed/unmeasured. Broader
-acceptance remains deferred to integration under the current controller policy.
+Keep one finite 15-minute composition per owner, original per-item keys and addressed source CAS. Never renew undo,
+remove source first, reclaim extra reservations or remove the source label. Preserve unselected facts, query operands,
+import evidence and public snapshots. Update the owner reference and capability inventory to reflect the actual
+verified/generated boundary without adding evidence/audit files.
