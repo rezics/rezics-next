@@ -1,31 +1,23 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/media-routes.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/growth-appeal-boundaries.test.ts",
-    "services/kernel/test/content/support/growth-appeal-boundaries-fixture.ts",
-    "packages/client/src/kernel/**",
-    "contracts/openapi.json"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [],
-  "estimate": {
-    "lines": 1100,
-    "files": 6
-  },
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/media-routes.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/growth-appeal-boundaries.test.ts',
+      'services/kernel/test/content/support/growth-appeal-boundaries-fixture.ts',
+      'packages/client/src/kernel/**',
+      'contracts/openapi.json',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 1100, 'files': 6 },
+  'inseparable': true,
 }
 ---
 
