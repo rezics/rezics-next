@@ -143,7 +143,7 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
       },
     };
     await render(creator(read, transport));
-    await waitFor(() => expect(host.querySelector('form')).not.toBeNull());
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
     await input(host.querySelector('input[id="create-label-0"]')!, 'Reviewed expansion');
     await input(host.querySelector('input[id="create-language-0"]')!, 'en');
     await input(host.querySelector('textarea[id="create-aliases-0"]')!, 'Northern lights alternate');
@@ -228,6 +228,7 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
         },
       }),
     );
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
     await input(host.querySelector('input[id="create-label-0"]')!, 'Uncertain expansion');
     await confirm();
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
@@ -253,6 +254,7 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
         },
       }),
     );
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
     await input(host.querySelector('input[id="create-label-0"]')!, 'Unread expansion');
     await confirm();
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
@@ -271,6 +273,7 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     });
     const beforeCreated = created.length;
     await render(creator(retiringRead, { ...retiring.transport, create: () => pending }));
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
     await input(host.querySelector('input[id="create-label-0"]')!, 'Retired expansion');
     await confirm();
     await render(null, false, true);
