@@ -103,10 +103,14 @@ export function parseReleaseSearch(
         if (value.some((tag) => typeof tag !== 'string')) fail(key);
         return [key, value.map(String).join(', ')];
       }
+      // TanStack decodes JSON search values before validateSearch. Preserve that
+      // decoded condition tree instead of treating a reload as a predicate edit.
+      if (key === 'condition' && value !== null && typeof value === 'object') return [key, JSON.stringify(value)];
+      if (key === 'q' && typeof value === 'boolean') return [key, String(value)];
       if (
         typeof value === 'number' &&
         Number.isFinite(value) &&
-        ['q', 'gte', 'lte', 'ageGte', 'ageLte', 'threshold'].includes(key)
+        ['q', 'gte', 'lte', 'ageGte', 'ageLte', 'ageUnit', 'threshold'].includes(key)
       )
         return [key, String(value)];
       if (typeof value !== 'string') fail(key);

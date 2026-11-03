@@ -12,6 +12,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import type { FilterRelease } from '@rezics/filter';
 import { parseReleaseSearch, releaseSearchHref, releaseSearchRequest } from '../src/search/release-search';
 import { ReleaseSearchPage } from '../src/search/release-search-page';
+import { defaultParseSearch } from '@tanstack/react-router';
 
 test('the universal editor preserves precise endpoints instead of rendering numeric year inputs', () => {
   const locale = 'ja';
@@ -210,7 +211,7 @@ test('release URLs round-trip ordered display and same-platform languages, exact
     expect(JSON.stringify(request.filter)).toContain('wdt:P178');
     expect(JSON.stringify(request.filter)).toContain('schema:publisher');
     const nextUrl = new URL(releaseSearchHref(locale, parsed.form, raw.cursor), 'https://example.test');
-    const restored = parseReleaseSearch(Object.fromEntries(nextUrl.searchParams), bundledRelease, locale);
+    const restored = parseReleaseSearch(defaultParseSearch(nextUrl.search), bundledRelease, locale);
     expect(releaseSearchRequest(restored.search, bundledRelease)).toEqual(request);
     expect(new URL(releaseSearchHref(locale, parsed.form), nextUrl).searchParams.has('cursor')).toBe(false);
     const displayOnly = parseReleaseSearch({ subtype: releaseType, language: ['fr', 'ja'] }, bundledRelease, locale);
