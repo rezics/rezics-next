@@ -92,6 +92,13 @@ current route's 200 response; older focused edition tests' 201 expectations are 
 
 ## Execution limits
 
+The native setup prerequisite currently fails with `error: record "new" has no field "scopes"` (PostgreSQL
+`42703`) in Auth's `auth_kind_consent_writer_guard()`, PL/pgSQL line 88. Its client-configuration condition
+references `NEW.scopes` while the trigger's current record has no such field. The failure is inside the unchanged
+native Auth composition, before Content resources or growth captures exist. Repair belongs to that Auth guard's
+owner; this acceptance must not replace registration, consent or grants to get past it. All four scenarios stop
+in setup, so no operation assertion or growth verdict has been reached.
+
 These are authored acceptance assertions and source reasoning, not measurements. No assertion result or growth
 verdict is claimed by this document. Test output emits the shared report with native metrics/statement attribution,
 axis footprints, and separate raw native command/replay/refusal/rollback captures if execution reaches them.
