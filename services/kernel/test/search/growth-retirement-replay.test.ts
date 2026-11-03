@@ -33,7 +33,7 @@ const pathPrefix: Record<Path, string> = {
 };
 
 let db: GrowthDatabase | undefined;
-let neighborSnapshot: readonly { partition_no: number; consumer: string; epoch: number; position: string }[] = [];
+let neighborSnapshot: { partition_no: number; consumer: string; epoch: number; position: string }[] = [];
 
 function checkpoint(partition: number, consumer: string, position: number) {
   return { partition_no: partition, consumer, epoch: 1, position };
