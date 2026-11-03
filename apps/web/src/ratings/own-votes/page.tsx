@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
-import type { OwnVoteEntry, OwnVotesPage } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry, OwnVotesPage } from './types';
 import { executeOwnVoteIntent, voteReadbackForIntent, type OwnVotesRead } from './actions';
 import { useOwnVotesCurrentOrigin } from './current-origin';
 import { OwnVotesDeparture } from './departure';

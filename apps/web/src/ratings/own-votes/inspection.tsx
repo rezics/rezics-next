@@ -1,6 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { Link } from '@tanstack/react-router';
-import type { OwnVoteEntry } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry } from './types';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { ownVoteChangedAt, ownVoteScale, ownVoteValue, ownVoteSubjectLabel } from './presentation';

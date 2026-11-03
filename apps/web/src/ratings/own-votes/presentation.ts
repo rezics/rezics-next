@@ -1,4 +1,4 @@
-import type { OwnVoteEntry } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry } from './types';
 import { m } from '../../paraglide/messages.js';
 
 export function ownVoteValue(entry: OwnVoteEntry, locale: string): string {

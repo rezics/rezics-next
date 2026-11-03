@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
-import type { OwnVoteEntry } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry } from './types';
 import { m } from '../../paraglide/messages.js';
 import { ownVoteChangedAt, ownVoteScale, ownVoteValue } from './presentation';
 import { isAdmittedVoteAction } from './intent';

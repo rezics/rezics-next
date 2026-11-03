@@ -1,4 +1,4 @@
-import type { OwnVoteEntry, OwnVotesPage } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry, OwnVotesPage } from './types';
 
 export const OWN_VOTES_OPERATION = 'rating.own_votes_page' as const;
 export const OWN_VOTES_SOURCE = 'rating.own_votes_page/v1' as const;

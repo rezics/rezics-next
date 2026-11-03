@@ -15,10 +15,9 @@ export function useOwnVotesReturn(
   latest.current = { isCurrent, refresh, restoreFocus };
 
   useEffect(() => {
-    const stop = router?.subscribe('onBeforeNavigate', ({ currentLocation, toLocation }) => {
-      const from = currentLocation.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '');
+    const stop = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
       const to = toLocation.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '');
-      if (from === '/library/ratings' && to !== '/library/ratings') refreshWhenRatingsReturns = true;
+      if (to !== '/library/ratings') refreshWhenRatingsReturns = true;
     });
     return () => stop?.();
   }, [router]);

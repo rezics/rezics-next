@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useRef, useState } from 'react';
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteEntry, OwnVotesPage } from '../ratings/own-votes/types';
 import { locales, setLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { OwnVotesWorkspace } from '../ratings/own-votes/page';

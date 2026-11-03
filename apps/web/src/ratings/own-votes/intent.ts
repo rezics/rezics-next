@@ -1,4 +1,4 @@
-import type { OwnVoteActions, OwnVoteEntry } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVoteActions, OwnVoteEntry } from './types';
 import { votePairKey } from './inventory';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

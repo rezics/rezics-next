@@ -10,7 +10,7 @@ import {
 } from '../../library/history-current-origin';
 import { personalRead } from '../../kernel/query';
 import { readOwnVotesForViewer, type OwnVotesRead } from './actions';
-import type { OwnVotesPage } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVotesPage } from './types';
 import { OWN_VOTES_OPERATION, OWN_VOTES_SOURCE } from './inventory';
 
 const operations = [OWN_VOTES_OPERATION] as const;
@@ -167,7 +167,7 @@ export function useOwnVotesCurrentOrigin(
           currentRead?.state === 'ready' && currentRead.page === page
             ? { ...currentRead, page: update(currentRead.page) }
             : currentRead,
-        { updatedAt },
+        updatedAt === undefined ? undefined : { updatedAt },
       );
     },
   };

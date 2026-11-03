@@ -3,7 +3,7 @@ import { Value } from '@sinclair/typebox/value';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { OwnVoteActionsSchema, OwnVotesPageSchema } from '../../../../../services/kernel/src/rating/own-votes-schemas.ts';
-import type { OwnVotesPage } from '../../../../../services/kernel/src/rating/own-votes-page.ts';
+import type { OwnVotesPage } from './types';
 import { requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
@@ -40,6 +40,14 @@ function readInput(value: unknown): { cursor: string | null; valid: boolean } {
   return { cursor: address.valid ? address.cursor : null, valid: address.valid };
 }
 
+function isOwnVotesPage(value: unknown): value is OwnVotesPage {
+  return Value.Check(OwnVotesPageSchema, value);
+}
+
+function isReadbackAction(value: unknown): value is 'PUT' | 'DELETE' | 'REVIEW' {
+  return value === 'PUT' || value === 'DELETE' || value === 'REVIEW';
+}
+
 function commandInput(value: unknown): OwnVoteIntent {
   const intent = parseOwnVoteIntent(value);
   if (!intent) throw new Error('This rating command is no longer current. Review the page before trying again.');
@@ -48,21 +56,24 @@ function commandInput(value: unknown): OwnVoteIntent {
 
 function createNativeTransport(origin: string, authorization: string, fetcher: typeof fetch = globalThis.fetch) {
   let sessionToken: string | null = null;
-  const transport: typeof fetch = async (input, init) => {
-    const headers = new Headers(init?.headers);
-    headers.set('authorization', authorization);
-    if (sessionToken !== null) headers.set(SESSION_HEADER, sessionToken);
-    const response = await fetcher(input, {
-      ...init,
-      headers,
-      cache: 'no-store',
-      credentials: 'omit',
-      redirect: 'manual',
-    });
-    const next = response.headers.get(SESSION_HEADER);
-    if (next !== null) sessionToken = next;
-    return response;
-  };
+  const transport: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const headers = new Headers(init?.headers);
+      headers.set('authorization', authorization);
+      if (sessionToken !== null) headers.set(SESSION_HEADER, sessionToken);
+      const response = await fetcher(input, {
+        ...init,
+        headers,
+        cache: 'no-store',
+        credentials: 'omit',
+        redirect: 'manual',
+      });
+      const next = response.headers.get(SESSION_HEADER);
+      if (next !== null) sessionToken = next;
+      return response;
+    },
+    { preconnect: fetcher.preconnect.bind(fetcher) },
+  );
   return { transport, client: createKernelClient(origin, { fetch: transport }) };
 }
 
@@ -104,7 +115,7 @@ async function readPage(address: { cursor: string | null; valid: boolean }): Pro
     if (response.status !== 200) return emptyRead('unavailable', subject, address.cursor, locale);
     const value: unknown = await response.json();
     if (
-      !Value.Check(OwnVotesPageSchema, value) ||
+      !isOwnVotesPage(value) ||
       value.viewer.accountId !== subject ||
       !ownVotesCursor(value.next).valid
     )
@@ -227,7 +238,7 @@ export const reviewOwnVoteIntent = createServerFn({ method: 'GET' })
       throw new Error('Invalid rating review');
     const intent = parseOwnVoteIntent(value.intent);
     const after = value.after;
-    if (!intent || (after !== 'PUT' && after !== 'DELETE' && after !== 'REVIEW'))
+    if (!intent || !isReadbackAction(after))
       throw new Error('Invalid rating review');
     return { intent, after };
   })
