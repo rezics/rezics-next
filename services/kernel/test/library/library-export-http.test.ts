@@ -16,7 +16,7 @@ import { parseAniList } from '../../src/library/list-import-anilist-parser.ts';
 import { readExportSourcePage, initialExportSeek } from '../../src/library/library-export-source.ts';
 import { exportSectionsV3 } from '../../src/library/library-export-format.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
-import { exportSections, libraryExportManifest } from '../../src/library/library-export-format.ts';
+import { exportSections, exportSectionsV2, libraryExportManifest } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -164,7 +164,7 @@ beforeAll(async () => {
       Array.from(
         { length: 35 },
         (_, i) =>
-          `<vn id="v${i + 1}"><vote>0</vote><started>2004-02-00</started><progress>0</progress><label>Unfamiliar</label><secret>never-export-xml-secret</secret></vn>`,
+          `<vn id="v${i + 1}"><vote>${i === 0 ? '7.5' : '0'}</vote><started>2004-02-00</started><progress>0</progress><label>Unfamiliar</label><secret>never-export-xml-secret</secret></vn>`,
       ).join('') +
       '</vns></vndb-export>',
   );
@@ -229,7 +229,8 @@ test('native owner export streams independent persisted facts, preserves dates, 
     evidence: {
       identifier: { provider: 'vndb', value: 'v1' },
       fields: {
-        score: { kind: 'invalid', raw: '0' },
+        score: { kind: 'value', raw: '7.5', value: 7.5, scale: { min: 1, max: 10, step: 0.1 } },
+        finished: { kind: 'missing', raw: null },
         started: { value: '2004-02', precision: 'month' },
         progress: { raw: '0' },
       },
@@ -296,6 +297,30 @@ test('native owner export streams independent persisted facts, preserves dates, 
     rows: archiveRecords.length,
     recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
   };
+  const v2Records = records.filter((record) => exportSectionsV2.includes(record.section));
+  const v2Manifest = {
+    ...libraryExportManifest({
+      export_id: id,
+      created_at: final.manifest.capturedAt,
+      expires_at: final.manifest.expiresAt,
+      format_version: 2,
+    }),
+    fullExport: false,
+    rows: v2Records.length,
+    recordBytes: v2Records.reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r)), 0),
+    sectionTotals: Object.fromEntries(
+      exportSectionsV2.map((section) => {
+        const rows = v2Records.filter((r) => r.section === section);
+        return [
+          section,
+          { rows: rows.length, recordBytes: rows.reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r)), 0) },
+        ];
+      }),
+    ),
+  };
+  expect(
+    decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: v2Manifest, records: v2Records }))).manifest.version,
+  ).toBe(2);
   const decoded = decodeLibraryArchive(
     Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })),
   );
@@ -688,96 +713,7 @@ test('provider encoded-row limits include nested evidence and escaped UTF-8', as
   expect(page).toMatchObject({ records: [], oversized: true });
 });
 
-test('cancellation, changed revisions, expiry and terminal deletion never yield success artifacts', async () => {
-  const aborted = new AbortController();
-  aborted.abort();
-  const abortKey = randomUUID();
-  const beforeExport =
-    await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`;
-  const beforeReceipts = await sql`SELECT count(*)::int AS count FROM core.receipt
-    WHERE principal_id=${owner} AND command_kind='library.export.capture'`;
-  const beforeEvents = await sql`SELECT count(*)::int AS count FROM core.outbox
-    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`;
-  const cancelledRequest = await request('POST', '/v1/libraryExports', 'owner', abortKey, aborted.signal).catch(
-    () => null,
-  );
-  expect(cancelledRequest === null || cancelledRequest.status >= 400 || (await cancelledRequest.text()) === '').toBe(
-    true,
-  );
-  expect(
-    (
-      await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`
-    ).rows,
-  ).toEqual(beforeExport.rows);
-  expect(
-    (
-      await sql`SELECT count(*)::int AS count FROM core.receipt
-    WHERE principal_id=${owner} AND command_kind='library.export.capture'`
-    ).rows,
-  ).toEqual(beforeReceipts.rows);
-  expect(
-    (
-      await sql`SELECT count(*)::int AS count FROM core.outbox
-    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`
-    ).rows,
-  ).toEqual(beforeEvents.rows);
-  const cancelled = await capture();
-  const path = `/v1/libraryExports/${cancelled.exportId}`;
-  expect((await request('GET', `${path}/pages?cursor=forged`)).status).toBe(400);
-  await json(await request('DELETE', path));
-  const cancelledPage = await get(`${path}/pages?cursor=${encodeURIComponent(cancelled.first)}`);
-  expect(cancelledPage).toMatchObject({ state: 'cancelled', records: [], next: null, manifest: null });
-  const newer = await capture();
-  expect((await request('POST', '/v1/libraryExports', 'owner', randomUUID())).status).toBe(409);
-  const newerPath = `/v1/libraryExports/${newer.exportId}`;
-  expect((await request('GET', `${newerPath}/pages?cursor=${encodeURIComponent(cancelled.first)}`)).status).toBe(400);
-  await sql`UPDATE library.entry SET revision=revision+1 WHERE route=${route} AND account_id=${owner} AND subject_id=${subjectIds[0]}`;
-  expect((await get(newerPath)).state).toBe('stale');
-  const expiring = await capture();
-  now += 15 * 60_000;
-  expect((await get(`/v1/libraryExports/${expiring.exportId}`)).state).toBe('expired');
-  now = Date.now();
-  await sql`UPDATE library.library_export SET state='expired' WHERE route=${route} AND account_id=${owner}`;
-  const terminal = await capture();
-  const access = fixture.access({ actions: LIFECYCLE_ACTIONS });
-  const actor = await access.authenticate(fixture.bearer('owner'), { pool: db.pool, deadline: Date.now() + 10000 });
-  await fixture.grant({ route, id: owner }, 'owner', 'account:delete');
-  await createLifecycleCommands({ pool: db.pool, access }).tombstone(
-    { actor, deadline: Date.now() + 10000 },
-    { accountId: owner, key: randomUUID() },
-  );
-  const response = await request(
-    'GET',
-    `/v1/libraryExports/${terminal.exportId}/pages?cursor=${encodeURIComponent(terminal.first)}`,
-  );
-  expect([401, 403]).toContain(response.status);
-  await purge(db.pool, { accountId: owner, kind: 'library_export', parent: null, after: null, ordinal: 0, segment: 0 });
-  expect((await sql`SELECT 1 FROM library.library_export WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(
-    0,
-  );
-  await purge(db.pool, {
-    accountId: owner,
-    kind: 'collection_archive_recovery',
-    parent: null,
-    after: null,
-    ordinal: 0,
-    segment: 0,
-  });
-  expect(
-    (
-      await sql`SELECT 1 FROM library.collection_archive_recovery
-    WHERE route=${route} AND account_id=${owner}`
-    ).rowCount,
-  ).toBe(0);
-  expect(
-    (
-      await sql`SELECT 1 FROM library.collection_archive_recovery_record
-    WHERE route=${route} AND account_id=${owner}`
-    ).rowCount,
-  ).toBe(0);
-});
-
-test('version 3 streams annotations, provenance and addressed journals with occurrence assessments', async () => {
+test('version 3 streams annotations, accepted provenance and addressed live journals as independent facts', async () => {
   const annotationSubject = subjectIds[16]!;
   const provenanceSubject = subjectIds[15]!;
   const annotationWrite = await command('PUT', `/v1/libraryEntries/${annotationSubject}/annotations`, {
@@ -921,4 +857,93 @@ test('version 3 streams annotations, provenance and addressed journals with occu
     state: 'stale',
   });
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], next: null, manifest: null });
+});
+
+test('cancellation, changed revisions, expiry and terminal deletion never yield success artifacts', async () => {
+  const aborted = new AbortController();
+  aborted.abort();
+  const abortKey = randomUUID();
+  const beforeExport =
+    await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`;
+  const beforeReceipts = await sql`SELECT count(*)::int AS count FROM core.receipt
+    WHERE principal_id=${owner} AND command_kind='library.export.capture'`;
+  const beforeEvents = await sql`SELECT count(*)::int AS count FROM core.outbox
+    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`;
+  const cancelledRequest = await request('POST', '/v1/libraryExports', 'owner', abortKey, aborted.signal).catch(
+    () => null,
+  );
+  expect(cancelledRequest === null || cancelledRequest.status >= 400 || (await cancelledRequest.text()) === '').toBe(
+    true,
+  );
+  expect(
+    (
+      await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`
+    ).rows,
+  ).toEqual(beforeExport.rows);
+  expect(
+    (
+      await sql`SELECT count(*)::int AS count FROM core.receipt
+    WHERE principal_id=${owner} AND command_kind='library.export.capture'`
+    ).rows,
+  ).toEqual(beforeReceipts.rows);
+  expect(
+    (
+      await sql`SELECT count(*)::int AS count FROM core.outbox
+    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`
+    ).rows,
+  ).toEqual(beforeEvents.rows);
+  const cancelled = await capture();
+  const path = `/v1/libraryExports/${cancelled.exportId}`;
+  expect((await request('GET', `${path}/pages?cursor=forged`)).status).toBe(400);
+  await json(await request('DELETE', path));
+  const cancelledPage = await get(`${path}/pages?cursor=${encodeURIComponent(cancelled.first)}`);
+  expect(cancelledPage).toMatchObject({ state: 'cancelled', records: [], next: null, manifest: null });
+  const newer = await capture();
+  expect((await request('POST', '/v1/libraryExports', 'owner', randomUUID())).status).toBe(409);
+  const newerPath = `/v1/libraryExports/${newer.exportId}`;
+  expect((await request('GET', `${newerPath}/pages?cursor=${encodeURIComponent(cancelled.first)}`)).status).toBe(400);
+  await sql`UPDATE library.entry SET revision=revision+1 WHERE route=${route} AND account_id=${owner} AND subject_id=${subjectIds[0]}`;
+  expect((await get(newerPath)).state).toBe('stale');
+  const expiring = await capture();
+  now += 15 * 60_000;
+  expect((await get(`/v1/libraryExports/${expiring.exportId}`)).state).toBe('expired');
+  now = Date.now();
+  await sql`UPDATE library.library_export SET state='expired' WHERE route=${route} AND account_id=${owner}`;
+  const terminal = await capture();
+  const access = fixture.access({ actions: LIFECYCLE_ACTIONS });
+  const actor = await access.authenticate(fixture.bearer('owner'), { pool: db.pool, deadline: Date.now() + 10000 });
+  await fixture.grant({ route, id: owner }, 'owner', 'account:delete');
+  await createLifecycleCommands({ pool: db.pool, access }).tombstone(
+    { actor, deadline: Date.now() + 10000 },
+    { accountId: owner, key: randomUUID() },
+  );
+  const response = await request(
+    'GET',
+    `/v1/libraryExports/${terminal.exportId}/pages?cursor=${encodeURIComponent(terminal.first)}`,
+  );
+  expect([401, 403]).toContain(response.status);
+  await purge(db.pool, { accountId: owner, kind: 'library_export', parent: null, after: null, ordinal: 0, segment: 0 });
+  expect((await sql`SELECT 1 FROM library.library_export WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(
+    0,
+  );
+  await purge(db.pool, {
+    accountId: owner,
+    kind: 'collection_archive_recovery',
+    parent: null,
+    after: null,
+    ordinal: 0,
+    segment: 0,
+  });
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery
+    WHERE route=${route} AND account_id=${owner}`
+    ).rowCount,
+  ).toBe(0);
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery_record
+    WHERE route=${route} AND account_id=${owner}`
+    ).rowCount,
+  ).toBe(0);
 });
