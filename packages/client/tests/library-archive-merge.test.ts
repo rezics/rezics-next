@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, expectTypeOf, test } from 'bun:test';
 import { createKernelClient } from '../src/index.ts';
 
 test.each(['text', 'envelope'])('generated archive methods carry the %s body and exact reviewed revision', async (format) => {
@@ -18,10 +18,16 @@ test.each(['text', 'envelope'])('generated archive methods carry the %s body and
     }, { preconnect: fetch.preconnect }),
   });
   const archive = { manifest: { version: 2 }, records: [{ section: 'labels', normalized_name: 'chosen' }] };
+  expectTypeOf<Parameters<typeof client.libraryArchiveMerges.post>[0]>().toEqualTypeOf<
+    string | { manifest: Record<string, unknown>; records: Record<string, unknown>[] }
+  >();
   const raw = JSON.stringify(archive, null, 2);
   const upload = await client.libraryArchiveMerges.post(format === 'text' ? raw : archive, { headers: { 'idempotency-key': 'upload-reviewed-archive' } });
   if (!upload.data) throw new Error('upload unavailable');
   const owner = client.libraryArchiveMerges({ id: upload.data.uploadId });
+  expectTypeOf<Parameters<typeof owner.apply.post>[0]>().toEqualTypeOf<{
+    items: { ordinal: number; reviewRevision: number }[];
+  }>();
   const preview = await owner.preview.get({ query: { limit: 1 } });
   const row = preview.data?.records[0];
   if (!row) throw new Error('preview unavailable');
@@ -32,6 +38,8 @@ test.each(['text', 'envelope'])('generated archive methods carry the %s body and
   const applied = await owner.apply.post({ items });
   expect(applied.data?.applied[0]?.status).toBe('acknowledged');
   expect(row.reviewRevision).toBe(1);
+  expect(row.ordinal).toBe(0);
   expect(requests[0]?.body).toBe(format === 'text' ? raw : JSON.stringify(archive));
+  expect(requests[1]?.path).toBe(`/v1/libraryArchiveMerges/${id}/preview`);
   expect(requests[3]).toEqual({ method: 'POST', path: `/v1/libraryArchiveMerges/${id}/apply`, body: JSON.stringify({ items }) });
 });
