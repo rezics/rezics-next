@@ -19,6 +19,7 @@ export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { setupPresentation } from './presentation/setup.ts';
 import { createRatedSubjectSource } from './search/rated-source.ts';
+import { createRealmRatingNativeSource } from './search/realm-rating-native.ts';
 import { setupSemantic } from './semantic/setup.ts';
 import { setupContent } from './content/setup.ts';
 import { createOpenSearch } from './search/opensearch.ts';
@@ -292,6 +293,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               prefix: searchConfig.prefix,
               source: rated.source,
               ratings: rated.ratings,
+              realmRatings: createRealmRatingNativeSource(),
               cursors: config.tokens,
               clock: defaults.clock,
               publicFilters: () => {
