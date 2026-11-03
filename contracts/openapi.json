@@ -130829,6 +130829,157 @@
                             "fields"
                           ],
                           "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "action": {
+                              "const": "admit",
+                              "type": "string"
+                            },
+                            "fields": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "privacy": {
+                                  "enum": [
+                                    "set",
+                                    "clear"
+                                  ],
+                                  "type": "string"
+                                },
+                                "sourceCreated": {
+                                  "enum": [
+                                    "set",
+                                    "clear"
+                                  ],
+                                  "type": "string"
+                                },
+                                "sourceUpdated": {
+                                  "enum": [
+                                    "set",
+                                    "clear"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "privacy",
+                                "sourceCreated",
+                                "sourceUpdated"
+                              ],
+                              "type": "object"
+                            },
+                            "kind": {
+                              "const": "observation",
+                              "type": "string"
+                            },
+                            "ordinal": {
+                              "maximum": 99999,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "provider": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "recordId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "subjectId": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ordinal",
+                            "kind",
+                            "subjectId",
+                            "provider",
+                            "recordId",
+                            "action",
+                            "fields"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "action": {
+                              "const": "correct",
+                              "type": "string"
+                            },
+                            "fields": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "privacy": {
+                                  "enum": [
+                                    "preserve",
+                                    "set",
+                                    "clear"
+                                  ],
+                                  "type": "string"
+                                },
+                                "sourceCreated": {
+                                  "enum": [
+                                    "preserve",
+                                    "set",
+                                    "clear"
+                                  ],
+                                  "type": "string"
+                                },
+                                "sourceUpdated": {
+                                  "enum": [
+                                    "preserve",
+                                    "set",
+                                    "clear"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [],
+                              "type": "object"
+                            },
+                            "kind": {
+                              "const": "observation",
+                              "type": "string"
+                            },
+                            "ordinal": {
+                              "maximum": 99999,
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "provider": {
+                              "maxLength": 64,
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "recordId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "revision": {
+                              "maximum": 2147483646,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "subjectId": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ordinal",
+                            "kind",
+                            "subjectId",
+                            "provider",
+                            "recordId",
+                            "action",
+                            "revision",
+                            "fields"
+                          ],
+                          "type": "object"
                         }
                       ]
                     },
@@ -410479,6 +410630,188 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "descriptions": {
+                                    "patternProperties": {
+                                      "^.*$": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "facts": {
+                                    "maxProperties": 4,
+                                    "patternProperties": {
+                                      "^.*$": {
+                                        "items": {
+                                          "anyOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "id": {
+                                                  "format": "uuid",
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "const": "item",
+                                                  "type": "string"
+                                                },
+                                                "labels": {
+                                                  "patternProperties": {
+                                                    "^.*$": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "id",
+                                                "labels"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "day": {
+                                                  "type": "integer"
+                                                },
+                                                "kind": {
+                                                  "const": "time",
+                                                  "type": "string"
+                                                },
+                                                "month": {
+                                                  "type": "integer"
+                                                },
+                                                "year": {
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "year"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "amount": {
+                                                  "type": "number"
+                                                },
+                                                "kind": {
+                                                  "const": "quantity",
+                                                  "type": "string"
+                                                },
+                                                "unit": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "amount",
+                                                "unit"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "kind": {
+                                                  "const": "code",
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "value"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "maxItems": 3,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "type": "object"
+                                  },
+                                  "figure": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "count": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "mean": {
+                                        "maximum": 10,
+                                        "minimum": 0,
+                                        "type": [
+                                          "number",
+                                          "null"
+                                        ]
+                                      },
+                                      "populationId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "questionId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "scale": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "displayStep": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "max": {
+                                            "type": "integer"
+                                          },
+                                          "min": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "min",
+                                          "max",
+                                          "displayStep"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "score": {
+                                        "maximum": 10,
+                                        "minimum": 0,
+                                        "type": [
+                                          "number",
+                                          "null"
+                                        ]
+                                      },
+                                      "state": {
+                                        "enum": [
+                                          "ready",
+                                          "insufficient_data",
+                                          "updating"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "questionId",
+                                      "populationId",
+                                      "scale",
+                                      "count",
+                                      "state",
+                                      "mean",
+                                      "score"
+                                    ],
+                                    "type": "object"
+                                  },
                                   "key": {
                                     "additionalProperties": false,
                                     "properties": {
@@ -410513,6 +410846,31 @@
                                         "type": "string"
                                       }
                                     },
+                                    "type": "object"
+                                  },
+                                  "listPresentation": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "imageAspect": {
+                                        "enum": [
+                                          "portrait",
+                                          "landscape",
+                                          "square"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "keyFacts": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 4,
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "imageAspect",
+                                      "keyFacts"
+                                    ],
                                     "type": "object"
                                   },
                                   "summary": {
@@ -410974,6 +411332,459 @@
                                       "value": {
                                         "additionalProperties": false,
                                         "properties": {
+                                          "card": {
+                                            "anyOf": [
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "cover": {
+                                                    "anyOf": [
+                                                      {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "credit": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "license": {
+                                                                "type": "string"
+                                                              },
+                                                              "obligations": {
+                                                                "items": {
+                                                                  "type": "string"
+                                                                },
+                                                                "type": "array"
+                                                              },
+                                                              "rightsHolder": {
+                                                                "type": "string"
+                                                              },
+                                                              "via": {
+                                                                "additionalProperties": false,
+                                                                "properties": {
+                                                                  "name": {
+                                                                    "type": "string"
+                                                                  },
+                                                                  "url": {
+                                                                    "type": "string"
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "name",
+                                                                  "url"
+                                                                ],
+                                                                "type": "object"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "rightsHolder",
+                                                              "via",
+                                                              "license",
+                                                              "obligations"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "focalPoint": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "x": {
+                                                                "type": "number"
+                                                              },
+                                                              "y": {
+                                                                "type": "number"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "x",
+                                                              "y"
+                                                            ],
+                                                            "type": [
+                                                              "object",
+                                                              "null"
+                                                            ]
+                                                          },
+                                                          "height": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          },
+                                                          "media": {
+                                                            "format": "uuid",
+                                                            "type": "string"
+                                                          },
+                                                          "placeholder": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "color": {
+                                                                "type": "string"
+                                                              },
+                                                              "thumbhash": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "thumbhash",
+                                                              "color"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "variants": {
+                                                            "items": {
+                                                              "additionalProperties": false,
+                                                              "properties": {
+                                                                "format": {
+                                                                  "enum": [
+                                                                    "avif",
+                                                                    "webp"
+                                                                  ],
+                                                                  "type": "string"
+                                                                },
+                                                                "width": {
+                                                                  "minimum": 1,
+                                                                  "type": "integer"
+                                                                }
+                                                              },
+                                                              "required": [
+                                                                "format",
+                                                                "width"
+                                                              ],
+                                                              "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                          },
+                                                          "width": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "media",
+                                                          "width",
+                                                          "height",
+                                                          "placeholder",
+                                                          "variants",
+                                                          "focalPoint",
+                                                          "credit"
+                                                        ],
+                                                        "type": [
+                                                          "object",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "coverSource": {
+                                                    "enum": [
+                                                      "owner",
+                                                      "member",
+                                                      "none",
+                                                      "pending"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "createdAt": {
+                                                    "format": "date-time",
+                                                    "type": "string"
+                                                  },
+                                                  "description": {
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "destination": {
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "kind": {
+                                                    "const": "collection",
+                                                    "type": "string"
+                                                  },
+                                                  "memberCount": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "membershipKind": {
+                                                    "const": "curated",
+                                                    "type": "string"
+                                                  },
+                                                  "orderEpoch": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "presentationKind": {
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "presentationKindSource": {
+                                                    "enum": [
+                                                      "mixed",
+                                                      "owner"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "title": {
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "updatedAt": {
+                                                    "format": "date-time",
+                                                    "type": "string"
+                                                  },
+                                                  "visibility": {
+                                                    "const": "public",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "kind",
+                                                  "id",
+                                                  "destination",
+                                                  "title",
+                                                  "description",
+                                                  "visibility",
+                                                  "revision",
+                                                  "presentationKind",
+                                                  "presentationKindSource",
+                                                  "cover",
+                                                  "coverSource",
+                                                  "membershipKind",
+                                                  "memberCount",
+                                                  "orderEpoch",
+                                                  "createdAt",
+                                                  "updatedAt"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "cover": {
+                                                    "anyOf": [
+                                                      {
+                                                        "additionalProperties": false,
+                                                        "properties": {
+                                                          "credit": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "license": {
+                                                                "type": "string"
+                                                              },
+                                                              "obligations": {
+                                                                "items": {
+                                                                  "type": "string"
+                                                                },
+                                                                "type": "array"
+                                                              },
+                                                              "rightsHolder": {
+                                                                "type": "string"
+                                                              },
+                                                              "via": {
+                                                                "additionalProperties": false,
+                                                                "properties": {
+                                                                  "name": {
+                                                                    "type": "string"
+                                                                  },
+                                                                  "url": {
+                                                                    "type": "string"
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "name",
+                                                                  "url"
+                                                                ],
+                                                                "type": "object"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "rightsHolder",
+                                                              "via",
+                                                              "license",
+                                                              "obligations"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "focalPoint": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "x": {
+                                                                "type": "number"
+                                                              },
+                                                              "y": {
+                                                                "type": "number"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "x",
+                                                              "y"
+                                                            ],
+                                                            "type": [
+                                                              "object",
+                                                              "null"
+                                                            ]
+                                                          },
+                                                          "height": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          },
+                                                          "media": {
+                                                            "format": "uuid",
+                                                            "type": "string"
+                                                          },
+                                                          "placeholder": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "color": {
+                                                                "type": "string"
+                                                              },
+                                                              "thumbhash": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "thumbhash",
+                                                              "color"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "variants": {
+                                                            "items": {
+                                                              "additionalProperties": false,
+                                                              "properties": {
+                                                                "format": {
+                                                                  "enum": [
+                                                                    "avif",
+                                                                    "webp"
+                                                                  ],
+                                                                  "type": "string"
+                                                                },
+                                                                "width": {
+                                                                  "minimum": 1,
+                                                                  "type": "integer"
+                                                                }
+                                                              },
+                                                              "required": [
+                                                                "format",
+                                                                "width"
+                                                              ],
+                                                              "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                          },
+                                                          "width": {
+                                                            "minimum": 1,
+                                                            "type": "integer"
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "media",
+                                                          "width",
+                                                          "height",
+                                                          "placeholder",
+                                                          "variants",
+                                                          "focalPoint",
+                                                          "credit"
+                                                        ],
+                                                        "type": [
+                                                          "object",
+                                                          "null"
+                                                        ]
+                                                      },
+                                                      {
+                                                        "type": "null"
+                                                      }
+                                                    ]
+                                                  },
+                                                  "coverSource": {
+                                                    "enum": [
+                                                      "owner",
+                                                      "member",
+                                                      "none",
+                                                      "pending"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "description": {
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "destination": {
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "kind": {
+                                                    "const": "collection",
+                                                    "type": "string"
+                                                  },
+                                                  "membershipKind": {
+                                                    "const": "dynamic",
+                                                    "type": "string"
+                                                  },
+                                                  "outputGeneration": {
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "presentationKind": {
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "presentationKindSource": {
+                                                    "enum": [
+                                                      "mixed",
+                                                      "owner"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "minimum": 0,
+                                                    "type": "integer"
+                                                  },
+                                                  "title": {
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "visibility": {
+                                                    "const": "public",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "kind",
+                                                  "id",
+                                                  "destination",
+                                                  "title",
+                                                  "description",
+                                                  "visibility",
+                                                  "revision",
+                                                  "presentationKind",
+                                                  "presentationKindSource",
+                                                  "cover",
+                                                  "coverSource",
+                                                  "membershipKind",
+                                                  "outputGeneration"
+                                                ],
+                                                "type": "object"
+                                              }
+                                            ]
+                                          },
                                           "description": {
                                             "type": [
                                               "string",
@@ -410992,7 +411803,8 @@
                                         "required": [
                                           "id",
                                           "title",
-                                          "description"
+                                          "description",
+                                          "card"
                                         ],
                                         "type": "object"
                                       }
@@ -411363,6 +412175,276 @@
                           "type": [
                             "string",
                             "null"
+                          ]
+                        },
+                        "viewerFacts": {
+                          "anyOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "question": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "grain": {
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "format": "uuid",
+                                      "type": "string"
+                                    },
+                                    "meaning": {
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "scale": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "displayStep": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "max": {
+                                          "type": "integer"
+                                        },
+                                        "min": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "min",
+                                        "max",
+                                        "displayStep"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "revision",
+                                    "grain",
+                                    "scale",
+                                    "meaning"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "rows": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "entry": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "entryState": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "incarnationId": {
+                                                "format": "uuid",
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "revision": {
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              },
+                                              "state": {
+                                                "const": "present",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "incarnationId",
+                                              "entryState",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "absent",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "reason": {
+                                                "const": "scope",
+                                                "type": "string"
+                                              },
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "reason"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      "rowKey": {
+                                        "type": "string"
+                                      },
+                                      "subjectId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "vote": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "questionId": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "questionRevision": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "revision": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "state": {
+                                                "const": "present",
+                                                "type": "string"
+                                              },
+                                              "units": {
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "questionId",
+                                              "questionRevision",
+                                              "units",
+                                              "revision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "questionId": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "questionRevision": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "state": {
+                                                "const": "absent",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "questionId",
+                                              "questionRevision"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "reason": {
+                                                "enum": [
+                                                  "scope",
+                                                  "question"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "state": {
+                                                "const": "unavailable",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "reason"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "rowKey",
+                                      "subjectId",
+                                      "entry",
+                                      "vote"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 100,
+                                  "type": "array"
+                                },
+                                "state": {
+                                  "const": "current",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "question",
+                                "rows"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "reason": {
+                                  "enum": [
+                                    "identity",
+                                    "currentness",
+                                    "response_limit"
+                                  ],
+                                  "type": "string"
+                                },
+                                "retryable": {
+                                  "type": "boolean"
+                                },
+                                "state": {
+                                  "const": "unavailable",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "reason",
+                                "retryable"
+                              ],
+                              "type": "object"
+                            }
                           ]
                         }
                       },
