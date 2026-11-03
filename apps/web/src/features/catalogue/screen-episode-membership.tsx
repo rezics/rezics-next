@@ -11,14 +11,36 @@ import { EditorFailure } from './statement-editor-view';
 import { RelationEditor } from './relation-editor';
 import type { RelationTransport } from '../../subject/relation-candidates';
 import {
+  episodeJourneyFromCreate,
   episodeMembershipAdmission,
   episodeMembershipProperty,
+  episodeType,
+  locateCreatedChild,
   markEpisodeLinked,
+  membershipCreateStatement,
+  screenSeriesId,
+  seriesEpisodeEntry,
   seriesPartsHref,
+  seriesUuid,
   type EpisodeJourney,
   type MembershipDraft,
-} from './screen-episode-membership';
+} from './screen-episode-membership.ts';
 import type { ScreenRead } from './screen-profile';
+
+export {
+  episodeJourneyFromCreate,
+  episodeMembershipAdmission,
+  episodeMembershipProperty,
+  episodeType,
+  locateCreatedChild,
+  markEpisodeLinked,
+  membershipCreateStatement,
+  screenSeriesId,
+  seriesEpisodeEntry,
+  seriesPartsHref,
+  seriesUuid,
+};
+export type { EpisodeJourney, MembershipDraft };
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8 md:pointer-fine:py-1';
