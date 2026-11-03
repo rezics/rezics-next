@@ -25,10 +25,10 @@ native outcomes. Web does not refill sparse pages or derive activity from loaded
 Decision: keep the current Board route on its existing typed reads until `@rezics/client` publishes
 `boards({ id }).page.get`; do not hand-author or fetch the source-only endpoint.
 
-The source route and response schema exist in Content, but the installed `@rezics/client` has no generated
-`boards({ id }).page.get` method or `BoardPageResponse` export. The generated route declaration contains the Board
-`get` and `threads.get` operations only; `contracts/openapi.json` has no `board_page.get` operation. The checked Web
-fixtures also have no native opening response. This exact publication gap prevents a typed loader integration. Web
+The source route, response schema and `board_page.get` operation in `contracts/openapi.json` exist, but the installed
+`@rezics/client` has no generated `boards({ id }).page.get` method or `BoardPageResponse` export. The generated Board
+route declaration still omits the opening operation. The checked Web fixtures also have no native opening response.
+OpenAPI publication alone does not install the generated client surface needed by the typed loader. Web
 must not cast the client, introduce a parallel DTO, or call the route with direct `fetch`.
 
 Until that generated surface is installed, `loadBoardPageWithAuthors` remains the existing route reader: it composes
