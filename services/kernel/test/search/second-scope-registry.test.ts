@@ -14,19 +14,16 @@ const route = 160;
 const noRead = async (): Promise<never> => {
   throw new Error('This registry test must not read existing producer sources');
 };
-function currentSummaries(ids: readonly string[], title: string) {
-  return new Map(ids.map((currentId) => [currentId, { id: currentId, title, summary: null }] as const));
-}
 const options: DiscoveryRegistryOptions = {
   release: release as Release,
   semantic: {
     source: { read: noRead, count: noRead },
-    hydrate: noRead,
+    hydrate: async () => new Map(),
     icons: Object.fromEntries(Object.keys(release.types).map((kind) => [kind, 'catalogue'])),
   },
   accounts: {
     source: { read: noRead, count: noRead, page: noRead },
-    hydrate: noRead,
+    hydrate: async () => new Map(),
     labels: { en: 'Accounts' },
     icon: 'account',
   },
@@ -38,7 +35,16 @@ const options: DiscoveryRegistryOptions = {
         kind: 'collection',
         metadata: { id: 'collection', labels: { en: 'Collections' }, icon: 'collection' },
         async readCurrent(ids) {
-          return currentSummaries(ids, 'Collection');
+          return new Map(ids.map((id) => [id, {
+            id, title: 'Collection', summary: null, revision: '1', sourcePosition: '1',
+            card: {
+              id, kind: 'collection' as const, destination: `/collections/${id}` as const,
+              title: 'Collection', description: null, visibility: 'public' as const, revision: 1,
+              membershipKind: 'dynamic' as const, outputGeneration: '1',
+              presentationKind: 'list' as const, presentationKindSource: 'default' as const,
+              cover: null, coverSource: 'none' as const,
+            },
+          }]));
         },
       },
     },
@@ -49,7 +55,10 @@ const options: DiscoveryRegistryOptions = {
         kind: 'review',
         metadata: { id: 'review', labels: { en: 'Reviews' }, icon: 'review' },
         async readCurrent(ids) {
-          return currentSummaries(ids, 'Review');
+          return new Map(ids.map((id) => [id, {
+            id, title: 'Review', summary: null, sourceVersion: 'v1', sourcePosition: '1',
+            authorId: id, subjectId: id,
+          }]));
         },
       },
     },
@@ -60,7 +69,10 @@ const options: DiscoveryRegistryOptions = {
         kind: 'space',
         metadata: { id: 'space', labels: { en: 'Spaces' }, icon: 'space' },
         async readCurrent(ids) {
-          return currentSummaries(ids, 'Space');
+          return new Map(ids.map((id) => [id, {
+            id, title: 'Space', summary: null, revision: '1', sourcePosition: '1',
+            address: 'space', realmId: null, realmTitle: null,
+          }]));
         },
       },
     },
@@ -72,15 +84,17 @@ const keys: DiscoveryOwnerKey[] = [
   { owner: 'content', kind: 'review', route, id },
   { owner: 'content', kind: 'space', route, id },
 ];
+const candidates = keys.map((key) => ({ key, sourcePosition: '1', revision: '1', sourceVersion: 'v1' }));
+const publicKeys = [{ ...keys[0]!, owner: 'library' }, keys[1]!, { ...keys[2]!, owner: 'community' }];
 
 test('ready owner adapters preserve canonical identity and current text/kind metadata', async () => {
-  const hits = await hydrateOwnerDiscoveryHits(registry, keys, {} as DiscoveryReadContext);
-  expect(hits.map(({ key }) => key)).toEqual(keys);
-  expect(new Set(hits.map(({ key }) => `${key.owner}:${key.kind}:${key.route}:${key.id}`)).size).toBe(3);
-  expect(hits.map(({ summary }) => summary)).toEqual([
-    { kind: 'collection', value: { id, title: 'Collection', summary: null } },
-    { kind: 'review', value: { id, title: 'Review', summary: null } },
-    { kind: 'space', value: { id, title: 'Space', summary: null } },
+  const hits = await hydrateOwnerDiscoveryHits(registry, candidates, {} as DiscoveryReadContext);
+  expect(hits.map((hit) => hit!.key)).toEqual(publicKeys);
+  expect(new Set(hits.map((hit) => `${hit!.key.owner}:${hit!.key.kind}:${hit!.key.route}:${hit!.key.id}`)).size).toBe(3);
+  expect(hits.map((hit) => hit!.summary)).toEqual([
+    { kind: 'collection', value: { id, title: 'Collection', description: null } },
+    { kind: 'review', value: { id, kind: 'review', title: 'Review' } },
+    { kind: 'space', value: { id, title: 'Space', address: 'space' } },
   ]);
   for (const kind of ['collection', 'review', 'space']) {
     expect(discoveryDomain(registry, kind, 'text')).toBe('applicable');
@@ -116,5 +130,5 @@ test('unknown, foreign, and unavailable owners fail closed while legacy registra
   expect(unavailable.ownerAdapters.collection.readiness).toBe('unavailable');
   expect(() => unavailable.ownerKey(keys[0]!)).toThrow();
   expect(() => unavailable.getOwnerAdapter('collection')).toThrow();
-  await expect(hydrateOwnerDiscoveryHits(unavailable, [keys[0]!], {} as DiscoveryReadContext)).rejects.toThrow();
+  await expect(hydrateOwnerDiscoveryHits(unavailable, [candidates[0]!], {} as DiscoveryReadContext)).rejects.toThrow();
 });
