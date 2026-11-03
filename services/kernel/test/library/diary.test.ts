@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { accountToken } from '../support/admitted-access.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import type { DiaryPage } from '../../src/library/diary-model.ts';
@@ -250,6 +251,78 @@ test('native identity fencing rejects retained navigation and occurrence reopeni
     await send('GET', `/v1/progressSessions/${sessions[0].id}?presentation=FULL`, undefined, identity.bearer),
     401,
   );
+});
+
+test('reported year and explicit buckets page exact completed IDs and reject changed membership', async () => {
+  const identity = await native.identity(scopes);
+  const a = await native.createSubject('game', 'Year repeat');
+  const b = await native.createSubject('recipe', 'Year independent');
+  const dated = [];
+  for (const [subjectId, finishDate] of [
+    [a, { year: 2020, month: 2, day: 29 }], [a, { year: 2020, month: 2 }],
+    [b, { year: 2020, month: 3 }], [b, { year: 2020 }], [a, null],
+  ] as const) {
+    const session = await start(subjectId, identity.bearer);
+    if (finishDate) await json(await send('PATCH', `/v1/progressSessions/${session.id}/journal`,
+      { revision: 0, finishDate }, identity.bearer));
+    await json(await send('POST', `/v1/progressSessions/${session.id}:complete`, { revision: 1 }, identity.bearer));
+    dated.push(session.id as string);
+  }
+  const active = await start(a, identity.bearer);
+  await json(await send('PATCH', `/v1/progressSessions/${active.id}/journal`,
+    { revision: 0, finishDate: { year: 2020, month: 2 } }, identity.bearer));
+  const client = createKernelClient('http://kernel.test', { fetch: (async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    return native.send(identity.bearer, request.method, url.pathname + url.search,
+      request.method === 'POST' ? await request.json() : undefined);
+  }) as typeof fetch });
+  const open = async (month?: number | 'unallocated', cursor?: string) => {
+    const result = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor } });
+    expect(result.error).toBeNull();
+    return result.data!;
+  };
+  const summary = async () => (await json(await send('GET', '/v1/libraryReportedYearSummary?year=2020',
+    undefined, identity.bearer)));
+  const totals = await summary();
+  expect(totals).toMatchObject({ completedOccurrences: '4', distinctCompletedSubjects: '2', repeatOccurrences: '2' });
+  for (const [month, expected] of [[undefined, dated.slice(0, 4)], [2, dated.slice(0, 2)],
+    [3, [dated[2]]], ['unallocated', [dated[3]]], [1, []]] as const) {
+    let value = await open(month);
+    const first = value;
+    const ids = value.occurrences.map(row => row.id);
+    expect(value.currentness).toEqual(totals.currentness);
+    while (value.next) {
+      value = await open(month, value.next);
+      ids.push(...value.occurrences.map(row => row.id));
+    }
+    expect(ids).toEqual([...expected].sort().reverse());
+    if (first.continuation) {
+      expect(value.continuation).toBeString();
+      expect((await client.libraryDiary.$cancel.post({ continuation: value.continuation! })).error).toBeNull();
+      const stale = await client.libraryDiary.get({ query: { year: 2020, month, limit: 1, cursor: first.next! } });
+      expect(stale.error?.status).toBe(409);
+    }
+  }
+  const first = await open(2);
+  for (const query of [{ year: 2020, month: 3 }, { year: 2021, month: 2 }, {}]) {
+    const changed = await client.libraryDiary.get({ query: { ...query, limit: 1, cursor: first.next! } });
+    expect(changed.error?.status).toBe(400);
+  }
+  const exact = await json(await send('GET', `/v1/progressSessions/${dated[0]}?presentation=FULL&view=FULL`,
+    undefined, identity.bearer));
+  expect(exact.progressSession.id).toBe(dated[0]);
+  await json(await send('PATCH', `/v1/progressSessions/${dated[0]}/journal`,
+    { revision: 1, finishDate: { year: 2020, month: 3 } }, identity.bearer));
+  expect((await client.libraryDiary.get({ query: { year: 2020, month: 2, limit: 1, cursor: first.next! } })).error?.status).toBe(409);
+  expect((await open(2)).occurrences.map(row => row.id)).toEqual([dated[1]!]);
+  const beforeRetire = await open();
+  await native.pool.query("UPDATE library.progress_session SET state='retired' WHERE route=$1 AND session_id=$2",
+    [routeOf(identity.actor.accountId), dated[1]]);
+  expect((await client.libraryDiary.get({ query: { year: 2020, limit: 1, cursor: beforeRetire.next! } })).error?.status).toBe(409);
+  expect((await open(2)).occurrences).toEqual([]);
+  expect((await summary()).completedOccurrences).toBe('3');
+  for (const query of ['month=2', 'year=0', 'year=2020&month=0', 'year=2020&month=13', 'year=2020&month=2&month=3'])
+    await json(await send('GET', `/v1/libraryDiary?${query}`, undefined, identity.bearer), 400);
 });
 
 test('unavailable native authority refuses new pages, retained continuation and addressed reopening', async () => {

@@ -619,3 +619,14 @@ acceptance remains controller-owned; source presence is not an acceptance result
 methods on the existing VNDB flow, indexed finite consent/items, native creation/assignment receipts and source
 cascade cleanup. Focused source and erasure cases accompany the implementation. Web303 integration and executed
 native64/512/4096 whole-caller growth measurements remain controller work; derived bounds alone do not close them.
+
+## Reported-year occurrence navigation
+
+The existing private diary now accepts typed year and month/`unallocated` filters and returns actual completed
+occurrence IDs, including repeated Subjects, with summary-comparable revision currentness. Native journal indexes
+seek addressed buckets; corrections and retirement invalidate filtered continuations. Existing unfiltered order,
+scopes, disclosure, eight navigation slots, cancellation and exact Session/journal reopening are retained.
+[Installed navigation and cost contract](../library-consumption-diary.md#opening-a-reported-year-count) owns the
+query shape and lifecycle. Focused typed-client scenarios extend `services/kernel/test/library/diary.test.ts`.
+Web318 continued by Web142 remains the history interface owner. Frozen acceptance, Web integration and executed
+whole-caller native64/512/4096 growth remain deferred to integration.

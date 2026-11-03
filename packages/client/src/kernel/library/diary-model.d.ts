@@ -21,9 +21,25 @@ export type DiarySubject = {
     label: string | null;
     language: string | null;
 };
+/** An omitted month selects the whole year; unallocated selects only year precision. */
+export type DiaryFilter = {
+    year: number;
+    month?: number | 'unallocated';
+};
+export type DiaryQuery = {
+    limit?: number;
+    cursor?: string;
+    year?: number;
+    month?: number | 'unallocated';
+};
 export type DiaryPage = {
     occurrences: DiaryOccurrence[];
     order: 'recorded_started_desc_id_desc';
+    /** Present for reported-year navigation, comparable with the summary revision. */
+    currentness?: {
+        state: 'snapshot';
+        revision: string;
+    };
     next: string | null;
     /** Retain until leaving the journey, including on the final page, for explicit cancellation. */
     continuation: string | null;

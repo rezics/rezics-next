@@ -7,7 +7,7 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { DIARY_LIMIT, type DiaryPage } from './diary-model.ts';
+import { DIARY_LIMIT, type DiaryPage, type DiaryQuery } from './diary-model.ts';
 import { createDiaryReads } from './diary-reads.ts';
 
 /** Explicit wire contract keeps the client independent of database and private reader implementations. */
@@ -41,7 +41,7 @@ export type DiaryRoutes = {
         body: unknown;
         headers: unknown;
         params: {};
-        query: { limit?: number; cursor?: string };
+        query: DiaryQuery;
         response: { 200: DiaryPage } & DiaryFailures;
       };
       $cancel: {
@@ -110,6 +110,7 @@ const diaryPageSchema = t.Unsafe<DiaryPage>(
         { maxItems: DIARY_LIMIT },
       ),
       order: t.Literal('recorded_started_desc_id_desc'),
+      currentness: t.Optional(t.Object({ state: t.Literal('snapshot'), revision: t.String() }, closed)),
       next: nullable,
       continuation: nullable,
       expiresAt: nullable,
@@ -159,6 +160,8 @@ export function diaryRoutes(
           {
             limit: t.Optional(t.Numeric({ minimum: 1, maximum: DIARY_LIMIT, multipleOf: 1, default: 20 })),
             cursor: t.Optional(token),
+            year: t.Optional(t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 })),
+            month: t.Optional(t.Union([t.Literal('unallocated'), t.Numeric({ minimum: 1, maximum: 12, multipleOf: 1 })])),
           },
           closed,
         ),
@@ -166,7 +169,7 @@ export function diaryRoutes(
           set.headers['cache-control'] = 'private, no-store';
           const query = new URL(request.url).searchParams;
           for (const name of query.keys())
-            if ((name !== 'limit' && name !== 'cursor') || query.getAll(name).length !== 1)
+            if (!['limit', 'cursor', 'year', 'month'].includes(name) || query.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
         response: { 200: diaryPageSchema, ...failures },

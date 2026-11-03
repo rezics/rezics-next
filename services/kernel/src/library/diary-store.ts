@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg';
 import { newId } from '../route/route.ts';
 import { ProblemError } from '../http/problem.ts';
 import { DIARY_LIFETIME_MS } from './diary-model.ts';
-import type { DiaryOccurrence } from './diary-model.ts';
+import type { DiaryFilter, DiaryOccurrence } from './diary-model.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 export type DiaryRow = Pick<
@@ -31,6 +31,7 @@ export async function diaryRows(
   accountId: string,
   after: DiaryKey | null,
   limit: number,
+  filter: DiaryFilter | null = null,
 ): Promise<DiaryRow[]> {
   const columns = `session_id AS id, subject_id AS "subjectId", version_subject_id AS "versionSubjectId",
     state, revision,
@@ -41,6 +42,26 @@ export async function diaryRows(
         'year', journal_finish_year, 'month', journal_finish_month, 'day', journal_finish_day)) END) AS "reportedDates",
     to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedStartedAt",
     to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedCompletedAt"`;
+  // Literal query shapes put the exact year/bucket and tuple boundary in the index range.
+  if (filter) {
+    const bucket = filter.month === 'unallocated' ? 13 : filter.month;
+    const parameters: unknown[] = [route, accountId, filter.year];
+    const conditions = ['route=$1', 'account_id=$2', "state='completed'",
+      'library.reported_finish_valid(journal_finish_year,journal_finish_month,journal_finish_day)',
+      'journal_finish_year=$3'];
+    if (bucket !== undefined) {
+      parameters.push(bucket);
+      conditions.push(`COALESCE(journal_finish_month,13)=$${parameters.length}`);
+    }
+    if (after) {
+      parameters.push(after.recordedStartedAt, after.id);
+      conditions.push(`(started_at,session_id) < ($${parameters.length - 1}::timestamptz,$${parameters.length}::uuid)`);
+    }
+    parameters.push(limit);
+    return (await client.query<DiaryRow>(`SELECT ${columns} FROM library.progress_session
+      WHERE ${conditions.join(' AND ')} ORDER BY started_at DESC,session_id DESC LIMIT $${parameters.length}`,
+      parameters)).rows;
+  }
   const parameters = after ? [route, accountId, after.recordedStartedAt, after.id, limit] : [route, accountId, limit];
   return (
     await client.query<DiaryRow>(

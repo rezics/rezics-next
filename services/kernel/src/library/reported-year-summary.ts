@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
@@ -63,6 +63,14 @@ WHERE i.singleton=true AND i.version=1`;
 const bucketsSql = `SELECT bucket,completed::text,subjects::text,unknown_profile::text AS unknown,
   month_precision::text AS month,day_precision::text AS day
 FROM library.reported_year_bucket WHERE route=$1 AND account_id=$2 AND year=$3 ORDER BY bucket LIMIT 14`;
+
+/** Shared coverage and source revision for summary-to-diary navigation; no preparation. */
+export async function reportedYearRevision(client: Pick<PoolClient, 'query'>, route: number, accountId: string) {
+  const head = (await client.query<Head>(headSql, [route, accountId])).rows[0];
+  if (!head?.complete || !head.ready || head.initialized !== head.retained)
+    throw new ProblemError('dependency_unavailable');
+  return head.revision;
+}
 
 function counts(row?: Bucket): ReportedYearCounts {
   const completed = BigInt(row?.completed ?? '0');

@@ -10,7 +10,7 @@ use eight expiring owner navigation slots and the existing presented session met
 
 ## Installed methods for the existing Web diary
 
-The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, cursor } })` and
+The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, cursor, year, month } })` and
 `client.v1.libraryDiary.$cancel.post({ continuation })`. `GET /v1/libraryDiary` defaults to 20 rows and accepts
 1–25. Omit `cursor` for a fresh first page. Pass `next` unchanged with the same limit for a continuation. The reply is:
 
@@ -119,3 +119,56 @@ bytes, with bounded label fields and at most 25 occurrences.
 active/completed/abandoned states, correction and addressed reopening, concealed subjects, other/anonymous/reduced
 scope callers, client/limit binding, cancellation, deleted anchors, expiry and authentication fencing. Broader
 frozen acceptance and the existing integrating Web diary's placement remain controller-owned.
+
+## Opening a reported-year count
+
+Decision: extend this same diary with `year?: number` (1–9999) and `month?: number | 'unallocated'`
+(1–12 or the literal `unallocated`); omit month for the whole year. Month requires year. Preserve the
+unfiltered recording-time/full-UUID order and page size, including existing callers and cancellation handles.
+The actual `createKernelClient` method is `client.libraryDiary.get({ query: { year: 2020, month: 2, limit: 20 } })`;
+its next request repeats year, month and limit with the opaque `cursor`. The mounted Eden method keeps its `v1` prefix.
+`client.libraryDiary.$cancel.post({ continuation })` needs no filter fields. Web318 continued by Web142 remains the
+only history interface; this delivery adds native filtering and client declarations, with Web adoption owned there.
+
+Filtered rows use exactly the [reported-year summary](library-reported-year-summary.md) inclusion rule: valid explicit
+Gregorian finish year, actual completed state and retained native occurrence identity. A year-only finish matches
+only `month=unallocated` (and whole-year navigation); missing dates and incomplete occurrences match neither.
+All twelve month counts and independent Subject distinctness remain summary-owned. Opening any returned `id` uses
+the existing addressed Session/journal, including earlier repeats, as described above.
+
+A filtered page includes `currentness: { state: 'snapshot', revision: string }`, comparable to the summary's
+currentness. Replace the displayed summary if its revision differs before presenting the opened count as current.
+The sealed cursor binds the exact year/bucket in addition to owner, authority, limit, partition and absolute expiry.
+The existing reported-year owner revision is conservatively bound: any summary-source mutation, even in another year,
+invalidates filtered continuation with `409 stale_cursor`. A finish correction, completion change, retirement or
+deletion therefore requires refreshing both counts and first page. Revision changes during rendering produce
+`409 conflict`; retry the same request (a now-stale cursor still requires restart). No historical snapshot is retained.
+Unfiltered navigation retains its live deletion/anchor and correction behavior. Cancellation and expiry use the
+same eight slots for both forms; stale revision handles can still cancel their exact slot.
+
+Two partial native indexes seek `(route,account_id,journal_finish_year[,coalesced-month],started_at DESC,session_id DESC)`
+for valid completed rows. Coalesced month 13 is an internal indexed key only; the public value is `unallocated`.
+The whole-year and bucket queries use separate shapes, with the microsecond time/full-UUID boundary in the index range.
+Source updates maintain these indexes in the same transaction as the installed summary trigger. There is no second
+statistics engine or per-owner preparation on GET. Existing incomplete summary coverage yields `503 dependency_unavailable`.
+
+For page cap L=25, each of two owner observations receives at most L+1 compact source rows (52 total), including
+empty/final pages. The first observation retains at most 26 rows; response construction retains at most 25 occurrences,
+50 unique Subject/version IDs and their one native summary batch. Two shared summary coverage probes each address the
+installation, all-time owner, reported-year owner and shelf gate keys. Existing account locks/authority reads and native
+Access/Semantic disclosure work remain charged; the second observation rechecks source rows, revision and coverage.
+Serialization retains bounded compact rows plus at most 65,536 output UTF-8 bytes and 2,048 characters per input token.
+Expiry, stale revision and invalid binding do no history scan; cancellation addresses one navigation key, expiry reuses
+one of eight slots, and terminal cleanup deletes at most eight. No occurrence payload is retained in a slot. Request
+retry repeats this bounded work and does not refresh the absolute 15-minute lifetime. PostgreSQL B-tree positioning,
+lock waits, nested native authorization and summary rendering remain real costs; unrelated history increases index
+depth, not page rows. One-time index installation scans the retained table and builds both indexes under migration
+locking; subsequent writes pay two native index updates rather than a new aggregate or maintenance workflow.
+
+The focused diary test now exercises typed year/month/unallocated requests, repeats across pages, summary revision
+agreement, addressed reopening, filter substitution, cancellation, correction, retirement and invalid query shapes.
+Whole-caller rows/buffers/bytes at native64/512/4096, nested disclosure/lifecycle work and Web acceptance remain unmeasured
+and deferred to integration. Reference comparison read `legacy-final:apps/web/features/library/reading-stats.tsx`
+(twelve visible months), Yamtrack `src/app/statistics.py` (explicit date range selection) and Ryot
+`apps/frontend/app/components/routes/media-item/displays/history-item.tsx` (individual history identity), from the
+registered `shelves` reference checkouts. These supply journey comparisons only; no reference code was copied.
