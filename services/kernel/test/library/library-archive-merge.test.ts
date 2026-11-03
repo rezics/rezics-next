@@ -216,7 +216,8 @@ test('unknown archived state remains readable but cannot enter the current profi
       ? { ...row, state: 'unavailable-historic-state', library_profile_pin: null }
       : row,
   );
-  const { id } = await makeUpload(unknownStateOwner, framed(rows));
+  const status = await upload(unknownStateOwner, framed(rows));
+  const id = status.uploadId as string;
   const preview = await previewAll(unknownStateOwner, id);
   const entry = preview.records.find((row: any) => row.section === 'entries' && row.evidence.subject_id === subjects[0]);
   expect(entry.evidence.state).toBe('unavailable-historic-state');

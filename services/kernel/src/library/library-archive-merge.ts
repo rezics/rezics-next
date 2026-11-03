@@ -505,7 +505,8 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             },
           };
         });
-      if (typeof decision.stateId !== 'string') throw new ProblemError('invalid_request');
+      const targetStateId = decision.stateId;
+      if (typeof targetStateId !== 'string') throw new ProblemError('invalid_request');
       return identityTime(async (at) => {
         const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
         const observation = await readLibraryProfileSourceObservation(
@@ -515,17 +516,17 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         if (!observation) {
           return {
             status: 'unresolved',
-            review: { requestedSubjectId: decision.subjectId, targetStateId: decision.stateId, action: decision.action },
+            review: { requestedSubjectId: decision.subjectId, targetStateId, action: decision.action },
           };
         }
         const { source, anchor } = observation;
         const base = {
           requestedSubjectId: decision.subjectId,
           targetSubjectId: source.subjectId,
-          targetStateId: decision.stateId,
+          targetStateId,
           action: decision.action,
         };
-        if (source.kind !== 'supported' || !hasEntryState(source.profile, decision.stateId))
+        if (source.kind !== 'supported' || !hasEntryState(source.profile, targetStateId))
           return { status: 'unsupported', review: base };
         let current: Awaited<ReturnType<ReturnType<typeof createEntryCommands>['readEntry']>> | null = null;
         try {
@@ -545,7 +546,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             ? decision.action === 'create'
               ? 'create'
               : 'current_conflict'
-            : current.state === decision.stateId
+            : current.state === targetStateId
               ? 'already_equal'
               : 'current_conflict';
         return {
@@ -894,7 +895,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       ordinals.some((ordinal) => !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records)
     )
       throw new ProblemError('invalid_request');
-    const applied = [];
+    const applied: { ordinal: number; status: string; result: Record<string, unknown> | null }[] = [];
     for (const ordinal of ordinals) {
       signal?.throwIfAborted();
       const start = await beginEffect(actor, id, ordinal, signal);
@@ -908,18 +909,18 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         applied.push({ ordinal, status: 'acknowledged', result: acknowledged });
       } catch (error) {
         if (error instanceof LibraryConflictError) {
-          applied.push({ ordinal, ...((await refuse(actor, id, ordinal, 'current_conflict')) as object) });
+          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'current_conflict')) });
           continue;
         }
         if (error instanceof LibraryNotFoundError) {
-          applied.push({ ordinal, ...((await refuse(actor, id, ordinal, 'unresolved')) as object) });
+          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'unresolved')) });
           continue;
         }
         if (
           error instanceof ProblemError &&
           (error.code === 'unsupported_library_profile' || error.code === 'library_label_capacity')
         ) {
-          applied.push({ ordinal, ...((await refuse(actor, id, ordinal, 'unsupported')) as object) });
+          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'unsupported')) });
           continue;
         }
         throw error;
