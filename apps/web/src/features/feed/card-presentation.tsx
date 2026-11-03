@@ -166,6 +166,28 @@ export function FeedCardPreview({ item }: { item: FeedItem }) {
 export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
+  if ('reviewContext' in summary && summary.reviewContext) {
+    const target = summary.reviewContext.target;
+    if (target.state === 'absent') return null;
+    if (target.state === 'withheld')
+      return (
+        <span data-feed-card-reviewed-subject="withheld">
+          {m.discussion_provenance_details_subject_unavailable({}, options)}
+        </span>
+      );
+    if (target.state === 'available') {
+      const subject = target.subject;
+      const title = subject.label?.value || m.subject_value_unlabelled({}, options);
+      return (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject="available">
+          <span>{m.home_card_review_subject({}, options)}</span>
+          <a href={subjectHref({ id: subject.id, label: title }, locale).href} className={feedCardLinkClassName}>
+            <bdi lang={subject.label?.language}>{title}</bdi>
+          </a>
+        </span>
+      );
+    }
+  }
   if ('kind' in summary && summary.kind === 'review' && 'subject' in summary && summary.subject) {
     const subject = summary.subject;
     const title = subject.title ?? m.subject_value_unlabelled({}, options);

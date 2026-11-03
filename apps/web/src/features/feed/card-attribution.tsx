@@ -5,6 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import type { FeedItem } from '../pages/home-feed-read';
 import { FeedCardSubjectContext, feedCardLinkClassName, type FeedCardKind } from './card-presentation';
+import { FeedCardCitation } from './content-context';
 
 /** An explicit UTC zone keeps server and client rendering stable across midnight. */
 export function feedCardTime(value: string | null | undefined, locale: string): { value: string; text: string } | null {
@@ -164,6 +165,7 @@ export function FeedCardAttribution({ item, kind, locale }: { item: FeedItem; ki
       {content ? <FeedCardAuthor item={item} locale={locale} /> : null}
       {kind === 'account' ? <FeedCardAccount item={item} locale={locale} /> : null}
       <FeedCardSubjectContext item={item} locale={locale} />
+      <FeedCardCitation item={item} locale={locale} />
       <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <FeedCardTime value={item.occurredAt} locale={locale} label={m.home_card_occurrence({}, options)} />
         {'createdAt' in summary ? (

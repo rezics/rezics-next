@@ -141,18 +141,13 @@ for manual copying and a Close action returning focus. Replacement visits retire
 Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,
 and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
 
-The installed Kernel source emits optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content
-thread/post summaries and optional `reactionsAsOf` on the page. The current generated Web client has not published
-those fields: its `FeedContentSummary` still has only author and excerpt, and its page type lacks `reactionsAsOf`.
-Until normal client generation publishes them, Home keeps reactions unavailable and binds none of these values.
-Publish with `bun run --cwd services/kernel typecheck --emit-client` before binding them. Do not add a browser DTO
-or cast, infer a thread target from `summary.id`, or read each row. Once present, bind the exact
-target: use `reactionTarget` verbatim. The installed thread projector supplies its thread ID; never infer it from
-`summary.id` or replace it with an opening post. A post target keeps its supplied post ID only after the native
-thread/destination relationship is admitted. The count map uses the seven native kinds and positive integer entries;
-an empty map means known zero, absent counts mean unavailable. Anonymous viewer-slot omission differs from
-authenticated `null`, and a null watermark does not prove a later write converged. Following projection failure
-withholds its rows and preserves its input frontier for retry.
+The generated mounted Feed response publishes optional `reactionTarget`, `reactions`, `viewerReaction` and
+page `reactionsAsOf`. Home binds these to `ThreadReactions` only when key, summary, target and destination
+agree and the existing current-visit observation admits the page. Authenticated cards require the supplied
+current viewer slot, including explicit null; guest cards keep their sign-in actions. Missing counts or slots,
+a mismatched target, or a retired page remains unavailable. Empty counts mean known zero. The native freshness
+operand is forwarded, including null, to the existing bounded point-read reconciliation after a command.
+No mount hydration or additional reaction producer is introduced.
 
 `useHomeReactionCurrentness` binds one displayed page to its result, request/cursor, stream, filters, Space, source
 states and existing session-cache observation. Beginning a replacement read, changing any binding or observing
@@ -164,10 +159,9 @@ requires a supplied projection watermark at least as recent as that baseline; an
 watermark retains explicit recovery rather than claiming convergence. Known receipts retry only the point read.
 Home can supply this operand when its generated page field is published; other callers keep their existing contract.
 
-`home-native-reactions` stories connect prepared pages without reaction fields to Home at 390 and 1280, light/dark,
-with anonymous/current-viewer admission, replacement and revocation. Counts remain unavailable. Exact-count and
-target-mismatch receiving remain dependent on generated publication. These stories do not prove native or rendered
-delivery, including anonymous Content discovery.
+`home-native-reactions` stories deliberately omit reaction fields and retain unavailable counts. They are
+prepared receiving scenarios, not native delivery evidence. Focused Home tests also cover supplied exact operands,
+current viewer selection, mismatched targets and request/account retirement.
 
 Home receives the existing public verification configuration with its page result and reuses `PostActions` for
 reporting. The row's canonical destination also feeds that owner's copy/recovery flow. Missing verification
@@ -262,3 +256,24 @@ and the existing retry, never an invented readable choice or a successful unfilt
 `16-home-filter-context` uses visibly prepared responses for phone 390, desktop 1280, light/dark, long strings,
 keyboard interaction, retained unavailable selections, delayed choices and account replacement. Its focused tests
 pin clear/removal/history/pagination retirement and 1/10/100 supplied-choice growth without automatic reads.
+
+## Review targets and reply parents
+
+The generated `reviewContext` now feeds the same Home card through `FeedCardSubjectContext` and
+`FeedCardCitation`. A current target replaces the older discovery Subject projection; absent and withheld native
+context never falls back to a stale label. Question label/current revision/scale and exact recorded units/vote
+revision remain distinct. No standard-question denominator or current private vote is substituted.
+
+Decision: Home displays recorded rating units without normalizing a nonstandard question to ten, and keeps
+spoiler-marked parent text behind an explicit reveal that retires with the page, target or account.
+
+`FeedCardParent` consumes only `parentContext`: one exact current post anchor, disclosed author, language-marked
+preview and exact source revision link. Opening posts have no parent section. A removed parent retains only its
+admitted post destination; a withheld parent has no destination, author or preview. The existing Home visit key
+also keys the parent subtree, so revealed spoilers retire on source/session changes and replacement pages.
+All reading remains a projection of the supplied response, with no additional native reads.
+
+`home-review-context` stories provide populated, concealed/removed, signed-out and retry receiving states and a
+prepared account-replacement control. Experience acceptance remains open for the existing Home owner to review
+these against actual native responses. The native lifecycle, action-advice, source-observation and three-scale
+growth work remains explicit in the continuation; prepared cards do not close those requirements.

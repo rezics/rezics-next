@@ -7,9 +7,10 @@ import type { FeedItem } from '../pages/home-feed-read';
 import type { FeedItemPresentation } from './feed-results';
 import { FeedCardAttribution } from './card-attribution';
 import { FeedCardContext, FeedCardPreview, FeedCardVisual, feedCardKind } from './card-presentation';
+import { FeedCardParent } from './content-context';
 
 /** A current-page projection: no hydration, retained identity, source inference or reordering. */
-export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedItemPresentation {
+export function homeFeedItemPresentation(item: FeedItem, locale: string, visit = ''): FeedItemPresentation {
   const options = { locale: locale as Locale };
   const title = homeFeedTitle(item, locale);
   const href = homeFeedDestination(item, locale);
@@ -28,7 +29,21 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
     visual: FeedCardVisual({ item, title, href, locale }),
     context: <FeedCardContext item={item} kind={kind} locale={locale} />,
     metadata: <FeedCardAttribution item={item} kind={kind} locale={locale} />,
-    preview: <FeedCardPreview item={item} />,
+    preview: (
+      <>
+        <FeedCardParent
+          key={JSON.stringify([
+            visit,
+            item.key,
+            item.destination,
+            'parentContext' in summary ? summary.parentContext : null,
+          ])}
+          item={item}
+          locale={locale}
+        />
+        <FeedCardPreview item={item} />
+      </>
+    ),
     state: progress?.text,
     actions:
       resume === undefined ? undefined : (
