@@ -1,5 +1,12 @@
 import { parseFilter, FILTER_LIMITS, type FilterDocument, type FilterRange } from '@rezics/filter';
 import * as v from 'valibot';
+import {
+  isSearchResourceScope,
+  parseSearchResourceScope,
+  removeSearchResourceScope,
+  searchFilterWithScope,
+  type SearchResourceScope,
+} from './advanced-scope';
 
 const facetValue = v.optional(v.union([v.string(), v.pipe(v.array(v.string()), v.maxLength(FILTER_LIMITS.in))]));
 
@@ -30,7 +37,12 @@ export const searchParams = v.objectWithRest(
       ),
     ),
     condition: v.optional(v.pipe(v.string(), v.maxLength(32768))),
-    filter: v.optional(v.pipe(v.string(), v.maxLength(16384))),
+    filter: v.optional(
+      v.union([
+        v.pipe(v.string(), v.maxLength(16384)),
+        v.pipe(v.array(v.pipe(v.string(), v.maxLength(16384))), v.maxLength(8)),
+      ]),
+    ),
     sort: v.optional(
       v.pipe(
         v.union([v.picklist(['rating']), v.literal('')]),
@@ -56,6 +68,7 @@ export type SearchLoaderDeps = {
   kinds?: string[] | undefined;
   languages?: string[] | undefined;
   filter?: string | undefined;
+  resourceScope?: SearchResourceScope | undefined;
   invalidInput?: InvalidSearchInput | undefined;
 };
 
@@ -131,16 +144,24 @@ export function rangeValuesFromSearch(search: Record<string, unknown>): Record<s
 /** The only URL params that affect the search loader's read. */
 export function searchLoaderDeps(search: Record<string, unknown>): SearchLoaderDeps {
   const filterInputs = filterInputsFromSearch(search);
+  const filterValue = search.filter;
+  const resourceScope =
+    typeof filterValue === 'string' ? parseSearchResourceScope(filterValue) : { scope: undefined, invalidInput: undefined };
+  const invalidFilter =
+    filterValue !== undefined && typeof filterValue !== 'string'
+      ? { key: 'filter', value: printableSearchValue(filterValue) }
+      : resourceScope.invalidInput;
   return {
     query: typeof search.q === 'string' ? search.q : '',
     type: typeof search.type === 'string' ? search.type : undefined,
     facets: facetValuesFromSearch(search),
     ranges: filterInputs.ranges,
     ...(filterInputs.condition ? { condition: filterInputs.condition } : {}),
-    ...(filterInputs.invalidInput ? { invalidInput: filterInputs.invalidInput } : {}),
+    ...(filterInputs.invalidInput ? { invalidInput: filterInputs.invalidInput } : invalidFilter ? { invalidInput: invalidFilter } : {}),
     cursor: typeof search.cursor === 'string' ? search.cursor : undefined,
     sort: search.sort === 'rating' ? 'rating' : undefined,
     ...(typeof search.filter === 'string' ? { filter: search.filter } : {}),
+    ...(resourceScope.scope ? { resourceScope: resourceScope.scope } : {}),
     ...(search.kinds
       ? {
           kinds:
@@ -176,7 +197,15 @@ export function searchFormFields(search: Record<string, unknown>): [string, stri
 
   if (typeof search.type === 'string' && search.type) append('type', search.type);
   if (search.sort === 'rating') append('sort', 'rating');
-  if (typeof search.filter === 'string' && search.filter) append('filter', search.filter);
+  const scope = isSearchResourceScope(search.resourceScope)
+    ? search.resourceScope
+    : typeof search.filter === 'string'
+      ? parseSearchResourceScope(search.filter).scope
+      : undefined;
+  const filter =
+    typeof search.filter === 'string' ? searchFilterWithScope(search.filter, scope) : search.filter;
+  if (filter !== undefined && filter !== '') append('filter', filter);
+  else if (Array.isArray(search.filter)) append('filter', search.filter);
   append('condition', search.condition);
   for (const [key, value] of Object.entries(search)) {
     if (key.startsWith('r.')) append(key, value);
@@ -195,7 +224,11 @@ export function correctSearchInput<Search extends object>(search: Search, key: s
 
 export function removeSearchInput<Search extends object>(search: Search, key: string): Search {
   const next = { ...search, cursor: undefined } as Record<string, unknown>;
-  delete next[key];
+  if (key === 'filter' && typeof next.filter === 'string') {
+    const remaining = removeSearchResourceScope(next.filter);
+    if (remaining !== undefined) next.filter = remaining;
+    else delete next.filter;
+  } else delete next[key];
   return next as Search;
 }
 
@@ -207,6 +240,7 @@ export function discoverySearchHref(locale: string, state: SearchLoaderDeps): st
       type: state.type,
       sort: state.sort,
       filter: state.filter,
+      resourceScope: state.resourceScope,
       condition: state.condition ? JSON.stringify(state.condition) : undefined,
       ...Object.fromEntries(
         Object.entries(state.ranges ?? {}).map(([key, range]) => [`r.${key}`, JSON.stringify(range)]),

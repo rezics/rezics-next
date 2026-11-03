@@ -6,6 +6,7 @@ import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { SearchPage } from '../search/search.tsx';
 import { searchQueryOptions } from '../search/search-queries';
 import { searchSessionOwner } from '../search/search-session-owner';
+import { searchUnavailablePage } from '../search/search-recovery';
 import { useSearchQuery } from '../search/use-search-query';
 import { isRealmDiscoverySearch, realmDiscoveryQueryOptions } from '../search/realm-discovery-loader';
 import { correctSearchInput, removeSearchInput, searchLoaderDeps, searchParams } from '../search/search-params';
@@ -34,6 +35,8 @@ export const Route = createFileRoute('/search')({
   loader: ({ deps, context }) => {
     const params = deps;
     if (params.invalidInput) return { query: params.query, invalidInput: params.invalidInput };
+    // Private scoped reads stay unavailable until the installed session-bound reader owns their request and cache.
+    if (params.resourceScope) return { query: params.query };
     const locale = getLocale();
     return Promise.all([
       context.queryClient.fetchQuery(searchQueryOptions(locale, params)),
@@ -100,6 +103,16 @@ function SearchRoute() {
 }
 
 function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
+  if (deps.resourceScope) return <ScopedSearchUnavailable deps={deps} locale={locale} />;
+  return <LoadedSearchResults deps={deps} locale={locale} />;
+}
+
+function ScopedSearchUnavailable({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
+  const session = searchSessionOwner(useSession());
+  return <SearchPage query={deps.query} data={searchUnavailablePage(deps)} locale={locale} session={session} />;
+}
+
+function LoadedSearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
   const { data, retry } = useSearchQuery(locale, deps);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
   const session = searchSessionOwner(useSession());

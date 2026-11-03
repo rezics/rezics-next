@@ -2,7 +2,9 @@ import { useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { getLocale } from '../../paraglide/runtime.js';
-import { searchFormFields } from '../search-params';
+import { searchFormFields, searchLoaderDeps } from '../search-params';
+import { searchResourceScopeAction, searchResourceScopeName } from '../advanced-scope';
+import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
 import { recentBucket } from '../recent-history';
 import { useRecentHistory } from '../recent-history-hook';
@@ -25,6 +27,17 @@ export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
   }, [scope, bucket]);
   const onSearchPage = /(?:^|\/)search\/?$/.test(location.pathname);
   const params = location.search as Record<string, unknown>;
+  const searchState = searchLoaderDeps(params);
+  const routeScope: SearchScope | undefined = searchState.resourceScope
+    ? {
+        kind: searchState.resourceScope.kind === 'realm' ? 'Realm' : 'Collection',
+        id: searchState.resourceScope.id,
+        name: searchResourceScopeName(searchState.resourceScope),
+        searchAction: searchResourceScopeAction(getLocale(), searchState.resourceScope),
+      }
+    : searchState.invalidInput?.key === 'filter'
+      ? { kind: 'Realm', id: '', name: m.search_history_unavailable({}, { locale: getLocale() as never }) }
+      : undefined;
   return (
     <HeaderSearch
       keyboardShortcut
@@ -33,7 +46,7 @@ export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
       session={session}
       readSession={readSession}
       observeSession={observeSession}
-      scope={scope}
+      scope={scope ?? (onSearchPage ? routeScope : undefined)}
       initialQuery={onSearchPage && typeof params.q === 'string' ? params.q : ''}
       fields={onSearchPage ? searchFormFields(params) : []}
       onNavigate={(href) => {

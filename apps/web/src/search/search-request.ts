@@ -1,4 +1,5 @@
 import { problemCode } from './refinement/request';
+import { searchFilterWithScope } from './advanced-scope';
 import type { DiscoveryRequest } from './discovery';
 import type { SearchLoaderDeps } from './search-params';
 
@@ -25,7 +26,8 @@ export async function readSearchPage<Response extends SearchResponsePage, Reques
 export function discoveryRequest(params: SearchLoaderDeps, languages: string[]): DiscoveryRequest {
   const clauses: unknown[] = [];
   if (params.condition) clauses.push(params.condition);
-  if (params.filter !== undefined) clauses.push(JSON.parse(params.filter));
+  const filter = searchFilterWithScope(params.filter, params.resourceScope);
+  if (filter !== undefined) clauses.push(JSON.parse(filter));
   if (params.type) clauses.push({ type: { in: [params.type] } });
   for (const [property, values] of Object.entries(params.facets))
     if (values.length)

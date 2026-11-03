@@ -21,6 +21,12 @@ import { subjectHref } from '../../subject/subject-href';
 import { hitYear, localizedLabel, SubjectMeta } from '../results';
 import type { SuggestionResult } from '../suggestions';
 import { headerSearchAction, removesHeaderScope } from './authority';
+import {
+  isSearchResourceScope,
+  removeSearchResourceScope,
+  searchFilterWithScope,
+  type SearchResourceScope,
+} from '../advanced-scope';
 import { useHeaderSearchFilterRegion, type HeaderSearchFilterRegion } from './filter-region';
 import { ScopeChip } from './scope-chip';
 import {
@@ -54,6 +60,48 @@ type HeaderSuggestionOwner = {
   scopeKey: string;
   loader: HeaderSuggestionLoader | undefined;
 };
+
+function resourceScope(scope?: SearchScope): SearchResourceScope | undefined {
+  if (!scope || (scope.kind !== 'Realm' && scope.kind !== 'Collection')) return undefined;
+  const candidate = { kind: scope.kind === 'Realm' ? 'realm' : 'collection', id: scope.id };
+  return isSearchResourceScope(candidate) ? candidate : undefined;
+}
+
+export function headerSearchFields(
+  fields: readonly [string, string][] | undefined,
+  scope: SearchScope | undefined,
+  action: string | undefined,
+): [string, string][] {
+  const carried = (fields ?? []).filter(([key]) => key !== 'q' && key !== 'cursor');
+  const other = carried.filter(([key]) => key !== 'filter');
+  const currentFilters = carried.filter(([key]) => key === 'filter');
+  const actionFields = action
+    ? [...new URL(action, 'https://rezics.invalid').searchParams].filter(([key]) => key !== 'q' && key !== 'cursor')
+    : [];
+  const actionFilters = actionFields.filter(([key]) => key === 'filter');
+  if (!scope) {
+    if (currentFilters.length !== 1) return [...other, ...currentFilters];
+    const filter = removeSearchResourceScope(currentFilters[0]![1]);
+    return filter ? [...other, ['filter', filter]] : other;
+  }
+
+  const resource = resourceScope(scope);
+  if (!resource) {
+    const currentKeys = new Set(carried.map(([key]) => key));
+    return [
+      ...other,
+      ...currentFilters,
+      ...actionFields.filter(([key]) => (key === 'filter' ? currentFilters.length === 0 : !currentKeys.has(key))),
+    ];
+  }
+  if (currentFilters.length > 1) return [...other, ...currentFilters, ...actionFilters];
+  const filter = currentFilters[0]?.[1] ?? actionFilters[0]?.[1];
+  const scopedFilter = resource ? searchFilterWithScope(filter, resource) : filter;
+  return [
+    ...other,
+    ...(scopedFilter ? [['filter', scopedFilter] as [string, string]] : []),
+  ];
+}
 
 function sameHeaderSuggestionOwner(a: HeaderSuggestionOwner | null, b: HeaderSuggestionOwner): boolean {
   return Boolean(
@@ -187,9 +235,7 @@ export function HeaderSearchView({
                       : '';
   // Plain GET forms replace an action's query string; retain its declared context as hidden controls.
   const target = action ? new URL(action, 'https://rezics.invalid') : undefined;
-  const retained = scope
-    ? [...(target?.searchParams ?? [])].filter(([key]) => key !== 'q' && key !== 'cursor')
-    : fields;
+  const retained = headerSearchFields(fields, scope, action);
   return (
     <div
       data-header-search
@@ -338,7 +384,7 @@ export function HeaderSearchView({
                 type="submit"
                 size="icon"
                 className={cn('size-11 rounded-full', controlFocus)}
-                disabled={!action || !query.trim()}
+                disabled={!action || (!query.trim() && !scope)}
                 aria-label={m.search_submit({}, messageOptions)}
               >
                 <ArrowUp aria-hidden="true" className="size-4" />
@@ -818,9 +864,7 @@ function HeaderSearchController({
   };
   const searchLanguages = (scope?: SearchScope) => {
     const action = headerSearchAction(locale, scope);
-    const context = scope
-      ? [...(action ? new URL(action, 'https://rezics.invalid').searchParams : [])]
-      : (fields ?? []);
+    const context = headerSearchFields(fields, scope, action);
     const selected = context.flatMap(([key, value]) => (key === 'language' ? [value] : []));
     return selected.length ? selected : undefined;
   };
@@ -837,11 +881,27 @@ function HeaderSearchController({
     url.searchParams.delete('q');
     url.searchParams.delete('cursor');
     // Follow the same native GET context as the mounted form. Native routes revalidate remembered scopes.
-    if (!scope)
-      for (const [key, value] of fields ?? []) if (!resumed || key !== 'language') url.searchParams.append(key, value);
+    const context = headerSearchFields(resumed ? undefined : fields, scope, action);
+    if (context.some(([key]) => key === 'filter')) url.searchParams.delete('filter');
+    for (const [key, value] of context) url.searchParams.append(key, value);
     if (resumed) applyRecentSearch(url.searchParams, query, resumed.languages);
     else if (query.trim()) url.searchParams.set('q', query);
     visit(`${url.pathname}${url.search}`);
+  };
+  const removeSearchScope = () => {
+    const current = requestState.scope ?? state.scope;
+    request.current?.();
+    if (current?.kind === 'Realm' || current?.kind === 'Collection') {
+      const action = headerSearchAction(locale);
+      if (!action) return;
+      const url = new URL(action, window.location.origin);
+      for (const [key, value] of headerSearchFields(fields, undefined, action)) url.searchParams.append(key, value);
+      if (requestState.query.trim()) url.searchParams.set('q', requestState.query);
+      visit(`${url.pathname}${url.search}`);
+      return;
+    }
+    dispatch({ type: 'remove-scope' });
+    input.current?.focus();
   };
   return (
     <HeaderSearchView
@@ -861,7 +921,7 @@ function HeaderSearchController({
       canSelectSuggestion={canSelectSuggestion}
       locale={locale}
       queryLimitError={queryLimitError}
-      fields={fields}
+      fields={headerSearchFields(fields, requestState.scope, headerSearchAction(locale, requestState.scope))}
       region={requestState.scope ? null : region}
       inputRef={input}
       formRef={form}
@@ -869,11 +929,7 @@ function HeaderSearchController({
       suggestionRatio={suggestionRatio}
       onOpen={open}
       onClose={() => close('escape', true)}
-      onRemoveScope={() => {
-        request.current?.();
-        dispatch({ type: 'remove-scope' });
-        input.current?.focus();
-      }}
+      onRemoveScope={removeSearchScope}
       onSuggestion={(href) => {
         if (!canSelectSuggestion()) return;
         if (requestState.scope || isWithinGlobalSearchQueryLimit(requestState.query))
@@ -922,9 +978,8 @@ function HeaderSearchController({
             return;
           }
           if (removesHeaderScope(event.key, requestState.query, requestState.scope)) {
-            request.current?.();
             event.preventDefault();
-            dispatch({ type: 'remove-scope' });
+            removeSearchScope();
           }
           const subjects = canSelectSuggestion() ? (visibleState.result?.subjects ?? []) : [];
           const next = nextSuggestion(event.key, visibleState.activeIndex, subjects.length);
@@ -950,7 +1005,7 @@ function HeaderSearchController({
       formProps={{
         onSubmit: (event) => {
           const action = headerSearchAction(locale, requestState.scope);
-          if (composing || !action || !requestState.query.trim()) {
+          if (composing || !action || (!requestState.query.trim() && !requestState.scope)) {
             event.preventDefault();
             return;
           }
@@ -965,7 +1020,8 @@ function HeaderSearchController({
           event.preventDefault();
           const url = new URL(action, window.location.origin);
           url.search = new URLSearchParams(new FormData(event.currentTarget) as never).toString();
-          url.searchParams.set('q', requestState.query);
+          if (requestState.query.trim()) url.searchParams.set('q', requestState.query);
+          else url.searchParams.delete('q');
           visit(`${url.pathname}${url.search}`);
         },
         onBlur: (event) => {

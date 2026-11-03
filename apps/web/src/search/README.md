@@ -55,8 +55,9 @@ result filters; Collection's dialog remains a separate delivery slice. No new fi
 is introduced here. Opening or closing Filters restores keyboard focus only for the current surface transition,
 to a still-connected captured owner. Reopen, desktop/phone replacement, a new committed search, unmount, and a
 reader who has moved retire the request. Desktop entry and Escape/Close use that rule; the phone sheet keeps
-BottomSheet's own focus lifecycle. Scope labels require a supported scoped action and suggestion loader; otherwise they remain
-explicitly unavailable until removed, without falling back to global search.
+BottomSheet's own focus lifecycle. The header retains the scoped filter through Search submission. Scoped suggestions
+remain unavailable until a native scoped suggestion loader exists; the missing loader never changes the scoped Search
+action into a Global request.
 
 Filters edits result-language preferences as an ordered list of at most eight: add from supported locales, preserve
 existing valid authored tags verbatim, remove or move individual entries, and use the page-language default only
@@ -99,6 +100,23 @@ identity, and disposing one anonymous consumer does not cancel another.
 A focused Retry or terminal More recovers onto a still-present current action with the same label, otherwise the named
 discovery region, only for the current owner and only while the reader has not moved; unactivated loads do not take
 focus.
+
+The public Search route is `/{locale}/search`. Realm and Collection scope use the existing `filter` tree as one
+request-only native leaf: `{realm:{id:UUID}}` or `{collection:{id:UUID}}`; for example,
+`/en/search?q=maps&filter=%7B%22realm%22%3A%7B%22id%22%3A%225a522c45-d94f-4d36-8b2a-3af80d988cff%22%7D%7D`.
+Search URLs use the existing filter grammar's
+single resource leaf for scope; display labels never enter native authority. The ID is the only operand sent to
+`POST /v1/subjects:search` with `representation: "discovery-v1"`. Result, kind and facet reads keep the same filter;
+refinement carries that filter through its existing request bridge. Removing scope removes its one leaf, retains
+sibling predicates, clears the cursor and begins a fresh traversal. GET scope is authored intent, not access proof.
+Until the native session/cache reader and resource population/response handoffs are present, scoped Search stays
+explicitly unavailable; it never retries the request as Global. The unscoped public Search route keeps its anonymous
+server rendering.
+
+The native handoffs extend the existing ConditionEditor with request-only resource admission, Refinement with scoped
+continuation, SearchSort with Realm population, DiscoveryResults with the closed mixed-kind response, and the
+Search-local reader with session-bound credentials and cache ownership. Search owns the URL and page wiring; each
+missing population or reader keeps the scoped result unavailable until its native owner supplies that seam.
 
 Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
 never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.

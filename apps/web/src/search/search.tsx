@@ -37,6 +37,13 @@ import {
 import { SearchRecovery } from './search-recovery-view';
 import { useSearchRetryFocus } from './search-retry-focus';
 import { discoverySearchHref, searchParams, type SearchLoaderDeps } from './search-params';
+import {
+  isSearchResourceScope,
+  parseSearchResourceScope,
+  removeSearchResourceScope,
+  searchFilterWithScope,
+  type SearchResourceScope,
+} from './advanced-scope';
 import { hasResultSearchIntent } from './search-intent';
 import { DiscoveryKinds } from './discovery-kinds';
 import { ResultKindNavigation } from './result-kind-navigation';
@@ -65,6 +72,7 @@ type SearchParams = {
   kinds?: string[] | undefined;
   languages?: string[] | undefined;
   filter?: string | undefined;
+  resourceScope?: SearchResourceScope | undefined;
   representation?: 'subjects-v1';
   kindCursor?: string;
   facetValues: Record<string, string[]>;
@@ -164,6 +172,19 @@ function validateSearchInput(input: unknown): SearchParams {
     language: input.languages,
     filter: input.filter,
   });
+  if (input.resourceScope !== undefined && !isSearchResourceScope(input.resourceScope))
+    throw new Error('Invalid search resource scope');
+  if (parsed.filter !== undefined && typeof parsed.filter !== 'string') throw new Error('Invalid search filter');
+  const filterScope = typeof parsed.filter === 'string' ? parseSearchResourceScope(parsed.filter) : {};
+  if (filterScope.invalidInput) throw new Error('Invalid search resource scope');
+  if (
+    isSearchResourceScope(input.resourceScope) &&
+    filterScope.scope &&
+    (input.resourceScope.kind !== filterScope.scope.kind || input.resourceScope.id.toLowerCase() !== filterScope.scope.id)
+  )
+    throw new Error('Search resource scope does not match its filter');
+  const resourceScope = isSearchResourceScope(input.resourceScope) ? input.resourceScope : filterScope.scope;
+  const filter = searchFilterWithScope(typeof parsed.filter === 'string' ? parsed.filter : undefined, resourceScope);
   if (input.kindCursor !== undefined && (typeof input.kindCursor !== 'string' || input.kindCursor.length > 4864))
     throw new Error('Invalid kind cursor');
   const facetValues: Record<string, string[]> = Object.create(null);
@@ -187,7 +208,8 @@ function validateSearchInput(input: unknown): SearchParams {
     sort: parsed.sort,
     kinds: parsed.kinds,
     languages: parsed.language,
-    filter: parsed.filter,
+    ...(filter !== undefined ? { filter } : {}),
+    ...(resourceScope ? { resourceScope } : {}),
     facetValues,
     ...(isRecord(input.ranges)
       ? {
@@ -218,6 +240,7 @@ function requestParams(data: SearchParams): SearchLoaderDeps {
     kinds: data.kinds,
     languages: data.languages,
     filter: data.filter,
+    resourceScope: data.resourceScope,
   };
 }
 
@@ -262,7 +285,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       body = undefined;
     }
     const filter = body?.filter;
-    const hasSearch = hasResultSearchIntent(queryState);
+    const hasSearch = hasResultSearchIntent(queryState) || queryState.resourceScope !== undefined;
     const languages = data.languages ?? requestLanguages(data.locale);
     const years = release ? yearProperties(release, knownType) : [];
     const properties = release
@@ -399,6 +422,86 @@ function messageOptions(locale: string): MessageOptions {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
+/** Search filters author a native request-only resource leaf; the server remains the access authority. */
+function AdvancedScope({
+  filter,
+  scope,
+  locale,
+  onRemove,
+}: {
+  filter?: string;
+  scope?: SearchResourceScope;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const typeId = useId();
+  const resourceId = useId();
+  const options = messageOptions(locale);
+  const [kind, setKind] = useState<SearchResourceScope['kind'] | ''>(scope?.kind ?? '');
+  const [id, setId] = useState(scope?.id ?? '');
+  useEffect(() => {
+    setKind(scope?.kind ?? '');
+    setId(scope?.id ?? '');
+  }, [scope?.kind, scope?.id]);
+
+  const selected = kind && isSearchResourceScope({ kind, id }) ? { kind, id: id.toLowerCase() } : undefined;
+  const nextFilter = selected
+    ? searchFilterWithScope(filter, selected)
+    : scope && !kind
+      ? removeSearchResourceScope(filter)
+      : filter;
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-border/60 p-3">
+      <legend className="px-1 text-sm font-medium">{m.access_resource({}, options)}</legend>
+      <Field>
+        <FieldLabel htmlFor={typeId}>{m.library_follow_count_context_select_type({}, options)}</FieldLabel>
+        <NativeSelect
+          id={typeId}
+          value={kind}
+          onChange={(event) => {
+            const next = event.currentTarget.value as SearchResourceScope['kind'] | '';
+            setKind(next);
+            if (!next && scope) onRemove();
+          }}
+        >
+          <NativeSelectOption value="">{m.header_search_global({}, options)}</NativeSelectOption>
+          <NativeSelectOption value="realm">Realm</NativeSelectOption>
+          <NativeSelectOption value="collection">Collection</NativeSelectOption>
+        </NativeSelect>
+      </Field>
+      {kind && (
+        <Field>
+          <FieldLabel htmlFor={resourceId}>{m.access_identity_resource_id({}, options)}</FieldLabel>
+          <input
+            id={resourceId}
+            type="text"
+            value={id}
+            required
+            pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+            autoComplete="off"
+            onChange={(event) => setId(event.currentTarget.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </Field>
+      )}
+      <input type="hidden" name="filter" value={nextFilter ?? ''} />
+      <div className="flex flex-wrap gap-2">
+        {kind && (
+          <Button type="submit" variant="outline">
+            {m.search_submit({}, options)}
+          </Button>
+        )}
+        {scope && (
+          <Button type="button" variant="ghost" onClick={onRemove}>
+            {m.header_search_remove_scope({ scope: `${scope.kind} ${scope.id}` }, options)}
+          </Button>
+        )}
+      </div>
+      {scope && <p className="text-xs text-muted-foreground">{`${scope.kind} ${scope.id}`}</p>}
+    </fieldset>
+  );
+}
+
 export function SearchPage({
   query,
   cursor,
@@ -465,7 +568,11 @@ export function SearchPage({
     ...(data?.problem?.errors ?? []),
     ...(draft.attempted || draft.condition !== data?.condition ? localIssues : []),
   ];
-  const editedState = conditionSearchState(committedState, draft.condition, draft.languages);
+  const editedState = {
+    ...conditionSearchState(committedState, draft.condition, draft.languages),
+    filter: committedState.filter,
+    resourceScope: committedState.resourceScope,
+  };
   // Pending fields can be incomplete. Result navigation consumes only an admitted tree.
   const navigationState = localIssues.length ? committedState : editedState;
   const editableData = data ? { ...data, queryState: navigationState, condition: navigationState.condition } : data;
@@ -539,8 +646,20 @@ export function SearchPage({
       languages: draft.languages?.filter((entry) => entry !== tag),
     });
   if (draft.condition) add('condition', m.condition_heading({}, options), { ...navigationState, condition: undefined });
-  if (navigationState.filter)
-    add('filter', m.search_existing_filter({}, options), { ...navigationState, filter: undefined });
+  const filterWithoutScope = navigationState.resourceScope
+    ? removeSearchResourceScope(navigationState.filter)
+    : navigationState.filter;
+  if (filterWithoutScope)
+    add(
+      'filter',
+      m.search_existing_filter({}, options),
+      {
+        ...navigationState,
+        filter: navigationState.resourceScope
+          ? searchFilterWithScope(undefined, navigationState.resourceScope)
+          : undefined,
+      },
+    );
   const activeFilterCount = constraints.length;
   useEffect(() => setHydrated(true), []);
   const desktopPanel = useRef<HTMLDivElement>(null);
@@ -621,6 +740,15 @@ export function SearchPage({
     }
     void router?.navigate({ href });
   };
+  const removeScope = () =>
+    navigate(
+      discoverySearchHref(locale, {
+        ...committedState,
+        filter: removeSearchResourceScope(committedState.filter),
+        resourceScope: undefined,
+        cursor: undefined,
+      }),
+    );
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     setDraft((previous) => ({ ...previous, attempted: true }));
     if (localIssues.length || router) event.preventDefault();
@@ -736,10 +864,16 @@ export function SearchPage({
     <div className="space-y-5 pt-3 lg:pt-0">
       <input type="hidden" name="q" value={query} />
       {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
+      <AdvancedScope
+        key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
+        filter={data?.queryState?.filter}
+        scope={data?.queryState?.resourceScope}
+        locale={locale}
+        onRemove={removeScope}
+      />
       {(draft.languages ?? []).map((tag) => (
         <input key={tag} type="hidden" name="language" value={tag} />
       ))}
-      {data?.queryState?.filter && <input type="hidden" name="filter" value={data.queryState.filter} />}
       {(data?.discovery?.status !== 'ready' ? (data?.queryState?.kinds ?? []) : []).map((kind) => (
         <input key={kind} type="hidden" name="kinds" value={kind} />
       ))}
