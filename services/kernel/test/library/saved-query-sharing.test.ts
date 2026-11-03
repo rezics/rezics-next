@@ -63,12 +63,14 @@ test('owner, another account and anonymous readers share only complete output wi
   for (const visibility of ['public', 'unlisted']) {
     const key = randomUUID(),
       input = draft(visibility);
-    const response = await f.send('POST', '/v1/collections', input, f.owner, key);
+    const [response, replay] = await Promise.all([
+      f.send('POST', '/v1/collections', input, f.owner, key),
+      f.send('POST', '/v1/collections', input, f.owner, key),
+    ]);
     expect(response.status).toBe(201);
     const body = await response.json(),
       id = body.collection.id;
     privateFieldsAbsent(body);
-    const replay = await f.send('POST', '/v1/collections', input, f.owner, key);
     expect(replay.status).toBe(201);
     expect(await replay.json()).toEqual(body);
     await members(id);
