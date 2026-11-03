@@ -27,6 +27,8 @@ export type FactDraft = {
   submission?: { statement: StatementInput; release: Release } | undefined;
   command?: FactCommand | undefined;
   result?: FactResult | undefined;
+  /** A local creation holder may be retained for repair while the active Type no longer admits it. */
+  reuseBlocked?: 'unknown' | 'withdrawn' | undefined;
 };
 export type ChangedFactView = {
   holder: string;
@@ -98,7 +100,7 @@ export function factHolder(draft: Pick<FactDraft, 'holder' | 'property'>): strin
 }
 /** Writable for a new local edit or evidence copy; sealed command bodies stay untouched. */
 export function factWritable(draft: FactDraft): boolean {
-  return !factLocked(draft) && !draft.command;
+  return !factLocked(draft) && !draft.command && !draft.reuseBlocked;
 }
 export function includedChanges(drafts: FactDraft[]): FactDraft[] {
   return drafts.filter((draft) => draft.included && factChanged(draft) && !draft.result?.ok);

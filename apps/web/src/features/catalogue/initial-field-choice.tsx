@@ -24,6 +24,7 @@ export function InitialFieldChoice({
   occupied,
   locale,
   disabled,
+  addLabel,
   atLimit = false,
   fieldClassName,
   labelClassName,
@@ -37,6 +38,7 @@ export function InitialFieldChoice({
   occupied: string[];
   locale: string;
   disabled: boolean;
+  addLabel?: string | undefined;
   atLimit?: boolean;
   fieldClassName: string;
   labelClassName: string;
@@ -92,7 +94,7 @@ export function InitialFieldChoice({
     <>
       <Field className={fieldClassName}>
         <FieldLabel className={labelClassName} htmlFor={selectId}>
-          {m.character_add_fact({}, o)}
+          {addLabel ?? m.character_add_fact({}, o)}
         </FieldLabel>
         <NativeSelect
           id={selectId}

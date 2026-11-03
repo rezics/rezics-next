@@ -23,6 +23,10 @@ function refusalText(reason: ReuseRefusal, locale: string) {
   const o = { locale: locale as never };
   return reason === 'locked'
     ? m.facts_reuse_reason_locked({}, o)
+    : reason === 'unknown'
+      ? m.facts_reuse_reason_unknown({}, o)
+      : reason === 'withdrawn'
+        ? m.facts_reuse_reason_withdrawn({}, o)
     : reason === 'limit'
       ? m.facts_reuse_reason_limit({}, o)
       : reason === 'definition'

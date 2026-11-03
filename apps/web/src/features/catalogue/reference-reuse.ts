@@ -6,7 +6,16 @@ import { factHolder, factWritable, type FactDraft } from './subject-facts';
 export const reuseTargetLimit = 16;
 export const referenceGroupLimit = 16;
 export type ReferenceGroup = { parts: SnakInput[] };
-export type ReuseRefusal = 'locked' | 'limit' | 'definition' | 'constraint' | 'missing' | 'source' | 'self';
+export type ReuseRefusal =
+  | 'locked'
+  | 'unknown'
+  | 'withdrawn'
+  | 'limit'
+  | 'definition'
+  | 'constraint'
+  | 'missing'
+  | 'source'
+  | 'self';
 export type ReusePreview = { ok: true; next: StatementInput } | { ok: false; reason: ReuseRefusal };
 export type ReuseSource = {
   holder: string;
@@ -48,6 +57,7 @@ export function previewReuse(
 ): ReusePreview {
   if (!target) return { ok: false, reason: 'missing' };
   if (sourceHolder && factHolder(target) === sourceHolder) return { ok: false, reason: 'self' };
+  if (target.reuseBlocked) return { ok: false, reason: target.reuseBlocked };
   if (!factWritable(target)) return { ok: false, reason: 'locked' };
   if (!completeReferenceGroup(group)) return { ok: false, reason: 'constraint' };
   if (target.statement.references.length >= referenceGroupLimit) return { ok: false, reason: 'limit' };

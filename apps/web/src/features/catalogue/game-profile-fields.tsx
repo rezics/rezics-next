@@ -84,6 +84,7 @@ function GameItemControl({
   search,
   change,
   editAllowed,
+  targetAdmitted,
 }: {
   part: SnakInput;
   context: StatementFieldsRead;
@@ -91,6 +92,7 @@ function GameItemControl({
   search: EntityPickerSearch;
   change: (value: SnakInput['value']) => void;
   editAllowed?: (() => boolean) | undefined;
+  targetAdmitted?: ((property: string, type: string) => boolean) | undefined;
 }) {
   const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
   const property = part.property.id;
@@ -121,7 +123,9 @@ function GameItemControl({
         }
         search={async (text, signal) =>
           (await search(text, signal)).filter((item) =>
-            item.types.some((type) => gameTarget(context.release, property, type)),
+            item.types.some((type) =>
+              targetAdmitted ? targetAdmitted(property, type) : gameTarget(context.release, property, type),
+            ),
           )
         }
         onValueChange={(items) => {
@@ -152,6 +156,7 @@ export function GameStatementFields({
   reuse,
   focusReference,
   stablePartAddresses,
+  targetAdmitted,
 }: {
   id?: string;
   feedback?: StatementFeedback | undefined;
@@ -166,6 +171,7 @@ export function GameStatementFields({
   reuse?: { disabled?: boolean; onReuse: (index: number, keyboard: boolean) => void } | undefined;
   focusReference?: { index: number; nonce: number } | undefined;
   stablePartAddresses?: boolean | undefined;
+  targetAdmitted?: ((property: string, type: string) => boolean) | undefined;
 }) {
   const change = (next: StatementInput) => {
     if (!editAllowed || editAllowed()) onChange(next);
@@ -193,6 +199,7 @@ export function GameStatementFields({
           search={search}
           change={update}
           editAllowed={editAllowed}
+          targetAdmitted={targetAdmitted}
         />
       </div>
     );

@@ -204,6 +204,11 @@ export const catalogueEntries = {
     label: m.music_context_title({}, options(locale)),
     href: `${subject({ id, label, locale })}/music-context`,
   }),
+  musicContextCreate: ({ locale }: Locale): CatalogueEntry => ({
+    group: 'create',
+    label: m.music_context_create_title({}, options(locale)),
+    href: `/${locale}/catalogue/music-context`,
+  }),
 };
 
 /** Navigation may request sign-in; the native page still owns every current availability/authority decision. */

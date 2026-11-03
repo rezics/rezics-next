@@ -979,3 +979,29 @@ are not definition changes. Comparison does not require the return URL, but the 
 Decision: comparison reads stay bounded to the active pointer and the two exact releases; Type directory
 search is not used. Opening, switching and closing comparison keeps the original editor return, including
 its field and statement.
+
+## Browser flow: music-context creation
+
+`/{locale}/catalogue/music-context` creates one released place, music event, administrative area, or instrument. Generic
+catalogue creation links to this localized entry. The page reads one successful active immutable release and offers
+only actual Types admitted by the existing music-context classifier, including its emitted structural bases. An
+unavailable definition read is an error; a release with no admitted Type shows that absence without inventing a
+profile or seed.
+
+The selected Type's exact emitted properties, datatypes, qualifiers, target restrictions, and multiplicities drive
+initial fact controls. Native editors keep date precision and unknown values, exact relation-target UUIDs, quantities,
+qualifiers, and independent reference groups. Untouched scaffolds are omitted. A reference group can be deliberately
+reviewed and copied to at most 16 eligible local facts; the copy is independent evidence and grants no rights or
+acceptance. Terms and aliases remain multilingual subject terms, separate from statement evidence.
+
+The data language starts unset and must be chosen for each term row; route locale only selects interface wording.
+Private term and fact drafts remain distinct by exact Type. A withdrawn fact stays visible until removed, while a
+withdrawn Type remains available for deliberate whole-draft discard. The contributor reviews the prepared Type,
+terms, facts, targets, ranks, qualifiers, and every evidence part before confirming. A changed release requires a new
+review, and nested native feedback returns to its stable holder. The BFF forwards the reviewed item through ordinary
+native subject creation with current authority. Unknown delivery retries the same bytes and key; after acknowledgement,
+recovery reads only the returned UUID. The ordinary subject reader supplies the exact public identity. Creating a
+place, event, area, or instrument proposes no album, performer, venue, occurrence, membership, personal ownership,
+Context, or account-setting relation.
+
+Decision: music-context creation starts with no data language selected; contributors choose each term language independently of the route locale.

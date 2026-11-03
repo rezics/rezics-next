@@ -23,6 +23,7 @@ import { TypeDirectoryPicker } from './type-directory-picker';
 import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
+import { MusicContextCreateEntry } from './music-context-create-entry';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import {
   initialTerms,
@@ -141,15 +142,30 @@ function CreateSubjectFormLive({
     hideHeading?: boolean;
     // A family can retain private draft metadata while retiring its current reference reading.
     metadata?: { ready: boolean; pending: boolean; failure: ReactNode; types: CreateType[] };
+    refreshMetadata?: () => void;
     readOnlyType?: boolean;
     control?: (pointer: string, type: string) => string | { id: string; label: string } | undefined;
     errorLabel?: (id: string) => string | undefined;
     type?: string;
     intro?: string;
     href?: string;
+    /** A feature may keep each exact Type's private term draft separately. */
+    retainTypeDrafts?: boolean;
+    initialLanguage?: string;
+    onTypeDraftChange?: (type: string, hasTerms: boolean) => void;
+    onDiscardType?: (type: string) => void;
+    canEditType?: (type: string) => boolean;
+    canCreateType?: (type: string) => boolean;
+    reviewRevision?: string;
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
-    fields: (type: string, disabled: boolean, canEdit: () => boolean, invalidate?: () => void) => ReactNode;
+    fields: (
+      type: string,
+      disabled: boolean,
+      canEdit: () => boolean,
+      invalidate?: () => void,
+      discardTypeDraft?: () => void,
+    ) => ReactNode;
     prepare: (item: InitialSubject) => { item: InitialSubject; errors: Violation[] };
     /** Opt-in whole-item review before sealing. Default callers skip this and submit immediately. */
     review?: (state: { item: InitialSubject; stale: boolean }) => ReactNode;
@@ -193,7 +209,12 @@ function CreateSubjectFormLive({
   const [directoryType, setDirectoryType] = useState<CreateType | null>(null);
   const [directoryPending, setDirectoryPending] = useState(false);
   const [directoryRefreshToken, setDirectoryRefreshToken] = useState(0);
-  const [rows, setRows] = useState<TermDraft[]>([{ language: locale, label: '', description: '', aliases: '' }]);
+  const [rows, setRows] = useState<TermDraft[]>([
+    { language: profile?.initialLanguage ?? locale, label: '', description: '', aliases: '' },
+  ]);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const typeRows = useRef(new Map<string, TermDraft[]>());
   const [failure, setFailure] = useState<CreateFailure>();
   // Capture profile addresses at rejection, before row deletion or Type changes can shift native indices.
   const targets = useRef(new Map<string, { id: string; label?: string }>());
@@ -234,15 +255,24 @@ function CreateSubjectFormLive({
   const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
   const definitionsFailed = directoryMode ? false : profile?.metadata ? !profile.metadata.ready : definitions.isError;
-  const hasCurrentType = directoryMode ? directoryType?.id === type : types.some((entry) => entry.id === type);
+  const hasCurrentType = directoryMode
+    ? directoryType?.id === type
+    : profile?.canCreateType
+      ? profile.canCreateType(type)
+      : types.some((entry) => entry.id === type);
   const definitionsBlocked =
     !request.current &&
     (!!profile?.metadata?.pending ||
       (directoryMode
         ? directoryPending || (!!type && !hasCurrentType)
-        : definitionsFailed || definitions.isFetching || types.length === 0));
+        : definitionsFailed ||
+          definitions.isFetching ||
+          types.length === 0 ||
+          (!!type && !!profile?.canCreateType && !hasCurrentType)));
   // Profile callbacks share this form's workspace and command lock, including before busy renders.
-  const profileEditable = !disabled && !definitionsBlocked && !profile?.metadata?.pending && !!selectedType && !created;
+  const typeEditable = !profile?.metadata?.pending && (!profile?.canEditType || profile.canEditType(type));
+  const profileEditable =
+    !disabled && !definitionsBlocked && !profile?.metadata?.pending && typeEditable && !!selectedType && !created;
   const currentEdit = useRef<object | null>(null);
   const edit = useMemo(() => {
     const token = {};
@@ -291,8 +321,53 @@ function CreateSubjectFormLive({
     ].join(' ');
   }
 
+  function hasTermInput(next: readonly TermDraft[]) {
+    return next.some((row) => !!(row.language || row.label || row.description || row.aliases));
+  }
+
+  function writeRows(next: TermDraft[], ownerType = type) {
+    rowsRef.current = next;
+    setRows(next);
+    if (profile?.retainTypeDrafts) profile.onTypeDraftChange?.(ownerType, hasTermInput(next));
+  }
+
+  function changeType(nextType: string) {
+    if (nextType === type) return;
+    currentEdit.current = null;
+    if (profile?.retainTypeDrafts) {
+      const current = structuredClone(rowsRef.current);
+      if (type) typeRows.current.set(type, current);
+      if (type) profile.onTypeDraftChange?.(type, hasTermInput(current));
+      const stored = typeRows.current.get(nextType);
+      if (stored) writeRows(structuredClone(stored), nextType);
+      else if (!type && hasTermInput(current)) {
+        typeRows.current.set(nextType, current);
+        writeRows(current, nextType);
+      } else {
+        writeRows(
+          [{ language: profile.initialLanguage ?? '', label: '', description: '', aliases: '' }],
+          nextType,
+        );
+      }
+    }
+    setType(nextType);
+    setFailure(undefined);
+    invalidateReview();
+  }
+
+  function discardTypeDraft() {
+    if (!profile?.retainTypeDrafts) return;
+    const discardedType = type;
+    typeRows.current.delete(type);
+    writeRows([{ language: profile.initialLanguage ?? '', label: '', description: '', aliases: '' }], '');
+    setType('');
+    profile.onDiscardType?.(discardedType);
+    setFailure(undefined);
+    invalidateReview();
+  }
+
   function update(index: number, field: keyof TermDraft, value: string) {
-    setRows((current) => current.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
+    writeRows(rowsRef.current.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
     setFailure(undefined);
     invalidateReview();
   }
@@ -315,7 +390,7 @@ function CreateSubjectFormLive({
         return;
       }
       if (profile?.review) {
-        const fingerprint = JSON.stringify(draft.item);
+        const fingerprint = JSON.stringify([draft.item, profile?.reviewRevision]);
         if (!itemReview || itemReview.stale || itemReview.fingerprint !== fingerprint) {
           setItemReview({ item: structuredClone(draft.item), fingerprint, stale: false });
           return;
@@ -457,6 +532,7 @@ function CreateSubjectFormLive({
                 disabled={(usesDefinitions && definitions.isFetching) || profile?.metadata?.pending}
                 onClick={() => {
                   if (usesDefinitions) void reloadDefinitions();
+                  profile?.refreshMetadata?.();
                   void client.invalidateQueries({ queryKey: ['session'] });
                 }}
               >
@@ -467,12 +543,16 @@ function CreateSubjectFormLive({
           {usesDefinitions && definitions.data?.ok && types.length === 0 && (
             <p role="status">{m.catalogue_create_empty({}, options)}</p>
           )}
-          {(directoryMode || (usesDefinitions && definitions.data?.ok && (types.length > 0 || hasDraft))) && (
+          {(
+            directoryMode ||
+            (usesDefinitions && definitions.data?.ok && (types.length > 0 || hasDraft)) ||
+            (!!profile?.metadata?.ready && (types.length > 0 || hasDraft))
+          ) && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
               {rows.map((row, index) => (
                 <fieldset
                   key={index}
-                  disabled={disabled}
+                  disabled={disabled || !typeEditable}
                   className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
                 >
                   <legend className="px-1 text-sm font-semibold">{m.catalogue_create_terms({}, options)}</legend>
@@ -546,7 +626,7 @@ function CreateSubjectFormLive({
                       type="button"
                       variant="ghost"
                       onClick={() => {
-                        setRows(rows.filter((_, at) => at !== index));
+                        writeRows(rowsRef.current.filter((_, at) => at !== index));
                         setFailure(undefined);
                         invalidateReview();
                       }}
@@ -561,7 +641,7 @@ function CreateSubjectFormLive({
                 variant="outline"
                 disabled={disabled}
                 onClick={() => {
-                  setRows([...rows, { language: '', label: '', description: '', aliases: '' }]);
+                  writeRows([...rowsRef.current, { language: '', label: '', description: '', aliases: '' }]);
                   invalidateReview();
                 }}
               >
@@ -624,15 +704,10 @@ function CreateSubjectFormLive({
                     <NativeSelect
                       id="create-type"
                       value={type}
-                      disabled={disabled}
+                      disabled={disabled || !!profile?.metadata?.pending}
                       aria-invalid={invalid('create-type')}
                       aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
-                      onChange={(event) => {
-                        currentEdit.current = null;
-                        setType(event.target.value);
-                        setFailure(undefined);
-                        invalidateReview();
-                      }}
+                      onChange={(event) => changeType(event.target.value)}
                     >
                       <NativeSelectOption value="">{m.catalogue_create_choose_type({}, options)}</NativeSelectOption>
                       {type && !types.some((entry) => entry.id === type) && (
@@ -686,7 +761,7 @@ function CreateSubjectFormLive({
               </Field>
               {profile && (
                 <CreateSubjectProfileDraft type={type} onDirty={setProfileDirty}>
-                  {profile.fields(type, disabled, edit.active, invalidateReview)}
+                  {profile.fields(type, disabled, edit.active, invalidateReview, discardTypeDraft)}
                 </CreateSubjectProfileDraft>
               )}
               {itemReview && profile?.review?.(itemReview)}
@@ -795,6 +870,7 @@ function CreateSubjectFormLive({
                 <MangaProfileEntry locale={locale} />
                 <PeopleProfileEntry locale={locale} />
                 <AlbumProfileEntry locale={locale} />
+                <MusicContextCreateEntry locale={locale} />
               </nav>
             </details>
           )}
