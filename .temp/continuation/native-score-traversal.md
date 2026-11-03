@@ -1,61 +1,53 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "interface",
-  "paths": [
-    "apps/web/src/library/shelf-params.ts",
-    "apps/web/src/library/shelf-rows.ts",
-    "apps/web/src/library/shelf-view.tsx",
-    "apps/web/src/library/shelf-columns.tsx",
-    "apps/web/src/library/entries-read.ts",
-    "apps/web/src/library/reads.ts",
-    "apps/web/src/library/personal-shelf-origin.tsx",
-    "apps/web/src/routes/library/index.tsx",
-    "apps/web/src/stories/library-page-states.stories.tsx",
-    "apps/web/tests/shelf-score-order.test.tsx",
-    "apps/web/tests/shelf-page.test.ts",
-    "apps/web/messages/*.json",
-    "docs/library-and-collections.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "account",
-    "deletion"
-  ],
-  "criticalPath": false,
-  "after": [
-    "e35e13cf-e5e6-4797-889d-9d16a052b942",
-    "b0bfd56d-40ea-42d8-88f1-e8d0c234afe7"
-  ],
-  "waiting": [],
-  "estimate": {
-    "lines": 1100,
-    "files": 14
-  },
-  "acceptance": {
-    "command": [
-      "bun",
-      "apps/web/scripts/focused.ts",
-      "--private-network",
-      "--",
-      "bun",
-      "test",
-      "tests/shelf-score-order.test.tsx",
-      "tests/shelf-page.test.ts",
-      "tests/personal-shelf-current-origin.test.tsx"
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'interface',
+  'paths':
+    [
+      'apps/web/src/library/shelf-params.ts',
+      'apps/web/src/library/shelf-rows.ts',
+      'apps/web/src/library/shelf-view.tsx',
+      'apps/web/src/library/shelf-columns.tsx',
+      'apps/web/src/library/entries-read.ts',
+      'apps/web/src/library/reads.ts',
+      'apps/web/src/library/personal-shelf-origin.tsx',
+      'apps/web/src/routes/library/index.tsx',
+      'apps/web/src/stories/library-page-states.stories.tsx',
+      'apps/web/tests/shelf-score-order.test.tsx',
+      'apps/web/tests/shelf-page.test.ts',
+      'apps/web/messages/*.json',
+      'docs/library-and-collections.md',
     ],
-    "placement": "default",
-    "tests": [
-      "Both personal-score directions traverse first, middle and final native pages in full-shelf order, including equal scores, zero, unrated-after-rated entries and existing state/type filters; no local page sorting.",
-      "A changed score, clear, replaced entry/filter/direction/question or retired viewer uses the native currentness/restart outcome and retires obsolete rows/cursors and delayed effects.",
-      "Ready, native preparation, unavailable order, stale cursor, empty and final page remain distinct; grid/list/table, existing saved display preferences and keyboard return remain coherent.",
-      "One fixed-size supplied page remains bounded at 1/10/20 rows and growing unrelated shelf populations, with no per-row score fetch or browser shelf aggregation."
-    ],
-    "failing": true
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': ['e35e13cf-e5e6-4797-889d-9d16a052b942', 'b0bfd56d-40ea-42d8-88f1-e8d0c234afe7'],
+  'waiting': [],
+  'estimate': { 'lines': 1100, 'files': 14 },
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'apps/web/scripts/focused.ts',
+          '--private-network',
+          '--',
+          'bun',
+          'test',
+          'tests/shelf-score-order.test.tsx',
+          'tests/shelf-page.test.ts',
+          'tests/personal-shelf-current-origin.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'Both personal-score directions traverse first, middle and final native pages in full-shelf order, including equal scores, zero, unrated-after-rated entries and existing state/type filters; no local page sorting.',
+          'A changed score, clear, replaced entry/filter/direction/question or retired viewer uses the native currentness/restart outcome and retires obsolete rows/cursors and delayed effects.',
+          'Ready, native preparation, unavailable order, stale cursor, empty and final page remain distinct; grid/list/table, existing saved display preferences and keyboard return remain coherent.',
+          'One fixed-size supplied page remains bounded at 1/10/20 rows and growing unrelated shelf populations, with no per-row score fetch or browser shelf aggregation.',
+        ],
+      'failing': true,
+    },
 }
 ---
 
