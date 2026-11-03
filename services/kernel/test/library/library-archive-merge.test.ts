@@ -6,6 +6,7 @@ import { createEntryPersonalCommands } from '../../src/library/entry-personal.ts
 import { createPersonalLabelCommands } from '../../src/library/label-commands.ts';
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
@@ -89,7 +90,7 @@ beforeAll(async () => {
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   source = await f.identity(exportScopes);
   const mergeScopes = [...exportScopes, 'account:delete'];
-  main = await f.identity(mergeScopes);
+  main = await f.identity([...mergeScopes, 'rating:vote']);
   createOwner = await f.identity(mergeScopes);
   staleRevision = await f.identity(mergeScopes);
   staleIncarnation = await f.identity(mergeScopes);
@@ -106,6 +107,11 @@ beforeAll(async () => {
     return (result.subject as { id: string }).id;
   }
   subjects = [await createSubject('archive first subject'), await createSubject('archive second subject')];
+  await createVoteCommands({ pool: f.pool, access: f.access }).putVoteOutcome(
+    main.actor,
+    { questionId: STANDARD_QUESTION_ID, targetId: subjects[0], units: 7 },
+    key(),
+  );
   await f.commands.putEntry(source.actor, subjects[0], { state: 'planned' }, entryKey());
   await f.commands.putEntry(source.actor, subjects[1], { state: 'playing' }, entryKey());
 
@@ -255,6 +261,9 @@ afterAll(async () => {
 test('the actual installed archive is privately reviewed, explicitly merged and replayed through native commands', async () => {
   const wrong = framed(artifact.records);
   expect(wrong.manifest.version).toBe(3);
+  const publicVoteCommands = createVoteCommands({ pool: f.pool, access: f.access });
+  const publicVoteBefore = await publicVoteCommands.readOwnVote(main.actor, STANDARD_QUESTION_ID, subjects[0]);
+  expect(publicVoteBefore?.units).toBe(7);
   const acceptedArchive = await upload(main, wrong);
   const id = acceptedArchive.uploadId as string;
   expect((await send(main, 'POST', mergePath, { records: artifact.records })).status).toBe(400);
@@ -470,6 +479,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     reflection: '  A historical private reflection.\n',
     assessment: { meaningRevision: 1, units: 14 },
   });
+  expect(await publicVoteCommands.readOwnVote(main.actor, STANDARD_QUESTION_ID, subjects[0])).toEqual(publicVoteBefore);
   expect(recoveredJournal.finishDate).toEqual(journalBefore.finishDate);
   expect(recoveredJournal.revision).toBe(journalBefore.revision + 1);
   const recoveredRepeatedJournal = await sessions.readSessionJournal(main.actor, repeatedTargetSessionId);
@@ -808,7 +818,10 @@ test('missing personal targets stay inert and concurrent annotation or journal r
   const missing = await makeUpload(missingFactOwner);
   const missingRows = (await previewAll(missingFactOwner, missing.id)).records;
   const missingAnnotation = missingRows.find((row: any) => row.section === 'annotations')!;
-  const missingJournal = missingRows.find((row: any) => row.section === 'journals')!;
+  const missingJournal = missingRows.find((row: any) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId)!;
+  const foreignJournal = missingRows.find(
+    (row: any) => row.section === 'journals' && row.evidence.sessionId === repeatedSourceSessionId,
+  )!;
   await json(
     await send(missingFactOwner, 'PATCH', `${mergePath}/${missing.id}/review`, {
       items: [
@@ -826,12 +839,20 @@ test('missing personal targets stay inert and concurrent annotation or journal r
           sessionId: key(),
           fields: { startDate: 'set' },
         },
+        {
+          ordinal: foreignJournal.ordinal,
+          kind: 'journal',
+          subjectId: subjects[0],
+          sessionId: sourceSessionId,
+          fields: { assessment: 'set' },
+        },
       ],
     }),
   );
   const missingReviewed = (await previewAll(missingFactOwner, missing.id)).records;
   expect(missingReviewed.find((row: any) => row.ordinal === missingAnnotation.ordinal).status).toBe('unresolved');
   expect(missingReviewed.find((row: any) => row.ordinal === missingJournal.ordinal).status).toBe('unresolved');
+  expect(missingReviewed.find((row: any) => row.ordinal === foreignJournal.ordinal).status).toBe('unresolved');
   expect(
     (
       await json(
@@ -839,11 +860,11 @@ test('missing personal targets stay inert and concurrent annotation or journal r
           missingFactOwner,
           'POST',
           `${mergePath}/${missing.id}/apply`,
-          selected([missingAnnotation.ordinal, missingJournal.ordinal]),
+          selected([missingAnnotation.ordinal, missingJournal.ordinal, foreignJournal.ordinal]),
         ),
       )
     ).applied,
-  ).toMatchObject([{ status: 'stale' }, { status: 'stale' }]);
+  ).toMatchObject([{ status: 'stale' }, { status: 'stale' }, { status: 'stale' }]);
 
   const entry = (await f.commands.putEntry(staleFactOwner.actor, subjects[0], { state: 'planned' }, entryKey())).value
     .entry;
@@ -965,20 +986,31 @@ test('cancellation stops pending effects and terminal erasure removes retained a
   const rows = (await previewAll(cancelledOwner, id)).records;
   const entry = rows.find((row: any) => row.section === 'entries' && row.evidence.subject_id === subjects[0]);
   const label = rows.find((row: any) => row.section === 'labels' && row.evidence.label_id === sourceLabels[1]);
+  const journal = rows.find((row: any) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId);
+  const sessions = createSessionCommands({ pool: f.pool, access: f.access, tokens: f.tokens });
+  const target = (
+    await sessions.startSession(cancelledOwner.actor, { subjectId: subjects[0], mode: 'scalar_amount', unit: 'page' }, key())
+  ).value;
   await json(
     await send(cancelledOwner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         { ordinal: entry.ordinal, kind: 'entry', subjectId: subjects[0], stateId: 'planned', action: 'update' },
         { ordinal: label.ordinal, kind: 'label', target: { mode: 'create' } },
+        { ordinal: journal.ordinal, kind: 'journal', subjectId: subjects[0], sessionId: target.id, fields: { assessment: 'set' } },
       ],
     }),
   );
-  await json(await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([label.ordinal])));
+  await json(await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([label.ordinal, journal.ordinal])));
   await json(await send(cancelledOwner, 'DELETE', `${mergePath}/${id}`));
   expect((await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([entry.ordinal]))).status).toBe(409);
   expect((await f.commands.readEntry(cancelledOwner.actor, subjects[0])).state).toBe(before.state);
   const results = await json(await send(cancelledOwner, 'GET', `${mergePath}/${id}/results`));
   expect(results.results.find((row: any) => row.ordinal === label.ordinal).status).toBe('acknowledged');
+  expect(results.results.find((row: any) => row.ordinal === journal.ordinal).status).toBe('accepted');
+  expect((await sessions.readSessionJournal(cancelledOwner.actor, target.id)).assessment).toEqual({
+    meaningRevision: 1,
+    units: 14,
+  });
 
   const { id: deletedId } = await makeUpload(deletedOwner);
   const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
@@ -1119,7 +1151,7 @@ test('exact occurrence confirmations fence competing corrections and replay the 
           kind: 'journal',
           subjectId: subjects[0],
           sessionId,
-          fields: { reflection: 'set', startDate: 'set' },
+          fields: { reflection: 'set', startDate: 'set', assessment: 'set' },
         },
         { ordinal: label.ordinal, kind: 'label', target: { mode: 'create' } },
       ],
@@ -1140,7 +1172,7 @@ test('exact occurrence confirmations fence competing corrections and replay the 
   await sessions.patchSessionJournal(
     owner.actor,
     targets[1]!,
-    { revision: 0, reflection: 'competing correction' },
+    { revision: 0, reflection: 'competing correction', assessment: { units: 19 } },
     key(),
   );
   const stale = await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[0]] }));
@@ -1152,11 +1184,12 @@ test('exact occurrence confirmations fence competing corrections and replay the 
   expect(committed).toMatchObject({
     reflection: '  A historical private reflection.\n',
     startDate: { year: 2004, month: 2 },
+    assessment: { meaningRevision: 1, units: 14 },
   });
   await sessions.patchSessionJournal(
     owner.actor,
     targets[1]!,
-    { revision: committed.revision, reflection: 'later local correction' },
+    { revision: committed.revision, reflection: 'later local correction', assessment: { units: 0 } },
     key(),
   );
   // Simulate native commit before the archive acknowledgement checkpoint.
@@ -1165,7 +1198,10 @@ test('exact occurrence confirmations fence competing corrections and replay the 
     [routeOf(owner.actor.accountId), owner.actor.accountId, id, row.ordinal],
   );
   expect(await json(await send(owner, 'POST', `${mergePath}/${id}/apply`, exact))).toEqual(accepted);
-  expect((await sessions.readSessionJournal(owner.actor, targets[1]!)).reflection).toBe('later local correction');
+  expect(await sessions.readSessionJournal(owner.actor, targets[1]!)).toMatchObject({
+    reflection: 'later local correction',
+    assessment: { meaningRevision: 1, units: 0 },
+  });
   expect((await sessions.readSessionJournal(owner.actor, targets[0]!)).revision).toBe(0);
   expect(
     (
@@ -1176,7 +1212,7 @@ test('exact occurrence confirmations fence competing corrections and replay the 
             kind: 'journal',
             subjectId: subjects[0],
             sessionId: targets[0],
-            fields: { reflection: 'clear' },
+            fields: { reflection: 'clear', assessment: 'clear' },
           },
         ],
       })
@@ -1184,5 +1220,8 @@ test('exact occurrence confirmations fence competing corrections and replay the 
   ).toBe(409);
   await json(await send(owner, 'DELETE', `${mergePath}/${id}`));
   expect((await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[1]] })).status).toBe(409);
-  expect((await sessions.readSessionJournal(owner.actor, targets[1]!)).reflection).toBe('later local correction');
+  expect(await sessions.readSessionJournal(owner.actor, targets[1]!)).toMatchObject({
+    reflection: 'later local correction',
+    assessment: { meaningRevision: 1, units: 0 },
+  });
 }, 120_000);

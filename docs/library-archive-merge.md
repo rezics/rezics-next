@@ -20,6 +20,8 @@ completion.
 Decision: accept completed V1, V2 and V3 artifacts with their exact installed manifests within 34 MiB and depth 32;
 preserve the V1/V2 inventories, reject duplicate rows and exact stored label names, and keep expired capture timestamps
 as evidence rather than treating them as permission or file expiry.
+V3 keeps the exact V2 section order and adds journal assessment; V4's appended provider sections are refused as a whole
+until their consumer coverage is explicitly installed.
 
 Decision: retain one seven-day archive per account; cap preview/result pages and review/apply batches at 100/20;
 replay uncertain effects with journaled native request keys and prune expired evidence in 100-row pages.

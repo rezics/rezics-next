@@ -58,10 +58,11 @@ Return uses locale-aware `/library` with no shelf or filter operands.
 Version 1 is the fixed historical coverage set below and never implies annotation, provenance or journal coverage.
 New captures use version 4. Stored version 1, 2 and 3 captures keep their original sections, record shapes, manifest
 fields and byte accounting; their cursor epochs remain 1, 2 and 3. Version 2, 3 and 4 cursors carry per-section counters.
-Unsupported versions and cursor shapes are refused. The existing archive consumer accepts V1 and V2 manifests; its
-supported annotation and journal operations are specified in
-[Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md). Version 3 assessments
-remain unsupported by that recovery journey.
+Unsupported versions and cursor shapes are refused. The existing archive consumer accepts V1, V2 and V3 manifests; its
+supported annotation, journal and assessment operations are specified in
+[Personal archive annotation, journal and assessment recovery](library-archive-personal-fact-recovery.md). V3 keeps
+the exact V2 section order and adds the declared assessment object; V4 provider sections remain unsupported for
+archive recovery.
 
 ## Version matrix and section additions
 
@@ -79,7 +80,7 @@ remain unsupported by that recovery journey.
 | `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded | Same as version 2                                                             |
 | `commerce`               | Excluded; orders and financial evidence use Commerce retention/export policy                                          | Same                                                                                                                      | Same                                                                          |
 | `publication`            | Excluded; stored rules only, no dynamic evaluation or working publication output                                      | Same                                                                                                                      | Same                                                                          |
-| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates/reflection; provenance remains unsupported                     | Existing V1/V2 recovery remains; V3 manifests and assessments are unsupported |
+| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates/reflection; provenance remains unsupported                     | V1/V2 recovery plus reviewed V3 occurrence assessments; provenance remains unsupported |
 
 Version 2 additions use independent owner-indexed selections. An annotation record preserves the account and Subject,
 the current entry incarnation and profile pin when an entry row exists, `annotationRevision`, note, priority and

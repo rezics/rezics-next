@@ -1,18 +1,23 @@
-# Personal archive annotation and journal recovery
+# Personal archive annotation, journal and assessment recovery
 
 This journey extends the existing private [archive review and merge](library-archive-merge.md) consumer. It uses the
-installed V2 export sections and the native Entry and Session commands; it adds no archive format, retention store,
-exporter, or restoration path. [Library export](library-export.md) remains the authority for producer facts and format
-limits.
+installed V2/V3 export sections and the native Entry and Session commands; it adds no archive format, retention store,
+exporter, or restoration path. V3 retains the V2 section inventory and adds an occurrence assessment; V4 appends provider
+sections and remains unsupported for recovery. [Library export](library-export.md) remains the authority for producer
+facts and format limits.
 
-Decision: Recovered annotations remain private; V2 exports and native setters expose no visibility field, and source visibility never authorizes publication.
+Decision: Recovered annotations and occurrence assessments remain private; archive IDs, source visibility, revisions and audit times never authorize publication or select a current occurrence.
 
 ## Evidence and supported operations
 
-`decodeLibraryArchive(bytes)` accepts completed V1 and V2 manifests. V1 continues to admit only its declared
-sections. V2 annotations and journals require explicit current-target mapping; V2 provenance and all other
-unimplemented sections remain retained unsupported evidence. Missing sections are not synthesized. Archived
-account, Subject, Entry, Session, pin, revision, capture, audit, completion, and source-observation values never grant
+`decodeLibraryArchive(bytes)` accepts completed V1, V2 and V3 manifests using each exact section inventory and final
+record/byte totals. V1 and V2 retain their original shapes; V2 annotations and journal date/reflection rows require
+explicit current-target mapping, and missing assessment never means zero or clear. V3 adds the required
+`assessment:{meaningRevision,units}` journal object without changing the V2 section inventory. Only meaning revision 1
+and integer units 0–20 are adoptable; null is an explicit archived absence, while unknown meanings and scales stay
+visible unsupported evidence. V2 provenance, V3 provenance and all other unimplemented sections remain retained
+unsupported evidence. V4 provider sections are refused. Missing sections are not synthesized. Archived account,
+Subject, Entry, Session, pin, revision, capture, audit, completion, visibility and source-observation values never grant
 authority.
 
 The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET /:id`, `GET /:id/preview`,
@@ -22,28 +27,35 @@ occurrence editor.
 
 | Retained row  | Explicit current target                         | Selected fields                         | Native operation                                |
 | ------------- | ----------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
-| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                      | `createEntryPersonalCommands().saveAnnotations` |
-| `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate`, `reflection` | `createSessionCommands().patchSessionJournal`   |
+| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                                             | `createEntryPersonalCommands().saveAnnotations` |
+| `journals`    | Canonical Subject and one owner-supplied existing non-retired Session | `startDate`, `finishDate`, `reflection`, `assessment` | `createSessionCommands().patchSessionJournal`   |
 
-Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
-uses the native null/clear operation. Setting an absent or null archived value is unsupported. Empty notes and
-invalid priorities are rejected by the installed native parsers. Journal dates retain year, year/month, or
-year/month/day precision and pass through the existing calendar-date parser. Reflection uses the same native parser:
-`set` preserves exact plain text, including empty text and whitespace; `clear` explicitly writes null. Absent fields
-and null cannot be set. Unsupported reflection evidence remains visible with `unsupported-field-value` or
+Each selected field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit
+clear uses the native null/clear operation. For V1/V2, a missing assessment is unsupported and never clears. For V3,
+setting supported `{meaningRevision:1,units:null}` adopts the archived absence by sending the native `assessment:null`
+PATCH; clearing a supported non-null assessment sends the same native clear operation. Empty notes and invalid
+priorities are rejected by the installed native parsers. Journal dates retain year, year/month, or year/month/day
+precision and pass through the existing calendar-date parser. Reflection uses the same native parser: `set` preserves
+exact plain text, including empty text and whitespace; `clear` explicitly writes null. Absent or null date/reflection
+fields cannot be set. Unsupported reflection evidence remains visible with `unsupported-field-value` or
 `invalid-journal-reflection`; no text is truncated. The native bounds are 2,000 Unicode characters, 4,096 UTF-8 bytes
 and a 16,384-byte escaped PATCH frame. Malformed Unicode reflection evidence is retained encoded for review, while
-other malformed archive strings remain rejected. Session creation, completion, repeat counters, state, progress,
-assessment and unit checklists are never replayed.
+other malformed archive strings remain rejected. Session creation, completion, repeat counters, state, progress and
+unit checklists are never replayed. An occurrence assessment is private to its exact Session; it is independent of the
+Content standard question and does not write vote rows or public enjoyment aggregates.
 
 Decision: native reflection text excludes malformed Unicode and U+0000, which the native text column cannot store;
-archive review retains that evidence and explicitly refuses its adoption. Omitted assessment remains native-owned;
-its coordinated producer uses journal-local CAS and version 3 exports, with V1/V2 absence never inferred.
+archive review retains that evidence and explicitly refuses its adoption. An owner who chooses `set` for a supported V3
+null assessment adopts no assessment; V1/V2 absence and unknown meaning revisions remain unsupported and preserved.
 
 Entry application binds the current incarnation, Entry revision, annotation revision, canonical Subject anchor,
 profile pin, and selected field values. The native annotation command rechecks that binding and always records the
-visibility outcome as private. Journal application binds current Session and journal revisions, state, Subject,
-profile anchor, and the selected dates/reflection. Review exposes current reflection for comparison. Journal application also needs the caller's current `progress_session:update`
+visibility outcome as private. Journal review binds one exact current Session creation/identity, state, canonical
+Subject/profile guard, journal revision, current assessment meaning/value, archived evidence and selected operation.
+The owner compares archived and current values and supplies a specific occurrence; no title/time search, historical
+inference, new Session or progress transition is performed. Journal application uses one PATCH containing all selected
+dates, reflection and assessment at the reviewed journal revision. Review exposes current reflection and assessment
+for comparison. Journal application also needs the caller's current `progress_session:update`
 scope for the native journal command; the archive route's `library_entry:update` scope alone is insufficient. The
 native journal command rechecks owner authority and that binding. Imported consumption dates do not change Session
 start/completion timestamps, progress history, or native command audit time. Journal patch state and its native
@@ -56,7 +68,7 @@ any effect. Accepted items cannot be refreshed. Item keys retain the
 original upload/ordinal/review-revision identity. Stored review JSON is canonicalized so JSONB key order does not
 change a binding. Lost acknowledgements replay through the native receipt and return the original field outcomes.
 Partial application is retained across cancellation and evidence expiry. One selected journal item retains the original
-native key and entire PATCH body before dispatch, combining dates and reflection at one reviewed journal revision.
+native key and entire PATCH body before dispatch, combining dates, reflection and assessment at one reviewed journal revision.
 The native admission guard checks the exact session/profile and live retained upload in the real command transaction;
 receipt replay recovers an original commit without rechecking an obsolete CAS or applying at a later revision.
 Native receipts and archive results contain identifiers, revision, change and field outcomes only. Current reflection
@@ -72,7 +84,7 @@ annotation and journal rows share the existing retained item table and lifecycle
 The [merge owner caller derivation](library-archive-merge.md#bounds-and-verification) remains authoritative for
 shared archive and nested native work.
 
-For fixed addressed selections `R <= 20`, journal fields `F <= 3`, reflection bytes `B <= 4096` and
+For fixed addressed selections `R <= 20`, journal fields `F <= 4`, reflection bytes `B <= 4096` and
 escaped frame `J <= 16384`, whole-caller work includes upload, pages, `R × (Creview + Cintent + Cnative + Cresult)`
 and cleanup, repeating only the reached terms on retries. Upload remains `O(encoded bytes + N)` under existing caps;
 preview/results seek at most `P+1 <= 101` indexed retained rows. Review performs exact retained-row, canonical
@@ -96,12 +108,14 @@ and unmeasured here; source derivation does not establish those execution result
 
 ## Verification and ownership
 
-Focused native coverage uses an actual V2 export, adopts one existing Entry and Session, proves partial-date
-precision, preserve/set/clear, source-visible provenance remains unsupported, stale revision/incarnation handling,
-missing targets, per-item replay, cancellation, expiry pruning, foreign-owner denial and terminal erasure. It also
-checks Session progress and command timestamps remain separate from imported dates. Focused tests and workspace
-typechecks are worker checks; frozen acceptance and composed native growth measurements run after integration.
+Focused native coverage includes a completed V3 producer artifact with private assessments on separate repeated
+occurrences, zero/nonzero/null semantics, V2 absence and unknown meaning preservation, combined date/reflection/assessment
+PATCH replay, stale targets, cancellation, expiry, foreign-owner denial and terminal erasure. It also verifies section and
+byte totals and keeps assessment separate from public votes and Session progress. The V1/V2 validation and personal-fact
+scenarios continue to prove existing date/reflection behavior. Whole-caller native64/512/4096 measurements and frozen
+acceptance remain controller-owned and deferred after this focused worker verification.
 
-The route/schema producer is implemented in this source. Generated client snapshot emission awaits successful
-workspace compilation; the existing snapshot must not be presented as the reflection handoff.
-The remaining generation and focused verification are recorded in the reflection client continuation.
+The mounted route supplies upload, preview, review, apply, results and cancellation DTOs and the supported
+`assessment` journal choice to the generated Kernel client producer. The declaration must expose immutable
+`reviewRevision/items` confirmation and actual returned preview/review/result DTOs before the canonical archive client
+uses this journey. Web keeps its existing manual occurrence interface and archive page ownership.

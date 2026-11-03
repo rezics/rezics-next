@@ -78,7 +78,7 @@ const v2Omissions = {
 const v3Omissions = {
   ...v2Omissions,
   reimport:
-    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; version 3 manifests, including assessments, and provenance are unsupported',
+    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection and supported version 3 occurrence assessments; provenance remains unsupported',
 } as const;
 
 const v4Omissions = {
@@ -86,7 +86,7 @@ const v4Omissions = {
   personalImportEvidence:
     'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
   reimport:
-    'version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+    'version 4 recovery unavailable to the installed V1/V2/V3 archive consumer; evidence never authorizes execution',
 } as const;
 
 export type LibraryExportManifestV1 = {

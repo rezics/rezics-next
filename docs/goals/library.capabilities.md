@@ -580,10 +580,11 @@ in V4; it adds no writer. V1/V2/V3 decoding remains fixed; the current archive c
 The existing Web export interface and canonical archive consumer retain their interface/recovery ownership. Native growth and broader
 integration acceptance remain deferred. See [export contract](../library-export.md#version-4-provider-evidence-and-assessment-seam).
 
-The native export now retains version 3 annotation, accepted provenance and live occurrence-journal records with
-private assessments under the installed private capture and source-fence contract. Version 1 and 2 captures retain
-their original shape; the archive-entry/label merge remains
-version 1 only; native64/512/4096 executed growth evidence remains deferred to integration.
+New captures use V4 for provider evidence while stored V3 captures retain the V2 section inventory plus private journal
+assessment. Personal archive review accepts completed V1/V2/V3 manifests with exact per-version section and byte
+accounting; V1/V2 meanings and inventories remain fixed, V3 assessment is independently reviewed for an explicit
+current occurrence, and V4 provider sections remain unsupported. Native64/512/4096 executed growth evidence remains
+deferred to integration.
 
 MAL, AniList and VNDB consumption-date adoption is integrated with each provider's existing private import journey. A
 source row targets one owner-supplied progress occurrence; supported calendar precision is retained through review and
@@ -615,17 +616,18 @@ and distinct empty/cleared/missing note outcomes while creating fresh private na
 Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
 the adjacent Web recovery interface remain deferred to integration; Web323 still owns export UI.
 
-[Personal archive review and merge](../library-archive-merge.md) shares the installed V1/V2 producer vocabulary and
-bounds. The bounded decoder checks completed artifacts; private consumer methods page evidence and coverage,
-require explicit current subject/state/label or Entry/Session review, and delegate selected entry, label, assignment,
-annotation and journal date/reflection effects to native commands with a per-item replay journal, cancellation, seven-day
-retention and owned-graph erasure. V2 provenance remains retained unsupported evidence. Focused native scenarios
-cover actual V2 producer compatibility, private fact recovery, stale targets, replay, cancellation and denial paths.
-Web adoption, frozen acceptance and measured native64/512/4096 cost evidence remain deferred; the existing export
-evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
-supported fields, immutable review confirmations, exact native PATCH replay and visibility decision. Reflection
-adoption includes empty/set, explicit null/clear and preserve; assessment stays with its coordinated native producer.
-The generated client snapshot handoff remains unavailable pending compiler-host emission and focused verification.
+[Personal archive review and merge](../library-archive-merge.md) accepts the exact installed V1/V2/V3 format without
+changing V1/V2 section inventories. The bounded decoder checks complete manifests, records and bytes; private methods
+page evidence and coverage, require explicit canonical Subject plus current Entry/Session review, and delegate selected
+entry, label, assignment, annotation and journal effects to native commands. V3 assessment adoption binds its meaning,
+current assessment, Session creation/identity, profile guard and journal revision, then sends one original PATCH with the
+selected dates, reflection and assessment. V1/V2 assessment absence, unknown V3 meanings and provenance remain
+unsupported evidence. The consumer retains item receipts, cancellation, seven-day lifetime and owned-graph erasure.
+Focused scenarios cover zero/nonzero/null, repeated occurrences, private/public separation, stale targets, exact replay,
+partial cancellation, expiry and denial paths. The generated client route retains upload, preview, review, item
+confirmation, results and cancellation DTOs for canonical archive8bb/Web323; Web318/142 keeps the manual occurrence
+interface. Frozen acceptance and measured native64/512/4096 cost evidence remain deferred. See
+[personal fact recovery](../library-archive-personal-fact-recovery.md) for supported field choices and limits.
 
 Archive Entry/label confirmation declares generator-visible upload/preview/review/apply methods and explicit per-item
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native

@@ -910,7 +910,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           const archivedAssessment = archiveJournal.assessment;
           if (!supportedArchiveAssessment(archivedAssessment)) unsupportedField = 'assessment';
           else if (assessmentChoice === 'clear') patch.assessment = null;
-          else if (archivedAssessment.units === null) unsupportedField = 'assessment';
+          else if (archivedAssessment.units === null) patch.assessment = null;
           else patch.assessment = { units: archivedAssessment.units };
         }
         if (unsupportedField)
@@ -1174,8 +1174,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         const archivedAssessment = object(evidence.assessment);
         if (
           assessmentChoice !== 'preserve' &&
-          (!supportedArchiveAssessment(archivedAssessment) ||
-            (assessmentChoice === 'set' && archivedAssessment.units === null))
+          !supportedArchiveAssessment(archivedAssessment)
         )
           return null;
         const currentAssessment = object(current.assessment);
@@ -1184,7 +1183,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           currentAssessment?.meaningRevision === 1 &&
           currentAssessment.units === (assessmentChoice === 'clear' ? null : value);
         if (assessmentChoice !== 'preserve')
-          patch.assessment = assessmentChoice === 'clear' ? null : { units: value };
+          patch.assessment = assessmentChoice === 'clear' || value === null ? null : { units: value };
         fields.assessment = {
           choice: assessmentChoice,
           outcome:
