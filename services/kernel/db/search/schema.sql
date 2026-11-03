@@ -377,6 +377,7 @@ CREATE TABLE search.discovery_generation (
     kinds text[] NOT NULL,
     state text NOT NULL,
     activated_at timestamp with time zone,
+    capability jsonb,
     CONSTRAINT discovery_generation_generation_check CHECK ((generation > 0)),
     CONSTRAINT discovery_generation_partition_no_check CHECK ((partition_no = 0)),
     CONSTRAINT discovery_generation_state_check CHECK ((state = ANY (ARRAY['allocated'::text, 'populating'::text, 'replaying'::text, 'reconciling'::text, 'ready'::text, 'active'::text, 'retiring'::text, 'retired'::text, 'quarantined'::text])))
@@ -403,6 +404,8 @@ CREATE TABLE search.discovery_population (
     revision bigint DEFAULT 0 NOT NULL,
     claim_revision bigint DEFAULT 0 NOT NULL,
     continuation jsonb,
+    native_complete boolean DEFAULT false NOT NULL,
+    native_epoch integer,
     CONSTRAINT discovery_population_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
     CONSTRAINT discovery_population_check1 CHECK (((after_route IS NULL) OR ((after_route / 16) = partition_no))),
     CONSTRAINT discovery_population_claim_revision_check CHECK ((claim_revision >= 0)),

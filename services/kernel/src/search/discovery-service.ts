@@ -2,6 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
+import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -516,6 +517,7 @@ function executeDiscoverySearch(
       return await execute(...args);
     } catch (error) {
       if (error instanceof ProblemError) throw error;
+      if (error instanceof CollectionDiscoveryReadinessError) throw error;
       // Owner source/native decoder failures are readiness for the whole response, never absence.
       throw ready();
     }
