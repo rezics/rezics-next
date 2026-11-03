@@ -301,6 +301,14 @@ The exported feed types are `FeedReactionTarget = { targetKind: 'thread' | 'post
 `FeedPage.reactionsAsOf` is `ReactionCountFreshness | null` when present. The generated closed schema accepts only the
 installed seven reaction kinds, positive sparse counts, a current native target and the native freshness fields.
 
+`@rezics/client` exports `FeedPage` from the mounted `feedItems.get` response, `FeedItem`, and its Content-only
+`FeedContentItem` union. `FeedContentSummary`, `FeedReactionTarget` and `FeedReactionCounts` come from the generated
+native contract. Consumers use these exports instead of declaring another feed DTO. The native factory exports
+`FeedReadQuery` and `FeedReads`; its `list` method returns the same closed `FeedPage`.
+The controller's `derivedFiles` rules generate the declaration closure and OpenAPI from `services/kernel/**`
+with `bun run --cwd services/kernel derived`; declaration emission can also share the Kernel compiler database
+through `bun run --cwd services/kernel typecheck --emit-client`.
+
 An authenticated request also gets `summary.viewerReaction`, including explicit `null` after a successful slot read.
 Anonymous requests omit this private field. It is read in one batch for the current actor and is never cached across
 requests. `GET /v1/feedItems?stream=following&limit=20&kind=thread` can return:
