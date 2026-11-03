@@ -23,10 +23,9 @@ export type CollectionExportResult =
 export type CollectionExportRead = (capture: CollectionExportCapture) => Promise<CollectionPageResult>;
 
 /** Revision zero belongs to a native logical identity, never a curated revision or anonymous claim. */
-function validExportRevision(capture: Pick<
-  CollectionExportCapture,
-  'id' | 'revision' | 'provenance' | 'dynamic'
->): boolean {
+function validExportRevision(
+  capture: Pick<CollectionExportCapture, 'id' | 'revision' | 'provenance' | 'dynamic'>,
+): boolean {
   if (!Number.isSafeInteger(capture.revision) || capture.revision < 0) return false;
   if (capture.revision > 0) return true;
   const identity = capture.provenance?.logicalBuiltin;
@@ -39,11 +38,15 @@ function validExportRevision(capture: Pick<
     !identity.curatorAccountId ||
     capture.provenance.viewerId !== identity.curatorAccountId ||
     !identity.builtin
-  ) return false;
+  )
+    return false;
   const key = identity.builtin;
   if (key.kind === 'everything' || key.kind === 'liked') return true;
-  return key.kind === 'state' && [key.profileId, key.stateSetId, key.stateId].every(
-    (id) => typeof id === 'string' && /^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(id),
+  return (
+    key.kind === 'state' &&
+    [key.profileId, key.stateSetId, key.stateId].every(
+      (id) => typeof id === 'string' && /^[a-z][a-z0-9_.-]{0,63}(?![\s\S])/.test(id),
+    )
   );
 }
 

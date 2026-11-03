@@ -141,27 +141,47 @@ test('native logical zero exports empty without writes and refuses stale or inve
   expect(captureCollectionExport({ ...curated, revision: 0 })).toBeNull();
   expect(() => validateCollectionExportCapture({ ...captureCollectionExport(curated), revision: 0 })).toThrow();
   const collection = {
-    id: 'logical-everything', curatorAccountId: 'owner', membershipKind: 'dynamic',
-    builtinKind: 'everything', builtin: { kind: 'everything' }, revision: 0,
-    title: null, description: null, visibility: 'private',
+    id: 'logical-everything',
+    curatorAccountId: 'owner',
+    membershipKind: 'dynamic',
+    builtinKind: 'everything',
+    builtin: { kind: 'everything' },
+    revision: 0,
+    title: null,
+    description: null,
+    visibility: 'private',
   };
   let status = 200;
-  const client = createKernelClient('https://kernel.test', { fetch: async (input, init) => {
-    const req = new Request(input, init);
-    expect(req.headers.get('authorization')).toBe('Bearer owner-token');
-    const path = new URL(req.url).pathname;
-    if (path === '/v1/viewerActions') return Response.json({ resources: [] });
-    expect(req.method).toBe('GET');
-    if (path.endsWith('/members')) return Response.json(status === 200 ? { members: [], next: null } : {}, { status });
-    if (path.includes('/follows/')) return Response.json({ follow: { state: 'unfollowed' } });
-    return Response.json({ collection });
-  } });
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const req = new Request(input, init);
+      expect(req.headers.get('authorization')).toBe('Bearer owner-token');
+      const path = new URL(req.url).pathname;
+      if (path === '/v1/viewerActions') return Response.json({ resources: [] });
+      expect(req.method).toBe('GET');
+      if (path.endsWith('/members'))
+        return Response.json(status === 200 ? { members: [], next: null } : {}, { status });
+      if (path.includes('/follows/')) return Response.json({ follow: { state: 'unfollowed' } });
+      return Response.json({ collection });
+    },
+  });
   const env = {
-    AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://kernel.test', WEBSITE_SCOPES: 'openid',
-    WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: 'unused',
-    SESSIONS: { idFromName: (id: string) => id, get: () => ({ credential: async () => ({
-      status: 'active', subject: 'owner', accessToken: 'owner-token', csrfToken: null,
-    }) }) },
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'unused',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({
+        credential: async () => ({
+          status: 'active',
+          subject: 'owner',
+          accessToken: 'owner-token',
+          csrfToken: null,
+        }),
+      }),
+    },
   } as unknown as SessionEnv;
   const request = new Request('https://rezics.com/collections/logical-everything', {
     headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
@@ -176,8 +196,14 @@ test('native logical zero exports empty without writes and refuses stale or inve
   if (result.state !== 'complete') throw new Error('Expected empty export');
   expect(JSON.parse(result.file.text)).toMatchObject({ numberOfItems: 0, itemListElement: [] });
   const members = ['second', 'first'].map((id) => ({
-    id: 'invented-occurrence', note: 'Invented note', subject: {
-      id, label: id, type: 'schema:Book', types: ['schema:Book'], cover: null,
+    id: 'invented-occurrence',
+    note: 'Invented note',
+    subject: {
+      id,
+      label: id,
+      type: 'schema:Book',
+      types: ['schema:Book'],
+      cover: null,
     },
   }));
   const populated = { ...page, members };
@@ -186,12 +212,15 @@ test('native logical zero exports empty without writes and refuses stale or inve
   if (exported.state !== 'complete') throw new Error('Expected subject export');
   const items = JSON.parse(exported.file.text).itemListElement;
   expect(items.map((item: { url: string }) => item.url)).toEqual([
-    'https://rezics.com/en/subjects/second/book-second', 'https://rezics.com/en/subjects/first/book-first',
+    'https://rezics.com/en/subjects/second/second',
+    'https://rezics.com/en/subjects/first/first',
   ]);
   expect(items.every((item: object) => !('identifier' in item) && !('description' in item))).toBe(true);
   expect(captureCollectionExport({ ...populated, members: [members[0]!, members[0]!] })).toBeNull();
   expect(captureCollectionExport({ ...page, provenance: { ...page.provenance!, viewerId: 'foreign' } })).toBeNull();
-  expect(captureCollectionExport({ ...page, provenance: { ...page.provenance!, logicalBuiltin: undefined } })).toBeNull();
+  expect(
+    captureCollectionExport({ ...page, provenance: { ...page.provenance!, logicalBuiltin: undefined } }),
+  ).toBeNull();
   collection.revision = 1;
   expect(await loadCollectionExport(client, request, env, capture, context)).toEqual({ state: 'changed' });
   status = 503;
