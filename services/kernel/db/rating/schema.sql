@@ -24,6 +24,22 @@ CREATE SCHEMA rating;
 
 
 --
+-- Name: initialize_question_label(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.initialize_question_label() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF NEW.realm_id IS NOT NULL THEN
+    INSERT INTO rating.question_label_head (question_id, revision, label) VALUES (NEW.id, 1, NEW.label);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: initialize_vote_counting(); Type: FUNCTION; Schema: rating; Owner: -
 --
 
@@ -50,6 +66,19 @@ BEGIN
     RAISE EXCEPTION 'Realm question definitions are immutable; create another question';
   END IF;
   RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: keep_question_label_revision(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.keep_question_label_revision() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'Question caption revisions are immutable';
 END;
 $$;
 
@@ -475,6 +504,34 @@ CREATE TABLE rating.question (
 
 
 --
+-- Name: question_label_head; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.question_label_head (
+    question_id uuid NOT NULL,
+    revision integer NOT NULL,
+    label text NOT NULL,
+    CONSTRAINT question_label_head_label_check CHECK ((((char_length(label) >= 1) AND (char_length(label) <= 200)) AND (length(btrim(label)) > 0))),
+    CONSTRAINT question_label_head_revision_check CHECK ((revision >= 1))
+);
+
+
+--
+-- Name: question_label_revision; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.question_label_revision (
+    question_id uuid NOT NULL,
+    revision integer NOT NULL,
+    label text NOT NULL,
+    author_id uuid NOT NULL,
+    changed_at timestamp with time zone NOT NULL,
+    CONSTRAINT question_label_revision_label_check CHECK ((((char_length(label) >= 1) AND (char_length(label) <= 200)) AND (length(btrim(label)) > 0))),
+    CONSTRAINT question_label_revision_revision_check CHECK ((revision >= 2))
+);
+
+
+--
 -- Name: realm_rank; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -789,6 +846,22 @@ ALTER TABLE ONLY rating.public_figure
 
 
 --
+-- Name: question_label_head question_label_head_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_label_head
+    ADD CONSTRAINT question_label_head_pkey PRIMARY KEY (question_id);
+
+
+--
+-- Name: question_label_revision question_label_revision_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_label_revision
+    ADD CONSTRAINT question_label_revision_pkey PRIMARY KEY (question_id, revision);
+
+
+--
 -- Name: question question_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -996,6 +1069,20 @@ CREATE TRIGGER question_definition_immutable BEFORE UPDATE ON rating.question FO
 
 
 --
+-- Name: question question_label_initial; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER question_label_initial AFTER INSERT ON rating.question FOR EACH ROW EXECUTE FUNCTION rating.initialize_question_label();
+
+
+--
+-- Name: question_label_revision question_label_revision_immutable; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER question_label_revision_immutable BEFORE UPDATE ON rating.question_label_revision FOR EACH ROW EXECUTE FUNCTION rating.keep_question_label_revision();
+
+
+--
 -- Name: vote vote_initialize_counting; Type: TRIGGER; Schema: rating; Owner: -
 --
 
@@ -1048,6 +1135,22 @@ ALTER TABLE ONLY rating.population_vote
 
 ALTER TABLE ONLY rating.public_figure
     ADD CONSTRAINT public_figure_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id);
+
+
+--
+-- Name: question_label_head question_label_head_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_label_head
+    ADD CONSTRAINT question_label_head_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id) ON DELETE CASCADE;
+
+
+--
+-- Name: question_label_revision question_label_revision_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_label_revision
+    ADD CONSTRAINT question_label_revision_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id) ON DELETE CASCADE;
 
 
 --
