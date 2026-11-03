@@ -1,11 +1,7 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { validSourceFigures, type SourceFigures } from './source-figures.ts';
-import {
-  SOURCE_OBSERVATION_PAYLOAD_VERSION,
-  sourceObservation,
-  type SourceObservation,
-} from './source-provider.ts';
+import { SOURCE_OBSERVATION_PAYLOAD_VERSION, sourceObservation, type SourceObservation } from './source-provider.ts';
 import lock from './source-provider-lock.sql';
 import head from './source-provider-head.sql';
 import observe from './source-provider-observe.sql';

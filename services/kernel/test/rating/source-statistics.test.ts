@@ -249,14 +249,7 @@ test('the importer resolves an inspected native head by exact digest and keyset 
     mean: 8.4,
   };
   await problem(await request('PUT', writePath, rebound, 'importer'), 409);
-  await json(
-    await request(
-      'PUT',
-      writePath,
-      { ...rebound, expectedObservation: firstDigest },
-      'importer',
-    ),
-  );
+  await json(await request('PUT', writePath, { ...rebound, expectedObservation: firstDigest }, 'importer'));
   const reboundDigest = sourceObservation(subjectId, 'vndb', rebound).digest;
   const history = await json(await request('GET', `${inspectPath}?history=true`, undefined, 'importer'));
   expect(history.head).toMatchObject({ digest: reboundDigest, state: 'published' });
@@ -282,7 +275,10 @@ test('the importer resolves an inspected native head by exact digest and keyset 
   };
   expect((await request('POST', `${writePath}:clear`, clear, 'importer')).status).toBe(204);
   const tombstone = await json(await request('GET', inspectPath, undefined, 'importer'));
-  expect(tombstone.head).toMatchObject({ digest: sourceObservation(subjectId, 'vndb', clear).digest, state: 'cleared' });
+  expect(tombstone.head).toMatchObject({
+    digest: sourceObservation(subjectId, 'vndb', clear).digest,
+    state: 'cleared',
+  });
   expect(tombstone.head.observation.nativeOrder).toBe('3');
   expect(tombstone.head.observation.payload).toMatchObject({ count: 0, asOf: '2026-10-20' });
   await problem(
@@ -344,8 +340,7 @@ test('the exact source statistic clear method is mounted under the existing writ
 });
 
 test('source observation inspection exposes a bounded importer-only contract', () => {
-  const operation =
-    openApiDocument(app).paths['/v1/subjects/{id}/source-statistics/{source}/observations']?.get;
+  const operation = openApiDocument(app).paths['/v1/subjects/{id}/source-statistics/{source}/observations']?.get;
   expect(operation?.operationId).toBe('rating.source_observations_get');
   expect(operation?.['x-action']).toBe('source_statistic:write');
   expect(operation?.['x-exposure']).toBe('gate:personal_library');

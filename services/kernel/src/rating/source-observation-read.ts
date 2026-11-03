@@ -101,7 +101,13 @@ export const SourceObservationReadResponseSchema = t.Object(
     ),
     selectedObservation: t.Optional(observationSchema),
     history: t.Optional(
-      t.Object({ items: t.Array(observationSchema, { maxItems: SOURCE_OBSERVATION_HISTORY_PAGE_SIZE }), nextCursor: t.Union([t.String({ maxLength: 512 }), t.Null()]) }, closed),
+      t.Object(
+        {
+          items: t.Array(observationSchema, { maxItems: SOURCE_OBSERVATION_HISTORY_PAGE_SIZE }),
+          nextCursor: t.Union([t.String({ maxLength: 512 }), t.Null()]),
+        },
+        closed,
+      ),
     ),
   },
   closed,
@@ -189,8 +195,7 @@ function readCursor(value: string, key: Uint8Array, route: number, subjectId: st
     (candidate.kind !== 'native' && candidate.kind !== 'legacy') ||
     typeof candidate.digest !== 'string' ||
     !/^[0-9a-f]{64}$/.test(candidate.digest) ||
-    (candidate.kind === 'native' &&
-      (typeof candidate.order !== 'string' || !/^[1-9][0-9]*$/.test(candidate.order))) ||
+    (candidate.kind === 'native' && (typeof candidate.order !== 'string' || !/^[1-9][0-9]*$/.test(candidate.order))) ||
     (candidate.kind === 'legacy' && candidate.order !== null)
   )
     return invalidCursor();
@@ -248,7 +253,12 @@ async function readFenceSnapshot(
   );
 }
 
-function payloadOf(row: PayloadRow, metadata: MetaRow, subjectId: string, source: SourceProvider): SourceObservationReadItem {
+function payloadOf(
+  row: PayloadRow,
+  metadata: MetaRow,
+  subjectId: string,
+  source: SourceProvider,
+): SourceObservationReadItem {
   if (row.payloadVersion !== SOURCE_OBSERVATION_PAYLOAD_VERSION)
     throw new ProblemError('partition_unavailable', { detail: 'Unsupported source observation payload version' });
   const payload = row.payload;
@@ -409,7 +419,10 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
     )
       throw new ProblemError('invalid_request');
     const source = input.source as SourceProvider;
-    const cursor = input.cursor === undefined ? null : readCursor(input.cursor, dependencies.routeKey, route, input.subjectId, source);
+    const cursor =
+      input.cursor === undefined
+        ? null
+        : readCursor(input.cursor, dependencies.routeKey, route, input.subjectId, source);
     const initial = await metadataFor(input, source, route, cursor);
     const currentMeta = initial.current;
     const required = [currentMeta, initial.selected, initial.legacySelection, ...initial.historyItems].filter(
@@ -492,7 +505,13 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
     for (const tuple of tupleList) {
       const prior = before.get(tupleKey(tuple))?.fence;
       const current = after.get(tupleKey(tuple))?.fence;
-      if (!prior || !current || prior.takenDown || current.takenDown || prior.securityRevision !== current.securityRevision)
+      if (
+        !prior ||
+        !current ||
+        prior.takenDown ||
+        current.takenDown ||
+        prior.securityRevision !== current.securityRevision
+      )
         throw new ProblemError('not_found');
     }
 
@@ -515,7 +534,9 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
             history: {
               items: historyItem ? [historyItem] : [],
               nextCursor:
-                historyItem && initial.lookahead && !before.get(tupleKey(metadataTuple(dependencies.routeKey, source, initial.lookahead)))?.fence.takenDown
+                historyItem &&
+                initial.lookahead &&
+                !before.get(tupleKey(metadataTuple(dependencies.routeKey, source, initial.lookahead)))?.fence.takenDown
                   ? signCursor(
                       {
                         version: 1,

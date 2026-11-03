@@ -135,9 +135,13 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
           expect(JSON.parse(text)[0].figures).toEqual(body.figures);
           const inspectionSubject = dimension === 'history' ? history : selected;
           const expectedFigures = dimension === 'history' ? historyFigures : body.figures;
-          const inspectionResponse = await fixture.request('GET', observationPath(inspectionSubject) + '?history=true', {
-            actor: fixture.actors.importer,
-          });
+          const inspectionResponse = await fixture.request(
+            'GET',
+            observationPath(inspectionSubject) + '?history=true',
+            {
+              actor: fixture.actors.importer,
+            },
+          );
           expect(inspectionResponse.status).toBe(200);
           const inspectionText = await inspectionResponse.text();
           const inspection = JSON.parse(inspectionText);
@@ -157,7 +161,9 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
             const nextText = await nextResponse.text();
             const next = JSON.parse(nextText);
             expect(next.history.items).toHaveLength(1);
-            expect(BigInt(next.history.items[0].nativeOrder)).toBeLessThan(BigInt(inspection.history.items[0].nativeOrder));
+            expect(BigInt(next.history.items[0].nativeOrder)).toBeLessThan(
+              BigInt(inspection.history.items[0].nativeOrder),
+            );
             inspectionBytes += Buffer.byteLength(nextText, 'utf8');
           }
           return {

@@ -34,10 +34,7 @@ import {
 } from './source-figures.ts';
 import { SOURCE_PROVIDER_IDS, sourceProvider, type SourceProvider } from './source-provider.ts';
 import { admitSourceObservation, lockSourceObservation, saveSourceObservation } from './source-provider-observation.ts';
-import {
-  createSourceObservationReadCommands,
-  SourceObservationReadResponseSchema,
-} from './source-observation-read.ts';
+import { createSourceObservationReadCommands, SourceObservationReadResponseSchema } from './source-observation-read.ts';
 import {
   SourceStatisticClearInputSchema,
   SourceStatisticInputSchema,
