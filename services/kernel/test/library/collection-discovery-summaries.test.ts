@@ -194,10 +194,6 @@ test('caller read times remain live and unrelated native infrastructure failures
     releaseOperationalTime(time);
   }
   const failure = new Error('Native owner checkout failed');
-  const broken = {
-    connect: async () => {
-      throw failure;
-    },
-  } as unknown as typeof f.database.pool;
-  await expect(hydrate({ ...deps(), pool: broken }, [row.id], context(row.id))).rejects.toBe(failure);
+  const broken: Access = { ...f.runtime.identity.access, prepareReadDecisions: async () => Promise.reject(failure) };
+  await expect(hydrate(deps(broken), [row.id], context(row.id))).rejects.toBe(failure);
 }, 120000);
