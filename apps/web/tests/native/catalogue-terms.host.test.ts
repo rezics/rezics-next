@@ -72,7 +72,12 @@ async function replaceField(page: Page, legend: string, value: string): Promise<
 function extractCommand(value: unknown): TermsCommand | undefined {
   if (!value || typeof value !== 'object') return;
   const record = value as Record<string, unknown>;
-  if (typeof record.id === 'string' && typeof record.etag === 'string' && typeof record.key === 'string' && record.patch)
+  if (
+    typeof record.id === 'string' &&
+    typeof record.etag === 'string' &&
+    typeof record.key === 'string' &&
+    record.patch
+  )
     return record as TermsCommand;
   for (const nested of Object.values(record)) {
     const found = extractCommand(nested);
@@ -102,7 +107,10 @@ async function openTerms(page: Page, subject: CatalogueTermsSubject): Promise<vo
   await page.getByRole('button', { name: 'Save terms', exact: true }).waitFor({ state: 'visible' });
 }
 
-async function submitTerms(page: Page, name: string): Promise<{ request: PlaywrightRequest; commands: TermsCommand[] }> {
+async function submitTerms(
+  page: Page,
+  name: string,
+): Promise<{ request: PlaywrightRequest; commands: TermsCommand[] }> {
   const commands: TermsCommand[] = [];
   const pending = page.waitForRequest((request) => {
     if (request.method() !== 'POST' || !new URL(request.url()).pathname.startsWith('/_serverFn/')) return false;
@@ -117,7 +125,9 @@ async function submitTerms(page: Page, name: string): Promise<{ request: Playwri
 
 function bff(requests: readonly NativeKernelRequest[], after: number, id: string) {
   const path = `/v1/subjects/${id}`;
-  return requests.slice(after).filter((request) => !request.fixtureRequest && request.url.split('?')[0]!.startsWith(path));
+  return requests
+    .slice(after)
+    .filter((request) => !request.fixtureRequest && request.url.split('?')[0]!.startsWith(path));
 }
 
 describe('native catalogue terms', () => {
@@ -206,16 +216,20 @@ describe('native catalogue terms', () => {
     await patchTerms(stale.id, staleBefore.subject.revision, { labels: { en: 'Concurrent native title' } });
     const beforeStale = stack.kernelRequests().length;
     await submitTerms(page, 'Save terms');
-    await page.getByText('These terms changed. Reload and compare before confirming again. Your draft is kept.').waitFor({
-      state: 'visible',
-    });
+    await page
+      .getByText('These terms changed. Reload and compare before confirming again. Your draft is kept.')
+      .waitFor({
+        state: 'visible',
+      });
     await page.getByRole('button', { name: 'Reload and compare', exact: true }).click();
     await page.getByText('Concurrent native title', { exact: true }).waitFor({ state: 'visible' });
     await page.getByText('Alice stale draft', { exact: true }).waitFor({ state: 'visible' });
     await submitTerms(page, 'Confirm changes to latest terms');
     await page.getByText('Terms saved.').waitFor({ state: 'visible' });
     await stack.refreshKernelRequests();
-    const staleTraffic = bff(stack.kernelRequests(), beforeStale, stale.id).filter((request) => request.method === 'PATCH');
+    const staleTraffic = bff(stack.kernelRequests(), beforeStale, stale.id).filter(
+      (request) => request.method === 'PATCH',
+    );
     expect(staleTraffic[0]?.failure?.status).toBe(412);
     expect(JSON.parse(staleTraffic.at(-1)?.body ?? 'null')).toEqual({ labels: { en: 'Alice stale draft' } });
     const recovered = await readSubject(stale.id);
@@ -241,9 +255,11 @@ describe('native catalogue terms', () => {
     });
     const beforeUncertain = stack.kernelRequests().length;
     const first = await submitTerms(page, 'Save terms');
-    await page.getByText('The result is uncertain. Retry the same request; your draft and request key are kept.').waitFor({
-      state: 'visible',
-    });
+    await page
+      .getByText('The result is uncertain. Retry the same request; your draft and request key are kept.')
+      .waitFor({
+        state: 'visible',
+      });
     const retry = await submitTerms(page, 'Retry');
     await page.getByText('Terms saved.').waitFor({ state: 'visible' });
     expect(retry.commands[0]).toEqual(first.commands[0]);
