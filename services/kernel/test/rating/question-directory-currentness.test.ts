@@ -115,10 +115,15 @@ test('selected question pages requalify the caller and lifecycle after native so
     });
 
     expect(
-      (await client['rating-questions']({ questionId: question.id }).label.put({
-        expectedLabelRevision: 1,
-        label: 'Corrected display caption',
-      }, { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } })).status,
+      (
+        await client['rating-questions']({ questionId: question.id }).label.put(
+          {
+            expectedLabelRevision: 1,
+            label: 'Corrected display caption',
+          },
+          { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } },
+        )
+      ).status,
     ).toBe(200);
     const corrected = await page(system.access, member, realmId, undefined, beforeLabel.lifecycleGeneration);
     expect(corrected.lifecycleGeneration).toBe(beforeLabel.lifecycleGeneration);
@@ -146,9 +151,16 @@ test('selected question pages requalify the caller and lifecycle after native so
     const rawFirst = selected.ratingQuestions[0]!;
     const point = directory({ questionId: rawFirst.id });
     expect((await point.get()).data).toEqual(rawFirst);
-    expect((await point.$retire.post({ expectedLifecycleRevision: 1 }, {
-      headers: { 'idempotency-key': JSON.stringify(randomUUID()) },
-    })).status).toBe(200);
+    expect(
+      (
+        await point.$retire.post(
+          { expectedLifecycleRevision: 1 },
+          {
+            headers: { 'idempotency-key': JSON.stringify(randomUUID()) },
+          },
+        )
+      ).status,
+    ).toBe(200);
     expect((await directory.get({ query: { realm: realmId, limit: 1, cursor: selected.next! } })).status).toBe(400);
     const restart = await directory.get({ query: { realm: realmId, limit: 1 } });
     expect(restart.status).toBe(200);
@@ -160,9 +172,11 @@ test('selected question pages requalify the caller and lifecycle after native so
     expect(resumed.data?.ratingQuestions).toHaveLength(1);
     expect((await directory.get(continuation)).data).toEqual(resumed.data);
     // Restore the raw first row so the observation races below select active definitions.
-    await json(await call('POST', `/v1/rating-questions/${rawFirst.id}/$restore`, fixture.member, {
-      expectedLifecycleRevision: 2,
-    }));
+    await json(
+      await call('POST', `/v1/rating-questions/${rawFirst.id}/$restore`, fixture.member, {
+        expectedLifecycleRevision: 2,
+      }),
+    );
 
     const unavailable = afterSecondPreparation(system.access, 'realm:read', async () => {
       throw new ProblemError('partition_unavailable');
@@ -218,7 +232,9 @@ test('selected question pages requalify the caller and lifecycle after native so
       canonicalLabel: definition.label,
       lifecycle: { state: 'retired', revision: rawFirst.id === question.id ? 4 : 2 },
     });
-    expect((await page(system.access, member, realmId)).ratingQuestions.map(({ id }) => id)).toEqual([created.data!.id]);
+    expect((await page(system.access, member, realmId)).ratingQuestions.map(({ id }) => id)).toEqual([
+      created.data!.id,
+    ]);
 
     const globalCaller = await actor(fixture.member);
     const globalAccess = afterSecondPreparation(system.access, 'definitions:read', async () => {
