@@ -53,14 +53,28 @@ test('FULL Space operands keep address, Space identity and admitted Realm action
   };
   expect(suppliedDestination(supplied, 'Community', 'ja')?.href).toBe('/ja/spaces/quiet%20%2F%20reading');
   expect(currentSpaceDestination(supplied, current, 'ja')?.href).toBe('/ja/spaces/quiet%20%2F%20reading');
-  expect(suppliedRealmMembershipHref(supplied, current, 'ja', true, false)).toBe(`/ja/realms/${realmId}`);
-  expect(suppliedRealmMembershipHref(supplied, { ...current, realmId: spaceId }, 'ja', true, true)).toBeNull();
-  expect(suppliedRealmMembershipHref(supplied, current, 'ja', false, false)).toBeNull();
+  expect(suppliedRealmMembershipHref(supplied, current, 'ja')).toBe(`/ja/realms/${realmId}`);
+  expect(suppliedRealmMembershipHref(supplied, { ...current, realmId: spaceId }, 'ja')).toBeNull();
   expect(
-    suppliedRealmMembershipHref({ ...supplied, actions: { status: 'unavailable' } }, current, 'en', true, true),
+    suppliedRealmMembershipHref(
+      {
+        ...supplied,
+        actions: {
+          status: 'available',
+          resourceType: 'community.realm',
+          resourceId: realmId,
+          viewerActions: [],
+        },
+      },
+      current,
+      'ja',
+    ),
   ).toBeNull();
   expect(
-    suppliedRealmMembershipHref({ ...supplied, destination: { kind: 'unavailable' } }, current, 'en', true, true),
+    suppliedRealmMembershipHref({ ...supplied, actions: { status: 'unavailable' } }, current, 'en'),
+  ).toBeNull();
+  expect(
+    suppliedRealmMembershipHref({ ...supplied, destination: { kind: 'unavailable' } }, current, 'en'),
   ).toBeNull();
 });
 

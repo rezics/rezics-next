@@ -33,7 +33,7 @@ type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
 const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
 
 const followingOperations = ['follow.list'] as const;
-const followingReadingOperations = ['follow.list', 'collection.get', 'realm.join', 'realm.leave'] as const;
+const followingReadingOperations = ['follow.list', 'collection.get'] as const;
 
 export const mineFollowingQuery = (
   subject: string,
@@ -288,8 +288,6 @@ function MineFollowingPageState({
 }) {
   const canUnfollow = useOperation('follow.delete');
   const canReadCollection = useOperation('collection.get');
-  const canJoinRealm = useOperation('realm.join');
-  const canLeaveRealm = useOperation('realm.leave');
   const [follows, setFollows] = useState(page.follows);
   const [removed, setRemoved] = useState(false);
   const listHeading = useRef<HTMLHeadingElement>(null);
@@ -311,8 +309,6 @@ function MineFollowingPageState({
     isCurrent: () =>
       readingOrigin.current(0) &&
       (!canReadCollection || readingOrigin.current(1)) &&
-      (!canJoinRealm || readingOrigin.current(2)) &&
-      (!canLeaveRealm || readingOrigin.current(3)) &&
       origin.isCurrent() &&
       getLocale() === locale &&
       !status &&
@@ -373,8 +369,6 @@ function MineFollowingPageState({
           subject={readingOrigin.subject}
           locale={locale}
           canReadCollection={canReadCollection}
-          canJoinRealm={canJoinRealm}
-          canLeaveRealm={canLeaveRealm}
           close={reading.close}
           readSpace={readSpace}
         />

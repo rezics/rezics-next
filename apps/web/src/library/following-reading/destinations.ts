@@ -52,8 +52,6 @@ export function suppliedRealmMembershipHref(
   follow: MineFollow,
   current: SelectedSpace,
   locale: string,
-  canJoin: boolean,
-  canLeave: boolean,
 ): string | null {
   const actions = follow.actions;
   if (
@@ -70,7 +68,7 @@ export function suppliedRealmMembershipHref(
   const admitted = actions.viewerActions.some(
     ({ action, operations }) =>
       action === 'realm:join' &&
-      ((canJoin && operations.includes('realm.join')) || (canLeave && operations.includes('realm.leave'))),
+      (operations.includes('realm.join') || operations.includes('realm.leave')),
   );
   return admitted ? `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(actions.resourceId)}` : null;
 }

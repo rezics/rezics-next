@@ -82,8 +82,6 @@ export function FollowingInspection({
   subject,
   locale,
   canReadCollection,
-  canJoinRealm = false,
-  canLeaveRealm = false,
   close,
   readSpace,
 }: {
@@ -91,8 +89,6 @@ export function FollowingInspection({
   subject: string | null;
   locale: string;
   canReadCollection: boolean;
-  canJoinRealm?: boolean;
-  canLeaveRealm?: boolean;
   close: () => void;
   readSpace?: FollowingSpaceReader | undefined;
 }) {
@@ -113,7 +109,7 @@ export function FollowingInspection({
       ? null
       : supplied;
   const actionHref = ready
-    ? suppliedRealmMembershipHref(follow, ready, locale, canJoinRealm, canLeaveRealm)
+    ? suppliedRealmMembershipHref(follow, ready, locale)
     : null;
   const stateText = !follow.target
     ? m.following_reading_identity_unavailable()
