@@ -114,7 +114,13 @@ function safeCreditHref(value: string | undefined): string | undefined {
 }
 
 /** Credit stays outside the cover link. Its licence never becomes a licence for the work. */
-function FeedCardImageCredit({ cover, locale }: { cover: CoverSummary | null | undefined; locale: string }) {
+function FeedCardImageCredit({
+  cover,
+  locale,
+}: {
+  cover: Pick<CoverSummary, 'credit' | 'withheld'> | null | undefined;
+  locale: string;
+}) {
   const credit = cover?.withheld ? null : cover?.credit;
   if (!credit) return null;
   const options = { locale: locale as Locale };

@@ -51,7 +51,7 @@ export function preparedFeedCardReading(long = false): FeedItem[] {
       author,
       excerpt: 'Prepared reply: this opens the exact post in its discussion, not the first page alone.',
     },
-    destination: { kind: 'post', threadId: id, postId: 'prepared-post', title },
+    destination: { kind: 'post', id: 'prepared-post', threadId: id, postId: 'prepared-post', title },
   };
   const account: FeedItem = {
     id: 'prepared:account',

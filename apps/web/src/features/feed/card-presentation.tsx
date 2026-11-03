@@ -168,11 +168,12 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
   const options = { locale: locale as Locale };
   if ('kind' in summary && summary.kind === 'review' && 'subject' in summary && summary.subject?.title) {
     const subject = summary.subject;
+    const title = summary.subject.title;
     return (
       <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
         <span>{m.home_card_review_subject({}, options)}</span>
-        <a href={subjectHref({ id: subject.id, label: subject.title }, locale).href} className={feedCardLinkClassName}>
-          <bdi>{subject.title}</bdi>
+        <a href={subjectHref({ id: subject.id, label: title }, locale).href} className={feedCardLinkClassName}>
+          <bdi>{title}</bdi>
         </a>
       </span>
     );
