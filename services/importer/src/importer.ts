@@ -1512,6 +1512,7 @@ export class Importer {
     signal: AbortSignal,
     write: Write,
   ): Promise<boolean> {
+    if (intended.association.subjectId !== subjectId) return false;
     const store = this.session.store;
     const operationId = classificationOperationId({ runId: run.id, recordKey: owner.external_id, subjectId, intended });
     const existing =

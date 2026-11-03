@@ -1,5 +1,6 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
+import type { ClassificationAssociation } from '../../../importer/src/import-contract.ts';
 import {
   classificationObservation as importedObservation,
   classificationPayload,
@@ -41,4 +42,5 @@ test('generated KernelClient mounts source-classifications read, put and clear',
   type Client = ReturnType<KernelClient['subjects']>['source-classifications'];
   expectTypeOf<keyof Client>().toEqualTypeOf<'$read' | '$put' | '$clear'>();
   expectTypeOf<Parameters<Client['$put']['post']>[0]['expectedObservation']>().toEqualTypeOf<string | null>();
+  expectTypeOf<Parameters<Client['$put']['post']>[0]['association']>().toEqualTypeOf<ClassificationAssociation>();
 });

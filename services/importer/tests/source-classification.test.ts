@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+import { createImportTransport } from '../src/import-client.ts';
 import { Importer } from '../src/importer.ts';
 import type { ClassificationAssociation, ImportTransport } from '../src/import-contract.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
@@ -106,6 +107,10 @@ test('classification distinguishes automatic, identical, equal-date, rebinding a
   expect(
     classifyClassification({ ...intendedWrite, asOf: '2026-11-02T00:00:00.000Z' }, { kind: 'head', head }),
   ).toEqual({ action: 'refused', reason: 'older-date' });
+  expect(classifyClassification({ ...intendedWrite, sourceAlias: 'other-fixture' }, { kind: 'head', head })).toEqual({
+    action: 'conflict',
+    reason: 'alias-rebinding',
+  });
   expect(parseClassificationReason('equal-date-correction')).toBe('equal-date-correction');
 });
 
@@ -145,6 +150,80 @@ async function classificationFixture(
   let hideNextConfirmation = false;
   let hideConfirmationAfterWrite = false;
   const metadata = sourceRecordMetadataFixture();
+  const generated = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    fetch: (async (request: Request) => {
+      const path = new URL(request.url).pathname;
+      const body = JSON.parse(await request.text()) as {
+        associations?: ClassificationAssociation[];
+        association?: ClassificationAssociation;
+        expectedObservation?: string | null;
+        value?: Record<string, unknown>;
+      };
+      if (path.endsWith(':put') || path.endsWith(':clear')) {
+        writes.push({ method: request.method, path, body, key: request.headers.get('idempotency-key') });
+        if (lost) throw new TypeError('delivery lost');
+        if (hideConfirmationAfterWrite) {
+          hideConfirmationAfterWrite = false;
+          hideNextConfirmation = true;
+        }
+      }
+      if (path.includes('/votes') || path.includes('ballot'))
+        throw new TypeError('classification import must not touch native ballots');
+      const subjectIdFromPath = path.split('/')[3]!;
+      if (path.endsWith(':read')) {
+        if (hideNextConfirmation) {
+          hideNextConfirmation = false;
+          return Response.json({
+            items: (body.associations ?? []).map(() => ({ state: 'unavailable', reason: 'changed' })),
+          });
+        }
+        return Response.json({
+          items: (body.associations ?? []).map((item) => {
+            const row = stored.get(`${subjectIdFromPath}:${classificationAssociationKey(item)}`);
+            if (!row) return { state: 'unavailable', reason: emptyReadReason };
+            return {
+              state: 'available',
+              value: {
+                provider: 'vndb',
+                association: item,
+                observation: { digest: row.digest, sourceVersion: row.sourceVersion },
+                sourceAlias: row.sourceAlias,
+                sourceRecordId: row.sourceRecordId,
+                sourceAssociationId: row.sourceAssociationId,
+                asOf: row.asOf,
+                ageSeconds: 0,
+                attribution: row.attribution ?? 'Example classification provider',
+                licence: row.licence ?? 'Fixture-1.0',
+                confidence:
+                  row.confidence === undefined
+                    ? { state: 'unavailable', reason: 'not_supplied' }
+                    : {
+                        state: 'available',
+                        value: row.confidence,
+                        unit: 'vndb-tag-rating',
+                        minExclusive: 0,
+                        max: 3,
+                      },
+                lie:
+                  row.lie === undefined
+                    ? { state: 'unavailable', reason: 'not_supplied' }
+                    : { state: 'available', value: row.lie, unit: 'boolean' },
+              },
+            };
+          }),
+        });
+      }
+      const digest = classificationObservation(body.association!, body.value as never).digest;
+      stored.set(`${subjectIdFromPath}:${classificationAssociationKey(body.association!)}`, { ...body.value, digest });
+      return Response.json({
+        observationDigest: digest,
+        state: path.endsWith(':clear') ? 'cleared' : 'published',
+      });
+    }) as typeof fetch,
+  });
   const transport = {
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
     async batchWrite(request: BatchWriteRequest) {
@@ -154,74 +233,9 @@ async function classificationFixture(
       return { fenced: false, securityRevision: null };
     },
     async writeSourceStatistic() {},
-    async readSourceClassifications(input: { subjectId: string; associations: readonly ClassificationAssociation[] }) {
-      if (hideNextConfirmation) {
-        hideNextConfirmation = false;
-        return [{ state: 'unavailable' as const, reason: 'changed' as const }];
-      }
-      return input.associations.map((item) => {
-        const row = stored.get(`${input.subjectId}:${JSON.stringify(item)}`);
-        if (!row) return { state: 'unavailable' as const, reason: emptyReadReason };
-        return {
-          state: 'available' as const,
-          value: {
-            provider: 'vndb' as const,
-            association: item,
-            observation: { digest: row.digest as string, sourceVersion: row.sourceVersion },
-            sourceAlias: row.sourceAlias as string,
-            sourceRecordId: row.sourceRecordId as string,
-            sourceAssociationId: row.sourceAssociationId as string,
-            asOf: row.asOf as string,
-            ageSeconds: 0,
-            attribution: (row.attribution as string) ?? 'Example classification provider',
-            licence: (row.licence as string) ?? 'Fixture-1.0',
-            confidence:
-              row.confidence === undefined
-                ? { state: 'unavailable' as const, reason: 'not_supplied' as const }
-                : {
-                    state: 'available' as const,
-                    value: row.confidence as number,
-                    unit: 'vndb-tag-rating' as const,
-                    minExclusive: 0 as const,
-                    max: 3 as const,
-                  },
-            lie:
-              row.lie === undefined
-                ? { state: 'unavailable' as const, reason: 'not_supplied' as const }
-                : { state: 'available' as const, value: row.lie as boolean, unit: 'boolean' as const },
-          },
-        };
-      });
-    },
-    async writeSourceClassification(input: {
-      subjectId: string;
-      association: ClassificationAssociation;
-      value: Record<string, unknown>;
-      expectedObservation: string | null;
-      idempotencyKey: string;
-    }) {
-      writes.push({
-        method: 'POST',
-        path: `/v1/subjects/${input.subjectId}/source-classifications:put`,
-        body: {
-          association: input.association,
-          expectedObservation: input.expectedObservation,
-          value: input.value,
-        },
-        key: input.idempotencyKey,
-      });
-      if (lost) throw new TypeError('delivery lost');
-      const digest = classificationObservation(input.association, input.value as never).digest;
-      stored.set(`${input.subjectId}:${JSON.stringify(input.association)}`, { ...input.value, digest });
-      if (hideConfirmationAfterWrite) {
-        hideConfirmationAfterWrite = false;
-        hideNextConfirmation = true;
-      }
-      return { observationDigest: digest, state: 'published' as const };
-    },
-    async clearSourceClassification() {
-      throw new TypeError('clear unused');
-    },
+    readSourceClassifications: generated.readSourceClassifications,
+    writeSourceClassification: generated.writeSourceClassification,
+    clearSourceClassification: generated.clearSourceClassification,
   } as unknown as ImportTransport;
   const importer = new Importer({
     path: join(directory, 'state.sqlite'),
@@ -263,12 +277,13 @@ async function classificationFixture(
     read() {
       return transport.readSourceClassifications!({ subjectId, associations: [association] });
     },
-    run(row: SourceRecord = vn()) {
+    run(row: SourceRecord = vn(), progress?: { onAcknowledgedEffects?(count: number): void }) {
       return importer.runRecords(
         registration,
         (async function* () {
           yield row;
         })(),
+        progress ? { progress } : {},
       );
     },
     async close() {
@@ -280,19 +295,23 @@ async function classificationFixture(
 
 test('admitted classification writes through the converter, binds the association, and is independently readable', async () => {
   const f = await classificationFixture();
+  const effects: number[] = [];
   try {
-    const result = await f.run();
+    const result = await f.run(vn(), { onAcknowledgedEffects: (count) => effects.push(count) });
     expect(result.status, result.diagnostic).toBe('committed');
     expect(f.writes).toHaveLength(1);
+    expect(f.writes[0]!.path).toBe(`/v1/subjects/${subjectId}/source-classifications:put`);
+    expect(effects.some((count) => count >= 1)).toBe(true);
     const body = f.writes[0]!.body as {
       expectedObservation: string | null;
-      value: { confidence: number; licence: string; sourceAlias: string };
+      value: { confidence: number; licence: string; sourceAlias: string; attribution: string };
     };
     expect(body.expectedObservation).toBeNull();
     expect(body.value).toMatchObject({
       sourceAlias: 'trusted-fixture',
       confidence: 2.4,
       licence: 'Fixture-1.0',
+      attribution: 'Example classification provider',
     });
     const items = await f.read();
     expect(items).toEqual([
@@ -305,6 +324,20 @@ test('admitted classification writes through the converter, binds the associatio
         }),
       }),
     ]);
+    const retained = f.importer.session.store.retainedClassificationHead(
+      'vndb',
+      subjectId,
+      classificationAssociationKey(association),
+    );
+    expect(retained?.sourceAlias).toBe('trusted-fixture');
+    const store = new RunStore(join(f.directory, 'state.sqlite'), { projectionMode: 'source-record', existing: true });
+    try {
+      expect(store.retainedClassificationHead('vndb', subjectId, classificationAssociationKey(association))).toEqual(
+        retained,
+      );
+    } finally {
+      store.close();
+    }
   } finally {
     await f.close();
   }
@@ -435,6 +468,12 @@ test('unadmitted licences, missing association and absent admission have zero na
   for (const options of [
     { admit: false as const },
     { association: null },
+    {
+      association: {
+        ...association,
+        subjectId: '00000000-0000-4000-8000-000000000999',
+      },
+    },
     {
       facts: admittedFacts({
         licence: { id: 'ODbL-1.0', url: 'https://opendatacommons.org/licenses/odbl/1-0/' },
