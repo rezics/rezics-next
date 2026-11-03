@@ -260033,6 +260033,19 @@
                     "minimum": 1,
                     "type": "integer"
                   },
+                  "population": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "realm": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "realm"
+                    ],
+                    "type": "object"
+                  },
                   "properties": {
                     "items": {
                       "type": "string"

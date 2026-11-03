@@ -1497,6 +1497,12 @@ declare const productEventTypes: {
         ownerId: Type.TString;
         revision: Type.TLiteral<1>;
     }>;
+    readonly 'com.rezics.rating.realm_rank.changed.v1': Type.TObject<{
+        questionId: Type.TString;
+        populationId: Type.TString;
+        subjectId: Type.TString;
+        revision: Type.TString;
+    }>;
     readonly "com.rezics.rating.identity-repair.page.v1": Type.TObject<{
         voterId: Type.TString;
         workId: Type.TString;

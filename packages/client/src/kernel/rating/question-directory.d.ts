@@ -70,4 +70,18 @@ export declare function readSelectedQuestionDirectory(deps: Dependencies, actor:
     after: string | null;
     hasMore: boolean;
 }>;
+/** Exact released measurement identity; labels do not change the measurement. */
+export declare function ratingQuestionIdentity(question: {
+    revision: number;
+    grain: string;
+    minimumUnits: number;
+    maximumUnits: number;
+    stepUnits: number;
+}): string;
+/** The released vote/event contract admits integer units in 0..20. */
+export declare function realmRankQuestionEligible(question: {
+    minimumUnits: number;
+    maximumUnits: number;
+    stepUnits: number;
+}): boolean;
 export {};

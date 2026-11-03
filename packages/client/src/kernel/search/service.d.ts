@@ -17,10 +17,14 @@ import type { PublicSearchHit } from './public-figures.ts';
 import type { KindValue } from './query.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
+import { type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 export type SearchRequest = {
     text?: string;
     filter?: unknown;
     sort?: SearchPlan['sort'];
+    population?: {
+        realm: string;
+    };
     limit?: number;
     cursor?: string;
     kindCursor?: string;
@@ -41,6 +45,7 @@ export type PublicSearchReadContext = Readonly<{
     deadline: number;
     /** The verified request context used only by the service-bound native Scope. */
     scope?: LeafOptions;
+    realmAuthority?: RealmRatingQuery['authority'];
     complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 type Result = {
@@ -51,13 +56,14 @@ type Result = {
 export declare function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
-export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
+export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, realmRatings, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {
     pool: Pool;
     client: OpenSearch;
     prefix: string;
     source: SubjectSource;
     ratings?: PublicRatingSource;
     realmSubjects?: RealmSubjectSource;
+    realmRatings?: RealmRatingSource;
     cursors: KeyRing;
     clock?: KernelClock;
     release?: () => Promise<FilterRelease | null>;

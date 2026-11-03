@@ -20,6 +20,7 @@ type PendingPopulation = {
     populationId: string;
 };
 export type SubjectPriorInput = {
+    question_identity?: string | null;
     population_route: number;
     question_id: string;
     population_id: string;
@@ -31,6 +32,8 @@ export type SubjectPriorInput = {
 };
 /** Finish each source snapshot before checking out any subject command connection. */
 export declare function capturePublicFigurePriorInputs(pool: Pool, keys: readonly PendingPopulation[]): Promise<SubjectPriorInput[]>;
+/** Resume retained custom totals through the existing durable epoch/republish work. */
+export declare function resumeRealmRankPublication(pool: Pool): Promise<void>;
 /** Internal subject-home command for a captured republish page, also safe to redeliver after an epoch change. */
 export declare function markPublicFigurePriorPage(pool: Pool, input: {
     partition: number;

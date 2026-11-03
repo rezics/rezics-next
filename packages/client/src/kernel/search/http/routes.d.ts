@@ -170,6 +170,9 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         kindCountLeaf?: number;
                         text?: string;
                         filter?: any;
+                        population?: {
+                            realm: string;
+                        };
                         sort?: "collections" | "id" | "name" | "rating" | "relevance";
                         limit?: number;
                         cursor?: string;

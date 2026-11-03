@@ -1,10 +1,14 @@
 import type { KeyRing } from '../tokens/seal.ts';
 import { type SearchCursorBinding, type SearchSortValue } from './cursor.ts';
-/** Supplied from current native Global standard-question metadata, never the request or a cached cursor. */
+/** Supplied from current native standard-question metadata, never request or cursor evidence. */
 export type RatingCursorContext = {
     questionId: string;
     populationId: string;
     priorEpoch: number | null;
+    realm?: {
+        authority: string;
+        revision: string;
+    };
 };
 export type RatingPhase = 'scored' | 'unscored';
 export type RatingCursorResult = {
