@@ -1,39 +1,105 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { awaitHostCapacity, capacityAvailable, waitersAhead } from './launch.ts';
 import { WorkerStore } from './store.ts';
 
+const temporaryRoot = join(process.cwd(), '.temp');
+mkdirSync(temporaryRoot, { recursive: true });
+
 test('a start waiting for host capacity counts running attempts with one indexed query, without reading every attempt body', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-capacity-count-'));
-  const db = openDb(':memory:');
+  const directory = mkdtempSync(join(temporaryRoot, 'goal-capacity-count-'));
+  const path = join(directory, 'capacity.sqlite');
+  const db = openDb(path);
   try {
     const store = new WorkerStore(db);
-    const plan = db
-      .query("EXPLAIN QUERY PLAN SELECT count(*) FROM worker_attempts WHERE json_extract(body, '$.state') = 'running'")
-      .all() as Array<{ detail: string }>;
-    expect(plan.map((step) => step.detail).join(' ')).toContain('worker_attempts_state');
+    const query = db.query.bind(db);
+    const insertTask = query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
+    const insertAttempt = query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)');
+    const schema = query("SELECT sql FROM sqlite_schema WHERE name = 'worker_attempts_state'").get() as { sql: string };
+    expect(schema.sql).toMatch(/ON worker_attempts\(json_extract\(body, '\$\.state'\)\)/);
+    expect(schema.sql).not.toMatch(/WHERE/i);
+    const executions: { sql: string; result: unknown }[] = [];
+    db.query = ((sql: string) => {
+      const statement = query(sql);
+      return new Proxy(statement, {
+        get(target, property) {
+          const value = Reflect.get(target, property);
+          if (typeof value !== 'function') return value;
+          return (...args: unknown[]) => {
+            const result = value.apply(target, args);
+            if (['get', 'all', 'run', 'values', 'iterate'].includes(String(property))) executions.push({ sql, result });
+            return result;
+          };
+        },
+      });
+    }) as typeof db.query;
 
-    const insertTask = db.query('INSERT INTO worker_tasks (id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)');
-    const insertAttempt = db.query('INSERT INTO worker_attempts (task_id, attempt, body) VALUES (?, ?, ?)');
-    let runningCount = 0;
-    for (const size of [10, 100, 1_000]) {
-      db.exec('DELETE FROM worker_attempts; DELETE FROM worker_tasks');
-      runningCount = 0;
-      for (let index = 0; index < size; index += 1) {
-        const id = `task-${index}`;
-        const state = index % 10 === 0 ? 'running' : 'finished';
-        if (state === 'running') runningCount += 1;
-        insertTask.run(id, index + 1, 1, '{}');
-        insertAttempt.run(id, 1, JSON.stringify({ state, payload: 'x'.repeat(1_024) }));
+    // Cross independent history and payload axes; active entries retain the same small bodies.
+    for (const runningCount of [0, 1, 10, 100]) {
+      const work: number[] = [];
+      for (const settledCount of [10, 100, 1_000]) {
+        for (const payloadBytes of [128, 1_024, 8_192]) {
+          db.transaction(() => {
+            db.exec('DELETE FROM worker_attempts; DELETE FROM worker_tasks');
+            for (let index = 0; index < runningCount + settledCount; index += 1) {
+              const id = `task-${index}`;
+              const running = index < runningCount;
+              insertTask.run(id, index + 1, 1, '{}');
+              insertAttempt.run(
+                id,
+                1,
+                JSON.stringify({
+                  state: running ? 'running' : 'finished',
+                  payload: 'x'.repeat(running ? 128 : payloadBytes),
+                }),
+              );
+            }
+          })();
+          executions.length = 0;
+          store.resetDecodedRows();
+          expect(store.runningAttemptsCount()).toBe(runningCount);
+          expect(executions).toHaveLength(1);
+          const { sql, result } = executions[0]!;
+          expect(result).toEqual({ count: runningCount }); // Returned aggregate, never rows examined.
+          expect(store.decodedRows()).toEqual({ tasks: 0, attempts: 0 });
+          expect(store.decodedBytes()).toEqual({ tasks: 0, attempts: 0 });
+          const plan = query(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[];
+          expect(plan.map((step) => step.detail).join(' ')).toMatch(
+            /SEARCH .*USING (?:COVERING )?INDEX worker_attempts_state/,
+          );
+
+          // Bun exposes no statement-status counters: replay the captured SQL against this same native fixture.
+          // VM steps count executed opcodes; fullscan steps exclude indexed visits. Neither is rows examined.
+          const native = Bun.spawnSync(['sqlite3', '-readonly', path], {
+            stdin: Buffer.from(`.eqp on\n.stats on\n${sql};\n`),
+          });
+          expect(native.exitCode).toBe(0);
+          expect(native.stderr.toString()).toBe('');
+          const output = native.stdout.toString();
+          expect(output).toMatch(/SEARCH .*USING (?:COVERING )?INDEX worker_attempts_state/);
+          expect(output).toMatch(new RegExp(`^${runningCount}$`, 'm'));
+          const counter = (name: string) => {
+            const match = output.match(new RegExp(`^${name}:\\s+(\\d+)`, 'm'));
+            expect(match).not.toBeNull();
+            return Number(match![1]);
+          };
+          expect(counter('Number of times run')).toBe(1);
+          expect(counter('Fullscan Steps')).toBe(0);
+          const steps = counter('Virtual Machine Steps');
+          expect(steps).toBeGreaterThan(0);
+          expect(steps).toBeLessThanOrEqual(5 * runningCount + 20);
+          work.push(steps);
+          writeFileSync(
+            join(directory, 'capacity.json'),
+            JSON.stringify({ maxWorkers: Math.max(1, runningCount), minAvailableMiB: 0 }),
+          );
+          expect(capacityAvailable(store, directory)).toBe(runningCount === 0);
+        }
       }
-      expect(store.runningAttemptsCount()).toBe(runningCount);
+      expect(new Set(work).size).toBe(1);
     }
-
-    writeFileSync(join(directory, 'capacity.json'), JSON.stringify({ maxWorkers: runningCount, minAvailableMiB: 0 }));
-    expect(capacityAvailable(store, directory)).toBe(false);
   } finally {
     db.close();
     rmSync(directory, { recursive: true, force: true });
@@ -41,7 +107,7 @@ test('a start waiting for host capacity counts running attempts with one indexed
 });
 
 test('a critical-path start waits at the cap like any other and only goes half an hour ahead in the queue', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'goal-capacity-critical-'));
+  const directory = mkdtempSync(join(temporaryRoot, 'goal-capacity-critical-'));
   const db = openDb(':memory:');
   try {
     const store = new WorkerStore(db);

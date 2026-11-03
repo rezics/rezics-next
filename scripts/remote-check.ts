@@ -1697,7 +1697,9 @@ systemctl stop "$run_slice" >/dev/null 2>&1
 /** Executed by the host Python 3 prerequisite, before selecting or downloading pinned Bun. */
 export const dependencyPreparationProgram = String.raw`# Linux check-host dependency preparation. The supervising process is a subreaper in the run's systemd scope.
 SUPERVISOR_SCHEMA = ${REMOTE_CHECK_SUPERVISOR_MARKER_SCHEMA_JSON}
+import contextlib
 import ctypes
+import errno
 import fcntl
 import hashlib
 import json
@@ -1866,21 +1868,109 @@ def native_entries(root, entries):
     return selected
 
 
-def publish_artifacts(root, entry, manifest):
-    stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
+def artifact_bytes(entry):
     try:
-        (stage / 'payload').mkdir()
-        copy_entries(root, stage / 'payload', manifest['entries'])
-        (stage / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
-        if verified(stage, manifest['key']) is None:
-            raise RuntimeError('prepared artifact verification failed')
-        # The per-key lock is held through verification/publication. Never remove a concurrent publisher's entry.
-        if entry.exists():
-            remove(entry)
-        stage.rename(entry)
-    finally:
-        if stage.exists():
-            remove(stage)
+        return int((entry / '.cache-bytes').read_text())
+    except (FileNotFoundError, ValueError):
+        # Old publications have no size record. Account for allocated blocks, including directories and links.
+        total = 0
+        for parent, directories, files in os.walk(entry, followlinks=False):
+            for path in [Path(parent), *(Path(parent) / name for name in files),
+                         *(Path(parent) / name for name in directories if (Path(parent) / name).is_symlink())]:
+                try:
+                    total += path.lstat().st_blocks * 512
+                except FileNotFoundError:
+                    pass
+        return total
+
+
+def touch_artifacts(entry):
+    # Directory mtime records last use without allocating a new file on a full filesystem.
+    os.utime(entry, None)
+
+
+def evict_artifacts(cache, held_entry=None):
+    # Source and native entries share one budget: at most 10% of the filesystem, preserving 10% free space.
+    # Serialize accounting; candidate locks are nonblocking to avoid deadlock with active preparations.
+    with contextlib.ExitStack() as cleanup:
+        sweep = os.open(cache, os.O_RDONLY)
+        cleanup.callback(os.close, sweep)
+        fcntl.flock(sweep, fcntl.LOCK_EX)
+        entries = []
+        for namespace in [cache, cache / 'native']:
+            if not namespace.exists():
+                continue
+            for entry in namespace.iterdir():
+                if not re.fullmatch(r'[a-f0-9]{64}', entry.name) or not entry.is_dir() or entry.is_symlink():
+                    continue
+                try:
+                    entries.append((entry.stat().st_mtime_ns, entry, artifact_bytes(entry)))
+                except FileNotFoundError:
+                    pass
+        size = sum(item[2] for item in entries)
+        disk = shutil.disk_usage(cache)
+        bound = max(0, min(disk.total // 10, size + disk.free - disk.total // 10))
+        for last_use, entry, entry_size in sorted(entries):
+            if size <= bound:
+                break
+            with open(entry.parent / (entry.name + '.lock'), 'a') as lock:
+                if entry != held_entry:
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        continue
+                if not entry.exists():
+                    size -= entry_size
+                    continue
+                # A hit since the snapshot makes this entry recent; let the next sweep reconsider it.
+                if entry.stat().st_mtime_ns != last_use:
+                    continue
+                if size > bound:
+                    remove(entry)
+                    size -= entry_size
+                    print('remote-check: dependency artifacts evicted ' + str(entry) + ' bytes=' + str(entry_size),
+                          file=sys.stderr, flush=True)
+        print('remote-check: dependency artifacts cache bytes=' + str(size) + ' bound=' + str(bound),
+              file=sys.stderr, flush=True)
+
+
+def publish_artifacts(root, entry, manifest):
+    cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
+    for attempt in range(2):
+        stage = None
+        try:
+            stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
+            (stage / 'payload').mkdir()
+            copy_entries(root, stage / 'payload', manifest['entries'])
+            (stage / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
+            if verified(stage, manifest['key']) is None:
+                raise RuntimeError('prepared artifact verification failed')
+            (stage / '.cache-bytes').write_text('pending')
+            size = artifact_bytes(stage)
+            (stage / '.cache-bytes').write_text(str(size))
+            # The per-key lock covers publication and eviction, including eviction of this new entry if necessary.
+            if entry.exists():
+                remove(entry)
+            stage.rename(entry)
+            touch_artifacts(entry)
+        except OSError as error:
+            if error.errno != errno.ENOSPC:
+                raise
+            if stage is not None:
+                remove(stage)
+                stage = None
+            if attempt == 0:
+                print('remote-check: dependency artifacts publication ENOSPC; evicting before one retry',
+                      file=sys.stderr, flush=True)
+                evict_artifacts(cache, entry)
+                continue
+            print('remote-check: dependency artifacts publication skipped after ENOSPC retry', file=sys.stderr, flush=True)
+            return
+        finally:
+            if stage is not None and stage.exists():
+                remove(stage)
+        evict_artifacts(cache, entry)
+        return
 
 
 def install():
@@ -1912,92 +2002,80 @@ def install():
         preparation_progress(root, 'source-cache-verification')
         manifest = verified(entry, key)
         hit = manifest is not None
-        stage = None
         native_hit = None
-        try:
-            if not hit:
-                native_identity = dict(identity, inputs={name: value for name, value in before.items()
-                    if Path(name).name in ['package.json', 'bun.lock', 'bun.lockb', 'bunfig.toml'] or name.startswith('patches/')})
-                native_key = hashlib.sha256(json.dumps(native_identity, sort_keys=True).encode()).hexdigest()
-                native_cache = cache / 'native'
-                native_cache.mkdir(exist_ok=True)
-                native_entry = native_cache / native_key
-                preparation_progress(root, 'native-cache-lock')
-                with open(native_cache / (native_key + '.lock'), 'a') as native_lock:
-                    while True:
-                        try:
-                            fcntl.flock(native_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                            break
-                        except BlockingIOError:
-                            time.sleep(0.02)
-                    preparation_progress(root, 'native-cache-verification')
-                    native_manifest = verified(native_entry, native_key)
-                    native_hit = native_manifest is not None
-                    if native_hit:
-                        copy_entries(native_entry / 'payload', root, native_manifest['entries'])
-                        if verify_native_packages(root, native_manifest['entries']) != sorted(native_manifest['nativeChecks'], key=lambda item: (item['name'], item['version'])):
-                            raise RuntimeError('restored native package identity mismatch')
-                    # No ignore-scripts: workspace/source lifecycle outputs are always rebuilt on a source-key miss.
-                    preparation_progress(root, 'frozen-install')
-                    completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])
-                    if completed.returncode:
-                        return completed.returncode if completed.returncode > 0 else 128 - completed.returncode
-                    preparation_progress(root, 'native-artifact-publication')
-                    native_outputs = native_entries(root, inventory(root))
-                    native_checks = verify_native_packages(root, native_outputs)
-                    if not native_hit:
-                        publish_artifacts(root, native_entry, {'schema': 2, 'key': native_key,
-                            'entries': native_outputs, 'removed': [], 'nativeChecks': native_checks})
-                if owned_processes():
-                    raise RuntimeError('installer left owned descendants')
-                preparation_progress(root, 'source-artifact-publication')
-                after = inventory(root)
-                native_checks = verify_native_packages(root, after)
-                outputs = {name: value for name, value in after.items() if before.get(name) != value}
-                # Include parent directories so the payload has a complete independently verifiable inventory.
-                for name in list(outputs):
-                    for parent in Path(name).parents:
-                        if parent.as_posix() != '.':
-                            outputs[parent.as_posix()] = after[parent.as_posix()]
-                removed = sorted(set(before) - set(after), key=lambda name: -name.count('/'))
-                stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
-                (stage / 'payload').mkdir()
-                copy_entries(root, stage / 'payload', outputs)
-                manifest = {'schema': 2, 'key': key, 'entries': outputs, 'removed': removed, 'nativeChecks': native_checks}
-                (stage / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
-                if verified(stage, key) is None:
-                    raise RuntimeError('prepared artifact verification failed')
-                # Only this key's lock owner can replace an invalid entry. Valid publications remain immutable.
-                if entry.exists():
-                    remove(entry)
-                stage.rename(entry)
-                stage = None
+        if not hit:
+            native_identity = dict(identity, inputs={name: value for name, value in before.items()
+                if Path(name).name in ['package.json', 'bun.lock', 'bun.lockb', 'bunfig.toml'] or name.startswith('patches/')})
+            native_key = hashlib.sha256(json.dumps(native_identity, sort_keys=True).encode()).hexdigest()
+            native_cache = cache / 'native'
+            native_cache.mkdir(exist_ok=True)
+            native_entry = native_cache / native_key
+            preparation_progress(root, 'native-cache-lock')
+            with open(native_cache / (native_key + '.lock'), 'a') as native_lock:
+                while True:
+                    try:
+                        fcntl.flock(native_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        time.sleep(0.02)
+                preparation_progress(root, 'native-cache-verification')
+                native_manifest = verified(native_entry, native_key)
+                native_hit = native_manifest is not None
+                if native_hit:
+                    touch_artifacts(native_entry)
+                    copy_entries(native_entry / 'payload', root, native_manifest['entries'])
+                    if verify_native_packages(root, native_manifest['entries']) != sorted(native_manifest['nativeChecks'], key=lambda item: (item['name'], item['version'])):
+                        raise RuntimeError('restored native package identity mismatch')
+                # No ignore-scripts: workspace/source lifecycle outputs are always rebuilt on a source-key miss.
+                preparation_progress(root, 'frozen-install')
+                completed = subprocess.run([os.environ['REMOTE_CHECK_REAL_BUN'], *sys.argv[2:]])
+                if completed.returncode:
+                    return completed.returncode if completed.returncode > 0 else 128 - completed.returncode
+                preparation_progress(root, 'native-artifact-publication')
+                native_outputs = native_entries(root, inventory(root))
+                native_checks = verify_native_packages(root, native_outputs)
+                if not native_hit:
+                    publish_artifacts(root, native_entry, {'schema': 2, 'key': native_key,
+                        'entries': native_outputs, 'removed': [], 'nativeChecks': native_checks})
+            if owned_processes():
+                raise RuntimeError('installer left owned descendants')
+            preparation_progress(root, 'source-artifact-publication')
+            after = inventory(root)
+            native_checks = verify_native_packages(root, after)
+            outputs = {name: value for name, value in after.items() if before.get(name) != value}
+            # Include parent directories so the payload has a complete independently verifiable inventory.
+            for name in list(outputs):
+                for parent in Path(name).parents:
+                    if parent.as_posix() != '.':
+                        outputs[parent.as_posix()] = after[parent.as_posix()]
+            removed = sorted(set(before) - set(after), key=lambda name: -name.count('/'))
+            manifest = {'schema': 2, 'key': key, 'entries': outputs, 'removed': removed, 'nativeChecks': native_checks}
+            publish_artifacts(root, entry, manifest)
+        else:
+            touch_artifacts(entry)
             preparation_progress(root, 'artifact-restore')
             for name in manifest['removed']:
                 remove(root / name)
             copy_entries(entry / 'payload', root, manifest['entries'])
-            packages = []
-            for name in manifest['entries']:
-                if name.endswith('/package.json'):
-                    try:
-                        package = json.loads((root / name).read_text())
-                        if package.get('name') and package.get('version'):
-                            packages.append({'name': package['name'], 'version': package['version']})
-                    except (OSError, ValueError):
-                        pass
-            receipt = {'schema': 1, 'host': os.environ['REMOTE_CHECK_HOST'],
-                       'run': os.environ['REZICS_CHECK_RUN'],
-                       'cache': 'hit' if hit else 'miss', 'nativeCache': None if hit else ('hit' if native_hit else 'miss'),
-                       'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks']}
-            (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
-            if time.monotonic() >= deadline:
-                raise RuntimeError('absolute preparation deadline exceeded')
-            (root / '.bun-install-complete').touch()
-            print('remote-check: dependency artifacts ' + receipt['cache'] + ' ' + key, file=sys.stderr, flush=True)
-            return 0
-        finally:
-            if stage is not None:
-                remove(stage)
+        packages = []
+        for name in manifest['entries']:
+            if name.endswith('/package.json'):
+                try:
+                    package = json.loads((root / name).read_text())
+                    if package.get('name') and package.get('version'):
+                        packages.append({'name': package['name'], 'version': package['version']})
+                except (OSError, ValueError):
+                    pass
+        receipt = {'schema': 1, 'host': os.environ['REMOTE_CHECK_HOST'],
+                   'run': os.environ['REZICS_CHECK_RUN'],
+                   'cache': 'hit' if hit else 'miss', 'nativeCache': None if hit else ('hit' if native_hit else 'miss'),
+                   'key': key, 'packages': packages, 'nativeChecks': manifest['nativeChecks']}
+        (root / 'preparation-install.json').write_text(json.dumps(receipt, sort_keys=True))
+        if time.monotonic() >= deadline:
+            raise RuntimeError('absolute preparation deadline exceeded')
+        (root / '.bun-install-complete').touch()
+        print('remote-check: dependency artifacts ' + receipt['cache'] + ' ' + key, file=sys.stderr, flush=True)
+        return 0
 
 
 def owned_processes():

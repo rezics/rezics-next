@@ -4,10 +4,16 @@ import { join } from 'node:path';
 import { git } from './tasks.ts';
 import { integrationHarness } from './test-support.ts';
 
-async function unchangedClaim(h: ReturnType<typeof integrationHarness>, command: string[] | null) {
+// A stabilize claim reruns its acceptance on the retained source; a direct dev landing does not.
+async function unchangedClaim(
+  h: ReturnType<typeof integrationHarness>,
+  command: string[] | null,
+  target?: 'stabilize',
+) {
   h.ensureDev();
   const source = h.advanceDev('retained.txt');
-  const task = h.dispatch('retained.txt', [], command);
+  if (target) git(h.root, ['branch', target, source]);
+  const task = h.dispatch('retained.txt', [], command, 'fixture', target);
   await h.start(task);
   return { source, task };
 }
@@ -16,7 +22,7 @@ test('an unchanged claim runs its original acceptance on the retained source wit
   const h = integrationHarness();
   const command = ['sh', '-c', 'test "$(cat retained.txt)" = retained.txt && git rev-parse HEAD'];
   try {
-    const { source, task } = await unchangedClaim(h, command);
+    const { source, task } = await unchangedClaim(h, command, 'stabilize');
     const dev = h.head();
 
     await h.train();
@@ -55,11 +61,30 @@ test('an unchanged claim without an acceptance command integrates on its represe
   }
 });
 
+test('an unchanged dev claim integrates on its represented source without rerunning acceptance', async () => {
+  const h = integrationHarness();
+  // Only a run prints 42-ran; the logged command line does not contain it.
+  const command = ['sh', '-c', 'echo $((40 + 2))-ran; exit 1'];
+  try {
+    const { source, task } = await unchangedClaim(h, command);
+
+    await h.train();
+
+    const outcome = h.outcomes[0]!;
+    expect(outcome.passed).toBe(true);
+    expect(outcome.retainedSourceAcceptance).toEqual({ sourceCommit: source, command, status: 'unavailable' });
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(readFileSync(outcome.logPath, 'utf8')).not.toContain('42-ran');
+  } finally {
+    h.dispose();
+  }
+});
+
 test('a failed retained-source acceptance stays non-green and records its exact result', async () => {
   const h = integrationHarness();
   const command = ['sh', '-c', 'echo retained-acceptance-failed; exit 1'];
   try {
-    const { source, task } = await unchangedClaim(h, command);
+    const { source, task } = await unchangedClaim(h, command, 'stabilize');
     const dev = h.head();
 
     await h.train();
@@ -126,7 +151,7 @@ test.each([false, true])(
       expect(h.outcomes[0]?.retainedSourceAcceptance).toEqual({
         sourceCommit: source,
         command: task.brief.acceptance.command,
-        status: 'passed',
+        status: 'unavailable',
       });
       expect(h.outcomes[0]?.mergedCommit).toBe(ancestor);
       expect(h.store.task(task.id).state).toBe('integrated');
@@ -143,7 +168,7 @@ test.each(['unavailable', 'dirty', 'source', 'contract', 'stale'] as const)(
   async (change) => {
     const h = integrationHarness();
     try {
-      const { source, task } = await unchangedClaim(h, ['true']);
+      const { source, task } = await unchangedClaim(h, ['true'], 'stabilize');
       await h.train(async () => {
         if (change === 'unavailable') throw new Error('Acceptance executable unavailable');
         if (change === 'dirty') writeFileSync(join(task.worktree, 'retained.txt'), 'dirty');
