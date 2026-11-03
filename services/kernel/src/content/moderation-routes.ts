@@ -176,7 +176,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
           ...historyReadFailures,
         },
         detail: {
-          operationId: 'board.moderation_history.list',
+          operationId: 'moderation_decision.list',
           'x-resource-types': ['content.board'],
           'x-exposure': 'public',
           'x-action': 'moderation:takedown',
