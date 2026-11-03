@@ -21,7 +21,7 @@ test('urgent flag and front matter require a live supermanager session or its re
     for (const id of [owner, parent]) h.store.db.query('INSERT OR REPLACE INTO manager_sessions VALUES (?,?)')
       .run(id, JSON.stringify({ id, status: 'running', threadId: `${id}-session` }));
     const started: string[] = [], printed: string[] = [];
-    const runtime = { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks,
+    const runtime = { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks, drain: async () => {},
       job: { start: async (id: string) => { started.push(id); }, drain: async () => {} } } as never;
     const call = (command: string, args: string[], id?: string) => runWorkerCommand(command, args, {
       runtime, env: id ? { CODEX_THREAD_ID: `${id}-session`, GOAL_MANAGER: id } : { GOAL_MANAGER: parent },
