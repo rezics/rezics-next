@@ -110,11 +110,7 @@ function reserve(
   });
 }
 
-async function authority(
-  pools: readonly ReleaseSearchCandidatePool[],
-  names: ReleaseSearchNameCut,
-  context: Context,
-) {
+async function authority(pools: readonly ReleaseSearchCandidatePool[], names: ReleaseSearchNameCut, context: Context) {
   const homesByPool: Record<string, { partition: number; position: string }[]> = {};
   for (const pool of pools) {
     const population = names.pools.find(({ id }) => id === pool.id)?.population;
@@ -246,8 +242,7 @@ export function createReleaseSearchCandidateStreams(input: {
     // cross-pool anchor keeps a stale, remote, concealed, or redirected target identity-free.
     const linked = new Map<string, Classified[]>();
     for (const value of current.values())
-      if (value.link?.kind === 'linked')
-        linked.set(value.link.work, [...(linked.get(value.link.work) ?? []), value]);
+      if (value.link?.kind === 'linked') linked.set(value.link.work, [...(linked.get(value.link.work) ?? []), value]);
     const byOwner = new Map<ReleaseSearchCandidatePool, Map<number, string[]>>();
     for (const [work, releases] of linked) {
       const owner = poolByPartition.get(subjectPartition(work));
@@ -272,8 +267,7 @@ export function createReleaseSearchCandidateStreams(input: {
         for (const id of ids) {
           const subject = subjects.get(id);
           const type = subject && Object.hasOwn(release.types, subject.type) ? release.types[subject.type] : undefined;
-          const workType =
-            subject?.type === 'schema:CreativeWork' || !!type?.bases?.includes('schema:CreativeWork');
+          const workType = subject?.type === 'schema:CreativeWork' || !!type?.bases?.includes('schema:CreativeWork');
           if (!subject || subject.visibility !== 'visible' || subject.redirect !== null || !workType)
             for (const release of linked.get(id) ?? []) release.link = { kind: 'unknown' };
         }

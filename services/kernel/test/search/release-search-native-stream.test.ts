@@ -80,9 +80,7 @@ async function fixture() {
     names: {
       observe: async () => ({
         generation: String(index),
-        homes: subjects.some(({ id }) => subjectPartition(id) === index)
-          ? [{ ...home, partition: index }]
-          : [],
+        homes: subjects.some(({ id }) => subjectPartition(id) === index) ? [{ ...home, partition: index }] : [],
       }),
       read: async ({ partition, after, limit }) => ({
         home: { ...home, partition },
@@ -109,7 +107,9 @@ async function fixture() {
     reserve: (value: ReleaseSearchCandidateReservation) => {
       reservations.push(value);
     },
-    observe: async ({ homesByPool }: {
+    observe: async ({
+      homesByPool,
+    }: {
       deadline: number;
       homesByPool: Readonly<Record<string, readonly { partition: number; position: string }[]>>;
     }) => {

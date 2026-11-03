@@ -48,11 +48,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Complete all-pool native ownership composition and explicit relevance order; preserve independent child streams and complete-evidence confidentiality."
-    - "Hydrate matching work and release cards with the full admitted Boolean filter, same-statement qualifiers, precise dates, separate credits, ordered languages, spoiler policy, viewer state and permitted actions; reserve matching, disclosure, hydration, serialization and final authority on every touched pool."
-    - "Install grouped POST /v1/subjects:search with viewer-bound encrypted group and child continuations; retire both streams on release, generation, disclosure, redirect, date, credit and order changes."
-    - "Mount contextual work and release cards on /search/releases with independent expansions and continuations, URL-backed operands, ordered languages, and accessible response-grounded preparation, repair and restart states in eight locales."
-    - "Add focused behavior tests. Native growth measurements, broader acceptance and browser inspection remain deferred until validation policy permits them."
+    - 'Complete all-pool native ownership composition and explicit relevance order; preserve independent child streams and complete-evidence confidentiality.'
+    - 'Hydrate matching work and release cards with the full admitted Boolean filter, same-statement qualifiers, precise dates, separate credits, ordered languages, spoiler policy, viewer state and permitted actions; reserve matching, disclosure, hydration, serialization and final authority on every touched pool.'
+    - 'Install grouped POST /v1/subjects:search with viewer-bound encrypted group and child continuations; retire both streams on release, generation, disclosure, redirect, date, credit and order changes.'
+    - 'Mount contextual work and release cards on /search/releases with independent expansions and continuations, URL-backed operands, ordered languages, and accessible response-grounded preparation, repair and restart states in eight locales.'
+    - 'Add focused behavior tests. Native growth measurements, broader acceptance and browser inspection remain deferred until validation policy permits them.'
   workerOwned: true
 estimate:
   lines: 1500
