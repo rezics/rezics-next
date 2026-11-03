@@ -106,11 +106,14 @@ export const sessionSchema = t.Object(
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
 const changeIntent = t.Union([
-  t.Object({
-    lifecycle: t.Union([t.Literal('reopen'), t.Literal('retire')]),
-    previousState: state,
-    previousCompletedAt: nullableString,
-  }, closed),
+  t.Object(
+    {
+      lifecycle: t.Union([t.Literal('reopen'), t.Literal('retire')]),
+      previousState: state,
+      previousCompletedAt: nullableString,
+    },
+    closed,
+  ),
   t.Object({ clear: t.Literal(true) }, closed),
   t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
   t.Object({ amount: t.String() }, closed),

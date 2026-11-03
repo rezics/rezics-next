@@ -351,10 +351,7 @@ export function transition(state: ProgressState, action: ProgressAction): Progre
 }
 
 /** Correct only the addressed occurrence; recorded values never imply completion. */
-export function correctOccurrence(
-  state: ProgressState,
-  action: 'reopen' | 'retire',
-): ProgressOutcome<ProgressState> {
+export function correctOccurrence(state: ProgressState, action: 'reopen' | 'retire'): ProgressOutcome<ProgressState> {
   if (!isState(state) || state === 'retired') return invalid('state');
   if (action === 'retire') return { ok: true, value: 'retired' };
   if (state === 'active') return invalid('state');

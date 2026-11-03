@@ -120,12 +120,18 @@ test('default native worker removes private sessions/history, labels, archives, 
     await f.json(as, 'POST', '/v1/publishedLogs', 201, { sessionId: session.id, note: 'private progress snapshot' })
   ).publishedLog;
   const retirementKey = crypto.randomUUID();
-  const retire = () => f.kernel.handle(new Request(`http://kernel.test/v1/progressSessions/${session.id}:retire`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${as.bearer}`, 'content-type': 'application/json',
-      'idempotency-key': JSON.stringify(retirementKey) },
-    body: JSON.stringify({ revision: 2 }),
-  }));
+  const retire = () =>
+    f.kernel.handle(
+      new Request(`http://kernel.test/v1/progressSessions/${session.id}:retire`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${as.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(retirementKey),
+        },
+        body: JSON.stringify({ revision: 2 }),
+      }),
+    );
   expect((await retire()).status).toBe(200);
   expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(404);
   const owner = [routeOf(as.accountId), as.accountId];

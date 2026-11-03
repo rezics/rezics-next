@@ -226,7 +226,9 @@ export function createSessionCommands(config: Dependencies) {
         async prepare(attempt) {
           try {
             if (action === 'reopen' || action === 'retire') {
-              const session = await snapshot(owner, 'progress_session:update', (client) => load(client, owner, sessionId));
+              const session = await snapshot(owner, 'progress_session:update', (client) =>
+                load(client, owner, sessionId),
+              );
               const source = await readLibraryProfileSource(
                 { pool, access, actor: owner, at: attempt.time, deadline },
                 session.subjectId,
