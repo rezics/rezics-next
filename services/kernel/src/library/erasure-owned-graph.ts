@@ -61,15 +61,12 @@ export const OWNED_PHASES = [
   'members_preparation_result',
   'members_preparation',
   'members_preparation_owner',
-<<<<<<< HEAD
   'bangumi_upload',
   'list_import_mal',
   'library_export',
   'copy_archive',
   'list_import_anilist',
-=======
   'vndb_import',
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -99,14 +96,11 @@ type Kind =
   | 'sessions'
   | 'collections'
   | 'collectionLocal'
-<<<<<<< HEAD
   | 'bangumi_upload'
   | 'list_import_mal'
   | 'library_export'
-  | 'copy_archive';
-=======
+  | 'copy_archive'
   | 'vndb_import';
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;

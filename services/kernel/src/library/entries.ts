@@ -50,17 +50,13 @@ import stampLegacyIncarnation from './entry-legacy-incarnation-stamp.sql';
 import restoreState from './entry-restore-state.sql';
 import mutationState from './entry-mutation-state.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
-<<<<<<< HEAD
+import { admitVndbEntry, vndbSourceFingerprint, type VndbEntryReview } from './list-import-vndb-admission.ts';
 import {
   captureEntryStateChange,
   pageEntryStateChanges,
   readEntryStateChange,
   type EntryStateChangeRow,
 } from './entry-state-history.ts';
-=======
-import { admitVndbEntry, vndbSourceFingerprint, type VndbEntryReview } from './list-import-vndb-admission.ts';
-import { readLibraryProfileSourceObservation } from './profile-source.ts';
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
 
 type Dependencies = {
   pool: Pool;
@@ -365,7 +361,6 @@ export function createEntryCommands(config: Dependencies) {
     });
   }
 
-<<<<<<< HEAD
   async function historicalStateAdmitted(owner: AccountActor, subjectId: string, historicalState: string) {
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const time = await withConnection(pool, (client) => mintReadTime(client, clock));
@@ -386,26 +381,21 @@ export function createEntryCommands(config: Dependencies) {
     }
   }
 
-=======
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
   async function putEntry(
     actor: Actor,
     subjectId: string,
     input: unknown,
     requestKey: string,
-<<<<<<< HEAD
     guard?:
       | import('./list-import-bangumi-model.ts').BangumiGuard
+      | VndbEntryReview
       | ReviewedEntrySource
       | { subjectId: string; pin: unknown; epoch: string },
   ) {
     const reviewedSource = guard && 'release' in guard ? guard : undefined;
     const reviewGuard = guard && 'releaseDigest' in guard ? guard : undefined;
     const review = guard && 'pin' in guard ? guard : undefined;
-=======
-    review?: VndbEntryReview,
-  ) {
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
+    const vndbReview = guard && 'reviewId' in guard ? guard : undefined;
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -416,10 +406,9 @@ export function createEntryCommands(config: Dependencies) {
     );
     // Preserve the existing normalized receipt input. A missing current source must
     // reach owner authorization and receipt lookup before fresh admission fails.
-<<<<<<< HEAD
     // Reviewed imports bind a canonical operand; receipt retries must never follow a new alias.
     const resolved =
-      reviewedSource || review
+      reviewedSource || review || vndbReview
         ? { subjectId, requestedSubjectId: null }
         : existing
           ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
@@ -427,16 +416,6 @@ export function createEntryCommands(config: Dependencies) {
               subjectId,
               requestedSubjectId: null,
             });
-=======
-    const resolved = review
-      ? { subjectId, requestedSubjectId: null }
-      : existing
-        ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
-        : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
-            subjectId,
-            requestedSubjectId: null,
-          });
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
 
     // Absence retains the exact pre-incarnation receipt input.
     const requestInput = {
@@ -447,11 +426,8 @@ export function createEntryCommands(config: Dependencies) {
       ...(reviewGuard === undefined ? {} : { reviewGuard }),
       revision: parsed.revision ?? null,
       ...(parsed.incarnationId === undefined ? {} : { incarnationId: parsed.incarnationId }),
-<<<<<<< HEAD
       ...(review === undefined ? {} : { importReview: review }),
-=======
-      ...(review === undefined ? {} : { vndbReview: review }),
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
+      ...(vndbReview === undefined ? {} : { vndbReview }),
     };
     const expectedRevision = parsed.revision;
     let preparedType: PreparedType | undefined;
@@ -470,7 +446,6 @@ export function createEntryCommands(config: Dependencies) {
                 subjectId,
               );
               const source = observation?.source;
-<<<<<<< HEAD
               if (reviewedSource) {
                 if (
                   !observation ||
@@ -498,9 +473,8 @@ export function createEntryCommands(config: Dependencies) {
                   String(observation.anchor.identityEpoch) !== review.epoch ||
                   canonicalize(source.pin) !== canonicalize(review.pin))
               )
-=======
-              if (review && (!observation || vndbSourceFingerprint(observation) !== review.source))
->>>>>>> 3d5fe6d650 (Squash worker branch changes)
+                throw new LibraryConflictError();
+              if (vndbReview && (!observation || vndbSourceFingerprint(observation) !== vndbReview.source))
                 throw new LibraryConflictError();
               if (!source) throw new LibraryNotFoundError();
               if (
@@ -583,7 +557,7 @@ export function createEntryCommands(config: Dependencies) {
             if (!admitted.rows.length) throw new LibraryConflictError();
           }
           if ('error' in prepared) throw prepared.error;
-          if (review) await admitVndbEntry(tx, owner.accountId, route, review);
+          if (vndbReview) await admitVndbEntry(tx, owner.accountId, route, vndbReview);
           const source = prepared.source;
           if (!source || (!existing && source.subjectId !== resolved.subjectId)) throw new LibraryNotFoundError();
           if (source.kind !== 'supported' || !hasEntryState(source.profile, parsed.state))

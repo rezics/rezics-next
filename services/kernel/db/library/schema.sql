@@ -4414,3 +4414,3374 @@ CREATE TABLE library.vndb_import (
 
 
 --
+-- Name: bangumi_upload bangumi_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bangumi_upload
+    ADD CONSTRAINT bangumi_upload_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: bangumi_upload_row bangumi_upload_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bangumi_upload_row
+    ADD CONSTRAINT bangumi_upload_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
+
+
+--
+-- Name: builtin_collection_reference builtin_collection_reference_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_collection_reference
+    ADD CONSTRAINT builtin_collection_reference_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: builtin_collection_reference builtin_collection_reference_route_account_id_profile_id_st_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_collection_reference
+    ADD CONSTRAINT builtin_collection_reference_route_account_id_profile_id_st_key UNIQUE (route, account_id, profile_id, state_set_id, state_id);
+
+
+--
+-- Name: builtin_state_reference_source builtin_state_reference_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_state_reference_source
+    ADD CONSTRAINT builtin_state_reference_source_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: bulk_effect bulk_effect_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bulk_effect
+    ADD CONSTRAINT bulk_effect_pkey PRIMARY KEY (route, operation_id, ordinal);
+
+
+--
+-- Name: bulk_operation bulk_operation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bulk_operation
+    ADD CONSTRAINT bulk_operation_pkey PRIMARY KEY (route, operation_id);
+
+
+--
+-- Name: bulk_target bulk_target_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bulk_target
+    ADD CONSTRAINT bulk_target_pkey PRIMARY KEY (route, operation_id, ordinal);
+
+
+--
+-- Name: canonical_source_fact canonical_source_fact_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_fact
+    ADD CONSTRAINT canonical_source_fact_pkey PRIMARY KEY (route, collection_id, generation, basis_digest, canonical_subject_id, stored_subject_id, driver, fact_id);
+
+
+--
+-- Name: canonical_source_fact canonical_source_fact_route_collection_id_generation_basis__key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_fact
+    ADD CONSTRAINT canonical_source_fact_route_collection_id_generation_basis__key UNIQUE (route, collection_id, generation, basis_digest, stored_subject_id, driver, fact_id);
+
+
+--
+-- Name: canonical_source_generation canonical_source_generation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_generation
+    ADD CONSTRAINT canonical_source_generation_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
+-- Name: canonical_source_head canonical_source_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_head
+    ADD CONSTRAINT canonical_source_head_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: canonical_source_reference canonical_source_reference_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_reference
+    ADD CONSTRAINT canonical_source_reference_pkey PRIMARY KEY (route, collection_id, generation, canonical_subject_id, stored_subject_id, driver, fact_id);
+
+
+--
+-- Name: canonical_source_scope canonical_source_scope_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_scope
+    ADD CONSTRAINT canonical_source_scope_pkey PRIMARY KEY (route, collection_id, source_fence);
+
+
+--
+-- Name: canonical_source_state canonical_source_state_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_state
+    ADD CONSTRAINT canonical_source_state_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_kind_audience_origin collection_kind_audience_origi_route_collection_id_audience_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_audience_origin
+    ADD CONSTRAINT collection_kind_audience_origi_route_collection_id_audience_key UNIQUE (route, collection_id, audience);
+
+
+--
+-- Name: collection_kind_audience_origin collection_kind_audience_origin_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_audience_origin
+    ADD CONSTRAINT collection_kind_audience_origin_pkey PRIMARY KEY (route, origin_id);
+
+
+--
+-- Name: collection_kind_consent_consumer collection_kind_consent_consu_route_owner_account_id_collec_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_consumer
+    ADD CONSTRAINT collection_kind_consent_consu_route_owner_account_id_collec_key UNIQUE (route, owner_account_id, collection_id, preparation_id, origin_id);
+
+
+--
+-- Name: collection_kind_consent_consumer collection_kind_consent_consumer_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_consumer
+    ADD CONSTRAINT collection_kind_consent_consumer_pkey PRIMARY KEY (route, reference_id);
+
+
+--
+-- Name: collection_kind_consent_transition collection_kind_consent_transition_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_transition
+    ADD CONSTRAINT collection_kind_consent_transition_pkey PRIMARY KEY (route, reference_id, transition_id);
+
+
+--
+-- Name: collection_kind_count collection_kind_count_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_count
+    ADD CONSTRAINT collection_kind_count_pkey PRIMARY KEY (route, collection_id, audience, generation, type_id);
+
+
+--
+-- Name: collection_kind_observation collection_kind_observation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_observation
+    ADD CONSTRAINT collection_kind_observation_pkey PRIMARY KEY (route, collection_id, audience);
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_raw_input
+    ADD CONSTRAINT collection_kind_raw_input_pkey PRIMARY KEY (route, origin_id, observation_version);
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_route_input_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_raw_input
+    ADD CONSTRAINT collection_kind_raw_input_route_input_id_key UNIQUE (route, input_id);
+
+
+--
+-- Name: collection_kind_retired collection_kind_retired_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_retired
+    ADD CONSTRAINT collection_kind_retired_pkey PRIMARY KEY (route, collection_id, audience, generation);
+
+
+--
+-- Name: collection_kind_subject collection_kind_subject_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_subject
+    ADD CONSTRAINT collection_kind_subject_pkey PRIMARY KEY (route, collection_id, audience, generation, subject_id);
+
+
+--
+-- Name: collection_listing_history collection_listing_history_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_listing_history
+    ADD CONSTRAINT collection_listing_history_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_member collection_member_ordinal_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_member
+    ADD CONSTRAINT collection_member_ordinal_key UNIQUE (route, collection_id, ordinal_key) DEFERRABLE;
+
+
+--
+-- Name: collection_member collection_member_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_member
+    ADD CONSTRAINT collection_member_pkey PRIMARY KEY (route, collection_id, member_id);
+
+
+--
+-- Name: collection_order_repair collection_order_repair_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_order_repair
+    ADD CONSTRAINT collection_order_repair_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_order_repair collection_order_repair_route_repair_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_order_repair
+    ADD CONSTRAINT collection_order_repair_route_repair_id_key UNIQUE (route, repair_id);
+
+
+--
+-- Name: collection_pins collection_pins_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_pins
+    ADD CONSTRAINT collection_pins_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: collection collection_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection
+    ADD CONSTRAINT collection_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_publication_episode collection_publication_episode_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_episode
+    ADD CONSTRAINT collection_publication_episode_pkey PRIMARY KEY (route, publication_id);
+
+
+--
+-- Name: collection_publication_operation collection_publication_operat_route_owner_account_id_creati_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_operation
+    ADD CONSTRAINT collection_publication_operat_route_owner_account_id_creati_key UNIQUE (route, owner_account_id, creation_key);
+
+
+--
+-- Name: collection_publication_operation collection_publication_operation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_operation
+    ADD CONSTRAINT collection_publication_operation_pkey PRIMARY KEY (route, publication_id);
+
+
+--
+-- Name: collection_publication_operation collection_publication_operation_route_source_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_operation
+    ADD CONSTRAINT collection_publication_operation_route_source_id_key UNIQUE (route, source_id);
+
+
+--
+-- Name: collection_publication_source collection_publication_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_source
+    ADD CONSTRAINT collection_publication_source_pkey PRIMARY KEY (route, source_id);
+
+
+--
+-- Name: collection_publication_staging collection_publication_stagin_route_collection_id_publicati_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging
+    ADD CONSTRAINT collection_publication_stagin_route_collection_id_publicati_key UNIQUE (route, collection_id, publication_id);
+
+
+--
+-- Name: collection_publication_staging_evidence collection_publication_staging_evidence_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_evidence
+    ADD CONSTRAINT collection_publication_staging_evidence_pkey PRIMARY KEY (route, collection_id, generation, subject_id);
+
+
+--
+-- Name: collection_publication_staging collection_publication_staging_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging
+    ADD CONSTRAINT collection_publication_staging_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
+-- Name: collection_publication_staging_seal collection_publication_staging_seal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_seal
+    ADD CONSTRAINT collection_publication_staging_seal_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
+-- Name: collection_retained_output collection_retained_output_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_retained_output
+    ADD CONSTRAINT collection_retained_output_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_source_output_head collection_source_output_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_head
+    ADD CONSTRAINT collection_source_output_head_pkey PRIMARY KEY (route, collection_id);
+
+
+--
+-- Name: collection_source_output_member collection_source_output_member_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_member
+    ADD CONSTRAINT collection_source_output_member_pkey PRIMARY KEY (route, collection_id, generation, subject_id);
+
+
+--
+-- Name: collection_source_output collection_source_output_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output
+    ADD CONSTRAINT collection_source_output_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
+-- Name: collection_source_output_publication collection_source_output_publication_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_publication
+    ADD CONSTRAINT collection_source_output_publication_pkey PRIMARY KEY (route, collection_id, generation);
+
+
+--
+-- Name: consumption_statistics_installation consumption_statistics_installation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.consumption_statistics_installation
+    ADD CONSTRAINT consumption_statistics_installation_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: consumption_statistics_owner consumption_statistics_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.consumption_statistics_owner
+    ADD CONSTRAINT consumption_statistics_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: consumption_statistics_subject consumption_statistics_subject_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.consumption_statistics_subject
+    ADD CONSTRAINT consumption_statistics_subject_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: copy_archive_row copy_archive_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_row
+    ADD CONSTRAINT copy_archive_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
+
+
+--
+-- Name: copy_archive_upload copy_archive_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_upload
+    ADD CONSTRAINT copy_archive_upload_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: copy_archive_upload copy_archive_upload_route_account_id_upload_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_upload
+    ADD CONSTRAINT copy_archive_upload_route_account_id_upload_id_key UNIQUE (route, account_id, upload_id);
+
+
+--
+-- Name: copy copy_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy
+    ADD CONSTRAINT copy_pkey PRIMARY KEY (route, copy_id);
+
+
+--
+-- Name: copy copy_status_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.copy
+    ADD CONSTRAINT copy_status_check CHECK ((((library_profile_pin IS NULL) AND (status = ANY (ARRAY['ordered'::text, 'owned'::text, 'lent'::text, 'disposed'::text]))) OR ((library_profile_pin IS NOT NULL) AND (char_length(status) > 0)))) NOT VALID;
+
+
+--
+-- Name: entry_deleted entry_deleted_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_deleted
+    ADD CONSTRAINT entry_deleted_pkey PRIMARY KEY (route, account_id, deletion_id);
+
+
+--
+-- Name: entry entry_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry
+    ADD CONSTRAINT entry_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: entry entry_state_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.entry
+    ADD CONSTRAINT entry_state_check CHECK ((((library_profile_pin IS NULL) AND (state = ANY (ARRAY['planned'::text, 'in_progress'::text, 'completed'::text, 'paused'::text, 'dropped'::text]))) OR ((library_profile_pin IS NOT NULL) AND (char_length(state) > 0)))) NOT VALID;
+
+
+--
+-- Name: fact_source_head fact_source_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.fact_source_head
+    ADD CONSTRAINT fact_source_head_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: follow_count_account_signal follow_count_account_signal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_account_signal
+    ADD CONSTRAINT follow_count_account_signal_pkey PRIMARY KEY (route, account_id, event_id);
+
+
+--
+-- Name: follow_count_account_work follow_count_account_work_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_account_work
+    ADD CONSTRAINT follow_count_account_work_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: follow_count_destination follow_count_destination_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_destination
+    ADD CONSTRAINT follow_count_destination_pkey PRIMARY KEY (route, account_id, target_type, original_id, destination_route, destination_id);
+
+
+--
+-- Name: follow_count_health follow_count_health_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_health
+    ADD CONSTRAINT follow_count_health_pkey PRIMARY KEY (node);
+
+
+--
+-- Name: follow_count_owner follow_count_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_owner
+    ADD CONSTRAINT follow_count_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: follow_count_pair follow_count_pair_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_pair
+    ADD CONSTRAINT follow_count_pair_pkey PRIMARY KEY (route, target_type, target_id, account_id, original_id);
+
+
+--
+-- Name: follow_count_partition follow_count_partition_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_partition
+    ADD CONSTRAINT follow_count_partition_pkey PRIMARY KEY (partition_no);
+
+
+--
+-- Name: follow_count_source follow_count_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_source
+    ADD CONSTRAINT follow_count_source_pkey PRIMARY KEY (route, account_id, target_type, target_id);
+
+
+--
+-- Name: follow_count_support follow_count_support_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_support
+    ADD CONSTRAINT follow_count_support_pkey PRIMARY KEY (route, target_type, target_id, account_id);
+
+
+--
+-- Name: follow_count_terminal_follower follow_count_terminal_follower_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_terminal_follower
+    ADD CONSTRAINT follow_count_terminal_follower_pkey PRIMARY KEY (partition_no, account_id);
+
+
+--
+-- Name: follow_count_terminal_source follow_count_terminal_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_terminal_source
+    ADD CONSTRAINT follow_count_terminal_source_pkey PRIMARY KEY (partition_no, account_id);
+
+
+--
+-- Name: follow_count_total follow_count_total_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_total
+    ADD CONSTRAINT follow_count_total_pkey PRIMARY KEY (route, target_type, target_id);
+
+
+--
+-- Name: follow follow_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow
+    ADD CONSTRAINT follow_pkey PRIMARY KEY (route, account_id, target_id);
+
+
+--
+-- Name: identity_epoch_participant_work identity_epoch_participant_work_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_epoch_participant_work
+    ADD CONSTRAINT identity_epoch_participant_work_pkey PRIMARY KEY (partition_no, job_id, job_epoch, effect_key);
+
+
+--
+-- Name: identity_epoch_source_basis identity_epoch_source_basis_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_epoch_source_basis
+    ADD CONSTRAINT identity_epoch_source_basis_pkey PRIMARY KEY (partition_no, job_id, job_epoch, effect_key);
+
+
+--
+-- Name: identity_scope_effect identity_scope_effect_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_effect
+    ADD CONSTRAINT identity_scope_effect_pkey PRIMARY KEY (route, collection_id, plan_key, effect_key, disposition);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_pkey PRIMARY KEY (route, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_seal identity_scope_seal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_seal
+    ADD CONSTRAINT identity_scope_seal_pkey PRIMARY KEY (route, collection_id, plan_key, version);
+
+
+--
+-- Name: label_assignment label_assignment_identity; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_assignment
+    ADD CONSTRAINT label_assignment_identity UNIQUE (route, account_id, assignment_id);
+
+
+--
+-- Name: label_assignment label_assignment_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_assignment
+    ADD CONSTRAINT label_assignment_pkey PRIMARY KEY (route, account_id, subject_id, label_id);
+
+
+--
+-- Name: library_export library_export_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.library_export
+    ADD CONSTRAINT library_export_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: list_import_anilist list_import_anilist_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_anilist
+    ADD CONSTRAINT list_import_anilist_pkey PRIMARY KEY (route, account_id, import_id, ordinal);
+
+
+--
+-- Name: list_import_mal list_import_mal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_mal
+    ADD CONSTRAINT list_import_mal_pkey PRIMARY KEY (route, account_id, id);
+
+
+--
+-- Name: members_preparation_owner members_preparation_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.members_preparation_owner
+    ADD CONSTRAINT members_preparation_owner_pkey PRIMARY KEY (route, owner_account_id);
+
+
+--
+-- Name: members_preparation members_preparation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.members_preparation
+    ADD CONSTRAINT members_preparation_pkey PRIMARY KEY (route, owner_account_id, collection_id, episode_id);
+
+
+--
+-- Name: members_preparation_result members_preparation_result_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.members_preparation_result
+    ADD CONSTRAINT members_preparation_result_pkey PRIMARY KEY (route, owner_account_id, collection_id, episode_id, subject_id);
+
+
+--
+-- Name: members_preparation_result members_preparation_result_route_owner_account_id_collectio_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.members_preparation_result
+    ADD CONSTRAINT members_preparation_result_route_owner_account_id_collectio_key UNIQUE (route, owner_account_id, collection_id, episode_id, sort_key, subject_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_partition_no_hold_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_partition_no_hold_id_key UNIQUE (partition_no, hold_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_route_collection_id_effect_key_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_route_collection_id_effect_key_key UNIQUE (route, collection_id, effect_key);
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_partition_no_capture_id_role_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_hold_partition_no_capture_id_role_key UNIQUE (partition_no, capture_id, role);
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_hold_pkey PRIMARY KEY (partition_no, hold_id);
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_receiving
+    ADD CONSTRAINT native_public_output_receiving_pkey PRIMARY KEY (partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transition_pkey PRIMARY KEY (partition_no, hold_id);
+
+
+--
+-- Name: native_source_capture native_source_capture_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_source_capture
+    ADD CONSTRAINT native_source_capture_pkey PRIMARY KEY (route, capture_id);
+
+
+--
+-- Name: native_source_fence native_source_fence_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_source_fence
+    ADD CONSTRAINT native_source_fence_pkey PRIMARY KEY (route, kind, owner_id);
+
+
+--
+-- Name: native_source_hold native_source_hold_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_source_hold
+    ADD CONSTRAINT native_source_hold_pkey PRIMARY KEY (route, capture_id, hold_id);
+
+
+--
+-- Name: native_source_receipt native_source_receipt_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_source_receipt
+    ADD CONSTRAINT native_source_receipt_pkey PRIMARY KEY (route, capture_id);
+
+
+--
+-- Name: owner_identity_scope owner_identity_scope_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_identity_scope
+    ADD CONSTRAINT owner_identity_scope_pkey PRIMARY KEY (partition_no, original, source_id, incarnation, role);
+
+
+--
+-- Name: owner_index_control owner_index_control_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_index_control
+    ADD CONSTRAINT owner_index_control_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: owner_index_label_repair owner_index_label_repair_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_index_label_repair
+    ADD CONSTRAINT owner_index_label_repair_pkey PRIMARY KEY (route, account_id, label_id);
+
+
+--
+-- Name: owner_index_pin owner_index_pin_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_index_pin
+    ADD CONSTRAINT owner_index_pin_pkey PRIMARY KEY (route, account_id, pin);
+
+
+--
+-- Name: owner_index_state owner_index_state_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_index_state
+    ADD CONSTRAINT owner_index_state_pkey PRIMARY KEY (route, account_id, pin, collection_id);
+
+
+--
+-- Name: owner_member_index owner_member_index_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_member_index
+    ADD CONSTRAINT owner_member_index_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: owner_member_support owner_member_support_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_member_support
+    ADD CONSTRAINT owner_member_support_pkey PRIMARY KEY (route, account_id, subject_id, family, pin);
+
+
+--
+-- Name: owner_write_counter owner_write_counter_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_write_counter
+    ADD CONSTRAINT owner_write_counter_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: personal_label personal_label_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.personal_label
+    ADD CONSTRAINT personal_label_pkey PRIMARY KEY (route, account_id, label_id);
+
+
+--
+-- Name: progress_change progress_change_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_change
+    ADD CONSTRAINT progress_change_pkey PRIMARY KEY (route, session_id, change_no);
+
+
+--
+-- Name: progress_head progress_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_head
+    ADD CONSTRAINT progress_head_pkey PRIMARY KEY (route, account_id, subject_id);
+
+
+--
+-- Name: progress_session progress_session_check2; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.progress_session
+    ADD CONSTRAINT progress_session_check2 CHECK (((library_profile_pin IS NOT NULL) OR (unit <> 'percent'::text) OR (((amount IS NULL) OR (amount <= (100)::numeric)) AND ((total IS NULL) OR (total <= (100)::numeric))))) NOT VALID;
+
+
+--
+-- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_session
+    ADD CONSTRAINT progress_session_pkey PRIMARY KEY (route, session_id);
+
+
+--
+-- Name: progress_session progress_session_unit_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.progress_session
+    ADD CONSTRAINT progress_session_unit_check CHECK ((((library_profile_pin IS NULL) AND (unit = ANY (ARRAY['page'::text, 'chapter'::text, 'episode'::text, 'volume'::text, 'minute'::text, 'percent'::text]))) OR ((library_profile_pin IS NOT NULL) AND (char_length(unit) > 0)))) NOT VALID;
+
+
+--
+-- Name: progress_unit progress_unit_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_unit
+    ADD CONSTRAINT progress_unit_pkey PRIMARY KEY (route, session_id, unit_id);
+
+
+--
+-- Name: published_log published_log_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.published_log
+    ADD CONSTRAINT published_log_pkey PRIMARY KEY (route, log_id);
+
+
+--
+-- Name: reported_year_bucket reported_year_bucket_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reported_year_bucket
+    ADD CONSTRAINT reported_year_bucket_pkey PRIMARY KEY (route, account_id, year, bucket);
+
+
+--
+-- Name: reported_year_owner reported_year_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reported_year_owner
+    ADD CONSTRAINT reported_year_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: reported_year_subject reported_year_subject_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reported_year_subject
+    ADD CONSTRAINT reported_year_subject_pkey PRIMARY KEY (route, account_id, year, bucket, subject_id);
+
+
+--
+-- Name: shelf_count shelf_count_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_count
+    ADD CONSTRAINT shelf_count_pkey PRIMARY KEY (route, account_id, generation_id, bucket, type_id);
+
+
+--
+-- Name: shelf_maintenance_head shelf_maintenance_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_maintenance_head
+    ADD CONSTRAINT shelf_maintenance_head_pkey PRIMARY KEY (route, account_id, run_id, subject_id);
+
+
+--
+-- Name: shelf_maintenance shelf_maintenance_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_maintenance
+    ADD CONSTRAINT shelf_maintenance_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: shelf_maintenance_run shelf_maintenance_run_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_maintenance_run
+    ADD CONSTRAINT shelf_maintenance_run_pkey PRIMARY KEY (route, account_id, run_id);
+
+
+--
+-- Name: shelf_maintenance_session shelf_maintenance_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_maintenance_session
+    ADD CONSTRAINT shelf_maintenance_session_pkey PRIMARY KEY (route, account_id, run_id, session_id);
+
+
+--
+-- Name: shelf_maintenance_source shelf_maintenance_source_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_maintenance_source
+    ADD CONSTRAINT shelf_maintenance_source_pkey PRIMARY KEY (route, account_id, run_id, subject_id);
+
+
+--
+-- Name: shelf_maintenance_step shelf_maintenance_step_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_maintenance_step
+    ADD CONSTRAINT shelf_maintenance_step_pkey PRIMARY KEY (route, account_id, run_id, epoch, sequence);
+
+
+--
+-- Name: shelf_type_node shelf_type_node_parent_chunk_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_node
+    ADD CONSTRAINT shelf_type_node_parent_chunk_key UNIQUE (route, account_id, parent_id, chunk);
+
+
+--
+-- Name: shelf_type_node shelf_type_node_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_node
+    ADD CONSTRAINT shelf_type_node_pkey PRIMARY KEY (route, account_id, node_id);
+
+
+--
+-- Name: shelf_type_reservation shelf_type_reservation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_reservation
+    ADD CONSTRAINT shelf_type_reservation_pkey PRIMARY KEY (route, account_id, reservation_id);
+
+
+--
+-- Name: shelf_type_root shelf_type_root_owner_node_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_root
+    ADD CONSTRAINT shelf_type_root_owner_node_key UNIQUE (route, account_id, root_node_id);
+
+
+--
+-- Name: shelf_type_root shelf_type_root_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_root
+    ADD CONSTRAINT shelf_type_root_pkey PRIMARY KEY (route, account_id, digest);
+
+
+--
+-- Name: shelf_type_value shelf_type_value_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_value
+    ADD CONSTRAINT shelf_type_value_pkey PRIMARY KEY (route, account_id, type_id);
+
+
+--
+-- Name: shelf_writer_owner shelf_writer_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_writer_owner
+    ADD CONSTRAINT shelf_writer_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: subject_collection subject_collection_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_collection
+    ADD CONSTRAINT subject_collection_pkey PRIMARY KEY (route, subject_id, collection_id);
+
+
+--
+-- Name: subject_collection_source_fence subject_collection_source_fence_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_collection_source_fence
+    ADD CONSTRAINT subject_collection_source_fence_pkey PRIMARY KEY (partition_no, collection_id);
+
+
+--
+-- Name: subject_collection_version subject_collection_version_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_collection_version
+    ADD CONSTRAINT subject_collection_version_pkey PRIMARY KEY (route, subject_id, collection_id);
+
+
+--
+-- Name: subject_listing subject_listing_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.subject_listing
+    ADD CONSTRAINT subject_listing_pkey PRIMARY KEY (route, subject_id);
+
+
+--
+-- Name: type_preparation_header type_preparation_header_identity_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.type_preparation_header
+    ADD CONSTRAINT type_preparation_header_identity_check CHECK (((source_identity IS NOT NULL) AND (jsonb_typeof(source_identity) = 'object'::text) AND (origin_identity IS NOT NULL) AND (jsonb_typeof(origin_identity) = 'object'::text))) NOT VALID;
+
+
+--
+-- Name: type_preparation_header type_preparation_header_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_header
+    ADD CONSTRAINT type_preparation_header_pkey PRIMARY KEY (route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_header type_preparation_header_route_account_id_binding_digest_pre_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_header
+    ADD CONSTRAINT type_preparation_header_route_account_id_binding_digest_pre_key UNIQUE (route, account_id, binding_digest, preparation_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_pkey PRIMARY KEY (route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_ready_proof_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_ready_proof_check CHECK (((state <> 'ready'::text) OR ((last_receipt IS NOT NULL) AND (last_transaction_id IS NOT NULL)))) NOT VALID;
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_receipt_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_receipt_check CHECK ((((last_receipt IS NULL) AND (last_transaction_id IS NULL)) OR ((last_receipt IS NOT NULL) AND (jsonb_typeof(last_receipt) = 'object'::text) AND (last_transaction_id IS NOT NULL)))) NOT VALID;
+
+
+--
+-- Name: type_preparation_slot type_preparation_slot_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_slot
+    ADD CONSTRAINT type_preparation_slot_pkey PRIMARY KEY (route, account_id, binding_digest);
+
+
+--
+-- Name: vndb_import vndb_import_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_import
+    ADD CONSTRAINT vndb_import_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: builtin_state_reference_source_support; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX builtin_state_reference_source_support ON library.builtin_state_reference_source USING btree (route, collection_id, subject_id);
+
+
+--
+-- Name: bulk_effect_erasure_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_effect_erasure_owner ON library.bulk_effect USING btree (route, account_id, operation_id, ordinal);
+
+
+--
+-- Name: bulk_effect_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_effect_expiry ON library.bulk_effect USING btree (route, expires_at, operation_id, ordinal);
+
+
+--
+-- Name: bulk_operation_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_operation_due ON library.bulk_operation USING btree (route, phase, expires_at, operation_id);
+
+
+--
+-- Name: bulk_operation_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_operation_expiry ON library.bulk_operation USING btree (route, results_expire_at, operation_id);
+
+
+--
+-- Name: bulk_operation_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_operation_owner ON library.bulk_operation USING btree (route, account_id, operation_id);
+
+
+--
+-- Name: bulk_target_erasure_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_target_erasure_owner ON library.bulk_target USING btree (route, account_id, operation_id, ordinal);
+
+
+--
+-- Name: bulk_target_occurrence; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX bulk_target_occurrence ON library.bulk_target USING btree (route, operation_id, collection_id, member_id) WHERE (target_kind = 'occurrence'::text);
+
+
+--
+-- Name: bulk_target_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_target_pending ON library.bulk_target USING btree (route, operation_id, ordinal) WHERE (state = ANY (ARRAY['pending'::text, 'reconciling'::text]));
+
+
+--
+-- Name: bulk_target_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bulk_target_state ON library.bulk_target USING btree (route, operation_id, state, ordinal);
+
+
+--
+-- Name: bulk_target_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX bulk_target_subject ON library.bulk_target USING btree (route, operation_id, subject_id) WHERE (target_kind = 'subject'::text);
+
+
+--
+-- Name: canonical_source_identity_old_fact; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX canonical_source_identity_old_fact ON library.canonical_source_fact USING btree (route, collection_id, generation, basis_digest, driver, stored_subject_id, fact_id);
+
+
+--
+-- Name: canonical_source_identity_raw; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX canonical_source_identity_raw ON library.canonical_source_reference USING btree (route, collection_id, generation, driver, stored_subject_id, fact_id);
+
+
+--
+-- Name: canonical_source_working; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX canonical_source_working ON library.canonical_source_generation USING btree (route, collection_id) WHERE (state = 'working'::text);
+
+
+--
+-- Name: collection_builtin_everything_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_builtin_everything_identity ON library.collection USING btree (route, curator_account_id) WHERE (builtin_kind = 'everything'::text);
+
+
+--
+-- Name: collection_builtin_state_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_builtin_state_identity ON library.collection USING btree (route, curator_account_id, builtin_profile_id, builtin_state_set_id, builtin_state_id) WHERE (builtin_kind = 'state'::text);
+
+
+--
+-- Name: collection_curator_listing; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_curator_listing ON library.collection USING btree (route, curator_account_id, collection_id);
+
+
+--
+-- Name: collection_curator_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_curator_page ON library.collection USING btree (route, curator_account_id, updated_at DESC, collection_id DESC) WHERE (state = 'active'::text);
+
+
+--
+-- Name: collection_curator_public_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_curator_public_page ON library.collection USING btree (route, curator_account_id, updated_at DESC, collection_id DESC) WHERE ((state = 'active'::text) AND (visibility = 'public'::text));
+
+
+--
+-- Name: collection_deletion_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_deletion_due ON library.collection USING btree (route, purge_after, collection_id) WHERE ((state = 'deleted'::text) AND (purge_after IS NOT NULL));
+
+
+--
+-- Name: collection_deletion_pending_legacy; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_deletion_pending_legacy ON library.collection USING btree (route, collection_id) WHERE ((state = 'deleted'::text) AND (deleted_at IS NULL));
+
+
+--
+-- Name: collection_kind_audience_origin_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_audience_origin_owner ON library.collection_kind_audience_origin USING btree (route, owner_account_id, collection_id, preparation_id);
+
+
+--
+-- Name: collection_kind_consent_consumer_episode; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_consumer_episode ON library.collection_kind_consent_consumer USING btree (route, owner_account_id, collection_id, preparation_id, reference_id);
+
+
+--
+-- Name: collection_kind_consent_consumer_erasure; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_consumer_erasure ON library.collection_kind_consent_consumer USING btree (route, owner_account_id, reference_id);
+
+
+--
+-- Name: collection_kind_consent_consumer_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_consumer_owner ON library.collection_kind_consent_consumer USING btree (route, owner_account_id, collection_id, preparation_id);
+
+
+--
+-- Name: collection_kind_consent_transition_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_consent_transition_pending ON library.collection_kind_consent_transition USING btree (route, reference_id, transition_id) WHERE (status <> 'committed'::text);
+
+
+--
+-- Name: collection_kind_count_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_count_account ON library.collection_kind_count USING btree (route, account_id, collection_id, audience, generation, type_id);
+
+
+--
+-- Name: collection_kind_observation_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_observation_account ON library.collection_kind_observation USING btree (route, account_id, collection_id, audience);
+
+
+--
+-- Name: collection_kind_retired_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_retired_account ON library.collection_kind_retired USING btree (route, account_id, collection_id, audience, generation);
+
+
+--
+-- Name: collection_kind_retired_capture; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_retired_capture ON library.collection_kind_retired USING btree (route, collection_id, account_id, capture) WHERE (octet_length(capture) <= 512);
+
+
+--
+-- Name: collection_kind_subject_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_subject_account ON library.collection_kind_subject USING btree (route, account_id, collection_id, audience, generation, subject_id);
+
+
+--
+-- Name: collection_kind_winner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_kind_winner ON library.collection_kind_count USING btree (route, collection_id, audience, generation, votes DESC, type_id);
+
+
+--
+-- Name: collection_member_deletion_id; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_member_deletion_id ON library.collection_member USING btree (route, collection_id, deletion_id) WHERE (deletion_id IS NOT NULL);
+
+
+--
+-- Name: collection_member_live_ordinal; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_live_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: collection_member_raw_ordinal; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_raw_ordinal ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id);
+
+
+--
+-- Name: collection_member_retention_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_retention_due ON library.collection_member USING btree (partition_no, purge_after, route, collection_id, member_id) WHERE ((deletion_id IS NOT NULL) AND (purge_after IS NOT NULL));
+
+
+--
+-- Name: collection_member_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_member_subject ON library.collection_member USING btree (route, collection_id, subject_id, member_id);
+
+
+--
+-- Name: collection_publication_episode_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_publication_episode_owner ON library.collection_publication_episode USING btree (route, owner_account_id, publication_id);
+
+
+--
+-- Name: collection_publication_episode_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_publication_episode_pending ON library.collection_publication_episode USING btree (route, collection_id) WHERE (phase = ANY (ARRAY['staging'::text, 'awaiting_activation'::text]));
+
+
+--
+-- Name: collection_publication_operation_collection; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_publication_operation_collection ON library.collection_publication_operation USING btree (route, collection_id, publication_id);
+
+
+--
+-- Name: collection_publication_operation_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_publication_operation_owner ON library.collection_publication_operation USING btree (route, owner_account_id, publication_id);
+
+
+--
+-- Name: collection_publication_staging_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_publication_staging_account ON library.collection_publication_staging USING btree (route, account_id, collection_id, generation);
+
+
+--
+-- Name: collection_retention_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_retention_due ON library.collection USING btree (partition_no, purge_after, route, collection_id) WHERE ((state = 'deleted'::text) AND (purge_after IS NOT NULL));
+
+
+--
+-- Name: collection_sitemap_public_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_sitemap_public_page ON library.collection USING btree (route, collection_id) INCLUDE (updated_at) WHERE ((state = 'active'::text) AND (visibility = 'public'::text));
+
+
+--
+-- Name: collection_source_output_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_source_output_account ON library.collection_source_output USING btree (route, account_id, collection_id, generation);
+
+
+--
+-- Name: collection_source_output_building; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX collection_source_output_building ON library.collection_source_output USING btree (route, collection_id) WHERE (state = 'building'::text);
+
+
+--
+-- Name: collection_source_output_publication_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX collection_source_output_publication_account ON library.collection_source_output_publication USING btree (route, account_id, collection_id, generation);
+
+
+--
+-- Name: copy_account_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_created ON library.copy USING btree (route, account_id, created_at, copy_id);
+
+
+--
+-- Name: copy_account_subject_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id);
+
+
+--
+-- Name: copy_archive_upload_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_archive_upload_expiry ON library.copy_archive_upload USING btree (expires_at, route, account_id);
+
+
+--
+-- Name: copy_live_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_created ON library.copy USING btree (route, account_id, created_at, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: copy_live_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_profile_pending ON library.copy USING btree (route, account_id, copy_id) WHERE ((library_profile_pin IS NULL) AND (deletion_id IS NULL));
+
+
+--
+-- Name: copy_live_raw_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_raw_source ON library.copy USING btree (route, account_id, subject_id, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: copy_live_subject_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_live_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: copy_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_profile_pending ON library.copy USING btree (route, account_id, copy_id) WHERE (library_profile_pin IS NULL);
+
+
+--
+-- Name: copy_raw_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_raw_source ON library.copy USING btree (route, account_id, subject_id, copy_id);
+
+
+--
+-- Name: copy_retention_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_retention_due ON library.copy USING btree (partition_no, restore_until, route, copy_id) WHERE (deletion_id IS NOT NULL);
+
+
+--
+-- Name: entry_account_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_account_state ON library.entry USING btree (route, account_id, state, updated_at DESC, subject_id);
+
+
+--
+-- Name: entry_account_updated; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_account_updated ON library.entry USING btree (route, account_id, updated_at DESC, subject_id);
+
+
+--
+-- Name: entry_deleted_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_deleted_due ON library.entry_deleted USING btree (partition_no, restore_until, route, account_id, deletion_id);
+
+
+--
+-- Name: entry_deleted_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_deleted_profile_pending ON library.entry_deleted USING btree (route, account_id, deletion_id) WHERE (library_profile_pin IS NULL);
+
+
+--
+-- Name: entry_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_profile_pending ON library.entry USING btree (route, account_id, subject_id) WHERE (library_profile_pin IS NULL);
+
+
+--
+-- Name: entry_shelf_activity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity ON library.entry USING btree (route, account_id, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_activity_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity_state ON library.entry USING btree (route, account_id, state, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_activity_state_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity_state_type ON library.entry USING btree (route, account_id, state, type_id, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_activity_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_activity_type ON library.entry USING btree (route, account_id, type_id, activity_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created ON library.entry USING btree (route, account_id, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created_state ON library.entry USING btree (route, account_id, state, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created_state_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created_state_type ON library.entry USING btree (route, account_id, state, type_id, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_created_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_created_type ON library.entry USING btree (route, account_id, type_id, created_at DESC, subject_id);
+
+
+--
+-- Name: entry_shelf_finished; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished ON library.entry USING btree (route, account_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_shelf_finished_state; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished_state ON library.entry USING btree (route, account_id, state, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_shelf_finished_state_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished_state_type ON library.entry USING btree (route, account_id, state, type_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_shelf_finished_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_shelf_finished_type ON library.entry USING btree (route, account_id, type_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_type_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_type_source ON library.entry USING btree (type_source_id, route, account_id, subject_id);
+
+
+--
+-- Name: follow_account_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_account_page ON library.follow USING btree (route, account_id, state, updated_at DESC, target_id);
+
+
+--
+-- Name: follow_activity_recipients; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_activity_recipients ON library.follow_count_support USING btree (route, target_type, target_id, account_id) WHERE (support > 0);
+
+
+--
+-- Name: follow_count_account_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_account_pending ON library.follow_count_account_work USING btree (((route >> 4)), oldest_pending_at, route, account_id);
+
+
+--
+-- Name: follow_count_owner_bootstrap; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_owner_bootstrap ON library.follow_count_owner USING btree (partition_no, route, account_id) WHERE (NOT bootstrap_complete);
+
+
+--
+-- Name: follow_count_pair_follower; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_pair_follower ON library.follow_count_pair USING btree (route, account_id, target_type, target_id, original_id);
+
+
+--
+-- Name: follow_count_pair_original; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_pair_original ON library.follow_count_pair USING btree (route, original_id, account_id, target_type, target_id);
+
+
+--
+-- Name: follow_count_partition_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_partition_pending ON library.follow_count_source USING btree (partition_no, pending_since, route, account_id, target_type, target_id) WHERE (pending_since IS NOT NULL);
+
+
+--
+-- Name: follow_count_source_original_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_source_original_page ON library.follow_count_source USING btree (route, account_id, target_id, target_type);
+
+
+--
+-- Name: follow_count_source_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_source_pending ON library.follow_count_source USING btree (route, account_id, pending_since, target_type, target_id) WHERE (pending_since IS NOT NULL);
+
+
+--
+-- Name: follow_count_terminal_source_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_count_terminal_source_pending ON library.follow_count_terminal_source USING btree (partition_no, oldest_pending_at, account_id) WHERE (NOT local_complete);
+
+
+--
+-- Name: identity_epoch_participant_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_participant_owner ON library.identity_epoch_participant_work USING btree (partition_no, owner_id, job_id, job_epoch, effect_key);
+
+
+--
+-- Name: identity_epoch_participant_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_participant_pending ON library.identity_epoch_participant_work USING btree (partition_no, job_id, job_epoch, effect_key) WHERE (NOT custodied);
+
+
+--
+-- Name: identity_epoch_source_basis_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_epoch_source_basis_owner ON library.identity_epoch_source_basis USING btree (partition_no, owner_id, job_id, job_epoch, effect_key);
+
+
+--
+-- Name: identity_scope_plan_capture; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_capture ON library.identity_scope_plan USING btree (route, capture_id, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_plan_generation; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX identity_scope_plan_generation ON library.identity_scope_plan USING btree (route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_plan_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_owner ON library.identity_scope_plan USING btree (route, account_id, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_plan_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX identity_scope_plan_pending ON library.identity_scope_plan USING btree (route, job_id, job_epoch, collection_id, plan_key) WHERE (state = 'building'::text);
+
+
+--
+-- Name: label_assignment_owner_label; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_assignment_owner_label ON library.label_assignment USING btree (route, account_id, label_id, subject_id);
+
+
+--
+-- Name: label_assignment_purge_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_assignment_purge_due ON library.label_assignment USING btree (route, purge_after, account_id, subject_id, label_id) WHERE (deleted_at IS NOT NULL);
+
+
+--
+-- Name: label_assignment_reserved_slot; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX label_assignment_reserved_slot ON library.label_assignment USING btree (route, account_id, subject_id, slot_no) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: label_assignment_reserved_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING btree (route, account_id, subject_id, assignment_id) INCLUDE (label_id, slot_no, revision, transaction_id) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: library_export_copy_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_copy_seek ON library.copy USING btree (route, account_id, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: library_export_unit_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_unit_seek ON library.progress_unit USING btree (route, session_id, unit_id COLLATE "C");
+
+
+--
+-- Name: list_import_mal_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX list_import_mal_expiry ON library.list_import_mal USING btree (expires_at);
+
+
+--
+-- Name: members_preparation_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_expiry ON library.members_preparation USING btree (route, last_read_at, owner_account_id, collection_id, episode_id) WHERE (state = 'live'::text);
+
+
+--
+-- Name: members_preparation_idle; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_idle ON library.members_preparation USING btree (((route >> 4)), last_read_at, route, owner_account_id, collection_id, episode_id) WHERE (state = 'live'::text);
+
+
+--
+-- Name: members_preparation_idle_retired; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_idle_retired ON library.members_preparation USING btree (((route >> 4)), last_read_at, route, owner_account_id, collection_id, episode_id) WHERE (state = 'retired'::text);
+
+
+--
+-- Name: members_preparation_live_digest; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX members_preparation_live_digest ON library.members_preparation USING btree (route, owner_account_id, basis_digest) WHERE (state = 'live'::text);
+
+
+--
+-- Name: members_preparation_live_lru; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_live_lru ON library.members_preparation USING btree (route, owner_account_id, last_read_at, episode_id) WHERE (state = 'live'::text);
+
+
+--
+-- Name: members_preparation_result_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_result_page ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, sort_key, subject_id);
+
+
+--
+-- Name: members_preparation_result_runtime_position; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX members_preparation_result_runtime_position ON library.members_preparation_result USING btree (route, owner_account_id, collection_id, episode_id, "position") WHERE ("position" IS NOT NULL);
+
+
+--
+-- Name: members_preparation_retired_cleanup; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX members_preparation_retired_cleanup ON library.members_preparation USING btree (route, owner_account_id, collection_id, episode_id) WHERE (state = 'retired'::text);
+
+
+--
+-- Name: native_public_output_retained; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_public_output_retained ON library.native_public_output_hold USING btree (route, collection_id, output_generation, incarnation, activation_transaction_id, activation_position, activation_source_generation) WHERE (consumed_by IS NULL);
+
+
+--
+-- Name: native_public_output_successor; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX native_public_output_successor ON library.native_public_output_transition USING btree (partition_no, successor_hold_id) WHERE (successor_hold_id IS NOT NULL);
+
+
+--
+-- Name: native_source_capture_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_capture_account ON library.native_source_capture USING btree (route, account_id, capture_id);
+
+
+--
+-- Name: native_source_capture_collection; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_capture_collection ON library.native_source_capture USING btree (route, collection_id, capture_id);
+
+
+--
+-- Name: native_source_capture_identity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_capture_identity ON library.native_source_capture USING btree (route, collection_id, account_id, incarnation, generation, scope, owner_epoch, receiving_epoch, effect_key, collection_fence, account_fence, capture_id);
+
+
+--
+-- Name: native_source_fence_account; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_fence_account ON library.native_source_fence USING btree (route, account_id, kind, owner_id);
+
+
+--
+-- Name: native_source_hold_active; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_hold_active ON library.native_source_hold USING btree (route, capture_id, hold_id) WHERE (NOT released);
+
+
+--
+-- Name: native_source_member_raw; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_member_raw ON library.collection_member USING btree (route, collection_id, ordinal_key, member_id);
+
+
+--
+-- Name: native_source_output_raw; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX native_source_output_raw ON library.published_log USING btree (route, account_id, log_id);
+
+
+--
+-- Name: owner_identity_scope_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_identity_scope_owner ON library.owner_identity_scope USING btree (partition_no, owner_id, original, source_id, incarnation, role);
+
+
+--
+-- Name: owner_index_activity; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_activity ON library.owner_member_index USING btree (route, account_id, activity_at DESC, subject_id) WHERE (activity_at IS NOT NULL);
+
+
+--
+-- Name: owner_index_activity_unknown; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_activity_unknown ON library.owner_member_index USING btree (route, account_id, subject_id) WHERE activity_unknown;
+
+
+--
+-- Name: owner_index_copy_scope; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_copy_scope ON library.copy USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb)) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: owner_index_entry_scope; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_entry_scope ON library.entry USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb));
+
+
+--
+-- Name: owner_index_label_identified; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_label_identified ON library.label_assignment USING btree (route, account_id, subject_id, label_id) WHERE ((deleted_at IS NULL) AND (slot_no IS NOT NULL) AND (assignment_id IS NOT NULL));
+
+
+--
+-- Name: owner_index_label_legacy; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_label_legacy ON library.label_assignment USING btree (route, account_id, subject_id, label_id) WHERE ((deleted_at IS NULL) AND ((slot_no IS NULL) OR (assignment_id IS NULL)));
+
+
+--
+-- Name: owner_index_label_live; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_label_live ON library.label_assignment USING btree (route, account_id, subject_id, label_id) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: owner_index_pending_pin; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_pending_pin ON library.owner_index_pin USING btree (route, account_id, pin) WHERE (NOT meaning_ready);
+
+
+--
+-- Name: owner_index_session_scope; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_session_scope ON library.progress_session USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb));
+
+
+--
+-- Name: owner_index_state_collection; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_state_collection ON library.owner_index_state USING btree (route, account_id, collection_id, pin);
+
+
+--
+-- Name: owner_index_state_presentation; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_index_state_presentation ON library.owner_index_state USING btree (route, account_id, collection_id, ((pin ->> 'releaseDigest'::text)), pin);
+
+
+--
+-- Name: owner_member_support_pin; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX owner_member_support_pin ON library.owner_member_support USING btree (route, account_id, pin, subject_id, family);
+
+
+--
+-- Name: personal_label_live_name; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX personal_label_live_name ON library.personal_label USING btree (route, account_id, normalized_name) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: personal_label_purge_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX personal_label_purge_due ON library.personal_label USING btree (route, purge_after, account_id, label_id) WHERE (deleted_at IS NOT NULL);
+
+
+--
+-- Name: progress_session_account_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_account_subject ON library.progress_session USING btree (route, account_id, subject_id, started_at DESC, session_id);
+
+
+--
+-- Name: progress_session_active; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_active ON library.progress_session USING btree (route, account_id, subject_id, last_changed_at DESC, session_id) WHERE (state = 'active'::text);
+
+
+--
+-- Name: progress_session_owner_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_owner_seek ON library.progress_session USING btree (route, account_id, session_id);
+
+
+--
+-- Name: progress_session_profile_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_profile_pending ON library.progress_session USING btree (route, account_id, session_id) WHERE (library_profile_pin IS NULL);
+
+
+--
+-- Name: progress_session_raw_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_raw_source ON library.progress_session USING btree (route, account_id, subject_id, session_id);
+
+
+--
+-- Name: published_log_account_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX published_log_account_page ON library.published_log USING btree (route, account_id, published_at DESC, log_id) WHERE (NOT deleted);
+
+
+--
+-- Name: published_log_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX published_log_due ON library.published_log USING btree (partition_no, restore_until, route, log_id) WHERE (deleted AND (restore_until IS NOT NULL));
+
+
+--
+-- Name: published_log_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX published_log_owner ON library.published_log USING btree (route, account_id, log_id) WHERE (account_id IS NOT NULL);
+
+
+--
+-- Name: shelf_count_types; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_count_types ON library.shelf_count USING btree (route, account_id, generation_id, type_id) WHERE ((bucket = 'all'::text) AND (type_id <> '00000000-0000-0000-0000-000000000000'::uuid) AND (n > 0));
+
+
+--
+-- Name: shelf_maintenance_runnable; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_maintenance_runnable ON library.shelf_maintenance_run USING btree (route, account_id, run_id) WHERE ((NOT cancelled) AND (phase <> 'complete'::text));
+
+
+--
+-- Name: shelf_maintenance_step_evidence; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_maintenance_step_evidence ON library.shelf_maintenance_step USING btree (route, account_id, run_id, epoch, sequence) WHERE ((input_identity IS NOT NULL) OR (cursor <> '[]'::jsonb));
+
+
+--
+-- Name: shelf_type_node_terminal_type; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX shelf_type_node_terminal_type ON library.shelf_type_node USING btree (route, account_id, terminal_type_id) WHERE (terminal_type_id IS NOT NULL);
+
+
+--
+-- Name: shelf_type_reservation_generation; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_type_reservation_generation ON library.shelf_type_reservation USING btree (route, account_id, generation_id, reservation_id);
+
+
+--
+-- Name: shelf_writer_owner_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX shelf_writer_owner_pending ON library.shelf_writer_owner USING btree (route, account_id, requested_run) WHERE enqueue_pending;
+
+
+--
+-- Name: subject_collection_reverse; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX subject_collection_reverse ON library.subject_collection USING btree (collection_route, collection_id, route, subject_id);
+
+
+--
+-- Name: subject_collection_version_reverse; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX subject_collection_version_reverse ON library.subject_collection_version USING btree (collection_route, collection_id, route, subject_id);
+
+
+--
+-- Name: type_preparation_pending; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX type_preparation_pending ON library.type_preparation_progress USING btree (route, account_id, preparation_id) WHERE (enqueue_pending AND (state = 'pending'::text));
+
+
+--
+-- Name: type_preparation_request; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX type_preparation_request ON library.type_preparation_header USING btree (route, account_id, ((binding ->> 'subjectId'::text)), ((binding ->> 'requestKey'::text)), principal_namespace, created_at DESC, preparation_id DESC);
+
+
+--
+-- Name: collection_kind_consent_consumer collection_kind_original_cancel; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_kind_original_cancel AFTER DELETE OR UPDATE ON library.collection_kind_consent_consumer FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_cancel();
+
+
+--
+-- Name: collection_kind_audience_origin collection_kind_original_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_kind_original_immutable BEFORE UPDATE ON library.collection_kind_audience_origin FOR EACH ROW EXECUTE FUNCTION library.collection_kind_original_immutable();
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER collection_kind_raw_input_commit AFTER INSERT ON library.collection_kind_raw_input DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_commit();
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_kind_raw_input_immutable BEFORE UPDATE ON library.collection_kind_raw_input FOR EACH ROW EXECUTE FUNCTION library.collection_kind_raw_input_immutable();
+
+
+--
+-- Name: collection collection_listing_public_history_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_listing_public_history_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.collection_listing_public_history_guard();
+
+
+--
+-- Name: collection_member collection_member_retained_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_member_retained_immutable BEFORE INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.guard_retained_collection_member();
+
+
+--
+-- Name: collection collection_membership_kind_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_membership_kind_immutable BEFORE UPDATE OF membership_kind ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_collection_membership_kind();
+
+
+--
+-- Name: collection_order_repair collection_order_capture; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_order_capture BEFORE UPDATE ON library.collection_order_repair FOR EACH ROW EXECUTE FUNCTION library.guard_collection_order_capture();
+
+
+--
+-- Name: collection_member collection_order_member; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_order_member BEFORE INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.guard_collection_order_member();
+
+
+--
+-- Name: collection collection_order_parent; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_order_parent BEFORE DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_collection_order_parent();
+
+
+--
+-- Name: collection_source_output_head collection_output_frozen_head; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_frozen_head BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_head FOR EACH ROW EXECUTE FUNCTION library.guard_frozen_output();
+
+
+--
+-- Name: collection_source_output collection_output_frozen_header; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_frozen_header BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output FOR EACH ROW EXECUTE FUNCTION library.guard_frozen_output();
+
+
+--
+-- Name: collection_source_output_member collection_output_frozen_member; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_frozen_member BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_member FOR EACH ROW EXECUTE FUNCTION library.guard_frozen_output();
+
+
+--
+-- Name: collection_source_output_member collection_output_members; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_members AFTER INSERT OR DELETE OR UPDATE ON library.collection_source_output_member FOR EACH ROW EXECUTE FUNCTION library.track_output_members();
+
+
+--
+-- Name: collection_source_output_publication collection_output_publication_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER collection_output_publication_commit AFTER INSERT ON library.collection_source_output_publication DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_output_publication_commit();
+
+
+--
+-- Name: collection_source_output_publication collection_output_publication_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_output_publication_immutable BEFORE UPDATE ON library.collection_source_output_publication FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection_publication_operation collection_publication_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER collection_publication_commit AFTER INSERT ON library.collection_publication_operation DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_publication_episode_commit();
+
+
+--
+-- Name: collection_publication_operation collection_publication_operation_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_publication_operation_immutable BEFORE UPDATE ON library.collection_publication_operation FOR EACH ROW EXECUTE FUNCTION library.publication_immutable();
+
+
+--
+-- Name: collection_publication_source collection_publication_source_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_publication_source_immutable BEFORE UPDATE ON library.collection_publication_source FOR EACH ROW EXECUTE FUNCTION library.publication_immutable();
+
+
+--
+-- Name: collection collection_retained_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_retained_immutable BEFORE UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_retained_collection();
+
+
+--
+-- Name: collection_retained_output collection_retained_output_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_retained_output_immutable BEFORE DELETE OR UPDATE ON library.collection_retained_output FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection_retained_output collection_retained_output_insert; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_retained_output_insert BEFORE INSERT ON library.collection_retained_output FOR EACH ROW EXECUTE FUNCTION library.guard_retained_output_insert();
+
+
+--
+-- Name: collection collection_rule_minimization; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_rule_minimization BEFORE UPDATE OF curator_account_id ON library.collection FOR EACH ROW EXECUTE FUNCTION library.minimize_collection_rule();
+
+
+--
+-- Name: progress_session consumption_statistics_receive; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER consumption_statistics_receive AFTER INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.consumption_statistics_receive();
+
+
+--
+-- Name: progress_session consumption_statistics_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER consumption_statistics_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.consumption_statistics_truncate();
+
+
+--
+-- Name: copy copy_fact_source_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_fact_source_delete AFTER DELETE ON library.copy FOR EACH ROW WHEN ((old.deletion_id IS NULL)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: copy copy_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_fact_source_rows AFTER INSERT ON library.copy FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: copy copy_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_fact_source_update AFTER UPDATE ON library.copy FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: copy copy_profile_migration_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER copy_profile_migration_writer BEFORE INSERT OR UPDATE ON library.copy FOR EACH ROW EXECUTE FUNCTION library.fence_profile_migration_writer();
+
+
+--
+-- Name: entry entry_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_fact_source_rows AFTER INSERT OR DELETE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry entry_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_fact_source_update AFTER UPDATE ON library.entry FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry entry_profile_migration_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_profile_migration_writer BEFORE INSERT OR UPDATE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.fence_profile_migration_writer();
+
+
+--
+-- Name: bangumi_upload export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.bangumi_upload FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: bangumi_upload_row export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.bangumi_upload_row FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: collection export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.advance_export_collection_fence();
+
+
+--
+-- Name: collection_member export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.advance_export_collection_fence();
+
+
+--
+-- Name: collection_pins export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.collection_pins FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: list_import_mal export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: collection follow_count_new_collection; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER follow_count_new_collection AFTER INSERT ON library.collection FOR EACH ROW EXECUTE FUNCTION library.initialize_follow_count_total();
+
+
+--
+-- Name: follow follow_count_source_change; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER follow_count_source_change AFTER INSERT OR DELETE OR UPDATE ON library.follow FOR EACH ROW EXECUTE FUNCTION library.record_follow_count_source();
+
+
+--
+-- Name: follow follow_target_type_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER follow_target_type_immutable BEFORE UPDATE OF target_type ON library.follow FOR EACH ROW EXECUTE FUNCTION library.guard_follow_target_type();
+
+
+--
+-- Name: identity_scope_effect identity_scope_effect_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER identity_scope_effect_immutable BEFORE DELETE OR UPDATE ON library.identity_scope_effect FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
+
+
+--
+-- Name: identity_scope_seal identity_scope_seal_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER identity_scope_seal_immutable BEFORE DELETE OR UPDATE ON library.identity_scope_seal FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
+
+
+--
+-- Name: label_assignment label_assignment_fact_source_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER label_assignment_fact_source_delete AFTER DELETE ON library.label_assignment FOR EACH ROW WHEN (((old.deleted_at IS NULL) AND (old.slot_no IS NOT NULL))) EXECUTE FUNCTION library.advance_live_label_assignment_delete_source_head();
+
+
+--
+-- Name: label_assignment label_assignment_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER label_assignment_fact_source_rows AFTER INSERT ON library.label_assignment FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: label_assignment label_assignment_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER label_assignment_fact_source_update AFTER UPDATE ON library.label_assignment FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: subject_collection live_copy_listing_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER live_copy_listing_guard BEFORE INSERT OR UPDATE ON library.subject_collection FOR EACH ROW EXECUTE FUNCTION library.guard_live_copy_listing();
+
+
+--
+-- Name: subject_collection_version live_copy_listing_version_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER live_copy_listing_version_guard BEFORE INSERT OR UPDATE ON library.subject_collection_version FOR EACH ROW EXECUTE FUNCTION library.guard_live_copy_listing();
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_binding_commit AFTER INSERT ON library.native_public_output_binding DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_binding_commit();
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_binding_immutable BEFORE DELETE OR UPDATE ON library.native_public_output_binding FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection native_public_output_collection_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_collection_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: collection_source_output native_public_output_header_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_header_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_consumed; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_hold_consumed AFTER UPDATE ON library.native_public_output_hold DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_transition_commit();
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_hold_guard BEFORE INSERT OR DELETE OR UPDATE ON library.native_public_output_hold FOR EACH ROW EXECUTE FUNCTION library.guard_public_output_hold();
+
+
+--
+-- Name: collection_source_output_member native_public_output_member_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_member_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_member FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: collection_source_output_publication native_public_output_publication_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_publication_guard BEFORE INSERT OR DELETE OR UPDATE ON library.collection_source_output_publication FOR EACH ROW EXECUTE FUNCTION library.guard_retained_public_output();
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_closed; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_receiving_closed AFTER UPDATE ON library.native_public_output_receiving DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_transition_commit();
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_guard; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_receiving_guard BEFORE DELETE OR UPDATE ON library.native_public_output_receiving FOR EACH ROW EXECUTE FUNCTION library.guard_public_output_receiving();
+
+
+--
+-- Name: native_public_output_binding native_public_output_semantic_binding; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_semantic_binding AFTER INSERT ON library.native_public_output_binding DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_semantic_binding();
+
+
+--
+-- Name: native_public_output_transition native_public_output_semantic_disposition; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_semantic_disposition AFTER INSERT ON library.native_public_output_transition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_semantic_disposition();
+
+
+--
+-- Name: native_public_output_hold native_public_output_successor_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_successor_commit AFTER INSERT ON library.native_public_output_hold DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_successor_commit();
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_commit; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER native_public_output_transition_commit AFTER INSERT ON library.native_public_output_transition DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION library.check_public_output_transition_commit();
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_public_output_transition_immutable BEFORE DELETE OR UPDATE ON library.native_public_output_transition FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection_source_output native_source_output_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_output_writer AFTER INSERT OR DELETE OR UPDATE ON library.collection_source_output FOR EACH ROW EXECUTE FUNCTION library.fence_selected_output();
+
+
+--
+-- Name: collection_source_output_head native_source_output_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_output_writer AFTER INSERT OR DELETE OR UPDATE ON library.collection_source_output_head FOR EACH ROW EXECUTE FUNCTION library.fence_selected_output();
+
+
+--
+-- Name: native_source_receipt native_source_receipt_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_receipt_immutable BEFORE UPDATE ON library.native_source_receipt FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: collection_member native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: copy native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.copy FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: entry native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: entry_deleted native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry_deleted FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: fact_source_head native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.fact_source_head FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: label_assignment native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.label_assignment FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: personal_label native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.personal_label FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: progress_change native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.progress_change FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: progress_session native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: progress_unit native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.progress_unit FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: published_log native_source_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER native_source_writer AFTER INSERT OR DELETE OR UPDATE ON library.published_log FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: owner_member_index owner_index_activity_insert; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER owner_index_activity_insert BEFORE INSERT ON library.owner_member_index FOR EACH ROW EXECUTE FUNCTION library.initialize_owner_activity();
+
+
+--
+-- Name: personal_label personal_label_fact_source_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER personal_label_fact_source_delete AFTER DELETE ON library.personal_label FOR EACH ROW WHEN ((old.deleted_at IS NULL)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: personal_label personal_label_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER personal_label_fact_source_update AFTER UPDATE ON library.personal_label FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session progress_session_fact_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER progress_session_fact_source_rows AFTER INSERT OR DELETE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session progress_session_fact_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER progress_session_fact_source_update AFTER UPDATE ON library.progress_session FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: collection_publication_staging_evidence publication_staging_evidence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER publication_staging_evidence AFTER INSERT OR DELETE OR UPDATE ON library.collection_publication_staging_evidence FOR EACH ROW EXECUTE FUNCTION library.track_publication_staging_evidence();
+
+
+--
+-- Name: collection_publication_staging_seal publication_staging_seal_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER publication_staging_seal_immutable BEFORE UPDATE ON library.collection_publication_staging_seal FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: published_log published_log_fact_delete; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER published_log_fact_delete AFTER DELETE ON library.published_log FOR EACH ROW WHEN (((old.account_id IS NOT NULL) AND (NOT old.deleted))) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: published_log published_log_fact_insert; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER published_log_fact_insert AFTER INSERT ON library.published_log FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: published_log published_log_fact_visibility; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER published_log_fact_visibility AFTER UPDATE ON library.published_log FOR EACH ROW WHEN ((old.deleted IS DISTINCT FROM new.deleted)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: progress_session reported_year_receive; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reported_year_receive BEFORE INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reported_year_receive();
+
+
+--
+-- Name: progress_session reported_year_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reported_year_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.reported_year_truncate();
+
+
+--
+-- Name: progress_session session_profile_migration_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER session_profile_migration_writer BEFORE INSERT OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.fence_profile_migration_writer();
+
+
+--
+-- Name: shelf_type_reservation shelf_type_reservation_input_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER shelf_type_reservation_input_immutable BEFORE INSERT OR UPDATE ON library.shelf_type_reservation FOR EACH ROW EXECUTE FUNCTION library.guard_shelf_type_reservation_input();
+
+
+--
+-- Name: subject_collection_source_fence subject_collection_source_fence_order; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER subject_collection_source_fence_order BEFORE UPDATE ON library.subject_collection_source_fence FOR EACH ROW EXECUTE FUNCTION library.guard_listing_order();
+
+
+--
+-- Name: subject_collection_version subject_collection_version_order; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER subject_collection_version_order BEFORE UPDATE ON library.subject_collection_version FOR EACH ROW EXECUTE FUNCTION library.guard_listing_order();
+
+
+--
+-- Name: type_preparation_header type_preparation_header_immutable; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER type_preparation_header_immutable BEFORE UPDATE ON library.type_preparation_header FOR EACH ROW EXECUTE FUNCTION library.guard_type_preparation_header();
+
+
+--
+-- Name: copy zz_owner_index_copy_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_copy_rows AFTER INSERT OR DELETE ON library.copy FOR EACH ROW EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: copy zz_owner_index_copy_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_copy_update AFTER UPDATE OF deletion_id, library_profile_pin, subject_id ON library.copy FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: entry zz_owner_index_entry_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_entry_rows AFTER INSERT OR DELETE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: entry zz_owner_index_entry_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_entry_update AFTER UPDATE OF state, library_profile_pin, owner_write_seq ON library.entry FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: label_assignment zz_owner_index_label_assignment_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_label_assignment_rows AFTER INSERT OR DELETE ON library.label_assignment FOR EACH ROW EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: label_assignment zz_owner_index_label_assignment_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_label_assignment_update AFTER UPDATE OF deleted_at, slot_no, label_id, subject_id ON library.label_assignment FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: personal_label zz_owner_index_label_parent; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_label_parent AFTER DELETE OR UPDATE OF deleted_at ON library.personal_label FOR EACH ROW EXECUTE FUNCTION library.queue_owner_label_repair();
+
+
+--
+-- Name: progress_session zz_owner_index_progress_session_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_progress_session_rows AFTER INSERT OR DELETE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: progress_session zz_owner_index_progress_session_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zz_owner_index_progress_session_update AFTER UPDATE OF state, library_profile_pin, subject_id ON library.progress_session FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_member_scope();
+
+
+--
+-- Name: entry zzz_owner_activity_entry_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zzz_owner_activity_entry_rows AFTER INSERT OR DELETE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.maintain_owner_activity();
+
+
+--
+-- Name: entry zzz_owner_activity_entry_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zzz_owner_activity_entry_update AFTER UPDATE OF activity_at, subject_id ON library.entry FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_activity();
+
+
+--
+-- Name: progress_head zzz_owner_activity_progress_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zzz_owner_activity_progress_rows AFTER INSERT OR DELETE ON library.progress_head FOR EACH ROW EXECUTE FUNCTION library.maintain_owner_activity();
+
+
+--
+-- Name: progress_head zzz_owner_activity_progress_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER zzz_owner_activity_progress_update AFTER UPDATE OF last_changed_at, subject_id ON library.progress_head FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_activity();
+
+
+--
+-- Name: bangumi_upload_row bangumi_upload_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bangumi_upload_row
+    ADD CONSTRAINT bangumi_upload_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.bangumi_upload(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- Name: builtin_state_reference_source builtin_state_reference_source_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.builtin_state_reference_source
+    ADD CONSTRAINT builtin_state_reference_source_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.builtin_collection_reference(route, collection_id);
+
+
+--
+-- Name: canonical_source_fact canonical_source_fact_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_fact
+    ADD CONSTRAINT canonical_source_fact_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: canonical_source_generation canonical_source_generation_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_generation
+    ADD CONSTRAINT canonical_source_generation_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: canonical_source_head canonical_source_head_route_collection_id_generation_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_head
+    ADD CONSTRAINT canonical_source_head_route_collection_id_generation_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.canonical_source_generation(route, collection_id, generation);
+
+
+--
+-- Name: canonical_source_reference canonical_source_reference_route_collection_id_generation_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_reference
+    ADD CONSTRAINT canonical_source_reference_route_collection_id_generation_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.canonical_source_generation(route, collection_id, generation);
+
+
+--
+-- Name: canonical_source_scope canonical_source_scope_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_scope
+    ADD CONSTRAINT canonical_source_scope_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: canonical_source_state canonical_source_state_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.canonical_source_state
+    ADD CONSTRAINT canonical_source_state_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: collection_kind_audience_origin collection_kind_audience_orig_route_collection_id_audience_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_audience_origin
+    ADD CONSTRAINT collection_kind_audience_orig_route_collection_id_audience_fkey FOREIGN KEY (route, collection_id, audience) REFERENCES library.collection_kind_observation(route, collection_id, audience) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_kind_consent_transition collection_kind_consent_transition_route_reference_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_consent_transition
+    ADD CONSTRAINT collection_kind_consent_transition_route_reference_id_fkey FOREIGN KEY (route, reference_id) REFERENCES library.collection_kind_consent_consumer(route, reference_id) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_kind_raw_input collection_kind_raw_input_route_origin_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_kind_raw_input
+    ADD CONSTRAINT collection_kind_raw_input_route_origin_id_fkey FOREIGN KEY (route, origin_id) REFERENCES library.collection_kind_audience_origin(route, origin_id) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_member collection_member_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_member
+    ADD CONSTRAINT collection_member_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: collection_order_repair collection_order_repair_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_order_repair
+    ADD CONSTRAINT collection_order_repair_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id) ON DELETE CASCADE;
+
+
+--
+-- Name: collection_publication_episode collection_publication_episode_route_publication_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_episode
+    ADD CONSTRAINT collection_publication_episode_route_publication_id_fkey FOREIGN KEY (route, publication_id) REFERENCES library.collection_publication_operation(route, publication_id);
+
+
+--
+-- Name: collection_publication_episode collection_publication_episode_route_source_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_episode
+    ADD CONSTRAINT collection_publication_episode_route_source_id_fkey FOREIGN KEY (route, source_id) REFERENCES library.collection_publication_source(route, source_id);
+
+
+--
+-- Name: collection_publication_source collection_publication_source_route_publication_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_source
+    ADD CONSTRAINT collection_publication_source_route_publication_id_fkey FOREIGN KEY (route, publication_id) REFERENCES library.collection_publication_operation(route, publication_id);
+
+
+--
+-- Name: collection_publication_source collection_publication_source_route_source_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_source
+    ADD CONSTRAINT collection_publication_source_route_source_id_fkey FOREIGN KEY (route, source_id) REFERENCES library.collection_publication_operation(route, source_id);
+
+
+--
+-- Name: collection_publication_staging_evidence collection_publication_stagi_route_collection_id_generati_fkey1; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_evidence
+    ADD CONSTRAINT collection_publication_stagi_route_collection_id_generati_fkey1 FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_publication_staging(route, collection_id, generation);
+
+
+--
+-- Name: collection_publication_staging_seal collection_publication_stagi_route_collection_id_generati_fkey2; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging_seal
+    ADD CONSTRAINT collection_publication_stagi_route_collection_id_generati_fkey2 FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_publication_staging(route, collection_id, generation);
+
+
+--
+-- Name: collection_publication_staging collection_publication_stagin_route_collection_id_generati_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_publication_staging
+    ADD CONSTRAINT collection_publication_stagin_route_collection_id_generati_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
+
+
+--
+-- Name: collection_retained_output collection_retained_output_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_retained_output
+    ADD CONSTRAINT collection_retained_output_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES editorial.write_basis(partition_no, transaction_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: collection_retained_output collection_retained_output_route_collection_id_generation_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_retained_output
+    ADD CONSTRAINT collection_retained_output_route_collection_id_generation_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
+
+
+--
+-- Name: collection_source_output_head collection_source_output_head_route_collection_id_generati_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_head
+    ADD CONSTRAINT collection_source_output_head_route_collection_id_generati_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
+
+
+--
+-- Name: collection_source_output_member collection_source_output_memb_route_collection_id_generati_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_member
+    ADD CONSTRAINT collection_source_output_memb_route_collection_id_generati_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
+
+
+--
+-- Name: collection_source_output_publication collection_source_output_publ_route_collection_id_generati_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_publication
+    ADD CONSTRAINT collection_source_output_publ_route_collection_id_generati_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.collection_source_output(route, collection_id, generation);
+
+
+--
+-- Name: collection_source_output_publication collection_source_output_publi_partition_no_transaction_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output_publication
+    ADD CONSTRAINT collection_source_output_publi_partition_no_transaction_id_fkey FOREIGN KEY (partition_no, transaction_id) REFERENCES editorial.write_basis(partition_no, transaction_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: collection_source_output collection_source_output_route_collection_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.collection_source_output
+    ADD CONSTRAINT collection_source_output_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: copy_archive_row copy_archive_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_row
+    ADD CONSTRAINT copy_archive_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.copy_archive_upload(route, account_id, upload_id);
+
+
+--
+-- Name: follow_count_terminal_source follow_count_terminal_source_partition_no_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.follow_count_terminal_source
+    ADD CONSTRAINT follow_count_terminal_source_partition_no_fkey FOREIGN KEY (partition_no) REFERENCES core.partition(partition_no);
+
+
+--
+-- Name: identity_scope_effect identity_scope_effect_route_collection_id_plan_key_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_effect
+    ADD CONSTRAINT identity_scope_effect_route_collection_id_plan_key_fkey FOREIGN KEY (route, collection_id, plan_key) REFERENCES library.identity_scope_plan(route, collection_id, plan_key);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_route_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_route_capture_id_fkey FOREIGN KEY (route, capture_id) REFERENCES library.native_source_capture(route, capture_id);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_route_collection_id_generation_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_route_collection_id_generation_fkey FOREIGN KEY (route, collection_id, generation) REFERENCES library.canonical_source_generation(route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_plan identity_scope_plan_route_collection_id_old_head_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_plan
+    ADD CONSTRAINT identity_scope_plan_route_collection_id_old_head_fkey FOREIGN KEY (route, collection_id, old_head) REFERENCES library.canonical_source_generation(route, collection_id, generation);
+
+
+--
+-- Name: identity_scope_seal identity_scope_seal_route_collection_id_plan_key_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.identity_scope_seal
+    ADD CONSTRAINT identity_scope_seal_route_collection_id_plan_key_fkey FOREIGN KEY (route, collection_id, plan_key) REFERENCES library.identity_scope_plan(route, collection_id, plan_key);
+
+
+--
+-- Name: label_assignment label_assignment_route_account_id_label_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_assignment
+    ADD CONSTRAINT label_assignment_route_account_id_label_id_fkey FOREIGN KEY (route, account_id, label_id) REFERENCES library.personal_label(route, account_id, label_id);
+
+
+--
+-- Name: members_preparation_result members_preparation_result_route_owner_account_id_collecti_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.members_preparation_result
+    ADD CONSTRAINT members_preparation_result_route_owner_account_id_collecti_fkey FOREIGN KEY (route, owner_account_id, collection_id, episode_id) REFERENCES library.members_preparation(route, owner_account_id, collection_id, episode_id);
+
+
+--
+-- Name: native_public_output_binding native_public_output_binding_partition_no_accepted_transac_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_binding
+    ADD CONSTRAINT native_public_output_binding_partition_no_accepted_transac_fkey FOREIGN KEY (partition_no, accepted_transaction_id, owner_epoch, accepted_position) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_hold native_public_output_consumption; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_consumption FOREIGN KEY (partition_no, consumed_by) REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_hold native_public_output_hold_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_hold
+    ADD CONSTRAINT native_public_output_hold_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES library.native_public_output_binding(partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_receiving native_public_output_receiving_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_receiving
+    ADD CONSTRAINT native_public_output_receiving_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES library.native_public_output_binding(partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_transition native_public_output_transiti_partition_no_successor_hold__fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transiti_partition_no_successor_hold__fkey FOREIGN KEY (partition_no, successor_hold_id) REFERENCES library.native_public_output_hold(partition_no, hold_id) DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_transition native_public_output_transiti_partition_no_transaction_id__fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transiti_partition_no_transaction_id__fkey FOREIGN KEY (partition_no, transaction_id, epoch, "position") REFERENCES semantic.identity_epoch_native_commit(partition_no, transaction_id, epoch, "position") DEFERRABLE INITIALLY DEFERRED;
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_partition_no_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transition_partition_no_capture_id_fkey FOREIGN KEY (partition_no, capture_id) REFERENCES library.native_public_output_binding(partition_no, capture_id);
+
+
+--
+-- Name: native_public_output_transition native_public_output_transition_partition_no_hold_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_public_output_transition
+    ADD CONSTRAINT native_public_output_transition_partition_no_hold_id_fkey FOREIGN KEY (partition_no, hold_id) REFERENCES library.native_public_output_hold(partition_no, hold_id);
+
+
+--
+-- Name: native_source_hold native_source_hold_route_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_source_hold
+    ADD CONSTRAINT native_source_hold_route_capture_id_fkey FOREIGN KEY (route, capture_id) REFERENCES library.native_source_receipt(route, capture_id);
+
+
+--
+-- Name: native_source_receipt native_source_receipt_route_capture_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.native_source_receipt
+    ADD CONSTRAINT native_source_receipt_route_capture_id_fkey FOREIGN KEY (route, capture_id) REFERENCES library.native_source_capture(route, capture_id);
+
+
+--
+-- Name: owner_index_state owner_index_state_route_account_id_pin_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.owner_index_state
+    ADD CONSTRAINT owner_index_state_route_account_id_pin_fkey FOREIGN KEY (route, account_id, pin) REFERENCES library.owner_index_pin(route, account_id, pin) ON DELETE CASCADE;
+
+
+--
+-- Name: progress_change progress_change_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_change
+    ADD CONSTRAINT progress_change_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
+
+
+--
+-- Name: progress_unit progress_unit_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_unit
+    ADD CONSTRAINT progress_unit_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
+
+
+--
+-- Name: shelf_type_node shelf_type_node_terminal_type_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_node
+    ADD CONSTRAINT shelf_type_node_terminal_type_id_fkey FOREIGN KEY (route, account_id, terminal_type_id) REFERENCES library.shelf_type_value(route, account_id, type_id);
+
+
+--
+-- Name: shelf_type_root shelf_type_root_primary_type_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.shelf_type_root
+    ADD CONSTRAINT shelf_type_root_primary_type_id_fkey FOREIGN KEY (route, account_id, primary_type_id) REFERENCES library.shelf_type_value(route, account_id, type_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_route_account_id_preparation_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_route_account_id_preparation_id_fkey FOREIGN KEY (route, account_id, preparation_id) REFERENCES library.type_preparation_header(route, account_id, preparation_id);
+
+
+--
+-- Name: type_preparation_progress type_preparation_progress_route_account_id_type_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_progress
+    ADD CONSTRAINT type_preparation_progress_route_account_id_type_id_fkey FOREIGN KEY (route, account_id, type_id) REFERENCES library.shelf_type_value(route, account_id, type_id);
+
+
+--
+-- Name: type_preparation_slot type_preparation_slot_route_account_id_binding_digest_prep_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.type_preparation_slot
+    ADD CONSTRAINT type_preparation_slot_route_account_id_binding_digest_prep_fkey FOREIGN KEY (route, account_id, binding_digest, preparation_id) REFERENCES library.type_preparation_header(route, account_id, binding_digest, preparation_id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+
