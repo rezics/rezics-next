@@ -23,6 +23,21 @@ sections of `src/system_database.ts`, and migrations 108–112; installed SDK cl
 native migration implementation. The installed retention indexes are on payload timestamps, not a terminal-status
 projection. No new native discovery or retention reporting primitive is introduced.
 
+## Bounded legacy membership child discovery
+
+`WorkClient.discoverLegacyLeaveChild(workflowId)` resolves a strict `realm:leave:<realm-id>:<member-id>` locator to
+the newest retained `community.leave` workflow's `accounts.membership` child with the same realm, member and
+reservation. It returns the child workflow ID or `null`; callers can then use the normal indexed status and step reads.
+The existing `listWorkflowSteps` legacy fallback remains the compatibility path and retains its linear diagnostic.
+
+The native indexes are `dbos.work_legacy_leave_parent_input_identity` on the input JSON paths
+`realmId/memberAccountId/reservationId` and `dbos.work_legacy_leave_child_input_identity` on
+`principal.id/memberAccountId/reservationId`. Both include `workflow_uuid`. Discovery is one SQL statement; for a
+fixed matching population, each index seek and each joined `workflow_status` primary-key check reads a constant
+number of rows and logarithmic index blocks. The growth fixture holds the matching parent and child count at one
+while growing unrelated status, input and step history. Repeated matching histories add candidate work and are not
+covered by that fixture's constant-row claim.
+
 # Native workflow writer retirement
 
 The pinned SDK extension declares `DBOSClient.retireWorkflow(actualWorkflowId)` and

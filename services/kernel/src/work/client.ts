@@ -5,7 +5,10 @@ import { WORK_QUEUES, type WorkQueueName } from './queues.ts';
 
 export const DBOS_SCHEMA = 'dbos';
 export const WORK_APPLICATION = 'rezics-kernel';
-export type WorkClient = DBOSClient & { close(): Promise<void> };
+export type WorkClient = DBOSClient & {
+  close(): Promise<void>;
+  discoverLegacyLeaveChild(workflowId: string): Promise<string | null>;
+};
 const selectedClientPools = new WeakMap<DBOSClient, Pool>();
 /** Private service composition binding. Matching URLs or a structural client do not enroll. */
 export function assertSelectedWorkClient(client: WorkClient, pool: Pool): void {
@@ -111,6 +114,38 @@ export async function createWorkClient(databaseUrl: string, pool?: Pool): Promis
   let lookupPool: Pool | undefined;
   let closing: Promise<void> | undefined;
   return Object.assign(client, {
+    async discoverLegacyLeaveChild(workflowId: string) {
+      const legacyLeave = /^realm:leave:([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(workflowId);
+      if (!legacyLeave) return null;
+      const lookup = pool ?? (lookupPool ??= new Pool({ connectionString: databaseUrl, max: 1 }));
+      const result = await lookup.query<{ workflow_uuid: string }>(
+        `/* work:legacy-membership-child-discovery */
+         SELECT child.workflow_uuid
+           FROM dbos.workflow_input AS parent_input
+           JOIN dbos.workflow_status AS parent
+             ON parent.workflow_uuid = parent_input.workflow_uuid
+           CROSS JOIN LATERAL (
+             SELECT child.workflow_uuid
+               FROM dbos.workflow_input AS child_input
+               JOIN dbos.workflow_status AS child
+                 ON child.workflow_uuid = child_input.workflow_uuid
+              WHERE child.name = 'accounts.membership'
+                AND child_input.inputs::jsonb #>> '{json,0,principal,id}' = $1
+                AND child_input.inputs::jsonb #>> '{json,0,memberAccountId}' = $2
+                AND child_input.inputs::jsonb #>> '{json,0,reservationId}' =
+                    parent_input.inputs::jsonb #>> '{json,0,reservationId}'
+              ORDER BY child.created_at DESC, child.workflow_uuid DESC
+              LIMIT 1
+           ) AS child
+          WHERE parent.name = 'community.leave'
+            AND parent_input.inputs::jsonb #>> '{json,0,realmId}' = $1
+            AND parent_input.inputs::jsonb #>> '{json,0,memberAccountId}' = $2
+          ORDER BY parent.created_at DESC, parent.workflow_uuid DESC
+          LIMIT 1`,
+        legacyLeave.slice(1),
+      );
+      return result.rows[0]?.workflow_uuid ?? null;
+    },
     async listWorkflowSteps(...args: Parameters<DBOSClient['listWorkflowSteps']>) {
       const [workflowId, options] = args;
       const legacyLeave = /^realm:leave:([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(workflowId);
