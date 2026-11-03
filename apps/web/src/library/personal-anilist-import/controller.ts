@@ -229,7 +229,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const response = await send();
     if (!live()) return;
     busy = false;
-    cost.recordCall(command.kind, retry);
+    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {
       unknown = (response as AniListUnknown).command;
       notice = response as AniListUnknown;
@@ -425,7 +425,7 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       if (!body || !row.target) {
         row.sourceAdmission = {
           status: 'unsupported',
-          reason: row.target ? (blocked ?? undefined) : 'This row has no canonical Subject.',
+          reason: row.target ? (blocked ?? 'This provider record has no stable identity.') : 'This row has no canonical Subject.',
         };
         continue;
       }

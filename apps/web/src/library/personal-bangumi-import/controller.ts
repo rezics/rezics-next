@@ -181,7 +181,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     const response = await send();
     if (!live()) return;
     busy = false;
-    cost.recordCall(command.kind, retry);
+    if (command.kind !== 'admit-source') cost.recordCall(command.kind, retry);
     if (response.kind === 'unknown') {
       unknown = (response as BangumiUnknown).command;
       notice = response as BangumiUnknown;
@@ -352,7 +352,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       if (!body || !row.target) {
         row.sourceAdmission = {
           status: 'unsupported',
-          reason: row.target ? (blocked ?? undefined) : 'This row has no canonical Subject.',
+          reason: row.target ? (blocked ?? 'This provider record has no stable identity.') : 'This row has no canonical Subject.',
         };
         continue;
       }
