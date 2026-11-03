@@ -27,7 +27,9 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
   const waiting = policy.delay > 0 && releasedFor !== error;
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+    };
   }, []);
   useEffect(() => {
     if (!policy.allowed || policy.delay <= 0 || policy.deferred) return;
@@ -49,8 +51,13 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
     const reader = owner();
     const current = () => {
       const next = owner();
-      return mounted.current && router.state.location.state.key === visit &&
-        reader.state === next.state && reader.subject === next.subject && reader.token === next.token;
+      return (
+        mounted.current &&
+        router.state.location.state.key === visit &&
+        reader.state === next.state &&
+        reader.subject === next.subject &&
+        reader.token === next.token
+      );
     };
     setRetrying(true);
     setRetryFailed(false);
@@ -69,8 +76,21 @@ export function ClosedErrorPage({ error, reset }: { error: unknown; reset?: () =
     }
   }
   if (isPlatformClosedError(error)) return <ClosedPage />;
-  const recovery = !policy.allowed ? m.route_retry_unavailable() : policy.deferred ? m.route_retry_later()
-    : waiting ? m.route_retry_after({ seconds: policy.delay }) : undefined;
-  return <RouteState kind="error" onRetry={policy.allowed && !policy.deferred ? retry : undefined}
-    retrying={retrying} retryDisabled={waiting} retryFailed={retryFailed} recovery={recovery} />;
+  const recovery = !policy.allowed
+    ? m.route_retry_unavailable()
+    : policy.deferred
+      ? m.route_retry_later()
+      : waiting
+        ? m.route_retry_after({ seconds: policy.delay })
+        : undefined;
+  return (
+    <RouteState
+      kind="error"
+      onRetry={policy.allowed && !policy.deferred ? retry : undefined}
+      retrying={retrying}
+      retryDisabled={waiting}
+      retryFailed={retryFailed}
+      recovery={recovery}
+    />
+  );
 }

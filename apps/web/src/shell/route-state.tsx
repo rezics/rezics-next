@@ -11,8 +11,16 @@ export type RouteStateKind = 'missing' | 'closed' | 'error';
 export const routeStateControl = 'min-h-11 h-auto max-w-full whitespace-normal break-words px-4 py-2 text-center';
 
 /** Route content uses the shared Empty slots; AppShell owns main, skip navigation and providers. */
-export function RouteState({ kind = 'error', heading, message, onRetry, retrying = false, retryFailed = false,
-  recovery, retryDisabled = false }: {
+export function RouteState({
+  kind = 'error',
+  heading,
+  message,
+  onRetry,
+  retrying = false,
+  retryFailed = false,
+  recovery,
+  retryDisabled = false,
+}: {
   kind?: RouteStateKind;
   heading?: string;
   message?: string;
@@ -24,8 +32,16 @@ export function RouteState({ kind = 'error', heading, message, onRetry, retrying
 }) {
   const locale = getLocale();
   const Icon = kind === 'closed' ? LockKeyhole : kind === 'missing' ? SearchX : CircleAlert;
-  const title = heading ?? (kind === 'closed' ? m.platform_closed_heading() : kind === 'missing' ? m.not_found_heading() : m.error_heading());
-  const description = message ?? (kind === 'closed' ? m.platform_closed_message() : kind === 'missing' ? m.not_found_message() : m.route_error_description());
+  const title =
+    heading ??
+    (kind === 'closed' ? m.platform_closed_heading() : kind === 'missing' ? m.not_found_heading() : m.error_heading());
+  const description =
+    message ??
+    (kind === 'closed'
+      ? m.platform_closed_message()
+      : kind === 'missing'
+        ? m.not_found_message()
+        : m.route_error_description());
   const section = useRef<HTMLElement>(null);
   // Replacing a focused route control must not leave focus on body. Existing chrome focus stays put.
   useEffect(() => {
@@ -48,20 +64,48 @@ export function RouteState({ kind = 'error', heading, message, onRetry, retrying
         </EmptyHeader>
         <EmptyContent className="max-w-xl gap-4">
           {recovery ? <p className="max-w-prose break-words text-sm text-muted-foreground">{recovery}</p> : null}
-          <p role="status" aria-live="polite" aria-atomic="true" className={retrying || retryFailed ? 'text-sm text-muted-foreground' : 'sr-only'}>
+          <p
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className={retrying || retryFailed ? 'text-sm text-muted-foreground' : 'sr-only'}
+          >
             {retrying ? m.status_retrying() : retryFailed ? m.route_retry_failed() : ''}
           </p>
           <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-center">
-            {onRetry ? <Button size="lg" className={routeStateControl} onClick={onRetry}
-              disabled={retrying || retryDisabled} aria-busy={retrying}>
-              <RotateCw aria-hidden="true" className={retrying ? 'size-4 motion-safe:animate-spin motion-reduce:animate-none' : 'size-4'} />
-              {retrying ? m.status_retrying() : m.status_retry()}
-            </Button> : null}
-            <a data-slot="button" className={cn(buttonVariants({ size: 'lg', variant: onRetry ? 'outline' : 'default' }), routeStateControl)} href={`/${locale}`}>
-              <House aria-hidden="true" className="size-4" />{m.status_home()}
+            {onRetry ? (
+              <Button
+                size="lg"
+                className={routeStateControl}
+                onClick={onRetry}
+                disabled={retrying || retryDisabled}
+                aria-busy={retrying}
+              >
+                <RotateCw
+                  aria-hidden="true"
+                  className={retrying ? 'size-4 motion-safe:animate-spin motion-reduce:animate-none' : 'size-4'}
+                />
+                {retrying ? m.status_retrying() : m.status_retry()}
+              </Button>
+            ) : null}
+            <a
+              data-slot="button"
+              className={cn(
+                buttonVariants({ size: 'lg', variant: onRetry ? 'outline' : 'default' }),
+                routeStateControl,
+              )}
+              href={`/${locale}`}
+            >
+              <House aria-hidden="true" className="size-4" />
+              {m.status_home()}
             </a>
-            <a data-slot="button" className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), routeStateControl)} href={`/${locale}/search`}>
-              <Search aria-hidden="true" className="size-4" />{m.status_search()}
+            <a
+              data-slot="button"
+              className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), routeStateControl)}
+              href={`/${locale}/search`}
+            >
+              <Search aria-hidden="true" className="size-4" />
+              {m.status_search()}
             </a>
           </div>
         </EmptyContent>

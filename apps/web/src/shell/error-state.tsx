@@ -43,7 +43,10 @@ function safeRetryAfter(headers: HeadersInit | undefined): string | null {
     const value = new Headers(headers).get('retry-after');
     if (!value || value.length > 64) return null;
     if (/^\d{1,10}$/.test(value)) return value;
-    if (/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value) && Number.isFinite(Date.parse(value)))
+    if (
+      /^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value) &&
+      Number.isFinite(Date.parse(value))
+    )
       return value;
   } catch {
     // A malformed header is unavailable metadata, not another route failure.
@@ -61,11 +64,17 @@ export type RouteRetryPolicy = {
 /** Only typed outcome fields affect recovery; titles, messages, causes and private bodies are ignored. */
 export function routeRetry(error: unknown, now = Date.now()): RouteRetryPolicy {
   const failure = routeFailure([{ status: 'error', error }]);
-  const value = error && typeof error === 'object'
-    ? error as { retryable?: unknown; problem?: { retryable?: unknown } }
-    : undefined;
-  const allowed = !failure?.closed && !failure?.missing && value?.retryable !== false && value?.problem?.retryable !== false;
+  const value =
+    error && typeof error === 'object'
+      ? (error as { retryable?: unknown; problem?: { retryable?: unknown } })
+      : undefined;
+  const allowed =
+    !failure?.closed && !failure?.missing && value?.retryable !== false && value?.problem?.retryable !== false;
   const after = failure?.retryAfter;
-  const seconds = !after ? 0 : /^\d+$/.test(after) ? Number(after) : Math.max(0, Math.ceil((Date.parse(after) - now) / 1000));
+  const seconds = !after
+    ? 0
+    : /^\d+$/.test(after)
+      ? Number(after)
+      : Math.max(0, Math.ceil((Date.parse(after) - now) / 1000));
   return { allowed, delay: seconds <= 300 ? seconds : 0, deferred: seconds > 300 };
 }

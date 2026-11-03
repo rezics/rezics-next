@@ -46,18 +46,20 @@ export const MissingDesktop: Story = { ...NotFound, globals: { ...desktop, theme
 /** Prepared shell states, without pretending that a recording is a native pending request. */
 function PreparedLoading({ layout }: { layout: PendingLayout }) {
   const [left, setLeft] = useState(false);
-  return <PatternStory visitor="Signed Out">
-    <AppShell>
-      <div data-prepared-route-state="true">
-        {left ? <RouteState kind="missing" /> : <RouteLoading layout={layout} />}
-        <aside aria-label="Prepared fixture controls" className="mt-8 border-t border-border pt-4">
-          <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setLeft(true)}>
-            Prepared fixture: leave loading
-          </button>
-        </aside>
-      </div>
-    </AppShell>
-  </PatternStory>;
+  return (
+    <PatternStory visitor="Signed Out">
+      <AppShell>
+        <div data-prepared-route-state="true">
+          {left ? <RouteState kind="missing" /> : <RouteLoading layout={layout} />}
+          <aside aria-label="Prepared fixture controls" className="mt-8 border-t border-border pt-4">
+            <button className="min-h-11 rounded-lg border border-border px-4" onClick={() => setLeft(true)}>
+              Prepared fixture: leave loading
+            </button>
+          </aside>
+        </div>
+      </AppShell>
+    </PatternStory>
+  );
 }
 
 async function pendingReady({ canvasElement }: { canvasElement: HTMLElement }) {
@@ -76,21 +78,37 @@ async function pendingReady({ canvasElement }: { canvasElement: HTMLElement }) {
 }
 export const FeedPhone: Story = { globals: phone, render: () => <PreparedLoading layout="feed" />, play: pendingReady };
 export const FeedDesktop: Story = { ...FeedPhone, globals: desktop };
-export const DetailPhone: Story = { globals: { ...phone, theme: 'dark' }, render: () => <PreparedLoading layout="detail" />, play: pendingReady };
+export const DetailPhone: Story = {
+  globals: { ...phone, theme: 'dark' },
+  render: () => <PreparedLoading layout="detail" />,
+  play: pendingReady,
+};
 export const DetailDesktop: Story = { ...DetailPhone, globals: { ...desktop, theme: 'light' } };
 export const FormPhone: Story = { globals: phone, render: () => <PreparedLoading layout="form" />, play: pendingReady };
 export const FormDesktop: Story = { ...FormPhone, globals: desktop };
-export const GenericPhone: Story = { globals: { ...phone, theme: 'dark' }, render: () => <PreparedLoading layout="page" />, play: pendingReady };
+export const GenericPhone: Story = {
+  globals: { ...phone, theme: 'dark' },
+  render: () => <PreparedLoading layout="page" />,
+  play: pendingReady,
+};
 export const GenericDesktop: Story = { ...GenericPhone, globals: { ...desktop, theme: 'light' } };
 
 function LongRecovery() {
-  return <PatternStory visitor="Signed Out"><AppShell>
-    <RouteState heading={m.error_heading()} message={Array(4).fill(m.route_error_description()).join(' ')}
-      recovery={m.route_retry_later()} />
-  </AppShell></PatternStory>;
+  return (
+    <PatternStory visitor="Signed Out">
+      <AppShell>
+        <RouteState
+          heading={m.error_heading()}
+          message={Array(4).fill(m.route_error_description()).join(' ')}
+          recovery={m.route_retry_later()}
+        />
+      </AppShell>
+    </PatternStory>
+  );
 }
 export const LongStringsPhone: Story = {
-  globals: { ...phone, locale: 'de', theme: 'dark' }, render: () => <LongRecovery />,
+  globals: { ...phone, locale: 'de', theme: 'dark' },
+  render: () => <LongRecovery />,
   play: async ({ canvasElement }) => {
     const main = await within(canvasElement).findByRole('main');
     await expect(within(main).getAllByRole('heading', { level: 1 })).toHaveLength(1);

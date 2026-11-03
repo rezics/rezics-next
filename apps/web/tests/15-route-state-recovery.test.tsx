@@ -3,7 +3,14 @@ import { createRequire } from 'node:module';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRouteWithContext, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
+import {
+  createMemoryHistory,
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from '@tanstack/react-router';
 import { RouteLoading, pendingLayout } from '../src/shell/pending';
 import { RouteState } from '../src/shell/route-state';
 import { ClosedErrorPage } from '../src/shell/closed';
@@ -44,7 +51,9 @@ test('safe route metadata selects bounded, localized and reduced-motion skeleton
         expect(html).not.toContain('<button');
       }
     }
-  } finally { setLocale(locale, { reload: false }); }
+  } finally {
+    setLocale(locale, { reload: false });
+  }
 });
 
 test('recovery uses only native metadata, preserves noindex and bounds Retry-After without inventing status', () => {
@@ -60,9 +69,18 @@ test('recovery uses only native metadata, preserves noindex and bounds Retry-Aft
   }
   expect(routeRetry({ headers: { 'retry-after': '301' } }, now)).toEqual({ allowed: true, delay: 0, deferred: true });
   for (const after of [privateText, '-1', 'NaN', '9'.repeat(100)]) {
-    expect(routeRetry({ headers: { 'retry-after': after } }, now)).toEqual({ allowed: true, delay: 0, deferred: false });
+    expect(routeRetry({ headers: { 'retry-after': after } }, now)).toEqual({
+      allowed: true,
+      delay: 0,
+      deferred: false,
+    });
   }
-  const head = errorPageHead({ origin: 'https://public.example', locale: 'en', path: '/failed', paths: { en: '/private' } });
+  const head = errorPageHead({
+    origin: 'https://public.example',
+    locale: 'en',
+    path: '/failed',
+    paths: { en: '/private' },
+  });
   expect(head.meta).toContainEqual({ name: 'robots', content: 'noindex' });
   expect(head.scripts).toEqual([]);
   expect(JSON.stringify(head)).not.toContain('private');
@@ -72,16 +90,37 @@ test('original loaders recover once per explicit retry, retire old visits/reader
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en' });
-  const globals = { window, ...Object.fromEntries(['document', 'navigator', 'HTMLElement', 'HTMLButtonElement', 'Element', 'Node',
-    'Document', 'DocumentFragment', 'MutationObserver', 'ResizeObserver'].map((key) => [key, Reflect.get(window, key)])),
-    getComputedStyle: window.getComputedStyle.bind(window), IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    ...Object.fromEntries(
+      [
+        'document',
+        'navigator',
+        'HTMLElement',
+        'HTMLButtonElement',
+        'Element',
+        'Node',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+        'ResizeObserver',
+      ].map((key) => [key, Reflect.get(window, key)]),
+    ),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host);
-  const settle = (action: () => void = () => {}) => act(async () => { action(); await new Promise((resolve) => setTimeout(resolve, 25)); });
+  const settle = (action: () => void = () => {}) =>
+    act(async () => {
+      action();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
   let dispose = () => {};
   const counts: number[] = [];
   try {
@@ -93,39 +132,74 @@ test('original loaders recover once per explicit retry, retire old visits/reader
       const items = Array.from({ length: size }, () => privateText);
       const client = new QueryClient();
       client.setQueryData(sessionQueryKey, { state: 'signed-in', subject: 'reader-a', csrfToken: 'token-a' });
-      const base = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: () => <>
-        <nav aria-label="Shell"><button onClick={() => void router.navigate({ to: '/search' })}>Leave</button></nav>
-        <main id="main-content" tabIndex={-1}><Outlet /></main>
-      </> });
-      const page = createRoute({ getParentRoute: () => base, path: '/offers/$id',
+      const base = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+        component: () => (
+          <>
+            <nav aria-label="Shell">
+              <button onClick={() => void router.navigate({ to: '/search' })}>Leave</button>
+            </nav>
+            <main id="main-content" tabIndex={-1}>
+              <Outlet />
+            </main>
+          </>
+        ),
+      });
+      const page = createRoute({
+        getParentRoute: () => base,
+        path: '/offers/$id',
         loader: async () => {
           reads++;
           if (!hold) throw { ...failure, payload: items };
-          return await new Promise<string>((yes, no) => { resolve = yes; reject = no; });
-        }, component: () => <h1>Current content</h1> });
-      const away = createRoute({ getParentRoute: () => base, path: '/search', component: () => <h1>Search destination</h1> });
-      const router = createRouter({ routeTree: base.addChildren([page, away]), context: { queryClient: client },
-        history: createMemoryHistory({ initialEntries: ['/offers/prepared'] }), defaultErrorComponent: ClosedErrorPage,
-        defaultPendingComponent: () => <RouteLoading layout="detail" />, defaultPendingMs: 0, defaultPendingMinMs: 0 });
-      dispose = () => { router.history.destroy(); client.clear(); };
+          return await new Promise<string>((yes, no) => {
+            resolve = yes;
+            reject = no;
+          });
+        },
+        component: () => <h1>Current content</h1>,
+      });
+      const away = createRoute({
+        getParentRoute: () => base,
+        path: '/search',
+        component: () => <h1>Search destination</h1>,
+      });
+      const router = createRouter({
+        routeTree: base.addChildren([page, away]),
+        context: { queryClient: client },
+        history: createMemoryHistory({ initialEntries: ['/offers/prepared'] }),
+        defaultErrorComponent: ClosedErrorPage,
+        defaultPendingComponent: () => <RouteLoading layout="detail" />,
+        defaultPendingMs: 0,
+        defaultPendingMinMs: 0,
+      });
+      dispose = () => {
+        router.history.destroy();
+        client.clear();
+      };
       await router.load();
       await settle(() => root.render(<RouterProvider router={router} />));
       const main = host.querySelector('main')!;
       const nav = host.querySelector('nav')!;
-      const retry = () => Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(m.status_retry()))!;
+      const retry = () =>
+        Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(m.status_retry()))!;
       expect(main.textContent).toContain(m.error_heading());
       expect(main.textContent).not.toContain(privateText);
       expect(reads).toBe(1);
       counts.push(main.querySelectorAll('*').length);
       hold = true;
-      await settle(() => { retry().click(); retry().click(); });
+      await settle(() => {
+        retry().click();
+        retry().click();
+      });
       expect(reads).toBe(2);
       await settle(() => reject(failure));
       expect(main.textContent).toContain(m.route_retry_failed());
       expect(main.textContent).not.toContain(privateText);
       expect(host.querySelector('main')).toBe(main);
       expect(host.querySelector('nav')).toBe(nav);
-      await settle(() => { retry().click(); retry().click(); });
+      await settle(() => {
+        retry().click();
+        retry().click();
+      });
       expect(reads).toBe(3);
       await settle(() => resolve('safe current response'));
       expect(main.textContent).toContain('Current content');
@@ -133,7 +207,9 @@ test('original loaders recover once per explicit retry, retire old visits/reader
       // A pending direct visit may leave without an old completion restoring its private content.
       await settle(() => void router.navigate({ to: '/search' }));
       let pendingVisit!: Promise<void>;
-      await settle(() => { pendingVisit = router.navigate({ to: '/offers/$id', params: { id: 'next' } }); });
+      await settle(() => {
+        pendingVisit = router.navigate({ to: '/offers/$id', params: { id: 'next' } });
+      });
       expect(main.querySelectorAll('[data-skeleton-block]').length).toBeLessThanOrEqual(12);
       expect(main.textContent).toContain(m.route_loading_detail());
       await settle(() => {
