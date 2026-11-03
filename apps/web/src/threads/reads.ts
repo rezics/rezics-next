@@ -15,7 +15,7 @@ import type { PageAuthors } from '../identity/read';
 import type { BoardRealm } from './board-context';
 import type { ThreadSubject } from './subjects';
 import type { ThreadPost, ThreadSlugRedirect } from './thread-page';
-import { readAuthorRevisionVotes, readRevisionSubjects } from './revision-provenance';
+import { readAuthorRevisionVotes, readRevisionSubjects, type RevisionVotes } from './revision-provenance';
 import { loadPostHistoryPage, type PostHistoryReadData } from './post-history-read';
 import type { ThreadDocumentMedia } from './document-media-read';
 import { loadNewThreadPage, type NewThreadPageResult } from './new-thread-read';
