@@ -665,7 +665,10 @@ export function createLabelConsolidationCommands(deps: {
            WHERE route=$1 AND account_id=$2 AND consolidation_id=$3`,
           [route, owner.accountId, plan.confirmationId, nextItem, complete, now, command.transactionId],
         );
-        return { value: { status, nextItem, complete }, events: consolidationEvents(owner.accountId, plan.confirmationId) };
+        return {
+          value: { status, nextItem, complete },
+          events: consolidationEvents(owner.accountId, plan.confirmationId),
+        };
       },
     );
   }
@@ -989,7 +992,10 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { confirmationId, item: current.itemNo }, events: consolidationEvents(owner.accountId, confirmationId) };
+        return {
+          value: { confirmationId, item: current.itemNo },
+          events: consolidationEvents(owner.accountId, confirmationId),
+        };
       },
     );
     return { operation, result: await runAndRead(owner, sourceLabelId, confirmationId, operation.value.item) };
@@ -1091,7 +1097,10 @@ export function createLabelConsolidationCommands(deps: {
             command.transactionId,
           ],
         );
-        return { value: { confirmationId, status: 'cancelled' as const }, events: consolidationEvents(owner.accountId, confirmationId) };
+        return {
+          value: { confirmationId, status: 'cancelled' as const },
+          events: consolidationEvents(owner.accountId, confirmationId),
+        };
       },
     );
     return { operation, result: await result(owner, sourceLabelId, confirmationId) };
