@@ -1,5 +1,8 @@
 # Library and Collections
 
+The [private reported-year summary](library-reported-year-summary.md) extends native completed occurrences with
+explicit journal finish-year membership, twelve months and a year-only bucket, preserving separate all-time semantics.
+
 The [personal consumption statistics contract](library-consumption-statistics.md) defines
 private completed occurrences, distinct stored subjects and repeats from retained native
 sessions, independently of current shelf state, holdings and published logs.

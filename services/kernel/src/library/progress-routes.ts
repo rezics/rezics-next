@@ -17,6 +17,33 @@ import { createPublishedLogCommands } from './published-logs.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
 import { createConsumptionStatisticsReads, type ConsumptionSummary } from './consumption-statistics.ts';
+import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
+
+const yearCount = t.String({ pattern: '^[0-9]{1,19}$' });
+const reportedCounts = {
+  completedOccurrences: yearCount,
+  distinctCompletedSubjects: yearCount,
+  repeatOccurrences: yearCount,
+  completedOccurrencesWithUnknownProfile: yearCount,
+  finishPrecision: t.Object({ year: yearCount, month: yearCount, day: yearCount }, { additionalProperties: false }),
+};
+const reportedYearResponse = t.Unsafe<ReportedYearSummary>(t.Object({
+  ...reportedCounts,
+  scope: t.Literal('retained_native_sessions'),
+  year: t.Integer({ minimum: 1, maximum: 9999 }),
+  calendar: t.Literal('gregorian'),
+  dateSource: t.Literal('explicitly_reported_journal_finish'),
+  months: t.Array(t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }), ...reportedCounts },
+    { additionalProperties: false }), { minItems: 12, maxItems: 12 }),
+  monthUnallocated: t.Object(reportedCounts, { additionalProperties: false }),
+  coverage: t.Object({
+    nativeSessions: t.Literal('complete'), initializedSessions: yearCount, retainedSessions: yearCount,
+    completedOccurrencesWithMissingFinish: yearCount, completedOccurrencesWithUnsupportedFinish: yearCount,
+    otherHistory: t.Literal('unavailable'), unitMeaning: t.Literal('not_evaluated'),
+  }, { additionalProperties: false }),
+  currentness: t.Object({ state: t.Literal('snapshot'), revision: t.String({ maxLength: 36 }) },
+    { additionalProperties: false }),
+}, { additionalProperties: false }));
 
 const MAX_JOURNAL_PATCH_BODY_BYTES = 16_384;
 
@@ -314,8 +341,33 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
   const publishedCommands = () =>
     (published ??= createPublishedLogCommands({ pool, access: dependencies.access(), tokens, clock }));
   const statistics = createConsumptionStatisticsReads({ pool });
+  const reportedYears = createReportedYearSummaryReads({ pool });
 
   return app
+    .get(
+      '/v1/libraryReportedYearSummary',
+      {
+        query: t.Object({ year: t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 }) }, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          const query = new URL(request.url).searchParams;
+          if ([...query.keys()].some((key) => key !== 'year') || query.getAll('year').length !== 1 ||
+            !/^[1-9][0-9]{0,3}$/.test(query.get('year') ?? '')) throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: reportedYearResponse, 400: invalid, 401: unauthorized,
+          403: problemSchema('forbidden', 'platform_closed'), 503: unavailable,
+        },
+        detail: detail('library_consumption.reported_year', 'progress_session:list'),
+      },
+      async ({ actor, admission, job, request, query }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () => reportedYears.summary(actor, query.year, job.deadline, request.signal,
+          (_value, encoded) => new Response(encoded, {
+            headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+          })));
+      },
+    )
     .get(
       '/v1/libraryConsumptionSummary',
       {
