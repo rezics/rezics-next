@@ -1,5 +1,11 @@
 # Temporary files at any depth, including workspace-local .temp directories.
 .temp/
+# Retain the named implementation continuation through source landing.
+!/.temp/
+/.temp/*
+!/.temp/continuation/
+/.temp/continuation/*
+!/.temp/continuation/shelf-type-observers.md
 node_modules/
 /apps/web/.cache/
 .DS_Store

@@ -15,6 +15,9 @@ a bounded implementation. This contract adds no per-type limit.
 
 ## Observation and authority
 
+The optional `typeSourceObserved` dependency receives the resolved source stamp after both initial source clients
+are released and before the preparation command; it observes only entry preparation, never sync or verification work.
+
 `entries.ts.putEntry` keeps its existing input parsing, state/CAS, owner receipt and response behavior. Prepare only
 for a create that needs a type key; state updates use existing entry metadata. Perform initial real owner authorization
 and `subject:read` Access before producing metadata, using the authenticated Actor, never fields in a request body.

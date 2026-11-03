@@ -285,6 +285,12 @@ export function createNativeTypePreparationPorts(
             return null;
           const source = resolved.subjectId === input.subjectId ? origin : await full.observe(resolved.subjectId);
           if (!source.identity || source.identity.redirect !== null || source.type === null) return null;
+          await full.typeSourceObserved?.({
+            accountId: actor.accountId,
+            subjectId: input.subjectId,
+            sourceId: resolved.subjectId,
+            stamp: { ...source.stamp },
+          });
           requireAccessDeadline(deadline);
           return { source, origin, sourceId: resolved.subjectId };
         },

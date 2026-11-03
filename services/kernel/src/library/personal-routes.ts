@@ -50,6 +50,7 @@ type Dependencies = {
   clock?: KernelClock;
   shelves?: () => ShelfReads;
   shelfTypeDigest?: ShelfTypeDigest;
+  typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
 };
 const closed = { additionalProperties: false } as const;
 const id = t.String();

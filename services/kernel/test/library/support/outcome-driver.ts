@@ -37,6 +37,7 @@ import type { NativeConformanceOptions, NativeConformanceWorld } from './native-
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 import type { Access } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
+import { createNativeShelfTypePauses } from './native-shelf-type-pause.ts';
 import { NativeLabelCommandTrace } from './native-label-command-trace.ts';
 import { createStateReferenceRepair, installStateReferenceRepairLatch } from './native-state-reference-repair.ts';
 
@@ -248,6 +249,7 @@ function sourceFile(statement: string): string {
 }
 
 export async function createLibraryDriver(options: NativeConformanceOptions = {}): Promise<NativeConformanceWorld> {
+  const typePauses = createNativeShelfTypePauses();
   const base = process.env.DATABASE_URL;
   if (!base) throw new Error('DATABASE_URL must name the migrated test database');
 
@@ -274,6 +276,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
   const cleanup = async () => {
     commandTrace.close();
     stateReferenceRepair?.close();
+    await typePauses.close();
     if (child) {
       child.kill('SIGCONT');
       child.kill('SIGTERM');
@@ -364,6 +367,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     let nativeAccess: Access;
     const app = createKernel({
       receiptKeys: testReceiptKeys(),
+      typeSourceObserved: typePauses.observe,
       requestDeadlineMs: 30_000,
       pool: db!.pool,
       clock: () => new Date(scenarioNow()),
@@ -450,7 +454,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
         requestHeaders.set('content-type', 'application/json');
         init.body = JSON.stringify(body);
       }
-      const response = await app.handle(new Request(`http://kernel.test${path}`, init));
+      const response = await typePauses.run(() => app.handle(new Request(`http://kernel.test${path}`, init)));
       return response;
     };
     const key = () => `"${Bun.randomUUIDv7()}"`;
@@ -923,6 +927,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     };
     const driver: NativeConformanceWorld = {
       native: {
+        typePauses,
         accountHost,
         pool: db.pool,
         reader: db.admin,

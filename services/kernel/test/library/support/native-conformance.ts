@@ -9,6 +9,7 @@ import type { LibraryAccountHost } from './native-account-host.ts';
 import type { TracedCommand } from '../../../../../specs/library-labels-driver.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
 import type { AccountActor } from '../../../src/request/access.ts';
+import type { createNativeShelfTypePauses } from './native-shelf-type-pause.ts';
 import type { ShelfTypeDigest } from '../../../src/library/shelf-type-keys.ts';
 import type { createStateReferenceRepair } from './native-state-reference-repair.ts';
 
@@ -31,6 +32,7 @@ export type NativePersona =
 export type NativeRequest = Parameters<LibraryDriver['request']>[1];
 export interface NativeConformanceWorld extends LibraryDriver {
   native: {
+    typePauses: ReturnType<typeof createNativeShelfTypePauses>;
     accountHost: LibraryAccountHost;
     pool: Pool;
     reader: Pool;

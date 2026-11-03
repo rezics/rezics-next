@@ -64,9 +64,7 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
       async forceTypeDigestCollision() {
         digestScenario.forceTypeDigestCollision();
       },
-      async pauseTypeWork(input) {
-        return unavailable(`production shelf ${input.workflow} ${input.boundary} observation latch`);
-      },
+      pauseTypeWork: world.native.typePauses.pause,
       changeSubjectType: types.changeSubjectType,
       async mergeSubjects(input) {
         const result = await json<{ survivor: string; redirected: string }>(
@@ -173,7 +171,8 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
         ).rows;
         return { entries, typeKeys, sessions, completedUnits, changes, heads, counts, collections, events };
       },
-      async settle() {
+      async settle(input) {
+        await world.native.typePauses.settle(input);
         await world.settle();
       },
       async seed(input) {

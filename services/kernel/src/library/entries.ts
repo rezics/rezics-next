@@ -55,6 +55,7 @@ type Dependencies = {
   tokens: KeyRing;
   clock?: KernelClock;
   shelfTypeDigest?: ShelfTypeDigest;
+  typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
 };
 type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
 type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
