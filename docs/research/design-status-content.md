@@ -51,13 +51,13 @@ mounted Page defect. Recovery-named captures sometimes show initial states: unse
 native behavior receive no credit. Long/populated pages, long references/reasons, dark/full-locale Inbox and every
 current-dev route/state/persona measurement remain open. Static styling does not prove interaction or disclosure.
 
-| Surface                                           | Retained ownership and next handoff                                                                                                                                                          |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inbox                                             | Performance retains capture. The integrated report completes the historical inspection; no second screenshot continuation absent newly admitted evidence or newly permitted capture.          |
-| Subject overview/companion and catalogue families | Web retains frames and their provenance handoff. Content supplies vote/review and moderation-region authority; a shell-free Pattern cannot establish frame quality.                          |
-| Settings notification region                      | Accounts retains Settings and preference authority; Content supplies mandatory-notice semantics. Obtain the existing admitted package through that owner.                                    |
-| Home and supplied Realm appearance regions        | Content retains Home capture and native vote/review and Realm appearance authority. When admitted, relay Home artifacts and full provenance to Web.                                          |
-| Shared patterns and final approval                | Findings affecting shared patterns return to Web. Root retains final screenshot approval.                                                                                                    |
+| Surface                                           | Retained ownership and next handoff                                                                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Inbox                                             | Performance retains capture. The integrated report completes the historical inspection; no second screenshot continuation absent newly admitted evidence or newly permitted capture. |
+| Subject overview/companion and catalogue families | Web retains frames and their provenance handoff. Content supplies vote/review and moderation-region authority; a shell-free Pattern cannot establish frame quality.                  |
+| Settings notification region                      | Accounts retains Settings and preference authority; Content supplies mandatory-notice semantics. Obtain the existing admitted package through that owner.                            |
+| Home and supplied Realm appearance regions        | Content retains Home capture and native vote/review and Realm appearance authority. When admitted, relay Home artifacts and full provenance to Web.                                  |
+| Shared patterns and final approval                | Findings affecting shared patterns return to Web. Root retains final screenshot approval.                                                                                            |
 
 The [inventory continuation](content-interface-quality-review.md#retained-source-continuation) is the detailed
 missing-measurement ledger, including long/populated, empty, loading, unavailable and error states and applicable
