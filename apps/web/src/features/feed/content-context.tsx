@@ -52,19 +52,8 @@ export function FeedCardCitation({ item, locale }: { item: FeedItem; locale: str
 
 /** Only the supplied immediate parent is displayed; its current post and recorded revision are distinct links. */
 export function FeedCardParent({ item, locale }: { item: FeedItem; locale: string }) {
-  const summary = item.summary;
-  const context = 'parentContext' in summary ? summary.parentContext : undefined;
+  const context = 'parentContext' in item.summary ? item.summary.parentContext : undefined;
   if (!context || context.kind === 'opening' || item.destination.kind !== 'post') return null;
-  if (
-    item.key.owner !== 'content' ||
-    item.key.kind !== 'post' ||
-    item.key.id !== summary.id ||
-    item.destination.id !== summary.id ||
-    item.destination.postId !== summary.id ||
-    !('threadId' in summary) ||
-    item.destination.threadId !== summary.threadId
-  )
-    return null;
   const options = { locale: locale as Locale };
   const { parent } = context;
   if (parent.state === 'withheld')

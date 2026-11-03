@@ -48,7 +48,7 @@ export function homeReviewContextPage(parentState: 'available' | 'withheld' | 'r
       createdAt: '2026-11-04T01:00:00Z',
       author: { displayName: 'Morgan', handle: 'morgan', avatar: null },
       excerpt: 'A reply to the immediate parent.',
-      reviewContext: review.summary.reviewContext!,
+      reviewContext: review.summary.reviewContext,
       parentContext: {
         kind: 'reply',
         parent:
