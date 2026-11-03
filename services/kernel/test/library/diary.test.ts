@@ -156,8 +156,8 @@ test('repeated completed occurrences keep zero and cleared assessments independe
   for (const occurrence of [zero, cleared])
     await json(await send('POST', `/v1/progressSessions/${occurrence.id}:complete`, { revision: 1 }));
   const before = await Promise.all(
-    [zero, cleared].map(async (occurrence) =>
-      (await json(await send('GET', `/v1/progressSessions/${occurrence.id}`))).progressSession,
+    [zero, cleared].map(
+      async (occurrence) => (await json(await send('GET', `/v1/progressSessions/${occurrence.id}`))).progressSession,
     ),
   );
 
@@ -166,7 +166,10 @@ test('repeated completed occurrences keep zero and cleared assessments independe
   const zeroWrite = await json(await native.send('owner', 'PATCH', zeroPath, zeroPatch, 'assessment-zero'));
   expect(await json(await native.send('owner', 'PATCH', zeroPath, zeroPatch, 'assessment-zero'))).toEqual(zeroWrite);
   await json(await native.send('owner', 'PATCH', zeroPath, { revision: 0, assessment: { units: 8 } }), 409);
-  await json(await send('PATCH', `/v1/progressSessions/${zero.id}/journal`, { revision: 0, assessment: null }, other.bearer), 404);
+  await json(
+    await send('PATCH', `/v1/progressSessions/${zero.id}/journal`, { revision: 0, assessment: null }, other.bearer),
+    404,
+  );
 
   const clearedPath = `/v1/progressSessions/${cleared.id}/journal`;
   await json(await send('PATCH', clearedPath, { revision: 0, assessment: { units: 12 } }));
@@ -183,8 +186,8 @@ test('repeated completed occurrences keep zero and cleared assessments independe
   if (diary.continuation) await cancel(diary.continuation);
 
   const after = await Promise.all(
-    [zero, cleared].map(async (occurrence) =>
-      (await json(await send('GET', `/v1/progressSessions/${occurrence.id}`))).progressSession,
+    [zero, cleared].map(
+      async (occurrence) => (await json(await send('GET', `/v1/progressSessions/${occurrence.id}`))).progressSession,
     ),
   );
   for (let index = 0; index < before.length; index++)

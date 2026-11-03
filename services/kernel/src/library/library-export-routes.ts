@@ -314,9 +314,12 @@ export function libraryExportRoutes(
             {
               exportId: text,
               state,
-              records: t.Array(t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecordV2, journalRecordV3]), {
-                maxItems: 16,
-              }),
+              records: t.Array(
+                t.Union([legacyRecord, annotationRecord, provenanceRecord, journalRecordV2, journalRecordV3]),
+                {
+                  maxItems: 16,
+                },
+              ),
               next: nullable,
               manifest: t.Union([finalManifest, t.Null()]),
             },
