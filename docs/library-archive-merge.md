@@ -83,6 +83,8 @@ strict bounded decoder alone admits the artifact. Web's canonical archive consum
 `/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
 a handwritten client, proxy cast or alternate upload route. Generated declarations must be regenerated before
 Web admits a file; the retained client declarations still describe ordinal-only apply and cannot confirm this review.
+Installed client delivery and its typed consumer proof continue in
+[the generated transport continuation](../.temp/continuation/archive-reviewed-client.md).
 
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results
