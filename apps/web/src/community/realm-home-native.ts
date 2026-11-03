@@ -133,7 +133,11 @@ export function presentNativeRealmHome(
     banner?: CoverSummary | null;
   },
 ): SpacePageData {
+  const continuity = realmClaimSnapshot(page.realm);
+  const selected = page.realm.presentation;
   if (
+    !continuity ||
+    !selected ||
     page.realm.state !== 'active' ||
     page.realm.realmId !== input.realmId ||
     page.realm.spaceId !== input.spaceId ||
@@ -156,6 +160,18 @@ export function presentNativeRealmHome(
     )
   )
     throw new Error('Realm home source changed');
+  for (const [image, mediaId] of [
+    [page.presentation.avatar, selected.avatarMediaId],
+    [page.presentation.banner, selected.bannerMediaId],
+  ] as const) {
+    if (image.state === 'available' && image.value.id !== mediaId) throw new Error('Realm home presentation changed');
+  }
+  const rules = page.presentation.rules;
+  if (
+    rules.state === 'available' &&
+    (rules.value.postId !== selected.rules?.postId || rules.value.revisionId !== selected.rules?.revisionId)
+  )
+    throw new Error('Realm home presentation changed');
   const presentation = boardCommunitySource({
     realmId: input.realmId,
     ...{ community: { ...page.presentation, join: { membership: 'unknown', action: null } } },
@@ -172,7 +188,7 @@ export function presentNativeRealmHome(
       title: page.realm.title,
       summary: page.realm.summary,
       visibility: page.realm.visibility,
-      continuity: realmClaimSnapshot(page.realm),
+      continuity,
       presentation: presentation ?? { state: 'unavailable', value: null },
       boards: boards(page.boards, input.realmId),
       published: publications(page.publications, input.realmId),
@@ -181,6 +197,10 @@ export function presentNativeRealmHome(
       credentialMode: input.credentialMode,
       viewer: null,
       nativeObservation: { viewer: page.viewer, actions: page.actions },
+      nativeSource: {
+        realm: { headRevisionId: page.realm.headRevisionId, presentation: selected },
+        space: { headRevisionId: page.space.headRevisionId },
+      },
     },
   };
 }

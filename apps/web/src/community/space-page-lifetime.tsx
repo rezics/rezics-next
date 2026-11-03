@@ -751,7 +751,7 @@ export function isObsoleteSpacePageRead(error: unknown): error is ObsoleteSpaceP
 /** A mounted native response belongs to the original route admission, including
  * its container, presentation and viewer observation. A nested replacement is
  * a new visit even when a caller retains the outer page object. */
-function nativeHomeBinding(page: SpacePageData) {
+export function nativeHomeBinding(page: SpacePageData) {
   const realm = page.realm;
   const observation = realm?.nativeObservation;
   if (!realm || !observation) return null;
@@ -766,10 +766,13 @@ function nativeHomeBinding(page: SpacePageData) {
     observation,
     viewer: observation.viewer,
     actions: observation.actions,
+    source: realm.nativeSource,
+    // References detect equal replacements; values also detect in-place changes.
+    values: JSON.stringify([realm.presentation, realm.continuity, observation, realm.nativeSource]),
   };
 }
 
-function sameNativeHomeBinding(
+export function sameNativeHomeBinding(
   original: ReturnType<typeof nativeHomeBinding>,
   current: ReturnType<typeof nativeHomeBinding>,
 ) {

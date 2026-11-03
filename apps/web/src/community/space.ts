@@ -66,6 +66,11 @@ export type RealmHome = {
   viewer: { state: MemberState; idempotencyKey: string } | null;
   /** The mounted home supplies viewer standing and action advice from the same native observation. */
   nativeObservation?: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
+  /** Original native heads and selected presentation, retained through route serialization. */
+  nativeSource?: {
+    realm: Pick<NativeRealmHomePage['realm'], 'headRevisionId' | 'presentation'>;
+    space: Pick<NativeRealmHomePage['space'], 'headRevisionId'>;
+  };
 };
 
 export type SpacePageData = {

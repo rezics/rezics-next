@@ -6,6 +6,7 @@ import type { SpacePageData } from '../src/community/space';
 import type { KernelClient } from '@rezics/client';
 import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
 import * as start from '../.storybook/react-start';
+import { available, image } from '../src/kernel/fake/community';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -377,6 +378,8 @@ test('presentation replacement and credential or reader retirement discard pendi
       setLocale('en', { reload: false });
       await paint(page);
       expect(host.textContent).toBe('');
+      await paint(await readNativeRealmHome(operations, input));
+      expect(host.textContent).toContain('Original presentation');
     }
   }
 });
@@ -442,7 +445,7 @@ test('member actions render only from admitted native advice and denied, banned 
 });
 
 test('route admission retires native media and pending shelves on nested source replacement', async () => {
-  for (const replacement of ['presentation', 'observation', 'lifecycle', 'page']) {
+  for (const replacement of ['presentation', 'observation', 'lifecycle', 'page', 'head', 'selection', 'advice']) {
     client.setQueryData(sessionModule.sessionQuery.queryKey, session);
     const original = capture();
     native = fixture();
@@ -460,6 +463,7 @@ test('route admission retires native media and pending shelves on nested source 
         credit: null,
       },
     };
+    native.realm.presentation!.bannerMediaId = id(90);
     const page = await readNativeRealmHome(operations, input);
     const admission = bindSpacePageResult(page, original, { kind: 'signed-in', subject: session.subject })!;
     const late = Promise.withResolvers<Awaited<ReturnType<NativeRealmHomeOperations['boardShelf']>>>();
@@ -473,6 +477,9 @@ test('route admission retires native media and pending shelves on nested source 
     if (replacement === 'presentation') page.realm!.presentation = { state: 'unavailable', value: null };
     if (replacement === 'observation') page.realm!.nativeObservation = { ...page.realm!.nativeObservation! };
     if (replacement === 'lifecycle') page.realm!.continuity = { ...page.realm!.continuity!, governanceReadOnly: true };
+    if (replacement === 'head') page.realm!.nativeSource!.space.headRevisionId = id(91);
+    if (replacement === 'selection') page.realm!.nativeSource!.realm.presentation!.bannerMediaId = id(91);
+    if (replacement === 'advice') page.realm!.nativeObservation!.actions.manage = 'admitted';
     await paint(replacement === 'page' ? { ...page } : page, operations, admission);
     await settle(() => late.resolve({ status: 200, data: { items: [], next: 'late-cursor' } }));
     expect(host.textContent).toBe('');
@@ -483,6 +490,36 @@ test('route admission retires native media and pending shelves on nested source 
     await settle(() => root.unmount());
     root = createRoot(host);
   }
+});
+
+test('standalone visits cannot lose native advice or reuse shelves on a fresh response', async () => {
+  const page = await readNativeRealmHome(operations, input);
+  await paint(page);
+  const observation = page.realm!.nativeObservation!;
+  delete page.realm!.nativeObservation;
+  await paint(page);
+  expect(host.textContent).toBe('');
+  page.realm!.nativeObservation = observation;
+  await paint(page);
+  expect(host.textContent).toBe('');
+  native = fixture(0);
+  native.boards.next = native.publications.next = null;
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.querySelectorAll('a[href*="?realm="]')).toHaveLength(0);
+  expect(host.textContent).toContain(m.realm_published_empty());
+});
+
+test('native presentation cannot disclose a different selected rules revision or media', async () => {
+  native = fixture();
+  native.presentation.avatar = {
+    state: 'available',
+    value: image,
+  };
+  await expect(readNativeRealmHome(operations, input)).rejects.toThrow('Realm home presentation changed');
+  native.presentation.avatar = { state: 'none', value: null };
+  native.presentation.rules = available.rules;
+  native.realm.presentation!.rules = { postId: available.presentation.rules!.postId, revisionId: id(93) };
+  await expect(readNativeRealmHome(operations, input)).rejects.toThrow('Realm home presentation changed');
 });
 
 test('late initial native home cannot bind to a retired route observation', async () => {

@@ -18,7 +18,7 @@ import { SpaceSetupEntry, useSpaceSetupRead } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
 import { useSession } from '../session/query';
 import { useShelfList } from './space-queries';
-import { useSpacePageLifetime } from './space-page-lifetime';
+import { nativeHomeBinding, sameNativeHomeBinding, useSpacePageLifetime } from './space-page-lifetime';
 import {
   changeRealmPublication,
   readRealmBoards,
@@ -360,6 +360,7 @@ export function SpacePage(props: {
     locale,
     route: location.publicHref,
     operations: props.nativeOperations,
+    binding: nativeHomeBinding(props.page),
   });
   if (source.current.page !== props.page) {
     retired.current.add(source.current.page);
@@ -372,13 +373,15 @@ export function SpacePage(props: {
       locale,
       route: location.publicHref,
       operations: props.nativeOperations,
+      binding: nativeHomeBinding(props.page),
     };
   }
   const native = props.page.realm?.nativeObservation;
   // A replacement credential/route cannot adopt the old native response, even with the same subject.
   if (
-    native &&
-    (source.current.state !== state ||
+    (native || source.current.binding) &&
+    (!sameNativeHomeBinding(source.current.binding, nativeHomeBinding(props.page)) ||
+      source.current.state !== state ||
       source.current.subject !== subject ||
       source.current.csrfToken !== csrfToken ||
       source.current.locale !== locale ||
@@ -386,11 +389,15 @@ export function SpacePage(props: {
       source.current.operations !== props.nativeOperations)
   )
     retired.current.add(props.page);
-  if (native && (retired.current.has(props.page) || (lifetime && !lifetime.matchesPage(props.page)))) return null;
+  if (
+    (native || source.current.binding) &&
+    (retired.current.has(props.page) || (lifetime && !lifetime.matchesPage(props.page)))
+  )
+    return null;
   return (
     <AuthoringDepartureBoundary>
       <SpaceHome
-        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}`}
+        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}:${native ? source.current.revision : ''}`}
         {...props}
         viewer={viewer}
         signedOut={state === 'signed-out'}

@@ -78,27 +78,30 @@ first-render producer/SSR contract remains deferred.
 
 ## Realm home source boundary
 
-Decision: Web will not mark the composed Realm-home visit available until `RealmHomePage` carries the native current viewer observation and `@rezics/client` exposes the generated declaration for its mounted operation; the existing separate reads do not establish that assembly.
+The mounted Kernel home now composes a current viewer observation with its container, presentation and shelves.
+Its anonymous observation is `{ state: 'anonymous' }` with sign-in advice. Its signed-in observation carries native
+readability, membership episode and participation, plus current entry, management and leave advice. It does not
+supply join or claim advice. The installed generated Client declaration still omits home, boardShelf and
+publicationShelf. The prepared consumer and its local operation seam do not establish generated default-route
+availability; the normal producer and controller retain generation and native acceptance.
 
-The prepared consumer in `realm-home-native.ts` validates one mounted home response and independent native shelf
-operations. It preserves disclosed publication summaries and raw cursors without Subject reads, refill or inferred
-unavailable-row counts. It never assembles standing from separate reads. Membership and each command are rendered
-only from their own explicit native advice; denied, banned, orphaned and unavailable advice stay distinct. The retained
-Kernel producer still returns anonymous/unavailable advice, and Client generation still omits these three operations.
-Until that delivery lands, the default Web route uses one narrow typed route seam and fails closed when advice is absent.
+Membership and each command require their own explicit composed native advice. Separate standing, participation,
+setup or claim reads cannot manufacture that observation. Missing publication support remains unavailable; it must
+not fall back to per-publication Subject hydration, another DTO or an endpoint assembled by Web. The legacy fixture
+helpers retain their original reads until the generated replacement is installed.
 
-Decision: default Space and Realm routes consume the composed home now; Client generation can replace the narrow local operation seam without changing the prepared consumer.
+Decision: a fresh native response starts both shelves again, while replacing or mutating the original heads,
+selected presentation or viewer observation permanently retires the complete visit.
 
-A native page replacement remounts the entire presentation and both shelves. Credential, locale, route or prepared
-operation replacement permanently retires the old page, including pending continuations, until a new response is
-supplied. Returning to an earlier credential tuple does not restore that page. Existing route admission remains
-required for session-cache generations, lifecycle retirement and hydration; this local rendering boundary supplies
-neither native viewer currentness nor private first-paint proof.
+The prepared consumer checks the carrying Space and Realm heads, active lifecycle and selected media and rules
+revision before presenting them. Native concealment may retain an empty optional presentation even when a selected
+reference is set. Orphan identity remains readable when the native read permits it; its governance stays read-only.
+The original heads and selected references survive route serialization alongside the native observation.
 
-Decision: a prepared native page uses its original route admission; replacing its container, lifecycle, presentation
-or viewer observation within that admission retires the complete visit and requires a fresh admitted response.
-
-The route lifetime captures the native page and its source references before mounting. An outer page copy cannot
-transfer the response to that lifetime, and nested observation or lifecycle replacement cannot keep its media or
-pending shelf tickets alive. These checks also apply to tickets retained by asynchronous callbacks. The standalone
-injectable rendering boundary remains for consumer fixtures and does not supply reader provenance.
+The route lifetime captures the exact page, container, native source, lifecycle, presentation and observation
+references before mounting. Value snapshots also reject in-place changes. An outer page copy, equal nested
+replacement or removed observation cannot transfer a response into that lifetime. The injectable rendering boundary
+uses the same source comparison and retires old pages permanently; a fresh response remounts both shelves and their
+controllers. Credential, locale, route and operation replacement also require a fresh response. Existing route
+admission remains required for session-cache generations, pending continuation tickets, lifecycle retirement and
+hydration; this local boundary supplies neither native viewer currentness nor private first-paint proof.
