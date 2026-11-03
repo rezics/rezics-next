@@ -1,12 +1,21 @@
 import { planReads, platformRegistry, type CompositionDocument, type PageRead } from '@rezics/composition';
 import type { KernelClient } from '@rezics/client';
-import { checkDocument, documentText } from '@rezics/document';
+import { checkDocument, documentText, type DocumentNode } from '@rezics/document';
 import { readPageAuthors, type PageAuthors } from '../../identity/read';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
 import type { ReactionKind } from '../../threads/reaction-request';
 import { GLOBAL } from './subject-ratings';
 import { pageContext, type SubjectPageData, type SubjectPageLoad } from './subject';
 import { isRecord } from './shared';
+import {
+  COMMUNITY_POSITION_LIMIT,
+  COMMUNITY_PROJECTED_BYTES,
+  COMMUNITY_ROW_BYTES,
+  COMMUNITY_TEXT_LIMIT,
+  projectCommunityCard,
+  withinCommunityBytes,
+  type CommunityCard,
+} from './subject-community-card';
 
 export type CommunityKind = 'review' | 'discussion';
 type NativePage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['threads']['get']>>['data']>;
@@ -25,6 +34,7 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
   voteCitation?: CommunityVoteCitation | null;
   reactions?: CommunityReactionCounts;
   viewerReaction?: ReactionKind | null;
+  card?: CommunityCard;
 };
 export type CommunityRegion =
   | { state: 'loading' | 'unavailable' | 'closed' }
@@ -100,8 +110,14 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
     !Number.isInteger(source.epoch) ||
     (source.epoch as number) < 1 ||
     typeof source.position !== 'string' ||
+    source.position.length > COMMUNITY_POSITION_LIMIT ||
     !/^[0-9]+$/.test(source.position) ||
-    (label !== null && (!isRecord(label) || typeof label.value !== 'string' || typeof label.language !== 'string'))
+    (label !== null &&
+      (!isRecord(label) ||
+        typeof label.value !== 'string' ||
+        label.value.length > COMMUNITY_TEXT_LIMIT ||
+        typeof label.language !== 'string' ||
+        label.language.length > 64))
   )
     return null;
   const subjectLabel = label === null ? null : (label as { value: string }).value;
@@ -115,6 +131,8 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
     value.place.kind !== 'realm' ||
     value.place.id !== expected.place ||
     typeof value.place.title !== 'string' ||
+    value.place.title.length > 2048 ||
+    new TextEncoder().encode(value.place.title).length > 4096 ||
     !nativeId(value.place.spaceId) ||
     !nativeId(value.place.headRevisionId)
   )
@@ -133,6 +151,7 @@ function communityReactionFreshness(value: unknown): CommunityReactionFreshness 
     !Number.isInteger(value.epoch) ||
     (value.epoch as number) < 1 ||
     typeof value.position !== 'string' ||
+    value.position.length > COMMUNITY_POSITION_LIMIT ||
     !/^[1-9][0-9]*$/.test(value.position)
   )
     return undefined;
@@ -153,11 +172,13 @@ function communityReactionCounts(value: unknown): CommunityReactionCounts | null
 function project(thread: unknown, expected: CommunityRequest, admitViewer: boolean): CommunityThread | null {
   if (
     !isRecord(thread) ||
+    !withinCommunityBytes(thread, COMMUNITY_ROW_BYTES) ||
     !nativeId(thread.id) ||
     !nativeId(thread.authorId) ||
     !nativeId(thread.boardId) ||
-    (thread.title !== null && typeof thread.title !== 'string') ||
+    (thread.title !== null && (typeof thread.title !== 'string' || thread.title.length > COMMUNITY_TEXT_LIMIT)) ||
     typeof thread.createdAt !== 'string' ||
+    thread.createdAt.length > 40 ||
     !Number.isFinite(Date.parse(thread.createdAt)) ||
     thread.kind !== expected.threadKind ||
     !Array.isArray(thread.subjectIds) ||
@@ -181,6 +202,19 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
   if (typeof post.licence !== 'string' || post.licence.length < 1 || post.licence.length > 128) return null;
   const citationPresent = Object.hasOwn(post, 'voteCitation');
   if (citationPresent && post.voteCitation !== null && !communityCitation(post.voteCitation)) return null;
+  const referencedMedia = new Set<string>();
+  function collectImages(node: DocumentNode) {
+    if (node.type === 'image' && typeof node.attrs?.src === 'string') referencedMedia.add(node.attrs.src);
+    for (const child of node.content ?? []) collectImages(child);
+  }
+  // Only a supplied extension needs media inspection; ordinary ThreadView stays text-only.
+  if (thread.card !== undefined) collectImages(post.body.doc);
+  const card = projectCommunityCard(thread.card, {
+    id: thread.id,
+    postRevisionId: post.revisionId,
+    mediaIds: Array.isArray(post.mediaIds) ? post.mediaIds.filter((id) => referencedMedia.has(id)) : [],
+    citation: citationPresent ? (post.voteCitation as CommunityVoteCitation | null) : undefined,
+  });
   const reactionsPresent = Object.hasOwn(thread, 'reactions');
   const reactions = reactionsPresent ? communityReactionCounts(thread.reactions) : undefined;
   if (reactionsPresent && reactions === null) return null;
@@ -193,7 +227,7 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
   )
     return null;
   // The native DTO has no place field. Board-to-place authority stays with the supplied native read.
-  return {
+  const projected: CommunityThread = {
     id: thread.id,
     title: thread.title,
     authorId: thread.authorId,
@@ -204,7 +238,9 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
     ...(citationPresent ? { voteCitation: post.voteCitation as CommunityVoteCitation | null } : {}),
     ...(reactionsPresent ? { reactions: reactions! } : {}),
     ...(admitViewer && viewerPresent ? { viewerReaction: thread.viewerReaction as ReactionKind | null } : {}),
+    ...(card ? { card } : {}),
   };
+  return withinCommunityBytes(projected, COMMUNITY_PROJECTED_BYTES) ? projected : null;
 }
 
 /** One native page per placed region and one shared public identity batch; continuations are never drained. */
@@ -215,6 +251,7 @@ export async function readSubjectCommunity(
   paged = false,
   cursor?: string,
   requestedReader?: string | null,
+  requestedPlace = GLOBAL,
 ): Promise<SubjectCommunity> {
   const limit = paged ? COMMUNITY_PAGE_LIMIT : COMMUNITY_PREVIEW_LIMIT;
   const entries = await Promise.all(
@@ -222,13 +259,13 @@ export async function readSubjectCommunity(
       if (cursor !== undefined && (!paged || !validCursor(cursor))) return [kind, { state: 'unavailable' }];
       try {
         const result = await client.subjects({ id: subjectId }).threads.get({
-          query: { place: GLOBAL, kind, limit, ...(cursor !== undefined ? { cursor } : {}) },
+          query: { place: requestedPlace, kind, limit, ...(cursor !== undefined ? { cursor } : {}) },
         });
         if (isPlatformClosedProblem(result.status, result.error?.value)) return [kind, { state: 'closed' }];
         if (result.status !== 200 || result.error || !result.data) return [kind, { state: 'unavailable' }];
         const region = composedCommunityRegion(
           { status: result.status, body: result.data },
-          { kind: 'subjectThreads', id: subjectId, place: GLOBAL, threadKind: kind, limit },
+          { kind: 'subjectThreads', id: subjectId, place: requestedPlace, threadKind: kind, limit },
           typeof requestedReader === 'string',
         );
         return [kind, region];
@@ -286,6 +323,7 @@ export function composedCommunityRegion(
     expected.limit < 1 ||
     expected.limit > COMMUNITY_PAGE_LIMIT ||
     !isRecord(read.body) ||
+    !withinCommunityBytes(read.body, expected.limit * COMMUNITY_ROW_BYTES + 64 * 1024) ||
     !Array.isArray(read.body.threads) ||
     read.body.threads.length > expected.limit ||
     (read.body.next !== null && !validCursor(read.body.next))

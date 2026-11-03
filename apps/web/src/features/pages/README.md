@@ -1,71 +1,90 @@
 # Subject page composition
 
 Subject templates place review and discussion regions through the shared community reader. The native page owns
-identity, order, continuation and disclosure; the reader projects bounded titles, author ids, timestamps and
-plain-text excerpts from the existing `subject_threads.list` response.
+identity, order, continuation and disclosure. Web requires its Subject/place/kind context to match the exact
+`planReads` descriptor before showing cards. Global and Realm remain independent native places, including on empty
+pages. A missing or mismatched context withholds the dependent region. Realm membership remains with Accounts,
+identity/context with Semantic, and disclosure/action authority with Content.
 
-Decision: Until Content publishes the extended `subject_threads.list` response, current Subject cards are open-only; any
-recorded citation without its own native scale and original target is shown as unavailable.
+The installed `GET /v1/subjects/:id/threads` operation remains public `subject:read`.
+`SubjectThreadsResponseSchema` and `listSubjectThreads` add required current `context` and `reactionsAsOf`, while the
+installed generated declaration still exposes ordinary ThreadView rows. The retained producer also projects
+`reviewContext` through `feed-context.ts`: its question revision and scale are **current**, not a historical scale
+snapshot. Neither that context nor the current question, personal vote or selected population supplies historical
+provenance or action authority. See Content's [Subject threads contract](../../../../../services/kernel/src/content/README.md#subject-threads).
 
-Decision: Web requires the response's current Subject/place/kind context to match the exact `planReads` descriptor
-before showing cards; a missing or mismatched context withholds the dependent region.
+Decision: accept historical presentation only through the optional versioned `card` consumer seam; an absent or
+invalid extension keeps its dependent presentation unavailable and grants no actions.
 
-Decision: Subject community reaction counts require a non-null freshness watermark from the same native page; Web
-does not derive a local total.
+## Consumer card seam
 
-The installed `GET /v1/subjects/:id/threads` operation remains public `subject:read`. Content now adds required current
-`context` and `reactionsAsOf` to `SubjectThreadsResponseSchema`, but the generated
-`subjects({ id }).threads.get` declaration still exposes `{ threads: ThreadView[], next }`. It does not yet include
-current page/place context, target-bound action variants, full citation scale/question revision/original target,
-authoritative activity or source freshness. Its existing
-producer is `services/kernel/src/content/subject-threads.ts`; the response schema is in
-`services/kernel/src/content/schemas.ts`. Do not infer these fields from a readable thread, author, membership,
-current vote or local policy. No admitted Content producer UUID, updated generated response head or
-complete populated/withheld/failed card examples have been published for this extension. The partial native context
-and reaction examples live in Content's [Subject threads contract](../../../../../services/kernel/src/content/README.md#subject-threads).
+`subject-community-card.ts` declares the minimal Web interface pending Content's complete card response. This is
+not a generated declaration or a claim that the installed producer supplies it. Each optional `thread.card` has
+`version: 1`, the exact `threadId` and first-post `postRevisionId`, and these closed fields:
 
-Decision: give every completed community read a fresh local visit identity, including a same-URL replacement; this
-identity retires local effects and never substitutes for native context, freshness or action authority.
+- `citation` is `{state:'withheld'}`, `{state:'absent'}`, or `{state:'available',postRevisionId,recorded,question,originalTarget}`.
+  `recorded` must exactly match the native first post's `{questionId,units,revision}`, including zero. `question`
+  carries the historical `{id,revision,label,scale:{min,max,displayStep}}` and independently disclosed lifecycle
+  `{state:'active'|'retired',revision}`. The units must belong to that historical scale. `originalTarget` carries
+  `{id,label,mergedInto}` with nullable label and merge destination. A merge never replaces the original id.
+  Only an explicit native null citation permits `absent`; withheld provenance contains no partial facts.
+- `activity` is null or native `{replyCount,lastActivityAt}`. Zero replies remain zero; creation time and loaded
+  window length cannot stand in for activity.
+- `media` contains at most two `{alt,image}` entries in native order. Each image uses the existing
+  `DocumentImagePresentation` shape and must name this thread's container and an image actually referenced and
+  declared by the exact first-post document. The renderer uses `NativeDocumentImage`, including its failure,
+  retry, credits and inspection. Web performs no media hydration. `RevisionProvenance` owns citation disclosure;
+  the surrounding card shows its historical scale, question revision, retirement and original-target provenance.
 
-Visit cleanup retires only its captured visit. Returning to an earlier URL cannot revive it or let its cleanup retire
-a newer visit. Mounted regions observe the existing browser session and exposure caches without fetching. Account,
-CSRF, successful session observation, exposure, provider, locale, descriptor or same-source watermark replacement
-removes the mounted cards, context, citations and selected child state until a new native observation arrives. Each
-new observation remounts its card subtree; the heading survives and receives focus when a focused card disappears.
-Decision: a retired native observation stays unavailable through an away/back browser epoch; only a fresh native
-observation may admit cards again.
+Ordinary rows remain readable with bounded text. Null citation is unscored; a recorded citation without the above
+provenance is unavailable. Reaction counts require a non-null watermark from the same native page. Counts retain
+seven native kinds without a local total; omitted kinds inside an admitted object are zero. Omitted counts or
+viewer slot remain unavailable; explicit null viewer reaction means no selection. Public projection removes viewer
+slots. Reply, creation, reaction, watch and overflow commands remain unmounted pending native viewer/target advice;
+readable cards and Board destinations do not confer it. Shared Board and command owners remain unchanged.
 
-`voteCitation` remains historical first-post context, never the author's current rating. A null citation is
-unscored; a present citation without its native scale and original target is unavailable. Omitted reaction counts
-mean the count projection is unavailable; omitted kinds inside a supplied count object are zero. An absent viewer
-slot is withheld, while explicit `null` means the current reader has no reaction. Public page output removes viewer
-slots; private reader-keyed page results keep their no-store boundary. Reaction, reply and creation controls stay
-unmounted until their target-bound native advice is available.
-
-Subject community leaves retain their native cursor and five-row overview/twenty-row full-page limits. One shared
-author batch serves each composition page. Missing reply-count and last-activity fields stay unavailable under the
-Content-owned conversation-activity contract; timestamps and loaded page length do not stand in for them. Readable
-titles open the admitted thread; Board links remain read destinations. See the [Web page requirements](../../../../../docs/goals/web.md#adopted-core-page-experience-requirements).
+Every completed read gets one fresh local observation UUID, including same-URL replacement. Retirement observes
+existing session/CSRF and exposure caches without reads. Account, successful session observation, exposure,
+provider, locale, descriptor, same-source watermark or card-presentation replacement removes the entire card
+subtree until a fresh native observation arrives. This includes citations, media inspection/retry and activity.
+Away/back epochs do not revive a retired source. Each cleanup retires only its captured visit. A focused removed
+card returns focus to the stable region heading; replacing the source remounts its cards and native disclosures.
 
 ## Cost
 
-- [x] **Touches:** Each full discussion or review view consumes one planned native page at limit 20 or less; the
-      overview keeps its existing five-row preview and one shared author batch. The page's current Subject/place/kind
-      context and reaction freshness are checked from that same response. Opening a conversation is deliberate.
-      Explicit retry repeats its cursor. Current Subject cards issue no per-card hydration, mutation or readback.
-      Session preparation belongs to the existing public/private page boundary; projection adds no session request.
-      Visit retirement subscribes to those existing caches, without reads, commands or readbacks.
-      A deliberate conversation open delegates commands and their readback to that conversation's existing owners.
-- [ ] **Bound:** The card projection carries at most 20 rows and excerpts up to 280 UTF-16 code units; the current
-      context adds one Subject label/source and one Global or Realm place. Native Realm title admission is bounded by
-      Content. Reaction counts retain their seven native kinds and are not summed locally. The direct
-      helper and native query schema admit nonempty cursors up to 4096 UTF-16 code units. Returned cursors use the same
-      bound, without decoding or rewriting. These are character limits, not byte bounds. A local observation key is
-      one 36-character UUID per completed read. Content retains at most 20 native bodies of at most 2 MiB each, plus
-      parsed documents, metadata and serialization copies; Web also retains the original page response. Media and
-      action advice are not projected by this reader. Unbounded titles and unpublished complete card caps prevent a
-      complete wire and retained-memory bound.
-- [ ] **Growth:** Context validation is O(1); projection and indexing are O(N) for N≤20, with no refill, local totals
-      or reordering. The native
-      raw80 selection and 256/1024/4096 growth evidence remain Content producer checks; Web fixtures do not establish
-      them.
+- **Touches:** One planned native page per placed region, at most five rows on overview or twenty in a full view,
+  plus one shared public author batch per composition page. Context and freshness come from that same page.
+  A sparse page retains its native continuation without refill. Explicit retry repeats the same opaque cursor.
+  Projection and cache subscriptions add zero session, media, activity, question, vote or per-card requests.
+  Session preparation belongs to the existing public/private page boundary. This reading slice sends zero commands
+  and zero command readbacks; deliberate conversation opens retain their existing command owners and costs.
+- **Bound:** Admission limits each source row to 2 MiB + 64 KiB of serialized UTF-8 JSON, the whole page to
+  `limit * rowBytes + 64 KiB` (43,319,296 bytes at twenty), each closed extension to 32 KiB and each normalized
+  thread to 48 KiB. These are enforced admission limits, not promises about unaccepted transport input.
+  Titles, historical labels and image alt text have at most 4096 UTF-16 units each; excerpts 280; licences 128;
+  language tags 64; timestamps 40; source/freshness decimal positions 20. Realm titles admit at most 2048 UTF-16
+  units and 4096 UTF-8 bytes. Each image has at most twelve distinct format/width derivatives, dimensions 1–65536,
+  placeholder strings 128/64 units, and four unique credit obligations; each credit text is at most 1024 units
+  and its licence at most 80 ASCII characters. There are at most forty images, 480 derivative entries and 140
+  reaction counters per full region. Native ids are UUIDs; question/vote/lifecycle revisions are positive int32,
+  scale units 0–4096, and counts nonnegative safe integers. No action advice or command body is retained here.
+  Cursors are opaque, nonempty and at most 4096 UTF-16 units (at most 12,288 UTF-8 or 24,576 escaped JSON bytes).
+  One local observation UUID uses 36 ASCII characters. These maxima compose under the stricter JSON byte caps.
+- **Retained memory:** One raw accepted native window (at most 43,319,296 JSON bytes), one normalized window
+  (at most twenty × 48 KiB), one context/cursor and at most twenty distinct author keys per region. Composition
+  regions share the identity batch. Retirement retains no prior card subtree, cursor history or source registry.
+  Admission temporarily materializes one page JSON string and UTF-8 buffer, then one source-row/card/normalized-row
+  serialization at a time; each is bounded as above. Parsed source documents and JS object/string overhead remain
+  real additional memory, not a claimed exact heap-byte measurement. The original composition response remains
+  with its page owner. Rejected transport input is outside these accepted-window bounds.
+- **Growth:** Projection and indexing are O(N + admitted bytes), N≤20; rendering, source comparison and retained
+  card state have the same bound. The 1/5/20-row consumer checks retain one output per supplied row, with no
+  accumulation, per-card hydration, reorder, refill or local totals. Native raw80 and independent 256/1024/4096
+  growth evidence remains with Content and is not established by these fixtures. Action and command/readback
+  caps must be completed when their native advice is bound.
+
+The connected Current Reading stories cover anonymous/member/writer, zero, changed current scale, retired/merged
+original target and concealed context through the native client and this seam. Browser review at 390px/1280px,
+light/dark, keyboard open/action/return and mounted action journeys remains part of the continuation. All eight
+locales share the same layout and localized historical provenance labels; continuation/retry, disclosure and media
+controls retain 44px targets and wrapping. See [Subject pages](../../../../../docs/subject-pages.md#overview).

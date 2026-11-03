@@ -10,6 +10,7 @@ import { SubjectCommunityPreview } from './subject-community-preview';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
 import { StreamHeading } from './view-heading';
+import { CommunityCardPresentation } from './subject-community-card-view';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 const headingClass =
@@ -58,6 +59,7 @@ export function SubjectCommunityRegion({
       region.state,
       region.state === 'ready' ? region.context : null,
       region.state === 'ready' ? region.reactionsAsOf : null,
+      region.state === 'ready' ? region.threads.map(({ id, card }) => [id, card]) : null,
     ]),
   });
   if (!reading.available) region = { state: 'unavailable' };
@@ -201,6 +203,7 @@ export function SubjectCommunityRegion({
                       {thread.summary}
                     </p>
                   )}
+                  {thread.card ? <CommunityCardPresentation card={thread.card} locale={locale} now={now} /> : null}
                   <SubjectCommunityPreview
                     kind={kind}
                     thread={thread}

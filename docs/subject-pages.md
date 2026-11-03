@@ -1055,10 +1055,57 @@ other view. Sections a type does not support are left out; the rest keep this or
 5. **Characters.** Main characters first, then supporting, each with portrait, name, role and cast.
 6. **Credits.** Principal staff by role, in credit order.
 7. **Ratings.** The score distribution, count and population, the reader's Realm scores, and a link to Reviews.
-8. **Reviews and discussion.** Public Global reviews and discussions in Content’s native order, with summaries, bylines, canonical thread links and bounded continuation. Current Subject cards remain open-only until Content supplies target-bound action advice. A recorded citation without its own native scale and original target is unavailable; it is never replaced by the reader’s current vote. Realm reviews remain closed until their population binding is delivered; existing Realm discussions retain native Context authority.
+8. **Reviews and discussion.** Public Global and native Realm review/discussion windows retain Content's order,
+   bylines, canonical thread links and bounded continuation. Current Subject cards remain open-only until Content
+   supplies viewer/target-bound action advice. Recorded value, historical scale, question revision and original
+   target remain independent of current question, personal vote and selected population, including zero, retired
+   questions and merged targets. A citation without its own complete native provenance stays unavailable.
 
-Content’s `listSubjectThreads` in `services/kernel/src/content/subject-threads.ts` and `SubjectThreadsResponseSchema` in `services/kernel/src/content/schemas.ts` now add current context and reaction freshness, but the generated Web client still exposes `{ threads: ThreadView[], next }`. It does not yet carry current page/place context, target-bound actions, complete recorded-citation provenance, authoritative activity or freshness. Until Content publishes that response head and complete card examples, Web keeps reply, creation and reaction controls unavailable, distinguishes null citation from incomplete citation context, and retries only the same supplied cursor. 9. **Lists.** Public collections and reading orders that include the subject. 10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
-external identifiers, and a link to Details.
+Content's `listSubjectThreads` and `SubjectThreadsResponseSchema` add current context and reaction freshness; the
+retained producer's `reviewContext` supplies a current question, not a historical scale snapshot. The generated
+client still declares ordinary ThreadView rows. Web's optional versioned `card` consumer seam binds historical
+citation, media and activity to the exact first-post revision without changing generated declarations. It is a
+minimal interface pending Content's complete projection, not evidence that the installed producer emits those
+facts. `recorded` must exactly equal the first post's citation. `question` supplies its own historical id, revision,
+label and min/max/step; current lifecycle is separate. `originalTarget` retains its id/label even when `mergedInto`
+names the current Subject. Withheld citation has no partial provenance. Media must belong to the same thread and
+be declared and referenced by that exact document; it uses the existing media renderer without hydration. Native
+activity, reaction counts/freshness and citation disclosure use their existing owners. Readable cards do not admit
+reply, creation, reaction, watch or overflow commands. Accounts retains Realm membership and Semantic retains
+identity/context authority.
+
+Decision: accept historical presentation only through the optional versioned `card` consumer seam; an absent or
+invalid extension keeps its dependent presentation unavailable and grants no actions.
+
+Community reading cost:
+
+- **Touches:** One native page per region (five overview/twenty full-view rows) and one shared author batch; zero
+  added session, question, vote, media or per-card reads. Sparse continuation never refills. Retry repeats the
+  opaque cursor. Existing session/exposure subscriptions add no reads. This reading slice sends zero commands
+  and readbacks; opening a conversation delegates those costs to its existing owners.
+- **Bound:** Source row ≤2 MiB + 64 KiB JSON bytes; page ≤`limit * rowBytes + 64 KiB`, or 43,319,296 at twenty;
+  card extension ≤32 KiB; normalized thread ≤48 KiB. Text fields ≤4096 UTF-16 units, excerpts 280, licences 128,
+  language tags 64, timestamps 40, decimal source/freshness positions 20. Realm title ≤2048 units/4096 UTF-8 bytes.
+  Each card has ≤2 images with ≤12 derivatives each, hence ≤40 images/480 derivative entries per full region;
+  media credit text ≤1024 units, credit licence ≤80 ASCII characters, ≤4 unique obligations, dimensions ≤65536,
+  placeholders ≤128/64 units. Seven reaction counters per thread are never summed. Counts are safe integers,
+  scale units 0–4096, revisions positive int32. No action advice or command body is retained. Cursor ≤4096 units,
+  ≤12,288 UTF-8/24,576 JSON-escaped bytes; local observation UUID 36 ASCII characters. Byte admission caps are
+  stricter when several text maxima coincide; oversized extensions withhold only dependent presentation.
+- **Memory and Growth:** One raw accepted window, one normalized window (≤20 × 48 KiB), one context/cursor,
+  ≤20 author keys per region, and no retained prior card tree or source registry. Admission temporarily creates
+  page JSON/UTF-8 copies and one row/card/normalized-row copy at a time. Parsed-document and JS object overhead
+  remains additional; these are logical admission bounds, not exact heap measurements or a transport-input cap.
+  Projection/rendering/source comparison is O(N + admitted bytes), N≤20. Consumer checks at 1/5/20 rows do not
+  establish Content's raw80 or independent 256/1024/4096 growth evidence. Action and command/readback costs remain
+  in the continuation. The [page reader contract](../apps/web/src/features/pages/README.md) defines the closed seam.
+
+Connected Current Reading stories cover anonymous/member/writer, zero, changed current scale, retired/merged
+targets and concealed context. 390px/1280px light/dark browser review and complete admitted/denied command journeys
+remain in the continuation; frozen acceptance entrypoints are unchanged.
+
+9. **Lists.** Public collections and reading orders that include the subject. 10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
+   external identifiers, and a link to Details.
 
 Community pages decode only against their planned native request and its row limit; missing request metadata or malformed rows make that region unavailable. The DTO omits place, so native board placement remains authoritative.
 
@@ -1067,7 +1114,7 @@ retire its replacement. Local visit identity grants no native authority. Continu
 cursor within Content's nonempty 4096-character bound; continuation and recovery links have 44px minimum targets.
 Decision: a retired native observation stays unavailable through an away/back browser epoch; only a fresh native
 observation may admit cards again. Mounted regions observe the existing session/CSRF and exposure caches, retire
-their cards and context on replacement, and return a removed card's keyboard focus to the surviving heading.
+their cards, media inspection/retry, citations and activity on replacement, and return a removed card's keyboard focus to the surviving heading.
 
 Every preview shows at most twelve items (fewer for reviews, threads and lists) and links to its full view when
 there are more. A subject with only a
