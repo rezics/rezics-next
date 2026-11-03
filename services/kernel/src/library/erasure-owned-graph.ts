@@ -67,6 +67,7 @@ export const OWNED_PHASES = [
   'copy_archive',
   'list_import_anilist',
   'diary_navigation',
+  'vndb_import',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -99,7 +100,8 @@ type Kind =
   | 'bangumi_upload'
   | 'list_import_mal'
   | 'library_export'
-  | 'copy_archive';
+  | 'copy_archive'
+  | 'vndb_import';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -314,7 +316,11 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
       }
       let removed: number;
       let hasMore = false;
-      if (kind in childQueries) {
+      if (kind === 'vndb_import') {
+        removed =
+          (await tx.query(`DELETE FROM library.vndb_import WHERE route=$1 AND account_id=$2`, [route, accountId]))
+            .rowCount ?? 0;
+      } else if (kind in childQueries) {
         if (parent === null) throw new TypeError('Graph child requires an exact parent');
         // Fixed dispatch, never runtime SQL construction or a table-name query API.
         const query = { ...args, parent_id: parent };

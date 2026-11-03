@@ -47,6 +47,11 @@ remains visible private evidence. This replaces the AniList personal-import defe
 Retained AniList custom-list membership has an independent [explicit private-label adoption](library-import-anilist-labels.md)
 review within that producer; default display groups and unsupported tags never imply assignments.
 
+The mounted [personal VNDB upload](library-import-vndb.md) supports private preview, identifier matching, explicit
+review and confirmed entry-state apply through existing native commands. Scores, dates, progress, notes and unmapped
+fields remain visible private evidence; broader personal-list migration remains second scope. Upload/review records
+are bounded Library-owned data included in terminal erasure; cancellation never reverses acknowledged native facts.
+
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
 immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.

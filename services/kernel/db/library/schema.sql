@@ -4442,6 +4442,28 @@ COMMENT ON TABLE library.type_preparation_slot IS 'Active owner binding slot. Di
 
 
 --
+-- Name: vndb_import; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.vndb_import (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    state text DEFAULT 'active'::text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    xml text NOT NULL,
+    rows jsonb NOT NULL,
+    decisions jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT vndb_import_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT vndb_import_decisions_check CHECK (((jsonb_typeof(decisions) = 'object'::text) AND (octet_length((decisions)::text) <= 8388608))),
+    CONSTRAINT vndb_import_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT vndb_import_rows_check CHECK (((jsonb_typeof(rows) = 'array'::text) AND (jsonb_array_length(rows) <= 5000) AND (octet_length((rows)::text) <= 16777216))),
+    CONSTRAINT vndb_import_state_check CHECK ((state = ANY (ARRAY['active'::text, 'cancelled'::text]))),
+    CONSTRAINT vndb_import_xml_check CHECK ((octet_length(xml) <= 2097152))
+);
+
+
+--
 -- Name: bangumi_upload bangumi_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5591,6 +5613,14 @@ ALTER TABLE library.type_preparation_progress
 
 ALTER TABLE ONLY library.type_preparation_slot
     ADD CONSTRAINT type_preparation_slot_pkey PRIMARY KEY (route, account_id, binding_digest);
+
+
+--
+-- Name: vndb_import vndb_import_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_import
+    ADD CONSTRAINT vndb_import_pkey PRIMARY KEY (route, account_id, upload_id);
 
 
 --

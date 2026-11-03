@@ -73,7 +73,7 @@ test('completed installed manifest preserves old meanings, explicit emptiness an
     { section: 'sessions', session_id: randomUUID(), amount: '12.50', state: 'completed' },
   ]);
   const decoded = decode(file);
-  expect(decoded.records).toEqual(file.records);
+  expect<unknown>(decoded.records).toEqual(file.records);
   expect(decoded.manifest.omissions).toEqual(file.manifest.omissions);
   expect(decoded.fullRestoration).toBe(false);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toEqual({

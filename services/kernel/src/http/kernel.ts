@@ -61,6 +61,7 @@ import { libraryExportRoutes } from '../library/library-export-routes.ts';
 import { copyArchiveRoutes } from '../library/copy-archive-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
+import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
@@ -650,7 +651,16 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(aniList), realmRoleReader }),
   });
-  const labels = personalLabelRoutes(aniList as unknown as ReturnType<typeof definitionRoutes>, {
+  const vndbImports = vndbImportRoutes(aniList as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(vndbImports), realmRoleReader }),
+    ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+    ...(dependencies.typeSourceObserved ? { typeSourceObserved: dependencies.typeSourceObserved } : {}),
+  });
+  const labels = personalLabelRoutes(vndbImports as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
@@ -807,6 +817,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof bangumiImportRoutes> &
   ReturnType<typeof malImportRoutes> &
   ReturnType<typeof aniListImportRoutes> &
+  ReturnType<typeof vndbImportRoutes> &
   ReturnType<typeof libraryExportRoutes> &
   ReturnType<typeof copyArchiveRoutes> &
   ReturnType<typeof communityRoutes> &
