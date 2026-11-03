@@ -138,13 +138,25 @@ test('native board journey keeps physical work fixed across retained history at 
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(_db, scale, previous) {
       for (let index = previous; index < scale; index++) {
+        // Dataset construction can outlive native credentials; renew through Auth outside measurement.
+        if (index % 256 === 0) {
+          for (const person of [f.people.decider, f.people.reviewer]) {
+            person.bearer = (
+              await f.base.system.auth.issue({
+                accountId: person.accountId,
+                clientId: f.base.system.auth.ordinaryClient.id,
+                scopes: f.base.system.auth.ordinaryScopes,
+              })
+            ).bearer;
+          }
+        }
         const key = `retained-thread-${index}`;
         const action = await f.call('POST', `/v1/threads/${denied.threadId}:takeDown`, {
           bearer: f.people.decider.bearer,
           key,
           body: { reason: 'Retained source' },
         });
-        expect(action.response.status).toBe(200);
+        expect(action.response.status, action.text).toBe(200);
         const { event } = await source(denied.threadId, key, 'thread', board);
         await f.moderationEffect.run(event);
       }
