@@ -1,8 +1,9 @@
 # Concept hierarchy traversal
 
 Search's hierarchy traversal is derived work beneath the existing retained-plan worker. It does not establish
-Semantic graph coverage, release admission, disclosure or authorization. Native composition and the public
-hierarchy journey are still to be installed; this module alone does not enable descendant filters.
+Semantic graph coverage, release admission, disclosure or authorization. Indexed storage and worker dispatch
+are installed; the native source adapter, current matcher and public hierarchy journey remain to be connected.
+Absent a native source adapter the worker leaves the plan preparing; it cannot seal an empty closure.
 
 Decision: hierarchy continuation follows sortable full native edge keys independently of returned child IDs, so
 duplicate or irrelevant rows can advance without being mistaken for an empty closure.
@@ -15,7 +16,7 @@ scheme, membership, principal and request binding before retaining the root. The
 bounded definition and a revision-fenced storage locator. It contains neither discovered keys nor frontier arrays.
 An old version-one array state is rejected rather than imported as complete evidence.
 
-`ConceptBrowseStore` is an internal derived-storage seam to be implemented within the existing retained-plan
+`createConceptBrowseStore` implements the internal derived-storage seam within the existing retained-plan
 lifecycle. The owning plan supplies immutable identity, leases, expiry, cancellation and worker dispatch. No
 separate capture, scheduler, coverage record or public cursor is introduced. The store must persist membership
 and frontier rows with full-key indexes, seed the root once, and atomically apply each bounded delta with a
@@ -25,6 +26,36 @@ polyhierarchy, duplicate edges and interrupted-step replay must not expand it ag
 frontier row. `seal` requires an empty indexed frontier. `contains` returns null unless the same retained revision
 is sealed and usable; a membership Boolean includes the selected root but supplies no statement disclosure.
 Retirement must invalidate membership immediately, with bounded row cleanup by the owning lifecycle.
+
+Decision: traversal uses the owning scope plan revision for every CAS and retains its retired plan as a tombstone after derived-row cleanup, preventing locator reuse from reviving an old membership observation.
+
+`scope_preparation_concept_member` has a `(partition_no,prefix,scope_id,concept)` primary key;
+`scope_preparation_concept_frontier` has the equivalent full parent key. Both use C collation. The
+frontier seek fixes partition zero, prefix and scope, orders by parent and returns one row. Each delta
+updates the owning plan only at the supplied revision, full JSON definition, live expiry and claimed
+worker lease, then changes exactly the expected frontier. Its bounded child input inserts membership
+with `ON CONFLICT DO NOTHING`; only inserted keys feed new frontier rows in the same transaction.
+Root seeding is atomic with plan creation. Re-retaining a plan neither reseeds nor renews it.
+
+For f frontier pages with b_i admitted child keys, storage reserves at most `6f + f + 2` statements
+for delta transactions, next-frontier reads, and initial read/seal. This excludes the native source's
+two observations and f adjacency reads, which the adapter must charge independently. Rollback paths
+are included in the six-statement delta reservation. Each delta reserves `3 + 2b_i` physical rows
+and `32768 + 8192b_i` bytes for plan, frontier, member and full index keys; a read or seal reserves
+two rows and 32768 bytes. Retaining the definition reserves six statements, four rows and 32768 bytes.
+The definition has nine keys of at most 1024 UTF-8 bytes, and a stored member/frontier key has at most
+128 prefix bytes, 64 locator bytes, 1024 concept bytes and 1024 edge-cursor bytes, plus fixed tuple and
+index overhead. These are conservative pre-dispatch storage reservations, not measured all-pool work.
+The worker fixes four pages, 256 edges and 64 child keys per page before dispatch, independently of V/E.
+Unseen edges and terminal empty seeks remain native source work, even when no member is inserted.
+
+The existing maintenance tick retires at most eight expired plans through the concept expiry index,
+then locks at most eight uncleaned retired prefixes through the retirement index. Each prefix deletes
+at most 128 frontier and 128 membership rows by its full primary-key prefix. Indexed empty seeks then
+mark cleanup complete; no cascade scans a closure. A tick uses at most 28 SQL statements including
+transaction controls and at most 2048 derived-row deletions. Retired tombstones leave the cleanup index
+and preserve the existing plan identity. Complete membership reads still check live plan expiry before
+returning either true or false, including while cleanup is pending.
 
 Each traversal step observes its entire binding, seeks at most P child pages and examines at most E native edge
 rows, then observes the binding again before returning resumable or completed work. A native child page carries

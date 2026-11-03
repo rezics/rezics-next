@@ -1367,6 +1367,36 @@ CREATE TABLE search.scope_preparation (
 
 
 --
+-- Name: scope_preparation_concept_frontier; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.scope_preparation_concept_frontier (
+    partition_no integer DEFAULT 0 NOT NULL,
+    prefix text COLLATE pg_catalog."C" NOT NULL,
+    scope_id text COLLATE pg_catalog."C" NOT NULL,
+    parent text COLLATE pg_catalog."C" NOT NULL,
+    after_key text COLLATE pg_catalog."C",
+    CONSTRAINT scope_preparation_concept_frontier_after_key_check CHECK (((octet_length(after_key) >= 1) AND (octet_length(after_key) <= 1024))),
+    CONSTRAINT scope_preparation_concept_frontier_parent_check CHECK (((octet_length(parent) >= 1) AND (octet_length(parent) <= 1024))),
+    CONSTRAINT scope_preparation_concept_frontier_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
+-- Name: scope_preparation_concept_member; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.scope_preparation_concept_member (
+    partition_no integer DEFAULT 0 NOT NULL,
+    prefix text COLLATE pg_catalog."C" NOT NULL,
+    scope_id text COLLATE pg_catalog."C" NOT NULL,
+    concept text COLLATE pg_catalog."C" NOT NULL,
+    CONSTRAINT scope_preparation_concept_member_concept_check CHECK (((octet_length(concept) >= 1) AND (octet_length(concept) <= 1024))),
+    CONSTRAINT scope_preparation_concept_member_partition_no_check CHECK ((partition_no = 0))
+);
+
+
+--
 -- Name: scope_preparation_ordered; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1843,6 +1873,22 @@ ALTER TABLE ONLY search.review_discovery_receiving_scan
 
 
 --
+-- Name: scope_preparation_concept_frontier scope_preparation_concept_frontier_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.scope_preparation_concept_frontier
+    ADD CONSTRAINT scope_preparation_concept_frontier_pkey PRIMARY KEY (partition_no, prefix, scope_id, parent);
+
+
+--
+-- Name: scope_preparation_concept_member scope_preparation_concept_member_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.scope_preparation_concept_member
+    ADD CONSTRAINT scope_preparation_concept_member_pkey PRIMARY KEY (partition_no, prefix, scope_id, concept);
+
+
+--
 -- Name: scope_preparation_ordered scope_preparation_ordered_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2112,6 +2158,20 @@ CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_n
 --
 
 CREATE INDEX review_discovery_receiving_pending ON search.review_discovery_receiving USING btree (prefix, generation, index_uuid, incarnation, meaning, partition_no) WHERE pending;
+
+
+--
+-- Name: scope_preparation_concept_expiry; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX scope_preparation_concept_expiry ON search.scope_preparation USING btree (partition_no, prefix, expires_at, scope_id) WHERE (((definition ->> 'kind'::text) = 'concept'::text) AND (state = ANY (ARRAY['capture'::text, 'ready'::text])));
+
+
+--
+-- Name: scope_preparation_concept_retired; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX scope_preparation_concept_retired ON search.scope_preparation USING btree (partition_no, prefix, scope_id) WHERE (((definition ->> 'kind'::text) = 'concept'::text) AND (state = 'retained'::text) AND ((frontier ->> 'cleaned'::text) IS DISTINCT FROM 'true'::text));
 
 
 --

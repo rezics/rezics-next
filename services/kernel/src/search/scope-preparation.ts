@@ -12,12 +12,21 @@ import type { IdentityScopeRegistration, IdentityScopeObservation } from '../sem
 import { createScopePreparationStore, type ScopePreparationRecord } from './scope-preparation-store.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-execution.ts';
 import { sameScopeObservation } from './service-scope-order.ts';
+import { advanceConceptBrowse, type ConceptBrowseSource, type ConceptBrowseState } from './concept-browse.ts';
+import { createConceptBrowseStore } from './concept-browse-store.ts';
 
 /** One bounded structural step under the existing Search WorkModule. No native receiving receipts
  * are constructed here. Expiry stops scheduling but retains unknown native custody for its owner.
  */
 export function createScopePreparation(
-  config: Parameters<PublicFilterSourceFactory>[0] & { prefix: string; search?: OpenSearch },
+  config: Parameters<PublicFilterSourceFactory>[0] & {
+    prefix: string;
+    search?: OpenSearch;
+    conceptSource?: (
+      definition: Extract<ScopePreparationRecord['definition'], { kind: 'concept' }>,
+      context: Readonly<{ deadline: number; work: ScopeWork }>,
+    ) => Promise<ConceptBrowseSource>;
+  },
 ) {
   const store = createScopePreparationStore(config.pool, config.prefix);
   const observations = createIdentityScopedObservations(config.pool);
@@ -90,6 +99,28 @@ export function createScopePreparation(
     );
   }
   async function step(record: ScopePreparationRecord, deadline: number, work: ScopeWork): Promise<void> {
+    if (record.definition.kind === 'concept') {
+      const state: ConceptBrowseState = {
+        version: 2,
+        selection: record.definition.selection,
+        binding: record.definition.binding,
+        retained: { id: record.scope_id, revision: record.revision },
+      };
+      const retained = createConceptBrowseStore(config.pool, config.prefix, record.scope_id, {
+        expiresAt: Number(record.expires_at),
+        leaseUntil: deadline,
+        reserve: ({ statements, rows, bytes }) =>
+          work.consume({ ...zeroScopeWork(), statements, nativeRows: rows, bytes }),
+      });
+      if (Number(record.expires_at) <= Date.now()) return retained.retire(state);
+      // The native adapter must observe the live release and source and account for its own work.
+      // Absence of that adapter cannot seal an empty hierarchy or enable concept Search.
+      if (!config.conceptSource) return retained.checkpoint(state, 30000);
+      const source = await config.conceptSource(record.definition, { deadline, work });
+      const result = await advanceConceptBrowse(source, retained, state, { pages: 4, edges: 256, pageSize: 64 });
+      if (result.status === 'preparing') await retained.checkpoint(result.state, 1000);
+      return;
+    }
     async function advance(
       frontier: ScopePreparationRecord['frontier'],
       observation: IdentityScopeObservation | null,

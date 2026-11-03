@@ -8,11 +8,14 @@ import type { IdentityScopeObservation } from '../semantic/identity-scope-types.
 import { withConnection } from '../database/pool.ts';
 import { enqueueWorkIntent, type WorkClient } from '../work/client.ts';
 import type { ScopeOrderedDefinition } from './scope-ordered.ts';
+import type { ConceptBrowseBinding, ConceptDescendantSelection } from './concept-browse.ts';
+import { cleanupConceptBrowses } from './concept-browse-store.ts';
 
 export type ScopeOrdinalMembershipProgress = Readonly<{ row: NativeOrdinalKey; value: CollectionAliasProgress }>;
 
 export const SCOPE_PREPARATION_WORKFLOW = 'search.scopePreparation';
 export type ScopeCaptureDefinition = (
+  | Readonly<{ kind: 'concept'; selection: ConceptDescendantSelection; binding: ConceptBrowseBinding }>
   | Readonly<{ kind: 'library'; identity: NativeSourceIdentity }>
   | Readonly<{ kind: 'realm'; identity: string; realm: string }>
   | Readonly<{
@@ -27,6 +30,7 @@ export type ScopeCaptureDefinition = (
     nativeOutput?: Readonly<{ nativeOrder: 'name' | 'collections'; pageSize: number }>;
   }>;
 export type ScopeCaptureFrontier =
+  | Readonly<{ kind: 'concept' }>
   | Readonly<{ kind: 'library'; value: NativeSourceFrontier | null }>
   | Readonly<{ kind: 'realm'; after: string | null; exhausted: boolean }>
   | Readonly<{ kind: 'public'; value: string | null }>;
@@ -46,7 +50,7 @@ export type ScopePreparationRecord = {
 /** Only native locators/frontiers; never Actor, Access, facts, allow lists or caller verdicts. */
 export function createScopePreparationStore(pool: Pool, prefix: string, work?: WorkClient) {
   return {
-    async retain(scopeId: string, definition: ScopeCaptureDefinition): Promise<void> {
+    async retain(scopeId: string, definition: Exclude<ScopeCaptureDefinition, { kind: 'concept' }>): Promise<void> {
       const frontier: ScopeCaptureFrontier =
         definition.kind === 'library'
           ? { kind: 'library', value: null }
@@ -333,6 +337,7 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
     },
     async due(): Promise<void> {
       if (!work) return;
+      await cleanupConceptBrowses(pool, prefix);
       await withConnection(pool, async (client) => {
         await client.query('BEGIN');
         try {
