@@ -14,16 +14,16 @@ setup only; selected summary evidence uses native `realm-icon` and `realm-banner
 registered Content effects and the actual Sharp workflow. The production Access factory is composed by `testAccess`
 with the kernel action catalogue and native Auth verifier. No permissive Access result or injected summary is used.
 
-| Stage | Native binding | Observation |
-| --- | --- | --- |
-| Setup | Native identities, protected Realm, grants, fixed 96 × 48 PNG bytes and real object storage transport | Outside summary measurement |
-| Admission | Realm management reservation, uploader website completion, revision CAS and permanent claims through Realm settings HTTP | HTTP status, selected IDs and current settings asserted |
-| Publication | Committed uploaded outbox event, registered effect relay, source-derived image workflow identity | Await effect and terminal image result; assert exactly one uploaded and available event |
-| Replay | Same completion request/key, then retrieve the same terminal workflow | No second publication or changed derivative objects |
-| Selected read | Existing two-slot summary reader, Bob's current Realm read and independently anchored active Space | Real SQL bindings, derivatives and source/final anchors asserted |
-| Refused read | Anonymous and uploader/manager Alice after current Realm read revocation; erased prior selections; wrong-purpose slots | Both slots are exactly `none`, without identifying reasons |
-| Optional loss | Real native checkout on an ended private pool, including one unset slot | Selected slots `unavailable`; unset slot `none`; no cached facts |
-| Completion | Actual selected read after failure, final Realm head change, read revocation and independent Space removal | Available recovery; committed source/final races yield `none` |
+| Stage         | Native binding                                                                                                           | Observation                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Setup         | Native identities, protected Realm, grants, fixed 96 × 48 PNG bytes and real object storage transport                    | Outside summary measurement                                                             |
+| Admission     | Realm management reservation, uploader website completion, revision CAS and permanent claims through Realm settings HTTP | HTTP status, selected IDs and current settings asserted                                 |
+| Publication   | Committed uploaded outbox event, registered effect relay, source-derived image workflow identity                         | Await effect and terminal image result; assert exactly one uploaded and available event |
+| Replay        | Same completion request/key, then retrieve the same terminal workflow                                                    | No second publication or changed derivative objects                                     |
+| Selected read | Existing two-slot summary reader, Bob's current Realm read and independently anchored active Space                       | Real SQL bindings, derivatives and source/final anchors asserted                        |
+| Refused read  | Anonymous and uploader/manager Alice after current Realm read revocation; erased prior selections; wrong-purpose slots   | Both slots are exactly `none`, without identifying reasons                              |
+| Optional loss | Real native checkout on an ended private pool, including one unset slot                                                  | Selected slots `unavailable`; unset slot `none`; no cached facts                        |
+| Completion    | Actual selected read after failure, final Realm head change, read revocation and independent Space removal               | Available recovery; committed source/final races yield `none`                           |
 
 The unavailable pool's native `connect()` rejection is asserted before observation. It is a real dependency lifecycle
 failure before SQL dispatch, not a zero-row SQL substitute. The inclusive measured operation also executes live,
