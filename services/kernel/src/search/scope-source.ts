@@ -31,7 +31,11 @@ import {
   type SearchScopeOrdinalPrefix,
 } from './service-scope-order.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { createScopePreparationStore, type ScopeCaptureDefinition } from './scope-preparation-store.ts';
+import {
+  createScopePreparationStore,
+  type ScopeCaptureDefinition,
+  type ScopeCaptureFrontier,
+} from './scope-preparation-store.ts';
 import { createScopePreparation, readPreparedScopeObservation } from './scope-preparation.ts';
 import { createOrderedScopePreparation, readOrderedScopeRows } from './scope-preparation-ordered.ts';
 import { createScopeOrderedNative } from './scope-ordered-native.ts';
@@ -1122,7 +1126,6 @@ export function createSearchScopeSource({
         });
       const observation =
         workDefinition?.identityObservation ?? (await readPreparedScopeObservation(pool, prefix, identity));
-      if (definition.kind === 'realm') unavailable();
       if (
         !observation ||
         (!workDefinition && observation.key.scopeId !== identity) ||

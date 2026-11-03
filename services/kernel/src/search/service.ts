@@ -733,7 +733,7 @@ export function createSearchService({
             request.kindCursor === undefined
               ? undefined
               : kinds
-                ? await decodeKindCursor(cursors, binding, generation, kinds.digest, request.kindCursor, now)
+                ? await decodeKindCursor(cursors, binding, request.kindCursor, generation, kinds.digest, now)
                 : (() => {
                     throw new ProblemError('search_restart_required');
                   })();

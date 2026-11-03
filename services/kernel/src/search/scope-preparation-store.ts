@@ -101,6 +101,7 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
     ): Promise<boolean> {
       if (record.definition.kind !== 'realm' || record.frontier.kind !== 'realm')
         throw new TypeError('Foreign retained Realm preparation');
+      const identity = record.definition.identity;
       return withConnection(pool, async (client) => {
         await client.query('BEGIN');
         try {
@@ -132,7 +133,7 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
               WHERE search.scope_preparation_ordered.name_key=EXCLUDED.name_key
                 AND search.scope_preparation_ordered.hit=EXCLUDED.hit
               RETURNING subject`,
-              [prefix, record.definition.identity, row.subject, row.nameKey, row.hit],
+              [prefix, identity, row.subject, row.nameKey, row.hit],
             );
             if (saved.rowCount !== 1) {
               await client.query('ROLLBACK');

@@ -194,9 +194,9 @@ test('Realm searches reject output orders without retained canonical tuples', as
     source: {} as never,
     cursors: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) },
   });
-  await expect(
-    service.search('anonymous', { filter: leaf, text: 'book', sort: 'collections' }),
-  ).rejects.toMatchObject({ code: 'unsupported_query' });
+  await expect(service.search('anonymous', { filter: leaf, text: 'book', sort: 'collections' })).rejects.toMatchObject({
+    code: 'unsupported_query',
+  });
 });
 
 test('unknown and withheld membership cannot establish a tautological Realm OR', async () => {
