@@ -460,10 +460,14 @@ export class WorkerStore implements AttemptFence {
   }
   /** Count only live attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
-    return (this.db.query(`SELECT count(*) AS count FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
+    return (
+      this.db
+        .query(`SELECT count(*) AS count FROM worker_attempts a JOIN worker_tasks t ON t.id=a.task_id
       WHERE json_extract(a.body,'$.state') IN (${urgent ? "'running','waiting'" : "'running'"})
       AND coalesce(json_extract(t.body,'$.brief.urgent'),0)=?
-      AND NOT (a.task_id=? AND a.attempt=?)`).get(urgent ? 1 : 0, taskId ?? '', attempt ?? -1) as { count: number }).count;
+      AND NOT (a.task_id=? AND a.attempt=?)`)
+        .get(urgent ? 1 : 0, taskId ?? '', attempt ?? -1) as { count: number }
+    ).count;
   }
   /** Retained unbound UUID evidence. Classification affects only logical admission, never physical custody. */
   historicalProofChecks(goal?: string): HistoricalProofCheck[] {

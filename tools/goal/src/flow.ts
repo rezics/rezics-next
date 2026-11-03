@@ -239,7 +239,11 @@ export function readFlowTasks(db: Database): FlowTask[] {
     }[]
   )
     .filter((row) => typeof row.goal === 'string')
-    .map((row) => ({ id: row.id, brief: { goal: row.goal!, ...(row.urgent === 1 ? { urgent: true } : {}) }, terminalState: row.state }));
+    .map((row) => ({
+      id: row.id,
+      brief: { goal: row.goal!, ...(row.urgent === 1 ? { urgent: true } : {}) },
+      terminalState: row.state,
+    }));
 }
 
 export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
@@ -306,7 +310,9 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
   });
   const urgent = new Set(tasks.filter((t) => t.brief.urgent).map((t) => t.id));
   const integrated = new Set(
-    ordered.filter((e) => e.stage === 'integration' && e.action === 'integrated' && !urgent.has(e.taskId)).map((e) => e.taskId),
+    ordered
+      .filter((e) => e.stage === 'integration' && e.action === 'integrated' && !urgent.has(e.taskId))
+      .map((e) => e.taskId),
   );
   const attemptCounts = new Map<string, number>();
   for (const e of ordered)
@@ -354,7 +360,14 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
       }))
       .sort((a, b) => b.ms - a.ms)[0]?.stage ?? null;
   return {
-    urgent: { tasks: [...urgent], integrated: new Set(ordered.filter((e) => urgent.has(e.taskId) && e.stage === 'integration' && e.action === 'integrated').map((e) => e.taskId)).size },
+    urgent: {
+      tasks: [...urgent],
+      integrated: new Set(
+        ordered
+          .filter((e) => urgent.has(e.taskId) && e.stage === 'integration' && e.action === 'integrated')
+          .map((e) => e.taskId),
+      ).size,
+    },
     stages: stageSummaries,
     goals,
     tasks: taskRows,

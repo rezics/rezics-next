@@ -452,8 +452,12 @@ export class WorkerTasks {
     urgent = false,
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     let markdown = readFileSync(briefFile, 'utf8');
-    if (urgent) markdown = markdown.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (_match, front: string) =>
-      `---\n${JSON.stringify({ ...(Bun.YAML.parse(front) as Record<string, unknown>), urgent: true }, null, 2)}\n---`);
+    if (urgent)
+      markdown = markdown.replace(
+        /^---\r?\n([\s\S]*?)\r?\n---/,
+        (_match, front: string) =>
+          `---\n${JSON.stringify({ ...(Bun.YAML.parse(front) as Record<string, unknown>), urgent: true }, null, 2)}\n---`,
+      );
     const brief = parseBrief(
       markdown,
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
@@ -503,8 +507,11 @@ export class WorkerTasks {
   dispatch(briefFile: string, actor?: AuthenticatedManager | null, urgent = false): Task {
     const { brief: submittedBrief, taskClass } = this.validateBrief(briefFile, undefined, actor, urgent);
     if (submittedBrief.urgent)
-      requireUrgentDispatch(this.store.db, this.settings.integration.supermanager,
-        actor === undefined ? authenticatedManager(this.store.db) : actor);
+      requireUrgentDispatch(
+        this.store.db,
+        this.settings.integration.supermanager,
+        actor === undefined ? authenticatedManager(this.store.db) : actor,
+      );
     if (submittedBrief.continuation)
       throw new Error('continuation briefs must go through the backlog controller, not new-task dispatch');
     const authorization =

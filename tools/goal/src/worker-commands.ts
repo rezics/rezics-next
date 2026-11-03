@@ -126,7 +126,9 @@ export async function runWorkerCommand(
       const actor = authenticatedManager(store.db, env);
       if (!actor) throw new Error('urgent grants require an authenticated manager session');
       tasks.setUrgentGrant(parsedArguments.managerId, parsedArguments.action === 'grant', actor);
-      print(`Urgent grant ${parsedArguments.action === 'grant' ? 'enabled' : 'revoked'} for ${parsedArguments.managerId}.`);
+      print(
+        `Urgent grant ${parsedArguments.action === 'grant' ? 'enabled' : 'revoked'} for ${parsedArguments.managerId}.`,
+      );
     } else if (parsedArguments.command === 'amend') {
       print(
         JSON.stringify(

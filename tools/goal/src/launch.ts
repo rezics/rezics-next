@@ -711,7 +711,9 @@ function releaseWhenStarted(
 }
 /** Task ids that a live process is waiting to start, from the capacity queue's tickets. */
 export function capacityWaiters(stateDirectory: string): Set<string> {
-  return new Set(['capacity-queue', 'urgent-capacity-queue'].flatMap((lane) => [...laneWaiters(join(stateDirectory, lane))]));
+  return new Set(
+    ['capacity-queue', 'urgent-capacity-queue'].flatMap((lane) => [...laneWaiters(join(stateDirectory, lane))]),
+  );
 }
 function laneWaiters(queue: string): Set<string> {
   let names: string[];

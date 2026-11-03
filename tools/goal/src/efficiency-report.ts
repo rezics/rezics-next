@@ -190,7 +190,9 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
     .map(([goal, count]) => `${goal} ${count}`)
     .join(', ');
   const omittedGoals = Math.max(0, goals.size - policy.goalRows);
-  const landings = [...byTask.values()].filter((row) => row.urgent !== 1).sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
+  const landings = [...byTask.values()]
+    .filter((row) => row.urgent !== 1)
+    .sort((a, b) => a.at.localeCompare(b.at) || a.task_id.localeCompare(b.task_id));
   const landingIdentities = landings
     .slice(0, policy.landingRows)
     .map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt} at ${row.at} (${targetFor(row)})`)
@@ -200,7 +202,12 @@ function landedSummary(db: Database, bucket: UtcHour, available: boolean, policy
     `Landings in UTC hour: dev ${totals.dev}; stabilize ${totals.stabilize}; main ${totals.main}; unknown ${totals.unknown} (each task counted once).`,
     `Landings by Goal: ${perGoal || (rows.length ? 'unknown' : 'none recorded')}${omittedGoals ? `; ${omittedGoals} more Goals omitted` : ''}.`,
     `Landing identities: ${landingIdentities || 'none recorded'}${omittedLandings ? `; ${omittedLandings} more omitted` : ''}.`,
-    `Urgent landings (excluded from throughput): ${[...byTask.values()].filter((row) => row.urgent === 1).map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt}`).join('; ') || 'none recorded'}.`,
+    `Urgent landings (excluded from throughput): ${
+      [...byTask.values()]
+        .filter((row) => row.urgent === 1)
+        .map((row) => `${clean(row.task_id, policy.fieldCharacters)}#${row.attempt}`)
+        .join('; ') || 'none recorded'
+    }.`,
   ];
 }
 
@@ -445,9 +452,13 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
   const asOf = options.now ?? Date.now();
   const openWorkAvailable = hasTable(db, 'worker_tasks');
   const metrics = openWorkAvailable ? lifecycleMetrics(db, asOf, options.policy) : null;
-  const urgentIds = new Set(openWorkAvailable
-    ? (db.query("SELECT id FROM worker_tasks WHERE json_extract(body,'$.brief.urgent')=1").all() as { id: string }[]).map((row) => row.id)
-    : []);
+  const urgentIds = new Set(
+    openWorkAvailable
+      ? (
+          db.query("SELECT id FROM worker_tasks WHERE json_extract(body,'$.brief.urgent')=1").all() as { id: string }[]
+        ).map((row) => row.id)
+      : [],
+  );
   const urgentEvents = events.filter((event) => urgentIds.has(event.taskId));
   const ordinaryEvents = events.filter((event) => !urgentIds.has(event.taskId));
   const starts = ordinaryEvents.filter((event) => event.stage === 'worker' && event.action === 'started').length;

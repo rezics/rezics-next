@@ -644,7 +644,11 @@ export class WorkerJob implements GateOutcomeSink {
         startsFirst(task),
         task.id,
         ref.attempt,
-        { policy: this.tasks.settings.policy?.capacity, leasePolicy: this.tasks.settings.policy?.leases, urgent: task.brief.urgent },
+        {
+          policy: this.tasks.settings.policy?.capacity,
+          leasePolicy: this.tasks.settings.policy?.leases,
+          urgent: task.brief.urgent,
+        },
       );
       let worker: RunningWorker | undefined;
       let lease: DirectoryLease | undefined;
