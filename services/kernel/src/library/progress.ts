@@ -46,7 +46,11 @@ export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 
 /** History payload. Unit ids are the ones given, sorted by code unit, never a filled range. */
 export type ProgressIntent =
-  | { lifecycle: 'reopen' | 'retire'; previousState: ProgressState; previousCompletedAt: string | null }
+  | {
+      lifecycle: 'reopen' | 'retire';
+      previousState: Exclude<ProgressState, 'retired'>;
+      previousCompletedAt: string | null;
+    }
   | { clear: true }
   | { measureId: string; clear: true }
   | { amount: string }

@@ -49,7 +49,9 @@ export type ShelfSeek = {
     subjectId: string;
 };
 /** The exact BASIC per-session shape of `GET /v1/progressSessions`. No account or transaction id. */
-export type ShelfSession = Omit<ProgressSession, 'accountId' | 'transactionId'>;
+export type ShelfSession = Omit<ProgressSession, 'accountId' | 'transactionId' | 'state'> & {
+  state: Exclude<ProgressSession['state'], 'retired'>;
+};
 /** Existing BASIC entry fields plus the shelf additions. FULL adds `subject` at the transport layer. */
 export type ShelfEntry = {
     subjectId: string;

@@ -278,6 +278,7 @@ export function createSessionCommands(config: Dependencies) {
         const fact = await store.readSessionFact(tx, route, sessionId);
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
+        if (current.state === 'retired') throw new LibraryNotFoundError();
         if (
           measureId !== undefined &&
           (current.mode !== 'scalar_amount' ||
