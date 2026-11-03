@@ -22,13 +22,16 @@ export type LibraryFollowingStoryMode =
 
 let mode: LibraryFollowingStoryMode = 'recorded';
 let observation = 0;
+type StoryFollow = (typeof followsRecording.follows)[number] & {
+  target: (typeof followsRecording.follows)[number]['target'] | null;
+};
 
 export function setLibraryFollowingStoryMode(next: LibraryFollowingStoryMode): void {
   mode = next;
   observation = 0;
 }
 
-function fullFollowingProjection(follow: (typeof followsRecording.follows)[number]) {
+function fullFollowingProjection(follow: StoryFollow) {
   if (follow.targetType !== 'space') return follow;
   if (mode === 'reading-no-destination')
     return { ...follow, destination: { kind: 'unavailable' as const }, actions: { status: 'unavailable' as const } };
@@ -44,7 +47,7 @@ function fullFollowingProjection(follow: (typeof followsRecording.follows)[numbe
   };
 }
 
-function page(follows: (typeof followsRecording.follows)[number][], next: string | null) {
+function page(follows: StoryFollow[], next: string | null) {
   return { status: 200, follows: follows.map(fullFollowingProjection), next };
 }
 
