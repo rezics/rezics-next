@@ -34,10 +34,7 @@ export type WorkbenchCasePageProps = {
 
 type WorkbenchVisit = ReturnType<typeof createVisit>;
 
-function createVisit(
-  original: WorkbenchCasePageProps,
-  client: QueryClient | undefined,
-) {
+function createVisit(original: WorkbenchCasePageProps, client: QueryClient | undefined) {
   const owner =
     typeof window === 'undefined' || !client
       ? undefined
@@ -126,11 +123,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
 
   const retired = current.observe();
   const queueHref = localizeHref(workbenchCaseQueueHref(props.input));
-  if (
-    retired ||
-    (typeof window !== 'undefined' && !browserClient) ||
-    (current.owner && !current.owner.available())
-  )
+  if (retired || (typeof window !== 'undefined' && !browserClient) || (current.owner && !current.owner.available()))
     return <WorkbenchCaseStatus state="unavailable" queueHref={queueHref} />;
 
   const result = workbenchCaseFromPage(props.page, props.reportId);
@@ -245,7 +238,11 @@ export function WorkbenchCaseStatus({
         {m.moderation_reports_heading()}
       </a>
       <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
-      <ContentItemFrame as="div" role={state === 'loading' || state === 'empty' ? 'status' : 'alert'} className="space-y-3 p-4 sm:p-6">
+      <ContentItemFrame
+        as="div"
+        role={state === 'loading' || state === 'empty' ? 'status' : 'alert'}
+        className="space-y-3 p-4 sm:p-6"
+      >
         <ContentItemHeading level={2} className="text-base font-semibold">
           {message}
         </ContentItemHeading>

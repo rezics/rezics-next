@@ -1,10 +1,7 @@
 import { createFileRoute, notFound, useNavigate, useRouter } from '@tanstack/react-router';
 import { useMemo } from 'react';
 import { localizeHref } from '../../paraglide/runtime.js';
-import {
-  loadModerationReports,
-  prepareModerationReportRead,
-} from '../../moderation/reports-read';
+import { loadModerationReports, prepareModerationReportRead } from '../../moderation/reports-read';
 import type { ReportNavigation } from '../../moderation/reports-page';
 import { WorkbenchCasePage, WorkbenchCaseStatus } from '../../moderation/workbench-case';
 import {
@@ -91,9 +88,7 @@ function WorkbenchCaseRoute() {
 function WorkbenchCasePending() {
   const search = Route.useSearch();
   const parsed = parseWorkbenchCaseSearch(search);
-  const queueHref = localizeHref(
-    parsed ? workbenchCaseQueueHref(workbenchCaseInput(parsed)) : '/moderation/catalogue',
-  );
+  const queueHref = localizeHref(parsed ? workbenchCaseQueueHref(workbenchCaseInput(parsed)) : '/moderation/catalogue');
   return <WorkbenchCaseStatus state="loading" queueHref={queueHref} />;
 }
 
@@ -101,14 +96,8 @@ function WorkbenchCaseError() {
   const router = useRouter();
   const search = Route.useSearch();
   const parsed = parseWorkbenchCaseSearch(search);
-  const queueHref = localizeHref(
-    parsed ? workbenchCaseQueueHref(workbenchCaseInput(parsed)) : '/moderation/catalogue',
-  );
+  const queueHref = localizeHref(parsed ? workbenchCaseQueueHref(workbenchCaseInput(parsed)) : '/moderation/catalogue');
   return (
-    <WorkbenchCaseStatus
-      state="error"
-      queueHref={queueHref}
-      onRetry={() => void router.invalidate({ sync: true })}
-    />
+    <WorkbenchCaseStatus state="error" queueHref={queueHref} onRetry={() => void router.invalidate({ sync: true })} />
   );
 }
