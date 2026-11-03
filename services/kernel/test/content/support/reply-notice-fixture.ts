@@ -61,7 +61,7 @@ export async function replyNoticeFixture() {
     await accounts.grant(id, 'account:read', { route: routeOf(id)!, id });
     await accounts.grant(id, 'account:update', { route: routeOf(id)!, id });
   }
-  async function call(account: string, method: string, path: string, body?: unknown, key = randomUUID()) {
+  async function call(account: string, method: string, path: string, body?: unknown, key: string = randomUUID()) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
