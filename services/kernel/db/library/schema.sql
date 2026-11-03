@@ -2475,6 +2475,42 @@ CREATE TABLE library.copy (
 
 
 --
+-- Name: copy_archive_row; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy_archive_row (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    evidence jsonb NOT NULL,
+    CONSTRAINT copy_archive_row_evidence_check CHECK ((octet_length((evidence)::text) <= 131072)),
+    CONSTRAINT copy_archive_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99999)))
+);
+
+
+--
+-- Name: copy_archive_upload; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy_archive_upload (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    manifest jsonb NOT NULL,
+    coverage jsonb NOT NULL,
+    holding_count integer NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    cancelled boolean DEFAULT false NOT NULL,
+    removing boolean DEFAULT false NOT NULL,
+    CONSTRAINT copy_archive_upload_coverage_check CHECK ((octet_length((coverage)::text) <= 8192)),
+    CONSTRAINT copy_archive_upload_holding_count_check CHECK (((holding_count >= 0) AND (holding_count <= 4096))),
+    CONSTRAINT copy_archive_upload_manifest_check CHECK ((octet_length((manifest)::text) <= 131072)),
+    CONSTRAINT copy_archive_upload_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: entry; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4552,6 +4588,30 @@ ALTER TABLE ONLY library.consumption_statistics_subject
 
 
 --
+-- Name: copy_archive_row copy_archive_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_row
+    ADD CONSTRAINT copy_archive_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
+
+
+--
+-- Name: copy_archive_upload copy_archive_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_upload
+    ADD CONSTRAINT copy_archive_upload_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: copy_archive_upload copy_archive_upload_route_account_id_upload_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_upload
+    ADD CONSTRAINT copy_archive_upload_route_account_id_upload_id_key UNIQUE (route, account_id, upload_id);
+
+
+--
 -- Name: copy copy_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5564,6 +5624,13 @@ CREATE INDEX copy_account_created ON library.copy USING btree (route, account_id
 --
 
 CREATE INDEX copy_account_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id);
+
+
+--
+-- Name: copy_archive_upload_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_archive_upload_expiry ON library.copy_archive_upload USING btree (expires_at, route, account_id);
 
 
 --
@@ -7215,6 +7282,14 @@ ALTER TABLE ONLY library.collection_source_output_publication
 
 ALTER TABLE ONLY library.collection_source_output
     ADD CONSTRAINT collection_source_output_route_collection_id_fkey FOREIGN KEY (route, collection_id) REFERENCES library.collection(route, collection_id);
+
+
+--
+-- Name: copy_archive_row copy_archive_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_archive_row
+    ADD CONSTRAINT copy_archive_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.copy_archive_upload(route, account_id, upload_id);
 
 
 --
