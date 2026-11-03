@@ -1,3 +1,5 @@
+import defaults from '../defaults.json';
+import { defaultPolicy } from './policy.ts';
 import { trackFixtureWait } from './fixture-process-ownership.ts';
 import {
   ProofCapacityQueuedError,
@@ -50,13 +52,7 @@ import {
   reportsSuccess,
 } from './records.ts';
 import { readRouting } from './routing.ts';
-import {
-  FINAL_REPORT_PROMPT,
-  finalReportPending,
-  isSqliteContention,
-  settle,
-  SETTLEMENT_CONTENTION_BACKOFF_MS,
-} from './settle.ts';
+import { FINAL_REPORT_PROMPT, finalReportPending, isSqliteContention, settle } from './settle.ts';
 import { firstFailure } from './merge.ts';
 import {
   canonicalConflictPaths,
@@ -247,27 +243,25 @@ function stopEvent(task: Task, summary: string, evidencePath: string) {
 }
 
 /** How long a capacity refusal waits before the attempt continues. */
-export const CAPACITY_PAUSE_MS = 10_000;
+export const CAPACITY_PAUSE_MS = defaultPolicy.worker.capacityPauseMs;
 /** A usage-limit refusal with recent allowance left is retried on the same pool after a brief recovery window. */
-export const USAGE_LIMIT_RETRY_PAUSE_MS = 3 * 60_000;
+export const USAGE_LIMIT_RETRY_PAUSE_MS = defaultPolicy.worker.usageLimitRetryPauseMs;
 /** Repeated ambiguous refusals temporarily route work away from one pool. */
-export const USAGE_LIMIT_REFUSAL_WINDOW_MS = 60 * 60_000;
-export const REPEATED_USAGE_LIMIT_EXHAUSTION_MS = 60 * 60_000;
+export const USAGE_LIMIT_REFUSAL_WINDOW_MS = defaultPolicy.worker.usageLimitRefusalWindowMs;
+export const REPEATED_USAGE_LIMIT_EXHAUSTION_MS = defaultPolicy.worker.usageLimitExhaustionMs;
 /** A waiting attempt gets its first resume plus two retries when the CLI cannot start. */
-const MAX_WAITING_RESUME_LAUNCH_FAILURES = 3;
 /** A worker whose CLI writes nothing this long never started a session: it is stopped, and its exit retries it. */
-export const START_GRACE_MS = 10 * 60_000;
+export const START_GRACE_MS = defaultPolicy.worker.startGraceMs;
 /** A running worker with no run-log activity for this long is stopped and retried. */
-export const SILENCE_WINDOW_MS = 40 * 60_000;
+export const SILENCE_WINDOW_MS = defaults.silenceMs;
 /** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
-const SILENCE_CHECK_MS = 60_000;
 
 /** Hold both train lanes while checking and repairing a landing with no queued request. */
-function acquireIdleTrainLeases(stateDirectory: string): DirectoryLease[] | undefined {
+function acquireIdleTrainLeases(stateDirectory: string, policy = defaultPolicy): DirectoryLease[] | undefined {
   const leases: DirectoryLease[] = [];
   try {
     for (const name of ['train-main.lease', 'train.lease'])
-      leases.push(acquireDirectoryLease(join(stateDirectory, name)));
+      leases.push(acquireDirectoryLease(join(stateDirectory, name), policy.leases));
     return leases;
   } catch (error) {
     for (const lease of leases) lease.release();
@@ -285,6 +279,9 @@ function processAlive(pid: number): boolean {
   }
 }
 export class WorkerJob implements GateOutcomeSink {
+  private get policy() {
+    return this.tasks.settings.policy ?? defaultPolicy;
+  }
   private readonly pending = new Set<Promise<void>>();
   private readonly retryIntentsInProgress = new Set<string>();
   constructor(
@@ -293,7 +290,8 @@ export class WorkerJob implements GateOutcomeSink {
     readonly inbox: ManagerInbox,
     readonly consultation: typeof consult = consult,
     readonly afterSettle: () => Promise<void> = async () => {},
-    private readonly acquireOrphanLease: (path: string) => DirectoryLease = acquireDirectoryLease,
+    private readonly acquireOrphanLease: (path: string) => DirectoryLease = (path) =>
+      acquireDirectoryLease(path, tasks.settings.policy?.leases),
     private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
   ) {}
   private track(work: Promise<void>): void {
@@ -348,10 +346,14 @@ export class WorkerJob implements GateOutcomeSink {
       // A backed-off retry waits for its time, and a check-host transport failure until the watchdog's probes see
       // every check host answer again: relaunching into a broken host repeats the failure. The intent stays pending,
       // and the host's recovery sweep tries it again every minute.
-      if (!incidentProbe && intent.options.notBefore && Date.parse(intent.options.notBefore) - Date.now() > 1_000)
+      if (
+        !incidentProbe &&
+        intent.options.notBefore &&
+        Date.parse(intent.options.notBefore) - Date.now() > this.policy.worker.retryIntentLeadMs
+      )
         return;
       if (intent.options.awaitCheckHosts) {
-        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory);
+        const hosts = checkHostsInOutage(this.tasks.settings.stateDirectory, this.policy);
         if (hosts.length) {
           if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'retry-awaits-check-hosts'))
             store.event(ref, 'retry-awaits-check-hosts', { hosts });
@@ -630,14 +632,18 @@ export class WorkerJob implements GateOutcomeSink {
         startsFirst(task),
         task.id,
         ref.attempt,
-        { policy: this.tasks.settings.policy?.capacity },
+        { policy: this.tasks.settings.policy?.capacity, leasePolicy: this.tasks.settings.policy?.leases },
       );
       let worker: RunningWorker | undefined;
       let lease: DirectoryLease | undefined;
       try {
         // Capacity may take time. Reacquire the task lease only after it, then take the current store and Git
         // snapshot with no SQLite transaction open. A replacement attempt or reshape wins before this launch.
-        lease = acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+        lease = acquireDirectoryLeaseWaiting(
+          join(this.tasks.settings.stateDirectory, 'leases', ref.taskId),
+          undefined,
+          this.tasks.settings.policy?.leases,
+        );
         const currentTask = this.tasks.store.task(ref.taskId);
         const currentAttempt = this.tasks.store.attempt(ref);
         if (
@@ -677,6 +683,7 @@ export class WorkerJob implements GateOutcomeSink {
                   this.tasks.settings.mainCheckout,
                   context,
                   this.tasks.settings.stateDirectory,
+                  this.tasks.settings.policy,
                 ),
                 `The checks you started have finished or could not be found. ${message}`,
                 'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
@@ -689,6 +696,7 @@ export class WorkerJob implements GateOutcomeSink {
           prompt,
           this.tasks.settings.codex,
           canResume ? currentAttempt.session! : undefined,
+          this.tasks.settings.policy,
         );
       } catch (error) {
         if (error instanceof StaleAttemptError) return;
@@ -712,7 +720,7 @@ export class WorkerJob implements GateOutcomeSink {
             errorLine,
           });
         });
-        if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
+        if (task.brief.kind === 'verification' || count >= this.policy.worker.waitingResumeLaunchFailures) {
           await this.endAsEnvironment(ref, new Error(errorLine), lease !== undefined, true);
           return;
         }
@@ -726,7 +734,7 @@ export class WorkerJob implements GateOutcomeSink {
       await this.follow(worker);
       const count = failureCount();
       if (count === before) return;
-      if (task.brief.kind === 'verification' || count >= MAX_WAITING_RESUME_LAUNCH_FAILURES) {
+      if (task.brief.kind === 'verification' || count >= this.policy.worker.waitingResumeLaunchFailures) {
         await this.endAsEnvironment(ref, new Error(lastFailure()), false, true);
         return;
       }
@@ -741,12 +749,12 @@ export class WorkerJob implements GateOutcomeSink {
     const ref = worker.attempt,
       store = this.tasks.store;
     const task = store.task(ref.taskId);
-    const limits = readRouting(this.tasks.settings.routingFile).classes[
+    const limits = readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing).classes[
       task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
     ];
     let watcher: Watching | undefined;
     let stopping: Promise<void> | undefined;
-    const silenceMs = this.tasks.settings.silenceMs ?? SILENCE_WINDOW_MS;
+    const silenceMs = this.tasks.settings.silenceMs ?? defaults.silenceMs;
     let silenceFailure: string | undefined;
     let silenceStopping: Promise<void> | undefined;
     const activity = workerActivityBaseline(store, ref);
@@ -775,7 +783,11 @@ export class WorkerJob implements GateOutcomeSink {
         store.updateAttempt(ref, (current) => {
           current.escalation = 'stalled';
         });
-        silenceStopping = terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs);
+        silenceStopping = terminateProcessGroup(
+          attempt.process ?? null,
+          this.tasks.settings.terminationGraceMs,
+          this.tasks.settings.policy?.process,
+        );
         void silenceStopping.catch(() => {});
       } catch (error) {
         if (!(error instanceof StaleAttemptError)) {
@@ -789,7 +801,10 @@ export class WorkerJob implements GateOutcomeSink {
         store.assertCurrent(ref);
         const attempt = store.attempt(ref);
         const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
-        const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
+        const measurement = readMeasurement(attempt, {
+          policy: this.tasks.settings.policy ?? defaultPolicy,
+          configDirectory: pool?.configDirectory,
+        });
         const steps = Object.values(measurement.steps).reduce((a, b) => a + b, 0);
         if (
           (timeLimit || steps > limits.maxSteps) &&
@@ -827,7 +842,7 @@ export class WorkerJob implements GateOutcomeSink {
       Math.max(0, checkWaitMs(ref.logPath) - activity.checkWaitBaseline) -
       (Date.now() - activity.startedAt);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const silenceTimer = setInterval(checkSilence, Math.max(1, Math.min(SILENCE_CHECK_MS, silenceMs)));
+    const silenceTimer = setInterval(checkSilence, Math.max(1, Math.min(this.policy.worker.silenceCheckMs, silenceMs)));
     const scheduleLimit = () => {
       timer = setTimeout(() => (remainingMs() > 0 ? scheduleLimit() : stopIfStalled(true)), Math.max(0, remainingMs()));
     };
@@ -846,12 +861,19 @@ export class WorkerJob implements GateOutcomeSink {
           )
             return;
           console.error(`Worker ${ref.taskId} attempt ${ref.attempt} wrote nothing; stopping it so it is retried.`);
-          void terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs).catch(() => {});
+          void terminateProcessGroup(
+            attempt.process ?? null,
+            this.tasks.settings.terminationGraceMs,
+            this.tasks.settings.policy?.process,
+          ).catch(() => {});
         } catch {
           /* A superseded attempt needs no check. */
         }
       },
-      Math.max(0, (this.tasks.settings.startGraceMs ?? START_GRACE_MS) - (Date.now() - activity.startedAt)),
+      Math.max(
+        0,
+        (this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs) - (Date.now() - activity.startedAt),
+      ),
     );
     try {
       watcher = watchOrPoll(
@@ -860,7 +882,7 @@ export class WorkerJob implements GateOutcomeSink {
           checkSilence();
           stopIfStalled(false);
         },
-        30_000,
+        this.policy.worker.activityPollMs,
       );
       try {
         await settle(this.tasks, worker, this.landing, async () => {
@@ -913,7 +935,7 @@ export class WorkerJob implements GateOutcomeSink {
       console.error(
         `Settlement of ${ref.taskId} attempt ${ref.attempt} deferred by store contention: ${String(error)}`,
       );
-      for (const pause of [0, ...SETTLEMENT_CONTENTION_BACKOFF_MS]) {
+      for (const pause of [0, ...this.policy.worker.settlementBackoffMs]) {
         await Bun.sleep(pause);
         try {
           this.tasks.store.updateAttempt(ref, (value) => {
@@ -928,7 +950,11 @@ export class WorkerJob implements GateOutcomeSink {
     }
     const lease = leaseHeld
       ? undefined
-      : await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+      : await acquireDirectoryLeaseWaiting(
+          join(this.tasks.settings.stateDirectory, 'leases', ref.taskId),
+          undefined,
+          this.tasks.settings.policy?.leases,
+        );
     try {
       const store = this.tasks.store;
       const current = store.attempt(ref);
@@ -959,11 +985,24 @@ export class WorkerJob implements GateOutcomeSink {
         .replace(/[\r\n]+/g, ' ')
         .slice(0, 4000);
       try {
-        await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs);
+        await terminateProcessGroup(
+          current.process,
+          this.tasks.settings.terminationGraceMs,
+          this.tasks.settings.policy?.process,
+        );
         for (const process of current.auxiliaryProcesses)
-          await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs);
+          await terminateProcessGroup(
+            process,
+            this.tasks.settings.terminationGraceMs,
+            this.tasks.settings.policy?.process,
+          );
         if (!task.workspace && task.brief.kind !== 'verification')
-          await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs);
+          await stopProcessesUnder(
+            task.worktree,
+            this.tasks.settings.terminationGraceMs,
+            undefined,
+            this.tasks.settings.policy?.process,
+          );
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
         // Unknown custody is an operational condition, not an exit or a free worker slot.
@@ -989,6 +1028,7 @@ export class WorkerJob implements GateOutcomeSink {
       let measurement: ReturnType<typeof readMeasurement>;
       try {
         measurement = readMeasurement(ended, {
+          policy: this.tasks.settings.policy ?? defaultPolicy,
           configDirectory: pool?.configDirectory,
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         });
@@ -997,6 +1037,7 @@ export class WorkerJob implements GateOutcomeSink {
         measurement = readMeasurement(
           { ...ended, startedAt: endedAt },
           {
+            policy: this.tasks.settings.policy ?? defaultPolicy,
             configDirectory: pool?.configDirectory,
             ...(logStartOffset !== undefined ? { logStartOffset } : {}),
           },
@@ -1018,7 +1059,7 @@ export class WorkerJob implements GateOutcomeSink {
           value.escalation = 'environment';
           value.blocker = detail;
           value.result = measurement.result || `Driver exception: ${detail}`;
-          value.approaches.push(...reportedApproaches(value.result));
+          value.approaches.push(...reportedApproaches(value.result, undefined, this.tasks.settings.policy?.records));
         });
         const record = makeRecord(task, attempt, measurement, 'stopped');
         record.escalation = 'environment';
@@ -1092,7 +1133,10 @@ export class WorkerJob implements GateOutcomeSink {
     for (const taskId of candidates) {
       let lease: DirectoryLease;
       try {
-        lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', taskId));
+        lease = acquireDirectoryLease(
+          join(this.tasks.settings.stateDirectory, 'leases', taskId),
+          this.tasks.settings.policy?.leases,
+        );
       } catch (error) {
         this.recoveryFailed(taskId, 'dependency release', error);
         continue;
@@ -1238,7 +1282,8 @@ export class WorkerJob implements GateOutcomeSink {
     const tasks = adoptRunning ? store.activeTasks() : [];
     let sweepItems = 0;
     const yieldSweep = async () => {
-      if (++sweepItems % 8 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+      if (++sweepItems % this.policy.worker.sweepYieldItems === 0)
+        await new Promise<void>((resolve) => setImmediate(resolve));
     };
     if (adoptRunning) {
       for (const candidate of store.orphanedLandingCandidates()) {
@@ -1255,7 +1300,7 @@ export class WorkerJob implements GateOutcomeSink {
           const task = store.task(candidate.id);
           if (task.currentAttempt !== ref.attempt || task.state !== 'landing') continue;
           if (store.retryIntent(ref)?.status === 'pending') continue;
-          const trainLeases = acquireIdleTrainLeases(this.tasks.settings.stateDirectory);
+          const trainLeases = acquireIdleTrainLeases(this.tasks.settings.stateDirectory, this.tasks.settings.policy);
           if (!trainLeases) continue;
           try {
             const attempt = store.attempt(ref);
@@ -1324,7 +1369,7 @@ export class WorkerJob implements GateOutcomeSink {
     // A pending attempt exists only while a process holds its task's lease to launch it. One that is old and whose
     // lease is free lost its launcher (nine tasks sat pending for three hours): the host retries the task.
     if (adoptRunning) {
-      const graceMs = this.tasks.settings.startGraceMs ?? START_GRACE_MS;
+      const graceMs = this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs;
       for (const attempt of store.attemptsInState('pending')) {
         await yieldSweep();
         try {
@@ -1334,7 +1379,10 @@ export class WorkerJob implements GateOutcomeSink {
           // A released `after` task must refresh its worktree base under the task lease before it starts.
           if (task.brief.after.length && this.tasks.dependenciesMet(task, tasks)) continue;
           try {
-            acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId)).release();
+            acquireDirectoryLease(
+              join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId),
+              this.tasks.settings.policy?.leases,
+            ).release();
           } catch (error) {
             this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error);
             continue;
@@ -1369,7 +1417,9 @@ export class WorkerJob implements GateOutcomeSink {
     // A ready task with no attempt is started by the process that dispatched or released it. When that process is
     // gone (five tasks sat ready for hours), no ticket in the capacity queue names the task and its lease is free.
     if (adoptRunning) {
-      const graceMs = 2 * (this.tasks.settings.startGraceMs ?? START_GRACE_MS);
+      const graceMs =
+        this.policy.worker.orphanStartGraceMultiplier *
+        (this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs);
       const waiting = capacityWaiters(this.tasks.settings.stateDirectory);
       for (const task of store.activeTasks()) {
         await yieldSweep();
@@ -1382,7 +1432,10 @@ export class WorkerJob implements GateOutcomeSink {
           continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
-          acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();
+          acquireDirectoryLease(
+            join(this.tasks.settings.stateDirectory, 'leases', task.id),
+            this.tasks.settings.policy?.leases,
+          ).release();
         } catch (error) {
           this.recoveryFailed(task.id, 'first start', error);
           continue;
@@ -1475,9 +1528,9 @@ export class WorkerJob implements GateOutcomeSink {
           (async () => {
             try {
               // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
-              const exited = (attempt.process ? waitForProcessGroup(attempt.process) : Promise.resolve()).then(() =>
-                readWorkerExit(attempt.logPath),
-              );
+              const exited = (
+                attempt.process ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()
+              ).then(() => readWorkerExit(attempt.logPath));
               await this.follow({ attempt, exited });
             } catch (error) {
               await this.endAsEnvironment(ref, error);
@@ -1615,6 +1668,7 @@ export class WorkerJob implements GateOutcomeSink {
       let usageLimitExhausted = false;
       if (kind === 'pool-exhausted') {
         const measurement = readMeasurement(attempt, {
+          policy: this.tasks.settings.policy ?? defaultPolicy,
           configDirectory: this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.configDirectory,
         });
         usageLimitRefusal =
@@ -1625,13 +1679,14 @@ export class WorkerJob implements GateOutcomeSink {
           const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
           const now = Date.now();
           const assessment = pool
-            ? assessUsageLimitRefusal(attempt.after, attempt.before, pool, now)
+            ? assessUsageLimitRefusal(attempt.after, attempt.before, pool, now, this.tasks.settings.policy?.provider)
             : { confirmedExhaustion: true, reason: 'reading-unavailable' as const, reading: attempt.after };
           const priorRefusals = store
             .events()
             .filter(
               (event) =>
-                event.kind === 'usage-limit-refusal' && Date.parse(event.at) >= now - USAGE_LIMIT_REFUSAL_WINDOW_MS,
+                event.kind === 'usage-limit-refusal' &&
+                Date.parse(event.at) >= now - this.policy.worker.usageLimitRefusalWindowMs,
             )
             .filter((event) => {
               try {
@@ -1641,10 +1696,10 @@ export class WorkerJob implements GateOutcomeSink {
               }
             }).length;
           const refusalCount = priorRefusals + 1;
-          const repeatedRefusalThresholdReached = refusalCount >= 3;
+          const repeatedRefusalThresholdReached = refusalCount >= this.policy.worker.usageLimitRefusals;
           usageLimitExhausted = assessment.confirmedExhaustion || repeatedRefusalThresholdReached;
           retrySamePool = !usageLimitExhausted;
-          retryDelayMs = retrySamePool ? USAGE_LIMIT_RETRY_PAUSE_MS : 0;
+          retryDelayMs = retrySamePool ? this.policy.worker.usageLimitRetryPauseMs : 0;
           const windowEvidence = (assessment.reading?.windows ?? []).map((window, index) => ({
             window:
               window.window ??
@@ -1658,7 +1713,7 @@ export class WorkerJob implements GateOutcomeSink {
               this.tasks.settings.stateDirectory,
               pool.allowanceKey,
               now,
-              repeatedRefusalThresholdReached ? REPEATED_USAGE_LIMIT_EXHAUSTION_MS : undefined,
+              repeatedRefusalThresholdReached ? this.policy.worker.usageLimitExhaustionMs : undefined,
             );
           }
           store.event(ref, 'usage-limit-refusal', {
@@ -1786,7 +1841,7 @@ export class WorkerJob implements GateOutcomeSink {
     if (retry)
       this.track(
         new Promise<void>((done) => {
-          const delay = retryDelayMs || (capacity ? CAPACITY_PAUSE_MS : 0);
+          const delay = retryDelayMs || (capacity ? this.policy.worker.capacityPauseMs : 0);
           if (delay) setTimeout(done, delay);
           else setImmediate(done);
         }).then(() => this.runRetryIntent(ref)),
@@ -2044,7 +2099,7 @@ export class WorkerJob implements GateOutcomeSink {
         store.putRecord(record);
         return;
       }
-      const limits = readRouting(this.tasks.settings.routingFile).classes[
+      const limits = readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing).classes[
         task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
       ];
       // A control-plane landing checks the whole control-plane tree, beyond the task's estimated diff size. A failed
@@ -2210,7 +2265,7 @@ export class WorkerJob implements GateOutcomeSink {
     const attempt = this.tasks.store.attempt(ref);
     if (!['running', 'exited'].includes(attempt.state))
       throw new Error('only a running or exited attempt can be recovered');
-    await this.follow({ attempt, exited: waitForWorkerExit(attempt.process, attempt.logPath) });
+    await this.follow({ attempt, exited: waitForWorkerExit(attempt.process, attempt.logPath, this.policy.process) });
   }
   async consultTask(taskId: string): Promise<void> {
     const task = this.tasks.store.task(taskId),

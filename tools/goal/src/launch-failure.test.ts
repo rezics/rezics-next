@@ -6,6 +6,7 @@ import type { GateOutcome, LandingRequest, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
 import { harness, reading } from './test-support.ts';
 import { WorkerTasks } from './tasks.ts';
+import { readControlPolicy } from './policy.ts';
 
 // The CLI fails while loading its configuration: no session starts, nothing is written to stdout, nothing is committed.
 const brokenCli = `#!/usr/bin/env bun
@@ -233,7 +234,7 @@ await new Promise(resolve => setTimeout(resolve, 600_000));
 test('a worker that writes nothing within the start window is stopped and retried, then goes to the manager', async () => {
   const h = harness(hangingCli),
     inbox: ManagerEvent[] = [];
-  h.settings.startGraceMs = 1000;
+  h.settings.policy = readControlPolicy({ worker: { startGraceMs: 1000 } });
   try {
     const task = h.tasks.dispatch(h.briefFile);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });

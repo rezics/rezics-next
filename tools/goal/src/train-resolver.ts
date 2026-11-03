@@ -14,6 +14,7 @@ import { measureLog } from './records.ts';
 import type { WorkerTasks } from './tasks.ts';
 import type { WorkerStore } from './store.ts';
 import type { Profile } from './types.ts';
+import { defaultPolicy } from './policy.ts';
 
 export type TrainConflict = AttemptRef & {
   key: string;
@@ -434,7 +435,11 @@ export class TrainResolver {
           ? (JSON.parse(readFileSync(prior.identityPath, 'utf8')) as ProcessIdentity)
           : null);
       if (durableIdentity)
-        await terminateProcessGroup(durableIdentity, this.tasks?.settings.terminationGraceMs ?? 1000);
+        await terminateProcessGroup(
+          durableIdentity,
+          this.tasks?.settings.terminationGraceMs ?? defaultPolicy.process.resolverTerminationGraceMs,
+          this.tasks?.settings.policy?.process,
+        );
       if (phase !== 'repair') {
         conflict.detail = `The bounded ${phase} pass was already spent; preserving source for its owner`;
         return false;
@@ -632,7 +637,11 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=5s','240s',*sys.arg
         if (Buffer.byteLength(output) + chunk.length > MAX_OUTPUT) {
           if (!failure) {
             failure = 'Train resolver exceeded its finite output budget';
-            void terminateProcessGroup(identity, this.tasks!.settings.terminationGraceMs).catch(() => {});
+            void terminateProcessGroup(
+              identity,
+              this.tasks!.settings.terminationGraceMs,
+              this.tasks!.settings.policy?.process,
+            ).catch(() => {});
           }
         } else output += chunk.toString();
       };
@@ -644,7 +653,11 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=5s','240s',*sys.arg
           timer = setTimeout(() => reject(new Error('Train resolver timed out')), MAX_MS);
         }),
       ]);
-      await terminateProcessGroup(identity, this.tasks.settings.terminationGraceMs);
+      await terminateProcessGroup(
+        identity,
+        this.tasks.settings.terminationGraceMs,
+        this.tasks.settings.policy?.process,
+      );
       this.current(request, conflict, true);
       if (this.store.task(request.taskId).brief.markdown !== contract)
         throw new Error('Train resolver owning contract changed');
@@ -740,7 +753,11 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=5s','240s',*sys.arg
       return false;
     } finally {
       clearTimeout(timer);
-      await terminateProcessGroup(identity, this.tasks.settings.terminationGraceMs);
+      await terminateProcessGroup(
+        identity,
+        this.tasks.settings.terminationGraceMs,
+        this.tasks.settings.policy?.process,
+      );
       writeFileSync(join(directory, `${phase}.output.jsonl`), output);
       appendFileSync(logPath, `\nTrain resolver ${phase}: ${failure ?? conflict.detail ?? 'completed'}\n`);
     }

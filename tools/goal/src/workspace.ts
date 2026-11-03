@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -11,15 +12,15 @@ import type { Brief, Settings, Task } from './types.ts';
 export type ModuleWorkspace = { module: string; branch: string; worktree: string; base: string };
 const glob = (path: string): boolean => /[*?]/.test(path);
 /** Conservative glob containment; never guess that a broader task glob fits a module. */
-function inside(path: string, patterns: readonly string[]): boolean {
+function inside(path: string, patterns: readonly string[], policy = defaultPolicy.brief): boolean {
   return patterns.some(
     (pattern) =>
       path === pattern ||
-      (!glob(path) && matchesPath(path, [pattern])) ||
+      (!glob(path) && matchesPath(path, [pattern], policy)) ||
       (pattern.endsWith('/**') && (path === pattern.slice(0, -3) || path.startsWith(pattern.slice(0, -2)))),
   );
 }
-export function readWebModules(value: unknown): Record<string, string[]> {
+export function readWebModules(value: unknown, policy = defaultPolicy.brief): Record<string, string[]> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('sharedWebModules must be a module to path-globs object');
   const modules: Record<string, string[]> = {};
@@ -28,20 +29,20 @@ export function readWebModules(value: unknown): Record<string, string[]> {
       throw new Error('invalid shared module');
     for (const path of paths) {
       if (typeof path !== 'string') throw new Error('invalid module path');
-      validatePath(path);
+      validatePath(path, policy);
     }
     modules[module] = [...paths];
   }
   const entries = Object.entries(modules);
   for (const [i, [, paths]] of entries.entries())
     for (const [, other] of entries.slice(i + 1))
-      if (paths.some((p) => other.some((q) => pathsOverlap(p, q)))) throw new Error('shared modules overlap');
+      if (paths.some((p) => other.some((q) => pathsOverlap(p, q, policy)))) throw new Error('shared modules overlap');
   return modules;
 }
 export function webModule(brief: Brief, settings: Settings): string | undefined {
   if (brief.target || !brief.paths.length) return;
   const modules = Object.entries(settings.sharedWebModules ?? {}).filter(([, patterns]) =>
-    brief.paths.every((path) => inside(path, patterns)),
+    brief.paths.every((path) => inside(path, patterns, settings.policy?.brief)),
   );
   return modules.length === 1 ? modules[0]![0] : undefined;
 }
@@ -100,7 +101,7 @@ export class WorkspaceController {
   constructor(
     readonly settings: Pick<
       Settings,
-      'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'sharedWebModules'
+      'mainCheckout' | 'stateDirectory' | 'worktreeRoot' | 'integrationBranch' | 'sharedWebModules' | 'policy'
     >,
     readonly store: WorkerStore,
   ) {
@@ -136,11 +137,13 @@ export class WorkspaceController {
     let lease: DirectoryLease;
     for (;;) {
       try {
-        lease = acquireDirectoryLease(path);
+        lease = acquireDirectoryLease(path, this.settings.policy?.leases);
         break;
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise((resolve) =>
+          setTimeout(resolve, (this.settings.policy ?? defaultPolicy).leases.workspacePollMs),
+        );
       }
     }
     try {

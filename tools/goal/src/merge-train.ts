@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readdirSync, realpathSync } from 'node:fs';
 import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -237,11 +238,16 @@ export type CandidateGitResult = {
 
 export type CandidateGitRunner = (cwd: string, args: readonly string[]) => CandidateGitResult | undefined;
 
-function candidateGit(cwd: string, args: string[], run?: CandidateGitRunner): CandidateGitResult {
+function candidateGit(
+  cwd: string,
+  args: string[],
+  run?: CandidateGitRunner,
+  policy = defaultPolicy.integration,
+): CandidateGitResult {
   try {
     const injected = run?.(cwd, args);
     if (injected) return injected;
-    const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 });
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.candidateGitBufferBytes });
     return {
       status: result.status,
       signal: result.signal,
@@ -260,8 +266,9 @@ function candidateGit(cwd: string, args: string[], run?: CandidateGitRunner): Ca
   }
 }
 
-function candidateGitDetails(result: CandidateGitResult): string {
-  const detail = (value: string) => JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, 800));
+function candidateGitDetails(result: CandidateGitResult, policy = defaultPolicy.integration): string {
+  const detail = (value: string) =>
+    JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, policy.candidateDetailCharacters));
   return [
     `exit=${result.status === null ? 'null' : result.status}`,
     `signal=${result.signal ?? 'none'}`,
@@ -275,8 +282,8 @@ function nulPaths(result: CandidateGitResult): string[] {
   return result.stdout.split('\0').filter(Boolean);
 }
 
-function boundedPaths(paths: readonly string[]): string {
-  const exact = paths.slice(0, 64).map((path) => JSON.stringify(path));
+function boundedPaths(paths: readonly string[], policy = defaultPolicy.integration): string {
+  const exact = paths.slice(0, policy.candidatePaths).map((path) => JSON.stringify(path));
   return `[${exact.join(', ')}]${paths.length > exact.length ? ` (${paths.length - exact.length} more omitted)` : ''}`;
 }
 
@@ -289,14 +296,15 @@ function candidateIntegrityEvidence(
   observedHead: string,
   quiet: CandidateGitResult,
   run?: CandidateGitRunner,
+  policy = defaultPolicy.integration,
 ): void {
-  const stagedResult = candidateGit(cwd, ['diff', '--cached', '--name-only', '-z', 'HEAD', '--'], run);
-  const unstagedResult = candidateGit(cwd, ['diff', '--name-only', '-z', '--'], run);
-  const trackedResult = candidateGit(cwd, ['diff', '--name-only', '-z', expected, '--'], run);
+  const stagedResult = candidateGit(cwd, ['diff', '--cached', '--name-only', '-z', 'HEAD', '--'], run, policy);
+  const unstagedResult = candidateGit(cwd, ['diff', '--name-only', '-z', '--'], run, policy);
+  const trackedResult = candidateGit(cwd, ['diff', '--name-only', '-z', expected, '--'], run, policy);
   const headResult =
     observedHead === expected
       ? undefined
-      : candidateGit(cwd, ['diff', '--name-only', '-z', expected, observedHead, '--'], run);
+      : candidateGit(cwd, ['diff', '--name-only', '-z', expected, observedHead, '--'], run, policy);
   const staged = nulPaths(stagedResult);
   const unstaged = nulPaths(unstagedResult);
   const tracked = nulPaths(trackedResult);
@@ -305,28 +313,29 @@ function candidateIntegrityEvidence(
     `Candidate integrity evidence phase=${phase}`,
     `expected HEAD=${expected}`,
     `observed HEAD=${observedHead}`,
-    `git diff --quiet HEAD --: ${candidateGitDetails(quiet)}`,
-    `tracked paths vs expected HEAD: ${boundedPaths(tracked)}`,
-    `staged paths vs observed HEAD: ${boundedPaths(staged)}`,
-    `unstaged paths: ${boundedPaths(unstaged)}`,
-    `committed paths vs expected HEAD: ${boundedPaths(committed)}`,
+    `git diff --quiet HEAD --: ${candidateGitDetails(quiet, policy)}`,
+    `tracked paths vs expected HEAD: ${boundedPaths(tracked, policy)}`,
+    `staged paths vs observed HEAD: ${boundedPaths(staged, policy)}`,
+    `unstaged paths: ${boundedPaths(unstaged, policy)}`,
+    `committed paths vs expected HEAD: ${boundedPaths(committed, policy)}`,
     [
       'path-query exits:',
-      `tracked=${candidateGitDetails(trackedResult)};`,
-      `staged=${candidateGitDetails(stagedResult)};`,
-      `unstaged=${candidateGitDetails(unstagedResult)}`,
-      ...(headResult ? [`; committed=${candidateGitDetails(headResult)}`] : []),
+      `tracked=${candidateGitDetails(trackedResult, policy)};`,
+      `staged=${candidateGitDetails(stagedResult, policy)};`,
+      `unstaged=${candidateGitDetails(unstagedResult, policy)}`,
+      ...(headResult ? [`; committed=${candidateGitDetails(headResult, policy)}`] : []),
     ].join(' '),
   ];
-  const stat = candidateGit(cwd, ['diff', '--stat', '--no-ext-diff', expected, '--'], run);
+  const stat = candidateGit(cwd, ['diff', '--stat', '--no-ext-diff', expected, '--'], run, policy);
   report.push(
-    `safe diff stat: ${stat.status === 0 ? stat.stdout.trim().slice(0, 4000) || '(empty)' : candidateGitDetails(stat)}`,
+    `safe diff stat: ${stat.status === 0 ? stat.stdout.trim().slice(0, policy.candidateStatCharacters) || '(empty)' : candidateGitDetails(stat, policy)}`,
   );
-  if (tracked.length <= 64 && tracked.length) {
+  if (tracked.length <= policy.candidatePaths && tracked.length) {
     const patch = candidateGit(
       cwd,
       ['diff', '--no-ext-diff', '--no-color', '--unified=0', expected, '--', ...tracked],
       run,
+      policy,
     );
     if (patch.status === 0) {
       const redacted = patch.stdout
@@ -336,14 +345,14 @@ function candidateIntegrityEvidence(
             ? `${line[0]}[content redacted]`
             : line,
         )
-        .slice(0, 80)
+        .slice(0, policy.candidatePatchLines)
         .join('\n')
-        .slice(0, 5000);
+        .slice(0, policy.candidatePatchCharacters);
       report.push(`safe patch (changed line contents redacted):\n${redacted || '(empty)'}`);
-    } else report.push(`safe patch unavailable: ${candidateGitDetails(patch)}`);
+    } else report.push(`safe patch unavailable: ${candidateGitDetails(patch, policy)}`);
   } else
     report.push(
-      `safe patch omitted: ${tracked.length > 64 ? 'path bound exceeded' : 'no tracked paths were returned'}`,
+      `safe patch omitted: ${tracked.length > policy.candidatePaths ? 'path bound exceeded' : 'no tracked paths were returned'}`,
     );
   appendFileSync(logPath, `${report.join('\n')}\n`);
 }
@@ -355,19 +364,20 @@ export function assertCandidateIntegrity(
   phase: string,
   logPath: string,
   run?: CandidateGitRunner,
+  policy = defaultPolicy.integration,
 ): void {
-  const head = candidateGit(cwd, ['rev-parse', 'HEAD'], run);
+  const head = candidateGit(cwd, ['rev-parse', 'HEAD'], run, policy);
   const observedHead = head.status === 0 ? head.stdout.trim() : '(unavailable)';
-  const quiet = candidateGit(cwd, ['diff', '--quiet', 'HEAD', '--'], run);
+  const quiet = candidateGit(cwd, ['diff', '--quiet', 'HEAD', '--'], run, policy);
   if (head.status === 0 && observedHead === expected && quiet.status === 0 && !quiet.error && !quiet.signal) {
     appendFileSync(logPath, `Candidate integrity verified phase=${phase} HEAD=${expected}\n`);
     return;
   }
 
-  candidateIntegrityEvidence(cwd, expected, phase, logPath, observedHead, quiet, run);
+  candidateIntegrityEvidence(cwd, expected, phase, logPath, observedHead, quiet, run, policy);
   if (head.status !== 0 || head.error || head.signal)
     throw new Error(
-      `Candidate Git infrastructure failure phase=${phase}: git rev-parse HEAD ${candidateGitDetails(head)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
+      `Candidate Git infrastructure failure phase=${phase}: git rev-parse HEAD ${candidateGitDetails(head, policy)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
     );
   if (observedHead !== expected)
     throw new Error(
@@ -378,7 +388,7 @@ export function assertCandidateIntegrity(
       `Candidate integrity violation phase=${phase}: tracked working-tree changes detected (git diff --quiet HEAD -- exited 1); evidence recorded before candidate cleanup`,
     );
   throw new Error(
-    `Candidate Git infrastructure failure phase=${phase}: git diff --quiet HEAD -- ${candidateGitDetails(quiet)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
+    `Candidate Git infrastructure failure phase=${phase}: git diff --quiet HEAD -- ${candidateGitDetails(quiet, policy)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
   );
 }
 
@@ -397,13 +407,14 @@ export async function runAffectedTest(
   logPath: string,
   env: NodeJS.ProcessEnv,
   options?: { signal: AbortSignal },
+  policy = defaultPolicy,
 ): Promise<AffectedTestResult> {
   const started = Date.now();
   let output = '';
   let passed = false;
   let transportUnverified = false;
   let environmentUnverified = false;
-  for (let retry = 0; retry < 2; retry++) {
+  for (let retry = 0; retry < policy.integration.affectedTransportAttempts; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
     const result = await processGroupRunner(undefined, undefined, env, false)(command, cwd, logPath, options);
     output = result.output;
@@ -411,7 +422,13 @@ export async function runAffectedTest(
     environmentUnverified = checkEnvironmentFailed(output);
     transportUnverified = !passed && checkTransportFailed(output);
     if (!transportUnverified) break;
-    if (retry === 0) appendFileSync(logPath, 'Check-host transport failed; retrying once\n');
+    if (retry + 1 < policy.integration.affectedTransportAttempts)
+      appendFileSync(
+        logPath,
+        policy.integration.affectedTransportAttempts === 2
+          ? 'Check-host transport failed; retrying once\n'
+          : 'Check-host transport failed; retrying on the same source\n',
+      );
   }
   const selectionUnverified = /^Affected mode: unverified, 0 of \d+ test files selected \(.+\)$/m.test(output);
   const unverified = transportUnverified || environmentUnverified || (passed && selectionUnverified);
@@ -431,7 +448,7 @@ export async function runIntegrationChecks(
   commands: readonly (readonly string[])[],
   cwd: string,
   logPath: string,
-  execute: GateRunner = gateRunner(600_000),
+  execute: GateRunner = gateRunner(defaultPolicy.integration.checkTimeoutMs),
 ): Promise<GateResult & { failedCommand?: readonly string[] }> {
   // Web's recorded-response check regenerates the web client first, which takes about two minutes on a loaded host.
   let output = '';
@@ -650,11 +667,12 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
 function taskIntegrationTarget(
   stateDirectory: string,
   taskId: string,
+  policy = defaultPolicy.storage,
 ): { target?: string; manager?: string; goal?: string; base?: string; workspace?: Task['workspace'] } {
   const path = join(stateDirectory, 'goal.sqlite');
   if (!existsSync(path)) return {};
   const db = new Database(path, { readonly: true, strict: true });
-  db.exec('PRAGMA busy_timeout = 30000');
+  db.exec(`PRAGMA busy_timeout = ${policy.sqliteBusyTimeoutMs}`);
   try {
     const row = db.query('SELECT body FROM worker_tasks WHERE id=?').get(taskId) as { body: string } | null;
     if (!row) return {};
@@ -679,14 +697,18 @@ function taskIntegrationTarget(
 const CONTROL_PLANE_PATH = 'tools/goal/';
 // A train worktree lies outside the main checkout with nothing installed: the first control-plane landing on main
 // failed its typecheck with exit 127. The root tests' preloads need the root packages, tsc needs tools/goal's own.
-export const CONTROL_PLANE_CHECKS: readonly (readonly string[])[] = [
-  ['bun', 'install', '--frozen-lockfile'],
-  ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
-  ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-  // Under check-host load (60-75 on 2026-10-29) git-heavy tests took over bun's 5 s default and refused unrelated
-  // landings; 30 s per test keeps a real hang visible.
-  ['bun', 'test', '--timeout', '30000', 'tools/goal/src'],
-];
+export function controlPlaneChecks(policy = defaultPolicy.controlPlane): readonly (readonly string[])[] {
+  return [
+    ['bun', 'install', '--frozen-lockfile'],
+    ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
+    ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
+    // Under check-host load (60-75 on 2026-10-29) git-heavy tests took over bun's 5 s default and refused unrelated
+    // landings; 30 s per test keeps a real hang visible.
+    ['bun', 'test', '--timeout', String(policy.testTimeoutMs), 'tools/goal/src'],
+  ];
+}
+/** Defaults for synthetic callers; the production train creates commands from its startup policy. */
+export const CONTROL_PLANE_CHECKS = controlPlaneChecks();
 const LAUNCH_SMOKE_PATHS = defaults.launchSmokePaths as string[];
 export function launchSmokeRequired(changed: readonly string[]): boolean {
   return changed.some((path) => matchesPath(path, LAUNCH_SMOKE_PATHS));
@@ -787,18 +809,22 @@ type ControlPlaneRefContinuationReceipt = {
 const refContinuationNode = 'ref-continuation';
 
 /** Same ordinary dev lease, bounded like lifecycle waits, without blocking the current train's event loop. */
-export async function acquireControlPlaneDevLane(stateDirectory: string, timeoutMs = 30_000) {
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 30_000)
-    throw new Error('Control-plane dev lease wait must be within 30 seconds');
+function validateDevLaneWait(timeoutMs: number, policy: ControlPolicy['controlPlane']): void {
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > policy.devLeaseWaitMs)
+    throw new Error(`Control-plane dev lease wait must be within ${policy.devLeaseWaitMs / 1000} seconds`);
+}
+export async function acquireControlPlaneDevLane(stateDirectory: string, timeoutMs?: number, policy = defaultPolicy) {
+  timeoutMs ??= policy.controlPlane.devLeaseWaitMs;
+  validateDevLaneWait(timeoutMs, policy.controlPlane);
   const deadline = performance.now() + timeoutMs;
   for (;;) {
     try {
-      return acquireDirectoryLease(join(stateDirectory, 'train.lease'));
+      return acquireDirectoryLease(join(stateDirectory, 'train.lease'), policy.leases);
     } catch (error) {
       if (!(error instanceof LeaseHeldError)) throw error;
       const remaining = deadline - performance.now();
       if (remaining <= 0) throw new LeaseHeldError(`Dev train lease held after waiting ${timeoutMs}ms`);
-      await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+      await new Promise((resolve) => setTimeout(resolve, Math.min(policy.controlPlane.pollMs, remaining)));
     }
   }
 }
@@ -1228,6 +1254,7 @@ export function rebaseOnto(
 }
 
 export type TrainOptions = {
+  policy?: ControlPolicy | undefined;
   mainCheckout: string;
   stateDirectory: string;
   worktreeRoot: string;
@@ -1259,7 +1286,7 @@ export type TrainOptions = {
   trainResolver?: TrainResolver;
   /** Real launch smoke seam; production uses the bounded candidate smoke after control-plane checks. */
   runLaunchSmoke?: GateRunner;
-  /** Ordinary main releases wait asynchronously for dev, then defer. Bounded to at most 30 seconds. */
+  /** Ordinary main releases wait asynchronously for dev, then defer, within the configured lane wait. */
   controlPlaneDevLeaseTimeoutMs?: number;
   gateIdentity?: string;
   mainBranch?: string;
@@ -1390,7 +1417,7 @@ export class MergeTrain {
       this.options.runTypecheck ??
       this.options.runGate ??
       processGroupRunner(this.options.integration?.gateTimeoutMs, this.options.stateDirectory, process.env);
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < (this.options.policy ?? defaultPolicy).integration.typecheckAttempts; attempt++) {
       appendFileSync(logPath, `$ ${command.join(' ')} (required root typecheck on ${candidate}, dev ${base})\n`);
       let result: GateResult;
       try {
@@ -1402,8 +1429,19 @@ export class MergeTrain {
           timedOut: false,
         };
       }
-      assertCandidateIntegrity(tree, candidate, 'dev root typecheck', logPath, this.options.runCandidateGit);
-      if (!compilerInfrastructureFailure(result.output, result.timedOut) || attempt === 1) return { command, result };
+      assertCandidateIntegrity(
+        tree,
+        candidate,
+        'dev root typecheck',
+        logPath,
+        this.options.runCandidateGit,
+        this.options.policy?.integration,
+      );
+      if (
+        !compilerInfrastructureFailure(result.output, result.timedOut) ||
+        attempt + 1 >= (this.options.policy ?? defaultPolicy).integration.typecheckAttempts
+      )
+        return { command, result };
       appendFileSync(logPath, 'Root typecheck infrastructure failure; retrying once on the same candidate\n');
     }
     throw new Error('Unreachable root typecheck retry state');
@@ -1461,7 +1499,7 @@ export class MergeTrain {
       }
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        lease = acquireDirectoryLease(leasePath);
+        lease = acquireDirectoryLease(leasePath, this.options.policy?.leases);
       } catch (error) {
         if (error instanceof LeaseHeldError) {
           if (failWhenInitiallyHeld && !acquired) throw error;
@@ -1557,7 +1595,12 @@ export class MergeTrain {
                   if (store.record(failure)) o.sink.onGateOutcome(failure);
                   else {
                     const task = store.task(failure.taskId);
-                    new SqliteManagerInbox(store.db, o.inboxDirectory ?? join(o.stateDirectory, 'inboxes')).deliver({
+                    new SqliteManagerInbox(
+                      store.db,
+                      o.inboxDirectory ?? join(o.stateDirectory, 'inboxes'),
+                      undefined,
+                      o.policy?.inbox,
+                    ).deliver({
                       managerId: task.brief.manager,
                       taskId: task.id,
                       kind: 'instruction',
@@ -1632,7 +1675,7 @@ export class MergeTrain {
     if (entry.request.managerLanding) return false;
     if (!o.integrationBranch || !o.fence.commitBatchMerge) return false;
     if ((entry.request.affectedTests ?? []).some((test) => test.status === 'failed')) return false;
-    const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId);
+    const recorded = taskIntegrationTarget(o.stateDirectory, entry.request.taskId, o.policy?.storage);
     return !recorded.workspace && recorded.target !== 'stabilize' && !controlPlaneReleaseBrief(recorded);
   }
 
@@ -1951,7 +1994,7 @@ export class MergeTrain {
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
-          installShared(trainTree);
+          installShared(trainTree, undefined, undefined, this.options.policy);
         const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         const { command, result: checked } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
         for (const member of prepared)
@@ -2049,6 +2092,7 @@ export class MergeTrain {
               'dev root typecheck before batch ref advance',
               logPaths.get(prepared[0]!.entry.id)!,
               o.runCandidateGit,
+              o.policy?.integration,
             );
             try {
               git(o.mainCheckout, 'update-ref', targetRef, head, base);
@@ -2152,15 +2196,15 @@ export class MergeTrain {
     if (
       lane !== 'main' ||
       o.integrationBranch === undefined ||
-      !controlPlaneReleaseBrief(taskIntegrationTarget(o.stateDirectory, entry.request.taskId))
+      !controlPlaneReleaseBrief(taskIntegrationTarget(o.stateDirectory, entry.request.taskId, o.policy?.storage))
     )
       return this.integrate(entry);
 
     const drainDev = () => this.drain('dev', false, handOff);
     const devPending = () => o.queue.nextBatch(1, [], 'dev').length > 0;
-    const timeoutMs = o.controlPlaneDevLeaseTimeoutMs ?? 30_000;
-    if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || timeoutMs > 30_000)
-      throw new Error('Control-plane dev lease wait must be within 30 seconds');
+    const policy = o.policy ?? defaultPolicy;
+    const timeoutMs = o.controlPlaneDevLeaseTimeoutMs ?? policy.controlPlane.devLeaseWaitMs;
+    validateDevLaneWait(timeoutMs, policy.controlPlane);
     const deadline = performance.now() + timeoutMs;
     for (;;) {
       o.fence.assertCurrent(entry.request);
@@ -2172,13 +2216,13 @@ export class MergeTrain {
         if (devPending()) {
           const remaining = deadline - performance.now();
           if (remaining <= 0) return;
-          await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+          await new Promise((resolve) => setTimeout(resolve, Math.min(policy.controlPlane.pollMs, remaining)));
           continue;
         }
       }
       let lease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'));
+        lease = acquireDirectoryLease(join(o.stateDirectory, 'train.lease'), this.options.policy?.leases);
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
         const remaining = deadline - performance.now();
@@ -2189,7 +2233,7 @@ export class MergeTrain {
           );
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, Math.min(50, remaining)));
+        await new Promise((resolve) => setTimeout(resolve, Math.min(policy.controlPlane.pollMs, remaining)));
         continue;
       }
       let yielded = false;
@@ -2242,8 +2286,9 @@ export class MergeTrain {
     }
     const attempts = history.attempts.filter((attempt) => attempt.source === source);
     const logPath = join(o.stateDirectory, `landing-${entry.id}-proof-${history.attempts.length + 1}.log`);
-    if (attempts.length >= 3) {
-      const output = 'Control-plane proof interrupted three times for this source; owning source decision required';
+    if (attempts.length >= (o.policy ?? defaultPolicy).controlPlane.proofAttempts) {
+      const count = (o.policy ?? defaultPolicy).controlPlane.proofAttempts;
+      const output = `Control-plane proof interrupted ${count === 3 ? 'three' : count} times for this source; owning source decision required`;
       appendFileSync(previous!.logPath, `${output}\n`);
       return {
         ...entry.request,
@@ -2293,8 +2338,10 @@ export class MergeTrain {
       checkpoint,
       capture(candidate, snapshot) {
         const spent = attempts.reduce((total, prior) => total + Math.max(1, prior.validations ?? 0), 0);
-        if (spent + (attempt.validations ?? 0) >= 5)
-          throw new Error('Control-plane source exhausted five candidate validations; owning source decision required');
+        if (spent + (attempt.validations ?? 0) >= (o.policy ?? defaultPolicy).controlPlane.candidateValidations)
+          throw new Error(
+            `Control-plane source exhausted ${(o.policy ?? defaultPolicy).controlPlane.candidateValidations === 5 ? 'five' : (o.policy ?? defaultPolicy).controlPlane.candidateValidations} candidate validations; owning source decision required`,
+          );
         attempt.validations = (attempt.validations ?? 0) + 1;
         attempt.candidate = candidate;
         attempt.snapshot = snapshot;
@@ -2308,13 +2355,16 @@ export class MergeTrain {
         return result;
       },
     };
-    const timer = setInterval(() => {
-      try {
-        observe();
-      } catch (error) {
-        controller.abort(error);
-      }
-    }, 50);
+    const timer = setInterval(
+      () => {
+        try {
+          observe();
+        } catch (error) {
+          controller.abort(error);
+        }
+      },
+      (o.policy ?? defaultPolicy).controlPlane.pollMs,
+    );
     try {
       const outcome = await this.integrate(entry, custody);
       attempt.status = 'finished';
@@ -2376,10 +2426,10 @@ export class MergeTrain {
   private async integrate(entry: LandingEntry, custody?: OrdinaryProofCustody): Promise<GateOutcome> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
-      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit);
+      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
-    const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId);
+    const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId, o.policy?.storage);
     const sharedStore = recorded.workspace && o.fence instanceof WorkerStore ? o.fence : undefined;
     const workspace = sharedStore
       ? new WorkspaceController(
@@ -2448,8 +2498,10 @@ export class MergeTrain {
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
-      runAffectedTest(command, cwd, log, env, custody ? { signal: custody.signal } : undefined);
-    const runGate = custody ? custody.run(o.runGate ?? gateRunner()) : (o.runGate ?? gateRunner());
+      runAffectedTest(command, cwd, log, env, custody ? { signal: custody.signal } : undefined, o.policy);
+    const runGate = custody
+      ? custody.run(o.runGate ?? gateRunner((o.policy ?? defaultPolicy).integration.checkTimeoutMs))
+      : (o.runGate ?? gateRunner((o.policy ?? defaultPolicy).integration.checkTimeoutMs));
     const target = () => git(o.mainCheckout, 'rev-parse', targetRef);
     const refreshManagerLanding = () => {
       if (request.managerLanding) return;
@@ -2693,7 +2745,7 @@ export class MergeTrain {
               existsSync(join(trainTree, 'bun.lock')) &&
               existsSync(join(trainTree, 'package.json'))
             )
-              installShared(trainTree);
+              installShared(trainTree, undefined, undefined, this.options.policy);
             const checked = rerun
               ? await runGate(request.gate, trainTree, logPath)
               : { passed: true, output: '', timedOut: false };
@@ -2776,7 +2828,10 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
         if (workspace) {
-          const ownership = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+          const ownership = readRiskOwnership(
+            o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+            o.policy?.brief,
+          );
           for (const task of sharedTasks) {
             const protectedPaths = Object.entries(ownership.areas)
               .filter(([area]) => !task.brief.riskAreas.includes(area))
@@ -2865,7 +2920,7 @@ export class MergeTrain {
             existsSync(join(trainTree, 'bun.lock')) &&
             existsSync(join(trainTree, 'package.json'))
           )
-            installShared(trainTree);
+            installShared(trainTree, undefined, undefined, this.options.policy);
           const { command, result: checked } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
@@ -2897,7 +2952,7 @@ export class MergeTrain {
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
-          installShared(trainTree);
+          installShared(trainTree, undefined, undefined, this.options.policy);
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
@@ -3412,7 +3467,10 @@ export class MergeTrain {
   ): void {
     const summary =
       `Task ${taskId} could not advance dev candidate ${candidate}: root typecheck command ${command.join(' ')} failed. ` +
-      `Compiler output: ${output.slice(-6000)}. Full log: ${logPath}`.replace(/[\r\n]+/g, ' ');
+      `Compiler output: ${output.slice(-(this.options.policy ?? defaultPolicy).controlPlane.diagnosticCharacters)}. Full log: ${logPath}`.replace(
+        /[\r\n]+/g,
+        ' ',
+      );
     const supermanager =
       this.options.supermanager ??
       localBranchSettings(this.options.mainCheckout).supermanager ??
@@ -3420,13 +3478,15 @@ export class MergeTrain {
     const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return;
     try {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const manager of managers)
         inbox.deliver({ managerId: manager, taskId, kind: 'instruction', evidencePath: logPath, summary });
@@ -3502,7 +3562,7 @@ export class MergeTrain {
   ): Promise<{ commit?: string; conflicts?: string[]; error?: string }> {
     const checkout = this.options.mainCheckout;
     const targetRef = `refs/heads/${targetBranch}`;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < (this.options.policy ?? defaultPolicy).integration.advanceAttempts; attempt++) {
       const targetResult = runSync('git', ['rev-parse', '--verify', targetRef], {
         cwd: checkout,
         encoding: 'utf8',
@@ -3545,7 +3605,7 @@ export class MergeTrain {
             existsSync(join(tree, 'bun.lock')) &&
             existsSync(join(tree, 'package.json'))
           )
-            installShared(tree);
+            installShared(tree, undefined, undefined, this.options.policy);
           const { command, result } = await this.checkDevCandidate(tree, targetHead, commit, logPath);
           if (!result.passed) {
             const output = result.output || 'Root typecheck failed without compiler output';
@@ -3563,6 +3623,7 @@ export class MergeTrain {
               'dev root typecheck before ref advance',
               logPath,
               this.options.runCandidateGit,
+              this.options.policy?.integration,
             );
           git(checkout, 'update-ref', targetRef, commit, targetHead);
           if (targetBranch === (this.options.integrationBranch ?? 'dev'))
@@ -3649,13 +3710,15 @@ export class MergeTrain {
     const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return false;
     try {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
     } finally {
@@ -3680,7 +3743,7 @@ export class MergeTrain {
         rmSync(join(this.options.stateDirectory, 'stabilize-conflict.json'), { force: true });
         return;
       }
-      for (let attempt = 0; attempt < 5; attempt++) {
+      for (let attempt = 0; attempt < (this.options.policy ?? defaultPolicy).integration.advanceAttempts; attempt++) {
         const expected = this.ensureBranch(devBranch);
         try {
           git(trainTree, 'merge', '--abort');
@@ -3724,7 +3787,7 @@ export class MergeTrain {
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
-          installShared(trainTree);
+          installShared(trainTree, undefined, undefined, this.options.policy);
         try {
           const { command, result } = await this.checkDevCandidate(trainTree, expected, merged, logPath);
           if (!result.passed) {
@@ -3753,7 +3816,8 @@ export class MergeTrain {
           return;
         } catch (error) {
           if (git(this.options.mainCheckout, 'rev-parse', devRef) === expected) throw error;
-          if (attempt === 4) throw new Error(`dev moved while merging stabilize ${candidate}`);
+          if (attempt + 1 >= (this.options.policy ?? defaultPolicy).integration.advanceAttempts)
+            throw new Error(`dev moved while merging stabilize ${candidate}`);
         }
       }
     } catch (error) {
@@ -3869,7 +3933,7 @@ export class MergeTrain {
   ): void {
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return;
     try {
@@ -3921,6 +3985,8 @@ export class MergeTrain {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const [manager, changed] of byManager) {
         const unions = changed.filter((file) => unionFiles.has(file));
@@ -3967,13 +4033,15 @@ export class MergeTrain {
     const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return;
     try {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
     } finally {
@@ -4057,7 +4125,11 @@ export class MergeTrain {
     }
     const brief = parseBrief(
       markdown,
-      readRiskOwnership(this.options.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json')),
+      readRiskOwnership(
+        this.options.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+        this.options.policy?.brief,
+      ),
+      this.options.policy?.brief,
     );
     const requested = store.events(member.taskId, member.attempt).find((event) => event.kind === 'landing-requested');
     const authorized = store
@@ -4150,7 +4222,7 @@ export class MergeTrain {
       throw new Error('Supersession requires exact verified terminal handoff and changed producer inputs');
     const batchId = controlPlaneBatchId(manifest);
     if (batchId === input.previousBatchId) throw new Error('Replacement cohort must genuinely change');
-    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
+    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'), this.options.policy?.leases);
     try {
       const path = join(o.stateDirectory, `control-plane-batch-${input.previousBatchId}.json`);
       const writeClosure = (previous: ControlPlaneBatchJournal, result: ControlPlaneBatchSupersessionResult) => {
@@ -4502,7 +4574,7 @@ export class MergeTrain {
     const actor = authenticatedManager(store.db, env);
     if (env.GOAL_TASK_ID || env.GOAL_ATTEMPT || !actor)
       throw new Error('Dev handoff requires an authenticated owning manager session');
-    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'));
+    const lease = acquireDirectoryLease(join(o.stateDirectory, 'train-main.lease'), this.options.policy?.leases);
     try {
       const raw = o.queue.controlPlaneSupersession(input.previousBatchId);
       const receipt = raw
@@ -4582,9 +4654,16 @@ export class MergeTrain {
 
   /** Main -> dev is the only nested train order. Dev never takes main while holding its lane. */
   private async withControlPlaneBatchLanes<T>(run: () => Promise<T>): Promise<T> {
-    const main = acquireDirectoryLease(join(this.options.stateDirectory, 'train-main.lease'));
+    const main = acquireDirectoryLease(
+      join(this.options.stateDirectory, 'train-main.lease'),
+      this.options.policy?.leases,
+    );
     try {
-      const dev = await acquireControlPlaneDevLane(this.options.stateDirectory);
+      const dev = await acquireControlPlaneDevLane(
+        this.options.stateDirectory,
+        this.options.controlPlaneDevLeaseTimeoutMs,
+        this.options.policy,
+      );
       try {
         return await run();
       } finally {
@@ -5207,13 +5286,23 @@ export class MergeTrain {
                           /^tools\/goal\/src\/[a-zA-Z0-9_./-]+\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file) &&
                           !file.split('/').includes('..'),
                       )
-                      .slice(0, 3)
+                      .slice(0, (this.options.policy ?? defaultPolicy).controlPlane.negativeProbeFiles)
                   : [];
               journal.nodes[child] = {
                 indices,
                 attempts: 0,
                 ...(files.length
-                  ? { negativeProbes: [['bun', 'test', '--timeout', '30000', ...files]] }
+                  ? {
+                      negativeProbes: [
+                        [
+                          'bun',
+                          'test',
+                          '--timeout',
+                          String((this.options.policy ?? defaultPolicy).controlPlane.testTimeoutMs),
+                          ...files,
+                        ],
+                      ],
+                    }
                   : failed?.result.negativeOnly
                     ? { negativeProbes: node.negativeProbes }
                     : {}),
@@ -5316,7 +5405,10 @@ export class MergeTrain {
               const sourcePaths = changedPathsBetween(tree, fork === tip ? task.base : fork, tip);
               const frozen = frozenFilesForTask(o.stateDirectory, task.id);
               const before = git(tree, 'rev-parse', 'HEAD');
-              const risk = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+              const risk = readRiskOwnership(
+                o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+                o.policy?.brief,
+              );
               const guardedRequest = {
                 ...entry.request,
                 declaredPaths: [
@@ -5673,10 +5765,14 @@ export class MergeTrain {
     custody?: OrdinaryProofCustody,
   ): Promise<ControlPlaneProof> {
     const o = this.options;
-    const runner = o.runControlPlaneGate ?? o.runGate ?? gateRunner(600_000, o.stateDirectory);
+    const checks = controlPlaneChecks(o.policy?.controlPlane);
+    const runner =
+      o.runControlPlaneGate ??
+      o.runGate ??
+      gateRunner((o.policy ?? defaultPolicy).controlPlane.checkTimeoutMs, o.stateDirectory);
     const run = custody ? custody.run(runner) : runner;
     const integrity = (cwd: string, head: string, phase: string) =>
-      assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit);
+      assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit, o.policy?.integration);
     const moved = () => !this.controlPlaneSnapshotMatches(snapshot);
     const finish = (result: ControlPlaneProof): ControlPlaneProof => {
       // Failure evidence is durable before publication-ref movement can request a rebuild.
@@ -5684,7 +5780,7 @@ export class MergeTrain {
       return { ...result, ...(moved() ? { moved: true } : {}) };
     };
     appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${snapshot.mainHead}\n`);
-    const installs = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(0, 2), tree, logPath, run);
+    const installs = await runIntegrationChecks(checks.slice(0, 2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane dependency installs');
     if (!installs.passed) return finish(installs);
     // At most one bounded file probe inherited from the failed parent's actual full-suite output.
@@ -5696,28 +5792,28 @@ export class MergeTrain {
         [command],
         tree,
         logPath,
-        o.runControlPlaneGate ?? o.runGate ?? gateRunner(60_000, o.stateDirectory),
+        o.runControlPlaneGate ??
+          o.runGate ??
+          gateRunner((o.policy ?? defaultPolicy).controlPlane.negativeProbeTimeoutMs, o.stateDirectory),
       );
       integrity(tree, candidate, 'negative-only bisection probe');
       if (!probe.passed && !probe.timedOut) return finish({ ...probe, negativeOnly: true });
     }
     let validation: Awaited<ReturnType<typeof runIntegrationChecks>>;
     if (repairTyping) {
-      let typing = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2, 3), tree, logPath, run);
+      let typing = await runIntegrationChecks(checks.slice(2, 3), tree, logPath, run);
       integrity(tree, candidate, 'control-plane typecheck');
       if (installs.passed && !typing.passed && !typing.timedOut && !moved()) {
         const repaired = await repairTyping(typing.output);
         if (repaired) {
           candidate = repaired;
-          typing = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2, 3), tree, logPath, run);
+          typing = await runIntegrationChecks(checks.slice(2, 3), tree, logPath, run);
           integrity(tree, candidate, 'control-plane repaired typecheck');
         }
       }
       validation =
-        typing.passed && installs.passed
-          ? await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(3), tree, logPath, run)
-          : typing;
-    } else validation = await runIntegrationChecks(CONTROL_PLANE_CHECKS.slice(2), tree, logPath, run);
+        typing.passed && installs.passed ? await runIntegrationChecks(checks.slice(3), tree, logPath, run) : typing;
+    } else validation = await runIntegrationChecks(checks.slice(2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane typecheck and test suite');
     const checked = {
       passed: installs.passed && validation.passed,
@@ -5747,7 +5843,7 @@ export class MergeTrain {
     }
     appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
     const smokeCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts', '--expected-dev-script-tree', snapshot.devHead];
-    const smokeRunner = o.runLaunchSmoke ?? gateRunner(300_000);
+    const smokeRunner = o.runLaunchSmoke ?? gateRunner((o.policy ?? defaultPolicy).controlPlane.launchSmokeTimeoutMs);
     const smoke = await runIntegrationChecks(
       [smokeCommand],
       tree,
@@ -5882,6 +5978,7 @@ export class MergeTrain {
         tree,
         ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
         this.options.runCandidateGit,
+        this.options.policy?.integration,
       );
       const cause = `${merged.stdout ?? ''}${merged.stderr ?? ''}`.trim() || merged.error?.message || '';
       if (merged.status !== 0) {

@@ -10,10 +10,11 @@ import {
   type SessionUsage,
 } from './agents.ts';
 import { scanSessionJsonl } from './session-accounting.ts';
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
 export const CLASSIFIER_VERSION = '1';
 export const emptyTokens = (): Tokens => ({ input: 0, cached: 0, output: 0 });
-export const ATTEMPT_LOG_TAIL_BYTES = 256 * 1024;
+export const ATTEMPT_LOG_TAIL_BYTES = defaultPolicy.worker.logTailBytes;
 
 /** Read a bounded suffix, discarding its first partial line so consumers only parse complete events. */
 export function readLogTail(path: string, maxBytes = ATTEMPT_LOG_TAIL_BYTES): string {
@@ -125,7 +126,13 @@ export type LogMeasurement = {
 /** Cumulative totals are differenced, duplicate snapshots contribute zero, and pre-window totals establish a baseline. */
 export function measureLog(
   text: string,
-  options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter } = {},
+  options: {
+    startedAt?: string;
+    endedAt?: string;
+    baseline?: Tokens;
+    adapter?: AgentAdapter;
+    policy?: ControlPolicy;
+  } = {},
 ): LogMeasurement {
   const lines = text.split('\n').flatMap((line) => {
     try {
@@ -149,8 +156,9 @@ export function measureLog(
   const state = measurementState(options, adapters, hasRollout);
   for (const event of events) state.add(event);
   const ledger =
-    adapters.map((adapter) => adapter.parseUsage(events, state.start, state.end)).find((usage) => usage !== null) ??
-    null;
+    adapters
+      .map((adapter) => adapter.parseUsage(events, state.start, state.end, options.policy?.provider))
+      .find((usage) => usage !== null) ?? null;
   return state.finish(ledger);
 }
 
@@ -164,7 +172,7 @@ type MeasurementState = {
 };
 
 function measurementState(
-  options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter },
+  options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter; policy?: ControlPolicy },
   adapters: AgentAdapter[],
   hasRollout: boolean,
 ): MeasurementState {
@@ -306,23 +314,39 @@ function measurementState(
 /** Measure a retained session JSONL file without retaining its event history. */
 export function measureSessionFile(
   path: string,
-  options: { startedAt?: string; endedAt?: string; baseline?: Tokens; adapter?: AgentAdapter } = {},
+  options: {
+    startedAt?: string;
+    endedAt?: string;
+    baseline?: Tokens;
+    adapter?: AgentAdapter;
+    policy?: ControlPolicy;
+  } = {},
 ): { measurement: LogMeasurement; hasUsage: boolean } | null {
   const adapters = options.adapter ? [options.adapter] : allAgentAdapters();
   let hasRollout = false;
-  const header = scanSessionJsonl(path, (event) => {
-    if (!hasRollout) hasRollout = adapters.some((adapter) => adapter.hasRollout?.([event]) ?? false);
-  });
+  const header = scanSessionJsonl(
+    path,
+    (event) => {
+      if (!hasRollout) hasRollout = adapters.some((adapter) => adapter.hasRollout?.([event]) ?? false);
+    },
+    options.policy?.records,
+  );
   if (!header.complete) return null;
 
   const state = measurementState(options, adapters, hasRollout);
   const usageAccumulators: AgentUsageAccumulator[] = adapters.flatMap((adapter) =>
-    adapter.createUsageAccumulator ? [adapter.createUsageAccumulator(state.start, state.end)] : [],
+    adapter.createUsageAccumulator
+      ? [adapter.createUsageAccumulator(state.start, state.end, options.policy?.provider)]
+      : [],
   );
-  const body = scanSessionJsonl(path, (event) => {
-    state.add(event);
-    for (const accumulator of usageAccumulators) accumulator.add(event);
-  });
+  const body = scanSessionJsonl(
+    path,
+    (event) => {
+      state.add(event);
+      for (const accumulator of usageAccumulators) accumulator.add(event);
+    },
+    options.policy?.records,
+  );
   if (!body.complete) return null;
   const ledger = usageAccumulators.map((accumulator) => accumulator.finish()).find((usage) => usage !== null) ?? null;
   const measurement = state.finish(ledger);
@@ -390,6 +414,7 @@ export function makeRecord(
   };
 }
 export type MeasurementOptions = {
+  policy?: ControlPolicy;
   baseline?: Tokens;
   configDirectory?: string | undefined;
   logStartOffset?: number;
@@ -399,7 +424,7 @@ export type MeasurementOptions = {
  * retry has chosen how to start, so the head of its run log names it instead; without this every retry of a superseded
  * attempt started a fresh session and lost its context (437 of 437 retries on 2026-10-29).
  */
-export function attemptSession(attempt: Attempt): string | null {
+export function attemptSession(attempt: Attempt, policy = defaultPolicy.records): string | null {
   if (attempt.session) return attempt.session;
   const adapter = attempt.profile && agentAdapter(attempt.profile.cli);
   if (!adapter) return null;
@@ -407,7 +432,7 @@ export function attemptSession(attempt: Attempt): string | null {
   try {
     const fd = openSync(attempt.logPath, 'r');
     try {
-      const buffer = Buffer.alloc(65536);
+      const buffer = Buffer.alloc(policy.sessionHeadBytes);
       head = buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, 0)).toString('utf8');
     } finally {
       closeSync(fd);
@@ -437,7 +462,11 @@ export function readMeasurement(
     } catch {
       /* A failed spawn has no stream. */
     }
-  const interval = { startedAt: attempt.startedAt, ...(attempt.endedAt ? { endedAt: attempt.endedAt } : {}) };
+  const interval = {
+    policy: options.policy ?? defaultPolicy,
+    startedAt: attempt.startedAt,
+    ...(attempt.endedAt ? { endedAt: attempt.endedAt } : {}),
+  };
   // Historical records can lack a profile; their event/session formats select an adapter instead.
   const selected = attempt.profile && agentAdapter(attempt.profile.cli);
   const adapters = selected ? [selected] : allAgentAdapters();
@@ -513,7 +542,11 @@ export function readMeasurement(
 }
 
 /** Only the bounded approach/result fields enter evidence; the rest of the session stays in its raw log. */
-export function reportedApproaches(result: string, adapter?: AgentAdapter): { approach: string; result: string }[] {
+export function reportedApproaches(
+  result: string,
+  adapter?: AgentAdapter,
+  policy = defaultPolicy.records,
+): { approach: string; result: string }[] {
   try {
     const value = parseAgentExit(result, adapter) as { approaches?: { approach?: unknown; result?: unknown }[] } | null;
     if (Array.isArray(value?.approaches))
@@ -525,7 +558,7 @@ export function reportedApproaches(result: string, adapter?: AgentAdapter): { ap
     /* Legacy handoffs use two bounded lines. */
   }
   return [...result.matchAll(/^APPROACH:[ \t]*(.+)\r?\nOUTCOME:[ \t]*(.+)$/gim)].map((match) => ({
-    approach: match[1]!.trim().slice(0, 1000),
-    result: match[2]!.trim().slice(0, 2000),
+    approach: match[1]!.trim().slice(0, policy.legacyApproachCharacters),
+    result: match[2]!.trim().slice(0, policy.legacyResultCharacters),
   }));
 }

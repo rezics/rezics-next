@@ -1,8 +1,9 @@
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
+import { defaultPolicy } from './policy.ts';
 
-export const SESSION_JSONL_READ_BUFFER_BYTES = 64 * 1024;
-export const SESSION_JSONL_MAX_RECORD_BYTES = 1024 * 1024;
+export const SESSION_JSONL_READ_BUFFER_BYTES = defaultPolicy.records.sessionReadBufferBytes;
+export const SESSION_JSONL_MAX_RECORD_BYTES = defaultPolicy.records.sessionRecordBytes;
 
 export type SessionJsonlScan = {
   complete: boolean;
@@ -12,7 +13,11 @@ export type SessionJsonlScan = {
 };
 
 /** Visit JSONL records with fixed-size reads and a bounded per-record buffer. */
-export function scanSessionJsonl(path: string, visit: (event: Record<string, any>) => void): SessionJsonlScan {
+export function scanSessionJsonl(
+  path: string,
+  visit: (event: Record<string, any>) => void,
+  policy = defaultPolicy.records,
+): SessionJsonlScan {
   const scan: SessionJsonlScan = { complete: true, bytesRead: 0, maxRecordBytes: 0, maxBufferedBytes: 0 };
   let fd: number;
   try {
@@ -28,7 +33,7 @@ export function scanSessionJsonl(path: string, visit: (event: Record<string, any
     } catch {
       return { ...scan, complete: false };
     }
-    const chunk = Buffer.alloc(SESSION_JSONL_READ_BUFFER_BYTES);
+    const chunk = Buffer.alloc(policy.sessionReadBufferBytes);
     let position = 0;
     let line = '';
     let lineBytes = 0;
@@ -38,7 +43,7 @@ export function scanSessionJsonl(path: string, visit: (event: Record<string, any
 
     const append = (bytes: Buffer) => {
       if (oversized || bytes.length === 0) return;
-      if (lineBytes + bytes.length > SESSION_JSONL_MAX_RECORD_BYTES) {
+      if (lineBytes + bytes.length > policy.sessionRecordBytes) {
         oversized = true;
         line = '';
         lineBytes = 0;
@@ -47,7 +52,7 @@ export function scanSessionJsonl(path: string, visit: (event: Record<string, any
       }
       lineBytes += bytes.length;
       scan.maxRecordBytes = Math.max(scan.maxRecordBytes, lineBytes);
-      scan.maxBufferedBytes = Math.max(scan.maxBufferedBytes, SESSION_JSONL_READ_BUFFER_BYTES + lineBytes);
+      scan.maxBufferedBytes = Math.max(scan.maxBufferedBytes, policy.sessionReadBufferBytes + lineBytes);
       line += decoder.write(bytes);
     };
 
