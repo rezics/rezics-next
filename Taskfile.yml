@@ -1,6 +1,5 @@
 version: '3'
 
-dir: '{{.ROOT_DIR}}'
 dotenv: ['.temp/goal/goal.env']
 env:
   PATH: '{{.ROOT_DIR}}/node_modules/.bin:{{.PATH}}'
