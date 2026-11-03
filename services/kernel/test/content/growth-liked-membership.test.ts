@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { NoticeMessage, PoolClient } from 'pg';
+import type { PoolClient } from 'pg';
 import { readLikedMembership } from '../../src/content/liked-read.ts';
 import membershipSql from '../../src/content/liked-membership.sql';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -20,7 +20,7 @@ async function membership(f: Fixture, ids: readonly string[], actorId = f.actorI
   const observer = observeSql(f.db.pool);
   const client = await f.db.pool.connect();
   const plans: PlanNode[] = [];
-  const notice = (message: NoticeMessage) => {
+  const notice = (message: { readonly message?: string }) => {
     const marker = 'plan:\n';
     if (!message.message?.startsWith('duration:') || !message.message.includes(marker)) return;
     const document: unknown = JSON.parse(message.message.slice(message.message.indexOf(marker) + marker.length));
