@@ -21,8 +21,10 @@ never converted to a clear. `clear` is an explicit native operation. Priority cl
 | Bangumi | `comment` or `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported | retained `private` when a recognized boolean value is present | retained `created_at` | retained `updated_at` |
 | AniList | `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported; retained numeric priority has no adopted mapping | a retained boolean `private` field only | retained `createdAt` | retained `updatedAt` |
 
-Recognized boolean privacy values are provider-specific true/false tokens. MAL maps textual `private`/`true` and
-`public`/`false`; numeric `0` and `1` remain unknown until the retained provider contract defines their meanings.
+Recognized boolean privacy values are provider-specific true/false tokens. **Decision:** MAL `my_privacy` maps only
+the retained strings `private`/`true` and `public`/`false`; numeric `0` and `1` remain unknown because the retained
+provider contract does not define their meanings. Bangumi boolean values map to known privacy; safe nonempty tokens
+remain unknown evidence.
 Unknown nonempty tokens remain private unknown evidence and can be adopted only when the native provenance value can
 retain the exact token. Empty values,
 malformed values and fields absent from a provider's retained schema stay distinguishable and are not guessed. Date-only
@@ -81,12 +83,14 @@ capped at 2,048 encoded bytes, selects at most five fields and addresses at most
 annotation command and one atomic source-observation admission or correction. The private comparison response is
 capped at 65,536 encoded bytes. Each retained metadata review is capped at 32,768 JSON bytes and each row history at
 65,536 bytes. MAL's existing whole-document limit is raised from 12 MiB to 48 MiB, covering the previous evidence
-allowance plus 500 rows × two 32 KiB review records, rounded up.
+allowance plus 500 rows × two 32 KiB review records, rounded up. MAL checks JSONB encoded size before each write;
+VNDB checks the prospective decision object against its installed 8 MiB constraint, while AniList stays inside its
+installed 4 MiB per-row payload limit.
 
 Per review cost is the provider's indexed owner/upload/row read and current profile admission, plus the native personal
-read of one Subject and at most 32 indexed source observations. Per apply cost adds at most one annotation command and
-one source-observation command, each rechecking owner, account lifecycle and canonical profile. Result retrieval is
+read of one Subject and at most 32 indexed source observations. Per apply cost adds at most two native commands per
+selected row (annotation and provenance), each rechecking owner, account lifecycle and canonical profile. Result retrieval is
 one indexed upload/row read; pruning is the existing bounded upload expiry/removal and account-erasure path. Thus
-`C = Cfixed-authority + Csource/current-review(R,F) + R*F*Cnative-field-command + Cresult/cleanup`; unrelated owner,
+`C <= Cfixed-authority + Csource/current-review(R,F) + 2R*Cnative-command + Cresult/cleanup`; unrelated owner,
 account-history and provider-row populations do not add work. Native growth acceptance at 64/512/4096 retained rows
 and shared checks are owned by the controller after integration.

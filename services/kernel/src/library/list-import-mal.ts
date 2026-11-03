@@ -251,7 +251,7 @@ function sameReviewContext(
   );
 }
 
-function malMetadataProposals(row: MalRow): EntryImportMetadataProposals {
+export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals {
   const noteRaw = row.fields.my_comments;
   const note = noteRaw === undefined
     ? { state: 'absent' as const, sourceField: null }
@@ -288,7 +288,7 @@ function malMetadataProposals(row: MalRow): EntryImportMetadataProposals {
       ? { state: 'empty' as const, sourceField: 'my_privacy', sourceValue: '' }
       : privacyMeaning
         ? { state: 'value' as const, sourceField: 'my_privacy', sourceValue: privacyRaw, value: { status: 'known' as const, meaning: privacyMeaning } }
-        : Buffer.byteLength(privacyRaw) <= 192 && !/[\u0000-\u001f\u007f]/.test(privacyRaw)
+        : Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(privacyRaw)
           ? { state: 'unknown' as const, sourceField: 'my_privacy', sourceValue: privacyRaw, value: { status: 'unknown' as const, sourceValue: privacyRaw } }
           : { state: 'unsupported' as const, sourceField: 'my_privacy', reason: 'The source privacy token exceeds the native evidence bound.' };
   const updateFields = Object.keys(row.fields).filter((field) => /updated|timestamp|last_updated/i.test(field));
@@ -302,7 +302,7 @@ function malMetadataProposals(row: MalRow): EntryImportMetadataProposals {
           try {
             return { state: 'value' as const, sourceField: field, sourceValue: raw, value: parseSourceTimestamp(raw) };
           } catch {
-            return Buffer.byteLength(raw) <= 64 && !/[\u0000-\u001f\u007f]/.test(raw)
+            return Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes && !/[\u0000-\u001f\u007f]/.test(raw)
               ? { state: 'unknown' as const, sourceField: field, sourceValue: raw, value: { status: 'unknown' as const, sourceValue: raw } }
               : { state: 'invalid' as const, sourceField: field, reason: 'The retained update time cannot fit the native timestamp evidence bound.' };
           }
@@ -405,12 +405,13 @@ export function createMalImport(deps: Dependencies) {
         else {
           if (Buffer.byteLength(canonicalize(doc)!) > MAL_LIMITS.evidenceBytes)
             throw new ProblemError('invalid_request', { detail: 'MAL: retained evidence exceeds 48 MiB' });
-          await tx.query(`UPDATE library.list_import_mal SET document=$4 WHERE route=$1 AND account_id=$2 AND id=$3`, [
-            route,
-            a.accountId,
-            id,
-            canonicalize(doc),
-          ]);
+          const saved = await tx.query(
+            `UPDATE library.list_import_mal SET document=$4
+            WHERE route=$1 AND account_id=$2 AND id=$3
+              AND octet_length($4::jsonb::text)<=$5`,
+            [route, a.accountId, id, canonicalize(doc), MAL_LIMITS.evidenceBytes],
+          );
+          if (saved.rowCount !== 1) throw new ProblemError('invalid_request');
         }
         return noEffect({ id }); // Receipts contain no source text or review payload.
       },

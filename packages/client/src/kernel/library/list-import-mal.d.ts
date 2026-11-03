@@ -3,6 +3,13 @@ import type { KernelClock } from '../clock.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Entry } from './entry-model.ts';
+import type {
+    EntryImportMetadataOutcome,
+    EntryImportMetadataSelection,
+    EntryImportMetadataView,
+    MalMetadataReviewRequest,
+} from './list-import-entry-metadata.ts';
+export type MalMetadataReviewInput = MalMetadataReviewRequest;
 export type MalReviewInput = {
     row: number;
     target: string | null;
@@ -199,7 +206,7 @@ export declare function createMalImport(deps: Dependencies): {
         limits: {
             readonly bytes: 2097152;
             readonly wireBytes: 4194304;
-            readonly evidenceBytes: 12582912;
+            readonly evidenceBytes: 50331648;
             readonly rows: 500;
             readonly page: 20;
             readonly depth: 16;
@@ -209,6 +216,12 @@ export declare function createMalImport(deps: Dependencies): {
     review: (actor: Actor, id: string, input: MalReviewInput, key: string, deadline: number) => Promise<import("../command/command.ts").CommandOutcome<{
         id: string;
     }>>;
+    reviewMetadata: (actor: Actor, id: string, input: MalMetadataReviewInput, key: string, deadline: number) => Promise<import("../command/command.ts").CommandOutcome<{
+        id: string;
+        reviewToken: string;
+    }>>;
+    metadata: (actor: Actor, id: string, ordinal: number, reviewToken: string, deadline: number) => Promise<EntryImportMetadataView>;
+    applyMetadata: (actor: Actor, id: string, ordinal: number, reviewToken: string, fields: readonly EntryImportMetadataSelection[], deadline: number, signal?: AbortSignal, recordCommand?: (command: import("../command/command.ts").CommandOutcome<unknown>) => void) => Promise<EntryImportMetadataOutcome>;
     apply: (actor: Actor, id: string, input: MalApplyInput, deadline: number, signal: AbortSignal, record: (value: Awaited<ReturnType<(actor: Actor, subjectId: string, input: unknown, requestKey: string, guard?: import("./list-import-bangumi-model.ts").BangumiGuard | import("./entries.ts").ReviewedEntrySource | undefined) => Promise<import("../command/command.ts").CommandOutcome<{
         entry: Entry;
         created: boolean;

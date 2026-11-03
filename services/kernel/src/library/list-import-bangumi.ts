@@ -45,6 +45,60 @@ import {
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; routeKey: Uint8Array; clock?: KernelClock };
 type StoredRow = BangumiRow & { choice: BangumiChoice | null; labels: BangumiLabelState | null };
+export function bangumiMetadataProposals(evidence: BangumiRow['evidence']): EntryImportMetadataProposals {
+  const source = evidence.source;
+  const noteField = ['comment', 'notes'].find((field) => Object.hasOwn(source, field)) ?? null;
+  const noteRaw = noteField === null ? undefined : source[noteField];
+  const note: EntryImportMetadataProposal =
+    noteField === null
+      ? { state: 'absent', sourceField: null, reason: 'This row has no retained note field.' }
+      : typeof noteRaw !== 'string'
+        ? { state: 'invalid', sourceField: noteField, sourceValue: null, reason: 'The retained note is not text.' }
+        : noteRaw.length === 0
+          ? { state: 'empty', sourceField: noteField, sourceValue: '', reason: 'An empty source comment is not a native clear.' }
+          : !noteRaw.isWellFormed() || noteRaw.includes('\u0000') || Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+            ? { state: 'unsupported', sourceField: noteField, reason: 'The retained note is outside the native 4,096-byte text limit.' }
+            : { state: 'value', sourceField: noteField, value: noteRaw };
+  const privacyField = Object.hasOwn(source, 'private') ? 'private' : null;
+  const privacyRaw = privacyField === null ? undefined : source.private;
+  const privacy: EntryImportMetadataProposal =
+    privacyField === null
+      ? { state: 'absent', sourceField: null, value: { status: 'absent' } }
+      : typeof privacyRaw === 'boolean'
+        ? {
+            state: 'value', sourceField: privacyField,
+            value: { status: 'known', meaning: privacyRaw ? 'private' : 'source_visible' },
+            sourceValue: privacyRaw,
+          }
+        : typeof privacyRaw === 'string' && privacyRaw.length > 0 && Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(privacyRaw)
+          ? { state: 'unknown', sourceField: privacyField, sourceValue: privacyRaw, value: { status: 'unknown', sourceValue: privacyRaw } }
+          : privacyRaw === null
+            ? { state: 'unknown', sourceField: privacyField, value: { status: 'unknown' } }
+            : typeof privacyRaw === 'number' && Number.isFinite(privacyRaw)
+              ? { state: 'unknown', sourceField: privacyField, sourceValue: privacyRaw, value: { status: 'unknown', sourceValue: String(privacyRaw) } }
+              : { state: 'unsupported', sourceField: privacyField, reason: 'The retained private value cannot fit the native provenance evidence bound.' };
+  const timestamp = (field: 'created_at' | 'updated_at'): EntryImportMetadataProposal => {
+    if (!Object.hasOwn(source, field)) return { state: 'absent', sourceField: null, value: { status: 'absent' } };
+    const raw = source[field];
+    if (typeof raw !== 'string') return { state: 'invalid', sourceField: field, sourceValue: null, reason: 'The retained timestamp is not text.' };
+    if (raw.length === 0) return { state: 'empty', sourceField: field, sourceValue: '', reason: 'An empty timestamp is not an absent timestamp.' };
+    try {
+      parseSourceTimestamp(raw);
+      return { state: 'value', sourceField: field, value: { status: 'known', value: raw }, sourceValue: raw };
+    } catch {
+      if (Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes && !/[\u0000-\u001f\u007f]/.test(raw) && !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw))
+        return { state: 'unknown', sourceField: field, sourceValue: raw, value: { status: 'unknown', sourceValue: raw } };
+      return { state: 'invalid', sourceField: field, sourceValue: raw.slice(0, 64), reason: 'The retained timestamp is not representable with its original precision.' };
+    }
+  };
+  return {
+    note,
+    priority: { state: 'unsupported', sourceField: null, reason: 'Bangumi has no retained personal-list priority field.' },
+    privacy,
+    sourceCreated: timestamp('created_at'),
+    sourceUpdated: timestamp('updated_at'),
+  };
+}
 export function createBangumiImport(deps: Dependencies) {
   const { pool, access } = deps;
   const runner = createLibraryCommandRunner(deps);
@@ -175,54 +229,6 @@ export function createBangumiImport(deps: Dependencies) {
   async function observation(actor: Actor, target: string) {
     const at = await mintReadTime(pool, deps.clock);
     return readLibraryProfileSourceObservation({ ...deps, actor, at, deadline: deadlineFor(5000) }, target);
-  }
-  function bangumiMetadataProposals(evidence: BangumiRow['evidence']): EntryImportMetadataProposals {
-    const source = evidence.source;
-    const noteField = ['comment', 'notes'].find((field) => Object.hasOwn(source, field)) ?? null;
-    const noteRaw = noteField === null ? undefined : source[noteField];
-    const note: EntryImportMetadataProposal =
-      noteField === null
-        ? { state: 'absent', sourceField: null, reason: 'This row has no retained note field.' }
-        : typeof noteRaw !== 'string'
-          ? { state: 'invalid', sourceField: noteField, sourceValue: null, reason: 'The retained note is not text.' }
-          : noteRaw.length === 0
-            ? { state: 'empty', sourceField: noteField, sourceValue: '', reason: 'An empty source comment is not a native clear.' }
-            : !noteRaw.isWellFormed() || noteRaw.includes('\u0000') || Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
-              ? { state: 'unsupported', sourceField: noteField, reason: 'The retained note is outside the native 4,096-byte text limit.' }
-              : { state: 'value', sourceField: noteField, value: noteRaw };
-    const privacyField = Object.hasOwn(source, 'private') ? 'private' : null;
-    const privacyRaw = privacyField === null ? undefined : source.private;
-    const privacy: EntryImportMetadataProposal =
-      privacyField === null
-        ? { state: 'absent', sourceField: null, value: { status: 'absent' } }
-        : typeof privacyRaw === 'boolean'
-          ? {
-              state: 'value',
-              sourceField: privacyField,
-              value: { status: 'known', meaning: privacyRaw ? 'private' : 'source_visible' },
-              sourceValue: privacyRaw,
-            }
-          : { state: 'invalid', sourceField: privacyField, sourceValue: null, reason: 'Bangumi private must be a retained boolean.' };
-    const timestamp = (field: 'created_at' | 'updated_at'): EntryImportMetadataProposal => {
-      if (!Object.hasOwn(source, field)) return { state: 'absent', sourceField: null, value: { status: 'absent' } };
-      const raw = source[field];
-      if (typeof raw !== 'string')
-        return { state: 'invalid', sourceField: field, sourceValue: null, reason: 'The retained timestamp is not text.' };
-      if (raw.length === 0) return { state: 'empty', sourceField: field, sourceValue: '', reason: 'An empty timestamp is not an absent timestamp.' };
-      try {
-        parseSourceTimestamp(raw);
-        return { state: 'value', sourceField: field, value: { status: 'known', value: raw }, sourceValue: raw };
-      } catch {
-        return { state: 'invalid', sourceField: field, sourceValue: raw.slice(0, 64), reason: 'The retained timestamp is not representable with its original precision.' };
-      }
-    };
-    return {
-      note,
-      priority: { state: 'unsupported', sourceField: null, reason: 'Bangumi has no retained personal-list priority field.' },
-      privacy,
-      sourceCreated: timestamp('created_at'),
-      sourceUpdated: timestamp('updated_at'),
-    };
   }
   async function profileMetadata(actor: Actor, target: string) {
     const current = await observation(actor, target);
@@ -388,6 +394,7 @@ export function createBangumiImport(deps: Dependencies) {
       if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw new ProblemError('conflict');
       if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new ProblemError('conflict');
       history.push(next);
+      assertEntryImportMetadataHistorySize(history);
       locked.review.metadata = history;
       await tx.query(
         `UPDATE library.bangumi_upload_row SET review=$5::jsonb WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,

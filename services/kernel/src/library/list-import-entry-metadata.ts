@@ -7,7 +7,12 @@ import type {
   PersonalEntrySourceCorrection,
   PersonalEntryTimestampInput,
 } from './entry-personal-model.ts';
-import { MAX_SOURCE_OBSERVATIONS } from './entry-personal-model.ts';
+import {
+  MAX_PERSONAL_NOTE_BYTES,
+  MAX_SOURCE_OBSERVATIONS,
+  MAX_SOURCE_PRIVACY_VALUE_BYTES,
+  MAX_SOURCE_TIMESTAMP_LENGTH,
+} from './entry-personal-model.ts';
 import type { Actor } from '../request/access.ts';
 import type { CommandOutcome } from '../command/command.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -22,7 +27,9 @@ export const ENTRY_IMPORT_METADATA_LIMITS = {
   requestBytes: 2048,
   reviewBytes: 32768,
   rowBytes: 65536,
-  noteBytes: 4096,
+  noteBytes: MAX_PERSONAL_NOTE_BYTES,
+  privacyValueBytes: MAX_SOURCE_PRIVACY_VALUE_BYTES,
+  timestampBytes: MAX_SOURCE_TIMESTAMP_LENGTH,
   responseBytes: 65536,
 } as const;
 
@@ -122,7 +129,7 @@ export function parseEntryImportMetadataSelections(value: unknown): EntryImportM
     });
   }
   if (new Set(result.map((item) => item.field)).size !== result.length) throw new ProblemError('invalid_request');
-  if (Buffer.byteLength(JSON.stringify(result)) > 2048) throw new ProblemError('invalid_request');
+  if (Buffer.byteLength(JSON.stringify(result)) > ENTRY_IMPORT_METADATA_LIMITS.requestBytes) throw new ProblemError('invalid_request');
   return result;
 }
 

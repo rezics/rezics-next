@@ -88,6 +88,42 @@ const role: Record<string, string> = {
   DROPPED: 'dropped',
   PAUSED: 'paused',
 };
+export function anilistMetadataProposals(row: AniListRow): EntryImportMetadataProposals {
+  const evidence = row.evidence;
+  const note: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'notes')
+    ? { state: 'absent', sourceField: null }
+    : typeof evidence.notes !== 'string'
+      ? { state: evidence.notes === null ? 'unknown' : 'invalid', sourceField: 'notes', sourceValue: typeof evidence.notes === 'number' || typeof evidence.notes === 'boolean' ? evidence.notes : null }
+      : evidence.notes === ''
+        ? { state: 'empty', sourceField: 'notes', sourceValue: '' }
+        : !evidence.notes.isWellFormed() || evidence.notes.includes('\0')
+          ? { state: 'invalid', sourceField: 'notes', reason: 'The retained note is not valid text.' }
+          : Buffer.byteLength(evidence.notes) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+            ? { state: 'unsupported', sourceField: 'notes', reason: 'The retained note exceeds the native 4,096-byte limit.' }
+            : { state: 'value', sourceField: 'notes', value: evidence.notes };
+  const priorityValue = evidence.priority;
+  const priority: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'priority')
+    ? { state: 'absent', sourceField: null }
+    : { state: 'unsupported', sourceField: 'priority', ...(typeof priorityValue === 'number' || typeof priorityValue === 'string' ? { sourceValue: priorityValue } : {}), reason: 'AniList priority has no installed, confirmed conversion to owner-local 1–100 positions.' };
+  const privacy: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'private')
+    ? { state: 'absent', sourceField: null, value: { status: 'absent' } }
+    : typeof evidence.private === 'boolean'
+      ? { state: 'value', sourceField: 'private', sourceValue: evidence.private, value: { status: 'known', meaning: evidence.private ? 'private' : 'source_visible' } }
+      : evidence.private === null
+        ? { state: 'unknown', sourceField: 'private', sourceValue: null, value: { status: 'unknown' } }
+        : { state: 'invalid', sourceField: 'private', reason: 'AniList private must be a retained boolean.' };
+  const timestamp = (field: 'createdAt' | 'updatedAt'): EntryImportMetadataProposal => {
+    if (!Object.hasOwn(evidence, field)) return { state: 'absent', sourceField: null, value: { status: 'absent' } };
+    const value = evidence[field];
+    if (value === null) return { state: 'unknown', sourceField: field, sourceValue: null, value: { status: 'unknown' } };
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
+      return { state: 'unknown', sourceField: field, sourceValue: value, value: { status: 'unknown', sourceValue: String(value) } };
+    if (typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes && !/[\u0000-\u001f\u007f]/.test(value))
+      return { state: 'unknown', sourceField: field, sourceValue: value, value: { status: 'unknown', sourceValue: value } };
+    return { state: 'unsupported', sourceField: field, reason: 'Only retained integer AniList timestamps fit the current native unknown-time contract.' };
+  };
+  return { note, priority, privacy, sourceCreated: timestamp('createdAt'), sourceUpdated: timestamp('updatedAt') };
+}
 function owner(actor: Actor): AccountActor {
   if (
     actor.kind !== 'account' ||
@@ -223,48 +259,6 @@ export function createAniListImport(deps: Dependencies) {
       observation.proposedState = choices.length === 1 ? choices[0]!.id : null;
     }
     return observation;
-  }
-  function anilistMetadataProposals(row: AniListRow): EntryImportMetadataProposals {
-    const evidence = row.evidence;
-    const note: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'notes')
-      ? { state: 'absent', sourceField: null }
-      : typeof evidence.notes !== 'string'
-        ? { state: evidence.notes === null ? 'unknown' : 'invalid', sourceField: 'notes', sourceValue: typeof evidence.notes === 'number' || typeof evidence.notes === 'boolean' ? evidence.notes : null }
-        : evidence.notes === ''
-          ? { state: 'empty', sourceField: 'notes', sourceValue: '' }
-          : !evidence.notes.isWellFormed() || evidence.notes.includes('\0')
-            ? { state: 'invalid', sourceField: 'notes', reason: 'The retained note is not valid text.' }
-            : Buffer.byteLength(evidence.notes) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
-              ? { state: 'unsupported', sourceField: 'notes', reason: 'The retained note exceeds the native 4,096-byte limit.' }
-              : { state: 'value', sourceField: 'notes', value: evidence.notes };
-    const priorityValue = evidence.priority;
-    const priority: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'priority')
-      ? { state: 'absent', sourceField: null }
-      : { state: 'unsupported', sourceField: 'priority', ...(typeof priorityValue === 'number' || typeof priorityValue === 'string' ? { sourceValue: priorityValue } : {}), reason: 'AniList priority has no installed, confirmed conversion to owner-local 1–100 positions.' };
-    const privacy: EntryImportMetadataProposal = !Object.hasOwn(evidence, 'private')
-      ? { state: 'absent', sourceField: null, value: { status: 'absent' } }
-      : typeof evidence.private === 'boolean'
-        ? { state: 'value', sourceField: 'private', sourceValue: evidence.private, value: { status: 'known', meaning: evidence.private ? 'private' : 'source_visible' } }
-        : evidence.private === null
-          ? { state: 'unknown', sourceField: 'private', sourceValue: null, value: { status: 'unknown' } }
-          : { state: 'invalid', sourceField: 'private', reason: 'AniList private must be a retained boolean.' };
-    const timestamp = (field: 'createdAt' | 'updatedAt'): EntryImportMetadataProposal => {
-      if (!Object.hasOwn(evidence, field)) return { state: 'absent', sourceField: null, value: { status: 'absent' } };
-      const value = evidence[field];
-      if (value === null) return { state: 'unknown', sourceField: field, sourceValue: null, value: { status: 'unknown' } };
-      if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
-        return { state: 'unknown', sourceField: field, sourceValue: value, value: { status: 'unknown', sourceValue: String(value) } };
-      if (typeof value === 'string' && value.length > 0 && Buffer.byteLength(value) <= 64 && !/[\u0000-\u001f\u007f]/.test(value))
-        return { state: 'unknown', sourceField: field, sourceValue: value, value: { status: 'unknown', sourceValue: value } };
-      return { state: 'unsupported', sourceField: field, reason: 'Only retained integer AniList timestamps fit the current native unknown-time contract.' };
-    };
-    return {
-      note,
-      priority,
-      privacy,
-      sourceCreated: timestamp('createdAt'),
-      sourceUpdated: timestamp('updatedAt'),
-    };
   }
   async function save(
     actor: Actor,

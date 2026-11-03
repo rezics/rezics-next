@@ -1,7 +1,7 @@
 export declare const MAL_LIMITS: {
     readonly bytes: 2097152;
     readonly wireBytes: 4194304;
-    readonly evidenceBytes: 12582912;
+    readonly evidenceBytes: 50331648;
     readonly rows: 500;
     readonly page: 20;
     readonly depth: 16;

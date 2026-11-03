@@ -161,7 +161,7 @@ export function vndbImportRoutes(
         headers,
         body: t.Object({ ordinal, sourceReviewToken: uuid }, closed),
         response: { 200: t.Unsafe<Output<'reviewMetadata'>['value']>(t.Any()), ...failures },
-        detail: detail('review_metadata'),
+        detail: { ...detail('review_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       ({ actor, params, body, headers, admission, job, session, set }) =>
         run(set, async () => {
@@ -208,7 +208,7 @@ export function vndbImportRoutes(
           closed,
         ),
         response: { 200: t.Unsafe<Output<'applyMetadata'>>(t.Any()), ...failures },
-        detail: detail('apply_metadata'),
+        detail: { ...detail('apply_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
       },
       ({ actor, params, body, request, admission, job, session, set }) =>
         run(set, () =>

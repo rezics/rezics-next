@@ -1,3 +1,5 @@
+import type { EntryImportMetadataReview } from './list-import-entry-metadata.ts';
+
 export declare const BANGUMI_LIMITS: {
     readonly bytes: 262144;
     readonly rows: 100;
@@ -37,6 +39,7 @@ export type BangumiReview = {
         incarnationId?: string | null;
     } | null;
     conflict: boolean;
+    metadata?: EntryImportMetadataReview[];
 };
 export type BangumiChoice = {
     ordinal: number;
@@ -58,3 +61,4 @@ export type BangumiRow = {
 };
 /** A REZICS upload wrapper, never advertised as an official Bangumi export format. */
 export declare function parseBangumiUpload(upload: string): BangumiEvidence[];
+

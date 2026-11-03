@@ -32,6 +32,7 @@ import {
 } from './list-import-entry-metadata.ts';
 
 type Config = Parameters<typeof createEntryCommands>[0] & { routeKey: Uint8Array };
+const VNDB_DECISIONS_BYTES = 8_388_608;
 export type VndbChoice = {
   ordinal: number;
   action: 'skip' | 'retain' | 'state';
@@ -51,6 +52,59 @@ type Decision = {
   matchDigest?: string;
   metadata?: EntryImportMetadataReview[];
 };
+export function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposals {
+  const noteField = row.fields.notes ?? row.fields.note;
+  let note: EntryImportMetadataProposal;
+  if (!noteField || noteField.kind === 'missing') note = { state: 'absent', sourceField: noteField ? 'notes' : null };
+  else if (noteField.kind === 'unknown')
+    note = { state: noteField.raw === '' ? 'empty' : 'unknown', sourceField: 'notes', sourceValue: noteField.raw };
+  else if (noteField.kind !== 'value' || typeof noteField.value !== 'string')
+    note = { state: 'invalid', sourceField: 'notes', sourceValue: noteField.raw, reason: 'The retained note is not valid text.' };
+  else if (
+    noteField.value.length === 0 ||
+    !noteField.value.isWellFormed() ||
+    noteField.value.includes('\u0000') ||
+    Buffer.byteLength(noteField.value) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+  )
+    note = {
+      state: noteField.value.length === 0 ? 'empty' : 'unsupported',
+      sourceField: 'notes',
+      reason: 'The retained note is empty or exceeds the native 4,096-byte text limit.',
+    };
+  else note = { state: 'value', sourceField: 'notes', value: noteField.value };
+
+  const privacyField = row.fields.privacy;
+  let privacy: EntryImportMetadataProposal;
+  if (!privacyField || privacyField.kind === 'missing')
+    privacy = { state: 'absent', sourceField: privacyField ? 'private' : null, value: { status: 'absent' } };
+  else if (privacyField.raw === '')
+    privacy = { state: 'empty', sourceField: 'private', sourceValue: '', reason: 'An empty privacy token is not an absence.' };
+  else if (privacyField.kind === 'invalid')
+    privacy = { state: 'invalid', sourceField: 'private', sourceValue: privacyField.raw, reason: 'The retained privacy token is invalid.' };
+  else {
+    const raw = privacyField.raw ?? String(privacyField.value ?? ''), token = raw.trim().toLowerCase();
+    const meaning = ['1', 'true', 'yes', 'private'].includes(token)
+      ? 'private'
+      : ['0', 'false', 'no', 'public', 'visible'].includes(token)
+        ? 'source_visible'
+        : null;
+    privacy = meaning
+      ? { state: 'value', sourceField: 'private', sourceValue: raw, value: { status: 'known', meaning } }
+      : token.length <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes && !/[\u0000-\u001f\u007f]/.test(raw)
+        ? { state: 'unknown', sourceField: 'private', sourceValue: raw, value: { status: 'unknown', sourceValue: raw } }
+        : { state: 'unsupported', sourceField: 'private', reason: 'The privacy token cannot fit the native provenance bound.' };
+  }
+  const unsupported = (field: string): EntryImportMetadataProposal => ({
+    state: 'unsupported', sourceField: null, reason: `VNDB does not retain ${field} as an original entry field.`,
+  });
+  return {
+    note,
+    priority: unsupported('personal priority'),
+    privacy,
+    sourceCreated: unsupported('source-created timestamps'),
+    sourceUpdated: unsupported('source-updated timestamps'),
+  };
+}
 type Upload = {
   upload_id: string;
   state: 'active' | 'cancelled';
@@ -156,61 +210,6 @@ export function createVndbImport(config: Config) {
       baseline: entry
         ? { state: entry.state, revision: entry.revision, incarnationId: entry.incarnationId ?? null }
         : null,
-    };
-  }
-  function vndbMetadataProposals(row: VndbRow): EntryImportMetadataProposals {
-    const noteField = row.fields.notes ?? row.fields.note;
-    let note: EntryImportMetadataProposal;
-    if (!noteField || noteField.kind === 'missing') note = { state: 'absent', sourceField: noteField ? 'notes' : null };
-    else if (noteField.kind === 'unknown')
-      note = { state: noteField.raw === '' ? 'empty' : 'unknown', sourceField: 'notes', sourceValue: noteField.raw };
-    else if (noteField.kind !== 'value' || typeof noteField.value !== 'string')
-      note = { state: 'invalid', sourceField: 'notes', sourceValue: noteField.raw, reason: 'The retained note is not valid text.' };
-    else if (
-      noteField.value.length === 0 ||
-      !noteField.value.isWellFormed() ||
-      noteField.value.includes('\u0000') ||
-      Buffer.byteLength(noteField.value) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
-    )
-      note = {
-        state: noteField.value.length === 0 ? 'empty' : 'unsupported',
-        sourceField: 'notes',
-        reason: 'The retained note is empty or exceeds the native 4,096-byte text limit.',
-      };
-    else note = { state: 'value', sourceField: 'notes', value: noteField.value };
-
-    const privacyField = row.fields.privacy;
-    let privacy: EntryImportMetadataProposal;
-    if (!privacyField || privacyField.kind === 'missing')
-      privacy = { state: 'absent', sourceField: privacyField ? 'private' : null, value: { status: 'absent' } };
-    else if (privacyField.raw === '')
-      privacy = { state: 'empty', sourceField: 'private', sourceValue: '', reason: 'An empty privacy token is not an absence.' };
-    else if (privacyField.kind === 'invalid')
-      privacy = { state: 'invalid', sourceField: 'private', sourceValue: privacyField.raw, reason: 'The retained privacy token is invalid.' };
-    else {
-      const raw = privacyField.raw ?? String(privacyField.value ?? ''), token = raw.trim().toLowerCase();
-      const meaning = ['1', 'true', 'yes', 'private'].includes(token)
-        ? 'private'
-        : ['0', 'false', 'no', 'public', 'visible'].includes(token)
-          ? 'source_visible'
-          : null;
-      privacy = meaning
-        ? { state: 'value', sourceField: 'private', sourceValue: raw, value: { status: 'known', meaning } }
-        : token.length <= 192 && !/[\u0000-\u001f\u007f]/.test(raw)
-          ? { state: 'unknown', sourceField: 'private', sourceValue: raw, value: { status: 'unknown', sourceValue: raw } }
-          : { state: 'unsupported', sourceField: 'private', reason: 'The privacy token cannot fit the native provenance bound.' };
-    }
-    const unsupported = (field: string): EntryImportMetadataProposal => ({
-      state: 'unsupported',
-      sourceField: null,
-      reason: `VNDB does not retain ${field} as an original entry field.`,
-    });
-    return {
-      note,
-      priority: unsupported('personal priority'),
-      privacy,
-      sourceCreated: unsupported('source-created timestamps'),
-      sourceUpdated: unsupported('source-updated timestamps'),
     };
   }
   async function metadataProfile(actor: Actor, decision: Decision) {
@@ -429,6 +428,7 @@ export function createVndbImport(config: Config) {
       if (history.some((item) => item.confirmation && !item.confirmation.outcome)) throw new ProblemError('conflict');
       if (history.length >= ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow) throw new ProblemError('conflict');
       history.push(next);
+      assertEntryImportMetadataHistorySize(history);
       current.metadata = history;
       await save(tx, a, id, ordinal, current);
       return { ordinal, reviewToken: next.token };
@@ -570,11 +570,14 @@ export function createVndbImport(config: Config) {
     ordinal: number,
     decision: Decision,
   ) {
-    await tx.query(
-      `UPDATE library.vndb_import SET decisions=jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)
-      WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
-      [requireRoute(account.accountId), account.accountId, id, String(ordinal), JSON.stringify(decision)],
+    const saved = await tx.query(
+      `UPDATE library.vndb_import
+      SET decisions=jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)
+      WHERE route=$1 AND account_id=$2 AND upload_id=$3
+        AND octet_length(jsonb_set(decisions,ARRAY[$4::text],$5::jsonb)::text)<=$6`,
+      [requireRoute(account.accountId), account.accountId, id, String(ordinal), JSON.stringify(decision), VNDB_DECISIONS_BYTES],
     );
+    if (saved.rowCount !== 1) throw new ProblemError('conflict');
   }
   async function apply(
     actor: Actor,

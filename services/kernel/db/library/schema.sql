@@ -3665,7 +3665,7 @@ CREATE TABLE library.list_import_mal (
     id uuid NOT NULL,
     document jsonb NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    CONSTRAINT list_import_mal_document_check CHECK ((octet_length((document)::text) <= 12582912)),
+    CONSTRAINT list_import_mal_document_check CHECK ((octet_length((document)::text) <= 50331648)),
     CONSTRAINT list_import_mal_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
