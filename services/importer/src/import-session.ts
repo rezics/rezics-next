@@ -20,6 +20,15 @@ function processIdentity(pid: number): { birth: string; live: boolean } {
   };
 }
 
+function wellFormedOwner(owner: { pid: number; birth: string }): boolean {
+  return (
+    Number.isInteger(owner.pid) &&
+    owner.pid > 0 &&
+    typeof owner.birth === 'string' &&
+    /^[0-9a-f-]+:[0-9]+$/i.test(owner.birth)
+  );
+}
+
 function alive(owner: Ownership): boolean {
   try {
     const identity = processIdentity(owner.pid);
@@ -29,6 +38,12 @@ function alive(owner: Ownership): boolean {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
     return true;
   }
+}
+
+/** Linux /proc birth+boot identity. Unverifiable evidence is busy; this is not an ownership rotation. */
+export function importOwnerIsBusy(owner: Readonly<{ pid: number; birth: string }>): boolean {
+  if (!wellFormedOwner(owner)) return true;
+  return alive({ pid: owner.pid, birth: owner.birth, capability: '' });
 }
 
 /** Same-file, exact-source ownership protects RunStore's capability rotation. */

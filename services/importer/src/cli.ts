@@ -30,6 +30,7 @@ import {
 import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
 import { runPreviewCli } from './preview-cli.ts';
+import { runBackupCli } from './backup-cli.ts';
 import {
   DumpInputError,
   fileChunks,
@@ -295,6 +296,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     });
+  if (Array.isArray(argv) && (argv[0] === 'backup' || argv[0] === 'validate-snapshot' || argv[0] === 'restore'))
+    return runBackupCli(argv, options.signal ? { signal: options.signal } : {});
   if (Array.isArray(argv) && argv[0] === 'diagnostics')
     return runDiagnosticsCli(argv.slice(1), {
       ...(options.signal ? { signal: options.signal } : {}),

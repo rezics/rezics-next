@@ -132,6 +132,55 @@ independent selection, current authorization and exact replay remain required. T
 below is implemented for the four launch registrations. A general metadata ACK programme, reviewed
 vocabulary/measured inputs and broader discovery remain deferred.
 
+## Back up stopped importer state
+
+Keep the same SQLite state after an interrupted or uncertain request. Copying only the main file can miss committed
+WAL frames. `rezics-import backup`, `validate-snapshot` and `restore` are local snapshot commands: they route before
+credentials and network, and they never construct an Importer just to inspect a file. `inspect`, dump previews, live
+progress and observation CAS keep their existing commands.
+
+```sh
+bun services/importer/src/cli.ts backup --state .state/imports.sqlite --output .state/imports.snapshot
+bun services/importer/src/cli.ts validate-snapshot --snapshot .state/imports.snapshot
+bun services/importer/src/cli.ts restore --snapshot .state/imports.snapshot --state .state/imports-restored.sqlite
+```
+
+`--state` for backup must name an existing regular file. `--output` and restore `--state` must name a distinct path
+that does not exist. Symlinks, FIFOs, special files, source/destination aliasing and existing output are refused.
+Every `import_owners` row is checked with the existing Linux `/proc` process-birth and boot-id identity; a live or
+unverifiable owner is busy (exit 5) and is never permission to force a backup or rotate its capability. Older schemas
+that cannot establish owner safety are reported as unsupported; RunStore is not opened to migrate them. A suspended
+run with no live process remains recoverable, including unresolved durable requests.
+
+The database copy uses SQLite `VACUUM INTO` under a read-only source connection so committed WAL frames are included
+without checkpointing the source, concatenating sidecars, or loading rows into an unbounded JavaScript object.
+Unknown compatible tables and columns and exact stored payload bytes are preserved. The snapshot is not an
+acknowledgement. Destination files are created exclusively at mode `0600` in a new `0700` directory, staged, flushed
+and published by renaming the database first and the manifest last. A failure removes only this operation's incomplete
+output.
+
+`snapshot.json` records format version 1, SQLite/schema compatibility, SHA-256 and byte length of
+`importer-state.sqlite`, creation time, and bounded source/run baseline identities. It does not contain key-file
+bytes, tokens, environment variables, provider prose or command payloads. Validation checks the immutable files
+against that manifest, `PRAGMA integrity_check`, and the supported importer structure, then returns the bounded
+source/run summary. It never repairs, migrates or rewrites a purported snapshot. Restore installs exact snapshot bytes
+at a new state path after validation and does not start an import. A restored `import_owners` row is not an authority
+grant; ordinary `ImportSession` acquisition still checks live process identity.
+
+Restoring local state cannot undo native writes made after that snapshot, revoke receipts, retract a selected fact or
+guarantee that an older source dump is safe. Stop the original importer and use one state lineage. Resume with the
+ordinary import command and current credentials; original request keys, current authority, source revision/fence
+checks and existing reconciliation remain decisive. There is no force mode, merged restore, selective row restore or
+recovery-only request key.
+
+Copying and hashing are O(B+T) time and O(buffer+T) memory for database bytes B and bounded schema/owner metadata T.
+Integrity work is SQLite's `PRAGMA integrity_check` over the snapshot's `page_count` pages. Opening a WAL source
+read-only may create reader `-wal`/`-shm` sidecars; logical tables and ownership stay unchanged.
+
+Decision: stopped-state snapshots are a new directory containing `importer-state.sqlite` plus `snapshot.json`; Bun has
+no backup API, so the consistent copy is SQLite `VACUUM INTO` into an exclusive empty `0600` file so committed WAL
+frames are included without checkpointing the source.
+
 ## Reviewed provider metadata
 
 The four built-in registrations describe their actual canonical record identity, independently of the configured
