@@ -432,9 +432,7 @@ test('version 2 preserves owner records and verifies all section totals before s
   expect(snap.cost.maxPageRecords).toBeLessThanOrEqual(EXPORT_PAGE_ROWS);
   expect(ready.pageCursors).toEqual([first, 'cursor-empty', 'cursor-final']);
   expect(snap.manifest?.version).toBe(2);
-  expect(Object.keys(snap.manifest?.version === 2 ? snap.manifest.sectionTotals : {})).toEqual([
-    ...EXPORT_SECTIONS_V2,
-  ]);
+  expect(Object.keys(snap.manifest?.version === 2 ? snap.manifest.sectionTotals : {})).toEqual([...EXPORT_SECTIONS_V2]);
   expect(snap.manifest?.version === 2 ? snap.manifest.sectionTotals.annotations : null).toEqual({
     rows: 1,
     recordBytes: encodedRecordBytes(records[1]!),

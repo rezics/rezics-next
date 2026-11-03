@@ -1,7 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
-import { EXPORT_FORMAT, EXPORT_PRIVACY, EXPORT_COMPLETENESS, EXPORT_SECTIONS_V1, type ExportManifestV1 } from '../library/private-export/contract';
+import {
+  EXPORT_FORMAT,
+  EXPORT_PRIVACY,
+  EXPORT_COMPLETENESS,
+  EXPORT_SECTIONS_V1,
+  type ExportManifestV1,
+} from '../library/private-export/contract';
 import { ExportCoverage } from '../library/private-export/coverage';
 import { ExportTerminal } from '../library/private-export/states';
 import { ExportReady } from '../library/private-export/ready';
@@ -70,7 +76,8 @@ export const StoredVersion1Replay: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Illustrative stored version 1 capture. Replay uses its original first cursor; no response was recorded.',
+        story:
+          'Illustrative stored version 1 capture. Replay uses its original first cursor; no response was recorded.',
       },
     },
   },

@@ -195,7 +195,11 @@ export function sameExportCoverage(left: ExportCoverage, right: ExportCoverage):
   const rightKeys = Object.keys(right.omissions);
   return (
     leftKeys.length === rightKeys.length &&
-    leftKeys.every((key) => Object.hasOwn(right.omissions, key) && left.omissions[key as ExportOmissionKey] === right.omissions[key as ExportOmissionKey])
+    leftKeys.every(
+      (key) =>
+        Object.hasOwn(right.omissions, key) &&
+        left.omissions[key as ExportOmissionKey] === right.omissions[key as ExportOmissionKey],
+    )
   );
 }
 
@@ -251,9 +255,7 @@ export function isExportCoverage(value: unknown): value is ExportCoverage {
   if (value.version === 1)
     return !Object.hasOwn(value, 'coverage') && exactSections(value.sections, EXPORT_SECTIONS_V1);
   return (
-    value.version === 2 &&
-    value.coverage === EXPORT_V2_COVERAGE &&
-    exactSections(value.sections, EXPORT_SECTIONS_V2)
+    value.version === 2 && value.coverage === EXPORT_V2_COVERAGE && exactSections(value.sections, EXPORT_SECTIONS_V2)
   );
 }
 
@@ -278,7 +280,11 @@ function validSectionTotals(value: unknown, rows: number, recordBytes: number): 
   for (const section of EXPORT_SECTIONS_V2) {
     if (!Object.hasOwn(value, section)) return false;
     const total = value[section];
-    if (!isObject(total) || !validCount(total.rows, EXPORT_STREAM_RECORDS) || !validCount(total.recordBytes, EXPORT_STREAM_BYTES))
+    if (
+      !isObject(total) ||
+      !validCount(total.rows, EXPORT_STREAM_RECORDS) ||
+      !validCount(total.recordBytes, EXPORT_STREAM_BYTES)
+    )
       return false;
     totalRows += total.rows;
     totalBytes += total.recordBytes;
@@ -289,13 +295,19 @@ function validSectionTotals(value: unknown, rows: number, recordBytes: number): 
 export function isExportManifest(value: unknown): value is ExportManifest {
   if (!isObject(value) || !isExportCoverage(value)) return false;
   const manifest = value as ExportManifest;
-  if (!validCount(manifest.rows, EXPORT_STREAM_RECORDS) || !validCount(manifest.recordBytes, EXPORT_STREAM_BYTES)) return false;
+  if (!validCount(manifest.rows, EXPORT_STREAM_RECORDS) || !validCount(manifest.recordBytes, EXPORT_STREAM_BYTES))
+    return false;
   if (manifest.version === 1) return !Object.hasOwn(value, 'sectionTotals');
   return validSectionTotals(manifest.sectionTotals, manifest.rows, manifest.recordBytes);
 }
 
 export function isExportRecord(value: unknown): value is ExportRecord {
-  return isObject(value) && typeof value.section === 'string' && (EXPORT_SECTIONS_V2 as readonly string[]).includes(value.section) && isJson(value);
+  return (
+    isObject(value) &&
+    typeof value.section === 'string' &&
+    (EXPORT_SECTIONS_V2 as readonly string[]).includes(value.section) &&
+    isJson(value)
+  );
 }
 
 export function isExportState(value: unknown): value is ExportState {
@@ -309,13 +321,16 @@ export function isExportState(value: unknown): value is ExportState {
   );
 }
 
-export function isTerminalState(state: ExportState): state is Extract<ExportState, 'stale' | 'cancelled' | 'expired' | 'limit'> {
+export function isTerminalState(
+  state: ExportState,
+): state is Extract<ExportState, 'stale' | 'cancelled' | 'expired' | 'limit'> {
   return state === 'stale' || state === 'cancelled' || state === 'expired' || state === 'limit';
 }
 
 export function isExportPage(value: unknown): value is ExportPage {
   if (!isObject(value) || typeof value.exportId !== 'string' || !SUBJECT_ID.test(value.exportId)) return false;
-  if (!isExportState(value.state) || !Array.isArray(value.records) || value.records.length > EXPORT_PAGE_ROWS) return false;
+  if (!isExportState(value.state) || !Array.isArray(value.records) || value.records.length > EXPORT_PAGE_ROWS)
+    return false;
   if (
     value.next !== null &&
     (typeof value.next !== 'string' || value.next.length === 0 || value.next.length > EXPORT_CURSOR_CHARS)
@@ -323,8 +338,7 @@ export function isExportPage(value: unknown): value is ExportPage {
     return false;
   if (value.manifest !== null && !isExportManifest(value.manifest)) return false;
   if (!value.records.every(isExportRecord)) return false;
-  if (isTerminalState(value.state))
-    return value.records.length === 0 && value.next === null && value.manifest === null;
+  if (isTerminalState(value.state)) return value.records.length === 0 && value.next === null && value.manifest === null;
   if (value.state === 'ready') return value.next === null && value.manifest !== null;
   return value.next !== null && value.manifest === null;
 }

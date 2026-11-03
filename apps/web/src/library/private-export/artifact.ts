@@ -91,8 +91,7 @@ export class ExportAssembly {
     // JSON.stringify and TextEncoder each make one bounded whole-artifact copy at finalization.
     const serialized = JSON.stringify({ manifest, records });
     const bytes = new TextEncoder().encode(serialized);
-    if (bytes.byteLength > EXPORT_STREAM_BYTES + encodedBytes(manifest) + records.length + 64)
-      return { kind: 'limit' };
+    if (bytes.byteLength > EXPORT_STREAM_BYTES + encodedBytes(manifest) + records.length + 64) return { kind: 'limit' };
 
     this.artifact = {
       filename: artifactFilename(manifest.exportId),
