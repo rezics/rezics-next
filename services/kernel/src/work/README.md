@@ -17,6 +17,54 @@ The current selector still returns at most 1,000 workflows per batch. Its creati
 indexed retention traversal required by the cleanup contract; that conversion remains separate work. These constants
 bound dispatch and returned IDs, and do not certify the existing selector's examined rows.
 
+Decision: keep the installed compatibility selector until the native owner supplies a supported indexed terminal
+selector; expose `WorkflowRetentionSelector` as an optional batch/sweep adapter without changing scheduled replay.
+The adapter receives the current application, all four terminal statuses, an exclusive completion cutoff in epoch
+milliseconds and a limit of 1,000. It must return only eligible IDs; it must not select by payload age. Existing
+callers retain their signatures and behaviour. No indexed completion is claimed for the installed default.
+
+The installed version is `5.5.3-preview`. Its `DBOSClient.listWorkflows(GetWorkflowsInput)` delegates to
+`SystemDatabase.#listWorkflows` (`dist/src/system_database.js:3808`). With the current retention input, the actual
+selection is equivalent to:
+
+```sql
+SELECT workflow_uuid, status, completed_at /* remaining status columns omitted */
+FROM dbos.workflow_status
+WHERE application_name = $application
+  AND status IN ('SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')
+  AND completed_at <= $cutoff_minus_one_ms
+  AND created_at <= $cutoff_minus_one_ms
+ORDER BY created_at ASC
+LIMIT 1000;
+```
+
+`GetWorkflowsInput` (`dist/src/workflow.d.ts:101–132`) offers completion filters and `sortDesc`, but no completion
+ordering or indexed terminal selection port. The implementation fixes ordering to `created_at` in `#listWorkflows`.
+The completion-only index `idx_workflow_status_completed_at` does not key application or terminal status; payload
+`retention_timestamp` indexes do not decide workflow eligibility. Either creation ordering or application/status
+residual filtering may traverse unrelated history. Returned IDs do not measure that traversal.
+
+Required native interface: `DBOSClient.selectTerminalWorkflowsForRetention(input)` with the
+`WorkflowRetentionSelector` argument/result contract. This is a requested port, not an installed method. One ordinary
+implementation is a partial index on `(application_name, completed_at, workflow_uuid)` restricted to the four terminal
+statuses, paired with this query using the same literal terminal predicate:
+
+```sql
+SELECT workflow_uuid FROM dbos.workflow_status
+WHERE application_name = $application AND completed_at < $cutoff
+  AND status IN ('SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED')
+ORDER BY completed_at, workflow_uuid LIMIT 1000;
+```
+
+That index/query pair is not installed here. Selection must have no application/status residual traversal before
+growth assertions can certify empty, short or full batches. No custom native discovery producer is required.
+Once available, selection examines at most 1,000 eligible keys per call; SDK deletion with `false` reaches no child
+discovery and issues six transaction statements (BEGIN, four exact-ID DELETEs, COMMIT). A sweep dispatches at most
+60 batches, or 180 attempts under the three-attempt retry cap, with at most 180,000 selected IDs across attempts.
+These are control/identity bounds: deletion also follows owned payload rows and FK cascades, whose count is not
+bounded by the workflow count. Permanent writer fence records are retained. Native growth and interrupted replay
+remain required evidence; no unit adapter assertion supplies that evidence. Database MVCC visibility work is excluded.
+
 Sources inspected: the indexed `native-scheduler-funded-design/dbos-transact-ts` reference at
 `627990fc59619d3584ce88511ab546bc7483f4b9`, `src/enqueue_options.ts`, `src/client.ts`, the outcome/cancellation/deletion
 sections of `src/system_database.ts`, and migrations 108–112; installed SDK client/queue declarations, deletion and

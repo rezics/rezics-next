@@ -14,7 +14,7 @@ export const WORKFLOW_RETENTION_MAX_BATCHES = 60;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Every DBOS terminal status has a completion timestamp in 5.4.6. */
+/** Terminal statuses supported by the installed DBOS SDK. */
 export const TERMINAL_WORKFLOW_STATUSES = [
   'SUCCESS',
   'ERROR',
@@ -25,6 +25,15 @@ export const TERMINAL_WORKFLOW_STATUSES = [
 type Environment = Readonly<Record<string, string | undefined>>;
 export type WorkflowRetentionConfig = Readonly<{ retentionDays: number }>;
 export type WorkflowRetentionSdk = Pick<typeof DBOS, 'listWorkflows' | 'deleteWorkflows'>;
+/** Work-owned adapter boundary; the installed SDK does not yet provide this selector. */
+export type WorkflowRetentionSelector = (
+  input: Readonly<{
+    applicationName: string;
+    statuses: typeof TERMINAL_WORKFLOW_STATUSES;
+    completedBefore: number;
+    limit: number;
+  }>,
+) => Promise<readonly string[]>;
 type RetentionBatchStep = (batch: () => Promise<number>) => Promise<number>;
 
 export function readWorkflowRetentionConfig(env: Environment): WorkflowRetentionConfig {
@@ -54,22 +63,11 @@ function listInput(strictCutoff: string): GetWorkflowsInput {
   };
 }
 
-/** Select and delete one bounded batch. The extra millisecond makes the SDK's inclusive cutoffs strict. */
-export async function runWorkflowRetentionBatch(
-  retentionDays: number,
-  sdk: WorkflowRetentionSdk = DBOS,
-  now = new Date(),
-): Promise<number> {
-  if (
-    !Number.isSafeInteger(retentionDays) ||
-    retentionDays < MIN_WORKFLOW_RETENTION_DAYS ||
-    retentionDays > MAX_WORKFLOW_RETENTION_DAYS
-  )
-    throw new RangeError('Invalid workflow retention period');
-  const cutoff = now.getTime() - retentionDays * DAY_MS;
-  const strictCutoff = new Date(cutoff - 1).toISOString();
-  const statuses = await sdk.listWorkflows(listInput(strictCutoff));
-  const ids = statuses
+/** Compatibility selection only: LIMIT bounds returned IDs, not the installed SDK's traversal. */
+async function selectCompatibilityBatch(sdk: WorkflowRetentionSdk, cutoff: number): Promise<string[]> {
+  // The installed SDK's completion cutoff is inclusive at millisecond precision.
+  const statuses = await sdk.listWorkflows(listInput(new Date(cutoff - 1).toISOString()));
+  return statuses
     .filter(
       (status) =>
         (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(status.status) &&
@@ -78,6 +76,32 @@ export async function runWorkflowRetentionBatch(
     )
     .slice(0, WORKFLOW_RETENTION_BATCH_SIZE)
     .map((status) => status.workflowID);
+}
+
+/** Select one batch and use supported SDK deletion without descendants. */
+export async function runWorkflowRetentionBatch(
+  retentionDays: number,
+  sdk: WorkflowRetentionSdk = DBOS,
+  now = new Date(),
+  select?: WorkflowRetentionSelector,
+): Promise<number> {
+  if (
+    !Number.isSafeInteger(retentionDays) ||
+    retentionDays < MIN_WORKFLOW_RETENTION_DAYS ||
+    retentionDays > MAX_WORKFLOW_RETENTION_DAYS
+  )
+    throw new RangeError('Invalid workflow retention period');
+  const cutoff = now.getTime() - retentionDays * DAY_MS;
+  const ids = select
+    ? [
+        ...(await select({
+          applicationName: WORK_APPLICATION,
+          statuses: TERMINAL_WORKFLOW_STATUSES,
+          completedBefore: cutoff,
+          limit: WORKFLOW_RETENTION_BATCH_SIZE,
+        })),
+      ].slice(0, WORKFLOW_RETENTION_BATCH_SIZE)
+    : await selectCompatibilityBatch(sdk, cutoff);
   if (ids.length > 0) await sdk.deleteWorkflows(ids, false);
   return ids.length;
 }
@@ -88,10 +112,11 @@ export async function runWorkflowRetentionSweep(
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
   step: RetentionBatchStep = (batch) => batch(),
+  select?: WorkflowRetentionSelector,
 ): Promise<number> {
   let deleted = 0;
   for (let batch = 0; batch < WORKFLOW_RETENTION_MAX_BATCHES; batch++) {
-    const removed = await step(() => runWorkflowRetentionBatch(retentionDays, sdk, now));
+    const removed = await step(() => runWorkflowRetentionBatch(retentionDays, sdk, now, select));
     deleted += removed;
     if (removed < WORKFLOW_RETENTION_BATCH_SIZE) break;
   }
