@@ -92,6 +92,19 @@ function hostRuntime() {
   return repositoryBun(repository);
 }
 
+function seedGit(directory: string) {
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], {
+      cwd: directory,
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) throw new Error(result.stderr || `git ${args[0]} failed`);
+  };
+  git('init', '-q');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
+}
+
 test('ledger command phases pair monotonic markers and report malformed or unpaired lines', () => {
   expect(
     parseCommandPhases('migrations\tstart\t1000000000\nmigrations\tend\t3500000000\nbad\ncompile\tstart\t4000000000'),
@@ -105,7 +118,7 @@ function generatedHostRun(): string {
   return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a', hostRuntime());
 }
 
-test('a trusted driver without a Bun pin binds a candidate runtime and frozen producer artifact', () => {
+test('a trusted driver without a Bun pin binds a candidate runtime through remote entry points', () => {
   const driver = mkdtempSync(join(root, 'no-pin-driver-'));
   mkdirSync(join(driver, 'scripts/check-host'), { recursive: true });
   copyFileSync(remoteCheck, join(driver, 'scripts/remote-check.ts'));
@@ -120,10 +133,19 @@ test('a trusted driver without a Bun pin binds a candidate runtime and frozen pr
   copyFileSync(join(repository, 'scripts/check-host/docker'), join(driver, 'scripts/check-host/docker'));
   writeFileSync(join(driver, 'package.json'), JSON.stringify({ name: 'driver', private: true }));
   const candidate = mkdtempSync(join(root, 'pinned-candidate-'));
-  const pin = installPinnedBun(candidate, '1.2.3', 'a'.repeat(40));
+  const pin = { version: '1.2.3', revision: 'a'.repeat(40), pin: 'bun@1.2.3' };
   writeFileSync(join(candidate, 'package.json'), JSON.stringify({ packageManager: pin.pin }));
+  seedGit(candidate);
+  installPinnedBun(candidate, pin.version, pin.revision);
   const frozen = mkdtempSync(join(root, 'frozen-candidate-'));
   writeFileSync(join(frozen, 'package.json'), JSON.stringify({ packageManager: pin.pin }));
+  seedGit(frozen);
+  const first = mkdtempSync(join(root, 'runtime-a-'));
+  const second = mkdtempSync(join(root, 'runtime-b-'));
+  const pinA = installPinnedBun(first, '1.2.3', 'a'.repeat(40));
+  const pinB = installPinnedBun(second, '2.0.0', 'b'.repeat(40));
+  writeFileSync(join(first, 'package.json'), JSON.stringify({ packageManager: pinA.pin }));
+  writeFileSync(join(second, 'package.json'), JSON.stringify({ packageManager: pinB.pin }));
   const result = spawnSync(
     process.execPath,
     [
@@ -132,49 +154,56 @@ test('a trusted driver without a Bun pin binds a candidate runtime and frozen pr
        Bun.spawn = Bun.spawnSync = () => { throw new Error('import started a process'); };
        const module = await import(${JSON.stringify(join(driver, 'scripts/remote-check.ts'))});
        Bun.spawn = spawn; Bun.spawnSync = spawnSync;
-       const runtime = module.repositoryBun(${JSON.stringify(frozen)}, ${JSON.stringify(candidate)});
+       const signal = new AbortController().signal;
+       const command = ['true'];
+       const frozen = ${JSON.stringify(frozen)};
+       const candidate = ${JSON.stringify(candidate)};
+       async function pastPin(entry) {
+         try {
+           const result = await entry({ hosts: [], workspace: frozen, runtimeProducer: candidate, command }, signal);
+           if (result && result.status === 'no-slot') return;
+           throw new Error('unexpected placement ' + JSON.stringify(result));
+         } catch (error) {
+           const message = error instanceof Error ? error.message : String(error);
+           if (message.includes('packageManager must pin')) throw new Error('used driver pin: ' + message);
+           if (!message.includes('no performance-approved host is configured')) throw error;
+         }
+       }
+       await pastPin(module.tryRemoteCheck);
+       await pastPin(module.remoteCheck);
+       await pastPin(module.remoteCheckUnlessUnreachable);
+       const runtime = module.repositoryBun(frozen, candidate);
        if (runtime.version !== ${JSON.stringify(pin.version)} || runtime.revision !== ${JSON.stringify(pin.revision)})
          throw new Error('wrong candidate runtime');
-       const script = module.runScript('test', '/run', '.', ['true'], 'host', runtime);
+       const script = module.runScript('test', '/run', '.', command, 'host', runtime);
        if (!script.includes('expected_bun=' + ${JSON.stringify(pin.version)})) throw new Error('lost pin');
        if (!script.includes('expected_revision=' + runtime.revision)) throw new Error('lost runtime binding');
-       try { module.repositoryBun(${JSON.stringify(driver)}); throw new Error('used driver pin'); }
+       try { await module.tryRemoteCheck({ hosts: [], workspace: frozen, command }, signal); throw new Error('used ancestor bun'); }
+       catch (error) {
+         if (!(error instanceof Error) || !error.message.includes('absent installed package')) throw error;
+       }
+       try { await module.tryRemoteCheck({ hosts: [], workspace: ${JSON.stringify(driver)}, command }, signal); throw new Error('used driver pin'); }
        catch (error) {
          if (!(error instanceof Error) || !error.message.includes('packageManager must pin')) throw error;
        }
-       try { module.repositoryBun(${JSON.stringify(frozen)}); throw new Error('used ancestor bun'); }
-       catch (error) {
-         if (!(error instanceof Error) || !error.message.includes('absent installed package')) throw error;
-       }`,
+       const runtimeA = module.repositoryBun(${JSON.stringify(first)});
+       const runtimeB = module.repositoryBun(${JSON.stringify(second)});
+       if (runtimeA.revision !== ${JSON.stringify(pinA.revision)} || runtimeB.revision !== ${JSON.stringify(pinB.revision)})
+         throw new Error('cache leaked');
+       const scriptA = module.runScript('a', '/run/a', '.', command, 'host', runtimeA);
+       const scriptB = module.runScript('b', '/run/b', '.', command, 'host', runtimeB);
+       if (!scriptA.includes('expected_bun=' + ${JSON.stringify(pinA.version)}) || !scriptB.includes('expected_bun=' + ${JSON.stringify(pinB.version)}))
+         throw new Error('mixed pins');`,
     ],
     {
       cwd: driver,
       encoding: 'utf8',
-      timeout: 10_000,
+      timeout: 15_000,
     },
   );
   expect(result.status, result.stderr).toBe(0);
   expect(result.stderr).toBe('');
   expect(existsSync(join(driver, 'node_modules'))).toBe(false);
-});
-
-test('one driver process admits independent candidate runtimes without inheriting the first pin', () => {
-  const first = mkdtempSync(join(root, 'runtime-a-'));
-  const second = mkdtempSync(join(root, 'runtime-b-'));
-  const pinA = installPinnedBun(first, '1.2.3', 'a'.repeat(40));
-  const pinB = installPinnedBun(second, '2.0.0', 'b'.repeat(40));
-  writeFileSync(join(first, 'package.json'), JSON.stringify({ packageManager: pinA.pin }));
-  writeFileSync(join(second, 'package.json'), JSON.stringify({ packageManager: pinB.pin }));
-  const runtimeA = repositoryBun(first);
-  const runtimeB = repositoryBun(second);
-  expect(runtimeA.revision).toBe(pinA.revision);
-  expect(runtimeB.revision).toBe(pinB.revision);
-  const scriptA = runScript('a', '/run/a', '.', ['true'], 'host', runtimeA);
-  const scriptB = runScript('b', '/run/b', '.', ['true'], 'host', runtimeB);
-  expect(scriptA).toContain(`expected_bun=${pinA.version}`);
-  expect(scriptA).toContain(`expected_revision=${pinA.revision}`);
-  expect(scriptB).toContain(`expected_bun=${pinB.version}`);
-  expect(scriptB).toContain(`expected_revision=${pinB.revision}`);
 });
 
 test('pinned runtime diagnostics distinguish absent, failed, malformed and mismatched identities', () => {

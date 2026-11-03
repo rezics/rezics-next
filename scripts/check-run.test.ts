@@ -357,6 +357,7 @@ test('frozen check-run candidates bind the original candidate runtime and keep s
       expect(options.runtimeProducer).toBe(fixture.root);
       expect(existsSync(join(options.workspace, 'node_modules'))).toBe(false);
       const runtime = repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
+      expect(options.runtime).toEqual(runtime);
       expect(runtime.version).toBe('1.2.3');
       expect(runtime.revision).toBe('c'.repeat(40));
       const script = runScript('check-run', '/srv/rezics-check/runs/check-run', '.', ['bun', 'test'], 'c', runtime);

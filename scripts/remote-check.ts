@@ -232,6 +232,8 @@ export type Host = {
   processorsPerSlot: number;
 };
 
+export type PinnedBun = { binary: string; version: string; revision: string };
+
 export type RemoteCheck = {
   hosts: Host[];
   /** An optional narrowing of the configured performance pool. */
@@ -306,9 +308,9 @@ export type RemoteCheck = {
    * Pin identity still comes from the candidate workspace package.json.
    */
   runtimeProducer?: string;
+  /** Admitted candidate runtime; when set, it must match the candidate pin and producer artifact. */
+  runtime?: PinnedBun;
 };
-
-export type PinnedBun = { binary: string; version: string; revision: string };
 
 export type RemotePreparedInputsEvidence = {
   schema: 1;
@@ -654,8 +656,16 @@ export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBu
 }
 
 /** Candidate pin and producer artifact, before placement, upload, or a held host slot. */
-function admitRemoteRuntime(options: Pick<RemoteCheck, 'workspace' | 'runtimeProducer'>): PinnedBun {
-  return repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
+function admitRemoteRuntime(options: Pick<RemoteCheck, 'workspace' | 'runtimeProducer' | 'runtime'>): PinnedBun {
+  const admitted = repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
+  if (
+    options.runtime &&
+    (options.runtime.version !== admitted.version || options.runtime.revision !== admitted.revision)
+  )
+    throw new Error(
+      `pinned Bun: supplied runtime does not match the candidate pin; supplied=${options.runtime.version}/${options.runtime.revision}; admitted=${admitted.version}/${admitted.revision}`,
+    );
+  return admitted;
 }
 
 /** Transport discriminator only. Source/binding admission and the child's full schema remain authoritative. */
