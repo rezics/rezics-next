@@ -671,5 +671,6 @@ Archive Entry/label confirmation declares generator-visible upload/preview/revie
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
 `services/kernel/test/library/library-archive-merge.test.ts`. Regenerating the retained client declarations and
-installing their typed transport journey remain required before Web file admission. The canonical Web archive
+installing their typed transport journey remain required before Web file admission; see
+[the generated transport continuation](../../.temp/continuation/archive-reviewed-client.md). The canonical Web archive
 consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
