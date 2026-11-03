@@ -52,6 +52,14 @@ function quote(value: string, unit = false, command = false): string {
   );
 }
 
+// Path settings such as WorkingDirectory= and EnvironmentFile= take no quotes: a quoted value is read as a relative
+// path, and on 2026-11-03 it made every unit fail with "bad unit file setting".
+function unitPath(value: string): string {
+  if (/[\r\n\0"'\\]/.test(value) || value.trim() !== value)
+    throw new Error(`Service paths must not contain line breaks, quotes, backslashes or edge whitespace: ${value}`);
+  return value.replace(/%/g, '%%');
+}
+
 export type ServiceInstall = {
   mainCheckout: string;
   localConfig: string;
@@ -87,8 +95,8 @@ export async function installService(options: ServiceInstall, run = serviceComma
   chmodSync(envFile, 0o600);
   mkdirSync(directory, { recursive: true });
   const replacements: Record<string, string> = {
-    '@CHECKOUT@': quote(main, true),
-    '@ENVIRONMENT@': quote(envFile, true),
+    '@CHECKOUT@': unitPath(main),
+    '@ENVIRONMENT@': unitPath(envFile),
     '@BUN@': quote(options.bun ?? process.execPath, true, true),
     '@CLI@': quote(join(main, 'tools/goal/src/cli.ts'), true, true),
   };
@@ -102,6 +110,8 @@ export async function installService(options: ServiceInstall, run = serviceComma
   // unknown") and rolled back the 2026-11-03 bootstrap.
   const user = options.user ?? process.env.USER ?? process.env.LOGNAME ?? userInfo().username;
   await checked(['loginctl', 'enable-linger', user], run);
+  // Reject a broken unit before the legacy supervisor stops, so a bad install never leaves no host at all.
+  await checked(['systemd-analyze', '--user', 'verify', ...SERVICE_UNITS.map((unit) => join(directory, unit))], run);
   await checked(['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3]], run);
   await stopLegacySupervisor(join(main, '.temp/goal'), run);
   // Wait for the notify host only after the old supervisor and host have relinquished the socket.

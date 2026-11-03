@@ -72,6 +72,7 @@ test('install renders repository units, one private environment file, linger and
     expect(calls).toEqual([
       ['systemctl', '--user', 'daemon-reload'],
       ['loginctl', 'enable-linger', 'fixture'],
+      ['systemd-analyze', '--user', 'verify', ...SERVICE_UNITS.map((unit) => join(units, unit))],
       ['systemctl', '--user', 'enable', SERVICE_UNITS[0], SERVICE_UNITS[1], SERVICE_UNITS[3]],
       ['systemctl', '--user', 'show', '--property=LoadState', '--value', 'rezics-goal-supervisor.service'],
       ['systemctl', '--user', 'stop', 'rezics-goal-supervisor.service'],
