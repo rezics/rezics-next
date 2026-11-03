@@ -40,20 +40,25 @@ test('selected membership and absence compare to the original source observation
 
 test('episode tokens bind the selected observation without disclosing native anchors', () => {
   const tokens = { current: 7, keys: new Map([[7, new Uint8Array(32).fill(41)]]) };
-  const token = (anchor: MemberAnchor | null, viewerAccountId = '00000000-0000-0000-0000-000000000010') =>
+  const token = (
+    anchor: MemberAnchor | null,
+    overrides: { realmId?: string; viewerAccountId?: string; accountId?: string; epoch?: number } = {},
+  ) =>
     realmMemberEpisodeToken({
       tokens,
-      realmId: '00000000-0000-0000-0000-000000000011',
-      viewerAccountId,
-      accountId,
-      epoch: 3,
+      realmId: overrides.realmId ?? '00000000-0000-0000-0000-000000000011',
+      viewerAccountId: overrides.viewerAccountId ?? '00000000-0000-0000-0000-000000000010',
+      accountId: overrides.accountId ?? accountId,
+      epoch: overrides.epoch ?? 3,
       anchor,
     });
   const selected = token(original);
   expect(token(original)).toBe(selected);
   expect(token(rejoined)).not.toBe(selected);
   expect(token(null)).not.toBe(selected);
-  expect(token(original, '00000000-0000-0000-0000-000000000012')).not.toBe(selected);
+  expect(token(original, { viewerAccountId: '00000000-0000-0000-0000-000000000012' })).not.toBe(selected);
+  expect(token(original, { realmId: '00000000-0000-0000-0000-000000000013' })).not.toBe(selected);
+  expect(token(original, { epoch: 4 })).not.toBe(selected);
   expect(selected).not.toContain(original.reservationId);
   expect(selected).not.toContain(original.transactionId);
 });

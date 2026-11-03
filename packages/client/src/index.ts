@@ -168,6 +168,12 @@ export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 
+/** Closed response types for the installed Realm member roster and exact selected Account inspection. */
+export type RealmMemberPage = Routes['realms'][':realmId']['members']['get']['response'][200];
+export type RealmMemberPageItem = RealmMemberPage['items'][number];
+export type RealmMemberSelection = NonNullable<RealmMemberPage['selected']>;
+export type RealmMemberAction = RealmMemberPageItem['actions'][keyof RealmMemberPageItem['actions']];
+
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
 export type KernelClientOptions = {
