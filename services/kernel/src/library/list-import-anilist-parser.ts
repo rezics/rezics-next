@@ -47,12 +47,19 @@ export function parseAniList(upload: string, scoreFormat?: string) {
     for (const group of payload.lists) {
       if (!object(group) || !Array.isArray(group.entries)) throw new AniListInputError();
       const { entries, ...metadata } = group;
+      if (Buffer.byteLength(JSON.stringify(metadata)) > 8192) throw new AniListInputError();
       for (const evidence of entries) items.push({ evidence, group: metadata });
     }
   } else throw new AniListInputError();
   if (!items.length || items.length > ANILIST_LIMITS.rows) throw new AniListInputError();
   const rows: AniListRow[] = items.map(({ evidence, group }) => {
     if (!object(evidence)) throw new AniListInputError();
+    if (
+      Object.keys(evidence).length > 128 ||
+      Object.keys(evidence).some((key) => key.length > 100) ||
+      Buffer.byteLength(JSON.stringify(evidence)) > 65536
+    )
+      throw new AniListInputError();
     const media = object(evidence.media) ? evidence.media : {};
     const identifiers: AniListRow['identifiers'] = [];
     for (const id of [evidence.mediaId, media.id]) {
@@ -91,8 +98,10 @@ export function parseAniList(upload: string, scoreFormat?: string) {
               ['year', 'month', 'day'].includes(part) &&
               (n === null || (positive(n) && n <= (part === 'year' ? 9999 : part === 'month' ? 12 : 31))),
           );
-        if (valid && object(value) && positive(value.year) && positive(value.month) && positive(value.day))
-          valid = new Date(Date.UTC(value.year, value.month - 1, value.day)).getUTCMonth() === value.month - 1;
+        if (valid && object(value) && positive(value.month) && positive(value.day))
+          valid =
+            new Date(Date.UTC(positive(value.year) ? value.year : 2000, value.month - 1, value.day)).getUTCMonth() ===
+            value.month - 1;
         reason = 'Fuzzy components retained exactly; no historical session admission';
       }
       if (field === 'progress')
