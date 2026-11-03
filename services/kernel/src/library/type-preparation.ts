@@ -42,6 +42,7 @@ import writeProgress from './type-preparation-progress-write.sql';
 import equal from './type-preparation-equal.sql';
 import readReservation from './shelf-type-key-reservation.sql';
 import ownerCurrent from './type-preparation-owner-current.sql';
+import preparationTime from './type-preparation-time.sql';
 import type { ShelfWrite } from './shelf-contract.ts';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -362,10 +363,9 @@ export function createNativeTypePreparationPorts(
           key,
           digest: digest.toString('hex'),
         };
-        const at = authoritativeTimeValue(command.time).replace(
-          /\.(\d{3})Z$/,
-          (_match, milliseconds: string) => `.${milliseconds}000Z`,
-        );
+        const timestamp = await preparationTime.run(tx, { at: authoritativeTimeValue(command.time) });
+        if (!timestamp?.at) throw new TypeError('Missing preparation timestamp');
+        const at = timestamp.at;
         const header: PreparationHeaderCommitment = {
           version: 1,
           route,
