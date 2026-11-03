@@ -56,7 +56,8 @@ test('replacement withdraws controls and rejects unavailable operands without su
     { ageRating: { gte: 13, unit: 'http://www.wikidata.org/entity/Q577' } },
     { platform: subject, languages: ['ja'] },
     { producer: { role: 'producer' as never, subject } },
-  ]) expect(() => buildReleaseSearchFilter(release, type, criteria)).toThrow();
+  ])
+    expect(() => buildReleaseSearchFilter(release, type, criteria)).toThrow();
   // Release-level languages still work; no qualifier fallback changes a platform condition's meaning.
   expect(() => buildReleaseSearchFilter(release, type, { languages: ['ja'] })).not.toThrow();
   expect(admittedReleaseSearchControls(bundledRelease, type)!.producers).toHaveLength(2);

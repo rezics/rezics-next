@@ -67,9 +67,7 @@ export function admittedReleaseSearchControls(
     language: admits('schema:inLanguage', 'string') && languageCode ? { property: 'schema:inLanguage' } : null,
     date: admits('schema:datePublished', 'time') ? { property: 'schema:datePublished' } : null,
     ageRating:
-      admits('wdt:P2899', 'quantity') && units.length
-        ? { property: 'wdt:P2899', units: distinct(units) }
-        : null,
+      admits('wdt:P2899', 'quantity') && units.length ? { property: 'wdt:P2899', units: distinct(units) } : null,
     producers: (['developer', 'publisher'] as const).flatMap((role) => {
       const property = producerProperties[role];
       return admits(property, 'wikibase-item') ? [{ role, property }] : [];
