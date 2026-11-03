@@ -87,9 +87,6 @@ test('Shared Collection items preserve exact occurrence editing and independent 
   const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('div');
   window.document.body.append(host);
-  const sheet = window.document.createElement('style');
-  sheet.textContent = await editorActionStyles();
-  window.document.head.append(sheet);
   const root = createRoot(host as unknown as HTMLElement);
   const show = (node: ReactNode) => act(async () => root.render(node));
   const previousLocale = getLocale();
@@ -180,11 +177,6 @@ test('Shared Collection items preserve exact occurrence editing and independent 
         })}"]`,
       )!.disabled,
     ).toBe(true);
-    for (const action of rows[1]!.querySelectorAll<HTMLElement>(
-      '[data-content-item-slot="actions"] [data-slot="button"]',
-    )) {
-      assertActionTarget(window, action);
-    }
     await act(async () => user.click(selection));
     await act(async () => user.click(rows[1]!.querySelector('summary')!));
     await act(async () => user.type(note, '!'));
@@ -218,6 +210,14 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(destinations).toEqual([]);
     await act(async () => user.click(primary));
     expect(destinations).toEqual([href]);
+    const sheet = window.document.createElement('style');
+    sheet.textContent = await editorActionStyles();
+    window.document.head.append(sheet);
+    for (const action of rows[1]!.querySelectorAll<HTMLElement>(
+      '[data-content-item-slot="actions"] [data-slot="button"]',
+    )) {
+      assertActionTarget(window, action);
+    }
 
     await show(
       <CollectionMemberList
