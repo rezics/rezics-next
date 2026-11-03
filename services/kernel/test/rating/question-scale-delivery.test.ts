@@ -25,9 +25,8 @@ const scale = { minimumUnits: 10, maximumUnits: 4096, stepUnits: 6 };
 test('custom stored units survive the mounted vote, worker aggregate, clear and late delivery', async () => {
   const fixture = await createNativePublicationFixture();
   try {
-    const { database, realmId, realmMembers, globalVoters, subjectIds } = fixture;
-    const subjectId = subjectIds[10]!;
-    const voter = realmMembers[0]!;
+    const { database, realmId, members, outsiders, target: subjectId } = fixture;
+    const voter = members[0]!;
     const questionId = newId(routeOf(realmId)!);
     await database.admin.query(
       `INSERT INTO rating.question
@@ -101,7 +100,7 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
 
     const first = await body(await requestVote(4096));
     expect(first).toMatchObject({ units: 4096, revision: 1 });
-    await fixture.drain();
+    await fixture.settle();
     const firstEvent = await latestEvent(1);
     expect(await aggregate()).toMatchObject({ count: 1n, sum: 4096n });
     expect((await aggregate()).histogram).toHaveLength(682);
@@ -117,7 +116,7 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
     expect((await aggregate()).sum).toBe(4096n);
     const second = await body(await requestVote(4090));
     expect(second).toMatchObject({ units: 4090, revision: 2 });
-    await fixture.drain();
+    await fixture.settle();
     const secondEvent = await latestEvent(2);
     const replay = createRatingAggregateEffect(
       database.pool,
@@ -139,7 +138,7 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
       key: randomUUID(),
     });
     expect(clear.status).toBe(204);
-    await fixture.drain();
+    await fixture.settle();
     const clearEvent = await latestEvent(3);
     await replay.run(secondEvent);
     await replay.run(firstEvent);
@@ -148,8 +147,8 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
     expect(empty).toMatchObject({ count: 0n, sum: 0n });
     expect(empty.histogram).toEqual(Array.from({ length: 682 }, () => 0n));
 
-    for (const standardVoter of globalVoters.slice(0, 5)) await fixture.vote(subjectId, standardVoter, 20);
-    await fixture.drain();
+    for (const standardVoter of outsiders.slice(0, 5)) await fixture.vote(subjectId, standardVoter, 20);
+    await fixture.settle();
     const standard = await readPublicFigureViews(database.pool, [subjectId]);
     expect(standard?.get(subjectId)?.figure).toMatchObject({
       questionId: STANDARD_QUESTION_ID,
