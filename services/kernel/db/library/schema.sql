@@ -3177,6 +3177,22 @@ CREATE TABLE library.label_assignment (
 
 
 --
+-- Name: label_consolidation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.label_consolidation (
+    route integer NOT NULL,
+    partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
+    account_id uuid NOT NULL,
+    consolidation_id uuid NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    payload jsonb NOT NULL,
+    CONSTRAINT label_consolidation_payload_check CHECK ((octet_length((payload)::text) <= 32768)),
+    CONSTRAINT label_consolidation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: library_export; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -5098,6 +5114,22 @@ ALTER TABLE ONLY library.label_assignment
 
 
 --
+-- Name: label_consolidation label_consolidation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_consolidation
+    ADD CONSTRAINT label_consolidation_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: label_consolidation label_consolidation_route_account_id_consolidation_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_consolidation
+    ADD CONSTRAINT label_consolidation_route_account_id_consolidation_id_key UNIQUE (route, account_id, consolidation_id);
+
+
+--
 -- Name: library_export library_export_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6277,6 +6309,13 @@ CREATE UNIQUE INDEX label_assignment_reserved_slot ON library.label_assignment U
 --
 
 CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING btree (route, account_id, subject_id, assignment_id) INCLUDE (label_id, slot_no, revision, transaction_id) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: label_consolidation_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_consolidation_due ON library.label_consolidation USING btree (partition_no, expires_at, route, account_id);
 
 
 --
