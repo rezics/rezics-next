@@ -97,9 +97,7 @@ function BanModeratorIdentity({ actor }: { actor: string | null }) {
   return (
     <div>
       <dt className="font-medium">{m.realm_bans_details_moderator()}</dt>
-      <dd className="wrap-anywhere">
-        {actor ? <bdi>{actor}</bdi> : m.realm_bans_moderator_erased()}
-      </dd>
+      <dd className="wrap-anywhere">{actor ? <bdi>{actor}</bdi> : m.realm_bans_moderator_erased()}</dd>
     </div>
   );
 }
