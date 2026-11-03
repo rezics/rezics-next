@@ -63,10 +63,10 @@ items (one icon and one banner), plus one icon whose old settings revision perma
 clear. The test records runtime IDs and revision numbers only after setup; they were unavailable because setup did not
 start. The independent axes and requested scales are below; no scale measurement was observed:
 
-| Independent axis | 256 | 1024 | 4096 |
-| --- | --- | --- | --- |
-| Same-home available media | Not reached | Not reached | Not reached |
-| Other-home available media | Not reached | Not reached | Not reached |
+| Independent axis                | 256         | 1024        | 4096        |
+| ------------------------------- | ----------- | ----------- | ----------- |
+| Same-home available media       | Not reached | Not reached | Not reached |
+| Other-home available media      | Not reached | Not reached | Not reached |
 | Retained claim/settings history | Not reached | Not reached | Not reached |
 
 Actual statements, rows, buffers, relation access paths, refusal/retry runner work, and physical deletion results are

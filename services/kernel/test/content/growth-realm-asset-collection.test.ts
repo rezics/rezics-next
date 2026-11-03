@@ -52,21 +52,23 @@ function reportRelations(report: GrowthReport): string[] {
 }
 
 function targetSignature(targets: SelectedPage) {
-  return [...targets].sort((left, right) => left.purpose.localeCompare(right.purpose)).map((target) => ({
-    purpose: target.purpose,
-    sourceByteCount: target.sourceBytes.byteLength,
-    sourceDigest: target.sourceDigest,
-    variants: target.image.variants.map(({ format, width, height, mediaType, byteCount, sha256 }) => ({
-      format,
-      width,
-      height,
-      mediaType,
-      byteCount,
-      sha256,
-    })),
-    prefix: `m/{mediaId}/`,
-    keys: ['m/{mediaId}/avif-320', 'm/{mediaId}/original', 'm/{mediaId}/webp-320'],
-  }));
+  return [...targets]
+    .sort((left, right) => left.purpose.localeCompare(right.purpose))
+    .map((target) => ({
+      purpose: target.purpose,
+      sourceByteCount: target.sourceBytes.byteLength,
+      sourceDigest: target.sourceDigest,
+      variants: target.image.variants.map(({ format, width, height, mediaType, byteCount, sha256 }) => ({
+        format,
+        width,
+        height,
+        mediaType,
+        byteCount,
+        sha256,
+      })),
+      prefix: `m/{mediaId}/`,
+      keys: ['m/{mediaId}/avif-320', 'm/{mediaId}/original', 'm/{mediaId}/webp-320'],
+    }));
 }
 
 async function candidateCount(database: GrowthDatabase, home: RealmAssetHome) {
@@ -230,7 +232,14 @@ test('Native Realm abandoned icon and banner collection stays bounded across hom
     const uploaderId = system.actors.author.actor.accountId;
     async function selectedPage(axis: Axis, scale: number, repetition: number): Promise<SelectedPage> {
       const targets = [
-        await createRealmAsset(system!, store, runtime!, home!, 'realm-icon', `${axis}-${scale}-${repetition}-icon-${serial++}`),
+        await createRealmAsset(
+          system!,
+          store,
+          runtime!,
+          home!,
+          'realm-icon',
+          `${axis}-${scale}-${repetition}-icon-${serial++}`,
+        ),
         await createRealmAsset(
           system!,
           store,
@@ -256,7 +265,9 @@ test('Native Realm abandoned icon and banner collection stays bounded across hom
       if (fixedShape) expect(signature).toEqual(fixedShape);
       else fixedShape = signature;
       const physical = targets.map((target) => store.inspect(`m/${target.id}/`));
-      expect(physical.map((objects) => objects.length)).toEqual(targets.map((target) => target.image.variants.length + 1));
+      expect(physical.map((objects) => objects.length)).toEqual(
+        targets.map((target) => target.image.variants.length + 1),
+      );
       selectedPages.push({
         axis,
         scale,

@@ -83,9 +83,7 @@ export async function nativeContentRequest(
   }
   return {
     response,
-    ...(value && typeof value === 'object' && !Array.isArray(value)
-      ? { body: value as Record<string, unknown> }
-      : {}),
+    ...(value && typeof value === 'object' && !Array.isArray(value) ? { body: value as Record<string, unknown> } : {}),
   };
 }
 
@@ -463,13 +461,15 @@ export async function seedRetainedClaimHistory(
           SET head_revision_id = history.clear_revision_id
          FROM jsonb_to_recordset($1::jsonb) AS history(route integer, realm_id uuid, clear_revision_id uuid)
         WHERE realm.route = history.route AND realm.realm_id = history.realm_id`,
-      [JSON.stringify(
-        [...records.values()].map((record) => ({
-          route: record.route,
-          realm_id: record.realmId,
-          clear_revision_id: record.clearRevisionId,
-        })),
-      )],
+      [
+        JSON.stringify(
+          [...records.values()].map((record) => ({
+            route: record.route,
+            realm_id: record.realmId,
+            clear_revision_id: record.clearRevisionId,
+          })),
+        ),
+      ],
     );
   }
 }
