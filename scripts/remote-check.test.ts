@@ -7359,6 +7359,46 @@ def install():`,
   }
 });
 
+test('interrupted empty-garbage bootstrap keeps its tombstone and private preparation working until restart', async () => {
+  const fixture = preparationFixture();
+  const cold = fixture.create();
+  expect(cold.execute().status).toBe(0);
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const entry = join(cache, cold.artifacts().key);
+  writeFileSync(entry + '.invalid', '');
+  const ready = join(fixture.directory, 'retiring');
+  const program = dependencyPreparationProgram.replace(
+    'def install():',
+    `
+original_unlink = os.unlink
+def slow_unlink(path, *args, **kwargs):
+    Path(${JSON.stringify(ready)}).touch()
+    time.sleep(60)
+    return original_unlink(path, *args, **kwargs)
+os.unlink = slow_unlink
+def install():`,
+  );
+  const child = Bun.spawn(['python3', '-c', program, 'sweep', cache], { stdout: 'ignore', stderr: 'pipe' });
+  const logs = new Response(child.stderr).text();
+  try {
+    await waitFor(() => existsSync(ready));
+    expect(existsSync(entry + '.retiring')).toBe(true);
+    const privateRun = fixture.create();
+    expect(privateRun.execute().status).toBe(0);
+    expect(privateRun.artifacts().cache).toBe('miss');
+    child.kill('SIGKILL');
+    await child.exited;
+    sweepArtifacts(fixture.directory);
+    expect(existsSync(entry)).toBe(false);
+    expect(existsSync(entry + '.retiring')).toBe(false);
+    expect(existsSync(entry + '.lock')).toBe(true);
+  } finally {
+    if (child.exitCode === null) child.kill('SIGKILL');
+    await child.exited;
+    await logs;
+  }
+});
+
 test('registration replaces a stale captured service once, reuses current code, and serializes concurrent publishers', async () => {
   const fixture = preparationFixture();
   const cache = join(fixture.directory, 'dependency-artifacts');

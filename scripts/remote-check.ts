@@ -2254,7 +2254,7 @@ def evict_artifacts(cache):
                 entry = namespace / name
                 try:
                     info = entry.lstat()
-                    if not stat.S_ISDIR(info.st_mode):
+                    if not stat.S_ISDIR(info.st_mode) or retirement_marker(entry).exists():
                         continue
                     identity = [info.st_mtime_ns, info.st_dev, info.st_ino]
                     size = measure_tree(cache, entry)
@@ -2430,6 +2430,11 @@ def publish_artifacts(root, entry, manifest):
     cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
     stage = None
     try:
+        if entry.exists() or retirement_marker(entry).exists():
+            (entry.parent / (entry.name + '.invalid')).touch()
+            print('remote-check: dependency artifacts replacement publication skipped: awaiting background reclamation',
+                  file=sys.stderr, flush=True)
+            return
         stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
         (stage / 'payload').mkdir()
         copy_entries(root, stage / 'payload', manifest['entries'])
@@ -2442,11 +2447,6 @@ def publish_artifacts(root, entry, manifest):
         size = allocated[0] + sum(path.lstat().st_blocks * 512 for path in
             [stage, stage / 'payload', stage / 'manifest.json', stage / '.cache-bytes'])
         (stage / '.cache-bytes').write_text(str(size))
-        if entry.exists() or retirement_marker(entry).exists():
-            (entry.parent / (entry.name + '.invalid')).touch()
-            print('remote-check: dependency artifacts replacement publication skipped: awaiting background reclamation',
-                  file=sys.stderr, flush=True)
-            return
         stage.rename(entry)
         touch_artifacts(entry)
     except OSError as error:
