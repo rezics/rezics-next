@@ -75,6 +75,8 @@ test('an exact private read retires across appeal creation and resolution, then 
     targetId: target.postId,
     statement: 'Retained private statement',
     appeal: null,
+    viewer: { affectedAuthor: true, appeal: { state: 'permitted' } },
+    targetContext: { state: 'concealed' },
   });
   expect(first.value).not.toHaveProperty('witness');
   expect(first.value).not.toHaveProperty('decider_account_id');
@@ -93,6 +95,7 @@ test('an exact private read retires across appeal creation and resolution, then 
     outcome: null,
     resolvedAt: null,
   });
+  expect(pending.value?.viewer.appeal).toEqual({ state: 'unavailable', reason: 'already_appealed' });
   expect(
     (
       await fixture.call('POST', `${path}:appeal`, {
@@ -134,7 +137,61 @@ test('an exact private read retires across appeal creation and resolution, then 
     statement: 'Independent resolution',
   });
   expect(resolved.value?.appeal.resolvedAt).toBeString();
+  expect(resolved.value?.viewer.appeal).toEqual({ state: 'unavailable', reason: 'already_appealed' });
   expect(await head()).toEqual(before);
+}, 120_000);
+
+test('current advice uses the command clock at the inclusive boundary and does not consume an appeal', async () => {
+  const { path } = await decide('Inclusive native advice');
+  const initial = await fixture.call('GET', path, { bearer: fixture.author.bearer });
+  const deadline = initial.value!.appealDeadline;
+  try {
+    await fixture.system.clock.setCommandTime(deadline);
+    const at = await fixture.call('GET', path, { bearer: fixture.author.bearer });
+    expect(at.response.status).toBe(200);
+    expect(at.value?.viewer).toMatchObject({ observedAt: deadline, appeal: { state: 'permitted' } });
+    await fixture.system.clock.setCommandTime(new Date(Date.parse(deadline) + 1).toISOString());
+    const late = await fixture.call('GET', path, { bearer: fixture.author.bearer });
+    expect(late.value?.viewer.appeal).toEqual({ state: 'unavailable', reason: 'deadline_passed' });
+    expect(late.value?.appeal).toBeNull();
+    expect((await fixture.call('POST', `${path}:appeal`, {
+      bearer: fixture.author.bearer, key: crypto.randomUUID(), body: { statement: 'Too late' },
+    })).response.status).toBe(422);
+    await fixture.system.clock.setCommandTime(deadline);
+    await fixture.command('POST', `${path}:appeal`, { statement: 'At the deadline' });
+    expect((await fixture.call('GET', path, { bearer: fixture.author.bearer })).value?.viewer.appeal)
+      .toEqual({ state: 'unavailable', reason: 'already_appealed' });
+  } finally {
+    await fixture.system.clock.setCommandTime(new Date().toISOString());
+  }
+}, 120_000);
+
+test('independent reversal exposes only current header context and keeps the original decision identity', async () => {
+  const { path, target } = await decide('Current context after reversal');
+  const appeal = await fixture.command<{ id: string }>('POST', `${path}:appeal`, { statement: 'Please restore' });
+  await fixture.grant(target.postId, ['moderation:takedown'], fixture.other.accountId);
+  await fixture.command('POST', `/v1/moderation-appeals/${appeal.id}:resolve`, {
+    outcome: 'reverse', statement: 'Restore this post',
+  }, { bearer: fixture.other.bearer, expectedStatus: 200 });
+  const author = await fixture.call('GET', path, { bearer: fixture.author.bearer });
+  expect(author.response.status).toBe(200);
+  expect(author.value?.targetContext).toEqual({
+    state: 'available', kind: 'thread', threadId: target.threadId, postId: target.postId,
+    boardId: target.boardId, threadTitle: 'Current context after reversal', boardTitle: expect.any(String),
+  });
+  expect(author.value?.targetId).toBe(target.postId);
+  expect(author.value?.statement).toBe('Retained private statement');
+  expect(author.value?.targetContext).not.toHaveProperty('body');
+  const moderator = await fixture.call('GET', path, { bearer: fixture.moderator.bearer });
+  expect(moderator.value?.viewer).toMatchObject({
+    affectedAuthor: false, appeal: { state: 'unavailable', reason: 'not_affected_author' },
+  });
+  for (const bearer of [undefined, fixture.system.actors.suspended.bearer]) {
+    const denied = await fixture.call('GET', path, { bearer });
+    expect([401, 404]).toContain(denied.response.status);
+    expect(denied.response.headers.get(SESSION_HEADER)).toBeNull();
+    expect(denied.text).not.toContain('Retained private statement');
+  }
 }, 120_000);
 
 test('a current moderator loses exact disclosure when their native grant is revoked during selection', async () => {

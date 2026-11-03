@@ -817,7 +817,8 @@ Responses are private/no-store and the history is not a public feed or search so
   placement through `decision-page-source.sql`. It releases that source checkout before moderator Access preparation,
   then observes the same exact source and partition epoch and evaluates current authority in a second snapshot.
   Authors retain their independent thread/post access. No target text, identity presentation or media is fetched.
-  The source witness stays private; the response remains the existing decision DTO. The author-only Inbox wrapper
+  The source witness stays private; the internal reader returns the existing decision DTO. The HTTP page composes
+  the additional viewer and optional header context described below. The author-only Inbox wrapper
   adds two source observations and checks every retained response field against its final observation.
 - Bound: the exact reader uses at most two snapshots, each BEGIN + partition PK + exact source + COMMIT: eight Content
   statements including four transaction controls. Missing source or anonymous/invalid selection stops earlier;
@@ -885,6 +886,61 @@ marks the target's open reports `actioned`; a moderator can instead mark an open
 receives at most one outcome and one outcome notice. A later takedown does not replace an already dismissed outcome.
 
 Decision: a source change during an exact read retires that read; reopen the same decision ID to observe the current appeal or placement.
+
+Decision: the exact GET retains its top-level decision fields and adds closed `viewer` advice plus `targetContext`;
+current header presentation is optional and never changes the original decision identity or grants command authority.
+
+`GET /v1/moderation-decisions/{id}` (`moderation_decision.get`) adds these fields:
+
+- `viewer.affectedAuthor` reports native ownership independently of ordinary target disclosure.
+  `viewer.observedAt` is the shared Kernel clock instant of the final source observation.
+  `viewer.appeal` is `{ state: "permitted" }`, `{ state: "unsupported", reason: "board" }`, or
+  `{ state: "unavailable", reason }`, where reason is `not_affected_author`, `already_appealed`, `deadline_passed`
+  or `command_unavailable`. Permitted advice requires the installed `account:read` self-account formula used by
+  the appeal command, a freshly authenticated identical request identity, no prior appeal and the inclusive deadline.
+  The command still repeats native admission, ownership, validation, replay and idempotency checks.
+- `targetContext` is `{ state: "concealed" }` for an ordinary header disclosure refusal or
+  `{ state: "unavailable" }` for unavailable/changed optional context or a removed target. When available it is
+  `{ state: "available", kind: "thread", threadId, postId, boardId, threadTitle, boardTitle }` or
+  `{ state: "available", kind: "board", boardId, boardTitle }`. A thread target has `postId: null`.
+  Titles may be null. Only the exact original target's native placement supplies the reference; no URL inference,
+  body, revision, reply/edit/reaction advice, public author profile or media enters this envelope.
+
+Web consumes the installed `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
+the existing `.$appeal.post({ statement }, { headers: { authorization, 'idempotency-key': key } })` stays final.
+For a restored readable post, context is populated with the current containing thread/board header. A hidden
+taken-down post keeps `{ state: "concealed" }` even when its author receives permitted appeal advice. An unavailable
+context dependency yields `{ state: "unavailable" }` without replacing the retained decision or consuming an appeal.
+The GET remains `private, no-store`; its session header records the final exact source anchor. Session provenance
+does not represent a transaction across Content, Account, Auth or authority homes. Both header passes use native
+disclosure, then native request authentication and private account/principal identity/partition equality are observed
+after preparation, before final source/epoch and Access evaluation. No frontend reader lifetime or submission engine
+is implemented here. Rendered acceptance and connected physical cost evidence remain separate delivery work.
+
+### Cost: exact decision page envelope
+
+- Touches: the exact source engine above, two calls to one installed notice header context primitive, the native
+  request authenticator once more, and an initial/final exact Account identity witness for the actor and optional
+  principal. Each context primitive performs two current header rounds; all its nested Access and parent work is
+  additive. An affected author without an appeal additionally prepares the command's native self-account Access
+  check and evaluates it in the final source snapshot. Other viewers add the existing moderator formula. The
+  response includes no media; therefore no media or target-text reader runs. All preparation releases source checkout.
+- Bound: let I be the distinct actor/principal IDs (1–2). Identity equality uses `2I` independently anchored
+  snapshots, `8I` statements including `4I` transaction controls, `2I` partition PKs and `2I` Account PKs. Two
+  optional context calls each contain two native header rounds: for a post at most 33 ancestor levels plus one
+  thread, board and Realm per round; a board uses only its board/Realm header rounds. These bounds do not replace
+  the primitives' nested Account, assignment, inverse-membership, authority and retained-history costs. Auth adds
+  its actual verifier/key-fetch and Account/client/assignment work; no callback is charged as zero. There is no
+  engine retry or cold positive cache. Failed snapshots attempt ROLLBACK and discard failed connections; withheld
+  branches pay their completed prefix, and a context failure cannot renew the request deadline. Identity equality
+  serializes only fixed IDs, epoch, kind/state/fence, operator ID and bigint floor; each initial/final context is
+  serialized once for equality and the chosen explicit envelope once for HTTP. Statement/witness UTF-8 and JSON
+  bounds from the exact engine remain additive. Title caps, driver copies, full nested physical rows, pool controls,
+  cold release and total HTTP serialization still require the connected accounting proof; this is not that proof.
+- Growth check: the focused source HTTP suite pins native author advice, pending/resolved readback, inclusive/late
+  deadline command agreement, independent reversal, current header presentation and source/authority withholding.
+  Full-prefix/residual-join plans and independent 256/1024/4096 decision versus retained target/appeal/identity/authority
+  histories, every pool/registered runner phase and empty/denied/revoked/retry accounting remain continuation work.
 
 Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
 deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,

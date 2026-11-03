@@ -117,6 +117,25 @@ export async function readModerationDecision(
   id: string,
   context: { actor: Actor; deadline: number },
 ) {
+  const result = await composeModerationDecision(deps, id, context, async () => ({
+    observe: async () => true,
+    value: async () => ({}),
+  }));
+  return result && { value: result.value, anchor: result.anchor };
+}
+
+/** Foreign page preparation and observations must finish before final source
+ * checkout. Only the explicit projection leaves this reader; the witness stays
+ * private. Existing DTO-only readers use the same source and authority gate. */
+export async function composeModerationDecision<T extends object>(
+  deps: { pool: Pool; access: Access },
+  id: string,
+  context: { actor: Actor; deadline: number },
+  prepare: (source: DecisionSource) => Promise<{
+    observe: () => Promise<boolean>;
+    value: (client: AccessClient, source: DecisionSource) => Promise<T>;
+  }>,
+) {
   const route = routeOf(id);
   if (route === null || context.actor.kind !== 'account') return null;
   const selected = await snapshot(deps.pool, route, context.deadline, (client) =>
@@ -126,6 +145,7 @@ export async function readModerationDecision(
   const needsModerator =
     selected.value.target_kind === 'board' || selected.value.author_account_id !== context.actor.accountId;
   if (needsModerator && !selected.value.available) return null;
+  const page = await prepare(selected.value);
   // Access may acquire other connections. Keep it outside the source checkout;
   // no positive authorization result survives into the final observation.
   const check = needsModerator
@@ -137,15 +157,16 @@ export async function readModerationDecision(
         { pool: deps.pool, deadline: context.deadline },
       )
     : null;
+  if (!(await page.observe())) return null;
   const final = await snapshot(deps.pool, route, context.deadline, async (client, partition) => {
     if (partition.epoch !== selected.anchor.epoch) return null;
     const source = await readDecisionSource.run(client, { route, decision_id: id });
     if (!source || !sameDecisionSource(selected.value!, source)) return null;
     if (check && !(await check(client))) return null;
-    return source;
+    return { source, page: await page.value(client, source) };
   });
   if (!final.value) return null;
-  return { value: decisionValue(final.value), anchor: final.anchor };
+  return { value: { ...decisionValue(final.value.source), ...final.value.page }, anchor: final.anchor };
 }
 
 /** Inbox disclosure is limited to the current author of a post or thread.
