@@ -26,7 +26,13 @@ const rows = Array.from({ length: 12 }, (_, index) => ({
   ),
 }));
 const page: ThreadReadingPage = {
-  thread: { ...recording.thread, firstPost: rows[0]! },
+  thread: {
+    ...recording.thread,
+    kind: 'discussion',
+    availability: 'available',
+    visibility: 'published',
+    firstPost: rows[0]!,
+  },
   posts: { posts: rows, next: 'prepared-opaque-page-cursor' },
   authors: {
     [author.id]: {
