@@ -1,3 +1,4 @@
+import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -8,7 +9,6 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
-import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let f: NativeProfileFixture;
 let matched: string;
 const root = '/v1/libraryImports/bangumi';
