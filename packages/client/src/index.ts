@@ -1,11 +1,13 @@
 import { treaty, type Treaty } from '@elysia/eden';
 import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
+import type { Static } from 'typebox';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
 import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
+import type { HistoryPageContextSchema } from '../../../services/kernel/src/content/schemas.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export type {
@@ -86,6 +88,19 @@ type ClientApp = Elysia<
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+type GeneratedPostPath = ReturnType<GeneratedKernelClient['posts']>;
+type GeneratedPostHistoryPath = GeneratedPostPath['revisions'];
+type GeneratedPostHistoryRead = Awaited<ReturnType<GeneratedPostHistoryPath['get']>>;
+type NativeHistoryPage = Static<typeof HistoryPageContextSchema>;
+type NativeHistoryData = NonNullable<GeneratedPostHistoryRead['data']> & { page: NativeHistoryPage };
+type NativeHistoryRead = Omit<GeneratedPostHistoryRead, 'data'> & { data: NativeHistoryData | null };
+type PostHistoryPath = Omit<GeneratedPostHistoryPath, 'get'> &
+  ((...args: Parameters<GeneratedPostHistoryPath>) => ReturnType<GeneratedPostHistoryPath>) & {
+    get: (...args: Parameters<GeneratedPostHistoryPath['get']>) => Promise<NativeHistoryRead>;
+  };
+type PostPath = Omit<GeneratedPostPath, 'revisions'> & { revisions: PostHistoryPath };
+type PostsClient = Omit<GeneratedKernelClient['posts'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['posts']>) => PostPath);
 type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
 type DecisionPagePath = ReturnType<GeneratedKernelClient['moderation-decisions']>;
 type DecisionPageGet = DecisionPagePath['get'];
@@ -178,8 +193,9 @@ type SourceClassificationsClient = import('./kernel/rating/source-classification
 
 export type KernelClient = Omit<
   GeneratedKernelClient,
-  'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions'
+  'posts' | 'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions'
 > & {
+  posts: PostsClient;
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
   subjects: KernelSubjectsClient;
