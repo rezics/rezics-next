@@ -207,6 +207,8 @@ the GET. Browser retirement now follows successful session incarnations and curr
 including cache errors and batched away/back transitions, without fetching authority or retaining private query snapshots.
 Producer lifetime observations now have an optional composition seam that retires page, selection and deferred focus
 without fetching; it remains unbound until Content publishes native disclosure/currentness ownership and exact intervals.
+Management discovery consumes existing exact-Realm `realm.update` or appearance `canManage` observations independently
+of ban advice. Effect replay preserves the original producer observation across subscription cleanup and reconnection.
 The positive production visit, current selected ban/add integration, rejected/unknown commands and full locale/viewport
 review remain continuation work. No fixture or unavailable route establishes native completion or producer growth.
 

@@ -12,6 +12,7 @@ import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
 import { RealmBansPanel } from './realm-bans-panel';
+import { RealmMembersEntry } from './members/entry';
 import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
 import { SpaceSetupEntry, useSpaceSetupRead } from './space-setup-page';
 import { FollowTargetControl } from '../library/follow-target-control';
@@ -549,13 +550,7 @@ function SpaceHome({
             <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
           ) : null}
           {entered && !managementRestricted && page.realm ? (
-            <Link
-              to="/realms/$id/members"
-              params={{ id: page.realm.id }}
-              className="inline-flex min-h-11 max-w-full items-center rounded-lg border px-4 py-2 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              {m.realm_members_heading()}
-            </Link>
+            <RealmMembersEntry realmId={page.realm.id} appearance={admissions.appearance === true} setup={setup} />
           ) : null}
           {viewer && page.realm ? (
             <div hidden={managementRestricted} inert={managementRestricted} className="min-w-0 space-y-8">

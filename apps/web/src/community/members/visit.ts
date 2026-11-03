@@ -87,9 +87,12 @@ export class RealmMembersVisit {
 
   /** Reconnecting for React effect replay starts fresh work; disconnected responses stay obsolete. */
   connect = () => {
+    if (this.retired) return () => {};
     this.connected = true;
     this.connection++;
-    this.observation = this.source.observe?.();
+    // Effect replay reconnects this visit, not a new producer lifetime. In particular, a
+    // change while unsubscribed must not acquire a fresh observation and revive old data.
+    this.observation ??= this.source.observe?.();
     const changed = () => {
       this.admitted();
     };
@@ -112,13 +115,13 @@ export class RealmMembersVisit {
       this.pageBusy = false;
       this.stop?.();
       this.stop = undefined;
-      this.observation = undefined;
       this.rows.clear();
-      this.value = {
-        read: { kind: 'loading' },
-        address: { realmId: this.realmId, cursor: null },
-        selection: null,
-      };
+      if (!this.retired)
+        this.value = {
+          read: { kind: 'loading' },
+          address: { realmId: this.realmId, cursor: null },
+          selection: null,
+        };
       queueMicrotask(() => {
         if (!this.connected) this.retire();
       });

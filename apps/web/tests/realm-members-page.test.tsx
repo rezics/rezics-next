@@ -1,6 +1,7 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient } from '@tanstack/react-query';
 import { realmMembersLifetimeSource } from '../src/community/members/lifetime';
 import type { MembersCaller } from '../src/community/members/page';
@@ -31,6 +32,7 @@ for (const [key, value] of Object.entries({
 }
 const { createRoot } = await import('react-dom/client');
 const { RealmMembersPage } = await import('../src/community/members/page');
+const { RealmMembersEntry } = await import('../src/community/members/entry');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 setLocale('en', { reload: false });
@@ -99,6 +101,36 @@ afterAll(async () => {
   for (const [key, descriptor] of originals) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+test('member discovery uses current Realm management observations and the Realm route anchor', async () => {
+  type Props = Parameters<typeof RealmMembersEntry>[0];
+  let update!: (next: Props) => void;
+  function Entry() {
+    const [props, setProps] = useState<Props>({ realmId: 'realm', appearance: false, setup: null });
+    update = setProps;
+    return createElement(RealmMembersEntry, props);
+  }
+  const route = createRootRoute({ component: Entry });
+  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
+  await router.load();
+  host = document.createElement('main');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => root!.render(createElement(RouterProvider, { router })));
+  expect(host.querySelector('a')).toBeNull();
+  for (const [setup, appearance, admitted] of [
+    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: true } }, false, true],
+    [{ kind: 'ready', realm: { id: 'space' }, permitted: { settings: true } }, false, false],
+    [{ kind: 'ready', realm: { id: 'realm' }, permitted: { settings: false } }, false, false],
+    [{ kind: 'failure' }, true, true],
+    [{ kind: 'failure' }, false, false],
+  ] satisfies [Props['setup'], boolean, boolean][]) {
+    await act(async () => update({ realmId: 'realm', setup, appearance }));
+    const link = host.querySelector('a');
+    expect(link !== null).toBe(admitted);
+    if (link) expect(link.getAttribute('href')).toBe('/realms/realm/members');
   }
 });
 

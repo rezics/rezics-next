@@ -138,3 +138,36 @@ test('an episode or authority replacement cannot reuse selected advice', async (
     stop();
   }
 });
+
+test('effect replay retains the original producer lifetime across an unsubscribed interval change', async () => {
+  for (const state of ['current', 'changed', 'retired'] as const) {
+    let epoch = 0;
+    let observations = 0;
+    let pages = 0;
+    const visit = new RealmMembersVisit('realm', {
+      pageBound: 20,
+      observe: () => {
+        observations++;
+        const captured = epoch;
+        return { current: () => state !== 'retired' && epoch === captured, subscribe: () => () => {} };
+      },
+      readPage: async () => {
+        pages++;
+        return { kind: 'ready', page: page() };
+      },
+      readSelected: async () => ({ kind: 'unavailable' }),
+    });
+    const disconnect = visit.connect();
+    await settle();
+    disconnect();
+    if (state === 'changed') epoch++;
+    const stop = visit.connect();
+    await settle();
+    expect(visit.snapshot()).toMatchObject({
+      read: { kind: state === 'current' ? 'ready' : 'retired' },
+      selection: null,
+    });
+    expect([observations, pages]).toEqual([1, state === 'current' ? 2 : state === 'changed' ? 1 : 0]);
+    stop();
+  }
+});

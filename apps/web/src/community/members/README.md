@@ -5,6 +5,10 @@ It takes the Realm anchor, never the containing Space ID. Navigation admission g
 authority. The installed route uses `boundedRealmMemberPage`, an explicit unavailable adapter with no network calls.
 An ordinary member receives no roster or commands from this interface.
 
+Decision: management discovery uses the existing exact-Realm `realm.update` permission or current appearance
+`canManage` observation, both owned by `realm:manage`; ban-list admission and Space-only grants do not qualify.
+The management host supplies these observations without a new probe or a private query snapshot.
+
 Decision: keep production unavailable until the installed roster has generated GET declarations and exposes an exact
 membership interval for selection; neither account ID nor `membership: 'member'` can stand in for that interval.
 
@@ -33,6 +37,8 @@ read/focus effects. The browser observes successful normalized session observati
 same-credential replacement, and both legacy and incarnation-keyed viewer exposure queries. Every away/back transition
 retires the old visit synchronously, even when React batches it. Observer bookkeeping, another viewer's exposure and unrelated queries do not
 retire a visit. Cache subscriptions last only while a visit or Panel observes them; no exposure or role read is added.
+Effect replay keeps the original producer observation, including changes while its subscription is disconnected;
+reconnecting cannot acquire a replacement lifetime and revive a retired interval.
 All private visit data stays in component memory, outside query
 cache, route loader data, metadata, storage and diagnostics. Native disclosure still owns all account presentation.
 There is no avatar integration until admitted media grants and their caps are published.
