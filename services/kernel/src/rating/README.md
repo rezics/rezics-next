@@ -533,6 +533,9 @@ scores use that question's stored units, while the standard question retains its
 The producer uses `readVisibleRatingQuestion` before and after traversal: one exact question-home read followed
 by its native provenance authority (Realm readability for Realm questions, `definitions:read` otherwise).
 It returns `ratingQuestionView` as `question`, including Realm provenance and meaning when present.
+Decision: standard and Global-authored questions may select a private Realm population under their existing
+`definitions:read` authority; Realm-authored questions must match that Realm, and every caption, provenance or
+lifecycle publication change restarts the compatibility cursor independently of measurement identity.
 Out-of-range scales return `invalid_request`; absent or denied questions return `not_found`. Global remains
 invalid as a Realm selection. Question revision, grain and exact scale are frozen with both publication and
 its same-question, same-Realm prior, included in the ordered index prefix and cursor binding. Changing a
