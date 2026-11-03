@@ -97,7 +97,10 @@ export function controlPlaneScopeApprovalIdentity(
 function assertScopeApprovalFiles(input: ControlPlaneScopeApprovalRequest, runtime: ScopeRuntime): void {
   const task = runtime.store.task(input.taskId);
   const entry = runtime.queue.entry(input);
-  const ownership = readRiskOwnership(runtime.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+  const ownership = readRiskOwnership(
+    runtime.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+    runtime.store.policy.brief,
+  );
   const protectedPaths = [
     ...(entry?.request.protectedPaths ?? []),
     ...Object.entries(ownership.areas)
@@ -118,7 +121,11 @@ function assertScopeApprovalFiles(input: ControlPlaneScopeApprovalRequest, runti
       .filter(Boolean),
   );
   for (const { path } of input.additionalPaths) {
-    if (matchesPath(path, task.brief.paths) || frozen.has(path) || matchesPath(path, protectedPaths))
+    if (
+      matchesPath(path, task.brief.paths, runtime.store.policy.brief) ||
+      frozen.has(path) ||
+      matchesPath(path, protectedPaths, runtime.store.policy.brief)
+    )
       throw new Error(`Scope approval cannot replace declared, frozen or protected authority: ${path}`);
     // ls-tree distinguishes a concrete regular file from a directory, symlink or submodule, including deleted files.
     const object =

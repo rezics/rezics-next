@@ -17,6 +17,7 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { CHECK_HOST_NAME_PATTERN } from './check-placement.ts';
 import { withCheckFence } from './check-custody.ts';
 import {
   executionCancellation,
@@ -57,7 +58,7 @@ export type CheckRunInvocationBinding = {
   returnsSha256: string;
 };
 
-export type CheckRunPhysicalIdentity = { host: 'a' | 'b'; run: string };
+export type CheckRunPhysicalIdentity = { host: string; run: string };
 export type CheckRunTransportChildIdentity = { pid: number; bootId: string; start: string };
 export type CheckRunTransportIdentityState = 'live-same' | 'gone-or-replaced' | 'unknown';
 
@@ -439,7 +440,8 @@ function validateCheckRunPreparationIntent(value: unknown): CheckRunPreparationI
 
 function validatePhysical(value: unknown): CheckRunPhysicalIdentity {
   const item = closedObject(value, ['host', 'run'], 'physical identity');
-  if (item.host !== 'a' && item.host !== 'b') throw new Error('check-run-settlement: invalid physical host');
+  if (typeof item.host !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(item.host))
+    throw new Error('check-run-settlement: invalid physical host');
   const run = boundedText(item.run, 'physical run id', 96);
   if (!PHYSICAL_RUN.test(run)) throw new Error('check-run-settlement: invalid physical run id');
   return { host: item.host, run };

@@ -3,9 +3,11 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, wri
 import { join } from 'node:path';
 import type { GateOutcome } from './contracts.ts';
 import { completeContinuation, harvestContinuations } from './continuation.ts';
+import { readControlPolicy } from './policy.ts';
 import { WorkerJob } from './job.ts';
 import { readRiskOwnership } from './briefs.ts';
 import { harness, markdown } from './test-support.ts';
+import { git } from './merge.ts';
 
 test("a gate failure's automatic retry survives the process that recorded it exiting before it ran", async () => {
   const h = harness();
@@ -90,48 +92,54 @@ test("a command leaves another task's pending retry to the host instead of runni
   }
 });
 
+function beginAttempt(h: ReturnType<typeof harness>, task: ReturnType<typeof h.tasks.dispatch>) {
+  return h.store.nextAttempt({ taskId: task.id, attempt: task.currentAttempt }, (attempt) => ({
+    taskId: task.id,
+    attempt,
+    state: 'pending',
+    profile: { cli: 'codex', model: 'fixture', effort: 'medium', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: new Date(Date.now() - 1000).toISOString(),
+    endedAt: null,
+    process: null,
+    driver: null,
+    logPath: join(h.settings.stateDirectory, 'runs', task.id, `${attempt}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(attempt)),
+    auxiliaryProcesses: [],
+    session: null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: null,
+    result: '',
+    blocker: null,
+    approaches: [],
+  }));
+}
+
 test("a retried attempt's continuation is dropped once an earlier attempt queued one", () => {
   const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
   try {
     const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
     const source = join(task.worktree, '.temp/continuation');
     const rest = markdown.replace('Write the requested result and commit it.', 'Finish the shelf.');
     mkdirSync(source, { recursive: true });
     writeFileSync(join(source, 'rest of shelf.md'), rest);
-    const earlier = { taskId: task.id, attempt: task.currentAttempt };
+    const earlier = { taskId: task.id, attempt: attempt.attempt };
     const first = harvestContinuations(h.store, h.settings, task, earlier);
     expect(first.queued).toHaveLength(1);
     expect(readFileSync(first.queued[0]!, 'utf8')).toContain(`after:\n  - ${task.id}\n`);
     writeFileSync(join(source, 'rest of shelf.md'), rest);
     writeFileSync(join(source, 'renamed rest.md'), rest);
-    const later = h.store.nextAttempt(earlier, (attempt) => ({
-      taskId: task.id,
-      attempt,
-      state: 'pending',
-      profile: { cli: 'codex', model: 'fixture', effort: 'medium', poolClass: 'codex' },
-      pool: 'fixture',
-      tableVersion: 'fixture',
-      experiment: null,
-      startedAt: new Date().toISOString(),
-      endedAt: null,
-      process: null,
-      driver: null,
-      logPath: join(h.settings.stateDirectory, 'runs', task.id, `${attempt}.jsonl`),
-      evidencePath: join(h.settings.stateDirectory, 'evidence', task.id, String(attempt)),
-      auxiliaryProcesses: [],
-      session: null,
-      fixRound: 0,
-      consulted: false,
-      previousFailure: null,
-      failure: null,
-      escalation: null,
-      before: null,
-      after: null,
-      exitCode: null,
-      result: '',
-      blocker: null,
-      approaches: [],
-    }));
+    const later = beginAttempt(h, h.store.task(task.id));
     const second = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: later.attempt });
     expect(second.queued).toEqual([]);
     expect(second.dropped.map((drop) => drop.reason)).toEqual([
@@ -147,15 +155,23 @@ test("a retried attempt's continuation is dropped once an earlier attempt queued
 
 test('Keep distinct worker continuations when filenames normalize alike', () => {
   const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
   try {
     const task = h.tasks.dispatch(h.briefFile);
-    const ref = { taskId: task.id, attempt: task.currentAttempt };
+    const attempt = beginAttempt(h, task);
+    const ref = { taskId: task.id, attempt: attempt.attempt };
     const source = join(task.worktree, '.temp/continuation');
     mkdirSync(source, { recursive: true });
     const ownership = readRiskOwnership(h.settings.riskAreasFile);
     // Published briefs are the completed ones, which wait for the task they continue.
     const brief = (sentence: string) =>
-      completeContinuation(markdown.replace('Write the requested result and commit it.', sentence), task, ownership);
+      completeContinuation(
+        markdown
+          .replace('paths: [result.txt]', `paths: [${sentence.replaceAll(' ', '-')}.txt]`)
+          .replace('Write the requested result and commit it.', sentence),
+        task,
+        ownership,
+      );
     const normalized = brief('Finish the shelf from the spaced name.');
     const hyphenated = brief('Finish the shelf from the hyphenated name.');
     const longA = brief('Finish the shelf from the first long name.');
@@ -203,6 +219,81 @@ test('Keep distinct worker continuations when filenames normalize alike', () => 
     expect(published.every((name) => name.endsWith('.md') && !name.includes('.tmp'))).toBe(true);
     expect(second.queued).toEqual([]);
     expect(readdirSync(backlog).sort()).toEqual(published);
+  } finally {
+    h.dispose();
+  }
+});
+
+test('harvest attributes new files to the attempt and proposes overlapping Goal work', () => {
+  const h = harness();
+  h.settings.policy = readControlPolicy({ backlog: { continuationReview: { fixture: false } } });
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const attempt = beginAttempt(h, task);
+    const ref = { taskId: task.id, attempt: attempt.attempt };
+    const source = join(task.worktree, '.temp/continuation');
+    mkdirSync(source, { recursive: true });
+    const inherited = join(source, 'inherited.md');
+    const inheritedBrief = markdown.replace('goal: fixture', 'goal: web');
+    writeFileSync(inherited, inheritedBrief);
+    git(task.worktree, 'add', '-f', '--', '.temp/continuation/inherited.md');
+    git(task.worktree, 'commit', '-m', 'Preserve another outcome');
+    writeFileSync(join(source, 'old.md'), markdown);
+    // Touching an inherited file cannot make it this attempt's output.
+    h.store.updateAttempt(ref, (current) => {
+      current.startedAt = new Date(Date.now() + 1000).toISOString();
+    });
+    utimesSync(join(source, 'old.md'), new Date(), new Date());
+    expect(harvestContinuations(h.store, h.settings, task, ref).dropped[0]?.reason).toBe(
+      'file was not created during this attempt',
+    );
+    expect(readFileSync(inherited, 'utf8')).toBe(inheritedBrief);
+    expect(git(task.worktree, 'status', '--porcelain', '--untracked-files=all')).toBe('');
+    h.store.updateAttempt(ref, (current) => {
+      current.startedAt = attempt.startedAt;
+    });
+    writeFileSync(join(source, 'foreign.md'), markdown.replace('goal: fixture', 'goal: web'));
+    expect(harvestContinuations(h.store, h.settings, task, ref).dropped[0]?.reason).toBe(
+      "goal web is not the task's goal fixture",
+    );
+    const other = h.tasks.dispatch(h.briefFile);
+    for (const state of ['running', 'held', 'ready'] as const) {
+      h.store.updateTask({ taskId: other.id, attempt: 0 }, (current) => {
+        current.state = state;
+      });
+      writeFileSync(
+        join(source, `${state}.md`),
+        markdown.replace('Write the requested result and commit it.', `Finish ${state}.`),
+      );
+      const result = harvestContinuations(h.store, h.settings, task, ref);
+      expect(result.queued).toEqual([]);
+      expect(result.proposed[0]?.reason).toContain(`overlaps task ${other.id}`);
+      expect(readFileSync(`${result.proposed[0]!.file}.reason`, 'utf8')).toContain(other.id);
+    }
+    h.store.updateTask({ taskId: other.id, attempt: 0 }, (current) => {
+      current.state = 'cancelled';
+    });
+    const backlog = join(h.settings.stateDirectory, 'backlog', 'fixture');
+    writeFileSync(
+      join(backlog, 'manager.md'),
+      markdown
+        .replace('paths: [result.txt]', 'paths: [other.txt]')
+        .replace('Write the requested result and commit it.', '# Finish shelf'),
+    );
+    writeFileSync(
+      join(source, 'title.md'),
+      markdown
+        .replace('paths: [result.txt]', 'paths: [separate.txt]')
+        .replace('Write the requested result and commit it.', '# Finish shelf'),
+    );
+    expect(harvestContinuations(h.store, h.settings, task, ref).proposed[0]?.reason).toContain('manager.md');
+    writeFileSync(
+      join(source, 'distinct.md'),
+      markdown
+        .replace('paths: [result.txt]', 'paths: [distinct.txt]')
+        .replace('Write the requested result and commit it.', '# Distinct outcome'),
+    );
+    expect(harvestContinuations(h.store, h.settings, task, ref).queued).toHaveLength(1);
   } finally {
     h.dispose();
   }

@@ -1,10 +1,11 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { relative, sep } from 'node:path';
 import type { Database } from 'bun:sqlite';
 import { git } from './merge.ts';
 
 export const CHECK_RESULT_SCHEMA = 1;
-export const CHECK_RESULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const CHECK_RESULT_TTL_MS = defaultPolicy.storage.checkResultTtlMs;
 export const CHECK_RESULT_ENV = ['CI', 'DATABASE_URL', 'NODE_ENV', 'PATH', 'PLAYWRIGHT_BROWSERS_PATH', 'TZ'] as const;
 export type CheckResult = {
   key: string;
@@ -34,8 +35,13 @@ CREATE INDEX check_results_expiry ON check_results(time);`,
 
 const GLOBAL =
   /^(?:bun\.lock|package\.json|bunfig\.toml|tsconfig[^/]*|patches\/|scripts\/|contracts\/|specs\/|\.github\/workflows\/|\.oxlintrc|\.oxfmtrc|\.prettier|\.editorconfig|\.gitattributes|\.gitignore|AGENTS\.md|services\/(?:kernel\/scripts\/database\.ts|auth\/scripts\/database\.ts|kernel\/db\/search\/opensearch\/Dockerfile))/;
-const globalInputCache = new Map<string, [string, string][]>();
-function globalInputs(root: string, commit: string): [string, string][] {
+const globalInputCaches = new WeakMap<ControlPolicy['storage'], Map<string, [string, string][]>>();
+function globalInputs(root: string, commit: string, policy: ControlPolicy['storage']): [string, string][] {
+  let globalInputCache = globalInputCaches.get(policy);
+  if (!globalInputCache) {
+    globalInputCache = new Map();
+    globalInputCaches.set(policy, globalInputCache);
+  }
   const cacheKey = `${root}\0${commit}`;
   const cached = globalInputCache.get(cacheKey);
   if (cached) return cached;
@@ -48,7 +54,7 @@ function globalInputs(root: string, commit: string): [string, string][] {
         path = line.slice(split + 1);
       return GLOBAL.test(path) ? [[path, object] as [string, string]] : [];
     });
-  if (globalInputCache.size > 64) globalInputCache.clear();
+  if (globalInputCache.size > policy.globalInputCacheClearAboveEntries) globalInputCache.clear();
   globalInputCache.set(cacheKey, inputs);
   return inputs;
 }
@@ -88,6 +94,7 @@ export function checkResultKey(input: {
   cwd: string;
   command: readonly string[];
   env?: NodeJS.ProcessEnv;
+  policy?: ControlPolicy['storage'];
   toolchain?: Partial<{
     bun: string;
     bunRevision: string;
@@ -127,7 +134,7 @@ export function checkResultKey(input: {
     command: [...command],
     env,
     trees,
-    global: globalInputs(root, commit),
+    global: globalInputs(root, commit, input.policy ?? defaultPolicy.storage),
     toolchain,
     workdir: here || '.',
   };
@@ -141,23 +148,35 @@ export function reusableCommand(command: readonly string[]): boolean {
   );
 }
 
-function reusableStoredTime(time: unknown, now: number): time is number {
-  return typeof time === 'number' && Number.isFinite(time) && time <= now && time >= now - CHECK_RESULT_TTL_MS;
+function reusableStoredTime(time: unknown, now: number, ttlMs: number): time is number {
+  return typeof time === 'number' && Number.isFinite(time) && time <= now && time >= now - ttlMs;
 }
 
 export class CheckResults {
-  constructor(readonly db: Database) {}
+  constructor(
+    readonly db: Database,
+    readonly policy: ControlPolicy['storage'] = defaultPolicy.storage,
+  ) {}
   lookup(key: string, now = Date.now()): CheckResult | undefined {
-    this.db.query('DELETE FROM check_results WHERE time < ?').run(now - CHECK_RESULT_TTL_MS);
+    this.db.query('DELETE FROM check_results WHERE time < ?').run(now - this.policy.checkResultTtlMs);
     const row = this.db
       .query(
         `SELECT key, unit, producer, host, duration, log_path AS logPath, time, schema_version AS schemaVersion FROM check_results WHERE key=? AND schema_version=? AND time>=? AND time<=?`,
       )
-      .get(key, CHECK_RESULT_SCHEMA, now - CHECK_RESULT_TTL_MS, now) as Omit<CheckResult, 'passed'> | undefined;
-    return row && reusableStoredTime(row.time, now) ? { ...row, passed: true } : undefined;
+      .get(key, CHECK_RESULT_SCHEMA, now - this.policy.checkResultTtlMs, now) as
+      | Omit<CheckResult, 'passed'>
+      | undefined;
+    return row && reusableStoredTime(row.time, now, this.policy.checkResultTtlMs)
+      ? { ...row, passed: true }
+      : undefined;
   }
   record(result: CheckResult, now = Date.now()): void {
-    if (!result.passed || result.schemaVersion !== CHECK_RESULT_SCHEMA || !reusableStoredTime(result.time, now)) return;
+    if (
+      !result.passed ||
+      result.schemaVersion !== CHECK_RESULT_SCHEMA ||
+      !reusableStoredTime(result.time, now, this.policy.checkResultTtlMs)
+    )
+      return;
     this.db
       .query(
         `INSERT OR REPLACE INTO check_results(key,unit,passed,producer,host,duration,log_path,time,schema_version) VALUES(?,?,1,?,?,?,?,?,?)`,
