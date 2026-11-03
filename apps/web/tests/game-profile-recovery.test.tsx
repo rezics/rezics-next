@@ -290,8 +290,8 @@ test('Game retires refused readings, privately retains exact corrections, and re
       await click(within(holder).getByRole('button', { name: m.facts_submit() }));
     };
 
-    let input = await editPlatform();
-    await write(input, 'fr');
+    let qualifierField = await editPlatform();
+    await write(qualifierField, 'fr');
     await addGenre();
     const beforeAdmission = sentCommands.length;
     outcome = without(genre, false);
@@ -315,8 +315,8 @@ test('Game retires refused readings, privately retains exact corrections, and re
     outcome = structuredClone(initial);
     await render('admission-replay-session');
     await status(m.game_profile_current());
-    input = await editPlatform();
-    await write(input, 'fr');
+    qualifierField = await editPlatform();
+    await write(qualifierField, 'fr');
     const beforeUncertain = sentCommands.length;
     loseNextResponse = true;
     await submitClassifications();
