@@ -90,6 +90,7 @@ export async function readBanReviewPage(
       limit,
       viewer: actor.accountId,
       client: actor.clientId,
+      scopes: [...actor.scopes].sort(),
       requestedBy: actor.requestedBy,
       authnEpoch: actor.authnEpoch,
     },

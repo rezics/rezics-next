@@ -212,9 +212,9 @@ test.serial(
   'unban/reban, revocation, session fencing and removal after raw selection withhold stale facts',
   async () => {
     const { system } = communityFixtureRuntime();
-    for (const change of ['episode', 'permission', 'session', 'removed'] as const) {
+    for (const change of ['episode', 'permission', 'empty-permission', 'session', 'removed'] as const) {
       const r = await realm();
-      await json(await ban(r, fixture.member.id));
+      if (change !== 'empty-permission') await json(await ban(r, fixture.member.id));
       const observer = observeSql(system.database.pool);
       const barrier = observer.hold({ statement: pageWindow.sql }, 'after');
       const pending = callRead(r, `?selectedAccountId=${fixture.member.id}`, fixture.moderator);
@@ -223,7 +223,7 @@ test.serial(
         if (change === 'episode') {
           expect((await unban(r, fixture.member.id)).status).toBe(204);
           await json(await ban(r, fixture.member.id, 'Replaced while reading'));
-        } else if (change === 'permission') {
+        } else if (change === 'permission' || change === 'empty-permission') {
           expect(
             (
               await call('POST', '/v1/roleGrants:revoke', fixture.owner, {
@@ -272,4 +272,53 @@ test.serial(
     }
   },
   180_000,
+);
+
+test.serial(
+  'erasure during hydration withholds stale identity; retry observes a concealed current ban',
+  async () => {
+    const r = await realm(),
+      { system } = communityFixtureRuntime();
+    const deletion = accountDeletionRuntime(system),
+      person = await deletion.person();
+    await json(await ban(r, person.accountId));
+    const observer = observeSql(system.database.pool);
+    const barrier = observer.hold({ statement: identities.sql }, 'after');
+    const pending = callRead(r, `?selectedAccountId=${person.accountId}`);
+    try {
+      await barrier.entered;
+      try {
+        await deletePersona({ pool: system.database.pool, auth: deletion.auth }, person);
+      } finally {
+        barrier.release();
+      }
+      const response = await pending;
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain(person.accountId);
+      expect((await json<BanReviewPage>(await callRead(r))).items[0]).toMatchObject({
+        accountId: person.accountId,
+        account: { state: 'concealed', label: 'Account', destination: null },
+      });
+    } finally {
+      barrier.release();
+      await observer.close();
+    }
+  },
+  120_000,
+);
+
+test.serial(
+  'suspended caller cannot inspect even an empty inventory',
+  async () => {
+    const r = await realm(),
+      { system } = communityFixtureRuntime();
+    const person = await accountDeletionRuntime(system).person();
+    const moderator = { id: person.accountId, bearer: person.bearer };
+    expect((await driver.grantModerator(r.realmId, moderator)).status).toBe(201);
+    await json<BanReviewPage>(await callRead(r, '', moderator));
+    const suspended = await driver.suspend(moderator);
+    expect(suspended.ok).toBe(true);
+    expect([401, 403]).toContain((await callRead(r, '', moderator)).status);
+  },
+  60_000,
 );

@@ -579,7 +579,7 @@ These supply user behavior only; current native commands retain authority.
   Across both rounds this is 2(p+s+1) current/payload pairs, independent of closed intervals. Payload reason is
   at most 1024 Unicode scalars (4096 UTF-8 or 6146 JSON-string bytes). `realm_ban_current` already covers the
   needed native route/Realm/account/interval key; materialized tuple seeks prevent a temporal history scan.
-  Cursors admit 4096 bytes of wire text. Each attempt makes one window, never scans old rows to fill it or
+  Cursors also bind the actual consented scope set and admit 4096 bytes of wire text. Each attempt makes one window, never scans old rows to fill it or
   retries a command; an explicit read retry pays the complete read again.
 - Growth check: `test/community/ban-review-page.test.ts` pins mounted bounds and readback; native physical
   selection plans and independent retained-history growth are in `test/community/ban-review-page-growth.test.ts`.
