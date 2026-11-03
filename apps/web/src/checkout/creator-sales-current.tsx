@@ -91,11 +91,13 @@ function CurrentSalesRead({
 }) {
   const client = useQueryClient();
   const queryKey = ['creator-sales-current', subject, locale, cursor ?? null, origin.id, revision];
-  const [initialData] = useState<CreatorSalesCurrentRead | undefined>(() => {
+  const seedData = () => {
     const retained = origin.workspace.read;
     const value = retained ?? (seed ? initial : undefined);
     return matches(value, subject, cursor ?? null) ? value : undefined;
-  });
+  };
+  // Remember only whether this mount was seeded, not another private page snapshot.
+  const [seeded] = useState(() => seedData() !== undefined);
   const query = useQuery<CreatorSalesCurrentRead | null>({
     ...personalRead,
     queryKey,
@@ -117,8 +119,8 @@ function CurrentSalesRead({
         return origin.isCurrent() ? unavailable : null;
       }
     },
-    ...(initialData ? { initialData } : {}),
-    refetchOnMount: !initialData,
+    initialData: seedData,
+    refetchOnMount: !seeded,
     structuralSharing: false,
     gcTime: 0,
     retry: false,

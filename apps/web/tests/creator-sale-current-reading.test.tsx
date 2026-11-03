@@ -174,15 +174,16 @@ for (const size of [1, 10, 20])
       expect(copiedText).toMatch(/^Sale reference: 019a2100/);
       expect(inspection()?.textContent).toContain('Copying reference');
       // Replacement has identical sale IDs and terms, yet is a fresh source observation.
-      await act(async () =>
+      await act(async () => {
         client.setQueriesData<CreatorSalesCurrentRead>({ queryKey: ['creator-sales-current'] }, (value) =>
           value ? { ...value, page: { ...value.page } } : value,
-        ),
-      );
+        );
+        // Resolve before React's cache notification renders the replacement.
+        finishCopy?.();
+        await Promise.resolve();
+      });
       await tick();
       expect(inspection()).toBeNull();
-      await act(async () => finishCopy?.());
-      await tick();
       expect(host.textContent).not.toContain('Sale reference copied.');
       await click('Inspect sale');
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
