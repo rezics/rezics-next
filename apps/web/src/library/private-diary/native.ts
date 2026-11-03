@@ -44,7 +44,7 @@ export async function cancelDiaryContinuation(
   client: KernelClient,
   authorization: string,
   continuation: string,
-): Promise<'cancelled' | 'unavailable'> {
+): Promise<'cancelled' | 'retired' | 'unavailable'> {
   const result = await client.libraryDiary.$cancel.post(
     { continuation },
     { headers: { authorization } },

@@ -36,5 +36,8 @@ and retained projections do not grow with the owner's total occurrence history N
 aggregate call; its engine cost is owned by [consumption statistics](library-consumption-statistics.md), not inferred
 from Web response counts.
 
+Journal read/update and occurrence reopen/retire are separately gated with their installed operation names. Their
+server calls use the generated client with the current request's authorization header and exact native command key.
+
 Focused tests cover partial-date preservation and exact native-summary pass-through. Three-scale loader/controller
 growth acceptance and browser evidence remain deferred to the normal dev verifier; they were not run in this increment.

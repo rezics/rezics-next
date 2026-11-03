@@ -120,16 +120,19 @@ export function PrivateOccurrenceControls({
   const router = useRouter();
   const queryClient = useQueryClient();
   const readAllowed = useOperation('progress_session.read');
-  const updateAllowed = useOperation('progress_session.update');
+  const journalReadAllowed = useOperation('progress_session_journal.read');
+  const journalUpdateAllowed = useOperation('progress_session_journal.update');
+  const reopenAllowed = useOperation('progress_session.reopen');
+  const retireAllowed = useOperation('progress_session.retire');
   const sessionState = useSession();
-  const currentViewer = sessionState.state === 'signed-in' ? sessionState.subject : null;
-  const csrfToken = sessionState.state === 'signed-in' ? sessionState.csrfToken : null;
-  const enabled = readAllowed && currentViewer !== null && csrfToken !== null && isCurrent();
+  const currentViewer = sessionState.state === 'signed-in' ? sessionState.subject ?? null : null;
+  const csrfToken = sessionState.state === 'signed-in' ? sessionState.csrfToken ?? null : null;
+  const enabled = readAllowed && journalReadAllowed && currentViewer !== null && csrfToken !== null && isCurrent();
   const queryKey = useMemo(
     () => ['private-occurrence-journal', currentViewer, csrfToken, session.id] as const,
     [currentViewer, csrfToken, session.id],
   );
-  const query = useQuery({
+  const query = useQuery<JournalReadResult>({
     queryKey,
     enabled,
     staleTime: 0,
@@ -178,7 +181,7 @@ export function PrivateOccurrenceControls({
   }, [leaveRetiredDetail, query.data?.kind]);
 
   async function sendJournal(command: JournalCommand) {
-    if (!updateAllowed || !stillCurrent(command)) return;
+    if (!journalUpdateAllowed || !stillCurrent(command)) return;
     setJournalNotice(null);
     const result = await correctOccurrenceJournal({ data: command });
     if (!stillCurrent(command)) return;
@@ -217,7 +220,7 @@ export function PrivateOccurrenceControls({
 
   function submitJournal(event: FormEvent) {
     event.preventDefault();
-    if (!journal || !body || !updateAllowed || journalCommand || terminal || !currentViewer || !csrfToken) return;
+    if (!journal || !body || !journalUpdateAllowed || journalCommand || terminal || !currentViewer || !csrfToken) return;
     if (conflictRevision !== null && reviewedRevision !== journal.revision) return;
     const command: JournalCommand = {
       sessionId: session.id,
@@ -230,7 +233,7 @@ export function PrivateOccurrenceControls({
   }
 
   async function submitLifecycle(command: LifecycleCommand) {
-    if (!updateAllowed || !stillCurrent(command)) return;
+    if (!(command.action === 'reopen' ? reopenAllowed : retireAllowed) || !stillCurrent(command)) return;
     setLifecycleNotice(null);
     const result = await changeOccurrenceLifecycle({ data: command });
     if (!stillCurrent(command)) return;
@@ -266,7 +269,7 @@ export function PrivateOccurrenceControls({
   }
 
   function chooseLifecycle(action: 'reopen' | 'retire') {
-    if (!updateAllowed || !isCurrent() || !currentViewer || !csrfToken || terminal || lifecycleConflictRevision !== null) return;
+    if (!(action === 'reopen' ? reopenAllowed : retireAllowed) || !isCurrent() || !currentViewer || !csrfToken || terminal || lifecycleConflictRevision !== null) return;
     setConfirmAction(action);
     setLifecycleCommand({
       action,
@@ -314,10 +317,10 @@ export function PrivateOccurrenceControls({
                 inputMode="numeric"
                 aria-describedby="library-occurrence-date-help"
                 value={working.startDate}
-                disabled={!updateAllowed || journalCommand !== null}
+                disabled={!journalUpdateAllowed || journalCommand !== null}
                 onChange={(event) => setDraft({ ...working, startDate: event.currentTarget.value })}
               />
-              <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!updateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, startDate: '' })}>{m.library_occurrence_clear_date()}</button>
+              <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!journalUpdateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, startDate: '' })}>{m.library_occurrence_clear_date()}</button>
             </label>
             <label className="block">
               <span className="mb-1 block text-sm font-medium">{m.library_occurrence_finish_date()}</span>
@@ -326,10 +329,10 @@ export function PrivateOccurrenceControls({
                 inputMode="numeric"
                 aria-describedby="library-occurrence-date-help"
                 value={working.finishDate}
-                disabled={!updateAllowed || journalCommand !== null}
+                disabled={!journalUpdateAllowed || journalCommand !== null}
                 onChange={(event) => setDraft({ ...working, finishDate: event.currentTarget.value })}
               />
-              <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!updateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, finishDate: '' })}>{m.library_occurrence_clear_date()}</button>
+              <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!journalUpdateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, finishDate: '' })}>{m.library_occurrence_clear_date()}</button>
             </label>
           </div>
           <label className="block">
@@ -337,17 +340,17 @@ export function PrivateOccurrenceControls({
             <textarea
               className="min-h-28 w-full rounded-md border bg-background p-3"
               value={working.reflection}
-              disabled={!updateAllowed || journalCommand !== null}
+              disabled={!journalUpdateAllowed || journalCommand !== null}
               onChange={(event) => setDraft({ ...working, reflection: event.currentTarget.value })}
             />
-            <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!updateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, reflection: '' })}>{m.library_occurrence_clear_reflection()}</button>
+            <button type="button" className="mt-2 min-h-11 rounded-md border px-3" disabled={!journalUpdateAllowed || journalCommand !== null} onClick={() => setDraft({ ...working, reflection: '' })}>{m.library_occurrence_clear_reflection()}</button>
           </label>
           {body === null && (
             (working.startDate !== dateText(journal.startDate) && parseDate(working.startDate) === 'invalid') ||
             (working.finishDate !== dateText(journal.finishDate) && parseDate(working.finishDate) === 'invalid')
           ) ? <p role="alert">{m.library_occurrence_date_invalid()}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50" disabled={!updateAllowed || !body || journalCommand !== null || (conflictRevision !== null && reviewedRevision !== journal.revision)}>
+            <button type="submit" className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50" disabled={!journalUpdateAllowed || !body || journalCommand !== null || (conflictRevision !== null && reviewedRevision !== journal.revision)}>
               {m.library_occurrence_save()}
             </button>
             {journalCommand ? (
@@ -388,13 +391,13 @@ export function PrivateOccurrenceControls({
         </form>
       ) : null}
 
-      {updateAllowed ? (
+      {reopenAllowed || retireAllowed ? (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
-            {(session.state === 'completed' || session.state === 'abandoned') ? (
+            {reopenAllowed && (session.state === 'completed' || session.state === 'abandoned') ? (
               <button type="button" className="min-h-11 rounded-md border px-3" disabled={lifecycleConflictRevision !== null} onClick={() => chooseLifecycle('reopen')}>{m.library_occurrence_reopen()}</button>
             ) : null}
-            {session.state !== 'retired' ? (
+            {retireAllowed ? (
               <button type="button" className="min-h-11 rounded-md border px-3" disabled={lifecycleConflictRevision !== null} onClick={() => chooseLifecycle('retire')}>{m.library_occurrence_retire()}</button>
             ) : null}
           </div>

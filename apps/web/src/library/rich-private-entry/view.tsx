@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
+import type { useSession } from '../../session/query';
 import {
   PRIVATE_NOTE_BYTES,
   annotationWrite,
@@ -18,9 +19,7 @@ import {
 } from './server';
 import type { PersonalEntryObservation, PersonalEntryPrivacyValue } from '@rezics/client';
 
-type ReaderSession =
-  | { state: 'signed-in'; subject: string; csrfToken: string | null }
-  | { state: 'signed-out' | 'unavailable'; csrfToken: null };
+type ReaderSession = ReturnType<typeof useSession>;
 
 type AnnotationCommand = {
   subjectId: string;
@@ -93,7 +92,7 @@ export function RichPrivateEntry({
     () => ['library', 'rich-private-entry', subject.id, viewer, csrfToken] as const,
     [subject.id, viewer, csrfToken],
   );
-  const query = useQuery({
+  const query = useQuery<PrivateEntryReadResult>({
     queryKey,
     enabled,
     staleTime: 0,

@@ -56,18 +56,21 @@ export function requestLocale(given?: Request): string | undefined {
 }
 
 /** One reader's kernel client. Every call asks for the reader's language chain, so embedded labels follow it. */
-export function kernelClient(locale?: string) {
+export function kernelClient(locale?: string, authorization?: string) {
   const language = uiLocale(locale) ?? requestLocale();
-  const headers = language === undefined ? undefined : { 'accept-language': acceptLanguage(language) };
+  const headers = {
+    ...(language === undefined ? {} : { 'accept-language': acceptLanguage(language) }),
+    ...(authorization === undefined ? {} : { authorization }),
+  };
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (origin)
     return withPlatformClosedRecognition(
-      createKernelClient(origin, { ...(headers ? { headers } : {}), fetch: pageFetch(globalThis.fetch) }),
+      createKernelClient(origin, { headers, fetch: pageFetch(globalThis.fetch) }),
     );
   if (import.meta.env.DEV) {
     return withPlatformClosedRecognition(
       createKernelClient('http://kernel.local', {
-        ...(headers ? { headers } : {}),
+        headers,
         fetch: pageFetch((async (input, init) => {
           const [{ createFakeKernelFetch }, { default: fixtures }] = await Promise.all([
             import('./fake.ts'),

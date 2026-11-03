@@ -131,15 +131,18 @@ export const savePrivateAnnotations = createServerFn({ method: 'POST' })
     const item = value as Record<string, unknown>;
     const id = subjectId(item.subjectId);
     const body = annotationInput(item.body);
+    const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
+    const viewer = typeof item.viewer === 'string' ? item.viewer : null;
+    const csrfToken = typeof item.csrfToken === 'string' ? item.csrfToken : null;
     if (
       !id ||
       !body ||
-      !annotationKey(item.key) ||
-      typeof item.viewer !== 'string' ||
-      typeof item.csrfToken !== 'string'
+      !key ||
+      !viewer ||
+      !csrfToken
     )
       throw new Error('Invalid annotation command');
-    return { subjectId: id, body, key: item.key, viewer: item.viewer, csrfToken: item.csrfToken };
+    return { subjectId: id, body, key, viewer, csrfToken };
   })
   .handler(async ({ data }): Promise<PrivateEntryCommandResult> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -168,24 +171,31 @@ export const savePrivateSourcePrivacy = createServerFn({ method: 'POST' })
     const item = value as Record<string, unknown>;
     const id = subjectId(item.subjectId);
     const privacy = privacyChange(item.privacy);
+    const provider =
+      typeof item.provider === 'string' && item.provider.length >= 1 && item.provider.length <= 64
+        ? item.provider
+        : null;
+    const recordId =
+      typeof item.recordId === 'string' && item.recordId.length >= 1 && item.recordId.length <= 192
+        ? item.recordId
+        : null;
+    const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
+    const viewer = typeof item.viewer === 'string' ? item.viewer : null;
+    const csrfToken = typeof item.csrfToken === 'string' ? item.csrfToken : null;
     if (
       !id ||
       !privacy ||
-      typeof item.provider !== 'string' ||
-      item.provider.length < 1 ||
-      item.provider.length > 64 ||
-      typeof item.recordId !== 'string' ||
-      item.recordId.length < 1 ||
-      item.recordId.length > 192 ||
+      !provider ||
+      !recordId ||
       !Number.isSafeInteger(item.revision) ||
-      !annotationKey(item.key) ||
-      typeof item.viewer !== 'string' ||
-      typeof item.csrfToken !== 'string'
+      !key ||
+      !viewer ||
+      !csrfToken
     )
       throw new Error('Invalid source correction');
     const body: PersonalEntrySourceCorrection = {
-      provider: item.provider,
-      recordId: item.recordId,
+      provider,
+      recordId,
       revision: item.revision as number,
       confirmReviewed: true,
       privacy,
@@ -195,9 +205,9 @@ export const savePrivateSourcePrivacy = createServerFn({ method: 'POST' })
     return {
       subjectId: id,
       body,
-      key: item.key,
-      viewer: item.viewer,
-      csrfToken: item.csrfToken,
+      key,
+      viewer,
+      csrfToken,
     };
   })
   .handler(async ({ data }): Promise<SourcePrivacyCommandResult> => {

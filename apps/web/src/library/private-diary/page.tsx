@@ -2,14 +2,13 @@ import { useRouter } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
+import type { useSession } from '../../session/query';
 import type { PrivateDiaryLoadResult } from './server';
 import { cancelPrivateDiary } from './server';
 import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';
 import { consumptionStatistics, privateCount, reportedDate } from './presentation';
 
-type ReaderSession =
-  | { state: 'signed-in'; subject: string; csrfToken: string | null }
-  | { state: 'signed-out' | 'unavailable'; csrfToken: null };
+type ReaderSession = ReturnType<typeof useSession>;
 
 function safeReturnTo(value: string | undefined): string {
   if (!value || !value.startsWith('/') || value.startsWith('//') || /[\u0000-\u001f]/.test(value)) return '/library';

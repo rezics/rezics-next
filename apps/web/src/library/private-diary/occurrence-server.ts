@@ -140,9 +140,9 @@ export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
     const identity = await currentIdentity();
     if (!identity || identity.viewer !== data.viewer || identity.csrfToken !== data.csrfToken) return { kind: 'retired' };
     try {
-      const client = kernelClient();
+      const client = kernelClient(undefined, identity.authorization);
       const result = await client.progressSessions({ sessionId: data.sessionId }).journal.patch(data.body, {
-        headers: { authorization: identity.authorization, 'idempotency-key': data.key },
+        headers: { 'idempotency-key': data.key },
       });
       if (result.error || !result.data?.journal || result.data.journal.sessionId !== data.sessionId) {
         if (result.status === 409) return { kind: 'conflict' };
@@ -150,9 +150,7 @@ export const correctOccurrenceJournal = createServerFn({ method: 'POST' })
         if (result.status === 401) return { kind: 'retired' };
         return { kind: 'uncertain' };
       }
-      const readback = await client.progressSessions({ sessionId: data.sessionId }).journal.get({
-        headers: { authorization: identity.authorization },
-      });
+      const readback = await client.progressSessions({ sessionId: data.sessionId }).journal.get();
       if (!readback.error && readback.data?.journal?.sessionId === data.sessionId)
         return { kind: 'saved', journal: readback.data.journal };
       if (readback.status === 404) return { kind: 'missing' };
@@ -180,8 +178,8 @@ export const changeOccurrenceLifecycle = createServerFn({ method: 'POST' })
     const identity = await currentIdentity();
     if (!identity || identity.viewer !== data.viewer || identity.csrfToken !== data.csrfToken) return { kind: 'retired' };
     try {
-      const client = kernelClient();
-      const options = { headers: { authorization: identity.authorization, 'idempotency-key': data.key } };
+      const client = kernelClient(undefined, identity.authorization);
+      const options = { headers: { 'idempotency-key': data.key } };
       const result =
         data.action === 'reopen'
           ? await client.progressSessions({ sessionId: data.sessionId }).$reopen.post({ revision: data.revision }, options)
