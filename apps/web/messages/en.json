@@ -1239,6 +1239,7 @@
   "realm_state_pending": "Pending",
   "realm_state_pending_note": "Your request is being processed. Reload in a moment to see the result.",
   "realm_list_details_sparse_page_empty": "No communities on this page. Continue to see more.",
+  "realms_entry_unavailable": "Entry is currently unavailable.",
   "realms_empty": "You have not joined any Realms yet.",
   "realms_heading": "Your Realms",
   "space_realm_heading": "Realm",

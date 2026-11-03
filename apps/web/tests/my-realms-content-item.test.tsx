@@ -28,7 +28,7 @@ function rowsIn(markup: string) {
   return [...markup.matchAll(/<li\b[^>]*data-slot="list-row"[^>]*>[\s\S]*?<\/li>/gu)].map((match) => match[0]);
 }
 
-function primaryLink(row: string) {
+function inventoryHeading(row: string) {
   const heading = row.match(/<h2\b([^>]*)>([\s\S]*?)<\/h2>/u);
   expect(heading).not.toBeNull();
   if (!heading) throw new Error('A Realm ContentItem should have a visible level-two heading.');
@@ -38,14 +38,8 @@ function primaryLink(row: string) {
   expect(heading[1]).toContain('data-content-item-slot="title"');
   expect(heading[1]).not.toContain('aria-hidden');
 
-  const links = [...row.matchAll(/<a\b([^>]*)>/gu)];
-  expect(links).toHaveLength(1);
-  const attributes = links[0]?.[1] ?? '';
-  expect(attributes).toContain(`aria-labelledby="${headingId}"`);
-  const href = attributes.match(/\bhref="([^"]+)"/u)?.[1];
-  expect(href).toBeTruthy();
-  if (!href) throw new Error('A Realm ContentItem should have one native destination.');
-  return { title: heading[2]!, href };
+  expect(row).not.toMatch(/<a\b/gu);
+  return heading[2]!;
 }
 
 function cursorFromContinuation(markup: string, locale: Locale, cursor: string) {
@@ -78,7 +72,7 @@ const pageWithRealms: MyRealmsPage = {
   next: 'opaque cursor/v1?scope=all&token=%25',
 };
 
-test('My Realms composes ordered ContentItems with named headings, supplied descriptions and exact localized destinations', async () => {
+test('My Realms composes ordered ContentItems with named headings, supplied descriptions and unavailable entry', async () => {
   for (const locale of ['en', 'zh-Hant'] as const) {
     const markup = await render(pageWithRealms, locale);
     const rows = rowsIn(markup);
@@ -90,11 +84,11 @@ test('My Realms composes ordered ContentItems with named headings, supplied desc
 
     const rendered = rows.map((row, index) => {
       const item = pageWithRealms.realms[index]!;
-      const link = primaryLink(row);
-      expect(link.title).toBe(item.name);
-      expect(link.href).toBe(`/${locale}/realms/${encodeURIComponent(item.realmId)}`);
+      const title = inventoryHeading(row);
+      expect(title).toBe(item.name);
+      expect(row).toContain(m.realms_entry_unavailable({}, { locale }));
       expect(row).toContain(`<p class="text-sm leading-relaxed text-muted-foreground">${item.description}</p>`);
-      return link.title;
+      return title;
     });
     expect(rendered).toEqual(pageWithRealms.realms.map((realm) => realm.name));
     cursorFromContinuation(markup, locale, pageWithRealms.next!);

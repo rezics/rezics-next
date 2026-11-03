@@ -1223,6 +1223,7 @@
   "realm_state_pending": "处理中",
   "realm_state_pending_note": "你的请求正在处理。请稍后刷新查看结果。",
   "realm_list_details_sparse_page_empty": "此页没有社区。继续查看更多社区。",
+  "realms_entry_unavailable": "目前无法进入。",
   "realms_empty": "你还没有加入任何社区。",
   "realms_heading": "你的社区",
   "space_realm_heading": "社区",

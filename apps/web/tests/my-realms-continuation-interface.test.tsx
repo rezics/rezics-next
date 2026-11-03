@@ -132,8 +132,8 @@ test('populated supplied pages preserve row order, descriptions and continuation
       rows.forEach((row, index) => {
         const realm = populated.realms[index]!;
         expect(row).toContain(`>${realm.name}</h2>`);
-        expect(row).toContain(`href="/${locale}/realms/${encodeURIComponent(realm.realmId)}"`);
-        expect([...row.matchAll(/<a\b/gu)]).toHaveLength(1);
+        expect(row).not.toMatch(/<a\b/gu);
+        expect(row).toContain(m.realms_entry_unavailable({}, { locale }));
         if (realm.description)
           expect(row).toContain(`<p class="text-sm leading-relaxed text-muted-foreground">${realm.description}</p>`);
         else expect(row).not.toContain('data-content-item-slot="preview"');
@@ -168,8 +168,8 @@ test('long supplied text and multiple instances keep distinct visible heading id
       expect(heading).not.toBeNull();
       const id = heading![1]!;
       expect(heading![2]).toBe(longPage.realms[index % 20]!.name);
-      expect(row).toContain(`aria-labelledby="${id}"`);
-      expect([...row.matchAll(/<a\b/gu)]).toHaveLength(1);
+      expect(row).not.toMatch(/<a\b/gu);
+      expect(row).toContain(m.realms_entry_unavailable({}, { locale }));
       expect(row).toContain(
         `<p class="text-sm leading-relaxed text-muted-foreground">${longPage.realms[index % 20]!.description}</p>`,
       );

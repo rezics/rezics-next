@@ -249,28 +249,30 @@ eligibility, disclosure, succession and growth evidence remain with Content and 
 ### My Realms current-entry boundary
 
 The existing `/realms` page keeps the current `MyRealmsCaller`, one-page cursor flow and signed-in route. The
-installed `GET /v1/me/realms` response currently contains only `realmId`, `name`, `role: 'member'` and `next`;
-it does not admit a current destination, readability, presentation, media, membership episode or action advice.
-Web does not infer management or leave authority from `role: 'member'`. The loader and fake route now pass through
-only the installed fields. The view's optional description slot remains useful for supplied-page examples, not proof
-that the native endpoint supplies a description.
+installed generated `GET /v1/me/realms` response and recorded example contain only `realmId`, `name`,
+`role: 'member'` and `next`. The native producer now adds `current` with presentation, media, destination,
+membership `since`, participation and explicitly unavailable actions; that expanded shape is not yet installed
+in the generated client or recorded example. The explicit projection in `my-realms-native.ts` remains bound to
+the installed generated type. No browser action contract is inferred from the newer producer.
 
-Decision: retain the current caller and route ownership until Content installs its expanded generated response and
-recorded examples; do not treat the existing ID-based link as native evidence of current readability. The current-entry
-continuation will bind the admitted destination and selected action to that response, then document the delivered
-pending/readback and retry meanings here.
+Decision: display inventory rows with localized unavailable entry until the generated response admits a current destination; retain labels without deriving an ID-based link or management/leave authority from membership.
 
-Decision: derive the inventory projection from the installed generated `me.realms.get` response, explicitly admitting
-only `realmId` and `name` until the producer publishes current-entry and action fields and examples.
+Unavailable entry means this page has no admitted current destination. It does not establish that the Realm is
+deleted, unreadable elsewhere, or no longer joined. Ordinary continuation and same-cursor error retry keep their
+existing caller ownership; a sparse page still offers its opaque continuation, and first-page recovery stays explicit.
+There is no selected leave action on the installed response. Accepted leave pending/readback, unknown outcome retry,
+actual management advice and their episode binding remain the current-entry continuation's outcome, not delivered UI.
+Supplied descriptions remain presentation examples, not expanded native evidence.
 
 #### Current native cost
 
 - Touches: one existing `/v1/me/realms` page read with its normal session preparation; Web formats the returned rows
-  once and performs no row-by-row membership or media read.
-- Bound: native page size 20, raw scan budget 80, one current page and its opaque continuation. The installed page has
-  no selected action or current-entry envelope.
-- Growth check: 1/10/20 rendering, sparse continuation, selected-action count and retirement remain owed with the
-  expanded native response. Existing supplied-page stories do not establish those native facts.
+  once and performs no row-by-row membership, Account, Access or media read.
+- Bound: native page size 20, raw scan budget 80, one current page and its opaque continuation; zero selected actions
+  while native action advice is unavailable. No sparse-page refill or private-page storage is introduced.
+- Growth: the installed projection covers 0/1/10/20 rows with one page read. Mounted unavailable-entry coverage
+  exercises the installed inventory; expanded presentation/media, selected leave and their retirement journeys remain
+  owed. Content owns native raw80 traversal and growth256/1024/4096 evidence.
 
 ### Canonical episode checklist
 

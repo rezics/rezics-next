@@ -2,11 +2,10 @@ import { useEffect, useId, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import type { MyRealmsPage } from './space';
 
-/** The signed-in person's Realms, one page at a time, each linked to its home. */
+/** One admitted inventory window; membership alone supplies no current entry authority. */
 export function MyRealmsPageView({
   page,
   onKeyboardNext,
@@ -16,7 +15,6 @@ export function MyRealmsPageView({
   onKeyboardNext?: (cursor: string) => void;
   focusContinuation?: (() => boolean) | undefined;
 }) {
-  const locale = getLocale();
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const attemptedFocus = useRef(false);
@@ -43,8 +41,8 @@ export function MyRealmsPageView({
                 key={realm.realmId}
                 title={realm.name}
                 headingLevel={2}
-                href={`/${locale}/realms/${encodeURIComponent(realm.realmId)}`}
                 className="flex items-start gap-4 rounded-xl px-4 py-3"
+                metadata={<p>{m.realms_entry_unavailable()}</p>}
                 preview={
                   realm.description ? (
                     <p className="text-sm leading-relaxed text-muted-foreground">{realm.description}</p>

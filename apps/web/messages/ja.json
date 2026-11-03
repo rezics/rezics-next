@@ -1223,6 +1223,7 @@
   "realm_state_pending": "保留中",
   "realm_state_pending_note": "リクエストを処理しています。しばらくしてから再読み込みすると結果を確認できます。",
   "realm_list_details_sparse_page_empty": "このページにコミュニティはありません。続けてほかのコミュニティをご覧ください。",
+  "realms_entry_unavailable": "現在、このコミュニティにはアクセスできません。",
   "realms_empty": "まだ参加しているコミュニティはありません。",
   "realms_heading": "参加中のコミュニティ",
   "space_realm_heading": "コミュニティ",

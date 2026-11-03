@@ -1223,6 +1223,7 @@
   "realm_state_pending": "處理中",
   "realm_state_pending_note": "你的請求正在處理。請稍後重新整理查看結果。",
   "realm_list_details_sparse_page_empty": "此頁沒有社群。繼續查看其他社群。",
+  "realms_entry_unavailable": "目前無法進入。",
   "realms_empty": "你尚未加入任何社群。",
   "realms_heading": "你的社群",
   "space_realm_heading": "社群",

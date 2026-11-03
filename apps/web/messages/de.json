@@ -1223,6 +1223,7 @@
   "realm_state_pending": "Ausstehend",
   "realm_state_pending_note": "Deine Anfrage wird bearbeitet. Lade die Seite gleich neu, um das Ergebnis zu sehen.",
   "realm_list_details_sparse_page_empty": "Auf dieser Seite gibt es keine Communities. Fahre fort, um weitere zu sehen.",
+  "realms_entry_unavailable": "Der Zugang ist derzeit nicht verfügbar.",
   "realms_empty": "Du bist noch keiner Community beigetreten.",
   "realms_heading": "Deine Communities",
   "space_realm_heading": "Community",

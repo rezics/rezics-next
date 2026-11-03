@@ -1223,6 +1223,7 @@
   "realm_state_pending": "Pendiente",
   "realm_state_pending_note": "Tu solicitud se está procesando. Recarga en un momento para ver el resultado.",
   "realm_list_details_sparse_page_empty": "No hay comunidades en esta página. Continúa para ver más.",
+  "realms_entry_unavailable": "El acceso no está disponible en este momento.",
   "realms_empty": "Todavía no te has unido a ninguna comunidad.",
   "realms_heading": "Tus comunidades",
   "space_realm_heading": "Comunidad",

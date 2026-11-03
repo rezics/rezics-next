@@ -78,7 +78,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Supplied-page observations for the production MyRealmsPageView. Realm IDs, order and names derive from the recorded my-realms response; descriptions, long text and opaque continuations are presentation examples. Use en/zh-Hant and phone390/desktop1280 globals for every state; RTL exports stress direction with those supported locales. Plays observe native link destinations, target size, wrapping and keyboard focus without fetching another page. Unavailable reuses the existing route error presentation. These examples establish no native signed-in admission, SSR or caller lifetime evidence.',
+          'Supplied-page observations for the production MyRealmsPageView. Realm IDs, order and names derive from the recorded my-realms response; descriptions, long text and opaque continuations are presentation examples. Use en/zh-Hant and phone390/desktop1280 globals for every state; RTL exports stress direction with those supported locales. Plays observe unavailable entry, native continuation destinations, target size, wrapping and keyboard focus without fetching another page. Unavailable reuses the existing route error presentation. These examples establish no native signed-in admission, SSR or caller lifetime evidence.',
       },
     },
   },
@@ -108,12 +108,10 @@ const meta = {
       for (const [rowIndex, row] of rows.entries()) {
         const realm = page.realms[rowIndex]!;
         const heading = within(row as HTMLElement).getByRole('heading', { level: 2, name: realm.name });
-        const link = within(row as HTMLElement).getByRole('link', { name: realm.name });
         headingIds.push(heading.id);
         await expect(heading).toBeVisible();
-        await expect(link).toHaveAttribute('aria-labelledby', heading.id);
-        await expect(link).toHaveAttribute('href', `/${getLocale()}/realms/${encodeURIComponent(realm.realmId)}`);
-        await expect(row.querySelectorAll('a')).toHaveLength(1);
+        await expect(within(row as HTMLElement).getByText(m.realms_entry_unavailable())).toBeVisible();
+        await expect(row.querySelectorAll('a')).toHaveLength(0);
         if (realm.description) {
           const description = row.querySelector('p');
           await expect(description).toHaveTextContent(realm.description);
