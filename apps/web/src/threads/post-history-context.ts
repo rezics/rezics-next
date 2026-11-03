@@ -1,5 +1,4 @@
 import type { KernelClient } from '@rezics/client';
-import type { DocumentMentions } from '@rezics/ui/document-body';
 import type { PageAuthors } from '../identity/read';
 import type { RevisionDocumentMedia } from './exact-revision-media';
 import type { ThreadSubject } from './subjects';
@@ -26,7 +25,7 @@ export function projectHistoryContext(page: HistoryContext) {
         operatorId: null,
       };
   }
-  const mentions: DocumentMentions = {};
+  const mentions: Record<string, { handle: string }> = {};
   if (page.mentions.state === 'current')
     for (const mention of page.mentions.items)
       if (mention.state === 'available') mentions[mention.id] = { handle: mention.handle };
