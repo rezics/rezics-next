@@ -68,6 +68,9 @@ async function command(args: string[], env: NodeJS.ProcessEnv): Promise<number> 
 }
 
 async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean, emitSchema?: string): Promise<number> {
+  // Refresh the client route declarations before checking consumers that import them.
+  const client = emitClient ? await command(['bun', 'scripts/client.ts'], env) : 0;
+  if (client !== 0) return client;
   const tsc = await command(['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
   if (tsc !== 0) return tsc;
   const constructed = await command(['bun', 'run', 'construct'], env);
@@ -80,8 +83,7 @@ async function typecheck(env: NodeJS.ProcessEnv, emitClient: boolean, emitSchema
     if (dump === undefined) throw new Error(`Unknown schema module: ${emitSchema}`);
     await Bun.write(resolve(directory, path), dump);
   }
-  // Declaration emission shares this compiler database; it never starts a native check.
-  return emitClient ? command(['bun', 'scripts/client.ts'], env) : 0;
+  return 0;
 }
 
 export async function runKernelTypecheck(
