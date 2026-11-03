@@ -93,7 +93,7 @@ export function aniListImportRoutes(
         query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: 199 })) }, closed),
         // Exact private result type is shared with the native composition, including retained arbitrary source JSON.
         response: {
-          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['page']>>>({ type: 'object', additionalProperties: true }),
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['page']>>>(t.Object({}, { additionalProperties: true })),
           ...failures,
         },
         detail: detail('page'),
@@ -116,7 +116,7 @@ export function aniListImportRoutes(
           closed,
         ),
         response: {
-          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['review']>>>({ type: 'object', additionalProperties: true }),
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['review']>>>(t.Object({}, { additionalProperties: true })),
           ...failures,
         },
         detail: detail('review'),
@@ -137,7 +137,7 @@ export function aniListImportRoutes(
           closed,
         ),
         response: {
-          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['apply']>>>({ type: 'object', additionalProperties: true }),
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['apply']>>>(t.Object({}, { additionalProperties: true })),
           ...failures,
         },
         detail: detail('apply'),
