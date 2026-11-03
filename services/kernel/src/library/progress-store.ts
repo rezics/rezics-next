@@ -61,7 +61,7 @@ type JournalColumns = Pick<
 
 const MODES = new Set<ProgressMode>(['scalar_amount', 'cursor_position', 'completed_units']);
 const UNITS = new Set<string>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
-const STATES = new Set<ProgressState>(['active', 'completed', 'abandoned']);
+const STATES = new Set<ProgressState>(['active', 'completed', 'abandoned', 'retired']);
 
 function queryClient(client: Client): Client {
   return { query: client.query.bind(client) };

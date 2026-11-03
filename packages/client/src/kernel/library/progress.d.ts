@@ -7,7 +7,7 @@ export declare const MAX_COMPLETED_UNITS = 20000;
 export declare const MAX_PROGRESS_MEASURES = 8;
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressUnit = string;
-export type ProgressState = 'active' | 'completed' | 'abandoned';
+export type ProgressState = 'active' | 'completed' | 'abandoned' | 'retired';
 export type ProgressAction = 'complete' | 'abandon';
 export type ProgressSessionCreate = {
     subjectId: string;
@@ -39,6 +39,10 @@ export type CompletedUnitsRecord = {
 export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 /** History payload. Unit ids are the ones given, sorted by code unit, never a filled range. */
 export type ProgressIntent = {
+    lifecycle: 'reopen' | 'retire';
+    previousState: Exclude<ProgressState, 'retired'>;
+    previousCompletedAt: string | null;
+} | {
     clear: true;
 } | {
     measureId: string;
@@ -90,3 +94,6 @@ export declare function changeIntent(record: ProgressRecord, measureId?: string)
  * `removed` is how many submitted ids already existed.
  */
 export declare function nextUnitCount(current: number, added: number, removed: number): ProgressOutcome<number>;
+
+/** Correct only the addressed occurrence; recorded values never imply completion. */
+export declare function correctOccurrence(state: ProgressState, action: 'reopen' | 'retire'): ProgressOutcome<ProgressState>;

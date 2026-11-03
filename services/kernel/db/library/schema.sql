@@ -1321,7 +1321,7 @@ CREATE FUNCTION library.owner_original_activity(r integer, a uuid, s uuid) RETUR
     (SELECT h.last_changed_at FROM library.progress_head h WHERE h.route=r AND h.account_id=a AND h.subject_id=s)
   ), EXISTS(SELECT 1 FROM library.entry e WHERE e.route=r AND e.account_id=a AND e.subject_id=s
       AND e.activity_at IS NULL)
-    OR (EXISTS(SELECT 1 FROM library.progress_session p WHERE p.route=r AND p.account_id=a AND p.subject_id=s)
+    OR (EXISTS(SELECT 1 FROM library.progress_session p WHERE p.state <> 'retired' AND p.route=r AND p.account_id=a AND p.subject_id=s)
       AND NOT EXISTS(SELECT 1 FROM library.progress_head h WHERE h.route=r AND h.account_id=a AND h.subject_id=s
         AND h.last_changed_at IS NOT NULL));
 $$;
@@ -1443,7 +1443,7 @@ BEGIN
     SELECT EXISTS (SELECT 1 FROM library.entry WHERE route=r AND account_id=a AND subject_id=s
       AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='session' THEN
-    SELECT EXISTS (SELECT 1 FROM library.progress_session WHERE route=r AND account_id=a AND subject_id=s
+    SELECT EXISTS (SELECT 1 FROM library.progress_session WHERE state <> 'retired' AND route=r AND account_id=a AND subject_id=s
       AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='copy' THEN
     SELECT EXISTS (SELECT 1 FROM library.copy WHERE route=r AND account_id=a AND subject_id=s
@@ -3785,7 +3785,7 @@ END))))))),
     CONSTRAINT progress_session_position_check CHECK ((("position" IS NULL) OR ("position" >= (0)::numeric))),
     CONSTRAINT progress_session_revision_check CHECK ((revision >= 1)),
     CONSTRAINT progress_session_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text]))),
+    CONSTRAINT progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text, 'retired'::text]))),
     CONSTRAINT progress_session_total_check CHECK (((total IS NULL) OR (total >= (0)::numeric)))
 );
 
@@ -6486,7 +6486,7 @@ CREATE INDEX owner_index_pending_pin ON library.owner_index_pin USING btree (rou
 -- Name: owner_index_session_scope; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX owner_index_session_scope ON library.progress_session USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb));
+CREATE INDEX owner_index_session_scope ON library.progress_session USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb)) WHERE (state <> 'retired'::text);
 
 
 --
@@ -6543,6 +6543,27 @@ CREATE INDEX progress_session_active ON library.progress_session USING btree (ro
 --
 
 CREATE INDEX progress_session_diary_seek ON library.progress_session USING btree (route, account_id, started_at DESC, session_id DESC);
+
+
+--
+-- Name: progress_session_live_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_live_owner ON library.progress_session USING btree (route, account_id, session_id) WHERE (state <> 'retired'::text);
+
+
+--
+-- Name: progress_session_live_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_live_page ON library.progress_session USING btree (route, account_id, subject_id, started_at DESC, session_id) WHERE (state <> 'retired'::text);
+
+
+--
+-- Name: progress_session_live_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_live_source ON library.progress_session USING btree (route, account_id, subject_id, session_id) WHERE (state <> 'retired'::text);
 
 
 --

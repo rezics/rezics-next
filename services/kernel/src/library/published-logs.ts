@@ -35,7 +35,7 @@ export type PublishedLog = {
   id: string;
   accountId: string;
   subjectId: string;
-  sessionState: ProgressState;
+  sessionState: Exclude<ProgressState, 'retired'>;
   startedAt: string;
   completedAt: string | null;
   note: string | null;
@@ -73,7 +73,7 @@ function view(
     id: row.id,
     accountId: row.accountId,
     subjectId: row.subjectId,
-    sessionState: row.sessionState as ProgressState,
+    sessionState: row.sessionState as Exclude<ProgressState, 'retired'>,
     startedAt: row.startedAt,
     completedAt: row.completedAt,
     note: row.note,

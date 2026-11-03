@@ -86,7 +86,7 @@ async function nativePresence(client: Client, actor: AccountActor) {
   }>(
     `SELECT
     EXISTS(SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2) AS entry,
-    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2) AS session,
+    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND state <> 'retired') AS session,
     EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND deletion_id IS NULL) AS copy,
     EXISTS(SELECT 1 FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND deleted_at IS NULL) AS label`,
     [routeOf(actor.accountId), actor.accountId],

@@ -119,6 +119,21 @@ test('default native worker removes private sessions/history, labels, archives, 
   const log = (
     await f.json(as, 'POST', '/v1/publishedLogs', 201, { sessionId: session.id, note: 'private progress snapshot' })
   ).publishedLog;
+  const retirementKey = crypto.randomUUID();
+  const retire = () =>
+    f.kernel.handle(
+      new Request(`http://kernel.test/v1/progressSessions/${session.id}:retire`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${as.bearer}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(retirementKey),
+        },
+        body: JSON.stringify({ revision: 2 }),
+      }),
+    );
+  expect((await retire()).status).toBe(200);
+  expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(404);
   const owner = [routeOf(as.accountId), as.accountId];
   const mal = await f.json(as, 'POST', '/v1/libraryImports/mal:preview', 200, {
     xml: '<myanimelist><anime><series_animedb_id>1</series_animedb_id><series_title>Private retained tags</series_title><my_tags>erase this evidence</my_tags></anime></myanimelist>',
@@ -163,6 +178,8 @@ test('default native worker removes private sessions/history, labels, archives, 
     ).rows,
   ).toHaveLength(1);
   await deletePersona(f.options, as);
+  expect((await retire()).status).toBe(401); // Terminal authority precedes the original receipt.
+  expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}:reopen`, { revision: 3 })).status).toBe(401);
   expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(401);
   await f.start();
   const results = await terminal(as.accountId);
@@ -336,7 +353,7 @@ test('existing terminal runner retires released native capture children and fina
         candidateKeys: 100,
         nativeRows: 10000,
         nativePoints: 256,
-        identityMetadataRows: 0,
+        identityMetadataRows: 3, // Partition, receipt and captured-output metadata probes.
         witnessKeys: 0,
         statements: 100,
         bytes: 1024 * 1024,
@@ -362,7 +379,7 @@ test('existing terminal runner retires released native capture children and fina
   let frontier: NativeSourceFrontier | null = null;
   for (let n = 0; n < 30; n++) {
     const page = await custody.capturePage({ ...work(), identity, frontier, limit: 100 });
-    if (page.status !== 'pending') throw new Error('Native capture unavailable');
+    if (page.status !== 'pending') throw new Error(`Native capture unavailable: ${JSON.stringify(page)}`);
     frontier = page.frontier;
     if (frontier.driver === 'done') break;
   }

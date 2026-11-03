@@ -18,7 +18,7 @@ FROM input i CROSS JOIN LATERAL (
    ORDER BY c.subject_id, c.copy_id LIMIT i.batch_limit)
   UNION ALL
   (SELECT s.subject_id, s.session_id FROM library.progress_session s
-   WHERE i.driver = 'session' AND s.route = i.route AND s.account_id = i.account_id
+   WHERE s.state <> 'retired' AND i.driver = 'session' AND s.route = i.route AND s.account_id = i.account_id
      AND (s.subject_id, s.session_id) > (i.after_subject, i.after_fact)
    ORDER BY s.subject_id, s.session_id LIMIT i.batch_limit)
   UNION ALL

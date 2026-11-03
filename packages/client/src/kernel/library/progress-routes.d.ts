@@ -35,7 +35,7 @@ export declare const sessionSchema: import("typebox").TObject<{
     locator: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     position: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
     completedUnitCount: import("typebox").TInteger;
-    state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>;
+    state: import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"completed">, import("typebox").TLiteral<"abandoned">]>, import("typebox").TLiteral<"retired">]>;
     revision: import("typebox").TInteger;
     startedAt: import("typebox").TString;
     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
@@ -5482,7 +5482,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             locator: string | null;
                             position: string | null;
                             completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
+                            state: "abandoned" | "active" | "completed" | "retired";
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
@@ -5684,7 +5684,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             locator: string | null;
                             position: string | null;
                             completedUnitCount: number;
-                            state: "abandoned" | "active" | "completed";
+                            state: "abandoned" | "active" | "completed" | "retired";
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
@@ -5903,7 +5903,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 locator: string | null;
                                 position: string | null;
                                 completedUnitCount: number;
-                                state: "abandoned" | "active" | "completed";
+                                state: "abandoned" | "active" | "completed" | "retired";
                                 revision: number;
                                 startedAt: string;
                                 completedAt: string | null;
@@ -6054,7 +6054,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     locator: string | null;
                                     position: string | null;
                                     completedUnitCount: number;
-                                    state: "abandoned" | "active" | "completed";
+                                    state: "abandoned" | "active" | "completed" | "retired";
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
@@ -6192,7 +6192,7 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     locator: string | null;
                                     position: string | null;
                                     completedUnitCount: number;
-                                    state: "abandoned" | "active" | "completed";
+                                    state: "abandoned" | "active" | "completed" | "retired";
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
@@ -6330,7 +6330,283 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     locator: string | null;
                                     position: string | null;
                                     completedUnitCount: number;
-                                    state: "abandoned" | "active" | "completed";
+                                    state: "abandoned" | "active" | "completed" | "retired";
+                                    revision: number;
+                                    startedAt: string;
+                                    completedAt: string | null;
+                                    measures?: {
+                                        unit: string;
+                                        amount: string | null;
+                                        total: string | null;
+                                        presentation?: Readonly<{
+                                            meaning: 'known' | 'unknown' | 'unavailable';
+                                            unitLabel?: string;
+                                            unitLabelLanguage?: string;
+                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            dimension?: string;
+                                            structure: 'unverified';
+                                            recording: Readonly<{
+                                                state: 'supported';
+                                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                                            } | {
+                                                state: 'unsupported' | 'unavailable';
+                                            }>;
+                                        }>;
+                                    }[];
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        progressSessions: {
+            ":sessionId": {
+                $reopen: {
+                    post: {
+                        body: {
+                            revision: number;
+                        };
+                        params: {
+                            sessionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                progressSession: {
+                                    id: string;
+                                    subjectId: string;
+                                    versionSubjectId: string | null;
+                                    mode: "completed_units" | "cursor_position" | "scalar_amount";
+                                    unit: string;
+                                    total: string | null;
+                                    amount: string | null;
+                                    locator: string | null;
+                                    position: string | null;
+                                    completedUnitCount: number;
+                                    state: "abandoned" | "active" | "completed" | "retired";
+                                    revision: number;
+                                    startedAt: string;
+                                    completedAt: string | null;
+                                    measures?: {
+                                        unit: string;
+                                        amount: string | null;
+                                        total: string | null;
+                                        presentation?: Readonly<{
+                                            meaning: 'known' | 'unknown' | 'unavailable';
+                                            unitLabel?: string;
+                                            unitLabelLanguage?: string;
+                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            dimension?: string;
+                                            structure: 'unverified';
+                                            recording: Readonly<{
+                                                state: 'supported';
+                                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                                            } | {
+                                                state: 'unsupported' | 'unavailable';
+                                            }>;
+                                        }>;
+                                    }[];
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        progressSessions: {
+            ":sessionId": {
+                $retire: {
+                    post: {
+                        body: {
+                            revision: number;
+                        };
+                        params: {
+                            sessionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                progressSession: {
+                                    id: string;
+                                    subjectId: string;
+                                    versionSubjectId: string | null;
+                                    mode: "completed_units" | "cursor_position" | "scalar_amount";
+                                    unit: string;
+                                    total: string | null;
+                                    amount: string | null;
+                                    locator: string | null;
+                                    position: string | null;
+                                    completedUnitCount: number;
+                                    state: "abandoned" | "active" | "completed" | "retired";
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
@@ -6548,6 +6824,10 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     id: string;
                                     revision: number;
                                     intent: {
+                                        lifecycle: "reopen" | "retire";
+                                        previousState: "abandoned" | "active" | "completed";
+                                        previousCompletedAt: string | null;
+                                    } | {
                                         clear: true;
                                     } | {
                                         measureId: string;

@@ -5,7 +5,7 @@ WITH input AS NOT MATERIALIZED (
   FROM library.progress_session
   WHERE route = (SELECT route FROM input)
     AND session_id = (SELECT session_id FROM input)
-    AND account_id = :account_id::uuid
+    AND state <> 'retired' AND account_id = :account_id::uuid
 ), page AS MATERIALIZED (
   SELECT change.change_no, change.recorded_at
   FROM library.progress_change AS change

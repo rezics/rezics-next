@@ -31,9 +31,10 @@ candidates AS (
   FROM library.progress_session AS session
   CROSS JOIN args
   WHERE session.route = args.route
+    AND session.state <> 'retired'
     AND session.account_id = args.account_id
     AND session.subject_id = args.subject_id
-    AND (NOT args.has_cursor OR session.started_at < args.after_started_at)
+    AND NOT args.has_cursor
   ORDER BY session.started_at DESC, session.session_id
   LIMIT (SELECT page_limit FROM args)
 )
@@ -61,6 +62,38 @@ UNION ALL
   FROM library.progress_session AS session
   CROSS JOIN args
   WHERE session.route = args.route
+    AND session.state <> 'retired'
+    AND session.account_id = args.account_id
+    AND session.subject_id = args.subject_id
+    AND args.has_cursor AND session.started_at < args.after_started_at
+  ORDER BY session.started_at DESC, session.session_id
+  LIMIT (SELECT page_limit FROM args)
+)
+UNION ALL
+(
+  SELECT session.route,
+         session.session_id AS id,
+         session.account_id AS "accountId",
+         session.subject_id AS "subjectId",
+         session.version_subject_id AS "versionSubjectId",
+         session.library_profile_pin AS "libraryProfilePin",
+         session.mode,
+         session.unit,
+         session.total::text AS total,
+         session.amount::text AS amount,
+         session.additional_measures AS "additionalMeasures",
+         session.locator,
+         session.position::text AS position,
+         session.completed_unit_count AS "completedUnitCount",
+         session.state,
+         session.revision,
+         session.started_at::text AS "startedAt",
+         session.completed_at::text AS "completedAt",
+         session.transaction_id AS "transactionId"
+  FROM library.progress_session AS session
+  CROSS JOIN args
+  WHERE session.route = args.route
+    AND session.state <> 'retired'
     AND session.account_id = args.account_id
     AND session.subject_id = args.subject_id
     AND args.has_cursor

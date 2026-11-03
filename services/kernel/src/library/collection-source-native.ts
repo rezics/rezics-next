@@ -145,7 +145,7 @@ const pinSQL =
 const labelSQL =
   'WITH raw AS MATERIALIZED (SELECT assignment_id, label_id, deleted_at IS NULL AS live FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND slot_no IS NOT NULL AND assignment_id > $4::uuid ORDER BY assignment_id LIMIT $5) SELECT raw.assignment_id::text AS "factId", raw.live AND parent.deleted_at IS NULL AND parent.label_id IS NOT NULL AS present FROM raw LEFT JOIN library.personal_label parent ON parent.route=$1 AND parent.account_id=$2 AND parent.label_id=raw.label_id ORDER BY raw.assignment_id';
 const pointSQL = (table: 'copy' | 'progress_session', key: 'copy_id' | 'session_id') =>
-  `SELECT ${key}::text AS "factId" FROM library.${table} WHERE route=$1 AND account_id=$2 AND subject_id=$3${table === 'copy' ? ' AND deletion_id IS NULL' : ''} ORDER BY ${key} LIMIT 1`;
+  `SELECT ${key}::text AS "factId" FROM library.${table} WHERE route=$1 AND account_id=$2 AND subject_id=$3${table === 'copy' ? ' AND deletion_id IS NULL' : " AND state <> 'retired'"} ORDER BY ${key} LIMIT 1`;
 const copySQL = pointSQL('copy', 'copy_id'),
   sessionSQL = pointSQL('progress_session', 'session_id');
 const normal = (sql: string) =>

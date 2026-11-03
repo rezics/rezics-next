@@ -572,3 +572,12 @@ stays unavailable. Focused growth in `apps/web/tests/configured-library-controls
 
 Decision: manga series and volume each resolve their own current profile; a volume never copies a parent series
 state, and live bundled types without a profile stay unsupported rather than forking a Web-owned native profile.
+
+## Occurrence lifecycle consumers
+
+[Occurrence correction](library-occurrence-correction.md) owns the mounted `:reopen` and `:retire` operations and
+exact recovery/clear semantics for the existing progress/diary editor. The original profile pin and independent
+measures survive reopening; retirement hides the whole session from ordinary reads and native private source pages.
+Export, diary and analytics consumers must use live native session facts and invalidate on the existing session-updated
+event; retained audit rows and public snapshots are not current repeat/completion facts. Journal fields use the same
+row and lifecycle through shared-source receiving. No duplicate journal store or publication worker is introduced.

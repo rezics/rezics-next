@@ -132,7 +132,7 @@ export async function stepOwnerIndex(tx: OperationalTransaction, accountId: stri
   // Only fixed native table/column literals above are interpolated; inputs remain parameters.
   const { rows } = await tx.query<Scope>(
     `SELECT subject_id AS subject, ${id} AS fact, ${pin} AS pin FROM ${table}
-    WHERE route=$1 AND account_id=$2 AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
+    WHERE route=$1 AND account_id=$2${current.phase === 'session' ? " AND state <> 'retired'" : ''} AND ($3::uuid IS NULL OR (subject_id,${id})>($3,$4::uuid))
     ORDER BY subject_id,${id} LIMIT 100`,
     [...args, current.subject, current.fact],
   );
@@ -186,7 +186,7 @@ export async function readOwnerOriginalTruth(client: Client, accountId: string, 
         WHERE l.route=$1 AND l.account_id=$2 AND l.label_id=x.label_id AND l.deleted_at IS NULL)) AS label,
     EXISTS(SELECT 1 FROM library.label_assignment x WHERE x.route=$1 AND x.account_id=$2 AND x.subject_id=$3
       AND x.deleted_at IS NULL AND (x.slot_no IS NULL OR x.assignment_id IS NULL)) AS "labelUnready",
-    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3) AS session,
+    EXISTS(SELECT 1 FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND state <> 'retired') AS session,
     EXISTS(SELECT 1 FROM library.copy WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND deletion_id IS NULL) AS copy,
     e.state, e.owner_write_seq::text AS sequence, e.library_profile_pin AS pin
     FROM (VALUES(1)) anchor(n) LEFT JOIN library.entry e ON e.route=$1 AND e.account_id=$2 AND e.subject_id=$3`,

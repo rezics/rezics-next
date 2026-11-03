@@ -17,12 +17,12 @@ const MAX_DECIMAL_LENGTH = MAX_INTEGER_DIGITS + 1 + MAX_FRACTION_DIGITS;
 
 const MODES = new Set<string>(['scalar_amount', 'cursor_position', 'completed_units']);
 const UNITS = new Set<string>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
-const STATES = new Set<string>(['active', 'completed', 'abandoned']);
+const STATES = new Set<string>(['active', 'completed', 'abandoned', 'retired']);
 const CREATE_FIELDS = ['subjectId', 'versionSubjectId', 'mode', 'unit', 'total', 'additionalMeasures'];
 
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressUnit = string;
-export type ProgressState = 'active' | 'completed' | 'abandoned';
+export type ProgressState = 'active' | 'completed' | 'abandoned' | 'retired';
 export type ProgressAction = 'complete' | 'abandon';
 
 export type ProgressSessionCreate = {
@@ -46,6 +46,11 @@ export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 
 /** History payload. Unit ids are the ones given, sorted by code unit, never a filled range. */
 export type ProgressIntent =
+  | {
+      lifecycle: 'reopen' | 'retire';
+      previousState: Exclude<ProgressState, 'retired'>;
+      previousCompletedAt: string | null;
+    }
   | { clear: true }
   | { measureId: string; clear: true }
   | { amount: string }
@@ -347,6 +352,14 @@ export function transition(state: ProgressState, action: ProgressAction): Progre
   if (action !== 'complete' && action !== 'abandon') return invalid('action');
   if (state !== 'active') return invalid('state');
   return { ok: true, value: action === 'complete' ? 'completed' : 'abandoned' };
+}
+
+/** Correct only the addressed occurrence; recorded values never imply completion. */
+export function correctOccurrence(state: ProgressState, action: 'reopen' | 'retire'): ProgressOutcome<ProgressState> {
+  if (!isState(state) || state === 'retired') return invalid('state');
+  if (action === 'retire') return { ok: true, value: 'retired' };
+  if (state === 'active') return invalid('state');
+  return { ok: true, value: 'active' };
 }
 
 function sortedIds(ids: readonly string[]): string[] {
