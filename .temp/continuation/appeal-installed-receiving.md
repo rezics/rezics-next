@@ -39,6 +39,9 @@ Board appeal queues and exact selections now locate cases on each appeal's nativ
 membership. Keep this repair and the existing two-round identity/ordinary disclosure work. The focused
 `services/kernel/test/content/appeal-review-page-currentness.test.ts` now pins different board/case routes and exact
 selection beside unchanged pending paging. The original resolution command remains the only writer.
+Preserve the native disclosure reader/result types, closed command metadata and retained resolution variants;
+the shared growth fixture's event subject type must continue to admit the native optional subject without changing
+its captured data or handles.
 
 Complete the remaining installed journey against `services/kernel/src/content/README.md` (Appeals and the Pending
 appeal review / Exact selected appeal inspection Cost sections). Do not rebuild decision target context or add a
@@ -50,7 +53,8 @@ head is `11d897d2bade697e2858090d81479878e72cc3ec`. The existing Web reader
 `apps/web/src/moderation/appeals-read.ts` explicitly returns `native-appeal-inspect` unavailable for selected reads.
 Consume the established complete-input generator closure with its owner; do not edit generated declarations, the
 root index or OpenAPI, filter inputs, add a generator or suppress diagnostics. Route remaining source diagnostics to
-their owners. The Library schema consistency change is already in the base.
+their owners. The Library schema consistency change is already in the base; have its owner restore agreement
+between migrations and the expected schema snapshot before attempting native outcomes. Do not bypass that check.
 
 Use the existing growth fixture without changing its handles or evidence; coordinate any fixture changes with its
 owner. Retain fixed selected keys/homes/depth/bytes, page budget and independent 256/1024/4096 histories. Full growth,
