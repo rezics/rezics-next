@@ -1,3 +1,4 @@
+import type { OwnMediaDependencies } from './own-media.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -36,7 +37,7 @@ import {
   strictContentSchema,
 } from './schemas.ts';
 
-type Dependencies = MediaDependencies & { routeKey: Uint8Array };
+type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const readFailures = {
   400: problemSchema('invalid_request'),

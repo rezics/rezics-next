@@ -7,6 +7,9 @@ SELECT m.media_id::text AS id, COALESCE(m.claimed_item_id, m.container_id)::text
        m.purpose, m.state, m.media_type,
        m.byte_count, m.actual_byte_count, m.created_at::text AS created_at,
        m.claimed_at::text AS claimed_at, m.erased, m.collection_pending, m.taken_down,
+       (m.source_url IS NULL AND m.credit IS NULL AND m.provenance IS NULL) AS browser_reservation,
+       jsonb_build_array(m.reservation_request_id, m.transaction_id, m.security_revision,
+         m.media_episode, p.xmin::text, r.xmin::text, t.xmin::text)::text AS observation_json,
        m.claimed_realm_id::text AS claimed_realm_id,
        CASE
          WHEN m.purpose = 'post-image' AND p.post_id IS NOT NULL THEN 'post'
@@ -33,7 +36,9 @@ CROSS JOIN LATERAL (
          media.purpose, media.state, media.media_type, media.byte_count,
          media.actual_byte_count, media.created_at, media.claimed_at, media.erased,
          media.collection_pending, media.taken_down, media.claimed_realm_id,
-         media.claimed_item_id
+         media.claimed_item_id, media.reservation_request_id, media.transaction_id,
+         media.security_revision, media.xmin::text AS media_episode,
+         media.source_url, media.credit, media.provenance
   FROM content.media AS media
   WHERE media.route = i.route AND media.media_id = i.media_id
     AND media.uploader_id = :uploader_id::uuid
@@ -55,10 +60,11 @@ LEFT JOIN LATERAL (
            'width', selected.width,
            'height', selected.height,
            'mediaType', selected.media_type,
-           'byteCount', selected.byte_count
+           'byteCount', selected.byte_count,
+           'sha256', selected.sha256, 'episode', selected.episode
          ) ORDER BY selected.format, selected.width) AS items
   FROM (
-    SELECT v.format, v.width, v.height, v.media_type, v.byte_count
+    SELECT v.format, v.width, v.height, v.media_type, v.byte_count, v.sha256, v.xmin::text AS episode
     FROM content.media_variant AS v
     WHERE v.route = m.route AND v.media_id = m.media_id
     ORDER BY v.format, v.width

@@ -1,13 +1,17 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
+import { readAccount } from '../access/account-data.ts';
+import { encodeCursor, decodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { mintReadTime, noEffect, runCommand } from '../command/command.ts';
+import { authoritativeTimeValue, mintReadTime, noEffect, runCommand } from '../command/command.ts';
 import {
+  accessCheck,
+  type AccessCheck,
   prepareReadDecisions,
   type Access,
   type AccountActor,
@@ -28,17 +32,6 @@ const firstMediaId = '00000000-0000-0000-0000-000000000000';
 const cursorFilter = 'all-media-v1';
 const mediaActions = ['media:read_reservation', 'media:read', 'media:erase', 'thread:read', 'post:read'] as const;
 
-type Cursor = Readonly<{
-  version: 1;
-  accountId: string;
-  authnEpoch: number;
-  clientId: string;
-  requestedBy: string | null;
-  filter: typeof cursorFilter;
-  order: 'media-id-ascending';
-  after: string;
-}>;
-
 type MediaRow = Readonly<{
   id: string;
   context_id: string;
@@ -58,6 +51,8 @@ type MediaRow = Readonly<{
   container_availability: string | null;
   thread_id: string | null;
   variants_json: string;
+  browser_reservation: boolean;
+  observation_json: string;
 }>;
 
 type OwnMediaEntry = OwnMediaInventoryPage['entries'][number];
@@ -65,11 +60,17 @@ type ReadAction = NonNullable<OwnMediaEntry['actions']['read']>;
 
 type Candidate = Readonly<{
   row: MediaRow;
+  partitionEpoch: number;
   container: { id: string; kind: 'thread' | 'post' | 'realm' | 'account' } | null;
   actions: OwnMediaEntry['actions'];
 }>;
 
-type OwnMediaDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
+export type OwnMediaDependencies = Readonly<{
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock: () => Date;
+}>;
 type ReadHome = Readonly<{ partition: number; ids: readonly string[] }>;
 type DecisionSet = Readonly<Record<string, { allowed: boolean; explicit: boolean }>>;
 const noDecisions: DecisionSet = {};
@@ -80,75 +81,48 @@ function accountRoute(actor: AccountActor): number {
   return route;
 }
 
-function cursorFor(actor: AccountActor, after: string): Cursor {
+function cursorBinding(actor: AccountActor): CursorBinding {
   return {
-    version: 1,
-    accountId: actor.accountId,
-    authnEpoch: actor.authnEpoch,
-    clientId: actor.clientId,
-    requestedBy: actor.requestedBy,
-    filter: cursorFilter,
-    order: 'media-id-ascending',
-    after,
+    operation: 'media.own',
+    parameters: {
+      accountId: actor.accountId,
+      authnEpoch: actor.authnEpoch,
+      clientId: actor.clientId,
+      requestedBy: actor.requestedBy,
+      scopes: JSON.stringify([...new Set(actor.scopes)].sort()),
+      filter: cursorFilter,
+      order: 'media-id-ascending',
+      limit: OWN_MEDIA_PAGE_SIZE,
+    },
   };
 }
 
-function encodeCursor(actor: AccountActor, after: string, key: Uint8Array): string {
-  const payload = Buffer.from(JSON.stringify(cursorFor(actor, after))).toString('base64url');
-  const signature = createHmac('sha256', key).update(payload).digest('base64url');
-  return `${payload}.${signature}`;
-}
-
-function validCursor(value: unknown): value is Cursor {
-  if (typeof value !== 'object' || value === null) return false;
-  const cursor = value as Record<string, unknown>;
-  return (
-    cursor.version === 1 &&
-    typeof cursor.accountId === 'string' &&
-    Number.isSafeInteger(cursor.authnEpoch) &&
-    typeof cursor.clientId === 'string' &&
-    (cursor.requestedBy === null || typeof cursor.requestedBy === 'string') &&
-    cursor.filter === cursorFilter &&
-    cursor.order === 'media-id-ascending' &&
-    typeof cursor.after === 'string' &&
-    routeOf(cursor.after) !== null
-  );
-}
-
-function decodeCursor(value: string | undefined, actor: AccountActor, key: Uint8Array): string {
-  if (value === undefined) return firstMediaId;
-  if (value.length > 2048) throw new ProblemError('invalid_request');
-  const separator = value.indexOf('.');
-  if (separator < 1 || separator !== value.lastIndexOf('.')) throw new ProblemError('invalid_request');
-  const payload = value.slice(0, separator);
-  const supplied = Buffer.from(value.slice(separator + 1), 'base64url');
-  const expected = createHmac('sha256', key).update(payload).digest();
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
-    throw new ProblemError('invalid_request');
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-  } catch {
-    throw new ProblemError('invalid_request');
-  }
-  if (!validCursor(parsed)) throw new ProblemError('invalid_request');
+/** Keep the original native Access check across foreign preparation. The local
+ * account observation also checks revocation that happened after its preparation.
+ * This neither registers an Actor nor substitutes ownership for authentication. */
+async function verifyViewer(
+  client: AccessClient,
+  actor: AccountActor,
+  check: AccessCheck,
+): Promise<void> {
+  if (!(await check(client))) throw new ProblemError('not_found');
+  const account = await readAccount(client, accountRoute(actor), actor.accountId);
   if (
-    parsed.accountId !== actor.accountId ||
-    parsed.authnEpoch !== actor.authnEpoch ||
-    parsed.clientId !== actor.clientId ||
-    parsed.requestedBy !== actor.requestedBy
-  )
-    throw new ProblemError('not_found');
-  return parsed.after;
+    !account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
+    !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
+    BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+  ) throw new ProblemError('not_found');
 }
 
 async function readLocatorPage(
   pool: Pool,
   homeRoute: number,
   actor: AccountActor,
-  after: string,
+  cursor: string | undefined,
+  deps: OwnMediaDependencies,
+  viewer: AccessCheck,
   deadline: number,
-): Promise<readonly string[]> {
+): Promise<Readonly<{ ids: readonly string[]; epoch: number }>> {
   return within(deadline, () =>
     withConnection(pool, async (client) => {
       const bounded = deadlineClient(client, deadline);
@@ -156,6 +130,18 @@ async function readLocatorPage(
         await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         const home = await readPartition(bounded, partitionOf(homeRoute));
         if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+        await verifyViewer(bounded, actor, viewer);
+        // Validate lifetime, complete request binding and the observed home before
+        // even selecting locators, and therefore before private object hydration.
+        let after = firstMediaId;
+        if (cursor !== undefined) {
+          const decoded = decodeCursor(deps.tokens, cursorBinding(actor), cursor, deps.clock().getTime());
+          if (
+            !decoded.ok || decoded.epoch !== home.epoch || decoded.after.length !== 1 ||
+            typeof decoded.after[0] !== 'string' || routeOf(decoded.after[0]) === null
+          ) throw new ProblemError('invalid_request');
+          after = decoded.after[0];
+        }
         const rows = await page.run(bounded, {
           route: homeRoute,
           account_id: actor.accountId,
@@ -163,7 +149,7 @@ async function readLocatorPage(
           limit: OWN_MEDIA_PAGE_SIZE,
         });
         await bounded.query('COMMIT');
-        return rows.map(({ id }) => id);
+        return { ids: rows.map(({ id }) => id), epoch: home.epoch };
       } catch (error) {
         try {
           await bounded.query('ROLLBACK');
@@ -261,6 +247,8 @@ function currentState(row: MediaRow): 'reserved' | 'uploaded' | 'available' | 'r
 function baseCandidate(
   row: MediaRow,
   actor: AccountActor,
+  now: number,
+  partitionEpoch: number,
   authorized: {
     read: boolean;
     remove: boolean;
@@ -294,9 +282,11 @@ function baseCandidate(
         recheckAtUse: true,
       }
     : null;
-  const canResume = row.purpose === 'post-image' && live && (state === 'reserved' || state === 'uploaded');
+  const canResume = row.purpose === 'post-image' && row.browser_reservation && live && containerAvailable &&
+    Date.parse(row.created_at) + 24 * 60 * 60_000 > now && (state === 'reserved' || state === 'uploaded');
   return {
     row,
+    partitionEpoch,
     container,
     actions: {
       read,
@@ -322,6 +312,7 @@ async function readObjectHome(
   actor: AccountActor,
   home: ReadHome,
   decisions: ReadDecisions,
+  clock: () => Date,
   deadline: number,
 ): Promise<readonly Candidate[]> {
   const routes = home.ids.map((id) => routeOf(id)!);
@@ -341,7 +332,7 @@ async function readObjectHome(
           await bounded.query('COMMIT');
           return [];
         }
-        const time = await mintReadTime(bounded);
+        const time = await mintReadTime(bounded, clock);
         const ids = rows.map(({ id }) => id);
         const [reservation, read, remove] = await Promise.all([
           decisionsFor(decisions, bounded, 'media:read_reservation', 'content.media', ids, time),
@@ -367,7 +358,7 @@ async function readObjectHome(
                 ? Boolean(posts[row.context_id]?.allowed && threads[row.thread_id ?? '']?.allowed)
                 : false;
           return [
-            baseCandidate(row, actor, {
+            baseCandidate(row, actor, Date.parse(authoritativeTimeValue(time)), partition.epoch, {
               read: Boolean(read[row.id]?.allowed),
               remove: Boolean(remove[row.id]?.allowed),
               containerRead,
@@ -497,10 +488,12 @@ export async function readOwnMediaInventory(
   deadline: number,
 ): Promise<OwnMediaInventoryPage> {
   if (actor.kind !== 'account') throw new ProblemError('not_found');
-  const after = decodeCursor(input.cursor, actor, deps.routeKey);
   const locatorRoute = accountRoute(actor);
-  const rawIds = await readLocatorPage(deps.pool, locatorRoute, actor, after, deadline);
-  if (rawIds.length === 0) return { availability: 'available', entries: [], nextCursor: null };
+  const viewer = await accessCheck(deps.access, actor, 'account:read', {
+    route: locatorRoute, id: actor.accountId,
+  }, { pool: deps.pool, deadline });
+  const raw = await readLocatorPage(deps.pool, locatorRoute, actor, input.cursor, deps, viewer, deadline);
+  const rawIds = raw.ids;
   const homes = homesFor(rawIds);
   const decisions = await prepareReadDecisions(deps.access, {
     actor,
@@ -508,12 +501,49 @@ export async function readOwnMediaInventory(
     context: { pool: deps.pool, deadline },
   });
   const candidates = (
-    await Promise.all(homes.map((home) => readObjectHome(deps.pool, actor, home, decisions, deadline)))
+    await Promise.all(homes.map((home) => readObjectHome(deps.pool, actor, home, decisions, deps.clock, deadline)))
   )
     .flat()
     .sort((left, right) => left.row.id.localeCompare(right.row.id));
   const current = await currentRealmActions(deps, actor, candidates, deadline);
-  const nextCursor = rawIds.length === OWN_MEDIA_PAGE_SIZE ? encodeCursor(actor, rawIds.at(-1)!, deps.routeKey) : null;
+  // Foreign Realm preparation releases its checkouts. Reprepare native media and
+  // container Access and repeat exact object/variant episodes afterward; any
+  // changed selected advice retires the response, preserving the input frontier.
+  const finalDecisions = await prepareReadDecisions(deps.access, {
+    actor,
+    actions: new Set(mediaActions),
+    context: { pool: deps.pool, deadline },
+  });
+  const finalCandidates = (await Promise.all(homes.map((home) =>
+    readObjectHome(deps.pool, actor, home, finalDecisions, deps.clock, deadline),
+  ))).flat().sort((left, right) => left.row.id.localeCompare(right.row.id));
+  if (JSON.stringify(finalCandidates) !== JSON.stringify(candidates))
+    throw new ProblemError('dependency_unavailable');
+  // Empty pages receive the same final viewer and home qualification. No failed
+  // authority round can return a terminal empty page or consume a raw frontier.
+  await within(deadline, () => withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, deadline);
+    try {
+      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const home = await readPartition(bounded, partitionOf(locatorRoute));
+      if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+      if (home.epoch !== raw.epoch) throw new ProblemError('dependency_unavailable');
+      await verifyViewer(bounded, actor, viewer);
+      await bounded.query('COMMIT');
+    } catch (error) {
+      try {
+        await bounded.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(client, rollbackError as Error);
+      }
+      throw error;
+    }
+  }));
+  const nextCursor = rawIds.length === OWN_MEDIA_PAGE_SIZE
+    ? encodeCursor(deps.tokens, cursorBinding(actor), {
+        epoch: raw.epoch, after: [rawIds.at(-1)!],
+      }, deps.clock().getTime())
+    : null;
   return {
     availability: 'available',
     entries: current.map(entry),

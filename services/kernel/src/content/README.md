@@ -2172,8 +2172,10 @@ raw locators; sparse withheld entries can produce an empty page with a next curs
 object home is unavailable, the endpoint returns 503 rather than an empty terminal page. Responses are `private, no-store`.
 
 The page advances over at most 20 raw `content.account_upload` media keys in UUID order, then batches the selected
-objects by native partition. A signed cursor binds the actor, authentication epoch, client, requested-by binding,
-filter and raw UUID frontier. Sparse missing, erased-by-retention or currently withheld objects do not consume a
+objects by native partition. The native token cursor uses the installed KeyRing and Kernel clock, expires after
+15 minutes, and binds account, authentication epoch, client, delegator, canonical scope set, filter, order, raw20
+page size, observed uploader-home epoch and raw UUID frontier. Invalid, expired or substituted tokens and changed
+home epochs return 400 before locator selection or object materialization. Sparse missing, erased-by-retention or currently withheld objects do not consume a
 replacement slot; the next cursor advances over the raw page, and an operational home failure returns the same
 input cursor frontier on retry. The actor-home table is the existing account-erasure locator and its registered
 `content_account_upload_index` event effect remains the repair path. Browser reservation also upserts that same
@@ -2186,8 +2188,9 @@ descriptors. Actual media type is null because the native media row stores the d
 a separately sniffed type. A read action names `media.authorize_download` and only lists stored `original` or actual
 variant slots; `recheckAtUse` is true because the existing transport repeats current media, container, source and
 Access checks before returning any storage key. Remove names the existing `media.erase` command only when its
-current owner authority is allowed. Resume appears only for reserved or uploaded post images, retains the original
-reservation and requires the original file for the current Web transport. A rejected image stays rejected and only
+current owner authority is allowed. Resume appears only for live browser post-image reservations with a readable
+container and creation time less than 24 hours ago, retains the original reservation and requires the original file
+for the current Web transport. A rejected image stays rejected and only
 offers `media.create` as its retry action with `choose-new-file` guidance. No rejection reason, reservation request
 identity, storage key, signed credential, guessed URL or private imported provenance is included.
 
@@ -2195,6 +2198,18 @@ Avatar reads list only actual derivatives. Realm asset actions use the current R
 actual stored derivative ladder in batches of at most two. Imported covers stay role-only in uploader history; the
 inventory never exposes their source provenance or browser resume action. This page does not authorize a public
 download and does not replace the document-media presentation or image transport owners.
+
+The factory is `readOwnMediaInventory({ pool, access, tokens, clock }, actor, { cursor? }, deadline)` in
+`own-media.ts`; `mediaRoutes` receives the same injected KeyRing/clock from the production Kernel factory.
+`OwnMediaInventoryPageSchema` and `OwnMediaInventoryPage` remain the closed wire contract in `schemas.ts`.
+The retained native `account:read` check and current native account state qualify the viewer before locator
+selection and after hydration, including empty pages. After foreign Realm preparation, fresh native media/container
+Access and exact reservation, object, parent/head and variant row episodes are observed again. Changed selected
+rows, home epochs or action advice fail with 503, retaining the input frontier. These internal observations,
+including transaction and reservation identities, are never serialized.
+
+Decision: use the native 15-minute cursor lifetime and conservatively withhold browser resume at the existing
+24-hour collection boundary, including the interval before the collection runner fences the object.
 
 Decision: uploader inventory declares the ordinary `public` route exposure, with its existing secured owner authority
 and `private, no-store` response policy; exposure metadata describes platform admission rather than data visibility.
@@ -2207,9 +2222,9 @@ and `private, no-store` response policy; exposure metadata describes platform ad
 
 ### Cost: uploader inventory page
 
-- Touches: one account-home raw page; at most 20 exact media keys grouped into at most 20 object partitions; exact post, head-revision and thread context probes; at most twelve stored derivative rows per selected object; three media Access decisions and up to two container Access decisions per participating object home. Realm entries add at most 20 current Realm groups and 20 existing Realm-media batches, each selecting at most two images.
-- Bound: 20 raw locators and returned entries; at most 20 media rows, 60 post/revision/thread context rows, 240 variant rows, and a maximum 13 safe variant names per returned post image. Statements and bytes are page-bounded; indexed blocks grow logarithmically in account locators, selected home rows and nested Access authority. No exact total, unrelated account enumeration, SQL join across homes, per-row HTTP fetch or refill.
-- Growth check: `test/content/own-media-http.test.ts` covers reserved, uploaded, available, rejected, claimed post, selected read, replay, erase and uploader privacy. Controller native growth acceptance must hold the selected actor/page fixed while unrelated objects, uploaders, retired objects and lifecycle history grow at 256, 1024 and 4096, capture every participating pool and runner, and prove strict uploader/object prefixes and empty, denied and stale branches.
+- Touches: the Kernel pool supplies the initial viewer Access preparation, two native viewer evaluations/account reads, account-home locator/final snapshots and two rounds over H represented object partitions (H <= 20). Each object round reads the partition, exact selected media/reservation episodes, post/head-revision/thread context, at most twelve derivatives per object and native time, plus three media and up to two container Access batches. Two fresh media/container Access preparations surround foreign Realm preparation. Realm entries retain the existing current Realm/Space reads and at most twenty two-image `authorizedRealmMedia` batches, including their repeated media, source, Access and final observations; no foreign checkout remains held by this factory.
+- Bound: the local successful nonempty-page term is `9 + 10H` SQL statements, including all BEGIN/COMMIT controls, two account reads and two time reads per represented nonempty home; empty object homes use four rather than five local statements per round. Add the full native viewer preparation/two evaluations, both media Access preparations, every media/container evaluation (including delegated authority and eligibility), and the complete existing Realm/Space/media reader terms. Failure adds rollback and discards a failed connection. Both rounds together project at most 40 media, 120 direct context and 480 derivative rows, plus 20 raw locators, two account rows and `2 + 2H` partition rows; these are logical projections, not physical-table/examined-row ceilings. Charge raw locator bytes, actual account-read fields (including biography/preferences), episode text, actual derivative JSON (including SHA and row episodes), both retained candidate copies, Realm source payloads, token work and final serialization; no output-count or safe-variant count establishes examined-work or byte bounds. There is no object-store byte transfer or new runner phase in list; reservation locator repair and collection retain their existing command/effect phases.
+- Growth check: `test/content/own-media-http.test.ts` covers lifecycle/select/remove, native cursor binding/expiry/epoch rejection, fabricated actor denial, expiry before collection and collection during hydration with same-frontier retry. Controller acceptance retains independent 256/1024/4096 unrelated-object/uploader, retired-object and lifecycle-history growth with fixed selected keys/homes/byte caps, strict physical-prefix plans, complete nested native Access/fence work and empty/denied/stale branches. Full transport-chain/source-fence advice qualification and its complete physical/byte cost derivation remain continuation work.
 
 ## Source fences
 

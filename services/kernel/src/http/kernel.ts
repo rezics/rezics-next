@@ -608,6 +608,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   subjectReactionRoutes(app as unknown as ReturnType<typeof createApp>, contentDependencies);
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    tokens,
     clock,
     routeKey: dependencies.routeKey,
     realmParticipation: checkRealmParticipation,
