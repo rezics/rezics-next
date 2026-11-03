@@ -22,12 +22,7 @@ import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import { admitGroup } from '../../access/gates/admission.ts';
-import {
-  createSearchService,
-  requiresAdvancedSearch,
-  type PublicSearchPage,
-  type ReleaseGroupedSearchRequest,
-} from '../service.ts';
+import { createSearchService, requiresAdvancedSearch, type PublicSearchPage } from '../service.ts';
 import { LIST_CURSOR_BOUNDS } from '../../tokens/list-cursor.ts';
 import { systemClock, type KernelClock } from '../../clock.ts';
 import { PublicFigureSchema } from '../../rating/public-figure-http.ts';
@@ -125,54 +120,6 @@ const searchResponse = t.Object(
   },
   object,
 );
-const releaseGroup = t.Union([
-  t.Object(
-    {
-      kind: t.Literal('work'),
-      id: t.String({ format: 'uuid' }),
-      work: searchHit,
-      releases: t.Array(searchHit, { maxItems: 20 }),
-      next: t.Union([t.String(), t.Null()]),
-    },
-    object,
-  ),
-  t.Object(
-    {
-      kind: t.Literal('release'),
-      id: t.String({ format: 'uuid' }),
-      release: searchHit,
-      workLink: t.Union([
-        t.Literal('missing'),
-        t.Literal('unknown'),
-        t.Literal('conflicting'),
-        t.Literal('unavailable'),
-        t.Literal('unproven'),
-      ]),
-    },
-    object,
-  ),
-]);
-const releaseGroupsResponse = t.Object(
-  {
-    operation: t.Literal('groups'),
-    status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-    groups: t.Array(releaseGroup, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-    as_of: t.String({ format: 'date-time' }),
-  },
-  object,
-);
-const releaseChildrenResponse = t.Object(
-  {
-    operation: t.Literal('children'),
-    status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-    children: t.Array(searchHit, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-    as_of: t.String({ format: 'date-time' }),
-  },
-  object,
-);
-const releaseGroupedResponse = t.Union([releaseGroupsResponse, releaseChildrenResponse]);
 type SearchHttpBase = Static<typeof genericBase>;
 type SearchHttpResponse = Omit<PublicSearchPage, 'subjects'> & {
   subjects: (PublicSearchPage['subjects'][number] & {
@@ -360,9 +307,7 @@ export function searchRoutes<App>(
       {
         body: t.Object(
           {
-            representation: t.Optional(t.Union([t.Literal('discovery-v1'), t.Literal('release-grouped-v1')])),
-            operation: t.Optional(t.Union([t.Literal('groups'), t.Literal('children')])),
-            work: t.Optional(t.String({ format: 'uuid' })),
+            representation: t.Optional(t.Literal('discovery-v1')),
             kindPage: t.Optional(
               t.Object(
                 {
@@ -396,7 +341,7 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: t.Union([searchResponse, DiscoveryPageSchema, releaseGroupedResponse]),
+          200: t.Union([searchResponse, DiscoveryPageSchema]),
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
@@ -412,11 +357,7 @@ export function searchRoutes<App>(
         },
       },
       ({ body, authorize, admission, job, actor, set }) => {
-        if (
-          body.population !== undefined ||
-          body.representation === 'discovery-v1' ||
-          body.representation === 'release-grouped-v1'
-        )
+        if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
           throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
@@ -517,57 +458,7 @@ export function searchRoutes<App>(
             return completed;
           });
         }
-        async function grouped() {
-          const check = await prepare();
-          return admission.run('normal', job, async () => {
-            if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-            if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-            const before = await activeRelease(pool);
-            const principal = actor.kind === 'account' ? `account:${actor.accountId}` as const : 'anonymous' as const;
-            const page = await search.releaseSearch(
-              principal,
-              body as ReleaseGroupedSearchRequest,
-              clock().getTime(),
-              { deadline: job.deadline },
-            );
-            const requested: PublicSearchPage['subjects'] = [];
-            if (page.operation === 'groups') {
-              for (const group of page.groups) {
-                if (group.kind === 'work') requested.push(group.work, ...group.releases);
-                else requested.push(group.release);
-              }
-            } else requested.push(...page.children);
-            const unique = [...new Map(requested.map((hit) => [hit.id, hit])).values()];
-            const enriched = unique.length
-              ? await fill({ subjects: unique }, authorize, body.languages ?? [], before)
-              : { subjects: [] };
-            const based = enriched.subjects.length
-              ? publicBases(enriched, body.languages ?? [], before)
-              : enriched;
-            const byId = new Map(based.subjects.map((hit) => [hit.id, hit]));
-            if (requested.some(({ id }) => !byId.has(id))) throw new ProblemError('search_restart_required');
-            const after = await activeRelease(pool);
-            if (before?.digest !== after?.digest || before?.head !== after?.head)
-              throw new ProblemError('search_restart_required');
-            return page.operation === 'children'
-              ? { ...page, children: page.children.map((hit) => byId.get(hit.id)!) }
-              : {
-                  ...page,
-                  groups: page.groups.map((group) =>
-                    group.kind === 'work'
-                      ? {
-                          ...group,
-                          work: byId.get(group.work.id)!,
-                          releases: group.releases.map((hit) => byId.get(hit.id)!),
-                        }
-                      : { ...group, release: byId.get(group.release.id)! },
-                  ),
-                };
-          });
-        }
-        if (body.representation === 'discovery-v1') return mixed();
-        if (body.representation === 'release-grouped-v1') return grouped();
-        return catalogue();
+        return body.representation === 'discovery-v1' ? mixed() : catalogue();
       },
     )
     .post(

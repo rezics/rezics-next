@@ -131,23 +131,11 @@ type Pending = Exclude<Fact, { kind: 'item' }> | { kind: 'item'; id: string };
 export function pendingFacts(
   subject: Pick<IndexedSubject, 'statements'>,
   properties: readonly string[],
-  spoilerThreshold?: 0 | 1 | 2,
 ): Map<string, Pending[]> {
   const kept = new Map<string, { values: Pending[]; seen: Set<string> }>(
     properties.map((property) => [property, { values: [], seen: new Set() }]),
   );
-  for (const statement of subject.statements) {
-    const { property, value, facet } = statement;
-    if (spoilerThreshold !== undefined) {
-      const levels = (statement.qualifiers ?? [])
-        .filter(({ property }) => property === 'rezics:spoilerLevel')
-        .map(({ value }) => value);
-      if (
-        levels.length > 1 ||
-        (levels.length === 1 && (!['0', '1', '2'].includes(levels[0]!) || Number(levels[0]) > spoilerThreshold))
-      )
-        continue;
-    }
+  for (const { property, value, facet } of subject.statements) {
     const entry = facet && kept.get(property);
     if (!facet || !entry || entry.values.length === FACTS_PER_PROPERTY) continue;
     const fact: Pending =
@@ -180,9 +168,8 @@ export async function projectFacts(
   subjects: readonly IndexedSubject[],
   properties: readonly string[],
   languages: readonly string[] | undefined,
-  spoilerThreshold?: 0 | 1 | 2,
 ): Promise<Record<string, Fact[]>[]> {
-  const lists = subjects.map((subject) => pendingFacts(subject, properties, spoilerThreshold));
+  const lists = subjects.map((subject) => pendingFacts(subject, properties));
   const targets = new Set<string>();
   for (const list of lists)
     for (const values of list.values()) for (const value of values) if (value.kind === 'item') targets.add(value.id);

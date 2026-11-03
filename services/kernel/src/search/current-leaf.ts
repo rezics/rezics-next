@@ -1,48 +1,10 @@
 import type { FactClause } from './disclosure/check.ts';
-import type { IndexedStatement, IndexedSubject, RelationFacetMatch } from './source.ts';
-import type { TextNode } from './text.ts';
+import type { IndexedStatement, RelationFacetMatch } from './source.ts';
 import { calendarRangeMatches } from '@rezics/filter';
 
 /** Match the current type by exact membership in the clause's values. */
 export function holdsCurrentType(type: string, clause: Extract<FactClause, { facet: 'type' }>): boolean {
   return clause.values.includes(type);
-}
-
-const wordSegments = new Intl.Segmenter('und', { granularity: 'word' });
-
-function textTokens(value: string): string[] {
-  return [...wordSegments.segment(value.normalize('NFKC').toLocaleLowerCase('und'))]
-    .filter((segment) => segment.isWordLike)
-    .map((segment) => segment.segment);
-}
-
-/** Recheck the bounded text grammar against current labels, aliases and descriptions. */
-export function holdsCurrentText(subject: Pick<IndexedSubject, 'labels' | 'aliases' | 'descriptions'>, node: TextNode): boolean {
-  const corpus = [...subject.labels, ...subject.aliases, ...subject.descriptions]
-    .map(({ value }) => value)
-    .join(' ');
-  const values = textTokens(corpus);
-  const contains = (query: string, phrase: boolean) => {
-    const wanted = textTokens(query);
-    if (!wanted.length) return false;
-    if (!phrase) return wanted.every((token) => values.includes(token));
-    return values.some((_, offset) => wanted.every((token, index) => values[offset + index] === token));
-  };
-  const evaluate = (current: TextNode): boolean => {
-    switch (current.kind) {
-      case 'term':
-        return contains(current.value, false);
-      case 'phrase':
-        return contains(current.value, true);
-      case 'not':
-        return !evaluate(current.child);
-      case 'and':
-        return current.children.every(evaluate);
-      case 'or':
-        return current.children.some(evaluate);
-    }
-  };
-  return evaluate(node);
 }
 
 /**

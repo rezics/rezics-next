@@ -1,7 +1,6 @@
 import {
   admitFilter,
   admitDiscoveryFilter,
-  admittedReleaseSearchTypes,
   FilterError,
   parseDiscoveryFilter,
   parseFilter,
@@ -13,7 +12,7 @@ import {
   type FilterRelease,
   type SpoilerThreshold,
 } from '@rezics/filter';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -32,11 +31,10 @@ import {
   type SearchCursorBinding,
   type SearchSortValue,
 } from './cursor.ts';
-import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from './request-source-snapshot.ts';
+import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
-import { holdsCurrentText } from './current-leaf.ts';
 import { createFreshness } from './freshness.ts';
 import {
   admitProperties,
@@ -69,13 +67,7 @@ import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { ScopeWork, scopeAllowance } from './scope-execution.ts';
 import type { ScopeBasis } from './scope-source.ts';
-import {
-  subjectPartition,
-  type IndexedSubject,
-  type RelationFacetProbe,
-  type RetainedRelationFacetPage,
-  type SubjectSource,
-} from './source.ts';
+import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
 import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
@@ -100,28 +92,6 @@ import { ownSubjectRequest } from './service-request.ts';
 import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
 import { executeScopedSuggestions } from './scoped-suggestion.ts';
-import {
-  createReleaseSearchCandidateStreams,
-  observeReleaseSearchCandidates,
-  type ReleaseSearchCandidatePool,
-  type ReleaseSearchCandidateReservation,
-} from './release-search-native-stream.ts';
-import {
-  releaseWorkLink,
-  ReleaseGroupingRestartRequired,
-  ReleaseGroupingUnavailable,
-  type ReleaseGroupingBasis,
-  type ReleaseGroupingRequest,
-  type ReleaseGroupingSource,
-} from './release-search-grouping.ts';
-import {
-  readReleaseChildrenPage,
-  readReleaseGroupsPage,
-  type ReleaseSearchGroup as PublicReleaseSearchGroup,
-  type ReleaseSearchPrincipal,
-} from './release-search-cursor.ts';
-import { createReleaseSearchGroupingSource } from './release-search-source.ts';
-import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -136,35 +106,6 @@ export type SearchRequest = {
   languages?: string[];
   properties?: string[];
 };
-
-export type ReleaseGroupedSearchRequest = {
-  operation?: 'groups' | 'children';
-  work?: string;
-  text?: string;
-  filter?: unknown;
-  sort?: 'name' | 'relevance';
-  spoilerThreshold?: number;
-  cursor?: string;
-  descriptions?: boolean;
-  languages?: string[];
-  properties?: string[];
-};
-
-export type ReleaseGroupedSearchPage =
-  | {
-      operation: 'groups';
-      status: 'ready' | 'preparing';
-      groups: PublicReleaseSearchGroup<PublicSearchHit, PublicSearchHit>[];
-      next: string | null;
-      as_of: string;
-    }
-  | {
-      operation: 'children';
-      status: 'ready' | 'preparing';
-      children: PublicSearchHit[];
-      next: string | null;
-      as_of: string;
-    };
 
 type SearchFilterDocument = FilterDocument | DiscoveryFilterDocument;
 
@@ -491,7 +432,6 @@ export function createSearchService({
   facetProvider,
   publicFilters,
   preparePublic,
-  releaseSearchPools: configuredReleaseSearchPools,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
   release: releaseOverride,
 }: {
@@ -513,8 +453,6 @@ export function createSearchService({
   preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
   /** Trusted native owner composition. Missing native ports fail closed. */
   facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
-  /** All native source pools participating in Global release ownership and current disclosure. */
-  releaseSearchPools?: readonly (ReleaseSearchCandidatePool & { source: SubjectSource })[];
 }) {
   const release =
     releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
@@ -697,451 +635,6 @@ export function createSearchService({
     )
       unsupported(text ? '/text' : '/filter');
     return admitted;
-  }
-
-  async function currentReleaseSnapshot() {
-    if (releaseOverride) {
-      const current = await releaseOverride();
-      return current ? { digest: kindDigest(current), head: 0, release: current } : null;
-    }
-    const current = await activeRelease(pool);
-    return current
-      ? { digest: current.digest, head: current.head ?? 0, release: current.release as FilterRelease }
-      : null;
-  }
-
-  async function groupedReleaseSearch(
-    principal: ReleaseSearchPrincipal,
-    submitted: ReleaseGroupedSearchRequest,
-    now = clock().getTime(),
-    context: { deadline: number } = { deadline: deadlineFor(30_000) },
-  ): Promise<ReleaseGroupedSearchPage> {
-    submitted = ownSubjectRequest(submitted);
-    const operation = submitted.operation ?? 'groups';
-    if (operation !== 'groups' && operation !== 'children') invalid('/operation', 'invalid_format');
-    if (operation === 'children') {
-      try {
-        if (!submitted.work) throw new Error('missing work');
-        subjectPartition(submitted.work);
-      } catch {
-        invalid('/work', 'invalid_format');
-      }
-    } else if (submitted.work !== undefined) invalid('/work', 'unsupported');
-    if (submitted.cursor !== undefined &&
-      (typeof submitted.cursor !== 'string' || !submitted.cursor || submitted.cursor.length > 4864))
-      invalid('/cursor', 'invalid_format');
-
-    const normalized = validate({
-      ...(submitted.text === undefined ? {} : { text: submitted.text }),
-      ...(submitted.filter === undefined ? {} : { filter: submitted.filter }),
-      ...(submitted.sort === undefined ? {} : { sort: submitted.sort }),
-      spoilerThreshold: submitted.spoilerThreshold ?? 0,
-      descriptions: submitted.descriptions ?? true,
-      ...(submitted.languages === undefined ? {} : { languages: submitted.languages }),
-      ...(submitted.properties === undefined ? {} : { properties: submitted.properties }),
-      limit: 20,
-    });
-    if (normalized.sort !== 'name') unsupported('/sort');
-    const active = await currentReleaseSnapshot();
-    if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-    const admitted = await admitQuery(
-      normalized.text,
-      normalized.filter,
-      active.release,
-      false,
-      normalized.spoilerThreshold,
-      true,
-    );
-    if (!admitted || containsRealmPredicate(admitted)) unsupported('/filter');
-    const filter = admitted as FilterDocument;
-    const options = normalized.hitOptions;
-    if (options.properties) admitProperties(options.properties, active.release);
-    const generation = await discoveryGeneration();
-    const calendarFormat = await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation));
-    if (containsCalendarRange(filter) && calendarFormat === null) throw indexNotReady();
-    const compiled = compileFilter(filter, {
-      prefix: 'release',
-      relationOverflow: true,
-      ...(calendarFormat === null ? {} : { calendarFormat }),
-    });
-    const clauses = new Map<string, FactClause>(compiled.leaves.map((leaf) => [leaf.name, leaf]));
-    const relationProperties = [
-      ...new Set(
-        compiled.leaves.flatMap((leaf) =>
-          leaf.facet === 'statement' && relationFacetProperty(active.release, leaf.property) ? [leaf.property] : [],
-        ),
-      ),
-    ];
-    const request: ReleaseGroupingRequest = {
-      releaseDigest: active.digest,
-      filter,
-      ...(submitted.text === undefined ? {} : { text: submitted.text }),
-      sort: normalized.sort,
-      languages: options.languages ?? [],
-      spoilerThreshold: (normalized.spoilerThreshold ?? 0) as SpoilerThreshold,
-      groupLimit: 20,
-      childLimit: 20,
-      previewLimit: 3,
-    };
-
-    const indexedSource = source as SubjectSource & { canonicalNames?: SubjectCanonicalNames };
-    const pools = configuredReleaseSearchPools?.length
-      ? [...configuredReleaseSearchPools]
-      : indexedSource.canonicalNames
-        ? [{ id: 'global', names: indexedSource.canonicalNames, source }]
-        : [];
-    if (!pools.length || pools.some(({ source: native }) => !native.readCompleteWorkLinks)) throw indexNotReady();
-
-    const totals = {
-      observations: 0,
-      ownerReads: 0,
-      nameSeeks: 0,
-      keys: 0,
-      sourceReads: 0,
-      completeWorkLinkReads: 0,
-      authorityObservations: 0,
-      relationFacetReads: 0,
-      hydrationReads: 0,
-      serializationBytes: 0,
-    };
-    const reserve = (value: ReleaseSearchCandidateReservation) => {
-      if (Date.now() > context.deadline) throw new ProblemError('deadline_exceeded');
-      for (const key of Object.keys(totals) as (keyof typeof totals)[]) {
-        const amount = value[key] ?? 0;
-        if (!Number.isSafeInteger(amount) || amount < 0 || totals[key] + amount > 100_000_000)
-          throw new ReleaseGroupingUnavailable();
-      }
-      for (const key of Object.keys(totals) as (keyof typeof totals)[]) totals[key] += value[key] ?? 0;
-    };
-    const liveRelease = async () => {
-      return currentReleaseSnapshot();
-    };
-    const poolSources = new Map(pools.map((candidate) => [candidate.id, candidate.source as SubjectSource]));
-    const nativeContext = {
-      deadline: context.deadline,
-      reserve,
-      async observe({ deadline, homesByPool }: {
-        deadline: number;
-        homesByPool: Readonly<Record<string, readonly { partition: number; position: string }[]>>;
-      }): Promise<ReleaseGroupingBasis> {
-        if (Date.now() > deadline) throw new ProblemError('deadline_exceeded');
-        const current = await liveRelease();
-        if (!current) throw indexNotReady();
-        const currentGeneration = await discoveryGeneration();
-        const indexUuid = await indexRequest(() => discoveryIndexUuid(client, prefix, currentGeneration));
-        const physical = {
-          generation: currentGeneration,
-          incarnation: `${currentGeneration}:${current.head}`,
-          indexUuid,
-        };
-        const ready = await indexRequest(() => readSubjectCalendarFormat(client, prefix, currentGeneration));
-        const positions: (string | number)[][] = [];
-        for (const poolId of Object.keys(homesByPool).sort()) {
-          const native = poolSources.get(poolId);
-          if (!native) throw new ReleaseGroupingRestartRequired();
-          for (const home of homesByPool[poolId]!) {
-            const observed = await native.count(home.partition);
-            if (
-              !observed ||
-              typeof observed.position !== 'bigint' ||
-              observed.position < 0n ||
-              !Number.isSafeInteger(observed.count) ||
-              observed.count < 0 ||
-              observed.position.toString() !== home.position
-            )
-              throw new ReleaseGroupingRestartRequired();
-            positions.push([poolId, home.partition, observed.position.toString(), observed.count]);
-          }
-        }
-        return {
-          releaseDigest: current.digest,
-          physical,
-          epoch: createHash('sha256').update(JSON.stringify(positions)).digest('hex'),
-          calendarReadyFor: ready === 1 ? physical : null,
-        };
-      },
-    };
-    const cut = await observeReleaseSearchCandidates(pools, nativeContext);
-    const homeByPartition = new Map<number, { pool: ReleaseSearchCandidatePool; position: string }>();
-    for (const retained of cut.names.pools) {
-      const owner = pools.find(({ id }) => id === retained.id);
-      if (!owner) throw new ReleaseGroupingRestartRequired();
-      for (const home of retained.population.homes)
-        homeByPartition.set(home.partition, { pool: owner, position: home.position });
-    }
-    const poolFor = (partition: number): ReleaseSearchCandidatePool => {
-      const retained = homeByPartition.get(partition);
-      if (retained) return retained.pool;
-      if (pools.length === 1) return pools[0]!;
-      throw new ReleaseGroupingUnavailable();
-    };
-    const sourceFor = (candidate: ReleaseSearchCandidatePool) => poolSources.get(candidate.id)!;
-    const sourceReservation = (
-      candidate: ReleaseSearchCandidatePool,
-      fields: Partial<ReleaseSearchCandidateReservation>,
-    ) => reserve({
-      pool: candidate.id,
-      observations: 0,
-      ownerReads: 0,
-      nameSeeks: 0,
-      keys: fields.keys ?? 0,
-      sourceReads: 0,
-      completeWorkLinkReads: 0,
-      authorityObservations: 0,
-      ...fields,
-    });
-    async function readPool(candidate: ReleaseSearchCandidatePool, partition: number, ids: readonly string[]) {
-      if (ids.length > REQUEST_SOURCE_KEYS) throw new ReleaseGroupingUnavailable();
-      sourceReservation(candidate, { sourceReads: 1, hydrationReads: 1, keys: ids.length });
-      const snapshot = await sourceFor(candidate).read(partition, ids);
-      const subjects = validateRequestSourceSnapshot(snapshot, partition, ids);
-      const retained = homeByPartition.get(partition);
-      if (retained && (retained.pool.id !== candidate.id || snapshot.position.toString() !== retained.position))
-        throw new ReleaseGroupingRestartRequired();
-      if (
-        !retained &&
-        snapshot.subjects.some((subject) => subject.visibility === 'visible' && subject.redirect === null)
-      )
-        throw new ReleaseGroupingRestartRequired();
-      return { snapshot, subjects };
-    }
-    const routedSource: SubjectSource = {
-      async read(partition, ids) {
-        return (await readPool(poolFor(partition), partition, ids)).snapshot;
-      },
-      async count(partition) {
-        const candidate = poolFor(partition);
-        sourceReservation(candidate, { sourceReads: 1, hydrationReads: 1 });
-        return sourceFor(candidate).count(partition);
-      },
-      ...(pools.every(({ source: native }) => !!native.matchRelationFacets)
-        ? {
-            async matchRelationFacets(partition: number, probes: readonly RelationFacetProbe[]) {
-              const candidate = poolFor(partition);
-              const matcher = sourceFor(candidate).matchRelationFacets;
-              if (!matcher) throw new ReleaseGroupingUnavailable();
-              sourceReservation(candidate, { relationFacetReads: 1, keys: probes.length });
-              return matcher.call(sourceFor(candidate), partition, probes);
-            },
-          }
-        : {}),
-      ...(pools.every(({ source: native }) => !!native.prepareRelationFacets)
-        ? {
-            async prepareRelationFacets(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage> {
-              const byPool = new Map<ReleaseSearchCandidatePool, { probe: RelationFacetProbe; index: number }[]>();
-              for (const [index, probe] of probes.entries()) {
-                const candidate = poolFor(subjectPartition(probe.subject));
-                byPool.set(candidate, [...(byPool.get(candidate) ?? []), { probe, index }]);
-              }
-              const retained = [] as { page: RetainedRelationFacetPage; entries: { index: number }[] }[];
-              for (const [candidate, entries] of byPool) {
-                const prepare = sourceFor(candidate).prepareRelationFacets;
-                if (!prepare) throw new ReleaseGroupingUnavailable();
-                sourceReservation(candidate, { relationFacetReads: 1, keys: entries.length });
-                retained.push({ page: await prepare(entries.map(({ probe }) => probe)), entries });
-              }
-              return {
-                bounds: retained.flatMap(({ page }) => page.bounds),
-                async match() {
-                  const values: (boolean | 'not_proven')[] = new Array(probes.length);
-                  for (const { page, entries } of retained) {
-                    const pageValues = await page.match();
-                    if (pageValues.length !== entries.length) throw new ReleaseGroupingUnavailable();
-                    for (const [index, { index: resultIndex }] of entries.entries()) values[resultIndex] = pageValues[index]!;
-                  }
-                  if (values.some((value) => value === undefined)) throw new ReleaseGroupingUnavailable();
-                  return values;
-                },
-                async revalidate() {
-                  for (const { page } of retained) if (!(await page.revalidate())) return false;
-                  return true;
-                },
-              };
-            },
-          }
-        : {}),
-    };
-
-    async function readCurrent(ids: readonly string[]): Promise<Map<string, IndexedSubject>> {
-      if (new Set(ids).size !== ids.length || ids.length > 256) throw new ReleaseGroupingUnavailable();
-      const byPartition = new Map<number, string[]>();
-      for (const id of ids) {
-        const partition = subjectPartition(id);
-        byPartition.set(partition, [...(byPartition.get(partition) ?? []), id]);
-      }
-      const result = new Map<string, IndexedSubject>();
-      for (const [partition, values] of byPartition) {
-        const candidate = poolFor(partition);
-        for (let offset = 0; offset < values.length; offset += REQUEST_SOURCE_KEYS) {
-          const page = values.slice(offset, offset + REQUEST_SOURCE_KEYS);
-          const snapshot = await readPool(candidate, partition, page);
-          for (const [id, subject] of snapshot.subjects) result.set(id, subject);
-        }
-      }
-      return result;
-    }
-    const workType = (subject: IndexedSubject) =>
-      subject.type === 'schema:CreativeWork' ||
-      !!(Object.hasOwn(active.release.types, subject.type) &&
-        active.release.types[subject.type]?.bases?.includes('schema:CreativeWork'));
-    async function liveRelationRelease() {
-      const current = await liveRelease();
-      if (!current || current.digest !== active.digest || current.head !== active.head)
-        throw new ReleaseGroupingRestartRequired();
-      return { release: current.release, digest: current.digest, head: current.head };
-    }
-    async function matching(ids: readonly string[], current: ReadonlyMap<string, IndexedSubject>) {
-      const hits = [...current.values()].map((subject) => ({
-        id: subject.id,
-        partition: subjectPartition(subject.id),
-        securityRevision: subject.securityRevision,
-        matched: [...clauses.keys()],
-      }));
-      const checked = await sourceRequest(() =>
-        checkHits(routedSource, hits, clauses, {
-          filter,
-          relationProperties,
-          spoilerThreshold: request.spoilerThreshold,
-          observeRelationRelease: liveRelationRelease,
-        }),
-      );
-      if (checked.relationRejected) throw indexNotReady();
-      const passed = new Map(checked.passed.map(({ subject }) => [subject.id, subject]));
-      if (normalized.text)
-        for (const [id, subject] of passed) if (!holdsCurrentText(subject, normalized.text)) passed.delete(id);
-      return passed;
-    }
-    async function currentLinks(ids: readonly string[]) {
-      const result = new Map<string, Awaited<ReturnType<typeof releaseWorkLink>>>();
-      const partitions = new Map<number, string[]>();
-      for (const id of ids) {
-        const partition = subjectPartition(id);
-        partitions.set(partition, [...(partitions.get(partition) ?? []), id]);
-      }
-      for (const [partition, values] of partitions) {
-        const candidate = poolFor(partition);
-        const links = sourceFor(candidate).readCompleteWorkLinks;
-        if (!links) throw new ReleaseGroupingUnavailable();
-        const home = homeByPartition.get(partition);
-        if (!home || home.pool.id !== candidate.id) throw new ReleaseGroupingRestartRequired();
-        sourceReservation(candidate, { completeWorkLinkReads: 1, keys: values.length });
-        const evidence = await links.call(sourceFor(candidate), partition, values);
-        if ([...evidence.keys()].some((id) => !values.includes(id))) throw new ReleaseGroupingUnavailable();
-        for (const id of values) {
-          const value = evidence.get(id);
-          if (
-            !value ||
-            typeof value.complete !== 'boolean' ||
-            !Array.isArray(value.values) ||
-            value.values.some(
-              (entry) => !entry || (entry.kind !== 'unknown' && (entry.kind !== 'work' || !canonicalId(entry.id))),
-            )
-          )
-            throw new ReleaseGroupingUnavailable();
-          result.set(id, releaseWorkLink(value.complete, value.values));
-        }
-      }
-      const targets = [...new Set([...result.values()].flatMap((link) => (link.kind === 'linked' ? [link.work] : [])))];
-      for (const target of targets) {
-        const home = homeByPartition.get(subjectPartition(target));
-        if (!home) {
-          result.forEach((link, id) => {
-            if (link.kind === 'linked' && link.work === target) result.set(id, { kind: 'unknown' });
-          });
-          continue;
-        }
-        const found = await readCurrent([target]);
-        const targetSubject = found.get(target);
-        if (
-          !targetSubject ||
-          targetSubject.visibility !== 'visible' ||
-          targetSubject.redirect !== null ||
-          !workType(targetSubject)
-        )
-          result.forEach((link, id) => {
-            if (link.kind === 'linked' && link.work === target) result.set(id, { kind: 'unknown' });
-          });
-      }
-      return result;
-    }
-    async function serialize(subjects: readonly IndexedSubject[]): Promise<PublicSearchHit[]> {
-      if (!subjects.length) return [];
-      const byPool = new Map<string, number>();
-      for (const subject of subjects) {
-        const owner = poolFor(subjectPartition(subject.id));
-        byPool.set(owner.id, (byPool.get(owner.id) ?? 0) + 1);
-      }
-      for (const [id, count] of byPool)
-        sourceReservation(pools.find(({ id: candidate }) => candidate === id)!, {
-          serializationBytes: count * 32_768,
-          keys: count,
-        });
-      const hits = subjects.map((subject) => projectHit(subject, options));
-      if (options.properties) {
-        const facts = await sourceRequest(() =>
-          projectFacts(
-            routedSource,
-            subjects,
-            options.properties!,
-            options.languages,
-            request.spoilerThreshold,
-          ),
-        );
-        hits.forEach((hit, index) => (hit.facts = facts[index]!));
-      }
-      return sourceRequest(() => publicHitFigures(pool, hits));
-    }
-
-    const groupingSource = createReleaseSearchGroupingSource<PublicSearchHit, PublicSearchHit>({
-      pools,
-      release: active.release,
-      cut,
-      context: nativeContext,
-      async works(_request, ids) {
-        const current = await readCurrent(ids);
-        const selected = [...current.values()].filter(
-          (subject) => subject.visibility === 'visible' && subject.redirect === null && workType(subject),
-        );
-        const cards = await serialize(selected);
-        return new Map(cards.map((card) => [card.id, card]));
-      },
-      async releases(_request, ids) {
-        const current = await readCurrent(ids);
-        const links = await currentLinks(ids);
-        const matched = await matching(ids, current);
-        const selected = ids.flatMap((id) => {
-          const subject = matched.get(id);
-          const link = links.get(id);
-          return subject && link ? [{ subject, link }] : [];
-        });
-        const cards = await serialize(selected.map(({ subject }) => subject));
-        return new Map(
-          selected.map(({ link }, index) => [cards[index]!.id, { card: cards[index]!, link }]),
-        );
-      },
-    });
-    const page = operation === 'children'
-      ? await readReleaseChildrenPage({
-          source: groupingSource,
-          request,
-          principal,
-          work: submitted.work!,
-          cursors,
-          ...(submitted.cursor ? { cursor: submitted.cursor } : {}),
-          now,
-        })
-      : await readReleaseGroupsPage({
-          source: groupingSource,
-          request,
-          principal,
-          cursors,
-          ...(submitted.cursor ? { cursor: submitted.cursor } : {}),
-          now,
-        });
-    const as_of = await asOf(generation);
-    return operation === 'children'
-      ? { operation, ...page, as_of }
-      : { operation, ...page, as_of };
   }
 
   const service = {
@@ -1868,15 +1361,6 @@ export function createSearchService({
           await operations?.close();
         }
       }
-    },
-
-    async releaseSearch(
-      principal: ReleaseSearchPrincipal,
-      request: ReleaseGroupedSearchRequest,
-      now = clock().getTime(),
-      context: { deadline: number } = { deadline: deadlineFor(30_000) },
-    ): Promise<ReleaseGroupedSearchPage> {
-      return groupedReleaseSearch(principal, request, now, context);
     },
 
     async facets(
