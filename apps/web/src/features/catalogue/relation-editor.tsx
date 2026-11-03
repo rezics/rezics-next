@@ -125,6 +125,7 @@ function RelationEditorLive({
   propertyIds,
   excludedProperties,
   initialProperty,
+  initialTarget,
   resolveTarget,
 }: {
   id: string;
@@ -151,6 +152,8 @@ function RelationEditorLive({
   excludedProperties?: readonly string[] | undefined;
   /** Preselects one admitted field after the current subject read arrives. */
   initialProperty?: string | undefined;
+  /** Selects an already created target once the admitted field is current; proposing stays explicit. */
+  initialTarget?: { id: string; title: string; types: readonly string[] } | undefined;
   resolveTarget?: (
     id: string,
   ) => Promise<{ ok: true; type: string } | { ok: false; reason: CandidateFailure['reason'] }>;
@@ -263,6 +266,7 @@ function RelationEditorLive({
   const running = useRef(false);
   const proposedCandidate = useRef<string | undefined>(undefined);
   const picked = useRef<Record<string, EntityPickerSubject>>({});
+  const seededTarget = useRef(false);
   const wasVisible = useRef(visible);
   const resumeRead = useRef(false);
   if (wasVisible.current !== visible) {
@@ -283,6 +287,7 @@ function RelationEditorLive({
       setResult(undefined);
       setConsentEntry(undefined);
       picked.current = {};
+      seededTarget.current = false;
       setFailure(request.current ? { ok: false, reason: 'unavailable' } : undefined);
     }
   }
@@ -788,6 +793,29 @@ function RelationEditorLive({
     if (!editable()) return;
     applyEdit(next);
   }
+  useEffect(() => {
+    if (
+      seededTarget.current ||
+      !initialTarget ||
+      !visible ||
+      !mount.active() ||
+      !field ||
+      !editable() ||
+      (initialProperty && field.id !== initialProperty) ||
+      (draft.value.type !== 'somevalue' && !(draft.value.type === 'value' && draft.value.content === ''))
+    )
+      return;
+    seededTarget.current = true;
+    picked.current[initialTarget.id] = {
+      id: initialTarget.id,
+      title: initialTarget.title,
+      types: [...initialTarget.types],
+      typeLabel: initialTarget.types[0] ?? '',
+      year: null,
+      cover: null,
+    };
+    edit({ ...draft, value: { type: 'value', content: initialTarget.id } });
+  });
   function createMissingCreditTarget() {
     if (
       !editable() ||

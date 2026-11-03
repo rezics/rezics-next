@@ -76,7 +76,15 @@ test('required Character metadata recovery fences retained term callbacks and pr
       await user.clear(control);
       await user.type(control, value);
     });
-  const submit = () =>
+  const confirmCreate = () => click(m.character_create());
+  const openReview = () => click(m.character_create_review());
+  const submit = async () => {
+    if (canvas.queryByRole('button', { name: m.correction_retry() })) return click(m.correction_retry());
+    if (canvas.queryByRole('button', { name: m.character_create() })) return click(m.character_create());
+    await openReview();
+    if (canvas.queryByRole('button', { name: m.character_create() })) await confirmCreate();
+  };
+  const dispatchSubmit = () =>
     act(async () => {
       host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     });
@@ -179,17 +187,17 @@ test('required Character metadata recovery fences retained term callbacks and pr
       await user.click(canvas.getByRole('button', { name: m.character_add_fact() }));
     });
     await replace(input(m.correction_url()), 'https://example.org/private');
-    await click(m.character_create());
+    await submit();
     expect(refreshes).toBe(1);
-    expect(canvas.getByRole('button', { name: m.character_create() })).toHaveProperty('disabled', true);
+    expect(canvas.getByRole('button', { name: m.character_create_review() })).toHaveProperty('disabled', true);
     expect(host.textContent).not.toContain(m.catalogue_create_uncertain());
     await replace(input(m.catalogue_create_label(), 1), '新しい旅人');
     await replace(input(m.catalogue_create_description(), 1), 'Private description');
     await replace(input(m.correction_url()), 'https://example.org/edited');
-    await submit();
+    await dispatchSubmit();
     await click(m.correction_reload());
     expect(refreshes).toBe(2);
-    await submit();
+    await dispatchSubmit();
     expect(commands).toHaveLength(1);
     expect(input(m.catalogue_create_label(), 1).value).toBe('新しい旅人');
     expect(input(m.correction_url()).value).toBe('https://example.org/edited');
@@ -206,7 +214,7 @@ test('required Character metadata recovery fences retained term callbacks and pr
     await click(m.recipe_remove_field());
     await click(m.recipe_remove_field());
     const lockedTermChange = inputChange(input(m.catalogue_create_label(), 1));
-    await click(m.character_create());
+    await submit();
     expect(commands).toHaveLength(2);
     const sealed = structuredClone(commands[1]);
     expect(commands[1]!.key).not.toBe(commands[0]!.key);

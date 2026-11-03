@@ -340,6 +340,7 @@ function CharacterProfileLive({
                         <CharacterProfileCreate
                           release={current.release}
                           locale={locale}
+                          search={search}
                           transport={transport}
                           onCreated={setCreated}
                           onRefreshDefinitions={async () => {
@@ -487,22 +488,59 @@ function CharacterProfileLive({
                           onChooseAnother={session === 'signed-in' ? () => select(undefined) : undefined}
                         />
                       )}
-                      <div hidden={session !== 'signed-in'}>
-                        <RelationEditor
-                          key={current.work.subject.id}
-                          id={current.work.subject.id}
-                          locale={locale}
-                          search={search}
-                          transport={{
-                            ...relations(current.work.subject.id),
-                            read: async (...args) =>
-                              characterRelations(
-                                await relations(current.work!.subject.id).read(...args),
-                                characterWorkDefinitions(current.workDescriptor!),
-                              ),
-                          }}
-                        />
-                      </div>
+                      {character && (
+                        <div hidden={session !== 'signed-in'}>
+                          <RelationEditor
+                            key={current.work.subject.id}
+                            id={current.work.subject.id}
+                            locale={locale}
+                            search={search}
+                            transport={{
+                              ...relations(current.work.subject.id),
+                              read: async (...args) =>
+                                characterRelations(
+                                  await relations(current.work!.subject.id).read(...args),
+                                  characterWorkDefinitions(current.workDescriptor!),
+                                ),
+                            }}
+                          />
+                        </div>
+                      )}
+                      {created && !character && current.workDescriptor && (
+                        <div hidden={session !== 'signed-in'} data-slot="character-associate" className="space-y-3">
+                          <h3 className="text-lg font-semibold">{m.character_associate_title({}, o)}</h3>
+                          <p className="text-sm text-muted-foreground">{m.character_associate_intro({}, o)}</p>
+                          <RelationEditor
+                            key={`${current.work.subject.id}:${created.id}`}
+                            id={current.work.subject.id}
+                            locale={locale}
+                            search={search}
+                            initialProperty={
+                              characterWorkFields(
+                                characterWorkDefinitions(current.workDescriptor),
+                                current.workDescriptor.typeId,
+                              ).find((id) => id === 'schema:character') ??
+                              characterWorkFields(
+                                characterWorkDefinitions(current.workDescriptor),
+                                current.workDescriptor.typeId,
+                              )[0]
+                            }
+                            initialTarget={{
+                              id: created.id,
+                              title: created.id,
+                              types: [characterType],
+                            }}
+                            transport={{
+                              ...relations(current.work.subject.id),
+                              read: async (...args) =>
+                                characterRelations(
+                                  await relations(current.work!.subject.id).read(...args),
+                                  characterWorkDefinitions(current.workDescriptor!),
+                                ),
+                            }}
+                          />
+                        </div>
+                      )}
                     </>
                   ) : (
                     <EntityPicker

@@ -4,7 +4,7 @@ import { checkSubjectInput, type Violation } from '@rezics/definitions/validate'
 import { initialTerms, type TermDraft, type CreateResult, type CreatedReader } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
 import type { SessionEnv } from '../../session/client';
-import type { StatementInput, EditorRead } from './statement-editor';
+import { creationStatement, type StatementInput, type EditorRead } from './statement-editor';
 import type { RelationRead } from '../../subject/relation-candidates';
 import { readTypeDescriptor, type CurrentTypeDescriptor, type CurrentTypeRead } from './type-directory-client';
 
@@ -169,7 +169,8 @@ export async function readCharacterProfile(
 export function characterDraft(release: Release, terms: TermDraft[], facts: StatementInput[]) {
   const initial = initialTerms(characterType, terms);
   const item: CharacterItem = { ...initial.item, statements: {} };
-  for (const fact of facts) (item.statements[fact.property.id] ??= []).push(structuredClone(fact));
+  for (const fact of facts)
+    (item.statements[fact.property.id] ??= []).push(structuredClone(creationStatement(fact, release)));
   return { item, errors: [...initial.errors, ...validateCharacter(release, item)] };
 }
 export function validateCharacter(release: Release, item: CharacterItem): Violation[] {

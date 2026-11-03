@@ -124,10 +124,14 @@ Subject and work entries use the shared **Contribute** menu, preserving the exac
 the existing signed-out return destination. The standalone catalogue creation entry shares that destination.
 
 Names, original text, traits, measurements and identifiers appear in meaningful groups. Initial creation reuses
-native subject POST, initial-term validation and scalar controls. Only explicitly entered languages and added facts
-are sent; no birth year, classification, image, Source metadata or work credit is inferred. Native initial facts
-are selected at creation. The exact returned UUID is reread before providing the canonical reader and correction
-address; concealed or unavailable readback offers a read retry without another create.
+native subject POST, initial-term validation and the shared statement, rank, qualifier and grouped-reference
+controls. Only explicitly entered languages and added facts are sent; no birth year, classification, image, Source
+metadata or work credit is inferred. The optional work query is context only. Contributors review the exact native
+item, then confirm one Character create. Creating a Character is not associating it with a work: an admitted work
+may offer a later, independent appearance or credit proposal that selects the new UUID.
+The association editor may show that UUID as the target title until a current character read exists. The exact returned UUID is
+reread before providing the canonical reader and correction address; concealed or unavailable readback offers a
+read retry without another create. Unknown create delivery keeps the same body and key.
 
 Scalar corrections reuse the multi-field workspace, with unchanged fields excluded and independent per-field
 results. Classification targets use the existing subject picker and the same statement, qualifier, grouped-reference,

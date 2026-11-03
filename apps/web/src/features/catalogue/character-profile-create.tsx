@@ -3,16 +3,23 @@ import { useId, useRef, useState, useLayoutEffect, type MouseEvent } from 'react
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { DefinitionMeaning } from './definition-meaning';
-import { ScalarControl, EditorFailure } from './statement-editor-view';
-import { editableScalar, type StatementInput } from './statement-editor';
+import {
+  EditorFailure,
+  StatementFields,
+  statementHolderKey,
+  type StatementFieldsRead,
+} from './statement-editor-view';
+import { emptyCreationStatement, editableScalar, type SnakInput, type StatementInput } from './statement-editor';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import {
   characterCreateCorrections,
@@ -20,7 +27,24 @@ import {
   characterFactId,
   type CharacterCorrection,
 } from './character-create-guidance';
-import { characterDraft, characterGroups, type CharacterCommand, type CharacterTransport } from './character-profile';
+import { CharacterCreateReview, characterCreateDrafts, characterCreateFingerprint } from './character-create-review';
+import {
+  applyReuse,
+  captureReuse,
+  cloneReferenceGroup,
+  type ReuseCapture,
+  type ReuseRefusal,
+  type ReuseSource,
+} from './reference-reuse';
+import { ReferenceReusePanel } from './reference-reuse-view';
+import { controlId } from './statement-validation-presentation';
+import {
+  characterDraft,
+  characterGroups,
+  characterType,
+  type CharacterCommand,
+  type CharacterTransport,
+} from './character-profile';
 
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -150,10 +174,71 @@ function DraftRemoval({
   );
 }
 
+function CharacterItemValue({
+  id,
+  address = 'fact',
+  part,
+  release,
+  locale,
+  search,
+  disabled,
+  change,
+}: {
+  id: string;
+  address?: string;
+  part: SnakInput;
+  release: Release;
+  locale: string;
+  search: EntityPickerSearch;
+  disabled: boolean;
+  change: (value: SnakInput['value']) => void;
+}) {
+  const [picked, setPicked] = useState<EntityPickerSubject[]>([]);
+  const definition = release.properties[part.property.id];
+  const content = part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : '';
+  const o = { locale: locale as never };
+  return (
+    <div id={controlId(id, address, 'value')}>
+      <EntityPicker
+        label={pickText(definition?.labels ?? {}, locale).text || m.subject_value_unlabelled({}, o)}
+        disabled={disabled}
+        value={
+          picked.filter((item) => item.id === content).length
+            ? picked.filter((item) => item.id === content)
+            : content
+              ? [
+                  {
+                    id: content,
+                    title: m.subject_value_unlabelled({}, o),
+                    types: [],
+                    typeLabel: '',
+                    cover: null,
+                  },
+                ]
+              : []
+        }
+        src={coverSrc}
+        search={async (text, signal) => {
+          const entries = await search(text, signal);
+          const targets = definition?.targets ?? [];
+          return targets.length
+            ? entries.filter((item) => item.types.some((type) => targets.includes(type)))
+            : entries;
+        }}
+        onValueChange={(items) => {
+          change({ type: 'value', content: items[0]?.id ?? '' });
+          setPicked(items);
+        }}
+      />
+    </div>
+  );
+}
+
 type CharacterProfileCreateProps = {
   release: Release;
   locale: string;
   transport: CharacterTransport;
+  search?: EntityPickerSearch;
   onCreated: (result: Extract<CreateResult, { ok: true }>) => void;
   onRefreshDefinitions?: () => Promise<Release>;
 };
@@ -173,6 +258,7 @@ function CharacterProfileCreateLive({
   release: suppliedRelease,
   locale,
   transport,
+  search,
   onCreated,
   onRefreshDefinitions,
 }: CharacterProfileCreateProps) {
@@ -242,16 +328,11 @@ function CharacterProfileCreateLive({
         )
       : [];
   const associated = new Map<string, string[]>();
-  const scalarFeedback = new Map<string, (CharacterCorrection & { target: string })[]>();
   for (const error of displayedCorrections) {
     if (!error.target) continue;
     const ids = associated.get(error.target) ?? [];
     ids.push(error.id);
     associated.set(error.target, ids);
-    const address = error.target.slice(0, error.target.lastIndexOf('-'));
-    const scalarErrors = scalarFeedback.get(address) ?? [];
-    scalarErrors.push({ ...error, target: error.target });
-    scalarFeedback.set(address, scalarErrors);
   }
   const feedback = (target: string) => ({
     'aria-invalid': associated.has(target) ? (true as const) : undefined,
@@ -268,6 +349,21 @@ function CharacterProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<CharacterCommand | null>(null);
   const running = useRef(false);
+  const [review, setReview] = useState<{ status: 'closed' | 'current' | 'stale'; fingerprint?: string }>({
+    status: 'closed',
+  });
+  const [reuse, setReuse] = useState<{
+    source: ReuseSource;
+    selected: string[];
+    capture: ReuseCapture;
+    applied: { holder: string; property: string; index: number }[];
+    refused: { holder: string; property: string; reason: ReuseRefusal }[];
+    trigger: HTMLButtonElement | null;
+  } | null>(null);
+  const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number } | null>(null);
+  const fingerprint = characterCreateFingerprint(release, terms, facts);
+  if (review.status === 'current' && review.fingerprint !== fingerprint)
+    setReview({ status: 'stale', fingerprint: review.fingerprint });
   const termEditIsAdmitted = () => isCurrent() && !running.current && !refreshRunning.current && !pending.current;
   const changeTerm = (id: number, key: keyof TermDraft, value: string) => {
     if (!termEditIsAdmitted()) return;
@@ -331,19 +427,8 @@ function CharacterProfileCreateLive({
       if (isCurrent()) setRefreshing(false);
     }
   }
-  async function submit() {
-    if (!isCurrent()) return;
-    if (running.current || refreshRunning.current || failure?.reason === 'conflict') return;
-    if (!pending.current) {
-      // A known rejection requires fresh metadata; an unresolved command keeps its exact replay.
-      if (definitionsRequired) return;
-      const draft = characterDraft(release, terms, facts);
-      if (draft.errors.length) {
-        reportFailure({ ok: false, reason: 'invalid', errors: draft.errors });
-        return;
-      }
-      pending.current = { item: draft.item, key: crypto.randomUUID() };
-    }
+  async function send() {
+    if (!pending.current) return;
     running.current = true;
     setBusy(true);
     try {
@@ -369,6 +454,30 @@ function CharacterProfileCreateLive({
       running.current = false;
       setBusy(false);
     }
+  }
+  async function submit() {
+    if (!isCurrent()) return;
+    if (running.current || refreshRunning.current || failure?.reason === 'conflict') return;
+    if (pending.current) {
+      await send();
+      return;
+    }
+    if (definitionsRequired) return;
+    const draft = characterDraft(release, terms, facts);
+    if (draft.errors.length) {
+      reportFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+      setReview({ status: 'closed' });
+      return;
+    }
+    if (review.status === 'current' && review.fingerprint === fingerprint) {
+      pending.current = { item: draft.item, key: crypto.randomUUID() };
+      setReview({ status: 'closed' });
+      await send();
+      return;
+    }
+    setFailure(undefined);
+    setCorrections([]);
+    setReview({ status: 'current', fingerprint });
   }
   return (
     <form
@@ -542,13 +651,7 @@ function CharacterProfileCreateLive({
           disabled={locked || !selectedField}
           onClick={(event) => {
             if (locked || running.current || !available.includes(field)) return;
-            const fact: StatementInput = {
-              property: { id: field },
-              value: { type: 'value', content: '' },
-              qualifiers: [],
-              references: [],
-              rank: 'normal',
-            };
+            const fact = emptyCreationStatement(field, release);
             const id = factId(fact);
             focusAddition(
               event,
@@ -586,35 +689,133 @@ function CharacterProfileCreateLive({
                   <DefinitionMeaning values={definition?.descriptions} locale={locale} />
                 </p>
                 {supported ? (
-                  <ScalarControl
-                    part={fact}
-                    definition={definition}
-                    locale={locale}
-                    read={{ release, public: { related: {} } }}
-                    feedback={{ id: address, address: 'fact', errors: scalarFeedback.get(`${address}-fact`) ?? [] }}
-                    onChange={(value) => {
-                      const admitted = () =>
-                        isCurrent() &&
-                        !locked &&
-                        !scalarAdmission.current.locked &&
-                        scalarAdmission.current.release === release &&
-                        !running.current &&
-                        !refreshRunning.current &&
-                        !pending.current;
-                      if (!admitted()) return;
-                      setFacts((previous) => {
-                        // The stable address survives edits; this callback belongs only to
-                        // the exact private fact and Semantic reading that rendered it.
-                        if (!admitted() || !previous.includes(fact)) return previous;
-                        return previous.map((row) => {
-                          if (row !== fact) return row;
-                          const next = { ...row, value };
-                          factIds.current.set(next, factId(row));
-                          return next;
+                  <>
+                    <Field className="min-w-0">
+                      <FieldLabel className={labelClassName} htmlFor={`${address}-rank`}>
+                        {m.candidate_rank({}, o)}
+                      </FieldLabel>
+                      <NativeSelect
+                        id={`${address}-rank`}
+                        className="w-full [&>select]:min-h-11"
+                        value={fact.rank === 'preferred' ? 'preferred' : 'normal'}
+                        {...feedback(`${address}-rank`)}
+                        onChange={(event) => {
+                          const admitted = () =>
+                            isCurrent() &&
+                            !locked &&
+                            !scalarAdmission.current.locked &&
+                            scalarAdmission.current.release === release &&
+                            !running.current &&
+                            !refreshRunning.current &&
+                            !pending.current;
+                          if (!admitted()) return;
+                          const rank = event.target.value === 'preferred' ? 'preferred' : 'normal';
+                          setFacts((previous) => {
+                            if (!admitted() || !previous.includes(fact)) return previous;
+                            return previous.map((row) => {
+                              if (row !== fact) return row;
+                              const next = { ...row, rank };
+                              factIds.current.set(next, factId(row));
+                              return next;
+                            });
+                          });
+                        }}
+                      >
+                        <NativeSelectOption value="normal">{m.candidate_rank_normal({}, o)}</NativeSelectOption>
+                        <NativeSelectOption value="preferred">{m.candidate_rank_preferred({}, o)}</NativeSelectOption>
+                      </NativeSelect>
+                    </Field>
+                    <StatementFields
+                      creation
+                      localDraft
+                      stablePartAddresses
+                      draft={fact}
+                      current={
+                        {
+                          release,
+                          source: null,
+                          public: { related: {}, subject: { type: characterType } },
+                        } satisfies StatementFieldsRead
+                      }
+                      locale={locale}
+                      feedback={{
+                        id: address,
+                        errors: displayedCorrections.filter(
+                          (error): error is CharacterCorrection & { target: string } =>
+                            !!error.target && (error.target === address || error.target.startsWith(`${address}-`)),
+                        ),
+                      }}
+                      guideReturn={`/${locale}/catalogue/character`}
+                      heading="h4"
+                      partControl={
+                        search
+                          ? (part, change) =>
+                              release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
+                                <CharacterItemValue
+                                  id={address}
+                                  address={`part-${statementHolderKey(part) ?? ''}`}
+                                  part={part}
+                                  release={release}
+                                  locale={locale}
+                                  search={search}
+                                  disabled={locked}
+                                  change={change}
+                                />
+                              ) : undefined
+                          : undefined
+                      }
+                      reuse={{
+                        disabled: locked,
+                        onReuse: (index) => {
+                          if (!isCurrent() || locked || pending.current) return;
+                          const group = fact.references[index];
+                          if (!group) return;
+                          const source = {
+                            holder: String(factId(fact)),
+                            property: fact.property.id,
+                            groupIndex: index,
+                            snapshot: cloneReferenceGroup(group),
+                          };
+                          const drafts = characterCreateDrafts(
+                            addressedFacts.filter((row) => available.includes(row.fact.property.id)),
+                          );
+                          setReuse({
+                            source,
+                            selected: [],
+                            capture: captureReuse(source, drafts),
+                            applied: [],
+                            refused: [],
+                            trigger:
+                              document.activeElement instanceof HTMLButtonElement ? document.activeElement : null,
+                          });
+                        },
+                      }}
+                      focusReference={
+                        focusCopy && String(factId(fact)) === focusCopy.holder
+                          ? { index: focusCopy.index, nonce: focusCopy.nonce }
+                          : undefined
+                      }
+                      change={(next) => {
+                        const admitted = () =>
+                          isCurrent() &&
+                          !locked &&
+                          !scalarAdmission.current.locked &&
+                          scalarAdmission.current.release === release &&
+                          !running.current &&
+                          !refreshRunning.current &&
+                          !pending.current;
+                        if (!admitted()) return;
+                        setFacts((previous) => {
+                          if (!admitted() || !previous.includes(fact)) return previous;
+                          return previous.map((row) => {
+                            if (row !== fact) return row;
+                            factIds.current.set(next, factId(row));
+                            return next;
+                          });
                         });
-                      });
-                    }}
-                  />
+                      }}
+                    />
+                  </>
                 ) : (
                   <>
                     <EditorFailure reason="stale" locale={locale} />
@@ -731,6 +932,83 @@ function CharacterProfileCreateLive({
           )}
         </ContentItemFrame>
       )}
+      {review.status !== 'closed' && (
+        <CharacterCreateReview
+          item={characterDraft(release, terms, facts).item}
+          facts={addressedFacts}
+          release={release}
+          locale={locale}
+          stale={review.status === 'stale' || review.fingerprint !== fingerprint}
+          onJumpTerm={(language) => {
+            const term = terms.find((row) => row.language.trim() === language);
+            if (!term || !isCurrent()) return;
+            form.current?.ownerDocument.getElementById(`${termsId}-language-${term.id}`)?.focus();
+          }}
+          onJumpFact={(id) => {
+            if (!isCurrent()) return;
+            form.current?.ownerDocument.getElementById(`${characterFactId(termsId, id)}-group`)?.focus();
+          }}
+          onBack={() => {
+            if (isCurrent() && !pending.current) setReview({ status: 'closed' });
+          }}
+        />
+      )}
+      {reuse && (
+        <ReferenceReusePanel
+          source={reuse.source}
+          drafts={characterCreateDrafts(addressedFacts.filter((row) => available.includes(row.fact.property.id)))}
+          selected={reuse.selected}
+          read={{ release, public: { related: {} } }}
+          locale={locale}
+          capture={reuse.capture}
+          applied={reuse.applied}
+          refused={reuse.refused}
+          onSelected={(selected) => isCurrent() && setReuse({ ...reuse, selected, applied: [], refused: [] })}
+          onRefresh={() => {
+            if (!isCurrent()) return;
+            const origin = facts.find((row) => String(factId(row)) === reuse.source.holder);
+            const group = origin?.references[reuse.source.groupIndex];
+            if (!origin || !group) return;
+            const source = { ...reuse.source, snapshot: cloneReferenceGroup(group) };
+            const drafts = characterCreateDrafts(
+              addressedFacts.filter((row) => available.includes(row.fact.property.id)),
+            );
+            setReuse({
+              ...reuse,
+              source,
+              capture: captureReuse(source, drafts),
+              applied: [],
+              refused: [],
+            });
+          }}
+          onApply={() => {
+            if (!isCurrent() || locked || pending.current) return;
+            const drafts = characterCreateDrafts(
+              addressedFacts.filter((row) => available.includes(row.fact.property.id)),
+            );
+            const result = applyReuse(drafts, reuse.source, reuse.selected, release);
+            const nextByHolder = new Map(result.drafts.map((draft) => [draft.holder, draft.statement]));
+            setFacts(
+              facts.map((row) => {
+                const id = factId(row);
+                const replacement = nextByHolder.get(String(id));
+                if (!replacement || replacement === row) return row;
+                factIds.current.set(replacement, id);
+                return replacement;
+              }),
+            );
+            setReuse({ ...reuse, applied: result.applied, refused: result.refused });
+            const first = result.applied[0];
+            if (first) setFocusCopy({ holder: first.holder, index: first.index, nonce: Date.now() });
+          }}
+          onCancel={() => {
+            const trigger = reuse.trigger;
+            setReuse(null);
+            if (isCurrent() && trigger?.isConnected) trigger.focus();
+          }}
+          onOpen={(holder, index) => isCurrent() && setFocusCopy({ holder, index, nonce: Date.now() })}
+        />
+      )}
       <Button
         className={actionClassName}
         type="submit"
@@ -740,7 +1018,9 @@ function CharacterProfileCreateLive({
           ? m.catalogue_create_saving({}, o)
           : pending.current
             ? m.correction_retry({}, o)
-            : m.character_create({}, o)}
+            : review.status === 'current' && review.fingerprint === fingerprint
+              ? m.character_create({}, o)
+              : m.character_create_review({}, o)}
       </Button>
     </form>
   );

@@ -5,7 +5,8 @@ import { m } from '../../paraglide/messages.js';
 import { isRecord } from '../pages/shared';
 import type { TermDraft } from './create-subject';
 import { createSubjectGuidance } from './create-subject-guidance';
-import { editableScalar, type StatementInput } from './statement-editor';
+import { editableScalar, type SnakInput, type StatementInput } from './statement-editor';
+import { statementHolderKey } from './statement-editor-view';
 import { controlId, presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
 
 export type CharacterTerm = TermDraft & { id: number };
@@ -15,10 +16,11 @@ const languagePattern = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 const escape = (part: string) => part.replaceAll('~', '~0').replaceAll('/', '~1');
 export const characterFactId = (id: string, fact: number) => `${id}-initial-${fact}`;
 
-/** Mirror only the controls supplied by ScalarControl, including its focusable compound groups. */
-function scalarTargets(id: string, { fact, id: factId }: CharacterFact, release: Release): Set<string> {
-  const definition = release.properties[fact.property.id];
-  if (!editableScalar(definition)) return new Set();
+const scalarFields = ['state', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'];
+
+function partScalarFields(part: SnakInput, release: Release): string[] {
+  const definition = release.properties[part.property.id];
+  if (!editableScalar(definition)) return [];
   const schema = isRecord(definition.value) ? definition.value : {};
   const properties = isRecord(schema.properties) ? schema.properties : {};
   if (
@@ -26,9 +28,9 @@ function scalarTargets(id: string, { fact, id: factId }: CharacterFact, release:
     (!isRecord(properties.calendarmodel) ||
       properties.calendarmodel.const !== 'http://www.wikidata.org/entity/Q1985727')
   )
-    return new Set();
+    return [];
   const fields = ['state'];
-  if (fact.value.type === 'value') {
+  if (part.value.type === 'value') {
     if (definition.datatype === 'quantity') {
       fields.push('value', 'amount', 'unit');
       if (isRecord(properties.lowerBound) || isRecord(properties.upperBound)) fields.push('lowerBound', 'upperBound');
@@ -36,10 +38,16 @@ function scalarTargets(id: string, { fact, id: factId }: CharacterFact, release:
     else if (definition.datatype === 'time') fields.push('date');
     else fields.push('value');
   }
-  return new Set(fields.map((field) => controlId(characterFactId(id, factId), 'fact', field)));
+  return fields;
 }
 
-/** A bounded index of current controls prevents a removed row or a hidden scalar from receiving old errors. */
+function partTargets(id: string, part: SnakInput, indexAddress: string, release: Release): string[] {
+  const key = statementHolderKey(part);
+  const address = key === undefined ? indexAddress : `part-${key}`;
+  return partScalarFields(part, release).map((field) => controlId(id, address, field));
+}
+
+/** Current term, rank, statement and nested evidence controls. Unrendered rows keep index addresses. */
 export function characterCorrectionTargets(
   id: string,
   terms: readonly CharacterTerm[],
@@ -49,7 +57,21 @@ export function characterCorrectionTargets(
   const targets = new Set<string>();
   for (const term of terms)
     for (const field of ['language', 'label', 'description', 'aliases']) targets.add(`${id}-${field}-${term.id}`);
-  for (const fact of facts) for (const target of scalarTargets(id, fact, release)) targets.add(target);
+  for (const { fact, id: factId } of facts) {
+    const address = characterFactId(id, factId);
+    for (const section of ['', '-group', '-fact', '-qualifiers', '-references', '-rank'])
+      targets.add(`${address}${section}`);
+    for (const target of partTargets(address, fact, 'fact', release)) targets.add(target);
+    fact.qualifiers?.forEach((part, index) => {
+      for (const target of partTargets(address, part, `qualifier-${index}`, release)) targets.add(target);
+    });
+    fact.references.forEach((reference, group) => {
+      reference.parts.forEach((part, index) => {
+        for (const target of partTargets(address, part, `reference-${group}-part-${index}`, release))
+          targets.add(target);
+      });
+    });
+  }
   return targets;
 }
 
@@ -143,40 +165,56 @@ export function characterCreateCorrections(
     const label = [m.character_create_correction_fact({ number: position + 1 }, o), property]
       .filter(Boolean)
       .join(' · ');
-    // Convert only this exact grouped statement address to the existing scalar presentation vocabulary.
-    const scalar = presentStatementViolations(
+    const address = characterFactId(id, fact.id);
+    const nested = parts.slice(3);
+    if (nested[0] === 'rank' && nested.length === 1) {
+      const target = `${address}-rank`;
+      if (!targets.has(target)) return { ...fallback, label };
+      return {
+        ...fallback,
+        target,
+        label: `${label} · ${m.candidate_rank({}, o)}`,
+        instruction: `${reasons[error.code]} ${m.correction_error_value({}, o)}`,
+      };
+    }
+    const presented = presentStatementViolations(
       [
         {
           ...error,
-          pointer: `/statement${parts
-            .slice(3)
-            .map((part) => `/${escape(part)}`)
-            .join('')}`,
+          pointer: `/statement${nested.map((part) => `/${escape(part)}`).join('')}`,
         },
       ],
       fact.fact,
       release,
       locale,
-      characterFactId(id, fact.id),
+      address,
     )[0]!;
-    if (!targets.has(scalar.target)) return { ...fallback, label };
-    const scalarLabels: Record<string, string> = {
-      state: m.correction_value_state({}, o),
-      value: release.properties[language]?.datatype === 'url' ? m.correction_url({}, o) : m.correction_value({}, o),
-      date: m.correction_date({}, o),
-      amount: m.correction_amount({}, o),
-      unit: m.correction_unit({}, o),
-      lowerBound: m.correction_lower({}, o),
-      upperBound: m.correction_upper({}, o),
-      text: m.correction_value({}, o),
-      language: m.correction_language({}, o),
-    };
-    const field = scalar.target.slice(scalar.target.lastIndexOf('-') + 1);
+    let target = presented.target;
+    let part: SnakInput | StatementInput = fact.fact;
+    if (nested[0] === 'qualifiers' && /^(0|[1-9]\d*)$/.test(nested[1] ?? '')) {
+      const found = fact.fact.qualifiers?.[Number(nested[1])];
+      if (found) part = found;
+    } else if (
+      nested[0] === 'references' &&
+      /^(0|[1-9]\d*)$/.test(nested[1] ?? '') &&
+      nested[2] === 'parts' &&
+      /^(0|[1-9]\d*)$/.test(nested[3] ?? '')
+    ) {
+      const found = fact.fact.references[Number(nested[1])]?.parts[Number(nested[3])];
+      if (found) part = found;
+    }
+    if (part !== fact.fact) {
+      const key = statementHolderKey(part);
+      const field = presented.target.slice(presented.target.lastIndexOf('-') + 1);
+      if (key !== undefined && scalarFields.includes(field) && presented.target !== `${address}-${field}`)
+        target = controlId(address, `part-${key}`, field);
+    }
+    if (!targets.has(target)) return { ...fallback, label };
     return {
       ...fallback,
-      target: scalar.target,
-      label: `${label} · ${scalarLabels[field]}`,
-      instruction: scalar.instruction,
+      target,
+      label: `${label} · ${presented.label}`,
+      instruction: presented.instruction,
     };
   });
 }

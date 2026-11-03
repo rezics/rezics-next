@@ -52,7 +52,7 @@ export function ReferenceReusePanel({
   source: ReuseSource;
   drafts: FactDraft[];
   selected: readonly string[];
-  read: FactsCurrent;
+  read: Pick<FactsCurrent, 'release'> & { public: Pick<FactsCurrent['public'], 'related'> };
   locale: string;
   capture: ReuseCapture;
   applied: { holder: string; property: string; index: number }[];

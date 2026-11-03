@@ -134,10 +134,13 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
       user.selectOptions(canvas.getByRole('combobox', { name: m.character_initial_fact() }), 'schema:url'),
     );
     await click(m.character_add_fact());
-    const scalar = canvas.getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
+    const scalar = within(
+      host.querySelector('[id$="-fact"]') as HTMLElement,
+    ).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
     await act(async () => user.type(scalar, 'https://example.org/private'));
     const scalarProps = Object.keys(scalar).find((key) => key.startsWith('__reactProps$'))!;
     const oldScalar = Reflect.get(scalar, scalarProps).onChange;
+    await click(m.character_create_review());
     await click(m.character_create());
     await waitFor(() => expect(creates).toHaveLength(1));
     await choose(m.character_choose_existing(), characterProfileId);

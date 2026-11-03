@@ -105,6 +105,7 @@ test('successful Character refresh withdraws only the choice and requires delibe
     const authored = input(m.correction_url());
     await type(m.correction_url(), 'https://example.org/private');
     await choose('schema:height');
+    await click(m.character_create_review());
     await click(m.character_create());
     expect(refreshes).toBe(1);
     expect(commands).toHaveLength(1);
@@ -127,6 +128,7 @@ test('successful Character refresh withdraws only the choice and requires delibe
     expect(window.document.activeElement).toBe(rows[1]);
     await type(m.correction_value(), 'c123');
     expect(commands).toHaveLength(1);
+    await click(m.character_create_review());
     await click(m.character_create());
     expect(commands).toHaveLength(2);
     expect(commands[1]!.item).toMatchObject({

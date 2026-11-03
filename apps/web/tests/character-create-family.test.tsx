@@ -90,6 +90,13 @@ test('Character creation keeps multilingual identity, initial facts, correction 
   };
   const canvas = () => within(host);
   const control = (name: string) => canvas().getByRole('textbox', { name }) as HTMLInputElement;
+  const valueUrls = () =>
+    [...host.querySelectorAll('[data-slot="character-initial-fact"]')].flatMap((row) => {
+      const section = row.querySelector('[id$="-fact"]');
+      return section
+        ? [...within(section as HTMLElement).queryAllByRole('textbox', { name: m.correction_url() })]
+        : [];
+    }) as HTMLInputElement[];
   const click = (name: string) => act(async () => user.click(canvas().getByRole('button', { name })));
   const replace = (element: HTMLElement, text: string) =>
     act(async () => {
@@ -105,7 +112,12 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       await user.selectOptions(canvas().getByRole('combobox', { name: m.character_initial_fact() }), property);
       await user.click(canvas().getByRole('button', { name: m.character_add_fact() }));
     });
-  const submit = () => click(m.character_create());
+  const submit = async () => {
+    if (canvas().queryByRole('button', { name: m.correction_retry() })) return click(m.correction_retry());
+    if (canvas().queryByRole('button', { name: m.character_create() })) return click(m.character_create());
+    await click(m.character_create_review());
+    if (canvas().queryByRole('button', { name: m.character_create() })) await click(m.character_create());
+  };
   const writes = (fixture: Fixture) =>
     fixture.calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects');
   const capture = (input: HTMLInputElement) => {
@@ -124,41 +136,37 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     });
     await name('Incarnation draft');
     await add('schema:url');
-    await replace(control(m.correction_url()), 'https://example.org/first');
+    await replace(valueUrls()[0]!, 'https://example.org/first');
     await add('schema:url');
-    const survivor = canvas().getAllByRole('textbox', { name: m.correction_url() })[1] as HTMLInputElement;
+    const survivor = valueUrls()[1]!;
     const survivorId = survivor.id;
     const editSurvivor = capture(survivor);
     await add('schema:url');
-    const removedInput = canvas().getAllByRole('textbox', { name: m.correction_url() })[2] as HTMLInputElement;
+    const removedInput = valueUrls()[2]!;
     const editRemoved = capture(removedInput);
     const remove = async (input: HTMLInputElement) => {
       const row = within(input.closest('[data-slot="character-initial-fact"]')! as HTMLElement);
       await act(async () => user.click(row.getByRole('button', { name: m.recipe_remove_field() })));
       await act(async () => user.click(row.getByRole('button', { name: m.recipe_remove_field() })));
     };
-    await remove(control(m.correction_url()));
+    await remove(valueUrls()[0]!);
     await editSurvivor('https://example.org/survivor');
-    expect(canvas().getAllByRole('textbox', { name: m.correction_url() })).toHaveLength(2);
-    expect(control(m.correction_url()).id).toBe(survivorId);
-    expect(control(m.correction_url()).value).toBe('https://example.org/survivor');
+    expect(valueUrls()).toHaveLength(2);
+    expect(valueUrls()[0]!.id).toBe(survivorId);
+    expect(valueUrls()[0]!.value).toBe('https://example.org/survivor');
     await editSurvivor('https://example.org/replaced-incarnation');
-    expect(control(m.correction_url()).value).toBe('https://example.org/survivor');
+    expect(valueUrls()[0]!.value).toBe('https://example.org/survivor');
     await remove(removedInput);
     await add('schema:url');
     await editRemoved('https://example.org/removed-incarnation');
-    expect(
-      canvas()
-        .getAllByRole('textbox', { name: m.correction_url() })
-        .map((row) => (row as HTMLInputElement).value),
-    ).toEqual(['https://example.org/survivor', '']);
-    const beforeUnavailable = capture(control(m.correction_url()));
+    expect(valueUrls().map((row) => row.value)).toEqual(['https://example.org/survivor', '']);
+    const beforeUnavailable = capture(valueUrls()[0]!);
     await click(m.correction_reload());
     await beforeUnavailable('https://example.org/unavailable-reading');
     expect(survivor.value).toBe('https://example.org/survivor');
     await click(m.correction_reload());
     await beforeUnavailable('https://example.org/retired-reading');
-    expect(control(m.correction_url()).value).toBe('https://example.org/survivor');
+    expect(valueUrls()[0]!.value).toBe('https://example.org/survivor');
 
     const ready = characterProfileFixture();
     await render(ready);
@@ -199,7 +207,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await replace(canvas().getAllByRole('textbox', { name: m.catalogue_create_aliases() })[1]!, '旅の人\n旅行者');
     await add('schema:url');
     expect(window.document.activeElement).toBe(host.querySelector('[data-slot="character-initial-fact"] > div'));
-    await replace(control(m.correction_url()), 'https://example.org/traveler');
+    await replace(valueUrls()[0]!, 'https://example.org/traveler');
     await add('schema:height');
     await replace(control(m.correction_amount()), '+170');
     await act(async () =>
@@ -316,12 +324,12 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await render(refresh, refreshTransport);
     await name('Retained metadata draft');
     await add('schema:url');
-    await replace(control(m.correction_url()), 'https://example.org/retained');
-    const retiredMetadataEdit = capture(control(m.correction_url()));
+    await replace(valueUrls()[0]!, 'https://example.org/retained');
+    const retiredMetadataEdit = capture(valueUrls()[0]!);
     await submit();
     await waitFor(() => expect(loads).toBe(2));
     expect(control(m.catalogue_create_label()).value).toBe('Retained metadata draft');
-    expect(control(m.correction_url()).value).toBe('https://example.org/retained');
+    expect(valueUrls()[0]!.value).toBe('https://example.org/retained');
     expect(host.textContent).not.toContain(m.catalogue_create_uncertain());
     const recovery = within(host.querySelector('[data-slot="character-create-recovery"]') as HTMLElement);
     await act(async () => user.click(recovery.getByRole('button', { name: m.correction_reload() })));
@@ -345,8 +353,8 @@ test('Character creation keeps multilingual identity, initial facts, correction 
       await render(fixture);
       await name('Recovery draft');
       await add('schema:url');
-      await replace(control(m.correction_url()), 'https://example.org/recovery');
-      const beforeCommand = capture(control(m.correction_url()));
+      await replace(valueUrls()[0]!, 'https://example.org/recovery');
+      const beforeCommand = capture(valueUrls()[0]!);
       await submit();
       if (scenario === 'uncertain') {
         await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
@@ -355,7 +363,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
         expect(remove.disabled || remove.closest('fieldset[disabled]') !== null).toBe(true);
         await act(async () => user.click(remove));
         await beforeCommand('https://example.org/late-uncertain');
-        expect(control(m.correction_url()).value).toBe('https://example.org/recovery');
+        expect(valueUrls()[0]!.value).toBe('https://example.org/recovery');
         const original = structuredClone(writes(fixture)[0]);
         await click(m.correction_retry());
         await waitFor(() => expect(canvas().getByRole('link', { name: m.candidate_view_public() })).toBeDefined());
@@ -454,11 +462,11 @@ test('Character creation keeps multilingual identity, initial facts, correction 
     await render(retired, delayed);
     await name('Retired private draft');
     await add('schema:url');
-    await replace(control(m.correction_url()), 'https://example.org/pending');
-    const beforePending = capture(control(m.correction_url()));
+    await replace(valueUrls()[0]!, 'https://example.org/pending');
+    const beforePending = capture(valueUrls()[0]!);
     await submit();
     await beforePending('https://example.org/late-pending');
-    expect(control(m.correction_url()).value).toBe('https://example.org/pending');
+    expect(valueUrls()[0]!.value).toBe('https://example.org/pending');
     await render(retired, delayed, false, false, false);
     await act(async () =>
       finish({ ok: true, id: characterCreatedId, reader: { state: 'ready', href: '/en/retired-reader' } }),

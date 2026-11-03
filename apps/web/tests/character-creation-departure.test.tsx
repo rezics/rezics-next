@@ -154,15 +154,17 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     await act(async () =>
       user.selectOptions(canvas.getByRole('combobox', { name: m.correction_add_qualifier() }), 'schema:inLanguage'),
     );
+    await act(async () =>
+      user.click(within(host.querySelector('[id$="-qualifiers"]') as HTMLElement).getByRole('button', { name: m.correction_add() })),
+    );
     await replace(input(m.correction_value()), 'ja');
     const fact = host.querySelector('[data-slot="character-initial-fact"]') as HTMLElement;
-    await click(m.correction_add_reference(), within(fact));
-    await act(async () =>
-      user.selectOptions(within(fact).getByRole('combobox', { name: m.correction_add_part() }), 'schema:url'),
-    );
-    const citation = within(fact).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
+    const citation = within(fact.querySelector('[id$="-references"]') as HTMLElement).getByRole('textbox', {
+      name: m.correction_url(),
+    }) as HTMLInputElement;
     await replace(citation, 'https://example.org/traveler');
     expect(beforeUnloadIsBlocked()).toBe(true);
+    await click(m.character_create_review());
     await click(m.character_create());
     await waitFor(() =>
       expect(canvas.getByRole('region', { name: m.character_create_correction_summary() })).toBeDefined(),
@@ -209,6 +211,7 @@ test('Character creation protects local work, preserves unknown retries on Stay 
       await router.navigate({ to: '/create' });
     });
     await replace(input(m.catalogue_create_label()), 'Unknown traveler');
+    await click(m.character_create_review());
     await click(m.character_create());
     await waitFor(() => expect(canvas.getByRole('button', { name: m.correction_retry() })).toBeDefined());
     const original = requests[1]!;
@@ -246,6 +249,7 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     });
     expect(input(m.catalogue_create_label()).value).toBe('');
     await replace(input(m.catalogue_create_label()), 'Fresh traveler');
+    await click(m.character_create_review());
     await click(m.character_create());
     await waitFor(() => expect(router.state.location.pathname).toBe('/success'));
     expect(created).toBe(1);

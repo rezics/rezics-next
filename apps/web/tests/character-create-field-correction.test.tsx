@@ -100,7 +100,12 @@ test('CharacterCreate associates exact corrections, retains drafts and attempts,
       if (value) await user.type(element, value);
     });
   const input = (name: string) => canvas.getByRole('textbox', { name }) as HTMLInputElement;
-  const submit = () => click(m.character_create());
+  const submit = async () => {
+    if (canvas.queryByRole('button', { name: m.correction_retry() })) return click(m.correction_retry());
+    if (canvas.queryByRole('button', { name: m.character_create() })) return click(m.character_create());
+    await click(m.character_create_review());
+    if (canvas.queryByRole('button', { name: m.character_create() })) await click(m.character_create());
+  };
   const summary = () => canvas.getByRole('region', { name: m.character_create_correction_summary() });
   const links = () => within(summary()).queryAllByRole('link') as HTMLAnchorElement[];
   const technical = () => JSON.parse(host.querySelector('details pre code')!.textContent!);
@@ -287,24 +292,34 @@ test('CharacterCreate associates exact corrections, retains drafts and attempts,
     await render();
     await replace(input(m.catalogue_create_label()), 'Interleaved facts');
     await addFact('schema:sameAs');
-    await replace(input(m.correction_url()), 'https://example.org/first');
+    const valueUrl = (row: Element) =>
+      within(row.querySelector('[id$="-fact"]') as HTMLElement).getByRole('textbox', {
+        name: m.correction_url(),
+      }) as HTMLInputElement;
+    await replace(valueUrl(host.querySelector('[data-slot="character-initial-fact"]')!), 'https://example.org/first');
     await addFact('schema:height');
     await replace(input(m.correction_amount()), '+');
     await addFact('schema:sameAs');
-    const urls = canvas.getAllByRole('textbox', { name: m.correction_url() });
-    const secondUrl = urls[1]!;
+    const sameAsRows = [...host.querySelectorAll('[data-slot="character-initial-fact"]')].filter((row) =>
+      within(row.querySelector('[id$="-fact"]') as HTMLElement).queryByRole('textbox', { name: m.correction_url() }),
+    );
+    const secondUrl = valueUrl(sameAsRows[1]!);
     const secondUrlId = secondUrl.id;
     const nativeBefore = fixture.calls.length;
     await submit();
     await association(secondUrl);
-    expect(urls[0]!.getAttribute('aria-invalid')).toBeNull();
+    expect(valueUrl(sameAsRows[0]!).getAttribute('aria-invalid')).toBeNull();
     expect(technical()).toContainEqual({
       pointer: '/statements/schema:sameAs/1/value/content',
       code: 'invalid_format',
     });
     await act(async () => user.click(canvas.getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
     await act(async () => user.click(canvas.getAllByRole('button', { name: m.recipe_remove_field() })[0]!));
-    const remainingUrl = input(m.correction_url());
+    const remainingUrl = valueUrl(
+      [...host.querySelectorAll('[data-slot="character-initial-fact"]')].find((row) =>
+        within(row.querySelector('[id$="-fact"]') as HTMLElement).queryByRole('textbox', { name: m.correction_url() }),
+      )!,
+    );
     expect(remainingUrl.id).toBe(secondUrlId);
     await association(remainingUrl);
     expect(technical()).toContainEqual({
