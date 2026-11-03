@@ -20,9 +20,9 @@ The clean base `10a74b6494213a0d72702c68e37dd17b17d6ad10` retains the source-set
 
 The current launch defers focused acceptance until integration for changed source. No new runtime assertions or cost observations have been reached in this attempt. Done-when 4 remains unmeasured pending `bun run --cwd services/kernel check test/rating/growth-segment-terminal.test.ts` on the integrated source.
 
-| Independent population | 256 | 1024 | 4096 |
-| --- | --- | --- | --- |
-| Unrelated Realm-segment votes | Unmeasured | Unmeasured | Unmeasured |
+| Independent population                 | 256        | 1024       | 4096       |
+| -------------------------------------- | ---------- | ---------- | ---------- |
+| Unrelated Realm-segment votes          | Unmeasured | Unmeasured | Unmeasured |
 | Retained Realm-segment command history | Unmeasured | Unmeasured | Unmeasured |
-| Unrelated eligibility votes | Unmeasured | Unmeasured | Unmeasured |
-| Retained eligibility command history | Unmeasured | Unmeasured | Unmeasured |
+| Unrelated eligibility votes            | Unmeasured | Unmeasured | Unmeasured |
+| Retained eligibility command history   | Unmeasured | Unmeasured | Unmeasured |
