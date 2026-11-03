@@ -144,7 +144,7 @@ export type SourceObservationReadResponse = Readonly<{
     clear: Readonly<{ expectedObservation: string | null }>;
   }>;
   selectedObservation?: SourceObservationReadItem;
-  history?: Readonly<{ items: readonly SourceObservationReadItem[]; nextCursor: string | null }>;
+  history?: Readonly<{ items: SourceObservationReadItem[]; nextCursor: string | null }>;
 }>;
 
 type Dependencies = Readonly<{ pool: Pool; routeKey: Uint8Array; clock?: KernelClock }>;
