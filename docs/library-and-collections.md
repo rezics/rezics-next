@@ -458,3 +458,11 @@ verification without foreign IO, receiving/custody/fence placement, every interm
 verification, and exact nested SQL/cost bounds. The live-copy gate supplies none of that missing effects seal. The
 existing SDK/Source/Account/Library/History retirement chain and the held original producer/consumer dependencies
 remain as qualified in the [owner dependency contract](../services/kernel/src/library/README.md#identity-retirement-dependency-retained).
+
+## Uploaded Bangumi collections
+
+The mounted [Bangumi upload](library-import-bangumi.md) previews the owner's bounded JSON, resolves admitted
+provider IDs, accepts explicit unmatched targets and reviews conflicts before native state admission. Current
+released state roles supply the only mapping; scores, measures, notes, source privacy, dates and unknown fields
+remain private evidence with reasons. Native commands retain account fences, revision guards and receipt retry.
+Upload deletion and indexed Library account erasure own retained evidence; no upload publishes a review or vote.
