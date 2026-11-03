@@ -67,6 +67,8 @@ caller binding, bounded continuation lifecycle, concurrent edits, terminal fence
 
 ## Personal facts and one Collection abstraction
 
+Decision: Account member reads add each viewer's own entry state and standard-question score beside each disclosed subject in a private, no-store response.
+
 [Personal AniList uploads](library-import-anilist.md) have mounted private preview, paged review, confirmed apply
 and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field
 remains visible private evidence. This replaces the AniList personal-import deferral only, not other sources or sync.
