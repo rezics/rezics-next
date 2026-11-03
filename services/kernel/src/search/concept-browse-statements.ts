@@ -218,8 +218,7 @@ function validConceptStatementWindow(
   if (page.after.observation !== cursor.observation) return false;
   return page.examined === 0
     ? page.after.slot === cursor.slot && page.after.candidate === cursor.candidate
-    : page.after.slot > cursor.slot ||
-        (page.after.slot === cursor.slot && page.after.candidate > cursor.candidate);
+    : page.after.slot > cursor.slot || (page.after.slot === cursor.slot && page.after.candidate > cursor.candidate);
 }
 
 /** A bounded native witness window composed with a retained closure. Never traverses the graph

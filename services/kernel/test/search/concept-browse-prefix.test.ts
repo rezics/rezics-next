@@ -72,12 +72,12 @@ function fixture(
           options.droppedTerminalCursor && index >= 2
             ? null
             : index >= 2 || (options.brokenCursor && index === 1)
-            ? after
-            : {
-                slot: `00000000-0000-4000-8000-00000000000${index + 1}`,
-                candidate: '00000000-0000-4000-8000-000000000001',
-                observation,
-              },
+              ? after
+              : {
+                  slot: `00000000-0000-4000-8000-00000000000${index + 1}`,
+                  candidate: '00000000-0000-4000-8000-000000000001',
+                  observation,
+                },
       },
       revalidate: async () => {
         validations.push(index);
