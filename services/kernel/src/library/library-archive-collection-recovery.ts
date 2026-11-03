@@ -112,7 +112,11 @@ type ReviewMapping = {
   currentSubjectId: string | null;
   state: 'mapped' | 'unresolved' | 'canonical-changed';
 };
-type PresentationReview = { kind: string | null; releaseDigest: string | null; source: 'mixed' | 'archived' | 'alternative' };
+type PresentationReview = {
+  kind: string | null;
+  releaseDigest: string | null;
+  source: 'mixed' | 'archived' | 'alternative';
+};
 type CreateCommand = {
   input: { title: string; description: string | null; visibility: 'private'; presentationKind?: string | null };
   key: string;
@@ -384,12 +388,16 @@ function recoveryStatus(root: RecoveryRoot) {
     pin: { state: expired ? 'unsupported' : root.pinState, reason: expired ? 'evidence_expired' : root.pinReason },
     fullRestoration: false as const,
     presentation: {
-      state: root.createFailure ? 'unsupported_or_stale' as const
-        : root.nativeCollectionId ? (root.reviewSnapshot?.presentation?.kind ? 'adopted' as const : 'mixed' as const)
-        : 'unattempted' as const,
-      kind: expired ? null : root.reviewSnapshot?.presentation?.kind ?? null,
-      source: expired ? null : root.reviewSnapshot?.presentation?.source ?? null,
-      releaseDigest: expired ? null : root.reviewSnapshot?.presentation?.releaseDigest ?? null,
+      state: root.createFailure
+        ? ('unsupported_or_stale' as const)
+        : root.nativeCollectionId
+          ? root.reviewSnapshot?.presentation?.kind
+            ? ('adopted' as const)
+            : ('mixed' as const)
+          : ('unattempted' as const),
+      kind: expired ? null : (root.reviewSnapshot?.presentation?.kind ?? null),
+      source: expired ? null : (root.reviewSnapshot?.presentation?.source ?? null),
+      releaseDigest: expired ? null : (root.reviewSnapshot?.presentation?.releaseDigest ?? null),
       reason: expired ? 'evidence_expired' : root.createFailure,
     },
     sectionReasons,
@@ -860,8 +868,8 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const next =
       hasMore && last ? collectionCursor(root, collectionId, [last.orderKey, last.sourceOccurrenceId], limit) : null;
     const active = found.presentationKind === null ? null : await activeRelease(deps.pool);
-    const presentationAdmissible = found.presentationKind !== null && !!active &&
-      Object.hasOwn(active.release.types, found.presentationKind);
+    const presentationAdmissible =
+      found.presentationKind !== null && !!active && Object.hasOwn(active.release.types, found.presentationKind);
     const current = await currentRoot(owner, uploadId, signal);
     if (current.state === 'expired')
       return { ...recoveryStatus(current), collection: null, occurrences: [], next: null };
@@ -880,7 +888,12 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             : found.builtinKind
               ? 'built_in_not_restored'
               : null,
-        presentationDisposition: found.presentationKind === null ? 'none' : presentationAdmissible ? 'available_explicit_choice' : 'unsupported_current_meaning',
+        presentationDisposition:
+          found.presentationKind === null
+            ? 'none'
+            : presentationAdmissible
+              ? 'available_explicit_choice'
+              : 'unsupported_current_meaning',
         presentationAdmissible,
         presentationReleaseDigest: active?.digest ?? null,
       },
@@ -1040,14 +1053,19 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     if (kind !== null && (!active || !Object.hasOwn(active.release.types, kind)))
       throw new ProblemError('invalid_request');
     const presentation: PresentationReview = {
-      kind, releaseDigest: active?.digest ?? null,
+      kind,
+      releaseDigest: active?.digest ?? null,
       source: kind === null ? 'mixed' : kind === collection.presentationKind ? 'archived' : 'alternative',
     };
     const snapshot: ReviewSnapshot = {
       presentation,
       createCommand: {
-        input: { title: collection.title, description: collection.description, visibility: 'private',
-          ...(kind === null ? {} : { presentationKind: kind }) },
+        input: {
+          title: collection.title,
+          description: collection.description,
+          visibility: 'private',
+          ...(kind === null ? {} : { presentationKind: kind }),
+        },
         key: commandKey({ ...root, reviewId }, 'create'),
         ...(active ? { reviewedReleaseDigest: active.digest } : {}),
       },
@@ -1228,7 +1246,11 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               reviewId: root.reviewSnapshot.reviewId,
               digest: root.reviewDigest,
               epoch: root.reviewSnapshot.reviewEpoch,
-              presentation: root.reviewSnapshot.presentation ?? { kind: null, releaseDigest: null, source: 'mixed' as const },
+              presentation: root.reviewSnapshot.presentation ?? {
+                kind: null,
+                releaseDigest: null,
+                source: 'mixed' as const,
+              },
               completeOrder: root.reviewSnapshot.completeOrder,
               completeMembership: root.reviewSnapshot.completeMembership,
               selectedOccurrences: root.reviewSnapshot.selectedOccurrenceIds.length,
@@ -1406,19 +1428,35 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           // New reviews persist canonical operands and the key before effect. Historical reviews
           // reconstruct only their original mixed operands; current releases never rewrite this command.
           const original: CreateCommand = snapshot.createCommand ?? {
-            input: { title: snapshot.collection.title, description: snapshot.collection.description, visibility: 'private' },
+            input: {
+              title: snapshot.collection.title,
+              description: snapshot.collection.description,
+              visibility: 'private',
+            },
             key: commandKey(root, 'create'),
           };
           let created: Awaited<ReturnType<typeof commands.createCollection>>;
           try {
-            created = await commands.createCollection(owner, original.input, original.key, original.reviewedReleaseDigest);
+            created = await commands.createCollection(
+              owner,
+              original.input,
+              original.key,
+              original.reviewedReleaseDigest,
+            );
           } catch (error) {
-            if (!snapshot.presentation?.kind || !(error instanceof ProblemError) ||
-                !['invalid_request', 'conflict'].includes(error.code)) throw error;
-            await checkpointEffect(root, leaseId,
+            if (
+              !snapshot.presentation?.kind ||
+              !(error instanceof ProblemError) ||
+              !['invalid_request', 'conflict'].includes(error.code)
+            )
+              throw error;
+            await checkpointEffect(
+              root,
+              leaseId,
               `UPDATE library.collection_archive_recovery SET state='reviewed',create_failure='unsupported_or_stale'
                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-              [root.route, owner.accountId, uploadId, leaseId]);
+              [root.route, owner.accountId, uploadId, leaseId],
+            );
             break;
           }
           await deps.afterNativeEffect?.('create');

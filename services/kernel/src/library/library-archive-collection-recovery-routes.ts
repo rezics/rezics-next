@@ -65,27 +65,47 @@ const manifestV1 = t.Object(
 );
 const manifestSchema = t.Union([
   manifestV1,
-  t.Object({
-    ...manifestV1.properties,
-    version: t.Literal(2),
-    coverage: t.Literal('private-library-owner-facts-v2'),
-    sectionTotals: t.Object(Object.fromEntries(exportSectionsV2.map(section => [section,
-      t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
-    ])), closed),
-  }, closed),
+  t.Object(
+    {
+      ...manifestV1.properties,
+      version: t.Literal(2),
+      coverage: t.Literal('private-library-owner-facts-v2'),
+      sectionTotals: t.Object(
+        Object.fromEntries(
+          exportSectionsV2.map((section) => [
+            section,
+            t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
+          ]),
+        ),
+        closed,
+      ),
+    },
+    closed,
+  ),
 ]);
-const presentationReview = t.Object({
-  kind: nullableText,
-  releaseDigest: nullableText,
-  source: t.Union([t.Literal('mixed'), t.Literal('archived'), t.Literal('alternative')]),
-}, closed);
-const presentationStatus = t.Object({
-  state: t.Union([t.Literal('mixed'), t.Literal('adopted'), t.Literal('unsupported_or_stale'), t.Literal('unattempted')]),
-  kind: nullableText,
-  source: t.Union([presentationReview.properties.source, t.Null()]),
-  releaseDigest: nullableText,
-  reason: nullableText,
-}, closed);
+const presentationReview = t.Object(
+  {
+    kind: nullableText,
+    releaseDigest: nullableText,
+    source: t.Union([t.Literal('mixed'), t.Literal('archived'), t.Literal('alternative')]),
+  },
+  closed,
+);
+const presentationStatus = t.Object(
+  {
+    state: t.Union([
+      t.Literal('mixed'),
+      t.Literal('adopted'),
+      t.Literal('unsupported_or_stale'),
+      t.Literal('unattempted'),
+    ]),
+    kind: nullableText,
+    source: t.Union([presentationReview.properties.source, t.Null()]),
+    releaseDigest: nullableText,
+    reason: nullableText,
+  },
+  closed,
+);
 const coverage = t.Object(
   {
     section: exportSection,
