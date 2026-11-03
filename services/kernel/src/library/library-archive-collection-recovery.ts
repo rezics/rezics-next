@@ -83,6 +83,12 @@ type RecoveryRoot = {
   cancelRequested: boolean;
   inflightAction: 'create' | 'member' | 'note' | 'order' | 'pin' | null;
   inflightSourceId: string | null;
+  inflightEffectId: string | null;
+  inflightEffectKey: string | null;
+  inflightOperands: Record<string, unknown> | null;
+  inflightReviewId: string | null;
+  inflightReviewDigest: string | null;
+  inflightReviewEpoch: number | null;
   leaseId: string | null;
   leaseUntil: string | null;
 };
@@ -181,8 +187,32 @@ type RootRow = {
   cancel_requested: boolean;
   inflight_action: RecoveryRoot['inflightAction'];
   inflight_source_id: string | null;
+  inflight_effect_id: string | null;
+  inflight_effect_key: string | null;
+  inflight_operands: Record<string, unknown> | null;
+  inflight_review_id: string | null;
+  inflight_review_digest: string | null;
+  inflight_review_epoch: string | null;
   lease_id: string | null;
   lease_until: string | null;
+};
+type EffectAction = NonNullable<RecoveryRoot['inflightAction']>;
+type EffectDraft = {
+  action: EffectAction;
+  sourceId: string | null;
+  key: string;
+  operands: Record<string, unknown>;
+};
+type AdmittedEffect = EffectDraft & {
+  id: string;
+  reviewId: string;
+  reviewDigest: string;
+  reviewEpoch: number;
+};
+type EffectCheckpoint = {
+  statement: string;
+  values: unknown[];
+  second?: { statement: string; values: unknown[] };
 };
 type RecoveryDependencies = {
   pool: Pool;
@@ -281,6 +311,12 @@ function rowValue(row: RootRow): RecoveryRoot {
     cancelRequested: row.cancel_requested,
     inflightAction: row.inflight_action,
     inflightSourceId: row.inflight_source_id,
+    inflightEffectId: row.inflight_effect_id,
+    inflightEffectKey: row.inflight_effect_key,
+    inflightOperands: row.inflight_operands,
+    inflightReviewId: row.inflight_review_id,
+    inflightReviewDigest: row.inflight_review_digest,
+    inflightReviewEpoch: row.inflight_review_epoch === null ? null : Number(row.inflight_review_epoch),
     leaseId: row.lease_id,
     leaseUntil: row.lease_until,
   };
@@ -292,6 +328,8 @@ function rootSelect() {
     selected_collection_id::text,selected_count,review_id::text,review_epoch::text,review_key,
     review_request_digest,review_digest,review_snapshot,create_failure,native_collection_id::text,last_added_member_id::text,
     pin_state,pin_reason,pin_revision::text,pin_after::text,cancel_requested,inflight_action,inflight_source_id::text,
+    inflight_effect_id::text,inflight_effect_key,inflight_operands,inflight_review_id::text,
+    inflight_review_digest,inflight_review_epoch::text,
     lease_id::text,lease_until::text
     FROM library.collection_archive_recovery`;
 }
@@ -299,9 +337,14 @@ function rootSelect() {
 async function purgeRecoveryRows(pool: Pool, route: number, accountId: string, uploadId: string) {
   return pool.query(
     `WITH keys AS MATERIALIZED (
-       SELECT record_kind,collection_id,source_id FROM library.collection_archive_recovery_record
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3
-       ORDER BY record_kind,collection_id,source_id LIMIT $4
+       SELECT item.record_kind,item.collection_id,item.source_id FROM library.collection_archive_recovery_record item
+       WHERE item.route=$1 AND item.account_id=$2 AND item.upload_id=$3
+         AND NOT (item.record_kind='occurrence' AND EXISTS (
+           SELECT 1 FROM library.collection_archive_recovery root
+           WHERE root.route=$1 AND root.account_id=$2 AND root.upload_id=$3
+             AND root.inflight_action IN ('member','note','order') AND root.inflight_source_id=item.source_id
+         ))
+       ORDER BY item.record_kind,item.collection_id,item.source_id LIMIT $4
      )
      DELETE FROM library.collection_archive_recovery_record r USING keys k
      WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.record_kind=k.record_kind
@@ -310,45 +353,92 @@ async function purgeRecoveryRows(pool: Pool, route: number, accountId: string, u
   );
 }
 
-async function expireRoot(pool: Pool, row: RecoveryRoot) {
-  await pool.query(
+async function markRootExpired(connection: Pick<PoolClient, 'query'>, row: RecoveryRoot) {
+  const result = await connection.query(
     `UPDATE library.collection_archive_recovery SET state='expired',source_record_count=0,
-       source_membership_complete=false,manifest='{}'::jsonb,coverage='[]'::jsonb,source_pins=NULL,
-       upload_digest=repeat('0',64),selected_collection_id=NULL,selected_count=0,review_id=NULL,
-       review_key=NULL,review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,create_failure=NULL,
-       native_collection_id=NULL,last_added_member_id=NULL,pin_state='none',pin_reason='evidence_expired',
-       pin_revision=NULL,pin_after=NULL,
-       cancel_requested=true,inflight_action=NULL,inflight_source_id=NULL,lease_id=NULL,lease_until=NULL
-     WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
-    [row.route, row.accountId, row.uploadId],
+       source_membership_complete=false,
+       manifest=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN manifest ELSE '{}'::jsonb END,
+       coverage=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN coverage ELSE '[]'::jsonb END,
+       source_pins=NULL,upload_digest=repeat('0',64),create_failure=NULL,
+       selected_collection_id=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN selected_collection_id ELSE NULL END,
+       selected_count=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN selected_count ELSE 0 END,
+       review_id=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN review_id ELSE NULL END,
+       review_key=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN review_key ELSE NULL END,
+       review_request_digest=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN review_request_digest ELSE NULL END,
+       review_digest=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN review_digest ELSE NULL END,
+       review_snapshot=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN review_snapshot ELSE NULL END,
+       native_collection_id=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN native_collection_id ELSE NULL END,
+       last_added_member_id=NULL,
+       pin_state=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN pin_state ELSE 'none' END,
+       pin_reason=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN pin_reason ELSE 'evidence_expired' END,
+       pin_revision=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN pin_revision ELSE NULL END,
+       pin_after=CASE WHEN inflight_action IS NOT NULL AND inflight_effect_id IS NULL THEN pin_after ELSE NULL END,
+       cancel_requested=true,
+       lease_id=CASE WHEN inflight_action IS NULL THEN NULL ELSE lease_id END,
+       lease_until=CASE WHEN inflight_action IS NULL THEN NULL ELSE lease_until END
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state=$4 AND expires_at=$5::timestamptz
+       AND lease_id IS NOT DISTINCT FROM $6::uuid AND lease_until IS NOT DISTINCT FROM $7::timestamptz
+       AND inflight_action IS NOT DISTINCT FROM $8 AND inflight_source_id IS NOT DISTINCT FROM $9::uuid
+       AND inflight_effect_id IS NOT DISTINCT FROM $10::uuid`,
+    [
+      row.route,
+      row.accountId,
+      row.uploadId,
+      row.state,
+      row.expiresAt,
+      row.leaseId,
+      row.leaseUntil,
+      row.inflightAction,
+      row.inflightSourceId,
+      row.inflightEffectId,
+    ],
   );
-  await purgeRecoveryRows(pool, row.route, row.accountId, row.uploadId);
+  return (result.rowCount ?? 0) === 1;
+}
+
+async function expireRoot(pool: Pool, row: RecoveryRoot, clock: KernelClock) {
+  let expired = false;
+  await withConnection(pool, async (connection) => {
+    await connection.query('BEGIN');
+    try {
+      const current = await connection.query<RootRow>(
+        `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+        [row.route, row.accountId, row.uploadId],
+      );
+      const latest = current.rows[0] ? rowValue(current.rows[0]) : null;
+      if (latest?.state === 'expired') expired = true;
+      else if (latest && Date.parse(latest.expiresAt) <= clock().getTime())
+        expired = await markRootExpired(connection, latest);
+      await connection.query('COMMIT');
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    }
+  });
+  if (expired) await purgeRecoveryRows(pool, row.route, row.accountId, row.uploadId);
 }
 
 async function expireOwnerEvidence(
   connection: Pick<PoolClient, 'query'>,
   route: number,
   accountId: string,
-  now: string,
+  clock: KernelClock,
 ) {
-  await connection.query(
-    `UPDATE library.collection_archive_recovery SET state='expired',source_record_count=0,
-       source_membership_complete=false,manifest='{}'::jsonb,coverage='[]'::jsonb,source_pins=NULL,
-       upload_digest=repeat('0',64),selected_collection_id=NULL,selected_count=0,review_id=NULL,
-       review_key=NULL,review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,create_failure=NULL,
-       native_collection_id=NULL,last_added_member_id=NULL,pin_state='none',pin_reason='evidence_expired',
-       pin_revision=NULL,pin_after=NULL,
-       cancel_requested=true,inflight_action=NULL,inflight_source_id=NULL,lease_id=NULL,lease_until=NULL
-     WHERE route=$1 AND account_id=$2 AND expires_at<=$3::timestamptz AND state<>'expired'
-       AND (lease_id IS NULL OR lease_until<=$3::timestamptz)`,
-    [route, accountId, now],
+  const roots = await connection.query<RootRow>(
+    `${rootSelect()} WHERE route=$1 AND account_id=$2 ORDER BY upload_id FOR UPDATE`,
+    [route, accountId],
   );
+  const now = clock().getTime();
+  for (const row of roots.rows.map(rowValue))
+    if (row.state !== 'expired' && Date.parse(row.expiresAt) <= now) await markRootExpired(connection, row);
   const removedRecords = await connection.query(
     `WITH keys AS MATERIALIZED (
        SELECT r.upload_id,x.record_kind,x.collection_id,x.source_id
        FROM library.collection_archive_recovery r
        JOIN library.collection_archive_recovery_record x USING(route,account_id,upload_id)
        WHERE r.route=$1 AND r.account_id=$2 AND r.state='expired'
+         AND NOT COALESCE(x.record_kind='occurrence'
+           AND r.inflight_action IN ('member','note','order') AND r.inflight_source_id=x.source_id,false)
        ORDER BY r.upload_id,x.record_kind,x.collection_id,x.source_id LIMIT $3
      )
      DELETE FROM library.collection_archive_recovery_record x USING keys k
@@ -360,6 +450,7 @@ async function expireOwnerEvidence(
     `WITH keys AS MATERIALIZED (
        SELECT r.upload_id FROM library.collection_archive_recovery r
        WHERE r.route=$1 AND r.account_id=$2 AND r.state='expired'
+         AND r.inflight_action IS NULL
          AND NOT EXISTS (SELECT 1 FROM library.collection_archive_recovery_record x
            WHERE x.route=r.route AND x.account_id=r.account_id AND x.upload_id=r.upload_id)
        ORDER BY r.upload_id LIMIT $3
@@ -368,6 +459,59 @@ async function expireOwnerEvidence(
      WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=k.upload_id`,
     [route, accountId, Math.max(0, cleanupLimit - (removedRecords.rowCount ?? 0))],
   );
+}
+
+async function settleCancelledRecovery(pool: Pool, row: RecoveryRoot, clock: KernelClock) {
+  await withConnection(pool, async (connection) => {
+    await connection.query('BEGIN');
+    try {
+      const current = await connection.query<{
+        state: RecoveryState;
+        expires_at: string;
+        lease_id: string | null;
+        lease_until: string | null;
+        review_epoch: string;
+        cancel_requested: boolean;
+        inflight_action: RecoveryRoot['inflightAction'];
+        inflight_effect_id: string | null;
+      }>(
+        `SELECT state,expires_at::text,lease_id::text,lease_until::text,review_epoch::text,
+           cancel_requested,inflight_action,inflight_effect_id::text
+         FROM library.collection_archive_recovery
+         WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+        [row.route, row.accountId, row.uploadId],
+      );
+      const latest = current.rows[0];
+      const now = clock().getTime();
+      if (
+        latest?.state === 'applying' &&
+        latest.cancel_requested &&
+        latest.inflight_action === null &&
+        latest.inflight_effect_id === null &&
+        Date.parse(latest.expires_at) > now
+      )
+        await connection.query(
+          `UPDATE library.collection_archive_recovery SET state='cancelled',lease_id=NULL,lease_until=NULL
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='applying'
+             AND cancel_requested=true AND inflight_action IS NULL AND inflight_effect_id IS NULL
+             AND expires_at>$4::timestamptz AND lease_id IS NOT DISTINCT FROM $5::uuid
+             AND lease_until IS NOT DISTINCT FROM $6::timestamptz AND review_epoch=$7`,
+          [
+            row.route,
+            row.accountId,
+            row.uploadId,
+            new Date(now).toISOString(),
+            latest.lease_id,
+            latest.lease_until,
+            latest.review_epoch,
+          ],
+        );
+      await connection.query('COMMIT');
+    } catch (error) {
+      await connection.query('ROLLBACK');
+      throw error;
+    }
+  });
 }
 
 function recoveryStatus(root: RecoveryRoot) {
@@ -554,21 +698,28 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const found = result.rows[0];
     if (!found) throw notFound();
     let root = rowValue(found);
-    const now = deps.clock().getTime();
-    if (
-      Date.parse(root.expiresAt) <= now &&
-      root.state !== 'expired' &&
-      !(root.leaseUntil && Date.parse(root.leaseUntil) > now)
-    ) {
-      await expireRoot(deps.pool, root);
+    if (Date.parse(root.expiresAt) <= deps.clock().getTime() && root.state !== 'expired') {
+      await expireRoot(deps.pool, root, deps.clock);
       result = await deps.pool.query<RootRow>(`${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3`, [
         route,
         owner.accountId,
         uploadId,
       ]);
-      root = rowValue(result.rows[0]!);
-    } else if (root.state === 'expired') {
+      if (!result.rows[0]) throw notFound();
+      root = rowValue(result.rows[0]);
+    }
+    if (root.state === 'expired') {
       await purgeRecoveryRows(deps.pool, route, owner.accountId, uploadId);
+    }
+    if (root.state === 'applying' && root.cancelRequested && root.inflightAction === null) {
+      await settleCancelledRecovery(deps.pool, root, deps.clock);
+      result = await deps.pool.query<RootRow>(`${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3`, [
+        route,
+        owner.accountId,
+        uploadId,
+      ]);
+      if (!result.rows[0]) throw notFound();
+      root = rowValue(result.rows[0]);
     }
     return root;
   }
@@ -637,7 +788,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
           `library.archive.recovery:${owner.accountId}`,
         ]);
-        await expireOwnerEvidence(connection, route, owner.accountId, createdAt);
+        await expireOwnerEvidence(connection, route, owner.accountId, deps.clock);
         const count = await connection.query<{ count: string }>(
           `SELECT count(*)::text AS count FROM library.collection_archive_recovery
            WHERE route=$1 AND account_id=$2`,
@@ -1164,15 +1315,25 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           inflight_action: RecoveryRoot['inflightAction'];
           lease_id: string | null;
           cancel_requested: boolean;
+          expires_at: string;
         }>(
           `SELECT state,review_epoch::text,review_id::text,review_key,review_request_digest,
-             native_collection_id::text,last_added_member_id::text,inflight_action,lease_id::text,cancel_requested
+             native_collection_id::text,last_added_member_id::text,inflight_action,lease_id::text,
+             cancel_requested,expires_at::text
            FROM library.collection_archive_recovery
            WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
           [root.route, owner.accountId, uploadId],
         );
         const latest = current.rows[0];
-        if (!latest) throw conflict();
+        const admittedAt = deps.clock().getTime();
+        if (
+          !latest ||
+          latest.state === 'applying' ||
+          latest.state === 'cancelled' ||
+          latest.state === 'expired' ||
+          Date.parse(latest.expires_at) <= admittedAt
+        )
+          throw conflict();
         if (latest.review_key === requestKey) {
           if (latest.review_request_digest !== requestDigest) throw new ProblemError('idempotency_conflict');
           await connection.query('COMMIT');
@@ -1202,13 +1363,14 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
              AND recovery_record.source_id=u.source_id`,
           [root.route, owner.accountId, uploadId, reviewId, JSON.stringify(occurrenceUpdates), input.collectionId],
         );
-        await connection.query(
+        const updated = await connection.query(
           `UPDATE library.collection_archive_recovery SET state='reviewed',selected_collection_id=$4::uuid,
              selected_count=$5,review_id=$6::uuid,review_epoch=review_epoch+1,review_key=$7,
              review_request_digest=$8,review_digest=$9,review_snapshot=$10::jsonb,native_collection_id=NULL,
              last_added_member_id=NULL,pin_state=$11,pin_reason=$12,pin_revision=$13::bigint,pin_after=$14::uuid,
              cancel_requested=false,create_failure=NULL
-           WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state=$15 AND review_epoch=$16
+             AND expires_at>$17::timestamptz`,
           [
             root.route,
             owner.accountId,
@@ -1224,8 +1386,12 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             pinReason,
             pinRevision,
             pinAfter,
+            latest.state,
+            latest.review_epoch,
+            new Date(admittedAt).toISOString(),
           ],
         );
+        if ((updated.rowCount ?? 0) !== 1) throw conflict();
         await connection.query('COMMIT');
       } catch (error) {
         await connection.query('ROLLBACK');
@@ -1272,12 +1438,41 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   }
 
   async function invalidateStaleReview(root: RecoveryRoot) {
-    await deps.pool.query(
-      `UPDATE library.collection_archive_recovery SET state='preview',review_id=NULL,review_key=NULL,
-         review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,native_collection_id=NULL
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='reviewed'`,
-      [root.route, root.accountId, root.uploadId],
-    );
+    await withConnection(deps.pool, async (connection) => {
+      await connection.query('BEGIN');
+      try {
+        const current = await connection.query<{
+          state: RecoveryState;
+          review_id: string | null;
+          review_epoch: string;
+          expires_at: string;
+        }>(
+          `SELECT state,review_id::text,review_epoch::text,expires_at::text
+           FROM library.collection_archive_recovery
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [root.route, root.accountId, root.uploadId],
+        );
+        const row = current.rows[0];
+        const now = deps.clock().getTime();
+        if (
+          row?.state === 'reviewed' &&
+          row.review_id === root.reviewId &&
+          Number(row.review_epoch) === root.reviewEpoch &&
+          Date.parse(row.expires_at) > now
+        )
+          await connection.query(
+            `UPDATE library.collection_archive_recovery SET state='preview',review_id=NULL,review_key=NULL,
+               review_request_digest=NULL,review_digest=NULL,review_snapshot=NULL,native_collection_id=NULL
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='reviewed'
+               AND review_id=$4::uuid AND review_epoch=$5 AND expires_at>$6::timestamptz`,
+            [root.route, root.accountId, root.uploadId, root.reviewId, root.reviewEpoch, new Date(now).toISOString()],
+          );
+        await connection.query('COMMIT');
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      }
+    });
   }
 
   async function reviewedMappingsCurrent(owner: OwnerActor, snapshot: ReviewSnapshot, signal?: AbortSignal) {
@@ -1300,20 +1495,93 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return true;
   }
 
-  async function acquireLease(root: RecoveryRoot) {
-    const leaseId = newId(root.route);
-    const now = deps.clock().toISOString();
-    const until = new Date(Date.parse(now) + 30_000).toISOString();
-    const result = await deps.pool.query<{ lease_id: string | null }>(
-      `UPDATE library.collection_archive_recovery SET lease_id=$4::uuid,lease_until=$5::timestamptz,
-         state='applying'
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state IN ('reviewed','applying')
-         AND (lease_until IS NULL OR lease_until<=$6::timestamptz)
-       RETURNING lease_id::text`,
-      [root.route, root.accountId, root.uploadId, leaseId, until, now],
-    );
-    return result.rows[0]?.lease_id ?? null;
+  function admittedEffect(root: RecoveryRoot): AdmittedEffect | null {
+    if (root.inflightAction === null) return null;
+    if (
+      !root.inflightEffectId ||
+      !root.inflightEffectKey ||
+      !root.inflightOperands ||
+      !root.inflightReviewId ||
+      !root.inflightReviewDigest ||
+      root.inflightReviewEpoch === null
+    )
+      throw conflict();
+    return {
+      action: root.inflightAction,
+      sourceId: root.inflightSourceId,
+      id: root.inflightEffectId,
+      key: root.inflightEffectKey,
+      operands: root.inflightOperands,
+      reviewId: root.inflightReviewId,
+      reviewDigest: root.inflightReviewDigest,
+      reviewEpoch: root.inflightReviewEpoch,
+    };
   }
+
+  async function acquireLease(root: RecoveryRoot, confirmation: { reviewId: string; digest: string }) {
+    const leaseId = newId(root.route);
+    return withConnection(deps.pool, async (connection) => {
+      await connection.query('BEGIN');
+      try {
+        const selected = await connection.query<RootRow>(
+          `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [root.route, root.accountId, root.uploadId],
+        );
+        const current = selected.rows[0] ? rowValue(selected.rows[0]) : null;
+        const now = deps.clock().getTime();
+        const recovering = current !== null && current.inflightAction !== null;
+        const expiredRecovery = current?.state === 'expired' && recovering;
+        const matchesReview = recovering
+          ? current?.inflightReviewId === confirmation.reviewId &&
+            current.inflightReviewDigest === confirmation.digest
+          : current?.reviewId === confirmation.reviewId && current.reviewDigest === confirmation.digest;
+        if (
+          !current ||
+          !matchesReview ||
+          (!expiredRecovery && current.leaseUntil !== null && Date.parse(current.leaseUntil) > now) ||
+          (recovering
+            ? current.inflightEffectId !== root.inflightEffectId ||
+              (!expiredRecovery &&
+                (current.state !== 'applying' || Date.parse(current.expiresAt) <= now))
+            : (current.state !== 'reviewed' && current.state !== 'applying') ||
+              Date.parse(current.expiresAt) <= now ||
+              current.cancelRequested)
+        ) {
+          await connection.query('COMMIT');
+          return null;
+        }
+        const until = new Date(Math.min(now + 30_000, recovering ? now + 30_000 : Date.parse(current.expiresAt)));
+        const updated = await connection.query<{ lease_id: string | null }>(
+          `UPDATE library.collection_archive_recovery SET lease_id=$4::uuid,lease_until=$5::timestamptz,
+             state=CASE WHEN state IN ('reviewed','applying') THEN 'applying' ELSE state END
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state=$6
+             AND lease_id IS NOT DISTINCT FROM $7::uuid AND lease_until IS NOT DISTINCT FROM $8::timestamptz
+             AND review_id IS NOT DISTINCT FROM $9::uuid AND review_epoch=$10
+             AND inflight_effect_id IS NOT DISTINCT FROM $11::uuid
+           RETURNING lease_id::text`,
+          [
+            root.route,
+            root.accountId,
+            root.uploadId,
+            leaseId,
+            until.toISOString(),
+            current.state,
+            current.leaseId,
+            current.leaseUntil,
+            recovering ? current.reviewId : confirmation.reviewId,
+            current.reviewEpoch,
+            current.inflightEffectId,
+          ],
+        );
+        await connection.query('COMMIT');
+        return updated.rows[0]?.lease_id ?? null;
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      }
+    });
+  }
+
   async function releaseLease(root: RecoveryRoot, leaseId: string) {
     await deps.pool.query(
       `UPDATE library.collection_archive_recovery SET lease_id=NULL,lease_until=NULL
@@ -1323,40 +1591,121 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   }
 
   async function refreshLease(root: RecoveryRoot, leaseId: string) {
-    await deps.pool.query(
-      `UPDATE library.collection_archive_recovery SET lease_until=$5::timestamptz
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid AND state='applying'`,
-      [root.route, root.accountId, root.uploadId, leaseId, new Date(deps.clock().getTime() + 30_000).toISOString()],
-    );
+    return withConnection(deps.pool, async (connection) => {
+      await connection.query('BEGIN');
+      try {
+        const selected = await connection.query<RootRow>(
+          `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [root.route, root.accountId, root.uploadId],
+        );
+        const current = selected.rows[0] ? rowValue(selected.rows[0]) : null;
+        const now = deps.clock().getTime();
+        if (
+          !current ||
+          current.state !== 'applying' ||
+          current.leaseId !== leaseId ||
+          !current.leaseUntil ||
+          Date.parse(current.leaseUntil) <= now ||
+          Date.parse(current.expiresAt) <= now ||
+          current.cancelRequested ||
+          current.inflightAction !== null
+        ) {
+          await connection.query('COMMIT');
+          return false;
+        }
+        const until = new Date(Math.min(now + 30_000, Date.parse(current.expiresAt))).toISOString();
+        const updated = await connection.query(
+          `UPDATE library.collection_archive_recovery SET lease_until=$5::timestamptz
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid AND state='applying'
+             AND lease_until>$6::timestamptz AND expires_at>$6::timestamptz AND cancel_requested=false
+             AND inflight_action IS NULL`,
+          [root.route, root.accountId, root.uploadId, leaseId, until, new Date(now).toISOString()],
+        );
+        await connection.query('COMMIT');
+        return (updated.rowCount ?? 0) === 1;
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      }
+    });
   }
 
-  async function beginEffect(
-    root: RecoveryRoot,
-    leaseId: string,
-    action: NonNullable<RecoveryRoot['inflightAction']>,
-    sourceId: string | null = null,
-  ) {
-    const started = await deps.pool.query(
-      `UPDATE library.collection_archive_recovery SET inflight_action=$5,inflight_source_id=$6::uuid
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid
-         AND inflight_action IS NULL AND cancel_requested=false`,
-      [root.route, root.accountId, root.uploadId, leaseId, action, sourceId],
-    );
-    if ((started.rowCount ?? 0) === 1) return true;
-    const current = await deps.pool.query<{
-      inflight_action: RecoveryRoot['inflightAction'];
-      inflight_source_id: string | null;
-    }>(
-      `SELECT inflight_action,inflight_source_id::text FROM library.collection_archive_recovery
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-      [root.route, root.accountId, root.uploadId, leaseId],
-    );
-    return current.rows[0]?.inflight_action === action && current.rows[0]?.inflight_source_id === sourceId;
+  async function beginEffect(root: RecoveryRoot, leaseId: string, draft: EffectDraft) {
+    const id = newId(root.route);
+    const serializedOperands = JSON.stringify(draft.operands);
+    if (Buffer.byteLength(serializedOperands, 'utf8') > 65_536) throw conflict();
+    return withConnection(deps.pool, async (connection) => {
+      await connection.query('BEGIN');
+      try {
+        const selected = await connection.query<RootRow>(
+          `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [root.route, root.accountId, root.uploadId],
+        );
+        const current = selected.rows[0] ? rowValue(selected.rows[0]) : null;
+        const now = deps.clock().getTime();
+        if (
+          !current ||
+          current.state !== 'applying' ||
+          current.leaseId !== leaseId ||
+          !current.leaseUntil ||
+          Date.parse(current.leaseUntil) <= now ||
+          Date.parse(current.expiresAt) <= now ||
+          current.cancelRequested ||
+          current.inflightAction !== null ||
+          current.reviewId !== root.reviewId ||
+          current.reviewDigest !== root.reviewDigest ||
+          current.reviewEpoch !== root.reviewEpoch ||
+          !current.reviewId ||
+          !current.reviewDigest
+        ) {
+          await connection.query('COMMIT');
+          return null;
+        }
+        const updated = await connection.query(
+          `UPDATE library.collection_archive_recovery SET inflight_action=$5,inflight_source_id=$6::uuid,
+             inflight_effect_id=$7::uuid,inflight_effect_key=$8,inflight_operands=$9::jsonb,
+             inflight_review_id=$10::uuid,inflight_review_digest=$11,inflight_review_epoch=$12
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid
+             AND state='applying' AND lease_until>$13::timestamptz AND expires_at>$13::timestamptz
+             AND cancel_requested=false AND inflight_action IS NULL AND review_id=$10::uuid
+             AND review_digest=$11 AND review_epoch=$12`,
+          [
+            root.route,
+            root.accountId,
+            root.uploadId,
+            leaseId,
+            draft.action,
+            draft.sourceId,
+            id,
+            draft.key,
+            serializedOperands,
+            current.reviewId,
+            current.reviewDigest,
+            current.reviewEpoch,
+            new Date(now).toISOString(),
+          ],
+        );
+        await connection.query('COMMIT');
+        return (updated.rowCount ?? 0) === 1
+          ? {
+              ...draft,
+              id,
+              reviewId: current.reviewId,
+              reviewDigest: current.reviewDigest,
+              reviewEpoch: current.reviewEpoch,
+            }
+          : null;
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      }
+    });
   }
 
   async function checkpointEffect(
     root: RecoveryRoot,
     leaseId: string,
+    effect: AdmittedEffect,
     statement: string,
     values: unknown[],
     second?: { statement: string; values: unknown[] },
@@ -1364,12 +1713,48 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     await withConnection(deps.pool, async (connection) => {
       await connection.query('BEGIN');
       try {
-        await connection.query(statement, values);
-        if (second) await connection.query(second.statement, second.values);
+        const applied = await connection.query(statement, values);
+        if ((applied.rowCount ?? 0) !== 1) throw conflict();
+        if (second) {
+          const appliedSecond = await connection.query(second.statement, second.values);
+          if ((appliedSecond.rowCount ?? 0) !== 1) throw conflict();
+        }
         const cleared = await connection.query(
-          `UPDATE library.collection_archive_recovery SET inflight_action=NULL,inflight_source_id=NULL
-           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-          [root.route, root.accountId, root.uploadId, leaseId],
+          `UPDATE library.collection_archive_recovery SET inflight_action=NULL,inflight_source_id=NULL,
+             inflight_effect_id=NULL,inflight_effect_key=NULL,inflight_operands=NULL,inflight_review_id=NULL,
+             inflight_review_digest=NULL,inflight_review_epoch=NULL,
+             manifest=CASE WHEN state='expired' THEN '{}'::jsonb ELSE manifest END,
+             coverage=CASE WHEN state='expired' THEN '[]'::jsonb ELSE coverage END,
+             source_pins=CASE WHEN state='expired' THEN NULL ELSE source_pins END,
+             selected_collection_id=CASE WHEN state='expired' THEN NULL ELSE selected_collection_id END,
+             selected_count=CASE WHEN state='expired' THEN 0 ELSE selected_count END,
+             review_id=CASE WHEN state='expired' THEN NULL ELSE review_id END,
+             review_key=CASE WHEN state='expired' THEN NULL ELSE review_key END,
+             review_request_digest=CASE WHEN state='expired' THEN NULL ELSE review_request_digest END,
+             review_digest=CASE WHEN state='expired' THEN NULL ELSE review_digest END,
+             review_snapshot=CASE WHEN state='expired' THEN NULL ELSE review_snapshot END,
+             native_collection_id=CASE WHEN state='expired' THEN NULL ELSE native_collection_id END,
+             pin_state=CASE WHEN state='expired' THEN 'none' ELSE pin_state END,
+             pin_reason=CASE WHEN state='expired' THEN 'evidence_expired' ELSE pin_reason END,
+             pin_revision=CASE WHEN state='expired' THEN NULL ELSE pin_revision END,
+             pin_after=CASE WHEN state='expired' THEN NULL ELSE pin_after END
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid
+             AND inflight_effect_id=$5::uuid AND inflight_action=$6
+             AND inflight_source_id IS NOT DISTINCT FROM $7::uuid
+             AND inflight_review_id=$8::uuid AND inflight_review_digest=$9
+             AND inflight_review_epoch=$10`,
+          [
+            root.route,
+            root.accountId,
+            root.uploadId,
+            leaseId,
+            effect.id,
+            effect.action,
+            effect.sourceId,
+            effect.reviewId,
+            effect.reviewDigest,
+            effect.reviewEpoch,
+          ],
         );
         if ((cleared.rowCount ?? 0) !== 1) throw conflict();
         await connection.query('COMMIT');
@@ -1378,6 +1763,232 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         throw error;
       }
     });
+  }
+
+  async function executeEffect(owner: OwnerActor, root: RecoveryRoot, leaseId: string, effect: AdmittedEffect, signal?: AbortSignal) {
+    if (effect.action === 'pin' && effect.operands.collectionId === null) {
+      await checkpointEffect(
+        root,
+        leaseId,
+        effect,
+        `UPDATE library.collection_archive_recovery SET pin_state='unsupported',pin_reason='native_collection_missing'
+         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid AND inflight_effect_id=$5::uuid`,
+        [root.route, owner.accountId, root.uploadId, leaseId, effect.id],
+      );
+      return;
+    }
+    const operandString = (name: string) => {
+      const value = effect.operands[name];
+      if (typeof value !== 'string') throw conflict();
+      return value;
+    };
+    const operandNullableString = (name: string) => {
+      const value = effect.operands[name];
+      if (value !== null && typeof value !== 'string') throw conflict();
+      return value;
+    };
+    const sourceId = effect.sourceId;
+    let checkpoint: EffectCheckpoint;
+    try {
+      if (effect.action === 'create') {
+        const title = operandString('title');
+        const description = operandNullableString('description');
+        if (effect.operands.visibility !== 'private') throw conflict();
+        const presentationKind = effect.operands.presentationKind;
+        if (presentationKind !== undefined && presentationKind !== null && typeof presentationKind !== 'string')
+          throw conflict();
+        const reviewedReleaseDigest = effect.operands.reviewedReleaseDigest;
+        if (reviewedReleaseDigest !== undefined && reviewedReleaseDigest !== null && typeof reviewedReleaseDigest !== 'string')
+          throw conflict();
+        const created = await commands.createCollection(
+          owner,
+          {
+            title,
+            description,
+            visibility: 'private',
+            ...(presentationKind === undefined ? {} : { presentationKind }),
+          },
+          effect.key,
+          typeof reviewedReleaseDigest === 'string' ? reviewedReleaseDigest : undefined,
+        );
+        checkpoint = {
+          statement: `UPDATE library.collection_archive_recovery SET native_collection_id=
+               CASE WHEN state='expired' THEN NULL ELSE $4::uuid END,create_failure=NULL
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$5::uuid
+               AND inflight_effect_id=$6::uuid`,
+          values: [root.route, owner.accountId, root.uploadId, created.value.id, leaseId, effect.id],
+        };
+      } else if (effect.action === 'member') {
+        if (!sourceId) throw conflict();
+        const collectionId = operandString('collectionId');
+        const subjectId = operandString('subjectId');
+        const after = operandNullableString('after');
+        const member = await commands.addMember(
+          owner,
+          collectionId,
+          { subjectId, ...(after === null ? {} : { after }) },
+          effect.key,
+        );
+        checkpoint = {
+          statement: `UPDATE library.collection_archive_recovery_record SET native_member_id=$7::uuid,add_state='applied'
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+               AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
+          values: [root.route, owner.accountId, root.uploadId, collectionId, sourceId, effect.reviewId, member.value.id],
+          second: {
+            statement: `UPDATE library.collection_archive_recovery SET last_added_member_id=
+                 CASE WHEN state='expired' THEN NULL ELSE $4::uuid END
+               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$5::uuid
+                 AND inflight_effect_id=$6::uuid`,
+            values: [root.route, owner.accountId, root.uploadId, member.value.id, leaseId, effect.id],
+          },
+        };
+      } else if (effect.action === 'note') {
+        if (!sourceId) throw conflict();
+        const collectionId = operandString('collectionId');
+        const memberId = operandString('memberId');
+        const note = operandNullableString('note');
+        await commands.updateMemberNote(owner, collectionId, memberId, { note }, effect.key);
+        checkpoint = {
+          statement: `UPDATE library.collection_archive_recovery_record SET note_state='applied'
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+               AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
+          values: [root.route, owner.accountId, root.uploadId, collectionId, sourceId, effect.reviewId],
+        };
+      } else if (effect.action === 'order') {
+        if (!sourceId) throw conflict();
+        const collectionId = operandString('collectionId');
+        const memberId = operandString('memberId');
+        const after = operandNullableString('after');
+        await commands.moveMember(owner, collectionId, memberId, { after }, effect.key);
+        checkpoint = {
+          statement: `UPDATE library.collection_archive_recovery_record SET order_state='applied'
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+               AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
+          values: [root.route, owner.accountId, root.uploadId, collectionId, sourceId, effect.reviewId],
+        };
+      } else {
+        const collectionId = effect.operands.collectionId;
+        const revision = effect.operands.revision;
+        const after = operandNullableString('after');
+        if (typeof collectionId !== 'string' || typeof revision !== 'number' || !Number.isSafeInteger(revision))
+          throw conflict();
+        await pins().mutate(
+          owner,
+          collectionId,
+          { revision, ...(after === null ? { after: null } : { after }) },
+          effect.key,
+        );
+        checkpoint = {
+          statement: `UPDATE library.collection_archive_recovery SET pin_state='applied'
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid
+               AND inflight_effect_id=$5::uuid`,
+          values: [root.route, owner.accountId, root.uploadId, leaseId, effect.id],
+        };
+      }
+    } catch (error) {
+      if (
+        effect.action === 'create' &&
+        typeof effect.operands.presentationKind === 'string' &&
+        error instanceof ProblemError &&
+        ['invalid_request', 'conflict'].includes(error.code)
+      ) {
+        await checkpointEffect(
+          root,
+          leaseId,
+          effect,
+          `UPDATE library.collection_archive_recovery SET state=CASE WHEN state='expired' THEN state ELSE 'reviewed' END,
+             create_failure=CASE WHEN state='expired' THEN NULL ELSE 'unsupported_or_stale' END
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid AND inflight_effect_id=$5::uuid`,
+          [root.route, owner.accountId, root.uploadId, leaseId, effect.id],
+        );
+        return;
+      }
+      if (effect.action === 'member') {
+        const failure = itemFailure(error, 'add');
+        if (failure && sourceId) {
+          checkpoint = {
+            statement: `UPDATE library.collection_archive_recovery_record SET add_state=$7,outcome_reason=$8
+               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+                 AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
+            values: [
+              root.route,
+              owner.accountId,
+              root.uploadId,
+              operandString('collectionId'),
+              sourceId,
+              effect.reviewId,
+              failure.state,
+              failure.reason,
+            ],
+          };
+        } else throw error;
+      } else if (effect.action === 'note') {
+        const failure = itemFailure(error, 'note');
+        if (failure && sourceId) {
+          checkpoint = {
+            statement: `UPDATE library.collection_archive_recovery_record SET note_state='failed',outcome_reason=$7
+               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+                 AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
+            values: [root.route, owner.accountId, root.uploadId, operandString('collectionId'), sourceId, effect.reviewId, failure.reason],
+          };
+        } else throw error;
+      } else if (effect.action === 'order') {
+        const failure = itemFailure(error, 'order');
+        if (failure && sourceId) {
+          checkpoint = {
+            statement: `UPDATE library.collection_archive_recovery_record SET order_state=$7,outcome_reason=$8
+               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
+                 AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
+            values: [
+              root.route,
+              owner.accountId,
+              root.uploadId,
+              operandString('collectionId'),
+              sourceId,
+              effect.reviewId,
+              failure.state,
+              failure.reason,
+            ],
+          };
+        } else throw error;
+      } else if (effect.action === 'pin' && error instanceof ProblemError && error.code === 'conflict') {
+        checkpoint = {
+          statement: `UPDATE library.collection_archive_recovery SET pin_state='unsupported',pin_reason='current_pin_revision_changed'
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid
+               AND inflight_effect_id=$5::uuid`,
+          values: [root.route, owner.accountId, root.uploadId, leaseId, effect.id],
+        };
+      } else throw error;
+      await checkpointEffect(root, leaseId, effect, checkpoint.statement, checkpoint.values, checkpoint.second);
+      return;
+    }
+    await deps.afterNativeEffect?.(effect.action, effect.sourceId ?? undefined);
+    await admit(owner);
+    abortIfRequested(signal);
+    await checkpointEffect(root, leaseId, effect, checkpoint.statement, checkpoint.values, checkpoint.second);
+  }
+
+  async function continueLease(
+    owner: OwnerActor,
+    root: RecoveryRoot,
+    leaseId: string,
+    confirmation: { reviewId: string; digest: string },
+  ) {
+    if (await refreshLease(root, leaseId)) return leaseId;
+    const current = await load(owner, root.uploadId);
+    if (
+      current.state !== 'applying' ||
+      current.cancelRequested ||
+      current.inflightAction !== null ||
+      current.reviewId !== confirmation.reviewId ||
+      current.reviewDigest !== confirmation.digest
+    ) {
+      await releaseLease(root, leaseId);
+      return null;
+    }
+    const next = await acquireLease(current, confirmation);
+    if (!next) await releaseLease(root, leaseId);
+    return next;
   }
 
   async function apply(
@@ -1389,34 +2000,65 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const owner = await admit(actor, ['collection:create', 'collection:update']);
     abortIfRequested(signal);
     let root = await load(owner, uploadId);
-    if (root.state === 'expired' || root.state === 'cancelled' || root.state === 'partial' || root.state === 'complete')
-      return recoveryStatus(await currentRoot(owner, uploadId, signal, ['collection:create', 'collection:update']));
+    let active = admittedEffect(root);
     if (
+      root.state === 'expired' ||
+      root.state === 'cancelled' ||
+      root.state === 'partial' ||
+      root.state === 'complete'
+    ) {
+      if (!active || active.reviewId !== confirmation.reviewId || active.reviewDigest !== confirmation.digest)
+        return recoveryStatus(await currentRoot(owner, uploadId, signal, ['collection:create', 'collection:update']));
+    }
+    if (active) {
+      if (active.reviewId !== confirmation.reviewId || active.reviewDigest !== confirmation.digest) throw conflict();
+    } else if (
       !root.reviewId ||
       root.reviewId !== confirmation.reviewId ||
       root.reviewDigest !== confirmation.digest ||
       !root.reviewSnapshot
-    )
+    ) {
       throw conflict();
-    if (root.state === 'reviewed' && !(await reviewedMappingsCurrent(owner, root.reviewSnapshot, signal))) {
+    }
+    if (root.state === 'reviewed' && root.reviewSnapshot && !(await reviewedMappingsCurrent(owner, root.reviewSnapshot, signal))) {
       await invalidateStaleReview(root);
       throw conflict();
     }
-    const leaseId = await acquireLease(root);
+    let leaseId = await acquireLease(root, confirmation);
     if (!leaseId)
       return recoveryStatus(await currentRoot(owner, uploadId, signal, ['collection:create', 'collection:update']));
     let commandCount = 0;
+    const runDraft = async (draft: EffectDraft) => {
+      const effect = await beginEffect(root, leaseId!, draft);
+      if (!effect) return false;
+      await executeEffect(owner, root, leaseId!, effect, signal);
+      commandCount++;
+      leaseId = await continueLease(owner, root, leaseId!, confirmation);
+      return leaseId !== null;
+    };
     try {
       while (commandCount < applyLimit) {
         abortIfRequested(signal);
+        if (!leaseId) break;
         root = await load(owner, uploadId);
+        active = admittedEffect(root);
         if (
           root.state === 'cancelled' ||
-          root.state === 'expired' ||
-          (root.cancelRequested && root.inflightAction === null)
+          (root.state === 'expired' && active === null) ||
+          (root.cancelRequested && active === null)
         )
           break;
+        if (active) {
+          if (active.reviewId !== confirmation.reviewId || active.reviewDigest !== confirmation.digest)
+            throw conflict();
+          await executeEffect(owner, root, leaseId, active, signal);
+          commandCount++;
+          leaseId = await continueLease(owner, root, leaseId, confirmation);
+          if (!leaseId) break;
+          continue;
+        }
         if (
+          root.state !== 'applying' ||
           root.reviewId !== confirmation.reviewId ||
           root.reviewDigest !== confirmation.digest ||
           !root.reviewSnapshot
@@ -1424,9 +2066,8 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           throw conflict();
         const snapshot = root.reviewSnapshot;
         if (!root.nativeCollectionId) {
-          if (!(await beginEffect(root, leaseId, 'create'))) break;
-          // New reviews persist canonical operands and the key before effect. Historical reviews
-          // reconstruct only their original mixed operands; current releases never rewrite this command.
+          // New reviews retain the exact canonical create operands and key; older reviews
+          // reconstruct only their original mixed create command.
           const original: CreateCommand = snapshot.createCommand ?? {
             input: {
               title: snapshot.collection.title,
@@ -1435,48 +2076,19 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             },
             key: commandKey(root, 'create'),
           };
-          let created: Awaited<ReturnType<typeof commands.createCollection>>;
-          try {
-            created = await commands.createCollection(
-              owner,
-              original.input,
-              original.key,
-              original.reviewedReleaseDigest,
-            );
-          } catch (error) {
-            if (
-              !snapshot.presentation?.kind ||
-              !(error instanceof ProblemError) ||
-              !['invalid_request', 'conflict'].includes(error.code)
-            )
-              throw error;
-            await checkpointEffect(
-              root,
-              leaseId,
-              `UPDATE library.collection_archive_recovery SET state='reviewed',create_failure='unsupported_or_stale'
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-              [root.route, owner.accountId, uploadId, leaseId],
-            );
-            break;
-          }
-          await deps.afterNativeEffect?.('create');
-          await admit(owner);
-          abortIfRequested(signal);
-          await checkpointEffect(
-            root,
-            leaseId,
-            `UPDATE library.collection_archive_recovery SET native_collection_id=$4::uuid,create_failure=NULL
-             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$5::uuid`,
-            [root.route, owner.accountId, uploadId, created.value.id, leaseId],
-          );
-          commandCount++;
-          await refreshLease(root, leaseId);
+          const keepGoing = await runDraft({
+            action: 'create',
+            sourceId: null,
+            key: original.key,
+            operands: {
+              ...original.input,
+              reviewedReleaseDigest: original.reviewedReleaseDigest ?? null,
+            },
+          });
+          if (!keepGoing) break;
           continue;
         }
-        const add = await deps.pool.query<{
-          source_id: string;
-          target_subject_id: string;
-        }>(
+        const add = await deps.pool.query<{ source_id: string; target_subject_id: string }>(
           `SELECT source_id::text,target_subject_id
            FROM library.collection_archive_recovery_record
            WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
@@ -1486,7 +2098,6 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         );
         if (add.rows[0]) {
           const item = add.rows[0];
-          if (!(await beginEffect(root, leaseId, 'member', item.source_id))) break;
           const prior = await deps.pool.query<{ id: string }>(
             `SELECT native_member_id::text AS id FROM library.collection_archive_recovery_record
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
@@ -1494,73 +2105,25 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
                AND source_id<$6::uuid ORDER BY source_id DESC LIMIT 1`,
             [root.route, owner.accountId, uploadId, root.selectedCollectionId, confirmation.reviewId, item.source_id],
           );
-          let member: Awaited<ReturnType<typeof commands.addMember>>;
-          try {
-            member = await commands.addMember(
-              owner,
-              root.nativeCollectionId,
-              { subjectId: item.target_subject_id, ...(prior.rows[0] ? { after: prior.rows[0].id } : {}) },
-              commandKey(root, 'member', item.source_id),
-            );
-          } catch (error) {
-            const failure = itemFailure(error, 'add');
-            if (!failure) throw error;
-            await checkpointEffect(
-              root,
-              leaseId,
-              `UPDATE library.collection_archive_recovery_record SET add_state=$7,outcome_reason=$8
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-                 AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-              [
-                root.route,
-                owner.accountId,
-                uploadId,
-                root.selectedCollectionId,
-                item.source_id,
-                confirmation.reviewId,
-                failure.state,
-                failure.reason,
-              ],
-            );
-            commandCount++;
-            await refreshLease(root, leaseId);
-            continue;
-          }
-          await deps.afterNativeEffect?.('member', item.source_id);
-          await admit(owner);
-          abortIfRequested(signal);
-          await checkpointEffect(
-            root,
-            leaseId,
-            `UPDATE library.collection_archive_recovery_record SET native_member_id=$7::uuid,add_state='applied'
-             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-               AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-            [
-              root.route,
-              owner.accountId,
-              uploadId,
-              root.selectedCollectionId,
-              item.source_id,
-              confirmation.reviewId,
-              member.value.id,
-            ],
-            {
-              statement: `UPDATE library.collection_archive_recovery SET last_added_member_id=$4::uuid
-                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$5::uuid`,
-              values: [root.route, owner.accountId, uploadId, member.value.id, leaseId],
+          const keepGoing = await runDraft({
+            action: 'member',
+            sourceId: item.source_id,
+            key: commandKey(root, 'member', item.source_id),
+            operands: {
+              collectionId: root.nativeCollectionId,
+              subjectId: item.target_subject_id,
+              after: prior.rows[0]?.id ?? null,
             },
-          );
-          commandCount++;
-          await refreshLease(root, leaseId);
+          });
+          if (!keepGoing) break;
           continue;
         }
         const note = await deps.pool.query<{
           source_id: string;
           native_member_id: string;
           note: string | null;
-          note_present: boolean;
         }>(
-          `SELECT source_id::text,native_member_id::text,note,note_present
+          `SELECT source_id::text,native_member_id::text,note
            FROM library.collection_archive_recovery_record
            WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
              AND collection_id=$4 AND review_id=$5::uuid AND selected AND add_state='applied'
@@ -1570,51 +2133,17 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         );
         if (note.rows[0]) {
           const item = note.rows[0];
-          if (!(await beginEffect(root, leaseId, 'note', item.source_id))) break;
-          try {
-            await commands.updateMemberNote(
-              owner,
-              root.nativeCollectionId,
-              item.native_member_id,
-              { note: item.note },
-              commandKey(root, 'note', item.source_id),
-            );
-          } catch (error) {
-            const failure = itemFailure(error, 'note');
-            if (!failure) throw error;
-            await checkpointEffect(
-              root,
-              leaseId,
-              `UPDATE library.collection_archive_recovery_record SET note_state='failed',outcome_reason=$7
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-                 AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-              [
-                root.route,
-                owner.accountId,
-                uploadId,
-                root.selectedCollectionId,
-                item.source_id,
-                confirmation.reviewId,
-                failure.reason,
-              ],
-            );
-            commandCount++;
-            await refreshLease(root, leaseId);
-            continue;
-          }
-          await deps.afterNativeEffect?.('note', item.source_id);
-          await admit(owner);
-          abortIfRequested(signal);
-          await checkpointEffect(
-            root,
-            leaseId,
-            `UPDATE library.collection_archive_recovery_record SET note_state='applied'
-             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-               AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-            [root.route, owner.accountId, uploadId, root.selectedCollectionId, item.source_id, confirmation.reviewId],
-          );
-          commandCount++;
-          await refreshLease(root, leaseId);
+          const keepGoing = await runDraft({
+            action: 'note',
+            sourceId: item.source_id,
+            key: commandKey(root, 'note', item.source_id),
+            operands: {
+              collectionId: root.nativeCollectionId,
+              memberId: item.native_member_id,
+              note: item.note,
+            },
+          });
+          if (!keepGoing) break;
           continue;
         }
         const order = await deps.pool.query<{
@@ -1632,7 +2161,6 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         );
         if (order.rows[0]) {
           const item = order.rows[0];
-          if (!(await beginEffect(root, leaseId, 'order', item.source_id))) break;
           const prior = await deps.pool.query<{ id: string }>(
             `SELECT native_member_id::text AS id FROM library.collection_archive_recovery_record
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
@@ -1650,118 +2178,47 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               item.source_id,
             ],
           );
-          try {
-            await commands.moveMember(
-              owner,
-              root.nativeCollectionId,
-              item.native_member_id,
-              { after: prior.rows[0]?.id ?? null },
-              commandKey(root, 'order', item.source_id),
-            );
-          } catch (error) {
-            const failure = itemFailure(error, 'order');
-            if (!failure) throw error;
-            await checkpointEffect(
-              root,
-              leaseId,
-              `UPDATE library.collection_archive_recovery_record SET order_state=$7,outcome_reason=$8
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-                 AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-              [
-                root.route,
-                owner.accountId,
-                uploadId,
-                root.selectedCollectionId,
-                item.source_id,
-                confirmation.reviewId,
-                failure.state,
-                failure.reason,
-              ],
-            );
-            commandCount++;
-            await refreshLease(root, leaseId);
-            continue;
-          }
-          await deps.afterNativeEffect?.('order', item.source_id);
-          await admit(owner);
-          abortIfRequested(signal);
-          await checkpointEffect(
-            root,
-            leaseId,
-            `UPDATE library.collection_archive_recovery_record SET order_state='applied'
-             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
-               AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-            [root.route, owner.accountId, uploadId, root.selectedCollectionId, item.source_id, confirmation.reviewId],
-          );
-          commandCount++;
-          await refreshLease(root, leaseId);
+          const keepGoing = await runDraft({
+            action: 'order',
+            sourceId: item.source_id,
+            key: commandKey(root, 'order', item.source_id),
+            operands: {
+              collectionId: root.nativeCollectionId,
+              memberId: item.native_member_id,
+              after: prior.rows[0]?.id ?? null,
+            },
+          });
+          if (!keepGoing) break;
           continue;
         }
         root = await load(owner, uploadId);
         if (root.pinState === 'pending') {
-          if (!(await beginEffect(root, leaseId, 'pin'))) break;
-          let pinApplied = false;
-          try {
-            const collectionId = root.nativeCollectionId;
-            if (collectionId === null) {
-              await checkpointEffect(
-                root,
-                leaseId,
-                `UPDATE library.collection_archive_recovery SET pin_state='unsupported',pin_reason='native_collection_missing'
-                 WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-                [root.route, owner.accountId, uploadId, leaseId],
-              );
-              commandCount++;
-              continue;
-            }
-            await pins().mutate(
-              owner,
-              collectionId,
-              {
-                revision: Number(root.pinRevision),
-                ...(root.pinAfter === null ? { after: null } : { after: root.pinAfter }),
-              },
-              commandKey(root, 'pin'),
-            );
-            pinApplied = true;
-          } catch (error) {
-            if (!(error instanceof ProblemError && error.code === 'conflict')) throw error;
-            await checkpointEffect(
-              root,
-              leaseId,
-              `UPDATE library.collection_archive_recovery SET pin_state='unsupported',pin_reason='current_pin_revision_changed'
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-              [root.route, owner.accountId, uploadId, leaseId],
-            );
-          }
-          if (pinApplied) {
-            await deps.afterNativeEffect?.('pin');
-            await admit(owner);
-            abortIfRequested(signal);
-            await checkpointEffect(
-              root,
-              leaseId,
-              `UPDATE library.collection_archive_recovery SET pin_state='applied'
-               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
-              [root.route, owner.accountId, uploadId, leaseId],
-            );
-          }
-          commandCount++;
+          const keepGoing = await runDraft({
+            action: 'pin',
+            sourceId: null,
+            key: commandKey(root, 'pin'),
+            operands: {
+              collectionId: root.nativeCollectionId,
+              revision: Number(root.pinRevision),
+              after: root.pinAfter,
+            },
+          });
+          if (!keepGoing) break;
           continue;
         }
         await finish(root, leaseId, confirmation.reviewId);
         break;
       }
     } finally {
-      await releaseLease(root, leaseId);
+      if (leaseId) await releaseLease(root, leaseId);
     }
     root = await load(owner, uploadId);
     if (root.state === 'applying' && root.cancelRequested && root.inflightAction === null) {
       await deps.pool.query(
         `UPDATE library.collection_archive_recovery SET state='cancelled'
          WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state='applying'
-           AND cancel_requested=true AND inflight_action IS NULL`,
-        [root.route, owner.accountId, uploadId],
+           AND cancel_requested=true AND inflight_action IS NULL AND expires_at>$4::timestamptz`,
+        [root.route, owner.accountId, uploadId, deps.clock().toISOString()],
       );
     }
     return recoveryStatus(await currentRoot(owner, uploadId, signal, ['collection:create', 'collection:update']));
@@ -1801,11 +2258,61 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       Number(row.selected_count) === root.reviewSnapshot.collection.memberCount &&
       Number(row.completed_count) === Number(row.selected_count) &&
       Number(row.incomplete_count) === 0;
-    await deps.pool.query(
-      `UPDATE library.collection_archive_recovery SET state=$5
-       WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid AND state='applying'`,
-      [root.route, root.accountId, root.uploadId, leaseId, complete ? 'complete' : 'partial'],
-    );
+    await withConnection(deps.pool, async (connection) => {
+      await connection.query('BEGIN');
+      try {
+        const current = await connection.query<{
+          state: RecoveryState;
+          expires_at: string;
+          lease_id: string | null;
+          lease_until: string | null;
+          cancel_requested: boolean;
+          inflight_effect_id: string | null;
+          review_id: string | null;
+          review_epoch: string;
+        }>(
+          `SELECT state,expires_at::text,lease_id::text,lease_until::text,cancel_requested,
+             inflight_effect_id::text,review_id::text,review_epoch::text
+           FROM library.collection_archive_recovery
+           WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [root.route, root.accountId, root.uploadId],
+        );
+        const row = current.rows[0];
+        const now = deps.clock().getTime();
+        if (
+          row?.state === 'applying' &&
+          row.lease_id === leaseId &&
+          row.lease_until !== null &&
+          Date.parse(row.lease_until) > now &&
+          Date.parse(row.expires_at) > now &&
+          !row.cancel_requested &&
+          row.inflight_effect_id === null &&
+          row.review_id === reviewId &&
+          Number(row.review_epoch) === root.reviewEpoch
+        )
+          await connection.query(
+            `UPDATE library.collection_archive_recovery SET state=$5
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid
+               AND state='applying' AND lease_until>$6::timestamptz AND expires_at>$6::timestamptz
+               AND cancel_requested=false AND inflight_effect_id IS NULL AND review_id=$7::uuid
+               AND review_epoch=$8`,
+            [
+              root.route,
+              root.accountId,
+              root.uploadId,
+              leaseId,
+              complete ? 'complete' : 'partial',
+              new Date(now).toISOString(),
+              reviewId,
+              root.reviewEpoch,
+            ],
+          );
+        await connection.query('COMMIT');
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      }
+    });
   }
 
   async function outcomes(
@@ -1895,13 +2402,52 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const owner = await admit(actor);
     abortIfRequested(signal);
     const root = await load(owner, uploadId);
-    if (root.state !== 'expired' && root.state !== 'complete' && root.state !== 'partial')
-      await deps.pool.query(
-        `UPDATE library.collection_archive_recovery
-         SET state=CASE WHEN state='applying' THEN 'applying' ELSE 'cancelled' END,cancel_requested=true
-         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state IN ('preview','reviewed','applying')`,
-        [root.route, owner.accountId, uploadId],
-      );
+    let purge = false;
+    await withConnection(deps.pool, async (connection) => {
+      await connection.query('BEGIN');
+      try {
+        const selected = await connection.query<RootRow>(
+          `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3 FOR UPDATE`,
+          [root.route, owner.accountId, uploadId],
+        );
+        const current = selected.rows[0] ? rowValue(selected.rows[0]) : null;
+        const now = deps.clock().getTime();
+        if (!current) throw notFound();
+        if (current.state !== 'expired' && Date.parse(current.expiresAt) <= now) {
+          purge = await markRootExpired(connection, current);
+        } else if (['preview', 'reviewed', 'applying'].includes(current.state)) {
+          await connection.query(
+            `UPDATE library.collection_archive_recovery SET
+               state=CASE WHEN inflight_action IS NULL THEN 'cancelled' ELSE 'applying' END,
+               cancel_requested=true,
+               lease_id=CASE WHEN inflight_action IS NULL THEN NULL ELSE lease_id END,
+               lease_until=CASE WHEN inflight_action IS NULL THEN NULL ELSE lease_until END
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND state=$4 AND expires_at=$5::timestamptz
+               AND lease_id IS NOT DISTINCT FROM $6::uuid AND lease_until IS NOT DISTINCT FROM $7::timestamptz
+               AND inflight_action IS NOT DISTINCT FROM $8 AND inflight_source_id IS NOT DISTINCT FROM $9::uuid
+               AND inflight_effect_id IS NOT DISTINCT FROM $10::uuid AND review_epoch=$11`,
+            [
+              root.route,
+              owner.accountId,
+              uploadId,
+              current.state,
+              current.expiresAt,
+              current.leaseId,
+              current.leaseUntil,
+              current.inflightAction,
+              current.inflightSourceId,
+              current.inflightEffectId,
+              current.reviewEpoch,
+            ],
+          );
+        }
+        await connection.query('COMMIT');
+      } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+      }
+    });
+    if (purge) await purgeRecoveryRows(deps.pool, root.route, owner.accountId, uploadId);
     return recoveryStatus(await currentRoot(owner, uploadId, signal));
   }
 

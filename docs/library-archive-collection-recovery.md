@@ -9,6 +9,9 @@ Decision: Keep at most two uploads per owner for 24 hours, select one Collection
 review, admit at most 25 recovery steps per apply request, and restore a Collection pin only for the sole archived
 pin when the current native pin revision can express it.
 
+Decision: The absolute-expiry cut is the root-row-locked `expires_at` check that records one exact native effect key
+and operand; expiry preserves that single custody record for receipt reconciliation and blocks all successor dispatch.
+
 ## Installed journey
 
 The typed client exposes these owner-only methods under `libraryArchiveCollectionRecoveries`:
@@ -86,9 +89,21 @@ Subject authority plus the native order-neighbor lookup. A move uses the native 
 key space is exhausted, the command reads at most 64 neighbors on either side and may rewrite at most 126 resting
 members before the move. No historical Collection scan or LIMIT-hidden total-membership pass is added by recovery.
 
-An upload can retain at most 100,000 evidence rows; two roots bound an owner to 200,000 rows. Expiry and terminal
-account erasure delete at most 100 evidence/root rows per cleanup pass. Accepted Collections are independent native
-facts: expiring or erasing archive evidence does not undo them. Deleting a recovered Collection continues through
+The absolute-expiry cut adds one root lock and current-time admission comparison before each native dispatch. The
+admitted effect identity, key, review epoch/digest and bounded operands (at most 64 KiB JSONB) stay on the root across
+a lost acknowledgement. A receipt retry may add a native call in a later apply request, but it reuses that key and
+those exact operands and adds no distinct effect or payer. Each completed step checkpoints its outcome row (and the
+root for create/member/pin), then clears the matching custody in the same transaction. Account/action admission runs
+before each call and after a successful return; the native command repeats target disclosure and authorization in its
+transaction. Lease renewal remains bounded by the immutable expiry. Expiry redacts other review evidence and keeps an
+admitted member/note/order occurrence indexed until its receipt is reconciled. Two roots retain at most 128 KiB of
+active JSON operands in total, plus row/TOAST overhead; bounded title, description and note inputs keep serialization
+below 64 KiB per operand.
+
+An upload can retain at most 100,000 evidence rows; two roots bound an owner to 200,000 rows. Each expiry cleanup
+locks at most the owner's two indexed roots and deletes at most 100 indexed evidence/root rows; the one row backing an
+admitted member/note/order effect stays indexed until receipt reconciliation. Accepted Collections are independent
+native facts: expiring or erasing archive evidence does not undo them. Deleting a recovered Collection continues through
 ordinary Collection retention and its existing public-output independence.
 
 ## Outcomes and lifecycle
@@ -96,8 +111,10 @@ ordinary Collection retention and its existing public-output independence.
 Each occurrence reports separate add, note and order states and a stable reason. Item failures do not erase accepted
 occurrences. Cancellation admits no new step after the current in-flight native command is checkpointed; the
 resulting Collection ID and accepted member IDs remain visible through owner-only outcomes. Retries after a lost
-acknowledgement replay the same create/member/note/order/pin receipt and IDs. A refreshed review increments the
-review epoch and changes the confirmation digest; an older confirmation cannot authorize work.
+acknowledgement replay the same create/member/note/order/pin receipt and IDs. An admitted operation may finish or be
+replayed after expiry; it cannot admit a successor, and stale lease holders cannot checkpoint a replacement worker's
+receipt. A refreshed review increments the review epoch and changes the confirmation digest; an older confirmation
+cannot authorize work.
 
 Replacement is admitted only against the current locked preview/reviewed root with the originally observed review
 ID and epoch, no native destination or accepted member checkpoint, no in-flight action or lease, and no cancellation.
