@@ -139,12 +139,16 @@ export const ScopedAccessibleNaming: Story = {
   render: () => <Example scope={scope} keyboardShortcut />,
   play: async (context) => {
     const canvas = within(context.canvasElement);
-    const owner = context.canvasElement.querySelector<HTMLElement>('[data-header-search]');
-    const trigger = owner?.querySelector<HTMLButtonElement>('.header-search-trigger');
-    const input = owner?.querySelector<HTMLInputElement>('input[role="combobox"]');
-    const help = owner?.querySelector<HTMLElement>('[id$="-keyboard-help"]');
-    if (!owner || !trigger || !input || !help)
-      throw new globalThis.Error('The scoped search naming surface is missing.');
+    const owner = await waitFor(() => {
+      const node = context.canvasElement.querySelector<HTMLElement>('[data-header-search]');
+      if (!node?.querySelector('.header-search-trigger') || !node.querySelector('input[role="combobox"]'))
+        throw new globalThis.Error('The scoped search naming surface is missing.');
+      return node;
+    });
+    const trigger = owner.querySelector<HTMLButtonElement>('.header-search-trigger')!;
+    const input = owner.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    const help = owner.querySelector<HTMLElement>('[id$="-keyboard-help"]');
+    if (!help) throw new globalThis.Error('The scoped search naming surface is missing.');
 
     const visibleName = trigger.innerText.replace(/\s+/gu, ' ').trim();
     await expect(trigger).toHaveAccessibleName(visibleName);
@@ -333,7 +337,7 @@ export const TrendingPreparing: Story = {
   play: async (context) => {
     const { canvas } = await expand(context);
     await expect(await canvas.findByText(m.discovery_not_ready())).toBeVisible();
-    await expect(await canvas.findByText(discoveryRealm.name)).toBeVisible();
+    await expect(await canvas.findByRole('heading', { name: discoveryRealm.name })).toBeVisible();
   },
 };
 export const TrendingUnavailable: Story = {
@@ -341,7 +345,7 @@ export const TrendingUnavailable: Story = {
   play: async (context) => {
     const { canvas } = await expand(context);
     await expect(await canvas.findByText(m.trending_unavailable())).toBeVisible();
-    await expect(await canvas.findByText(discoveryRealm.name)).toBeVisible();
+    await expect(await canvas.findByRole('heading', { name: discoveryRealm.name })).toBeVisible();
   },
 };
 export const CommunitiesUnavailable: Story = {

@@ -112,7 +112,9 @@ export function TrendingSearchesSection({
       aria-busy={state.status === 'loading'}
       data-trending-searches
     >
-      <h3 className="px-2 text-sm font-semibold">{m.header_search_trending_searches({}, options)}</h3>
+      <div className="px-2">
+        <h3 className="text-sm font-semibold">{m.header_search_trending_searches({}, options)}</h3>
+      </div>
       {values.length ? (
         <ul>
           {rows.map(({ key, query, display }, index) => (

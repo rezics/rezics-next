@@ -254,7 +254,7 @@ export function HeaderSearchView({
         ))}
         <div
           data-search-composer
-          className={cn('rounded-full', expanded && 'shrink-0 rounded-t-3xl border-b border-border/60')}
+          className={cn(expanded ? 'shrink-0 rounded-t-3xl border-b border-border/60' : 'rounded-full')}
         >
           <div className={cn('flex min-h-11 min-w-0 items-center gap-2 px-4', expanded && 'py-2')}>
             {expanded ? (
