@@ -27,11 +27,7 @@ export async function maintainReviewCensusBatch(
 
 /** Registered by Content's default supervisor. Every owner read gets its own
  * deadline and releases its connections before the next durable step. */
-export function registerReviewCensusWork(
-  context: WorkContext,
-  access: Access,
-  partitions: readonly number[],
-): void {
+export function registerReviewCensusWork(context: WorkContext, access: Access, partitions: readonly number[]): void {
   const page = DBOS.registerStep(
     async (partition: number) => {
       const source = createReviewDiscoverySource(
@@ -52,10 +48,9 @@ export function registerReviewCensusWork(
       maxAttempts: 10,
     },
   );
-  const maintain = DBOS.registerWorkflow(
-    (partition: number) => maintainReviewCensusBatch(partition, page),
-    { name: partitionWorkflow },
-  );
+  const maintain = DBOS.registerWorkflow((partition: number) => maintainReviewCensusBatch(partition, page), {
+    name: partitionWorkflow,
+  });
   DBOS.registerWorkflow(
     async (_scheduledDate: Date, _context: unknown) => {
       const sweep = DBOS.workflowID!;
@@ -63,9 +58,11 @@ export function registerReviewCensusWork(
         // Children execute directly: placing them behind their waiting parent on
         // the maintenance queue would deadlock overlapping sweeps.
         const handles = await Promise.all(
-          partitions.slice(offset, offset + concurrency).map((partition) =>
-            DBOS.startWorkflow(maintain, { workflowID: `${sweep}:partition:${partition}` })(partition),
-          ),
+          partitions
+            .slice(offset, offset + concurrency)
+            .map((partition) =>
+              DBOS.startWorkflow(maintain, { workflowID: `${sweep}:partition:${partition}` })(partition),
+            ),
         );
         await Promise.all(handles.map((handle) => handle.getResult()));
       }

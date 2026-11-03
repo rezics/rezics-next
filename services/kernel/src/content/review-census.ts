@@ -114,8 +114,9 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
   }
 
   async function reset(partition: number, state: Installation, deadline: number): Promise<ReviewCensusStep> {
-    const generation = await realmSubjectHome(pool, partition * 16, deadline, true,
-      (client) => restart(client, partition, state));
+    const generation = await realmSubjectHome(pool, partition * 16, deadline, true, (client) =>
+      restart(client, partition, state),
+    );
     return { state: 'changed', generation, examined: 0 };
   }
 

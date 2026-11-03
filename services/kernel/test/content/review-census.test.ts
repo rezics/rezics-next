@@ -21,13 +21,20 @@ const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture
 test('a census maintenance turn yields after bounded progress and stops when authority is preparing', async () => {
   let pages = 0;
   const changed = { state: 'changed' as const, generation: Bun.randomUUIDv7(), examined: 0 };
-  expect(await maintainReviewCensusBatch(1, async () => { pages++; return changed; })).toBe(changed);
+  expect(
+    await maintainReviewCensusBatch(1, async () => {
+      pages++;
+      return changed;
+    }),
+  ).toBe(changed);
   expect(pages).toBe(REVIEW_CENSUS_BATCH_PAGES);
   pages = 0;
-  expect(await maintainReviewCensusBatch(1, async () => {
-    pages++;
-    return { ...changed, state: 'preparing' };
-  })).toMatchObject({ state: 'preparing' });
+  expect(
+    await maintainReviewCensusBatch(1, async () => {
+      pages++;
+      return { ...changed, state: 'preparing' };
+    }),
+  ).toMatchObject({ state: 'preparing' });
   expect(pages).toBe(1);
 });
 
@@ -79,8 +86,9 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   const commitObserver = observeSql(fixture.pool);
   try {
     await source.pageWithCut(partition, null, 1);
-    const statement = commitObserver.records.find(({ statement }) =>
-      statement.includes('AS "lifecycleState"') && statement.includes('ORDER BY t.route,t.thread_id'),
+    const statement = commitObserver.records.find(
+      ({ statement }) =>
+        statement.includes('AS "lifecycleState"') && statement.includes('ORDER BY t.route,t.thread_id'),
     )!.statement;
     const barrier = commitObserver.hold({ statement }, 'after');
     const pending = source.maintainCensus(partition);
@@ -160,7 +168,11 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   const beforeRestoration = await source.censusCoverage(partition);
   const before = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
   const deps = { pool: fixture.pool, access: fixture.access, routeKey };
-  const request = () => ({ idempotencyKey: Bun.randomUUIDv7(), requestId: Bun.randomUUIDv7(), deadline: Date.now() + 30_000 });
+  const request = () => ({
+    idempotencyKey: Bun.randomUUIDv7(),
+    requestId: Bun.randomUUIDv7(),
+    deadline: Date.now() + 30_000,
+  });
   await softDeletePost(deps, author, { postId: written.value.itemId, reason: 'Withdraw review' }, request());
   await restorePost(deps, author, written.value.itemId, request());
   const restored = (await source.hydrate(partition, [written.value.threadId])).reviews[0]!;
@@ -176,8 +188,8 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   const observer = observeSql(fixture.pool);
   try {
     await source.pageWithCut(partition, null, 1);
-    const statement = observer.records.find(({ statement }) =>
-      statement.includes('AS "lifecycleState"') && statement.includes('LIMIT $5'),
+    const statement = observer.records.find(
+      ({ statement }) => statement.includes('AS "lifecycleState"') && statement.includes('LIMIT $5'),
     )!.statement;
     const barrier = observer.hold({ statement }, 'after');
     const pending = source.pageWithCut(partition, null, 1);

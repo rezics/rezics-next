@@ -314,7 +314,11 @@ async function currentCandidatesMatch(
   partition: number,
   observed: readonly Candidate[],
 ): Promise<boolean> {
-  const current = await populationByIds(client, partition, observed.map((item) => item.id));
+  const current = await populationByIds(
+    client,
+    partition,
+    observed.map((item) => item.id),
+  );
   const byId = new Map(current.map((row) => [row.id, row]));
   return observed.every((item) => JSON.stringify(item) === JSON.stringify(byId.get(item.id)));
 }
@@ -668,10 +672,14 @@ async function reobserveOutput(
   cut: PopulationCut,
   candidates: readonly Candidate[],
 ): Promise<Readonly<{ state: CutState; current: boolean }>> {
-  const state = await captureCut(client, partition, cut.homes.map((home) => home.partition));
+  const state = await captureCut(
+    client,
+    partition,
+    cut.homes.map((home) => home.partition),
+  );
   return {
     state,
-    current: state.status === 'ready' && await currentCandidatesMatch(client, partition, candidates),
+    current: state.status === 'ready' && (await currentCandidatesMatch(client, partition, candidates)),
   };
 }
 
@@ -833,8 +841,7 @@ export function createReviewDiscoverySource(
       );
     if (!sameCut(native.cut, finalState.cut))
       return failedPopulationPage(partition, 'changed', 'eligibility-dependency', finalState.position);
-    if (!final.current)
-      return failedPopulationPage(partition, 'changed', 'source-lifecycle', finalState.position);
+    if (!final.current) return failedPopulationPage(partition, 'changed', 'source-lifecycle', finalState.position);
     const last = native.selected[examined - 1];
     let next: ReviewDiscoveryContinuation | null = null;
     if (last && examined < native.candidates.length) {
@@ -893,12 +900,13 @@ export function createReviewDiscoverySource(
         if (!depSet)
           return { state: 'unavailable', position: current.position, missing: 'review-dependency-directory' };
         const homes = new Set(current.cut.homes.map((home) => home.partition));
-        const versions = new Map(candidates.map((item) => [
-          item.id,
-          sourceVersion(item, depSet.byReview.get(item.id) ?? [], current.cut),
-        ]));
-        if (depSet.homes.some((home) => !homes.has(home)) ||
-            episodes.some((episode) => versions.get(episode.id) !== episode.sourceVersion))
+        const versions = new Map(
+          candidates.map((item) => [item.id, sourceVersion(item, depSet.byReview.get(item.id) ?? [], current.cut)]),
+        );
+        if (
+          depSet.homes.some((home) => !homes.has(home)) ||
+          episodes.some((episode) => versions.get(episode.id) !== episode.sourceVersion)
+        )
           return { state: 'changed', position: current.position, missing: 'source-lifecycle' };
       }
       return {
