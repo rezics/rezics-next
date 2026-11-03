@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { mintReadTime, noEffect } from '../command/command.ts';
 import { readAccount } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
+import accountShare from '../access/account-share.sql';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
@@ -88,7 +88,7 @@ export function createAniListImport(deps: Dependencies) {
       await client.query('BEGIN');
       try {
         await partitionReadClient(client, partitionOf(route));
-        await shareAccount(client, account.accountId);
+        await accountShare.run(client, { route, account_id: account.accountId });
         const current = await readAccount(client, route, account.accountId);
         if (
           !current ||
