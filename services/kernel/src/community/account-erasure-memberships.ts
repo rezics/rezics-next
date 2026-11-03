@@ -101,7 +101,7 @@ export async function eraseAccountMembershipsPage(
   if (!Number.isFinite(deadline)) throw new TypeError('Invalid membership erasure deadline');
   for (const key of keys) {
     if (!access) throw new Error('Membership erasure requires installed worker Access');
-    const native = { pool, access, clock };
+    const native = { pool, access, ...(clock === undefined ? {} : { clock }) };
     const input = { realmId: key.realm_id, accountId };
     if (await qualifiesForSuccession(native, input, { deadline })) {
       const result = await eraseAccountRealmOwnership(native, input, { deadline });
