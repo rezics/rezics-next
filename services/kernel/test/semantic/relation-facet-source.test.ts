@@ -783,7 +783,8 @@ test('active facet and qualifier retirement suppress historical selected credits
     const replacement = structuredClone(original.release);
     replacement.catalogue.version += `-${change}`;
     if (change === 'facet') {
-      replacement.types['schema:Book']!.facets = replacement.types['schema:Book']!.facets!.filter(
+      const facets = replacement.types['schema:Book']!.facets!;
+      replacement.types['schema:Book']!.facets = (typeof facets === 'string' ? [facets] : facets).filter(
         (property) => property !== probe.property,
       );
     } else {
