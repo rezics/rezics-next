@@ -595,8 +595,10 @@ outcomes. The typed client exposes upload, status, Collection/occurrence pages, 
 Explicit reviewed presentation now defaults to mixed or admits an actual current Type, preserving raw archived
 meaning and distinguishing alternatives. Immutable review digests bind the choice/current release and original native
 create operands/key; stale new creation is refused, exact receipts replay and later stored-choice fallback persists.
-The actual route schema/client producer exposes preview/review/confirmation/result additions with
-`fullRestoration:false`; native64/512/4096 and browser/full-kernel acceptance remains unexecuted by this change.
+The actual route schema exposes preview/review/confirmation/result additions with `fullRestoration:false`.
+Retained client declarations and the library schema snapshot await the existing producer after the unchanged
+Community compiler errors are resolved; see the [transport continuation](../../.temp/continuation/collection-presentation-client.md).
+Native64/512/4096 and browser/full-kernel acceptance remains unexecuted by this change.
 Only one curated Collection is supported; recovery preserves duplicate occurrences, valid archived ordinal order,
 and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. Dynamic and built-in
 Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
