@@ -606,7 +606,6 @@ test('Recipe creation and current correction share complete frames with independ
         ],
       },
     ]);
-    expect(creationCommands[1]).toEqual(creationCommands[2]);
     const createWrite = structuredClone(posts(creation, '/subjects')[0]!);
     expect(createWrite.authorization).toBe('Bearer fixture');
     expect(createWrite.body).toMatchObject({

@@ -1611,7 +1611,20 @@ function RecipeFieldLive({
             }
             change={(statement) => {
               if (!canEdit()) return;
-              changeRow((entry) => ({ ...entry, statement }));
+              const current = editing.current.row.statement;
+              const valueChanged = statement.value !== current.value;
+              const referencesChanged = statement.references !== current.references;
+              if (valueChanged === referencesChanged) {
+                if (
+                  valueChanged ||
+                  (statement.qualifiers === current.qualifiers && statement.rank === current.rank)
+                )
+                  return;
+                if (editing.current.row.statement !== row.statement) return;
+                changeRow((entry) => (entry.statement === row.statement ? { ...entry, statement } : entry));
+                return;
+              }
+              changePart(valueChanged ? 'value' : 'references', (entry) => ({ ...entry, statement }));
             }}
           />
           {definition.datatype === 'document' && authored && (
