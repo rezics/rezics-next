@@ -914,7 +914,6 @@ export function createSearchService({
         await sourceRequest(() => retained.retainRealm(queryId, preparedRealm!.scope.basis, realms));
         scopeWork.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 8192 });
         let retainedState = await sourceRequest(() => retained.readRealm(queryId, preparedRealm!.scope.basis, realms));
-        const preparationDefinition = { basis: preparedRealm.scope.basis, realms };
         const requestWork = () => ({
           bytes: scopeWork!.remaining().remaining.bytes,
           deadline: readContext?.deadline ?? Date.now() + 10_000,
@@ -923,34 +922,29 @@ export function createSearchService({
           },
         });
         if (!retainedState.complete) {
-          const next: Extract<ScopeCaptureFrontier, { kind: 'realm' }> = {
-            kind: 'realm',
-            value: {
-              realms: retainedState.frontier.value.realms.map((entry) => ({ ...entry })),
-              catalogueAfter: retainedState.frontier.value.catalogueAfter
-                ? [...retainedState.frontier.value.catalogueAfter]
-                : null,
-              catalogueExhausted: retainedState.frontier.value.catalogueExhausted,
-            },
+          const nextValue = {
+            realmIndex: retainedState.frontier.value.realmIndex,
+            realmAfter: retainedState.frontier.value.realmAfter,
+            catalogueAfter: retainedState.frontier.value.catalogueAfter
+              ? [...retainedState.frontier.value.catalogueAfter]
+              : null,
+            catalogueExhausted: retainedState.frontier.value.catalogueExhausted,
           };
           let candidates: SearchIndexHit[] = [];
-          const activeRealm = next.value.realms.find((entry) => !entry.exhausted);
+          const activeRealm = realms[nextValue.realmIndex];
           if (activeRealm) {
             const raw = await sourceRequest(() =>
               scope!.realm.sourcePrefix(
                 preparedRealm!.scope,
-                activeRealm.id,
-                activeRealm.after,
+                activeRealm,
+                nextValue.realmAfter,
                 32,
                 scopeWork!.remaining(),
               ),
             );
             scopeWork.native(raw.work);
-            next.value.realms = next.value.realms.map((entry) =>
-              entry.id === activeRealm.id
-                ? { ...entry, after: raw.after, exhausted: raw.exhausted }
-                : entry,
-            );
+            nextValue.realmIndex += Number(raw.exhausted);
+            nextValue.realmAfter = raw.exhausted ? null : raw.after;
             const ids = [...new Set(raw.subjects)];
             if (ids.length) {
               const indexed = await sourceRequest(() =>
@@ -971,14 +965,14 @@ export function createSearchService({
               });
               candidates = indexed.hits;
             }
-          } else if (!next.value.catalogueExhausted) {
+          } else if (!nextValue.catalogueExhausted) {
             const indexed = await sourceRequest(() =>
               searchSubjectHits(client, prefix, {
                 ...(compiledText ? { query: compiledText.query } : {}),
                 sort: 'name',
                 generation,
                 size: 32,
-                ...(next.value.catalogueAfter ? { after: next.value.catalogueAfter } : {}),
+                ...(nextValue.catalogueAfter ? { after: nextValue.catalogueAfter } : {}),
                 work: requestWork(),
               }),
             );
@@ -989,8 +983,8 @@ export function createSearchService({
               nativeRows: indexed.hits.length,
             });
             candidates = indexed.hits;
-            next.value.catalogueAfter = indexed.hits.at(-1)?.sort ?? next.value.catalogueAfter;
-            next.value.catalogueExhausted = indexed.hits.length < 32;
+            nextValue.catalogueAfter = indexed.hits.at(-1)?.sort ?? nextValue.catalogueAfter;
+            nextValue.catalogueExhausted = indexed.hits.length < 32;
           }
           const live = candidates as unknown as NativeSearchHit[];
           const checked = live.length ? await checkCandidates(live) : new Map();
@@ -1009,7 +1003,8 @@ export function createSearchService({
               throw indexNotReady();
             retainedHits = visible.filter((_, index) => evaluation.values[index] === true) as SearchIndexHit[];
           }
-          const complete = next.value.catalogueExhausted && next.value.realms.every((entry) => entry.exhausted);
+          const next: Extract<ScopeCaptureFrontier, { kind: 'realm' }> = { kind: 'realm', value: nextValue };
+          const complete = nextValue.catalogueExhausted && nextValue.realmIndex >= realms.length;
           scopeWork.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 32768 });
           const advanced = await sourceRequest(() =>
             retained.advanceRealm(queryId, retainedState, next, complete, retainedHits),

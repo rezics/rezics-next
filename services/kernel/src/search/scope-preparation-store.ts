@@ -33,7 +33,8 @@ export type ScopeCaptureFrontier =
   | Readonly<{
       kind: 'realm';
       value: Readonly<{
-        realms: readonly Readonly<{ id: string; after: string | null; exhausted: boolean }>[];
+        realmIndex: number;
+        realmAfter: string | null;
         catalogueAfter: readonly (string | number | null)[] | null;
         catalogueExhausted: boolean;
       }>;
@@ -69,7 +70,8 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
             : {
                 kind: 'realm',
                 value: {
-                  realms: definition.realms.map((id) => ({ id, after: null, exhausted: false })),
+                  realmIndex: 0,
+                  realmAfter: null,
                   catalogueAfter: null,
                   catalogueExhausted: false,
                 },
@@ -95,7 +97,8 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
       const frontier: Extract<ScopeCaptureFrontier, { kind: 'realm' }> = {
         kind: 'realm',
         value: {
-          realms: definition.realms.map((id) => ({ id, after: null, exhausted: false })),
+          realmIndex: 0,
+          realmAfter: null,
           catalogueAfter: null,
           catalogueExhausted: false,
         },
