@@ -23,7 +23,10 @@ const typeHelp = 'About this Type · Opens in a new tab; your draft stays here.'
 const fieldHelp = 'Field guide · Opens in a new tab; your draft stays here.';
 
 function userReads(from: number): NativeKernelRequest[] {
-  return fixture.stack.kernelRequests().slice(from).filter((request) => !request.fixtureRequest);
+  return fixture.stack
+    .kernelRequests()
+    .slice(from)
+    .filter((request) => !request.fixtureRequest);
 }
 
 function definitionPath(request: NativeKernelRequest): string {
@@ -131,7 +134,9 @@ nativeTest(
     expect(await pinGuide.getByText(published.rezics.release).count()).toBeGreaterThan(0);
     await ui(pinGuide.getByText('Date with a precision and calendar', { exact: true })).toBeVisible();
     await ui(pinGuide.getByText('This field allows one selected value.', { exact: true })).toBeVisible();
-    const pinReturn = await pinGuide.getByRole('link', { name: 'Return to contribution', exact: true }).getAttribute('href');
+    const pinReturn = await pinGuide
+      .getByRole('link', { name: 'Return to contribution', exact: true })
+      .getAttribute('href');
     expect(pinReturn).toContain('/edit');
     expect(pinReturn).toContain('property=schema%3AdatePublished');
     expect(pinReturn).toContain(`statement=${published.id}`);

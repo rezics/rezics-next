@@ -2,10 +2,7 @@ import { bundledDigest } from '@rezics/definitions/bundled';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import historicalBundle from '../../../../packages/definitions/test/fixtures/bundled-historical-construction.json';
-import {
-  startCatalogueFactsFixture,
-  type CatalogueFactsFixture,
-} from './catalogue-facts-fixture.ts';
+import { startCatalogueFactsFixture, type CatalogueFactsFixture } from './catalogue-facts-fixture.ts';
 
 export const missingGuideDigest = `sha256:${'ab'.repeat(32)}`;
 
@@ -69,7 +66,8 @@ export async function startCatalogueDefinitionGuideFixture(): Promise<CatalogueD
       200,
       'GET /v1/definitions/active',
     );
-    if (active.digest !== bundledDigest) throw new Error('Publishing historical construction changed the active pointer');
+    if (active.digest !== bundledDigest)
+      throw new Error('Publishing historical construction changed the active pointer');
 
     return {
       ...facts,
