@@ -1172,6 +1172,121 @@ export async function discloseBoardPageThreads(
   };
 }
 
+export type BoardPageActionEvidence = Readonly<{
+  createThread: boolean;
+  threads: ReadonlyMap<string, Readonly<{ reply: boolean; react: boolean }>>;
+  anchors: readonly AnchoredPosition[];
+}>;
+
+/** Batch current action checks for the exact mounted Board and disclosed threads.
+ * Commands still repeat these checks inside their write transactions. */
+export async function readBoardPageActionEvidence(
+  dependencies: ContentReadDependencies,
+  boardId: BoardId,
+  baseline: BoardView,
+  threadIds: readonly string[],
+  context: ReadContext,
+): Promise<BoardPageActionEvidence> {
+  const unique = [...new Set(threadIds)];
+  if (unique.length > 25 || unique.length !== threadIds.length)
+    throw new RangeError('Board action advice requires at most twenty-five unique threads');
+  const boardActions = new Set(['board:read', 'thread:create']);
+  const realmActions = baseline.realmId === null ? new Set<string>() : new Set(['realm:read']);
+  const threadActions = new Set(['post:create', 'reaction:set']);
+  const actionSet = new Set([...boardActions, ...realmActions, ...threadActions]);
+  const typeActions = new Map<string, ReadonlySet<string>>([
+    ['content.board', boardActions],
+    ...(baseline.realmId === null ? [] : [['community.realm', realmActions] as const]),
+    ['content.thread', threadActions],
+  ]);
+  let decisions: ReadDecisions;
+  try {
+    decisions = await prepareReadDecisions(dependencies.access, {
+      actor: context.actor,
+      actions: actionSet,
+      typeActions,
+      context: { pool: dependencies.pool, deadline: context.deadline },
+    });
+  } catch (error) {
+    // Embedded catalogues for global Boards can omit realm:read; Realm pages
+    // require the installed action because their parent remains authoritative.
+    if (
+      baseline.realmId !== null ||
+      !(error instanceof RangeError) ||
+      error.message !== 'Invalid read decision actions'
+    )
+      throw error;
+    const globalActions = new Set([...boardActions, ...threadActions]);
+    decisions = await prepareReadDecisions(dependencies.access, {
+      actor: context.actor,
+      actions: globalActions,
+      typeActions: new Map([
+        ['content.board', boardActions],
+        ['content.thread', threadActions],
+      ]),
+      context: { pool: dependencies.pool, deadline: context.deadline },
+    });
+  }
+  const ids = [boardId, ...unique];
+  const observed = await batchSnapshot(dependencies, ids, context, async (client) => {
+    const boards = await batchRows(client, 'board', [batchKey(boardId)]);
+    const board = boards[0];
+    if (!board || signature(board) !== signature(boardRowFromView(baseline))) return null;
+    const realms = board.realm_id ? await batchRealms(client, [board.realm_id]) : [];
+    const parent = await decideBoardAndRealms(client, decisions, context.actor, [board], realms);
+    if (!parent.boards.get(boardId) || (board.realm_id && !parent.realms.get(board.realm_id))) return null;
+
+    const threads = await batchRows(client, 'thread', unique.map((id) => batchKey(id)));
+    const current = new Map(
+      threads.map((row) => [
+        row.id,
+        row.board_id === boardId && row.availability === 'available' && row.visibility !== 'taken_down',
+      ]),
+    );
+    const boardCreate = await decisions.decide(client, {
+      action: 'thread:create',
+      resourceType: 'content.board',
+      ids: [boardId],
+      eligibility: async (_client, requested) =>
+        Object.fromEntries(requested.map((id) => [id, board.availability === 'available'])),
+    });
+    const reply = unique.length
+      ? await decisions.decide(client, {
+          action: 'post:create',
+          resourceType: 'content.thread',
+          ids: unique,
+          eligibility: async (_client, requested) =>
+            Object.fromEntries(requested.map((id) => [id, current.get(id) === true])),
+        })
+      : {};
+    const react = unique.length
+      ? await decisions.decide(client, {
+          action: 'reaction:set',
+          resourceType: 'content.thread',
+          ids: unique,
+          eligibility: async (_client, requested) =>
+            Object.fromEntries(requested.map((id) => [id, current.get(id) === true])),
+        })
+      : {};
+    return {
+      createThread: boardCreate[boardId]?.allowed === true,
+      threads: new Map(
+        unique.map((id) => [
+          id,
+          { reply: reply[id]?.allowed === true, react: react[id]?.allowed === true },
+        ]),
+      ),
+    };
+  });
+  if (!observed.value) throw new ContentNotFoundError();
+  const anchors = [...observed.anchors.values()].map((partition) => ({
+    partition,
+    epoch: partition.epoch,
+    position: partition.position,
+  }));
+  return { ...observed.value, anchors };
+}
+
 async function disclose(
   dependencies: ContentReadDependencies,
   threadId: string,
@@ -1495,16 +1610,19 @@ type Counted<T> = T extends ErasedPlaceholder & { readonly revisionId?: never }
   ? T
   : T & { readonly reactions: ReactionCountMap };
 
-/** One index seek per partition over the page's targets. Zero kinds are omitted.
- * The freshness is the oldest source watermark among the count rows actually read. */
-export async function withReactionCounts<T extends { readonly id: string }>(
+type ReactionCountProjection<T extends { readonly id: string }> = Readonly<{
+  items: readonly Counted<T>[];
+  reactionsAsOf: ReactionCountFreshness | null;
+  /** Targets with at least one installed current aggregate row. An absent target
+   * row does not prove a zero count and remains unavailable to page consumers. */
+  targetsWithRows: readonly string[];
+}>;
+
+async function readReactionCountProjection<T extends { readonly id: string }>(
   dependencies: ContentReadDependencies,
   targets: readonly T[],
   deadline: number,
-): Promise<{
-  readonly items: readonly Counted<T>[];
-  readonly reactionsAsOf: ReactionCountFreshness | null;
-}> {
+): Promise<ReactionCountProjection<T>> {
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const target of targets) {
@@ -1567,7 +1685,32 @@ export async function withReactionCounts<T extends { readonly id: string }>(
       return { ...target, reactions };
     }) as Counted<T>[],
     reactionsAsOf: oldest === null ? null : { epoch: oldest.epoch, position: oldest.position.toString() },
+    targetsWithRows: [...sums.keys()],
   };
+}
+
+/** One index seek per partition over the page's targets. Zero kinds are omitted.
+ * The freshness is the oldest source watermark among the count rows actually read. */
+export async function withReactionCounts<T extends { readonly id: string }>(
+  dependencies: ContentReadDependencies,
+  targets: readonly T[],
+  deadline: number,
+): Promise<{
+  readonly items: readonly Counted<T>[];
+  readonly reactionsAsOf: ReactionCountFreshness | null;
+}> {
+  const projection = await readReactionCountProjection(dependencies, targets, deadline);
+  return { items: projection.items, reactionsAsOf: projection.reactionsAsOf };
+}
+
+/** The native page projection exposes coverage without treating a missing aggregate
+ * row as an exact zero. Existing feed callers keep their established return shape. */
+export async function withReactionCountsAndCoverage<T extends { readonly id: string }>(
+  dependencies: ContentReadDependencies,
+  targets: readonly T[],
+  deadline: number,
+): Promise<ReactionCountProjection<T>> {
+  return readReactionCountProjection(dependencies, targets, deadline);
 }
 
 /** Read at most five relayed subject totals per id with one statement per target partition. */

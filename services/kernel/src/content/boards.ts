@@ -37,6 +37,7 @@ export type ContentBoardDependencies = ContentReadDependencies & {
   cursorNow?: () => number;
 };
 export type BoardPageInput = { cursor?: string; limit?: number; sort?: BoardCursorSort; query?: string };
+export type BoardOpeningPageInput = Omit<BoardPageInput, 'limit'>;
 export type BoardThreadPage = Page<ThreadView> & {
   pinnedThreads: readonly ThreadView[];
   anchors: readonly AnchoredPosition[];
@@ -212,10 +213,32 @@ export async function listBoardThreads(
   context: ReadContext,
   input: BoardPageInput = {},
 ): Promise<BoardThreadPage> {
+  return listBoardThreadsFromSource(dependencies, boardId, context, input, false);
+}
+
+/** One native opening cohort: at most twenty ordinary candidates are disclosed,
+ * while one raw lookahead only determines whether the same source can continue. */
+export async function listBoardOpeningThreads(
+  dependencies: ContentBoardDependencies,
+  boardId: string,
+  context: ReadContext,
+  input: BoardOpeningPageInput = {},
+): Promise<BoardThreadPage> {
+  return listBoardThreadsFromSource(dependencies, boardId, context, { ...input, limit: 20 }, true);
+}
+
+async function listBoardThreadsFromSource(
+  dependencies: ContentBoardDependencies,
+  boardId: string,
+  context: ReadContext,
+  input: BoardPageInput,
+  openingPage: boolean,
+): Promise<BoardThreadPage> {
   const limit = input.limit ?? 20;
   const sort = input.sort ?? 'newest';
   const query = normalizeBoardQuery(input.query ?? '');
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
+  if (openingPage && limit !== 20) throw new RangeError('Board opening pages contain twenty ordinary candidates');
   if (sort !== 'newest' && sort !== 'oldest' && sort !== 'active' && sort !== 'hot')
     throw new TypeError('Invalid content cursor');
   const now = (dependencies.cursorNow ?? Date.now)();
@@ -228,6 +251,7 @@ export async function listBoardThreads(
     async (client, partition) => {
       // Pins, revision and the ordinary range share one board-home observation.
       const pinRevision = await readBoardPinRevision(client, boardId);
+      const candidateLimit = openingPage ? limit + 1 : 200;
       const binding: BoardCursorBinding = {
         boardId,
         query,
@@ -256,7 +280,7 @@ export async function listBoardThreads(
           active_rank: after?.kind === 'rank' ? after.rank : 0,
           thread_id: after?.kind === 'rank' ? after.threadId : '00000000-0000-0000-0000-000000000000',
           has_after: after !== null && after.kind === 'rank',
-          limit: 200,
+          limit: candidateLimit,
         };
         const sql =
           sort === 'hot'
@@ -285,7 +309,7 @@ export async function listBoardThreads(
           board_id: boardId,
           created_at: after?.kind === 'created' ? after.createdAt : sort === 'oldest' ? '-infinity' : 'infinity',
           thread_id: after?.kind === 'created' ? after.threadId : '00000000-0000-0000-0000-000000000000',
-          limit: 200,
+          limit: candidateLimit,
         };
         const sql =
           sort === 'oldest'
@@ -303,7 +327,7 @@ export async function listBoardThreads(
         pinnedIds,
         pinRevision,
         binding,
-        hasMore: candidates.length === 200,
+        hasMore: candidates.length === candidateLimit,
         invalidCursor,
         epoch: partition.epoch,
         position: partition.position,
@@ -335,10 +359,11 @@ export async function listBoardThreads(
   let scanned = 0;
   const readRound = async (batch: readonly ListedBoardCandidate[]) => {
     if (batch.length === 0) return;
+    const selectedBatch = openingPage ? batch.filter((candidate) => !pinnedIdSet.has(candidate.id)) : batch;
     const round = await selectBoardThreadCandidates(
       dependencies,
       boardId,
-      batch.map((candidate) => candidate.id),
+      selectedBatch.map((candidate) => candidate.id),
       context,
       decisions,
       query,
@@ -359,9 +384,12 @@ export async function listBoardThreads(
       entryPositions.push(lastScanned);
     }
   };
-  const firstRoundSize = Math.min(candidates.length, 2 * (limit + 1) + 1, 200);
+  const firstRoundSize = openingPage
+    ? Math.min(candidates.length, limit)
+    : Math.min(candidates.length, 2 * (limit + 1) + 1, 200);
   await readRound(candidates.slice(0, firstRoundSize));
-  if (entries.length <= limit && scanned < candidates.length) await readRound(candidates.slice(scanned));
+  if (!openingPage && entries.length <= limit && scanned < candidates.length)
+    await readRound(candidates.slice(scanned));
 
   let finalState: { boardAnchor: AnchoredPosition; parentAllowed: boolean } | undefined;
   const finalItems = await withBoardDisclosure(

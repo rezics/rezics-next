@@ -21,6 +21,7 @@ import type { ReporterReportView, ReportReadView, ReportView } from './reports.t
 import type { Operation } from './operation-contract.ts';
 import type { DocumentMediaPage } from './media-presentation.ts';
 import type { OwnDraftEntry } from './own-drafts.ts';
+import { RealmPresentationImageSchema } from './realm-media.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -408,6 +409,98 @@ export const BoardThreadsResponseSchema = t.Object(
     threads: t.Array(ThreadViewSchema, { maxItems: 100 }),
     next: t.Union([t.String(), t.Null()]),
     rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  },
+  closed,
+);
+const boardAdvice = t.Union([
+  t.Literal('allowed'),
+  t.Literal('denied'),
+  t.Literal('sign-in'),
+  t.Literal('unavailable'),
+]);
+const boardAuthor = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      id: ContentIdSchema,
+      kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+      handle: t.Union([t.String(), t.Null()]),
+      displayName: t.Union([t.String(), t.Null()]),
+      automated: t.Boolean(),
+    },
+    closed,
+  ),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
+const boardOpeningCounts = t.Union([
+  t.Object(
+    {
+      state: t.Literal('as-of'),
+      values: t.Object(
+        {
+          upvote: t.Optional(reactionCount),
+          downvote: t.Optional(reactionCount),
+          like: t.Optional(reactionCount),
+          love: t.Optional(reactionCount),
+          laugh: t.Optional(reactionCount),
+          insightful: t.Optional(reactionCount),
+          sad: t.Optional(reactionCount),
+        },
+        closed,
+      ),
+      source: t.Object(
+        { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
+        closed,
+      ),
+    },
+    closed,
+  ),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
+const boardOpeningMedia = t.Union([
+  t.Object({ state: t.Literal('none'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
+  t.Object({ state: t.Literal('available'), images: t.Array(RealmPresentationImageSchema, { minItems: 1, maxItems: 32 }) }, closed),
+  t.Object({ state: t.Literal('unavailable'), images: t.Array(RealmPresentationImageSchema, { maxItems: 0 }) }, closed),
+]);
+export const BoardOpeningCardSchema = t.Object(
+  {
+    thread: ThreadViewSchema,
+    target: t.Object({ kind: t.Literal('thread'), id: ContentIdSchema, boardId: ContentIdSchema }, closed),
+    authors: t.Object({ thread: boardAuthor, openingPost: boardAuthor }, closed),
+    media: boardOpeningMedia,
+    interaction: t.Object(
+      {
+        target: t.Object({ kind: t.Literal('thread'), id: ContentIdSchema }, closed),
+        counts: boardOpeningCounts,
+        viewer: t.Union([
+          t.Object({ state: t.Literal('current'), reaction: t.Union([reactionKind, t.Null()]) }, closed),
+          t.Object({ state: t.Literal('not-applicable') }, closed),
+        ]),
+      },
+      closed,
+    ),
+    comments: t.Object({ state: t.Literal('unavailable') }, closed),
+    actions: t.Object({ reply: boardAdvice, react: boardAdvice, share: t.Literal('available') }, closed),
+  },
+  closed,
+);
+export const BoardPageQuerySchema = t.Object(
+  {
+    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+    sort: t.Optional(t.Union([t.Literal('new'), t.Literal('active'), t.Literal('hot')])),
+  },
+  closed,
+);
+export const BoardPageResponseSchema = t.Object(
+  {
+    board: BoardViewSchema,
+    pinnedThreads: t.Array(BoardOpeningCardSchema, { maxItems: 5 }),
+    threads: t.Array(BoardOpeningCardSchema, { maxItems: 20 }),
+    next: t.Union([t.String(), t.Null()]),
+    rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    reactionsAsOf: reactionFreshness,
+    viewer: t.Object({ participation: boardAdvice }, closed),
+    actions: t.Object({ createThread: boardAdvice }, closed),
   },
   closed,
 );

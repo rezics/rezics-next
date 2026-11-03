@@ -2379,6 +2379,35 @@ check uses scales [256, 1024, 4096] with the series rule.
 - **Growth check:** Structural fixed-window bound; focused sparse continuation beyond 200 raw rows and four-sort
   traversal in `test/content/board-pin-http.test.ts`. Broader growth verification is deferred.
 
+Decision: Mount the combined reader at `GET /v1/boards/{id}/page`; accept `new`, `active` and `hot` while binding continuation to the existing native sort, viewer and pin revision.
+
+### Cost: mounted Board opening envelope
+
+- Touches: The mounted factory runs two `readRealmBoard` observations and two `listBoardOpeningThreads` passes
+  to bracket author, media and action hydration with current Board and thread equality. Each page pass reads at most
+  21 raw ordinary candidates, selects/discloses at most 20 ordinary threads and, only on an initial request, selects
+  and discloses the existing five-pin cohort. Each ordinary pass also reads its pin revision and repeats the native
+  final parent observation. The action reader prepares current Access evidence once, batches `thread:create` for one
+  Board and `post:create`/`reaction:set` for at most 25 threads, and checks current Realm participation once. Two
+  public author batches read at most 50 deduplicated identities grouped by account route. Two existing media
+  media projection passes cover at most 800 deduplicated opening-post media keys each in batches of 32; each selected key
+  retains the helper's current parent, Realm and final derivative authorization. Reaction totals use the existing
+  one-seek-per-target-partition projection; signed-in viewer reactions add one batch in the viewer's home. The page
+  reports comments as unavailable because `conversation-activity.ts` has no proven current coverage for this read.
+- Bound: A single request observes at most 42 raw candidates across its two validation passes, hydrates at most 40
+  ordinary candidates and 10 initial pins, and never refills a sparse page. Existing page passes retain their own
+  bounded Access preparation, partition fence, BEGIN/COMMIT or rollback controls, source-cursor validation, chain
+  reads, citation checks and native dispatch retries. Account, media and reaction calls use their existing pools,
+  home grouping, deadlines and runner work; this wrapper adds no cross-partition join or shared transaction. One
+  opening post admits up to `MAX_DOCUMENT_BYTES` (2 MiB) and 32 media references, title limits remain 1,024
+  characters, and published rules are limited to 64 KiB; JSON escaping and repeated copies mean these source caps
+  are not themselves a response-byte or retained-memory cap. The aggregate byte, statement, control and runner
+  bounds still need the native capture below; no fitted cap is asserted.
+- Growth check: Deferred to controller acceptance. Exercise initial and continuation pages at 256/1024/4096 unrelated
+  Board, pin/history, thread/review, Realm/Space, account/authority, reaction and target/reference rows; separately
+  grow unrelated author/media and membership/ban history. Capture each participating pool and runner phase for
+  populated, empty, withheld, stale and retry paths and preserve strict physical-plan refusal.
+
 ### Mention notices
 
 - **Touches:** One thread-route first-revision body read (at most 2 MiB), one independent board point read, and, for up to ten recipients, one preference check, one current Access read check and one notice row.

@@ -5,6 +5,11 @@ import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listOwnDrafts, resumeOwnDraft } from './own-drafts.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import {
+  BoardOpeningChangedError,
+  createBoardPageReader,
+  type BoardOpeningPage,
+} from './board-page.ts';
 import { BoardPinLimitError, setBoardThreadPin } from './board-pin.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
 import { listSubjectThreads } from './subject-threads.ts';
@@ -84,6 +89,8 @@ import {
   BoardViewSchema,
   BoardThreadsQuerySchema,
   BoardThreadsResponseSchema,
+  BoardPageQuerySchema,
+  BoardPageResponseSchema,
   BoardThreadPinInputSchema,
   BoardThreadPinResponseSchema,
   SitemapBoardPageSchema,
@@ -233,6 +240,8 @@ const globalBoardCreateBody = strictContentSchema(
 );
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
+const boardPageQuery = strictContentSchema(BoardPageQuerySchema);
+const boardPageResponse = strictContentSchema(BoardPageResponseSchema);
 const boardThreadPinInput = strictContentSchema(BoardThreadPinInputSchema);
 const boardThreadPinResponse = strictContentSchema(BoardThreadPinResponseSchema);
 const sitemapQuery = strictContentSchema(SitemapQuerySchema);
@@ -360,6 +369,7 @@ function sessionComponent(anchor: AnchoredPosition) {
 }
 
 export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
+  const readBoardPage = createBoardPageReader(dependencies);
   const oversized = new WeakSet<Request>();
   const parseBody = (context: { request: Request; contentType: string }) => parseContentBody(context, oversized);
   const rejectOversized = ({ request }: { request: Request }) => {
@@ -1142,6 +1152,49 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               next: page.nextCursor,
               rankRefreshedAt: page.rankRefreshedAt,
             };
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/boards/:id/page',
+      {
+        params,
+        query: BoardPageQuerySchema,
+        transform: ({ query }) => {
+          if ('issues' in boardPageQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: withHeaders(boardPageResponse, sessionHeader),
+          ...readFailures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'board_page.get',
+          'x-resource-types': ['content.board'],
+          'x-exposure': 'public',
+          'x-action': 'thread:read',
+          security: readSecurity,
+        },
+      },
+      async ({ params: { id }, query, actor, admission, job, session, set }) => {
+        existingId(id);
+        set.headers['cache-control'] = 'private, no-store';
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            let page: BoardOpeningPage;
+            try {
+              page = await readBoardPage(id, { actor, deadline: job.deadline }, query);
+            } catch (error) {
+              if (error instanceof BoardOpeningChangedError)
+                throw new ProblemError('dependency_unavailable', { effectStatus: 'not_applicable' });
+              if (error instanceof TypeError && error.message === 'Invalid content cursor')
+                throw new ProblemError('invalid_cursor');
+              throw error;
+            }
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            const { anchors: _anchors, ...response } = page;
+            return response;
           }),
         );
       },
