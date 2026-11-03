@@ -535,6 +535,12 @@ function SpaceHome({
           {entered && !managementRestricted ? (
             <ResourceAccessLink resourceId={page.realm?.id ?? page.space.id} />
           ) : null}
+          {entered && !managementRestricted && page.realm ? (
+            <Link to="/realms/$id/members" params={{ id: page.realm.id }}
+              className="inline-flex min-h-11 max-w-full items-center rounded-lg border px-4 py-2 text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">
+              {m.realm_members_heading()}
+            </Link>
+          ) : null}
           {viewer && page.realm ? (
             <div hidden={managementRestricted} inert={managementRestricted} className="min-w-0 space-y-8">
               {realmAppearance ?? <RealmAppearancePanel realmId={page.realm.id} />}

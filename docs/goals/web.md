@@ -168,6 +168,19 @@ where its scope or interface wording changes. Page stories cover only the brief'
 recordings when available; illustrative responses stay labelled as such. All launch locales and the current
 phone/desktop, keyboard, private no-store and session-retirement requirements continue to apply.
 
+### Realm members management boundary
+
+The private `/realms/:id/members` destination and management-region link compose one bounded page and one exact
+account inspection. The [members owner](../../apps/web/src/community/members/README.md) defines source retirement,
+opaque continuation, exact failed-address retry, concealed/denied/failed states and consumer cost. Pending membership
+does not certify participation. No actions are admitted by this inspection part; the default Realm ban Panel and
+membership command owners retain execution, uncertain retry and native readback semantics.
+
+Decision: retain an unavailable production source until Content publishes the installed roster/selected operations,
+generated DTOs, authorized responses and action variants; illustrative composition must not become a wire contract.
+The positive production visit, current selected ban/add integration, rejected/unknown commands and full locale/viewport
+review remain continuation work. No fixture or unavailable route establishes native completion or producer growth.
+
 ### My Realms current-entry boundary
 
 The existing `/realms` page keeps the current `MyRealmsCaller`, one-page cursor flow and signed-in route. The
