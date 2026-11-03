@@ -10,8 +10,7 @@ export type PublishedMembership =
 function completePublication(value: unknown): Extract<PublishedMembership, { state: 'complete' }> | null {
   if (!isRecord(value) || value.state !== 'complete' || typeof value.generation !== 'string' || !value.generation)
     return null;
-  if (typeof value.itemCount !== 'number' || !Number.isSafeInteger(value.itemCount) || value.itemCount < 0)
-    return null;
+  if (typeof value.itemCount !== 'number' || !Number.isSafeInteger(value.itemCount) || value.itemCount < 0) return null;
   return { state: 'complete', generation: value.generation, itemCount: value.itemCount };
 }
 
@@ -25,7 +24,7 @@ export function publishedMembershipFromDto(collection: unknown): PublishedMember
 }
 
 export function publishedMembershipFromComplete(complete: PublicationComplete | null): PublishedMembership {
-  return complete ? completePublication(complete.publication) ?? { state: 'unavailable' } : { state: 'unavailable' };
+  return complete ? (completePublication(complete.publication) ?? { state: 'unavailable' }) : { state: 'unavailable' };
 }
 
 export function publishedMembership(

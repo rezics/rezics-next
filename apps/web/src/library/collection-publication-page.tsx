@@ -278,7 +278,12 @@ function PublicationIntentView({
         </div>
       ) : (
         <>
-          <section className="space-y-4" aria-labelledby="publication-selection" aria-busy={busy} data-publication-current>
+          <section
+            className="space-y-4"
+            aria-labelledby="publication-selection"
+            aria-busy={busy}
+            data-publication-current
+          >
             <h2 id="publication-selection" className="text-xl font-semibold">
               {m.library_publication_current()}
             </h2>

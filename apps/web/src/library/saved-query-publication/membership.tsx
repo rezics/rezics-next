@@ -44,9 +44,7 @@ export function SavedQueryPublishedMembership({
         </p>
       ) : (
         <>
-          <p role="status">
-            {m.library_publication_published_generation({ generation: published.generation })}
-          </p>
+          <p role="status">{m.library_publication_published_generation({ generation: published.generation })}</p>
           <SavedQueryAcceptedMeaning meaning={acceptedMeaningFromReview(review)} />
           {review && subjects.length ? <CollectionPublicationReview review={{ ...review, subjects }} /> : null}
         </>

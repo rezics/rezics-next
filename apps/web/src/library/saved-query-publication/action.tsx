@@ -46,10 +46,7 @@ export function SavedQueryPublicationAction({
   if (!admitsSavedQueryPublication(collection, viewerId, allowed)) return null;
   return (
     <span data-slot="saved-query-publication">
-      <PublicationLink
-        target={{ id: collection.id, membershipKind: 'dynamic' }}
-        className={className}
-      >
+      <PublicationLink target={{ id: collection.id, membershipKind: 'dynamic' }} className={className}>
         {children}
       </PublicationLink>
     </span>

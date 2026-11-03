@@ -11,9 +11,5 @@ export {
   publishedReviewSubjects,
   type PublishedMembership,
 } from './published';
-export {
-  acceptedMeaningFromPage,
-  acceptedMeaningFromReview,
-  type AcceptedPublicationMeaning,
-} from './meaning';
+export { acceptedMeaningFromPage, acceptedMeaningFromReview, type AcceptedPublicationMeaning } from './meaning';
 export { SavedQueryAcceptedMeaning, SavedQueryPublishedMembership } from './membership';

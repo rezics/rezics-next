@@ -167,10 +167,12 @@ export async function publishSelectedNative(
   const session = await writeSession(request, sessionEnv);
   if (!asSession(session)) return { ok: false, reason: session.reason === 'unavailable' ? 'unavailable' : 'denied' };
   try {
-    const result = await client.collections({ collectionId: validated.collectionId }).$publishSelected.post(
-      { revision: validated.revision, subjectIds: validated.subjectIds },
-      { headers: kernelHeaders(session.authorization, validated.idempotencyKey) },
-    );
+    const result = await client
+      .collections({ collectionId: validated.collectionId })
+      .$publishSelected.post(
+        { revision: validated.revision, subjectIds: validated.subjectIds },
+        { headers: kernelHeaders(session.authorization, validated.idempotencyKey) },
+      );
     const status = typeof result.status === 'number' ? result.status : (result.error?.status ?? 0);
     const body = result.data ?? result.error?.value ?? null;
     return publicationResponse(status, body, validated);
