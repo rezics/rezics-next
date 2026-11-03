@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { episodeIds, episodeIntent } from '../../src/library/episode-progress.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -60,7 +61,18 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   const path = `/v1/progressSessions/${first.id}`;
   const body = { revision: 1, add: [one.id, three.id, special.id] };
   const retryKey = entryKey();
-  expect(await send('POST', `${path}:recordEpisodes`, body, 200, retryKey)).toEqual({ revision: 2 });
+  const client = createKernelClient('http://kernel.test', {
+    headers: { authorization: `Bearer ${owner.bearer}` },
+    fetch: async (input, init) => {
+      const request = new Request(input, init), url = new URL(request.url);
+      return native.sendWithHeaders(owner.bearer, request.method, url.pathname + url.search,
+        request.method === 'GET' ? undefined : await request.json(), request.headers);
+    },
+  });
+  const wire = client.progressSessions({ sessionId: first.id });
+  const written = await wire.$recordEpisodes.post(body, { headers: { 'idempotency-key': JSON.stringify(retryKey) } });
+  expect(written.status).toBe(200);
+  expect(written.data).toEqual({ revision: 2 });
   expect(await send('POST', `${path}:recordEpisodes`, body, 200, retryKey)).toEqual({ revision: 2 });
   await send('POST', `${path}:recordEpisodes`, { revision: 1, add: [two.id] }, 409);
   await send('POST', `${path}:recordEpisodes`, { revision: 2, add: [foreign.id] }, 404);
@@ -68,7 +80,9 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   await send('POST', `${path}:recordEpisodes`, { revision: 2, add: [one.id, one.id] }, 400);
   await send('POST', `${path}:recordEpisodes`, { revision: 2, add: [one.id], remove: [one.id] }, 400);
   const ids = [one.id, two.id, three.id, special.id];
-  const shown = await inspect(first.id, ids);
+  const viaClient = await wire.episodes.get({ query: { ids: ids.join(',') } });
+  expect(viaClient.status).toBe(200);
+  const shown = viaClient.data!;
   expect(shown.episodes).toEqual(ids.map((id, index) => ({ episodeSubjectId: id,
     completed: index !== 1, membership: 'member', ordinal: ['1', '2', '3', '1'][index] })));
   expect((await inspect(reread.id, ids)).episodes.every((row: { completed: boolean }) => row.completed === false)).toBe(true);

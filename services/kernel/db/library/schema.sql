@@ -3206,13 +3206,13 @@ CREATE TABLE library.progress_session (
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
     episode_completed_count integer DEFAULT 0 NOT NULL,
-    CONSTRAINT progress_session_episode_completed_count_check CHECK (((episode_completed_count >= 0) AND (episode_completed_count <= 20000))),
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT progress_session_check3 CHECK (((state = 'completed'::text) = (completed_at IS NOT NULL))),
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
+    CONSTRAINT progress_session_episode_completed_count_check CHECK (((episode_completed_count >= 0) AND (episode_completed_count <= 20000))),
     CONSTRAINT progress_session_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
     CONSTRAINT progress_session_locator_check CHECK (((locator IS NULL) OR ((char_length(locator) >= 1) AND (char_length(locator) <= 256)))),
     CONSTRAINT progress_session_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
@@ -4595,6 +4595,10 @@ ALTER TABLE library.progress_session
 
 --
 -- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+--
+-- Name: progress_episode progress_episode_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.progress_episode
@@ -6849,6 +6853,10 @@ ALTER TABLE ONLY library.progress_change
 
 --
 -- Name: progress_unit progress_unit_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+--
+-- Name: progress_episode progress_episode_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.progress_episode
