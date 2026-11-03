@@ -22,7 +22,8 @@ export type LibraryFollowingStoryMode =
 
 let mode: LibraryFollowingStoryMode = 'recorded';
 let observation = 0;
-type StoryFollow = (typeof followsRecording.follows)[number] & {
+type RecordedFollow = (typeof followsRecording.follows)[number];
+type StoryFollow = Omit<RecordedFollow, 'target'> & {
   target: (typeof followsRecording.follows)[number]['target'] | null;
 };
 
