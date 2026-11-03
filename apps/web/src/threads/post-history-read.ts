@@ -9,6 +9,7 @@ import {
 } from './exact-revision-media';
 import { readAuthorRevisionVotes, readRevisionSubjects, type RevisionVotes } from './revision-provenance';
 import type { ThreadSubject } from './subjects';
+import { historyContextMatches, projectHistoryContext, type HistoryContext } from './post-history-context';
 
 type PostResource = ReturnType<KernelClient['posts']>;
 type NativeHistoryPage = NonNullable<Awaited<ReturnType<PostResource['revisions']['get']>>['data']>;
@@ -17,6 +18,7 @@ export type PostHistoryReadData =
   | { available: false; transportFailed?: true }
   | {
       available: true;
+      context?: HistoryContext;
       revisions: NativeHistoryPage['revisions'];
       next: NativeHistoryPage['next'];
       authors: PageAuthors;
@@ -91,8 +93,7 @@ function matchesHistoryAddress(page: NativeHistoryPage, postId: string): boolean
  * No session preparation, current-head read, cursor decoding, refill or follow-up history request occurs here.
  * The caller keeps actual-reader provenance even when this transport or a required dependency fails.
  *
- * The installed closed response currently supplies only revisions/next. Keep the existing optional joins
- * until Content publishes its generated current-context/enrichment variants; do not guess their wire shape.
+ * Native context is projected directly. Legacy revisions/next recordings retain their existing optional joins.
  */
 export async function loadPostHistoryPage(
   client: KernelClient,
@@ -112,6 +113,22 @@ export async function loadPostHistoryPage(
       return { available: false };
 
     const { revisions, next } = result.data;
+    if (result.data.page) {
+      if (!historyContextMatches(result.data, address.postId, reader)) return { available: false };
+      const { authors, mentions, subjects, documentMedia } = projectHistoryContext(result.data.page);
+      return {
+        available: true,
+        context: result.data.page,
+        revisions,
+        next,
+        authors,
+        mentions,
+        subjects,
+        reviewVotes: {},
+        documentMedia,
+        now: new Date().toISOString(),
+      };
+    }
     const documentMedia = await loadRevisionDocumentMedia(client, revisionDocumentImageIds(revisions), authorization);
     const [{ authors, mentions }, subjects, reviewVotes] = await Promise.all([
       readHistoryIdentities(client, revisions),
