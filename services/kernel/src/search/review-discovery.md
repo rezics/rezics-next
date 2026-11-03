@@ -1,9 +1,7 @@
 # Public review discovery leaf
 
-Decision: Search composes Content's installed public review source, preserves its unavailable census and full-key
-continuation, and returns `preparing` when a still-eligible row has advanced beyond its indexed partition position
-without a matching opening revision. This avoids exposing a restored stale row while Content has no per-review
-lifecycle version.
+Decision: Search copies Content's exact per-review lifecycle version, omits stale indexed reviews until refreshed,
+and maps incomplete population cuts to `preparing` while retaining the native full-key continuation.
 
 `createNativeReviewDiscoveryAdapter` builds Content's `createReviewDiscoverySource` and exposes its bounded page,
 count, current-summary and registry-reader calls. `createReviewDiscoveryAdapter` accepts that exact Content source
@@ -15,23 +13,25 @@ available. Exact population cardinality remains unavailable as reported by Conte
 ## Native projection and continuation
 
 The identity is `content:review:<thread UUID>` with the native route derived from that UUID. Each document carries
-the exact Content partition position and opening `revisionId`; Content's approved 160-code-point excerpt is copied
+the exact Content partition position, opening `revisionId` and opaque per-review `sourceVersion` as `version`;
+Content's approved 160-code-point excerpt is copied
 without widening its cap. The native row's subject, author ID, vote citation and other author-private fields do not
 enter Search documents or common summaries.
 
 Content pages accept 1–25 results, examine up to four candidates per requested result, and fetch one lookahead key.
 The adapter accepts sparse and empty pages, preserves Content's raw full `(route, thread ID)` continuation, and
 validates that it advances past every returned eligible row. Only `next: null` ends a traversal; eligible row count
-does not prove exhaustion. Each page has its own exact native position. A continuation is not pinned to a fabricated
-partition census, so a late publication can appear after the last examined full key with its own later position.
+does not prove exhaustion. Pass the initial page's `position` as the fourth `cut` argument on continuation. Content
+retains that cut or reports typed incomplete readiness, which Search maps to `preparing`. Missing cuts and partition
+changes require a fresh traversal, so late publication cannot silently fall behind the retained frontier. The cut
+does not manufacture an exact population census or retain historical disclosure rights.
 
 Current cards use Content `hydrate` under its anonymous public-read checks and the Search caller's live deadline.
 Content omission for a protected, withdrawn or deleted opening stays an omission. A changed opening revision also
-withholds the indexed hit. If the same revision is still eligible at a later partition position, Search returns
-`preparing`: Content currently exports no per-review lifecycle version to distinguish an unrelated partition write
-from deletion followed by restoration. A freshly indexed document at that exact later position hydrates normally.
-This conservative state is retained until Content exports that per-review version; Search does not infer it from
-the opening revision or a global position.
+withholds the indexed hit. The native `sourceVersion` must also equal the indexed document's `version`. Deletion
+followed by restoration changes this binding even if the opening revision is unchanged, so the stale restored hit
+stays omitted until refreshed. Unrelated partition writes leave this review's version unchanged and do not delay
+its current card. Search never infers lifecycle freshness from a partition position or opening revision alone.
 
 ## Cost, bounds and growth
 

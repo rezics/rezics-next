@@ -24,6 +24,8 @@ export type IndexedReview = Readonly<{
   title: string | null;
   excerpt?: string;
   revisionId: string;
+  /** Opaque exact opening revision and native thread/post lifecycle binding. */
+  sourceVersion: string;
 }>;
 
 /** Current Content-owned fields for a Search hit; the author ID is an Accounts lookup key, not display text. */
@@ -45,18 +47,29 @@ export type ReviewDiscoverySnapshot = Readonly<{
 export type ReviewDiscoveryHydration = Readonly<{
   partition: number;
   position: bigint;
-  reviews: readonly (ReviewDiscoverySummary & { revisionId: string })[];
+  reviews: readonly CurrentReview[];
 }>;
 
+type CurrentReview = ReviewDiscoverySummary & Pick<IndexedReview, 'revisionId' | 'sourceVersion'>;
 export type ReviewDiscoveryPageKey = Readonly<{ route: number; id: string }>;
 export type ReviewDiscoveryPage = ReviewDiscoverySnapshot & Readonly<{ next: ReviewDiscoveryPageKey | null }>;
+export type ReviewDiscoveryIncompletePage = Readonly<{
+  partition: number;
+  position: bigint;
+  incomplete: 'cut-required' | 'cut-changed';
+}>;
 export type ReviewDiscoveryCount = Readonly<{ partition: number; position: bigint; unavailable: true }>;
 
 export type ReviewDiscoverySource = Readonly<{
   read(partition: number, ids: readonly string[]): Promise<ReviewDiscoverySnapshot>;
   hydrate(partition: number, ids: readonly string[]): Promise<ReviewDiscoveryHydration>;
   count(partition: number): Promise<ReviewDiscoveryCount>;
-  page(partition: number, after: ReviewDiscoveryPageKey | null, limit: number): Promise<ReviewDiscoveryPage>;
+  page(
+    partition: number,
+    after: ReviewDiscoveryPageKey | null,
+    limit: number,
+    cut?: bigint,
+  ): Promise<ReviewDiscoveryPage | ReviewDiscoveryIncompletePage>;
 }>;
 
 export const REVIEW_DISCOVERY_BOUNDS = Object.freeze({
@@ -78,6 +91,7 @@ type Candidate = Readonly<{
   realmId: string | null;
   title: string | null;
   securityRevision: string;
+  postSecurityRevision: string;
   firstPostId: string;
   revisionId: string;
 }>;
@@ -91,6 +105,7 @@ type CandidateRow = {
   realmId: string | null;
   title: string | null;
   securityRevision: string;
+  postSecurityRevision: string;
   firstPostId: string;
   revisionId: string;
 };
@@ -99,7 +114,8 @@ const candidateColumns = `
   t.route, t.thread_id::text AS id, t.author_account_id::text AS "authorId",
   t.board_id::text AS "boardId", t.review_subject_id::text AS "subjectId",
   b.realm_id::text AS "realmId", t.title, t.security_revision::text AS "securityRevision",
-  t.first_post_id::text AS "firstPostId", p.head_revision_id::text AS "revisionId"`;
+  t.first_post_id::text AS "firstPostId", p.head_revision_id::text AS "revisionId",
+  p.security_revision::text AS "postSecurityRevision"`;
 
 const eligibleReviewJoins = `
   FROM content.thread t
@@ -168,7 +184,8 @@ function candidate(row: CandidateRow): Candidate {
     !row.subjectId ||
     !row.firstPostId ||
     !row.revisionId ||
-    !/^[1-9][0-9]*$/.test(row.securityRevision)
+    !/^[1-9][0-9]*$/.test(row.securityRevision) ||
+    !/^[1-9][0-9]*$/.test(row.postSecurityRevision)
   )
     throw new TypeError('Invalid native review discovery candidate');
   return row;
@@ -212,7 +229,7 @@ async function hydrateCandidate(
   dependencies: ContentReadDependencies,
   currentContext: ReadContext,
   value: Candidate,
-): Promise<(ReviewDiscoverySummary & { revisionId: string }) | null> {
+): Promise<CurrentReview | null> {
   let thread: ThreadView | null;
   try {
     thread = (
@@ -259,6 +276,7 @@ async function hydrateCandidate(
     post.availability !== 'available' ||
     !('revisionId' in post) ||
     post.revisionId !== value.revisionId ||
+    post.securityRevision !== value.postSecurityRevision ||
     !post.body
   )
     return null;
@@ -270,16 +288,18 @@ async function hydrateCandidate(
     title: thread.title,
     ...(excerpt === undefined ? {} : { excerpt }),
     revisionId: value.revisionId,
+    sourceVersion: `${value.revisionId}:${value.securityRevision}:${value.postSecurityRevision}`,
   };
 }
 
-function indexRecord(value: ReviewDiscoverySummary & { revisionId: string }): IndexedReview {
+function indexRecord(value: CurrentReview): IndexedReview {
   return {
     id: value.id,
     subjectId: value.subjectId,
     title: value.title,
     ...(value.excerpt === undefined ? {} : { excerpt: value.excerpt }),
     revisionId: value.revisionId,
+    sourceVersion: value.sourceVersion,
   };
 }
 
@@ -299,7 +319,7 @@ export function createReviewDiscoverySource(
       },
       context.deadline,
     );
-    const hydrated = new Map<string, ReviewDiscoverySummary & { revisionId: string }>();
+    const hydrated = new Map<string, CurrentReview>();
     for (const item of native.candidates) {
       const value = await hydrateCandidate(dependencies, context, item);
       if (value) hydrated.set(value.id, value);
@@ -335,22 +355,29 @@ export function createReviewDiscoverySource(
       );
       return { partition, position: at, unavailable: true };
     },
-    async page(partition, after, limit) {
+    async page(partition, after, limit, cut) {
       assertPartition(partition);
       const frontier = checkedFrontier(partition, after);
       if (!Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_PAGE_LIMIT)
         throw new RangeError(`Review discovery page limit must be from 1 to ${REVIEW_DISCOVERY_PAGE_LIMIT}`);
+      if (cut !== undefined && (typeof cut !== 'bigint' || cut < 0n))
+        throw new RangeError('Review discovery cut must be a native position');
       const context = checkedContext(makeAnonymousContext);
       const native = await withReadTransaction(
         dependencies.pool,
         async (client) => {
           const at = await position(client, partition);
+          if (frontier !== null && cut === undefined)
+            return { position: at, candidates: [], incomplete: 'cut-required' as const };
+          if (cut !== undefined && cut !== at)
+            return { position: at, candidates: [], incomplete: 'cut-changed' as const };
           const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
           const candidates = await pageCandidates(client, partition, frontier, candidateLimit + 1);
           return { position: at, candidates };
         },
         context.deadline,
       );
+      if (native.incomplete) return { partition, position: native.position, incomplete: native.incomplete };
       const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
       const selected = native.candidates.slice(0, candidateLimit);
       const reviews: IndexedReview[] = [];
