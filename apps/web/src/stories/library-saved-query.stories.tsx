@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { parseFilter } from '@rezics/filter';
 import { savedRuleReadyId } from '../kernel/fake/collection-rules';
 import { storyViewerId } from '../kernel/fake/identities';
 import { writeSavedQueryHandoff } from '../library/save-query';
@@ -21,9 +22,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const filter = {
+const filter = parseFilter({
   and: [{ owner: { presence: true } }, { type: { in: ['schema:Book'] } }],
-};
+});
 
 function SeededRulePage() {
   writeSavedQueryHandoff({ viewerId: storyViewerId, filter, sort: 'id' });
