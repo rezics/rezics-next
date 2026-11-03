@@ -19,7 +19,7 @@ import {
   type BangumiOutcome,
 } from './list-import-bangumi-model.ts';
 
-import { BANGUMI_LABEL_LIMITS, type BangumiLabelState, type BangumiLabelOutcome } from './list-import-bangumi-label-model.ts';
+import { BANGUMI_LABEL_LIMITS, type BangumiLabelState, type BangumiLabelOutcome, type BangumiTagPage } from './list-import-bangumi-label-model.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -165,7 +165,7 @@ export function bangumiImportRoutes(
       {
         params: t.Object({ uploadId: id, ordinal }, closed),
         query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: BANGUMI_LIMITS.rowBytes, default: -1 })) }, closed),
-        response: { 200: result<Awaited<ReturnType<ReturnType<typeof createBangumiImport>['tags']>>>(), ...failures },
+        response: { 200: result<BangumiTagPage>(), ...failures },
         detail: detail('library_bangumi.tags', false),
       },
       ({ actor, params, query, set }) => {

@@ -41,6 +41,7 @@ export function createBangumiLabelReview(
   const labels = createPersonalLabelCommands(deps), assignments = createLabelAssignmentCommands(deps);
   const args = (a: AccountActor, id: string, ordinal: number) => [requireRoute(a.accountId), a.accountId, id, ordinal];
   class LimitError extends Error {}
+  class StaleError extends LibraryConflictError {}
   const conflict = () => new ProblemError('conflict');
   async function retained(actor: Actor, id: string, ordinal: number) {
     return host.read(actor, async (tx, a) => {
@@ -114,12 +115,12 @@ export function createBangumiLabelReview(
       async prepare(at) {
         let error: unknown;
         try {
-          if (!review.subject) throw new LibraryConflictError();
+          if (!review.subject) throw new StaleError();
           const o = await readLibraryProfileSourceObservation({ ...deps, actor, at, deadline: deadlineFor(5000) },
             review.subject.subjectId);
           if (!o || o.source.kind !== 'supported' || o.source.subjectId !== review.subject.subjectId ||
               o.source.pin.releaseDigest !== review.subject.releaseDigest ||
-              String(o.anchor.identityEpoch) !== review.subject.identityEpoch) throw new LibraryConflictError();
+              String(o.anchor.identityEpoch) !== review.subject.identityEpoch) throw new StaleError();
         } catch (e) { error = e; }
         return async (tx: Client) => {
           if (error) throw error;
@@ -134,7 +135,7 @@ export function createBangumiLabelReview(
           if (!r || r.cancelled || r.review?.token !== review.rowRevision ||
               !r.labels?.confirmed || canonicalize(r.labels.review) !== canonicalize(review) ||
               canonicalize(bangumiTagFromItem(r.labels.review, item.index)) !== canonicalize(item))
-            throw new LibraryConflictError();
+            throw new StaleError();
           if (target) {
             // The same subject guard precedes parent locks in native assignment admission.
             await lockLabelAssignmentSubject(tx, { route: requireRoute(actor.accountId), accountId: actor.accountId,
@@ -142,7 +143,7 @@ export function createBangumiLabelReview(
             const parent = await tx.query<{ revision: number }>(`SELECT revision FROM library.personal_label
               WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`,
               [requireRoute(actor.accountId), actor.accountId, target.id]);
-            if (parent.rows[0]?.revision !== target.revision) throw new LibraryConflictError();
+            if (parent.rows[0]?.revision !== target.revision) throw new StaleError();
           }
           // Charge fresh native commands only; receipt replay never executes this body.
           const counter = target ? 'label_assignments' : 'label_creations';
@@ -185,7 +186,7 @@ export function createBangumiLabelReview(
       else if (item.status === 'ready') {
         const key = `bangumi-label:${id}:${ordinal}:${token}:${item.index}`;
         try {
-          if (!review.subject) throw new LibraryConflictError();
+          if (!review.subject) throw new StaleError();
           let target: { id: string; revision: number };
           if ('labelId' in item.target) target = { id: item.target.labelId, revision: item.target.revision };
           else {
@@ -201,7 +202,8 @@ export function createBangumiLabelReview(
           result.status = assigned.value.unchanged ? 'unchanged' : 'assigned';
         } catch (error) {
           if (error instanceof GrantDeniedError) throw error;
-          result.status = error instanceof LimitError ? 'limit' : error instanceof LibraryConflictError || error instanceof LibraryNotFoundError ? 'stale' :
+          result.status = error instanceof LimitError ? 'limit' : error instanceof StaleError || error instanceof LibraryNotFoundError ? 'stale' :
+            error instanceof LibraryConflictError ? 'conflict' :
             error instanceof ProblemError && error.code === 'library_label_capacity' ? 'capacity' :
             error instanceof ProblemError && error.code === 'conflict' ? 'conflict' : 'failed';
         }

@@ -59,3 +59,12 @@ export function bangumiTag(e: BangumiEvidence, index: number): BangumiTag | null
     return { index, value, status: 'invalid', proposedName: null };
   }
 }
+
+export type BangumiTagPage = {
+  ordinal: number;
+  rowRevision: string | null;
+  evidence: BangumiTagEvidence;
+  tags: BangumiTag[];
+  next: number | null;
+  labels: BangumiLabelState | null;
+};
