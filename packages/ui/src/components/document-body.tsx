@@ -1,6 +1,6 @@
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import { type DocumentSnapshot } from '@rezics/document';
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, createElement, useContext, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { DocumentSpoiler } from './document-spoiler.tsx';
 import { Prose } from './prose.tsx';
 import { documentExtensions } from './document-extensions.ts';
@@ -42,16 +42,16 @@ type DocumentRenderValue = {
   visitId: number;
   revealed: ReadonlySet<number>;
   reveal: (index: number) => void;
-  nextSpoilerIndex: () => number;
+  spoilerIndex: (node: object) => number;
 };
 
 const DocumentRenderContext = createContext<DocumentRenderValue | null>(null);
 
 /** Stable mark component; visit-scoped revealed indices restore after a parent re-render remounts. */
-function SpoilerMark({ children }: { children?: ReactNode }) {
+function SpoilerMark({ children, node }: { children?: ReactNode; node: object }) {
   const render = useContext(DocumentRenderContext);
   if (!render) return <DocumentSpoiler>{children}</DocumentSpoiler>;
-  const index = render.nextSpoilerIndex();
+  const index = render.spoilerIndex(node);
   return (
     <DocumentSpoiler
       label={render.labels.revealSpoiler}
@@ -63,19 +63,35 @@ function SpoilerMark({ children }: { children?: ReactNode }) {
   );
 }
 
+/** Optional local reading anchors; no URLs, labels or document mutation. */
+export type DocumentHeadingAttributes = {
+  id: string;
+  tabIndex: -1;
+  ref: Ref<HTMLHeadingElement>;
+};
+
 type Props = {
   document: DocumentSnapshot;
   className?: string;
   labels?: Partial<DocumentBodyLabels>;
   mentions?: DocumentMentions;
   locale?: string;
+  /** Existing admitted node identity, independent of render attempts or heading text. */
+  headingAttributes?: (nodeId: string) => DocumentHeadingAttributes | undefined;
+  /** Spoiler mark positions in document order, from the renderer's live disclosure authority. */
+  onDisclosureChange?: (revealed: ReadonlySet<number>) => void;
   /** A reader without current native derivative summaries must render explicit unavailability, never guess a URL. */
   renderImage?: (image: { mediaId: string; alt: string }) => ReactNode;
 };
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
-export function DocumentBody({ document, className, labels, mentions, locale = 'en', renderImage }: Props) {
-  const semanticSnapshot = semanticSnapshotJson(document);
+export function DocumentBody({
+  document, className, labels, mentions, locale = 'en', renderImage, headingAttributes, onDisclosureChange,
+}: Props) {
+  // Published readers admit immutable snapshots; ordinary consumers retain semantic replacement detection.
+  const anchored = !!headingAttributes;
+  const cachedSemantic = useMemo(() => anchored ? semanticSnapshotJson(document) : null, [document, anchored]);
+  const semanticSnapshot = cachedSemantic ?? semanticSnapshotJson(document);
   const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
   const concealment = useRef({ id: 0, revealed: new Set<number>() });
   if (visit.semanticSnapshot !== semanticSnapshot) {
@@ -93,21 +109,42 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
   const reveal = (index: number) => {
     if (concealment.current.id !== visitId) return;
     concealment.current.revealed.add(index);
+    onDisclosureChange?.(new Set(concealment.current.revealed));
   };
   let spoilerIndex = 0;
+  const spoilerPositions = new WeakMap<object, number>();
   const resolved = { ...documentBodyLabels, ...labels };
   const renderValue: DocumentRenderValue = {
     labels: resolved,
     visitId,
     revealed: concealment.current.revealed,
     reveal,
-    nextSpoilerIndex: () => spoilerIndex++,
+    spoilerIndex: (node) => {
+      const known = spoilerPositions.get(node);
+      if (known !== undefined) return known;
+      const index = spoilerIndex++;
+      spoilerPositions.set(node, index);
+      return index;
+    },
   };
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
     options: {
       nodeMapping: {
+        // Without the optional port, the installed extension retains its exact default markup.
+        ...(headingAttributes ? {
+          heading: ({ node, children }: any) => {
+            const attributes = headingAttributes(node.attrs.id ?? '');
+            return createElement(`h${node.attrs.level}`, {
+              'data-block-id': node.attrs.id ?? undefined,
+              lang: node.attrs.lang ?? undefined,
+              dir: node.attrs.dir ?? undefined,
+              draggable: 'true',
+              ...attributes,
+            }, children);
+          },
+        } : {}),
         mention: ({ node }: any) => {
           const account = Object.hasOwn(mentions ?? {}, node.attrs?.accountId)
             ? mentions?.[node.attrs.accountId]

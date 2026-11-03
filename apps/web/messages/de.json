@@ -6732,5 +6732,12 @@
   "thread_inspection_edit_target": "Bearbeitung in Thread {target} · Quellfassung {revision}",
   "thread_inspection_draft_title": "Entwurfstitel",
   "thread_inspection_image_unavailable": "Entwurfsbild in der Prüfung nicht verfügbar",
-  "thread_inspection_draft_notice": "Nur ein ungesendeter Entwurf. Keine Veröffentlichungszeit oder Autorenmetadaten werden angenommen. Erwähnungen und Bilder nutzen nur vorhandene Leserechte."
+  "thread_inspection_draft_notice": "Nur ein ungesendeter Entwurf. Keine Veröffentlichungszeit oder Autorenmetadaten werden angenommen. Erwähnungen und Bilder nutzen nur vorhandene Leserechte.",
+  "post_sections_title": "Abschnitte",
+  "post_sections_close": "Schließen",
+  "post_sections_count": "{count} Abschnitte werden angezeigt",
+  "post_sections_overflow": "{count} weitere sichtbare Abschnitte sind nicht aufgeführt. Lies im vollständigen Beitrag weiter.",
+  "post_sections_return": "Zur vorherigen Leseposition",
+  "post_sections_unavailable": "Dieser Abschnitt ist nicht mehr verfügbar. Lies im aktuellen Beitrag weiter.",
+  "post_sections_entry": "Überschrift der Ebene {level}: {label}"
 }

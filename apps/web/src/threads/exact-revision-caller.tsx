@@ -303,7 +303,9 @@ export function ExactRevisionCaller({
     page.state === 'ready' && admissionMatches && ownsConnection(visit, generation) && !retiredVisits.has(visit);
   return (
     <>
-      <ExactRevisionView identity={identity} page={page} onRetry={retry} />
+      <ExactRevisionView identity={identity} page={page} onRetry={retry} readingIdentity={visit}
+        isReadingCurrent={() => active.current?.visit === visit && !retiredVisits.has(visit) &&
+          ownsConnection(visit, generation) && historicalBindingCurrent(source, visit.admission.binding)} />
       {ready ? <EditionCreateEntry identity={identity} /> : null}
     </>
   );

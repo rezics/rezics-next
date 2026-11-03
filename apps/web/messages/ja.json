@@ -6732,5 +6732,12 @@
   "thread_inspection_edit_target": "スレッド{target}を編集 · 元の版{revision}",
   "thread_inspection_draft_title": "下書きタイトル",
   "thread_inspection_image_unavailable": "確認画面では下書き画像を表示できません",
-  "thread_inspection_draft_notice": "未送信の下書きです。公開日時や著者情報を示しません。メンションと画像は既存の閲覧権限のみを使用します。"
+  "thread_inspection_draft_notice": "未送信の下書きです。公開日時や著者情報を示しません。メンションと画像は既存の閲覧権限のみを使用します。",
+  "post_sections_title": "セクション",
+  "post_sections_close": "閉じる",
+  "post_sections_count": "{count} 件のセクションを表示",
+  "post_sections_overflow": "表示可能なセクションがほかに {count} 件あります。投稿全体を続けてお読みください。",
+  "post_sections_return": "前の読書位置に戻る",
+  "post_sections_unavailable": "このセクションは利用できなくなりました。現在の投稿を続けてお読みください。",
+  "post_sections_entry": "見出しレベル {level}：{label}"
 }

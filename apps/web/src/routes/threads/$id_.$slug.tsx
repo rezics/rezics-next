@@ -1043,7 +1043,8 @@ export function ThreadReadingPost({
         />
       ) : (
         <>
-          <ThreadPostReadingBody post={post} documentMedia={documentMedia} mentions={mentions} />
+          <ThreadPostReadingBody post={post} documentMedia={documentMedia} mentions={mentions}
+            readerIdentity={lifetime} isReaderCurrent={() => current()} />
           <footer className="mt-3 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <p className="mr-auto min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">
               {m.thread_history_licence()}: {post.licence}

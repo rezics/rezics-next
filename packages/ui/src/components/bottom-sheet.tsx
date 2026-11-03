@@ -22,6 +22,7 @@ export function BottomSheet({
   closeLabel,
   before,
   className,
+  onOpenChangeComplete,
   finalFocus,
 }: {
   open: boolean;
@@ -31,12 +32,13 @@ export function BottomSheet({
   closeLabel?: string;
   before?: ReactNode;
   className?: string;
+  onOpenChangeComplete?: DrawerPrimitive.Root.Props['onOpenChangeComplete'];
   finalFocus?: DrawerPrimitive.Popup.Props['finalFocus'];
 }) {
   const locale = typeof document === 'undefined' ? 'en' : document.documentElement.lang;
   const label = closeLabel ?? doneLabels[locale] ?? doneLabels[locale.split('-')[0]!] ?? 'Done';
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} showSwipeHandle>
+    <Drawer open={open} onOpenChange={onOpenChange} onOpenChangeComplete={onOpenChangeComplete} showSwipeHandle>
       <DrawerContent className="max-h-[85dvh]" finalFocus={finalFocus}>
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">

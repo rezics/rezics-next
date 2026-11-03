@@ -18,10 +18,14 @@ export function ExactRevisionView({
   identity,
   page,
   onRetry,
+  readingIdentity,
+  isReadingCurrent,
 }: {
   identity: ExactRevisionIdentity;
   page: ExactRevisionState;
   onRetry?: () => void;
+  readingIdentity?: unknown;
+  isReadingCurrent?: () => boolean;
 }) {
   const locale = getLocale();
   const detailsId = `revision-details-${useId().replaceAll(':', '')}`;
@@ -82,6 +86,8 @@ export function ExactRevisionView({
           />
           <PostReadingBody
             key={`${page.revision.id}:${page.revision.revisionId}`}
+            readerIdentity={readingIdentity ?? page.revision}
+            {...(isReadingCurrent ? { isReaderCurrent: isReadingCurrent } : {})}
             document={page.revision.body}
             mentions={page.mentions}
             locale={locale}

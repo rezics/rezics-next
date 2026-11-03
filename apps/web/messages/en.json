@@ -6782,5 +6782,12 @@
   "thread_inspection_edit_target": "Editing in thread {target} · source revision {revision}",
   "thread_inspection_draft_title": "Draft title",
   "thread_inspection_image_unavailable": "Draft image unavailable in inspection",
-  "thread_inspection_draft_notice": "Unsent draft only. No publication time or author metadata is implied. Mentions and images use only existing reading authority."
+  "thread_inspection_draft_notice": "Unsent draft only. No publication time or author metadata is implied. Mentions and images use only existing reading authority.",
+  "post_sections_title": "Sections",
+  "post_sections_close": "Close",
+  "post_sections_count": "Showing {count} sections",
+  "post_sections_overflow": "{count} more visible sections are not listed. Continue reading the full post.",
+  "post_sections_return": "Return to previous position",
+  "post_sections_unavailable": "This section is no longer available. Continue reading in the current post.",
+  "post_sections_entry": "Heading level {level}: {label}"
 }

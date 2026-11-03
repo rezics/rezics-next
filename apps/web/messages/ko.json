@@ -6732,5 +6732,12 @@
   "thread_inspection_edit_target": "글타래 {target} 편집 · 원본 버전 {revision}",
   "thread_inspection_draft_title": "초안 제목",
   "thread_inspection_image_unavailable": "점검에서 초안 이미지를 표시할 수 없음",
-  "thread_inspection_draft_notice": "보내지 않은 초안입니다. 게시 시각이나 작성자 정보를 뜻하지 않습니다. 멘션과 이미지는 기존 읽기 권한만 사용합니다."
+  "thread_inspection_draft_notice": "보내지 않은 초안입니다. 게시 시각이나 작성자 정보를 뜻하지 않습니다. 멘션과 이미지는 기존 읽기 권한만 사용합니다.",
+  "post_sections_title": "섹션",
+  "post_sections_close": "닫기",
+  "post_sections_count": "섹션 {count}개 표시",
+  "post_sections_overflow": "표시 가능한 섹션 {count}개가 더 있습니다. 게시물 전체를 계속 읽어 주세요.",
+  "post_sections_return": "이전 읽기 위치로 돌아가기",
+  "post_sections_unavailable": "이 섹션은 더 이상 사용할 수 없습니다. 현재 게시물을 계속 읽어 주세요.",
+  "post_sections_entry": "제목 수준 {level}: {label}"
 }

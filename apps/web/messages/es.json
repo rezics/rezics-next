@@ -6732,5 +6732,12 @@
   "thread_inspection_edit_target": "Editando en el hilo {target} · revisión original {revision}",
   "thread_inspection_draft_title": "Título del borrador",
   "thread_inspection_image_unavailable": "Imagen del borrador no disponible en la revisión",
-  "thread_inspection_draft_notice": "Solo un borrador sin enviar. No implica fecha ni metadatos del autor. Menciones e imágenes usan solo los permisos de lectura existentes."
+  "thread_inspection_draft_notice": "Solo un borrador sin enviar. No implica fecha ni metadatos del autor. Menciones e imágenes usan solo los permisos de lectura existentes.",
+  "post_sections_title": "Secciones",
+  "post_sections_close": "Cerrar",
+  "post_sections_count": "Se muestran {count} secciones",
+  "post_sections_overflow": "Hay {count} secciones visibles más que no se muestran. Continúa leyendo la publicación completa.",
+  "post_sections_return": "Volver a la posición anterior",
+  "post_sections_unavailable": "Esta sección ya no está disponible. Continúa leyendo la publicación actual.",
+  "post_sections_entry": "Encabezado de nivel {level}: {label}"
 }

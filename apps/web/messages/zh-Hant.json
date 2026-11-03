@@ -6732,5 +6732,12 @@
   "thread_inspection_edit_target": "正在編輯討論串 {target} · 來源版本 {revision}",
   "thread_inspection_draft_title": "草稿標題",
   "thread_inspection_image_unavailable": "檢查時無法顯示草稿圖片",
-  "thread_inspection_draft_notice": "僅為未送出草稿，不代表發表時間或作者資訊。提及與圖片僅使用既有閱讀權限。"
+  "thread_inspection_draft_notice": "僅為未送出草稿，不代表發表時間或作者資訊。提及與圖片僅使用既有閱讀權限。",
+  "post_sections_title": "章節",
+  "post_sections_close": "關閉",
+  "post_sections_count": "顯示 {count} 個章節",
+  "post_sections_overflow": "另有 {count} 個可見章節未列出。請繼續閱讀完整貼文。",
+  "post_sections_return": "返回先前閱讀位置",
+  "post_sections_unavailable": "此章節已無法使用。請繼續閱讀目前的貼文。",
+  "post_sections_entry": "第 {level} 級標題：{label}"
 }

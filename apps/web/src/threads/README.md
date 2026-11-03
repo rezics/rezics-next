@@ -258,10 +258,47 @@ Spoiler and image-recovery controls retain phone targets and keyboard focus. Det
 complete. The exact-revision page uses the same body composition and its existing localized return-to-post link;
 opening provenance/history never substitutes a current head for the selected immutable revision.
 
-Rendering adds no loader, observer or network read. One media index plus one renderer traversal gives O(B+V) work
+Rendering adds no loader, observer or network read. One media index, one bounded outline projection and the renderer give O(B+V) work
 within the existing native document/media limits. Prepared multilingual stories cover the post/revision/return
 journey at 390 and 1280 pixels in both themes, plus keyboard use and unavailable media. They reuse recorded DTO
 shapes and visibly identify prepared content; they are not native disclosure proof.
+
+### Published post sections
+
+`PostReadingBody` offers an optional Sections launcher after hydration when the exact admitted published snapshot
+has a visible, nonempty heading. It composes the installed shared renderer, preserving its headings, language,
+marks, code and image renderer. Current post and immutable-revision readers each own their mounted namespace;
+no draft inspector, history picker, reply anchor or post permalink is repurposed. A whole-body warning remains
+outside and before this reader; concealed bodies must not be mounted beneath a warning.
+
+Decision: Sections closes after a choice at both widths; the current visit keeps one Return to previous position
+bookmark captured before the outline opens, including nested scroll containers and the last live reading focus.
+Phone uses the shared scrollable BottomSheet, desktop the shared Dialog. Dismissal restores launcher focus; a choice
+waits for modal dismissal before instant local scroll and heading focus. The existing six-rem shell offset also reserves the measured sticky launcher and a wrapping Return row.
+The compact sticky controls wrap, have 44px targets and never narrow the prose column. No state enters browser
+history, addresses or storage. A disappeared target reports unavailability and focuses the live reader.
+
+One iterative O(B+N) projection runs per exact snapshot and live spoiler disclosure identity. Only source text and
+hard breaks contribute plain labels, capped at 120 Unicode codepoints including any ellipsis. Image alt/title,
+mention identities, link metadata, ruby annotations and embedded-component payloads never contribute labels or
+requests. Headings with any still-concealed spoiler, hidden ancestor or unsupported visibility shape are omitted
+entirely from labels and counts. Only the renderer's live reveal authority can admit newly disclosed headings;
+opening Sections never reveals one. Visible heading levels retain hierarchy across omitted headings and duplicates
+remain independent positional targets. At most 100 entries/target references survive; overflow counts only additional
+eligible visible headings. There is no observer, scroll subscription, DOM-wide scan, polling or enrichment.
+
+A document, source, viewer, route or readability replacement retires targets, return state and pending focus work,
+even if the new document has equal text or returns to an earlier identity. Current readers pass their original
+`PostCommandLifetime` guard; immutable readers pass their admitted revision visit guard. The optional shared heading
+attribute and disclosure ports add no markup changes for other document consumers. Sections stories connect the
+actual post frame, current reader and immutable reader at phone390 and desktop1280 in light/dark, including keyboard,
+concealment, overflow, unavailable targets and viewer replacement. Integration owns visual review of that journey.
+
+Behavior references: `legacy-final:packages/ui/src/components/document-body.tsx` (optional reading-anchor port),
+`legacy-final:apps/web/features/feed/post-row.tsx` (post navigation), the earlier app's
+`posts/components/post-detail-article.tsx` and `content-language-display/localized-portable-text-content.tsx`
+(document structure and explicit concealment), and [GitHub's writing guide](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#headings)
+(heading outline interaction). These are source/interaction references, not runtime or visual proof.
 
 ## Document image inspection
 

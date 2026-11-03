@@ -6732,5 +6732,12 @@
   "thread_inspection_edit_target": "正在编辑主题 {target} · 来源版本 {revision}",
   "thread_inspection_draft_title": "草稿标题",
   "thread_inspection_image_unavailable": "检查时无法显示草稿图片",
-  "thread_inspection_draft_notice": "仅为未发送草稿，不代表发表时间或作者信息。提及与图片仅使用既有阅读权限。"
+  "thread_inspection_draft_notice": "仅为未发送草稿，不代表发表时间或作者信息。提及与图片仅使用既有阅读权限。",
+  "post_sections_title": "章节",
+  "post_sections_close": "关闭",
+  "post_sections_count": "显示 {count} 个章节",
+  "post_sections_overflow": "另有 {count} 个可见章节未列出。请继续阅读完整帖子。",
+  "post_sections_return": "返回先前阅读位置",
+  "post_sections_unavailable": "此章节已无法使用。请继续阅读当前帖子。",
+  "post_sections_entry": "第 {level} 级标题：{label}"
 }
