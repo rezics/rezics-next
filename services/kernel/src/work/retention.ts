@@ -1,7 +1,8 @@
-import { DBOS, type GetWorkflowsInput, type WorkflowStatusString } from '@dbos-inc/dbos-sdk';
+import { DBOS, type WorkflowStatusString } from '@dbos-inc/dbos-sdk';
 import { ConfigError } from '../commerce/config.ts';
 import { WORK_APPLICATION } from './client.ts';
 import type { WorkModule } from './registry.ts';
+import { createWorkflowRetentionSelector } from './retention-selector.ts';
 
 export const WORKFLOW_RETENTION_WORKFLOW = 'kernel.workflowRetention';
 export const WORKFLOW_RETENTION_SCHEDULE = 'kernel.workflowRetention.every-10-minutes';
@@ -24,8 +25,8 @@ export const TERMINAL_WORKFLOW_STATUSES = [
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export type WorkflowRetentionConfig = Readonly<{ retentionDays: number }>;
-export type WorkflowRetentionSdk = Pick<typeof DBOS, 'listWorkflows' | 'deleteWorkflows'>;
-/** Work-owned adapter boundary; the installed SDK does not yet provide this selector. */
+export type WorkflowRetentionSdk = Pick<typeof DBOS, 'deleteWorkflows'>;
+/** Work-owned selector boundary; production uses the repository index via the Work pool. */
 export type WorkflowRetentionSelector = (
   input: Readonly<{
     applicationName: string;
@@ -50,40 +51,13 @@ export function readWorkflowRetentionConfig(env: Environment): WorkflowRetention
   return { retentionDays };
 }
 
-function listInput(strictCutoff: string): GetWorkflowsInput {
-  return {
-    applicationName: WORK_APPLICATION,
-    status: [...TERMINAL_WORKFLOW_STATUSES],
-    completedBefore: strictCutoff,
-    endTime: strictCutoff,
-    limit: WORKFLOW_RETENTION_BATCH_SIZE,
-    sortDesc: false,
-    loadInput: false,
-    loadOutput: false,
-  };
-}
-
-/** Compatibility selection only: LIMIT bounds returned IDs, not the installed SDK's traversal. */
-async function selectCompatibilityBatch(sdk: WorkflowRetentionSdk, cutoff: number): Promise<string[]> {
-  // The installed SDK's completion cutoff is inclusive at millisecond precision.
-  const statuses = await sdk.listWorkflows(listInput(new Date(cutoff - 1).toISOString()));
-  return statuses
-    .filter(
-      (status) =>
-        (TERMINAL_WORKFLOW_STATUSES as readonly string[]).includes(status.status) &&
-        typeof status.completedAt === 'number' &&
-        status.completedAt < cutoff,
-    )
-    .slice(0, WORKFLOW_RETENTION_BATCH_SIZE)
-    .map((status) => status.workflowID);
-}
-
 /** Select one batch and use supported SDK deletion without descendants. */
 export async function runWorkflowRetentionBatch(
   retentionDays: number,
   sdk: WorkflowRetentionSdk = DBOS,
   now = new Date(),
   select?: WorkflowRetentionSelector,
+  applicationName = WORK_APPLICATION,
 ): Promise<number> {
   if (
     !Number.isSafeInteger(retentionDays) ||
@@ -91,17 +65,16 @@ export async function runWorkflowRetentionBatch(
     retentionDays > MAX_WORKFLOW_RETENTION_DAYS
   )
     throw new RangeError('Invalid workflow retention period');
+  if (!select) throw new TypeError('Workflow retention requires the indexed selector');
   const cutoff = now.getTime() - retentionDays * DAY_MS;
-  const ids = select
-    ? [
-        ...(await select({
-          applicationName: WORK_APPLICATION,
-          statuses: TERMINAL_WORKFLOW_STATUSES,
-          completedBefore: cutoff,
-          limit: WORKFLOW_RETENTION_BATCH_SIZE,
-        })),
-      ].slice(0, WORKFLOW_RETENTION_BATCH_SIZE)
-    : await selectCompatibilityBatch(sdk, cutoff);
+  const ids = [
+    ...(await select({
+      applicationName,
+      statuses: TERMINAL_WORKFLOW_STATUSES,
+      completedBefore: cutoff,
+      limit: WORKFLOW_RETENTION_BATCH_SIZE,
+    })),
+  ].slice(0, WORKFLOW_RETENTION_BATCH_SIZE);
   if (ids.length > 0) await sdk.deleteWorkflows(ids, false);
   return ids.length;
 }
@@ -113,10 +86,11 @@ export async function runWorkflowRetentionSweep(
   now = new Date(),
   step: RetentionBatchStep = (batch) => batch(),
   select?: WorkflowRetentionSelector,
+  applicationName = WORK_APPLICATION,
 ): Promise<number> {
   let deleted = 0;
   for (let batch = 0; batch < WORKFLOW_RETENTION_MAX_BATCHES; batch++) {
-    const removed = await step(() => runWorkflowRetentionBatch(retentionDays, sdk, now, select));
+    const removed = await step(() => runWorkflowRetentionBatch(retentionDays, sdk, now, select, applicationName));
     deleted += removed;
     if (removed < WORKFLOW_RETENTION_BATCH_SIZE) break;
   }
@@ -125,17 +99,25 @@ export async function runWorkflowRetentionSweep(
 
 export const workflowRetentionWorkModule: WorkModule = {
   name: 'retention',
-  async register({ client, env, queues }) {
+  async register({ client, env, queues, pool }) {
     if (!Object.hasOwn(queues, 'maintenance')) throw new Error('Workflow retention requires the maintenance queue');
     const { retentionDays } = readWorkflowRetentionConfig(env);
+    const select = createWorkflowRetentionSelector(pool);
+    const applicationName = client.applicationName ?? WORK_APPLICATION;
     DBOS.registerWorkflow(
       async () => {
         // Freeze both configuration and time across worker replacement and replay.
         const start = await DBOS.runStep(async () => ({ retentionDays, now: Date.now() }), {
           name: 'kernel.workflowRetention.start',
         });
-        return runWorkflowRetentionSweep(start.retentionDays, client, new Date(start.now), (batch) =>
-          DBOS.runStep(batch, { name: 'kernel.workflowRetention.batch', retriesAllowed: true, maxAttempts: 3 }),
+        return runWorkflowRetentionSweep(
+          start.retentionDays,
+          client,
+          new Date(start.now),
+          (batch) =>
+            DBOS.runStep(batch, { name: 'kernel.workflowRetention.batch', retriesAllowed: true, maxAttempts: 3 }),
+          select,
+          applicationName,
         );
       },
       { name: WORKFLOW_RETENTION_WORKFLOW },

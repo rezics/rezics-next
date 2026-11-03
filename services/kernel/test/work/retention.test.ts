@@ -9,13 +9,15 @@ import {
 } from '../../src/work/retention.ts';
 import { createWorkClient, enqueueWorkIntent } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
+import { createWorkflowRetentionSelector } from '../../src/work/retention-selector.ts';
 import { readSdkWorkflowRetirement, retireSdkWorkflowWriters } from '../../src/work/sdk-retirement-fence.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 const database = new pg.Pool({ connectionString: databaseUrl, max: 2 });
-const client = await createWorkClient(databaseUrl);
+const client = await createWorkClient(databaseUrl, database);
+const select = createWorkflowRetentionSelector(database);
 const owned = new Set<string>();
 
 beforeAll(async () => {
@@ -163,7 +165,6 @@ for (const lostResult of [false, true]) {
     if (lostResult) {
       // Real SDK deletion commits, but the batch cannot return a result to its checkpoint caller.
       const sdk: WorkflowRetentionSdk = {
-        listWorkflows: (input) => client.listWorkflows(input),
         async deleteWorkflows(ids, deleteChildren) {
           expect(deleteChildren).toBe(false);
           expect([...ids].sort()).toEqual([...workflowIDs].sort());
@@ -171,9 +172,13 @@ for (const lostResult of [false, true]) {
           throw new Error('lost deletion result');
         },
       };
-      await expect(runWorkflowRetentionSweep(30, sdk)).rejects.toThrow('lost deletion result');
+      await expect(runWorkflowRetentionSweep(30, sdk, new Date(), (batch) => batch(), select)).rejects.toThrow(
+        'lost deletion result',
+      );
     } else {
-      expect(await runWorkflowRetentionSweep(30, client)).toBe(workflowIDs.length);
+      expect(await runWorkflowRetentionSweep(30, client, new Date(), (batch) => batch(), select)).toBe(
+        workflowIDs.length,
+      );
     }
 
     for (const workflowID of workflowIDs) {
@@ -195,7 +200,7 @@ for (const lostResult of [false, true]) {
       }
     }
     // Reselection after an uncheckpointed deletion and ordinary replay both find no remaining work.
-    expect(await runWorkflowRetentionSweep(30, client)).toBe(0);
+    expect(await runWorkflowRetentionSweep(30, client, new Date(), (batch) => batch(), select)).toBe(0);
   });
 }
 
@@ -228,7 +233,7 @@ test('cancellation precedes writer closure and retention deletes only its termin
   expect(
     (await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount,
   ).toBe(1);
-  expect(await runWorkflowRetentionSweep(30, client)).toBe(1);
+  expect(await runWorkflowRetentionSweep(30, client, new Date(), (batch) => batch(), select)).toBe(1);
   expect(await client.getWorkflow(workflowID)).toBeUndefined();
   expect(
     (await database.query('SELECT 1 FROM dbos.workflow_input WHERE workflow_uuid = $1', [workflowID])).rowCount,
@@ -271,7 +276,7 @@ test('the retention sweep keeps pending, enqueued, delayed and recently complete
     cutoff - 1000,
   ]);
 
-  await runWorkflowRetentionSweep(30, client, new Date(now));
+  await runWorkflowRetentionSweep(30, client, new Date(now), (batch) => batch(), select);
 
   for (const workflowID of [pending, enqueued, delayed, recent, onCutoff, noCompletedAt]) {
     expect(await client.getWorkflow(workflowID)).toBeDefined();
@@ -388,7 +393,7 @@ for (const checkpoint of ['before', 'after'] as const) {
       expect(await handle.getResult()).toBe(checkpoint === 'after' ? 1001 : 1);
       const recoveredOutput = await worker.until('deleted:1');
       const cutoffs = [...`${firstOutput}${recoveredOutput}`.matchAll(/selection:([^\s]+)/g)].map((match) => match[1]);
-      expect(new Set(cutoffs)).toEqual(new Set([new Date(start.now - 30 * 86400000 - 1).toISOString()]));
+      expect(new Set(cutoffs)).toEqual(new Set([String(start.now - 30 * 86400000)]));
       expect((await client.getWorkflow(sweep))?.workflowID).toBe(sweep);
       expect(
         (await client.listWorkflowSteps(sweep))!
