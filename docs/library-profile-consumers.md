@@ -544,6 +544,34 @@ The driver interface and outcome suite in `specs/library-profiles-driver.ts` and
 substitute for the native API outcomes. The missing-driver verifier proves every named outcome fails for the single
 intended reason. It does not prove the product implementation.
 
+## Web manga series and volume visit
+
+Web mounts configured Library controls on an exact `schema:ComicSeries` or `schema:PublicationVolume` subject.
+Each identity reads its own current `TypeDefinition.library.profileId` from the selected release. A volume never
+inherits series state, progress or copy kind. Physical and digital copy kinds, admitted state IDs and the first
+scalar manual unit come from that descriptor; structured media or sleeve condition is not a free-text extension.
+Simultaneous chapter/volume measures stay with Commerce209/Web320, canonical episodes with Web319, and rich
+diary/history with Web318. Music and live-action presentation stay with Imports Reader38.
+
+A manga type or source label is not permission. Absence of a current profile, an empty capability set, a failed
+release read, a refused owner read, a known empty value and a stored ID from an earlier profile are distinct.
+New writes use the current release; accepted meaning is not rewritten. The bundled ComicSeries and
+PublicationVolume types currently omit `library.profileId`, so a live visit reports unsupported until Semantic
+attaches independent series and volume profiles. Fixture releases used by focused tests attach `manga.series`
+(chapter scalar, physical/digital) and `manga.volume` (page scalar, physical/digital).
+
+The visit loader is `loadConfiguredLibraryVisit`. Component set **C** is one local profile/capability resolve plus
+three native reads: addressed entry, one progress-session page and one copies page (`CONFIGURED_VISIT_COMPONENTS`,
+`CONFIGURED_VISIT_NATIVE_CALLS` = 3). **F** is `admittedFieldCount` of the descriptor. **L** is
+`LIBRARY_PAGE_LIMIT` (100). **B** is the copies cursor cap 2048 (`CONFIGURED_PAGE_CURSOR_BYTE_CAP`); copy notes
+remain 1,000 characters and locators 256. Work is O(F + L + B) and independent of the owner's other entries,
+copies or history N. An edit touches one addressed native entity with one command and one readback. History
+disclosure loads one bounded change page for the selected session. If a producer has no bounded page, the control
+stays unavailable. Focused growth in `apps/web/tests/configured-library-controls.test.tsx` runs owner populations
+32, 256 and 2,048 through this loader and asserts fixed native call counts and page-bounded retained bytes.
+
+Decision: manga series and volume each resolve their own current profile; a volume never copies a parent series
+state, and live bundled types without a profile stay unsupported rather than forking a Web-owned native profile.
 
 ## Canonical episode checklist consumer
 
