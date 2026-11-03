@@ -53,7 +53,7 @@ async function membership(f: Fixture, ids: readonly string[], actorId = f.actorI
   } finally {
     client.off('notice', notice);
     client.release();
-    observer.close();
+    await observer.close();
   }
 }
 

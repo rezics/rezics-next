@@ -98,7 +98,7 @@ export async function createMembershipGrowthFixture() {
     const envelopes: Envelope[] = [];
     for (const sourcePartition of new Set(sources.map(({ actorId }) => partitionOf(routeOf(actorId)!)))) {
       const read = await readBatch(growth.pool, {
-        consumer: `membership_setup_${crypto.randomUUID()}`,
+        consumer: `membership_setup_${crypto.randomUUID().replaceAll('-', '')}`,
         partition: sourcePartition,
         apply: async (batch) => { envelopes.push(...batch); },
       });
