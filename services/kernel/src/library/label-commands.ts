@@ -6,7 +6,7 @@ import { authoritativeTimeValue, noEffect } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { AccountActor, Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -20,6 +20,7 @@ import { LibraryConflictError } from './entries.ts';
 import page from './label-catalogue-page.sql';
 import prefixPage from './label-catalogue-prefix.sql';
 import * as store from './label-store.ts';
+import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
 
 type Label = { id: string; name: string; revision: number };
 type LabelValue = { label: { id: string; revision: number } };
@@ -59,14 +60,25 @@ const events = (owner: AccountActor, labelId: string) => [
 ];
 
 /** Native private catalogue; receipts contain identity and revision only. */
-export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRing; clock?: KernelClock }) {
+export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRing; clock?: KernelClock; access?: Access }) {
   const { pool, tokens } = config;
   const clock = config.clock ?? systemClock;
   const runner = createLibraryCommandRunner({ pool, clock });
 
-  async function run<T>(actor: Actor, kind: string, input: unknown, requestKey: string, body: LibraryCommandBody<T>) {
+  async function run<T>(actor: Actor, kind: string, input: unknown, requestKey: string, body: LibraryCommandBody<T>, guard?: AniListLabelGuard) {
     try {
-      return await runner.ownAccount(actor, { action: 'library_entry:update', kind, input, requestKey }, body);
+      const request = { action: 'library_entry:update', kind, input: guard ? { input, importReview: guard } : input, requestKey };
+      if (guard) {
+        const owner = account(actor, 'library_entry:update');
+        return await createLibraryCommandRunner(config).ownAccountPrepared(actor, {
+          ...request, prepare: attempt => prepareAniListLabel(config, owner, guard, attempt.time),
+        }, async (tx, command, prepared) => {
+          if (prepared.error !== undefined) throw prepared.error;
+          await assertAniListLabel(tx, owner, guard);
+          return body(tx, command);
+        });
+      }
+      return await runner.ownAccount(actor, request, body);
     } catch (error) {
       // Translate only this domain index, after the native transaction has rolled back.
       if (
@@ -112,7 +124,7 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
     });
   }
 
-  async function createLabel(actor: Actor, input: unknown, key: string) {
+  async function createLabel(actor: Actor, input: unknown, key: string, guard?: AniListLabelGuard) {
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input);
     return run(actor, 'library_label.create', { name: parsed.name }, key, async (tx, command) => {
@@ -124,7 +136,7 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
         { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
       );
       return { value: minimal(label), events: events(owner, label.id) };
-    });
+    }, guard);
   }
 
   async function renameLabel(actor: Actor, labelId: string, input: unknown, key: string) {
