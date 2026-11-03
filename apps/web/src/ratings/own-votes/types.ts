@@ -1,4 +1,4 @@
-import type { Static } from '@sinclair/typebox';
+import type { Static } from 'typebox';
 
 type NativeOwnVotesPageSchema = typeof import('../../../../../services/kernel/src/rating/own-votes-schemas.ts').OwnVotesPageSchema;
 type NativeOwnVoteActionsSchema = typeof import('../../../../../services/kernel/src/rating/own-votes-schemas.ts').OwnVoteActionsSchema;

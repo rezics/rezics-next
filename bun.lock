@@ -72,7 +72,6 @@
         "@rezics/document": "workspace:*",
         "@rezics/filter": "workspace:*",
         "@rezics/ui": "workspace:*",
-        "@sinclair/typebox": "0.31.28",
         "@tailwindcss/vite": "4.3.3",
         "@tanstack/react-query": "5.105.0",
         "@tanstack/react-router": "1.170.46",
@@ -85,6 +84,7 @@
         "react-dom": "19.3.1",
         "satori": "0.63.2",
         "tailwindcss": "4.3.3",
+        "typebox": "1.4.3",
         "valibot": "1.5.0",
       },
       "devDependencies": {

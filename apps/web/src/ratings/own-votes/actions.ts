@@ -1,5 +1,5 @@
 import { createKernelClient, SESSION_HEADER } from '@rezics/client';
-import { Value } from '@sinclair/typebox/value';
+import { Value } from 'typebox/value';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { OwnVoteActionsSchema, OwnVotesPageSchema } from '../../../../../services/kernel/src/rating/own-votes-schemas.ts';
