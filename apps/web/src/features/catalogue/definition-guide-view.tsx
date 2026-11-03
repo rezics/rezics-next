@@ -162,13 +162,13 @@ function Kind({ datatype, locale }: { datatype: string; locale: string }) {
 
 function Constraint({
   label,
-  changed,
+  changed = false,
   locale,
   children,
 }: {
   label: string;
-  changed?: boolean;
-  locale?: string;
+  changed?: boolean | undefined;
+  locale?: string | undefined;
   children: ReactNode;
 }) {
   return (
@@ -198,8 +198,8 @@ function Constraints({
   definition: PropertyDefinition;
   release: GuideRelease;
   locale: string;
-  qualifiers?: boolean;
-  changed?: ReadonlySet<GuideFieldAspect>;
+  qualifiers?: boolean | undefined;
+  changed?: ReadonlySet<GuideFieldAspect> | undefined;
 }) {
   const o = { locale: locale as never };
   const mark = (aspect: GuideFieldAspect) => ({ changed: changed?.has(aspect), locale });
@@ -381,7 +381,7 @@ function ComparisonField({
 }) {
   const o = { locale: locale as never };
   return (
-    <ContentItemFrame as="section" className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
+    <ContentItemFrame as="div" className="flex min-w-0 flex-col gap-4 p-4 sm:p-5">
       <header className="space-y-2">
         <ContentItemHeading level={2} className="text-lg font-semibold">
           {title}

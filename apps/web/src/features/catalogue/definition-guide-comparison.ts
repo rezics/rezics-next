@@ -24,12 +24,12 @@ export type GuideComparison = {
 type NativeShape = {
   datatype: string;
   multivalued: boolean;
-  targets: string[];
-  units: string[];
+  targets: readonly string[];
+  units: readonly string[];
   disclosure?: 'sourceOrConsent';
 };
 
-function ids(value: readonly string[] | undefined) {
+function ids(value: readonly string[] | undefined): readonly string[] {
   return value ?? [];
 }
 
