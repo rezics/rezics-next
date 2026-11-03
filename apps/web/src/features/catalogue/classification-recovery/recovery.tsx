@@ -1,11 +1,16 @@
-import { useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { m } from '../../../paraglide/messages.js';
 import type { CandidateTransport } from '../../../subject/candidate-review';
 import { AuthoringDepartureBoundary } from '../../../threads/authoring-departure';
 import { CharacterClassifications } from '../character-profile-classification';
-import { useCurrentReadingVisible } from '../editor-lifetime';
+import { useCurrentReadingActive, useCurrentReadingVisible } from '../editor-lifetime';
 import type { FactsCurrent, FactsTransport } from '../subject-facts';
+
+const unavailableReview: CandidateTransport = {
+  read: async () => ({ ok: false, reason: 'unavailable' }),
+  confirm: async () => ({ ok: false, reason: 'unavailable' }),
+};
 
 type KeyboardRecovery = {
   opener: HTMLButtonElement;
@@ -80,6 +85,11 @@ export function ClassificationRecovery({
   review: (property: string, session?: string) => CandidateTransport;
 }) {
   const visible = useCurrentReadingVisible();
+  const active = useCurrentReadingActive();
+  const admittedReview = useMemo(
+    () => (property: string, session?: string) => (active() ? review(property, session) : unavailableReview),
+    [review, active],
+  );
   const o = { locale: locale as never };
   const offered = properties.length > 0;
   const seen = useRef(offered);
@@ -119,7 +129,7 @@ export function ClassificationRecovery({
           locale={locale}
           search={search}
           transport={transport}
-          review={review}
+          review={admittedReview}
         />
       </AuthoringDepartureBoundary>
     </section>

@@ -162,7 +162,8 @@ selection confirmation and editor or reader changes cancel that intent; other re
 Album and Manga classification correction reuses the delivered Character writer. The private holder stays
 mounted across reading loss and total classification withdrawal, rendering nothing until a matching current
 read; compatible drafts and citations resume, withdrawn assertions stay inspect-only, and explicit keyboard
-recovery orients to the classification summary. Viewer or CSRF replacement and deliberate departure retire the
+recovery orients to the classification summary. A hidden reading does not construct a review session.
+Viewer or CSRF replacement and deliberate departure retire the
 holder. Creation and selected-reader recovery remain independent. Semantic owns native Concept suggestion,
 proposal, review, selection and command identity; Web binds the existing generated candidate methods.
 

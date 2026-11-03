@@ -466,7 +466,8 @@ Decision: Album and Manga keep that Character classification writer mounted acro
 admitted classification field is withdrawn, hiding stale public and private controls while retaining drafts,
 citations and exact sealed retry identity. Compatible drafts resume under a newly admitted reading; withdrawn
 assertions stay inspect-only and admit no new writes. Explicit discard and departure, or viewer/CSRF
-replacement, retire the holder. Keyboard recovery orients to the classification summary. Creation and
+replacement, retire the holder. Keyboard recovery orients to the classification summary. A hidden reading does
+not construct a review session; resumed review uses the newly admitted reading. Creation and
 selected-reader recovery remain independent. Semantic retains Concept suggestion, proposal, review, selection
 and command authority; Web binds the existing generated candidate methods and does not invent an endpoint.
 
@@ -604,7 +605,8 @@ admitted classification fields, with independent drafts and the ordinary candida
 Album classification correction keeps that private holder mounted while a current reading is missing or every
 admitted classification field is withdrawn, then recovers compatible drafts and citations under the newly
 admitted reading. Withdrawn assertions remain visible for reconciliation; sealed unknown commands keep their
-original sender, credentials, key and operands. Creation readback and this correction holder stay independent.
+original sender, credentials, key and operands. A hidden reading does not construct a review session.
+Creation readback and this correction holder stay independent.
 
 Correction reuses the scalar multi-field staging and per-field partial results, exact candidate review, qualified
 relation editor and original authored-text composer. Unchanged language maps, qualifiers and references remain
