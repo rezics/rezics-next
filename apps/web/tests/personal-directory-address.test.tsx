@@ -35,6 +35,7 @@ test('personal directory addresses keep opaque cursors bounded and malformed val
     valid: false,
   });
   expect(personalDirectoryAddress('', PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid).toBe(false);
+  expect(personalDirectoryAddress(null, PERSONAL_DIRECTORY_CURSOR_LIMITS.following).valid).toBe(false);
 });
 
 test('oversized Following addresses make no native read and stay an explicit invalid state', async () => {

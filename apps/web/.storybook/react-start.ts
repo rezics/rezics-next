@@ -7,6 +7,21 @@ export function setStoryRequestContext(context: StoryContext): void {
   (globalThis as StoryGlobals).__rezicsStoryContext = context;
 }
 
+function withStoryHeaders(request: Request, headers: Headers, cookie: string | null): Request {
+  // Browser Request guards strip Cookie. Keep this server-only observation local,
+  // including when a reader clones the request for a fresh session preparation.
+  const getHeader = headers.get.bind(headers);
+  Object.defineProperty(headers, 'get', {
+    value: (name: string) => (name.toLowerCase() === 'cookie' ? cookie : getHeader(name)),
+  });
+  const clone = request.clone.bind(request);
+  Object.defineProperty(request, 'headers', { value: headers });
+  Object.defineProperty(request, 'clone', {
+    value: () => withStoryHeaders(clone() as Request, new Headers(headers), headers.get('cookie')),
+  });
+  return request;
+}
+
 export function requestForStory(input?: RequestInfo | URL, init?: RequestInit): Request {
   const storyContext = (globalThis as StoryGlobals).__rezicsStoryContext;
   const page = new URL(storyContext?.url ?? window.location.href, window.location.origin);
@@ -19,16 +34,12 @@ export function requestForStory(input?: RequestInfo | URL, init?: RequestInit): 
   if (!headers.has('x-forwarded-proto')) headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
   if (input !== undefined && !headers.has('referer'))
     headers.set('referer', request.referrer && request.referrer !== 'about:client' ? request.referrer : page.href);
-  if (storyContext?.visitor === 'Signed In' && credentials !== 'omit' && !headers.has('cookie')) {
-    // Browsers strip Cookie from Request headers, so expose the recorded session to route handlers locally.
-    const getHeader = headers.get.bind(headers);
-    Object.defineProperty(headers, 'get', {
-      value: (name: string) =>
-        name.toLowerCase() === 'cookie' ? `__Host-rezics_session=${'a'.repeat(43)}` : getHeader(name),
-    });
-  }
-  Object.defineProperty(request, 'headers', { value: headers });
-  return request;
+  const cookie =
+    headers.get('cookie') ??
+    (storyContext?.visitor === 'Signed In' && credentials !== 'omit'
+      ? `__Host-rezics_session=${'a'.repeat(43)}`
+      : null);
+  return withStoryHeaders(request, headers, cookie);
 }
 
 /** The story route handlers run in the browser against the Storybook request context. */

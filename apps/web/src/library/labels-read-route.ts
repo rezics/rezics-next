@@ -26,7 +26,7 @@ async function read(data: ReturnType<typeof validate>): Promise<LabelsCurrentRea
   setResponseHeader('cache-control', 'private, no-store');
   setResponseHeader('set-cookie', clearLabelFeedback());
   // A fresh Request has no retained WeakMap credentials. Only the native reader prepares it.
-  const request = new Request(getRequest());
+  const request = getRequest().clone() as Request;
   const page = await loadLabelsPage(kernelClient(), request, env as Partial<SessionEnv>, data.cursor, data.query);
   const subject = sessionSubject(request);
   const credential = viewerCredential(request);

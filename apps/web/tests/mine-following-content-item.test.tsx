@@ -53,7 +53,7 @@ test('Following uses shared item headings and independent native actions while p
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
     await import('@tanstack/react-router');
-  const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const { sessionQuery } = await import('../src/session/query');
   const { MineFollowingPageView } = await import('../src/library/mine-following-page');
   const followActions = await import('../src/library/follow-actions');
   const { subjectOf } = await import('../src/library/reads');
@@ -90,7 +90,11 @@ test('Following uses shared item headings and independent native actions while p
   const page: MineFollowingPage = { signedIn: true, follows: [space, collection, subject, unavailable], next: null };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'owner', csrfToken: 'current-csrf' });
-  client.setQueryData(exposureQuery.queryKey, ['personal_library', 'collections']);
+  const admit = (admitted: string[]) =>
+    client.setQueriesData(
+      { predicate: ({ queryKey }) => queryKey[0] === 'exposure' && queryKey[1] === 'viewer' && queryKey[2] === 'owner' },
+      { subject: 'owner', admitted },
+    );
   const write = spyOn(followActions, 'setFollow')
     .mockResolvedValueOnce({ ok: false, reason: 'conflict' })
     .mockResolvedValue({ ok: true, following: false });
@@ -113,6 +117,7 @@ test('Following uses shared item headings and independent native actions while p
       return (
         <MineFollowingPageView
           page={current}
+          cursor={null}
           onReview={async () => {
             reviews++;
             return { state: 'ready', following: true };
@@ -139,7 +144,12 @@ test('Following uses shared item headings and independent native actions while p
       );
       await tick();
     });
+    await act(async () => {
+      admit(['personal_library', 'collections']);
+      await tick();
+    });
     const rows = [...host.querySelectorAll<HTMLElement>('li[data-slot="list-row"]')];
+    expect(host.textContent).not.toContain(m.library_directory_address_invalid());
     expect(rows).toHaveLength(4);
     expect(rows.map((row) => row.querySelector('h3')?.textContent)).toEqual([
       'こころ',
@@ -178,7 +188,7 @@ test('Following uses shared item headings and independent native actions while p
     expect(rows[3]!.textContent).toContain(m.library_follow_reason_membership());
 
     await act(async () => {
-      client.setQueryData(exposureQuery.queryKey, ['personal_library']);
+      admit(['personal_library']);
       await tick();
     });
     expect(rows[2]!.querySelector('a')).toBeNull();

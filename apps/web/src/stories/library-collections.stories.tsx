@@ -53,10 +53,9 @@ async function selectResponsiveMenuAction(label: string) {
   await userEvent.click(await within(menu).findByRole(sheet ? 'button' : 'menuitem', { name: label }));
 }
 
-function collectionCard(main: HTMLElement, title: string): HTMLElement {
-  const card = [...main.querySelectorAll<HTMLElement>('[data-collection-row]')].find((element) =>
-    element.textContent?.includes(title),
-  );
+function collectionCard(main: HTMLElement, title: string, preview = false): HTMLElement {
+  const heading = within(main).getByRole('heading', { level: 2, name: title });
+  const card = heading.closest<HTMLElement>(preview ? '[data-collection-preview]' : '[data-collection-row]');
   if (!card) throw new globalThis.Error(`Missing Collection row: ${title}`);
   return card;
 }
@@ -79,7 +78,7 @@ export const OneCollection: Story = {
   render: () => render('one'),
   play: async (context) => {
     await collectionsReady(context);
-    await expect(within(context.canvasElement).getByText('To read this winter')).toBeVisible();
+    await expect(within(context.canvasElement).getByRole('heading', { name: 'To read this winter' })).toBeVisible();
   },
 };
 
@@ -88,8 +87,8 @@ export const ManyCollections: Story = {
   render: () => render('many'),
   play: async (context) => {
     await collectionsReady(context);
-    await expect(within(context.canvasElement).getByText('Books I come back to')).toBeVisible();
-    await expect(within(context.canvasElement).getByText('To read this winter')).toBeVisible();
+    await expect(within(context.canvasElement).getByRole('heading', { name: 'Books I come back to' })).toBeVisible();
+    await expect(within(context.canvasElement).getByRole('heading', { name: 'To read this winter' })).toBeVisible();
   },
 };
 
@@ -104,12 +103,19 @@ export const PreviewMembers: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const first = await canvas.findByRole('link', { name: 'Snow Country' });
-    const preview = first.closest('article')!;
+    await canvas.findByRole('link', { name: 'Snow Country' });
+    const main = canvas.getByRole('main');
+    const preview = collectionCard(main, collectionRecording.collection.title, true);
     expect(preview.querySelectorAll('[data-slot="cover-card"]')).toHaveLength(3);
     expect(within(preview).queryByRole('link', { name: 'Kokoro' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: m.library_layout_list() }));
-    await expect((await canvas.findAllByRole('link', { name: m.library_collection_open() }))[0]!).toBeVisible();
+    await waitFor(async () =>
+      expect(
+        await within(collectionCard(main, collectionRecording.collection.title)).findByRole('link', {
+          name: m.library_collection_open(),
+        }),
+      ).toBeVisible(),
+    );
     await userEvent.click(canvas.getByRole('button', { name: m.library_collection_previews() }));
     await expect(await canvas.findByRole('link', { name: 'Snow Country' })).toBeVisible();
   },
@@ -125,10 +131,11 @@ export const PreviewPending: Story = {
     }),
   play: async (context) => {
     await pageReady(context);
-    const heading = await within(context.canvasElement).findByRole('link', {
-      name: new RegExp(collectionRecording.collection.title),
+    const heading = await within(context.canvasElement).findByRole('heading', {
+      level: 2,
+      name: collectionRecording.collection.title,
     });
-    const preview = heading.closest('article')!;
+    const preview = heading.closest<HTMLElement>('[data-collection-preview]')!;
     await expect(within(preview).getByRole('status')).toHaveTextContent(m.library_collection_preview_preparing());
     expect(preview.querySelector('[data-slot="cover-card"]')).toBeNull();
     expect(within(preview).queryByText(m.library_collection_empty())).toBeNull();
@@ -145,10 +152,11 @@ export const PreviewUnavailable: Story = {
     }),
   play: async (context) => {
     await pageReady(context);
-    const heading = await within(context.canvasElement).findByRole('link', {
-      name: new RegExp(collectionRecording.collection.title),
+    const heading = await within(context.canvasElement).findByRole('heading', {
+      level: 2,
+      name: collectionRecording.collection.title,
     });
-    const preview = heading.closest('article')!;
+    const preview = heading.closest<HTMLElement>('[data-collection-preview]')!;
     await expect(within(preview).getByRole('status')).toHaveTextContent(m.library_collection_preview_unavailable());
     expect(within(preview).queryByText(m.library_collection_empty())).toBeNull();
   },
@@ -174,9 +182,11 @@ export const LongCollectionTitles: Story = {
     await userEvent.click(canvas.getByRole('button', { name: `${title} ${m.library_nav_selector()}` }));
     const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const menu = await within(document.body).findByRole(sheet ? 'dialog' : 'menu');
-    await expect(within(menu).getByRole(sheet ? 'link' : 'menuitem', { name: longTitles[1] })).toBeVisible();
+    await waitFor(() =>
+      expect(within(menu).getByRole(sheet ? 'link' : 'menuitem', { name: longTitles[1] })).toBeVisible(),
+    );
     await userEvent.keyboard('{Escape}');
-    await expect(within(document.body).queryByRole(sheet ? 'dialog' : 'menu')).toBeNull();
+    await waitFor(() => expect(within(document.body).queryByRole(sheet ? 'dialog' : 'menu')).toBeNull());
   },
 };
 
@@ -191,10 +201,10 @@ export const Unavailable: Story = {
   play: async (context) => {
     await pageReady(context);
     await expect(
-      within(context.canvasElement).getByRole('heading', { level: 1, name: m.library_collections_heading() }),
+      await within(context.canvasElement).findByRole('heading', { level: 1, name: m.library_collections_heading() }),
     ).toBeVisible();
     await expect(
-      within(context.canvasElement).getAllByText(m.library_collections_unavailable(), { exact: true }),
+      await within(context.canvasElement).findAllByText(m.library_collections_unavailable(), { exact: true }),
     ).toHaveLength(1);
   },
 };
@@ -210,9 +220,9 @@ export const Error: Story = {
   play: async (context) => {
     await pageReady(context);
     await expect(
-      within(context.canvasElement).getByRole('heading', { level: 1, name: m.library_collections_heading() }),
+      await within(context.canvasElement).findByRole('heading', { level: 1, name: m.library_collections_heading() }),
     ).toBeVisible();
-    await expect(within(context.canvasElement).getByRole('alert')).toHaveTextContent(
+    await expect(await within(context.canvasElement).findByRole('alert')).toHaveTextContent(
       m.library_collections_read_failed(),
     );
   },

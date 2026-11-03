@@ -29,7 +29,7 @@ export const Empty: Story = {
   play: async (context) => {
     await pageReady(context);
     await expect(
-      within(within(context.canvasElement).getByRole('main')).getByText(m.library_empty_title()),
+      await within(within(context.canvasElement).getByRole('main')).findByText(m.library_empty_title()),
     ).toBeVisible();
     await expect(within(context.canvasElement).getByRole('link', { name: m.library_browse() })).toHaveAttribute(
       'href',
@@ -43,7 +43,7 @@ export const ContinuePresent: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(canvas.getByRole('heading', { name: m.home_continue_heading() })).toBeVisible();
+    await expect(await canvas.findByRole('heading', { name: m.home_continue_heading() })).toBeVisible();
     const progressLink = (await canvas.findAllByRole('link')).find((link) =>
       link.getAttribute('href')?.startsWith(`/${getLocale()}/library/progress`),
     );
@@ -55,6 +55,7 @@ export const ContinueAbsent: Story = {
   render: () => render('empty', 0),
   play: async (context) => {
     await pageReady(context);
+    await within(context.canvasElement).findByText(m.library_empty_title());
     await expect(within(context.canvasElement).queryByRole('heading', { name: m.home_continue_heading() })).toBeNull();
   },
 };
@@ -64,8 +65,8 @@ export const LongContent: Story = {
   play: async (context) => {
     await pageReady(context);
     const main = within(context.canvasElement).getByRole('main');
-    await expect(within(main).getByText('Library story entry 1')).toBeVisible();
-    await expect(within(main).getByText('Library story entry 12')).toBeVisible();
+    await expect(await within(main).findByRole('heading', { name: 'Library story entry 1' })).toBeVisible();
+    await expect(await within(main).findByRole('heading', { name: 'Library story entry 12' })).toBeVisible();
   },
 };
 
@@ -89,7 +90,7 @@ export const PinsUnavailable: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(canvas.getByText(m.library_pin_read_failed(), { exact: true })).toBeVisible();
+    await expect(await canvas.findByText(m.library_pin_read_failed(), { exact: true })).toBeVisible();
     expect(canvas.getAllByText(m.library_pin_read_failed(), { exact: true })).toHaveLength(1);
     await expect(canvas.queryByRole('button', { name: m.library_pin_actions() })).toBeNull();
   },
@@ -105,13 +106,13 @@ export const EverythingAndLiked: Story = {
   play: async (context) => {
     await pageReady(context);
     const main = within(context.canvasElement).getByRole('main');
-    await expect(within(main).getByRole('link', { name: m.library_dynamic_everything() })).toHaveAttribute(
+    await expect(await within(main).findByRole('link', { name: m.library_dynamic_everything() })).toHaveAttribute(
       'href',
-      `/${getLocale()}/collections/builtin-everything`,
+      `/${getLocale()}/collections/story-builtin-everything`,
     );
     await expect(within(main).getByRole('link', { name: m.library_dynamic_liked() })).toHaveAttribute(
       'href',
-      `/${getLocale()}/collections/builtin-liked`,
+      `/${getLocale()}/collections/story-builtin-liked`,
     );
   },
 };
@@ -126,7 +127,7 @@ export const PinnedCollections: Story = {
   play: async (context) => {
     await pageReady(context);
     await expect(
-      within(context.canvasElement).getByText(m.library_pin_pinned_section(), { exact: true }),
+      await within(context.canvasElement).findByText(m.library_pin_pinned_section(), { exact: true }),
     ).toBeVisible();
   },
 };

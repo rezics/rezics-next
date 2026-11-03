@@ -69,8 +69,8 @@ export async function loadPersonalLibraryCurrent(
   input: ShelfSearch,
 ): Promise<PersonalLibraryCurrentRead> {
   const requested = personalLibraryAddress(input, requestLocale(request) ?? 'en');
-  const requests = [new Request(request), new Request(request), new Request(request)];
-  const [shelfRequest, continueRequest, navigationRequest] = requests as [Request, Request, Request];
+  const requests = [request.clone(), request.clone(), request.clone()] as [Request, Request, Request];
+  const [shelfRequest, continueRequest, navigationRequest] = requests;
   const [page, continueEntries, navigation] = await Promise.all([
     loadPersonalLibrary(client, shelfRequest, sessionEnv, validateInput(input)),
     loadContinueState(client, continueRequest, sessionEnv),
@@ -121,7 +121,7 @@ export const readPersonalLibraryContinue = createServerFn({ method: 'GET' })
   .validator(validateInput)
   .handler(async ({ data }): Promise<PersonalContinueRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    const request = new Request(getRequest());
+    const request = getRequest().clone() as Request;
     const requested = personalLibraryAddress(data, requestLocale(request) ?? 'en');
     const result = await loadContinueState(kernelClient(), request, env as Partial<SessionEnv>);
     const origin = prepared(request);

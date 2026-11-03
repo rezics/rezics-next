@@ -199,7 +199,7 @@ export function MineFollowingPageView({
   onRetry?: (() => void) | undefined;
   onReview?: ReviewFollow | undefined;
 }) {
-  const requestedAddress = personalDirectoryAddress(cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  const requestedAddress = personalDirectoryAddress(cursor ?? undefined, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
   const addressRejected = invalidAddress || page.addressInvalid || !requestedAddress.valid;
   const requestedCursor = requestedAddress.cursor;
   // A meaningful row/page replacement retires local removal callbacks during render. Equivalent

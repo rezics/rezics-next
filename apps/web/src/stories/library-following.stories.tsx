@@ -1,15 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { setLibraryFollowingStoryMode, type LibraryFollowingStoryMode } from '../kernel/fake/library-following-story';
 import { PageStory, libraryFollowingReady, pagePaths, pageReady } from './page';
 
-const viewports = {
-  phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' }, type: 'mobile' as const },
-};
 const meta = {
   title: 'Pages/Library/Following',
-  parameters: { layout: 'fullscreen', viewport: { viewports } },
+  parameters: { layout: 'fullscreen' },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -17,6 +14,26 @@ type Story = StoryObj<typeof meta>;
 function FollowingStory(mode: LibraryFollowingStoryMode = 'recorded') {
   setLibraryFollowingStoryMode(mode);
   return <PageStory visitor="Signed In" path={pagePaths['library-following']} />;
+}
+
+async function followRow(canvasElement: HTMLElement, title: string) {
+  const heading = await within(canvasElement).findByRole('heading', { level: 3, name: title });
+  const row = heading.closest<HTMLElement>('li[data-slot="list-row"]');
+  if (!row) throw new globalThis.Error(`Missing Following row: ${title}`);
+  return row;
+}
+
+async function followMenu(canvasElement: HTMLElement, title: string) {
+  const row = await followRow(canvasElement, title);
+  await userEvent.click(within(row).getByRole('button', { name: m.library_follow_more_actions({ title }) }));
+  const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+  const menu = await within(canvasElement.ownerDocument.body).findByRole(
+    sheet ? 'dialog' : 'menu',
+    sheet ? { name: m.library_follow_more_actions({ title }) } : undefined,
+  );
+  const action = await within(menu).findByRole(sheet ? 'button' : 'menuitem', { name: m.library_follow_unfollow() });
+  await waitFor(() => expect(action).toBeVisible());
+  return action;
 }
 
 export const SignedIn: Story = {
@@ -27,17 +44,11 @@ export const SignedIn: Story = {
 
 export const UnfollowMenuPhone: Story = {
   name: 'Unfollow menu phone',
-  parameters: { viewport: { defaultViewport: 'phone390' } },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => FollowingStory(),
   play: async (context) => {
     await pageReady(context);
-    const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: /more actions for/i }));
-    const dialog = context.canvasElement.querySelector('[data-slot="drawer-content"]');
-    await expect(dialog).toBeVisible();
-    await expect(
-      within(dialog as HTMLElement).getByRole('button', { name: m.library_follow_unfollow() }),
-    ).toBeVisible();
+    await followMenu(context.canvasElement, 'Kokoro');
   },
 };
 
@@ -45,7 +56,7 @@ export const Empty: Story = {
   render: () => FollowingStory('none'),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByText(m.library_following_empty())).toBeVisible();
+    await expect(await within(context.canvasElement).findByText(m.library_following_empty())).toBeVisible();
   },
 };
 
@@ -54,7 +65,7 @@ export const InactivePage: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await expect(canvas.getByText(m.library_following_page_empty())).toBeVisible();
+    await expect(await canvas.findByText(m.library_following_page_empty())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.search_heading() })).toHaveAttribute('href', /\/search$/);
     await expect(canvas.getByRole('link', { name: m.library_collection_more() })).toHaveAttribute(
       'href',
@@ -68,14 +79,9 @@ export const AfterLastUnfollow: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: /more actions for/i }));
-    const body = within(context.canvasElement.ownerDocument.body);
-    const remove =
-      body.queryByRole('menuitem', { name: m.library_follow_unfollow() }) ??
-      body.getByRole('button', { name: m.library_follow_unfollow() });
-    await userEvent.click(remove);
-    await expect(canvas.getByText(m.library_follow_removed())).toBeVisible();
-    await expect(canvas.getByText(m.library_following_page_empty())).toBeVisible();
+    await userEvent.click(await followMenu(context.canvasElement, 'Kokoro'));
+    await expect(await canvas.findByText(m.library_follow_removed())).toBeVisible();
+    await expect(await canvas.findByText(m.library_following_page_empty())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.library_collections_first_page() })).toHaveAttribute(
       'href',
       /\/library\/following$/,
@@ -89,7 +95,7 @@ export const LongContent: Story = {
   render: () => FollowingStory('many'),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByText('Following item 12')).toBeVisible();
+    await expect(await within(context.canvasElement).findByRole('heading', { name: 'Following item 12' })).toBeVisible();
   },
 };
 
@@ -125,17 +131,10 @@ export const UnfollowFailure: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const link = await canvas.findByRole('link', { name: 'Kokoro' });
-    const row = link.closest<HTMLElement>('[data-slot="list-row"]');
-    await expect(row).toBeTruthy();
+    const row = await followRow(context.canvasElement, 'Kokoro');
     await expect(row).not.toHaveClass(/border|bg-card|shadow/);
-    await userEvent.click(within(row as HTMLElement).getByRole('button', { name: /more actions for/i }));
-    const sheet = context.canvasElement.querySelector('[data-slot="drawer-content"]');
-    const action = sheet
-      ? within(sheet as HTMLElement).getByRole('button', { name: m.library_follow_unfollow() })
-      : canvas.getByRole('menuitem', { name: m.library_follow_unfollow() });
-    await userEvent.click(action);
-    await expect(canvas.getByRole('alert')).toHaveTextContent(m.error_message());
+    await userEvent.click(await followMenu(context.canvasElement, 'Kokoro'));
+    await expect(await within(row).findByRole('alert')).toHaveTextContent(m.error_message());
     await expect(canvas.getByRole('link', { name: 'Kokoro' })).toBeVisible();
   },
 };
@@ -145,12 +144,11 @@ export const ListRowBehavior: Story = {
     await pageReady(context);
     const canvas = within(context.canvasElement);
     const link = await canvas.findByRole('link', { name: 'Kokoro' });
-    const row = link.closest<HTMLElement>('[data-slot="list-row"]');
-    await expect(row).toBeTruthy();
+    const row = await followRow(context.canvasElement, 'Kokoro');
     await expect(row).not.toHaveClass(/border|bg-card|shadow/);
     await userEvent.hover(row as HTMLElement);
     await userEvent.click(link);
-    await expect(canvas.getByRole('heading', { level: 1, name: /Kokoro/ })).toBeVisible();
+    await expect(await canvas.findByRole('heading', { level: 1, name: /Kokoro/ })).toBeVisible();
   },
   render: () => FollowingStory(),
 };
@@ -160,8 +158,9 @@ export const RemoveUnavailableTarget: Story = {
   play: async ({ canvasElement, ...context }) => {
     await pageReady({ canvasElement, ...context });
     const canvas = within(canvasElement);
-    const unavailable = await canvas.findAllByText(m.library_subject_unavailable(), { exact: true });
-    const row = unavailable[0]!.closest<HTMLElement>('[data-slot="list-row"]');
+    const section = await canvas.findByRole('region', { name: m.library_following_collections() });
+    const heading = await within(section).findByRole('heading', { level: 3, name: m.library_subject_unavailable() });
+    const row = heading.closest<HTMLElement>('li[data-slot="list-row"]');
     if (!row) throw new globalThis.Error('Unavailable follow row is missing');
     await expect(within(row).queryByRole('link')).toBeNull();
     await userEvent.click(
@@ -169,29 +168,21 @@ export const RemoveUnavailableTarget: Story = {
         name: m.library_follow_more_actions({ title: m.library_subject_unavailable() }),
       }),
     );
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
     const body = within(canvasElement.ownerDocument.body);
-    const remove =
-      body.queryByRole('menuitem', { name: m.library_follow_unfollow() }) ??
-      body.getByRole('button', { name: m.library_follow_unfollow() });
+    const remove = await body.findByRole(sheet ? 'button' : 'menuitem', { name: m.library_follow_unfollow() });
     await userEvent.click(remove);
-    await expect(canvas.getByText(m.library_follow_removed())).toBeVisible();
+    await expect(await canvas.findByText(m.library_follow_removed())).toBeVisible();
     await expect(row).not.toBeInTheDocument();
     await expect(canvas.getAllByText(m.library_subject_unavailable(), { exact: true })).toHaveLength(1);
   },
 };
 
 export const UnfollowMenuDesktop: Story = {
-  parameters: {
-    viewport: {
-      viewports: { desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } } },
-      defaultViewport: 'desktop1280',
-    },
-  },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
   render: () => FollowingStory(),
   play: async (context) => {
     await pageReady(context);
-    const canvas = within(context.canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: /more actions for/i }));
-    await expect(canvas.getByRole('menuitem', { name: m.library_follow_unfollow() })).toBeVisible();
+    await followMenu(context.canvasElement, 'Kokoro');
   },
 };

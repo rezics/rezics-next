@@ -81,7 +81,7 @@ function observeCopiesRead(client: KernelClient, observe: (authorization: string
 }
 
 async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesCurrentRead> {
-  const request = current ? new Request(getRequest()) : getRequest();
+  const request = current ? (getRequest().clone() as Request) : getRequest();
   const requested = copiesAddress(input, getLocale());
   if (requested.issue) {
     // Session admission remains native; a malformed address performs no copy or subject read.
@@ -162,7 +162,7 @@ export const readCopiesCurrent = createServerFn({ method: 'GET' })
   });
 
 async function copyDetailBody(input: unknown, current: boolean): Promise<CopyDetailCurrentRead> {
-  const request = current ? new Request(getRequest()) : getRequest();
+  const request = current ? (getRequest().clone() as Request) : getRequest();
   const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   const requested = copiesAddress(record, getLocale());
   if (requested.issue)
@@ -249,7 +249,7 @@ async function resolveSubject(
 ): Promise<CopySubjectResult> {
   if (!copiesSubjectId(id)) return { state: 'unavailable' };
   try {
-    const request = current ? new Request(getRequest()) : getRequest();
+    const request = current ? (getRequest().clone() as Request) : getRequest();
     if (await prepareSession(request, env as Partial<SessionEnv>)) return { state: 'forbidden' };
     const authorization = viewerCredential(request);
     if (!authorization) return { state: 'forbidden' };
