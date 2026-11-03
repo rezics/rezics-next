@@ -144,11 +144,6 @@ export type {
   OwnCountedVoteRow,
   StandardRatingMeasurement,
 } from './kernel/rating/own-votes-counted';
-type OwnVotesGetRoute = Routes['me']['rating-votes']['get'];
-export type OwnVotesPageQuery = OwnVotesGetRoute['query'];
-export type OwnVotesPage = OwnVotesGetRoute['response'][200];
-export type OwnVoteEntry = OwnVotesPage['votes'][number];
-export type OwnVoteActions = OwnVoteEntry['actions'];
 type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
 

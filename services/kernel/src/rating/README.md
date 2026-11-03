@@ -1277,7 +1277,6 @@ query field is `cursor`; unknown fields, including voter, selection, search, sor
 Responses use `Cache-Control: no-store`. `register.ts` exports `createOwnVotesReader`, `OWN_VOTES_PAGE_SIZE`,
 `OwnVoteActions`, `OwnVoteEntry`, `OwnVotesPage` and their mounted schemas. The factory takes the existing
 `{pool, access, tokens, routeKey, clock?}` dependencies; `page(actor, {cursor?}, deadline)` returns the same DTO.
-`@rezics/client` exports `OwnVotesPageQuery`, `OwnVotesPage`, `OwnVoteEntry` and `OwnVoteActions`, inferred from the mounted closed route response.
 The default Kernel passes its existing trusted route key; this read-only operation registers no new writer,
 projection, event or worker. Existing vote effects and session-token transport remain the mutation authority.
 
