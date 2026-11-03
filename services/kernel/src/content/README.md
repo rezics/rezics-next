@@ -101,6 +101,7 @@ other reporter identity, transaction metadata or moderation action. Open and fol
 exact case GET; follow is advice to revisit its current outcome, never a subscription.
 
 Decision: My reports uses a fixed raw page of 20 and one optional exact own selection alongside it; selection never moves the raw frontier. Installation certifies a sealed migration cut; later creations use the registered native locator effect.
+Decision: Realm and Space target labels follow their current native read titles and link to their existing GET routes.
 
 The existing reporter-home inventory retains its primary key for account erasure. Its received-time index
 adds chronological traversal with report ID as the raw tie-breaker; report IDs themselves are derived and
@@ -110,9 +111,11 @@ The cursor binds account, client, delegated principal, authentication epoch, exa
 page size and reporter-home epoch. An outcome change during fill fails the whole page; a retry uses its
 original cursor. Operational failures return no advanced frontier. `retry.cursor` also preserves that input
 on a successful preparing response. Native account admission precedes retained-case fills and repeats after
-hydration. Target disclosure repeats after the final source fill; hidden or removed targets return only
-`{ "state": "unavailable" }` and no target action. Original submitted target identity remains retained under
-the existing reporter policy, independently of present target readership.
+hydration. The page retains its first bounded target observations, then checks the same target labels,
+destinations, Community source revisions and Semantic disclosure after the final case fill. A changed target
+retries the same request; hidden or removed targets return only `{ "state": "unavailable" }` and no target
+action. Original submitted target identity remains retained under the existing reporter policy, independently
+of present target readership.
 
 `report-locator-installation.ts` supplies `installReportLocatorPage(pool, partition)` and
 `createReportLocatorInstallationEffect(pool)`. A migration locks native command positions before report
@@ -192,7 +195,9 @@ An empty page (200) is exactly:
 
 For a withheld target, the same retained entry replaces `targetSummary` with exactly
 `{"state":"unavailable"}` and `actions.target` with `null`; it carries no stale label, snippet or link.
-A signed-out request returns 401 with the existing problem `code: "authentication_required"`.
+A signed-out or revoked-account request returns the existing authentication/availability problem (401 or 404)
+without another reporter's receipt. A signed-out request returns 401 with the existing problem
+`code: "authentication_required"`.
 A changed-outcome page returns 503 with existing problem `code: "dependency_unavailable"` and
 `Retry-After: 1`; the client repeats the same request, preserving its cursor and selection.
 An incomplete cut returns the same page envelope with `state: "preparing"`, no raw entries or advanced
@@ -200,20 +205,62 @@ cursor, and an optional permitted exact selection. It must not be presented as a
 
 No current Web consumer/head is integrated with this route. The existing Web report owner retains the
 interface. Phone/desktop inspection, a real follow/open action and failed-page recovery remain consumer
-acceptance after integration. Current exact post disclosure uses the native per-post ancestry driver;
-batching that producer and connected installation/race/three-scale evidence remain continuation work.
+acceptance after integration. Realm summaries use current Realm reads and link to `/v1/realms/{id}`; Space
+summaries use the current Space reader and link to `/v1/spaces/{id}`. Post labels use the compact native
+header disclosure, including every readable reply ancestor, without loading post bodies solely for a label.
+Connected installation/race/three-scale evidence remains controller acceptance.
+
+The installed Community target variants use the same closed entry shape as the populated example above:
+
+```json
+{
+  "target": { "kind": "realm", "id": "11111111-1111-8111-8111-111111111111" },
+  "targetSummary": {
+    "state": "available",
+    "label": "Public community",
+    "href": "/v1/realms/11111111-1111-8111-8111-111111111111"
+  },
+  "actions": {
+    "target": {
+      "method": "GET",
+      "href": "/v1/realms/11111111-1111-8111-8111-111111111111"
+    }
+  }
+}
+```
+
+```json
+{
+  "target": { "kind": "space", "id": "22222222-2222-8222-8222-222222222222" },
+  "targetSummary": {
+    "state": "available",
+    "label": "Public Space",
+    "href": "/v1/spaces/22222222-2222-8222-8222-222222222222"
+  },
+  "actions": {
+    "target": {
+      "method": "GET",
+      "href": "/v1/spaces/22222222-2222-8222-8222-222222222222"
+    }
+  }
+}
+```
 
 ### Cost: own reporter page
 
 - Touches: initial/final native account authority; one control-home coverage point; one reporter-home
-  received-time/ID seek; two owning-case batch fills; two current native target rounds. Each source-home fill
-  admits through native account policy before accessing source bytes. Every checkout is released before
-  another home's command or authorization preparation. No totals or outcome-history enumeration.
+  received-time/ID seek; two owning-case batch fills; two retained target observations. Each source-home
+  fill admits through native account policy before accessing source bytes. Target fills group post locations
+  and community source checks by native home, use compact post ancestry evidence, and re-evaluate Community
+  and Semantic disclosure before serialization. Every checkout is released before another home's command
+  or authorization preparation. No totals or outcome-history enumeration.
 - Bound: raw L=20 plus one optional exact selection; at most L+1 locator rows and P<=21 distinct cases in
   H<=P source homes. Source SQL has H statements and P exact route/ID probes per fill, including ownership
-  predicates. Locator work is O(log N+L), case work O(P log R), plus the independently derived account,
-  target and control terms below. Evidence is capped by the existing 4096-character report admission;
-  all nested native payload reads count even though this DTO returns only labels and submitted fields.
+  predicates. Target identities are deduplicated before native reads and grouped by represented home;
+  Community fingerprints retain only the exact current head/lifecycle witnesses. Locator work is O(log N+L),
+  case work O(P log R), plus the independently derived account, target and control terms below. Evidence is
+  capped by the existing 4096-character report admission; all nested native payload reads count even though
+  this DTO returns only labels and submitted fields.
 - Growth check: focused native HTTP outcomes in `test/content/reporter-history-http.test.ts`; independent
   256/1024/4096 source, reporter, outcome and backlog growth with strict physical-prefix/byte capture remains
   pending, with Performance review requested. No measured ceiling or completed growth acceptance is claimed.

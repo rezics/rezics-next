@@ -59,6 +59,79 @@ test('a signed reporter can return without a receipt URL and cannot enumerate an
   expect(suspended.text).not.toContain(id);
 }, 120_000);
 
+test('Realm and Space reports follow current readable targets through concealment and restoration', async () => {
+  const created = await fixture.createRealmTarget('Reporter history community', 'public');
+  const realmPath = `/v1/realms/${created.realmId}`;
+  const realmRead = await fixture.call('GET', realmPath, { bearer: fixture.author.bearer });
+  expect(realmRead.response.status).toBe(200);
+  const spaceId = realmRead.value!.realm.spaceId as string;
+  const spacePath = `/v1/spaces/${spaceId}`;
+  const spaceRead = await fixture.call('GET', spacePath, { bearer: fixture.author.bearer });
+  expect(spaceRead.response.status).toBe(200);
+
+  const realmReportId = await fixture.submit(
+    { kind: 'realm', id: created.realmId },
+    { bearer: fixture.other.bearer },
+  );
+  const spaceReportId = await fixture.submit({ kind: 'space', id: spaceId }, { bearer: fixture.other.bearer });
+  const page = await fixture.call('GET', '/v1/reports/me', { bearer: fixture.other.bearer });
+  expect(page.response.status).toBe(200);
+  const entries = new Map(page.value!.entries.map((entry: any) => [entry.id, entry]));
+  const realmEntry = entries.get(realmReportId) as any;
+  const spaceEntry = entries.get(spaceReportId) as any;
+  expect(realmEntry.targetSummary).toEqual({
+    state: 'available',
+    label: realmRead.value!.realm.title,
+    href: realmPath,
+  });
+  expect(spaceEntry.targetSummary).toEqual({
+    state: 'available',
+    label: spaceRead.value!.space.title,
+    href: spacePath,
+  });
+  expect((await fixture.call('GET', realmEntry.actions.target.href, { bearer: fixture.other.bearer })).response.status).toBe(
+    200,
+  );
+  expect((await fixture.call('GET', spaceEntry.actions.target.href, { bearer: fixture.other.bearer })).response.status).toBe(
+    200,
+  );
+
+  const hidden = await fixture.call('PATCH', realmPath, {
+    bearer: fixture.author.bearer,
+    key: randomUUID(),
+    headers: { 'if-match': JSON.stringify(realmRead.value!.realm.headRevisionId) },
+    body: { visibility: 'protected' },
+  });
+  expect(hidden.response.status).toBe(200);
+  const concealed = await fixture.call('GET', `/v1/reports/me?reportId=${realmReportId}`, {
+    bearer: fixture.other.bearer,
+  });
+  expect(concealed.response.status).toBe(200);
+  const concealedRealm = concealed.value!.entries[0];
+  expect(concealedRealm.targetSummary).toEqual({ state: 'unavailable' });
+  expect(concealedRealm.actions.target).toBeNull();
+  expect(concealed.text).not.toContain('Reporter history community');
+
+  const restored = await fixture.call('PATCH', realmPath, {
+    bearer: fixture.author.bearer,
+    key: randomUUID(),
+    headers: { 'if-match': JSON.stringify(hidden.value!.realm.headRevisionId) },
+    body: { visibility: 'public' },
+  });
+  expect(restored.response.status).toBe(200);
+  const visibleAgain = await fixture.call('GET', `/v1/reports/me?reportId=${realmReportId}`, {
+    bearer: fixture.other.bearer,
+  });
+  expect(visibleAgain.response.status).toBe(200);
+  expect(visibleAgain.value!.entries[0].targetSummary).toEqual({
+    state: 'available',
+    label: 'Reporter history community',
+    href: realmPath,
+  });
+  expect((await fixture.call('GET', `/v1/reports/me?reportId=${spaceReportId}`, { bearer: fixture.other.bearer })).response
+    .status).toBe(200);
+}, 120_000);
+
 test('raw continuation survives an exact old selection, replay and another viewer cannot reuse it', async () => {
   const target = await fixture.createThread(fixture.mainBoardId, 'Page of real reports');
   const ids: string[] = [];

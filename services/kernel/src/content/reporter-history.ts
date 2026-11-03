@@ -139,7 +139,7 @@ async function readReporterHistory(
   const ids = [...new Set([...selectedRaw.map((row) => row.report_id), ...(query.reportId ? [query.reportId] : [])])];
   const retained = await readReporterHistoryCases(dependencies, ids, context);
   const currentTargets = [...retained.values()].map((record) => record.target);
-  await readReporterHistoryTargets(dependencies, currentTargets, context);
+  const targetObservation = await readReporterHistoryTargets(dependencies, currentTargets, context);
   const current = await readReporterHistoryCases(dependencies, ids, context);
   for (const [id, record] of retained) {
     const final = current.get(id);
@@ -147,11 +147,8 @@ async function readReporterHistory(
     if (final && JSON.stringify(final) !== JSON.stringify(record))
       throw new ReporterHistoryChangedError('Report changed during page fill');
   }
-  const targets = await readReporterHistoryTargets(
-    dependencies,
-    [...current.values()].map((record) => record.target),
-    context,
-  );
+  if (!(await targetObservation.verify()))
+    throw new ReporterHistoryChangedError('Report target changed during page fill');
   const final = await reporterHistoryAuthority(dependencies, context);
   if (!final.value || final.anchor.epoch !== initial.anchor.epoch) throw new ReportUnavailableError();
   const selected = query.reportId ? current.get(query.reportId) : undefined;
@@ -160,7 +157,9 @@ async function readReporterHistory(
   for (const id of order) {
     const record = current.get(id);
     if (!record) continue;
-    const summary = targets.get(`${record.target.kind}:${record.target.id}`) ?? { state: 'unavailable' as const };
+    const summary = targetObservation.summaries.get(`${record.target.kind}:${record.target.id}`) ?? {
+      state: 'unavailable' as const,
+    };
     const open = { method: 'GET' as const, href: `/v1/reports/${id}` };
     entries.push(project(record, summary, open));
   }

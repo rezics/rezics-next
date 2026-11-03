@@ -43,11 +43,11 @@ export async function createReporterHistoryFixture() {
     return { response, text, value: text ? (JSON.parse(text) as Record<string, any>) : null };
   }
   async function submit(
-    target: { kind: 'thread' | 'post' | 'board' | 'subject'; id: string },
-    options: { key?: string; project?: boolean } = {},
+    target: { kind: 'thread' | 'post' | 'board' | 'subject' | 'realm' | 'space'; id: string },
+    options: { key?: string; project?: boolean; bearer?: string } = {},
   ) {
     const result = await call('POST', '/v1/reports', {
-      bearer: base.author.bearer,
+      bearer: options.bearer ?? base.author.bearer,
       key: options.key ?? randomUUID(),
       body: { target, reason: 'spam', evidence: 'My retained submission' },
     });
