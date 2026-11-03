@@ -211,6 +211,7 @@ function site(): Promise<string> {
         env: {
           ...process.env,
           KERNEL_ORIGIN: fake.url.origin,
+          PUBLIC_ORIGIN: origin,
           AUTH_ISSUER: `${fake.url.origin}/auth`,
           WEBSITE_CLIENT_ID: clientId,
           WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
