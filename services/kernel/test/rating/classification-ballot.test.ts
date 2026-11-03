@@ -72,6 +72,16 @@ beforeAll(async () => {
     Buffer.from(realAccess.bearer('voter0').split('.')[1]!, 'base64url').toString(),
     new Date().toISOString(),
   );
+  try {
+    const directAccess = realAccess.access({ actions: new Map() });
+    const actor = await directAccess.authenticate(realAccess.bearer('voter0'), {
+      pool: database.pool,
+      deadline: Date.now() + 10_000,
+    });
+    console.info('classification ballot direct auth probe', actor.accountId);
+  } catch (error) {
+    console.info('classification ballot direct auth failure', error);
+  }
 });
 
 afterAll(async () => {
