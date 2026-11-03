@@ -617,6 +617,7 @@ test('missing, unreadable and empty host configuration fail closed before local 
   delete withoutRemote.KERNEL_CHECK_REMOTE;
   const emptyCheckout = join(unset.dir, 'empty-checkout');
   mkdirSync(emptyCheckout);
+  expect(Bun.spawnSync(['git', 'init', '--quiet', emptyCheckout]).exitCode).toBe(0);
   const first = await runGate(localPath(withoutRemote), emptyCheckout);
   expect(first.code).toBe(1);
   expect(first.stderr).toContain('no check host is configured');
@@ -627,6 +628,7 @@ test('missing, unreadable and empty host configuration fail closed before local 
   delete forged.env.KERNEL_CHECK_REMOTE;
   const forgedCheckout = join(forged.dir, 'empty-checkout');
   mkdirSync(forgedCheckout);
+  expect(Bun.spawnSync(['git', 'init', '--quiet', forgedCheckout]).exitCode).toBe(0);
   const selected = await runGate(
     localPath({ ...forged.env, KERNEL_CHECK_ON_REMOTE: '1', REZICS_STACK_REMOTE: 'off' }),
     forgedCheckout,
