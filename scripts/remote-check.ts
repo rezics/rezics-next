@@ -1773,6 +1773,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 CONTROL_ROOT_FILES=set(${REMOTE_CHECK_PRODUCER_CONTROL_FILES_JSON})
 CONTROL_ROOT_DIRECTORIES=set(${REMOTE_CHECK_PRODUCER_CONTROL_DIRECTORIES_JSON})
@@ -1787,7 +1788,7 @@ def digest(path):
     return value.hexdigest()
 
 
-def inventory(root):
+def inventory(root, allocated=None):
     result = {}
     # These belong to the transport/supervisor, or are disposable runtime caches, never lifecycle outputs.
     excluded = {'.git'} | CONTROL_ROOT_FILES | CONTROL_ROOT_DIRECTORIES | RUN_SCRATCH_PATHS
@@ -1800,6 +1801,8 @@ def inventory(root):
                     directories.remove(name)
                 continue
             info = path.lstat()
+            if allocated is not None:
+                allocated[0] += info.st_blocks * 512
             mode = stat.S_IMODE(info.st_mode)
             if path.is_symlink():
                 target = os.readlink(path)
@@ -1843,7 +1846,7 @@ def copy_entries(source, destination, entries):
                 shutil.copy2(source / name, target)
 
 
-def verified(entry, key):
+def verified(entry, key, allocated=None):
     try:
         manifest = json.loads((entry / 'manifest.json').read_text())
         if manifest['key'] != key or manifest['schema'] != 2:
@@ -1853,7 +1856,7 @@ def verified(entry, key):
         if any(Path(name).is_absolute() or '..' in Path(name).parts
                for name in [*manifest['entries'], *manifest['removed']]):
             return None
-        if inventory(entry / 'payload') != manifest['entries']:
+        if inventory(entry / 'payload', allocated) != manifest['entries']:
             return None
         return manifest
     except (OSError, ValueError, KeyError, TypeError):
@@ -1927,108 +1930,226 @@ def native_entries(root, entries):
 
 
 def artifact_bytes(entry):
+    # Unknown legacy sizes stay unknown. Publication never accounts for any other artifact.
     try:
-        return int((entry / '.cache-bytes').read_text())
-    except (FileNotFoundError, ValueError):
-        # Old publications have no size record. Account for allocated blocks, including directories and links.
-        total = 0
-        for parent, directories, files in os.walk(entry, followlinks=False):
-            for path in [Path(parent), *(Path(parent) / name for name in files),
-                         *(Path(parent) / name for name in directories if (Path(parent) / name).is_symlink())]:
-                try:
-                    total += path.lstat().st_blocks * 512
-                except FileNotFoundError:
-                    pass
-        return total
+        with (entry / '.cache-bytes').open() as record:
+            value = record.read(65)
+        value = value.strip() if len(value) <= 64 else ''
+        return int(value) if re.fullmatch(r'[0-9]{1,30}', value) else None
+    except (OSError, UnicodeError):
+        return None
 
 
 def touch_artifacts(entry):
-    # Directory mtime records last use without allocating a new file on a full filesystem.
     os.utime(entry, None)
 
 
-def evict_artifacts(cache, held_entry=None):
-    # Source and native entries share one budget: at most 10% of the filesystem, preserving 10% free space.
-    # Serialize accounting; candidate locks are nonblocking to avoid deadlock with active preparations.
+def detach_artifacts(cache, entry):
+    # Caller holds the stable per-key lock. Never unlink that lock or recursively remove its entry here.
+    garbage = cache / '.garbage'
+    garbage.mkdir(exist_ok=True)
+    entry.rename(garbage / uuid.uuid4().hex)
+
+
+# Linux directory cookies let a bounded scan resume without re-listing an arbitrarily large namespace.
+# Cookies are best effort across mutation; every completed pass starts again to reconcile concurrent changes.
+def directory_entries(namespace, cookie):
+    class Dirent(ctypes.Structure):
+        _fields_ = [('ino', ctypes.c_ulong), ('off', ctypes.c_long), ('length', ctypes.c_ushort),
+                    ('kind', ctypes.c_ubyte), ('name', ctypes.c_char * 256)]
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.opendir.argtypes = [ctypes.c_char_p]
+    libc.opendir.restype = ctypes.c_void_p
+    libc.readdir.argtypes = [ctypes.c_void_p]
+    libc.readdir.restype = ctypes.POINTER(Dirent)
+    libc.seekdir.argtypes = [ctypes.c_void_p, ctypes.c_long]
+    libc.telldir.argtypes = [ctypes.c_void_p]
+    libc.telldir.restype = ctypes.c_long
+    libc.closedir.argtypes = [ctypes.c_void_p]
+    stream = libc.opendir(os.fsencode(namespace))
+    if not stream:
+        error = ctypes.get_errno()
+        if error != errno.ENOENT:
+            raise OSError(error, os.strerror(error))
+        yield None, 0
+        return
+    try:
+        libc.seekdir(stream, cookie)
+        while True:
+            ctypes.set_errno(0)
+            item = libc.readdir(stream)
+            if not item:
+                error = ctypes.get_errno()
+                if error:
+                    raise OSError(error, os.strerror(error))
+                yield None, 0
+                return
+            yield os.fsdecode(item.contents.name), libc.telldir(stream)
+    finally:
+        libc.closedir(stream)
+
+
+def clean_garbage(cache, deadline):
+    garbage = cache / '.garbage'
+    if not garbage.exists():
+        return
+    # A separate deletion owner survives per-key replacement. No global or per-key lock is held during deletion.
     with contextlib.ExitStack() as cleanup:
-        sweep = os.open(cache, os.O_RDONLY)
-        cleanup.callback(os.close, sweep)
-        fcntl.flock(sweep, fcntl.LOCK_EX)
-        entries = []
-        for namespace in [cache, cache / 'native']:
-            if not namespace.exists():
-                continue
-            for entry in namespace.iterdir():
-                if not re.fullmatch(r'[a-f0-9]{64}', entry.name) or not entry.is_dir() or entry.is_symlink():
-                    continue
-                try:
-                    entries.append((entry.stat().st_mtime_ns, entry, artifact_bytes(entry)))
-                except FileNotFoundError:
-                    pass
-        size = sum(item[2] for item in entries)
-        disk = shutil.disk_usage(cache)
-        bound = max(0, min(disk.total // 10, size + disk.free - disk.total // 10))
-        for last_use, entry, entry_size in sorted(entries):
-            if size <= bound:
+        descriptor = os.open(garbage, os.O_RDONLY)
+        cleanup.callback(os.close, descriptor)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        cursor = cache / '.garbage-cursor'
+        try:
+            relative = cursor.read_text()
+            path = garbage / relative
+            if '..' in Path(relative).parts or Path(relative).is_absolute() or path.resolve() != path or not path.is_dir():
+                path = garbage
+        except (OSError, UnicodeError):
+            path = garbage
+        for _ in range(128):
+            if time.monotonic() >= deadline:
                 break
-            with open(entry.parent / (entry.name + '.lock'), 'a') as lock:
-                if entry != held_entry:
+            with os.scandir(path) as stream:
+                item = next(stream, None)
+            if item is None:
+                if path == garbage:
+                    break  # Keep the deletion lock's directory inode stable.
+                path.rmdir()
+                path = path.parent
+            elif item.is_dir(follow_symlinks=False):
+                path = Path(item.path)
+            else:
+                os.unlink(item.path)
+        # Resume deep trees too: repeated descent must not consume every later tick's entire step budget.
+        cursor.write_text(str(path.relative_to(garbage)))
+
+
+def evict_artifacts(cache):
+    # Maintenance only: two seconds, 128 directory records, eight detachments and 128 deletion steps per tick.
+    deadline = time.monotonic() + 2
+    fresh = {'namespace': 0, 'cookie': 0, 'bytes': 0, 'unknown': 0, 'known': [], 'legacy': []}
+    with contextlib.ExitStack() as cleanup:
+        descriptor = os.open(cache, os.O_RDONLY)
+        cleanup.callback(os.close, descriptor)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        state_file = cache / '.sweep-state.json'
+        try:
+            state = json.loads(state_file.read_text())
+        except (OSError, ValueError):
+            state = dict(fresh, known=[], legacy=[])
+        remaining = 128
+        while remaining and state['namespace'] < 2 and time.monotonic() < deadline - 1:
+            namespace = cache if state['namespace'] == 0 else cache / 'native'
+            with contextlib.closing(directory_entries(namespace, state['cookie'])) as stream:
+                for name, cookie in stream:
+                    if not remaining or time.monotonic() >= deadline - 1:
+                        break
+                    remaining -= 1
+                    state['cookie'] = cookie
+                    if name is None:
+                        state['namespace'] += 1
+                        break
+                    if not re.fullmatch(r'[a-f0-9]{64}', name):
+                        continue
+                    entry = namespace / name
+                    try:
+                        info = entry.lstat()
+                        if not stat.S_ISDIR(info.st_mode):
+                            continue
+                        size = artifact_bytes(entry)
+                        state['bytes'] += size if size is not None else 0
+                        state['unknown'] += size is None
+                        with (namespace / (name + '.lock')).open('a') as lock:
+                            try:
+                                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            except BlockingIOError:
+                                continue
+                            bucket = state['legacy' if size is None else 'known']
+                            bucket.append([info.st_mtime_ns, info.st_dev, info.st_ino,
+                                           str(entry.relative_to(cache)), size])
+                            bucket.sort()
+                            del bucket[32:]
+                    except FileNotFoundError:
+                        continue
+        if state['namespace'] == 2:
+            disk = shutil.disk_usage(cache)
+            bound = max(0, min(disk.total // 10, state['bytes'] + disk.free - disk.total // 10))
+            candidates = sorted(state['known'] + state['legacy'], key=lambda item: item[0]) if state['bytes'] > bound else state['legacy']
+            for last_use, device, inode, name, size in candidates[:8]:
+                if time.monotonic() >= deadline - 1:
+                    break
+                if size is not None and state['bytes'] <= bound:
+                    continue
+                entry = cache / name
+                with (entry.parent / (entry.name + '.lock')).open('a') as lock:
                     try:
                         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    except BlockingIOError:
+                        info = entry.lstat()
+                        if (info.st_mtime_ns, info.st_dev, info.st_ino) != (last_use, device, inode):
+                            continue
+                        detach_artifacts(cache, entry)
+                        state['bytes'] -= size if size is not None else 0
+                        state['unknown'] -= size is None
+                    except (BlockingIOError, FileNotFoundError):
                         continue
-                if not entry.exists():
-                    size -= entry_size
-                    continue
-                # A hit since the snapshot makes this entry recent; let the next sweep reconsider it.
-                if entry.stat().st_mtime_ns != last_use:
-                    continue
-                if size > bound:
-                    remove(entry)
-                    size -= entry_size
-                    print('remote-check: dependency artifacts evicted ' + str(entry) + ' bytes=' + str(entry_size),
-                          file=sys.stderr, flush=True)
-        print('remote-check: dependency artifacts cache bytes=' + str(size) + ' bound=' + str(bound),
-              file=sys.stderr, flush=True)
+            print('remote-check: dependency artifacts attached measured bytes=' + str(state['bytes']) +
+                  ' unknown=' + str(state['unknown']) + ' bound=' + str(bound), file=sys.stderr, flush=True)
+            state = fresh
+        temporary = state_file.with_suffix('.pending')
+        temporary.write_text(json.dumps(state))
+        temporary.replace(state_file)
+    clean_garbage(cache, deadline)
+
+
+def schedule_maintenance(root, source):
+    # systemd owns a singleton timer/service outside the completed run's scope. Its program is independent of run files.
+    # --no-block waits only for registration, never a sweep; failure cannot change the command's status.
+    try:
+        import base64, zlib
+        encoded = base64.b64encode(zlib.compress(source)).decode('ascii')
+        # ExecStart expands dollars and percent specifiers; carry source as inert encoded bytes instead.
+        program = 'import base64,zlib;exec(zlib.decompress(base64.b64decode(' + repr(encoded) + ')))'
+        subprocess.run(['systemd-run', '--unit=rezics-check-cache-maintenance', '--collect', '--no-block',
+            '--on-active=1s', '--on-unit-inactive=60s', '--timer-property=RemainAfterElapse=no',
+            '-p', 'RuntimeMaxSec=3s', '-p', 'TimeoutStopSec=1s', '-p', 'KillMode=control-group',
+            '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
+            'python3', '-c', program, 'sweep', str(root.parent.parent / 'dependency-artifacts')],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1, cwd=root)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def publish_artifacts(root, entry, manifest):
     cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
-    for attempt in range(2):
-        stage = None
-        try:
-            stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
-            (stage / 'payload').mkdir()
-            copy_entries(root, stage / 'payload', manifest['entries'])
-            (stage / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
-            if verified(stage, manifest['key']) is None:
-                raise RuntimeError('prepared artifact verification failed')
-            (stage / '.cache-bytes').write_text('pending')
-            size = artifact_bytes(stage)
-            (stage / '.cache-bytes').write_text(str(size))
-            # The per-key lock covers publication and eviction, including eviction of this new entry if necessary.
-            if entry.exists():
-                remove(entry)
-            stage.rename(entry)
-            touch_artifacts(entry)
-        except OSError as error:
-            if error.errno != errno.ENOSPC:
-                raise
-            if stage is not None:
-                remove(stage)
-                stage = None
-            if attempt == 0:
-                print('remote-check: dependency artifacts publication ENOSPC; evicting before one retry',
-                      file=sys.stderr, flush=True)
-                evict_artifacts(cache, entry)
-                continue
-            print('remote-check: dependency artifacts publication skipped after ENOSPC retry', file=sys.stderr, flush=True)
-            return
-        finally:
-            if stage is not None and stage.exists():
-                remove(stage)
-        evict_artifacts(cache, entry)
-        return
+    stage = None
+    try:
+        stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
+        (stage / 'payload').mkdir()
+        copy_entries(root, stage / 'payload', manifest['entries'])
+        (stage / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True))
+        (stage / '.cache-bytes').write_text('pending')
+        allocated = [0]
+        if verified(stage, manifest['key'], allocated) is None:
+            raise RuntimeError('prepared artifact verification failed')
+        # Reuse the verification traversal; no additional walk, especially no traversal of legacy entries.
+        size = allocated[0] + sum(path.lstat().st_blocks * 512 for path in
+            [stage, stage / 'payload', stage / 'manifest.json', stage / '.cache-bytes'])
+        (stage / '.cache-bytes').write_text(str(size))
+        if entry.exists():
+            detach_artifacts(cache, entry)
+        stage.rename(entry)
+        touch_artifacts(entry)
+    except OSError as error:
+        if error.errno != errno.ENOSPC:
+            raise
+        print('remote-check: dependency artifacts publication skipped after ENOSPC', file=sys.stderr, flush=True)
+    # Partial staging stays private inside the owned run for normal post-command cleanup.
 
 
 def install():
@@ -2530,6 +2651,8 @@ def lifetime():
     if host not in SUPERVISOR_SCHEMA['hosts'] or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
         raise RuntimeError('invalid host lifetime identity')
     root = Path(directory)
+    # Capture producer code before the command can modify its private wrapper files.
+    maintenance_source = Path(__file__).read_bytes()
     preparation_deadline = started + int(preparation_ms) / 1000
     if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
         raise RuntimeError('host lifetime subreaper unavailable')
@@ -2633,6 +2756,7 @@ def lifetime():
     else:
         code = code if code >= 0 else 128 - code
     # Terminal admission state is published only after the entire owned tree is reaped and timeout cgroups are empty.
+    schedule_maintenance(root, maintenance_source)
     durable(root / 'exit-status', str(code) + '\n')
     return code
 
@@ -2673,7 +2797,7 @@ if sys.argv[1] == 'phase':
     preparation_progress(Path(sys.argv[2]), sys.argv[3])
     sys.exit(0)
 try:
-    sys.exit(install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
+    sys.exit(evict_artifacts(Path(sys.argv[2])) if sys.argv[1] == 'sweep' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
 except Exception as error:
     stop_owned(signal.SIGKILL)
     while True:
