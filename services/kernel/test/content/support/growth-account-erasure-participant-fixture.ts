@@ -21,7 +21,7 @@ import { createWorkClient, type WorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../../support/account-deletion.ts';
 import { checkGrowth, assertGrowthAccessPaths, openGrowthDatabase, seed } from '../../support/growth.ts';
-import { createNativeContentSystem, type NativeContentSystem } from './native-system.ts';
+import { createNativeContentSystem } from './native-system.ts';
 import { seedGovernanceAuthority } from './disclosure-fixtures.ts';
 
 export const SCALES = [256, 1024, 4096] as const;
@@ -309,6 +309,7 @@ async function worker() {
         await Bun.sleep(25);
       }
       await client.cancelWorkflow(id);
+      await assert.rejects(handle.getResult());
     } else await handle.getResult();
     const steps = (await client.listWorkflowSteps(id)) ?? [];
     const native = steps.filter((entry) => entry.name === 'content.account-erasure.run');
@@ -370,6 +371,15 @@ async function worker() {
     if (axis === 'content') retainedSources += pending.length;
     pressure.push(...pending);
     assert.equal(pressure.length, scale);
+    if (axis === 'content') {
+      for (const [relation, column, ids] of [
+        ['post', 'post_id', pressure.map((row) => row.post)],
+        ['revision', 'revision_id', pressure.map((row) => row.revision)],
+      ] as const) {
+        const rows = await db.admin.query(`SELECT count(*)::int AS n FROM content.${relation} WHERE ${column}=ANY($1::uuid[])`, [ids]);
+        assert.equal(rows.rows[0].n, scale);
+      }
+    }
     const relation = axis === 'progress' ? 'account_erasure_progress' : axis === 'content' ? 'author_item' : 'account_erasure_statement';
     const column = axis === 'content' ? 'author_account_id' : 'account_id';
     assert.equal((await db.admin.query(`SELECT count(*)::int AS n FROM content.${relation} WHERE ${column}=ANY($1::uuid[])`,
