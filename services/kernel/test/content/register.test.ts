@@ -56,6 +56,13 @@ function workEnvironment(mode: 'empty' | 'full'): Record<string, string | undefi
   return {
     DATABASE_URL: databaseUrl,
     KERNEL_ROUTE_KEY: routeKey,
+    KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({
+      current: 1,
+      keys: { 1: Buffer.alloc(32, 8).toString('base64url') },
+    }),
+    AUTH_ISSUER: 'https://accounts.test',
+    AUTH_AUDIENCE: 'https://api.test',
+    AUTH_JWKS_URL: 'https://accounts.test/.well-known/jwks.json',
     CONTENT_CANARY: canary,
     ...(mode === 'full' ? contentEnv : {}),
   };
