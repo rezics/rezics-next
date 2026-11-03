@@ -167,9 +167,7 @@ async function publicIdentityForAccount(
     const label = labelSet ? subjectLabel(labelSet) : '';
     if (type && label) subject = { id: subjectId, label, type };
   }
-  const avatar = row.avatar
-    ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null)
-    : null;
+  const avatar = row.avatar ? ((await readAvatarSummaries(client, [row.avatar])).get(row.avatar) ?? null) : null;
   return [
     {
       ...identity,

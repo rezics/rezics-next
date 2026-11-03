@@ -71,7 +71,7 @@ returns `400 invalid_request`. There is no query or request body. The closed suc
 
 ```ts
 {
-  targetType: "subject" | "collection" | "space";
+  targetType: 'subject' | 'collection' | 'space';
   targetId: string;
   followerCount: number;
 }

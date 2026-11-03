@@ -316,8 +316,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
               await Bun.sleep(10);
             }
             const result: unknown = await client.retrieveWorkflow(id).getResult();
-            if (typeof result !== 'object' || result === null)
-              throw new Error('Invalid Library participant result');
+            if (typeof result !== 'object' || result === null) throw new Error('Invalid Library participant result');
             if ('state' in result && result.state === 'acknowledged') {
               const status = await readErasureStatus(pool, accountId);
               const outcome = status?.participants.library?.outcome;
@@ -329,12 +328,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
             }
             for (const field of ['counts', 'facts', 'owned'] as const) {
               const stats: unknown = Reflect.get(result, field);
-              if (
-                typeof stats !== 'object' ||
-                stats === null ||
-                !('pages' in stats) ||
-                typeof stats.pages !== 'number'
-              )
+              if (typeof stats !== 'object' || stats === null || !('pages' in stats) || typeof stats.pages !== 'number')
                 throw new Error(`Invalid Library participant ${field} stats`);
               pages += stats.pages;
             }

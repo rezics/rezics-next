@@ -86,8 +86,7 @@ function bindDatabaseClock(pool: Pool, now: () => string): () => void {
   const matches = (query: unknown) =>
     (queryText(query) ?? '').replace(/\s+/g, ' ').trim().startsWith('SELECT clock_timestamp()::text AS at');
   const replace = (value: unknown) => {
-    if (typeof value !== 'object' || value === null || !('rows' in value) || !Array.isArray(value.rows))
-      return value;
+    if (typeof value !== 'object' || value === null || !('rows' in value) || !Array.isArray(value.rows)) return value;
     return {
       ...value,
       rows: value.rows.map((row) => (typeof row === 'object' && row !== null ? { ...row, at: now() } : row)),
@@ -521,8 +520,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
       published,
       201,
     );
-    if (publishedBody.digest !== digest)
-      throw new Error('Definitions returned a different compiled release digest');
+    if (publishedBody.digest !== digest) throw new Error('Definitions returned a different compiled release digest');
     const currentHead = await byRoute(null, 'GET', '/v1/definitions/active');
     const expectedHead =
       currentHead.status === 404
@@ -541,8 +539,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
       await byRoute(null, 'GET', '/v1/definitions/active'),
       200,
     );
-    if (active.digest !== digest)
-      throw new Error('Definitions did not activate the compiled fixture release');
+    if (active.digest !== digest) throw new Error('Definitions did not activate the compiled fixture release');
 
     for (const group of ['collections', 'personal_library', 'reading_progress']) {
       const response = await byRoute(
@@ -667,8 +664,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         readiness.then(() => ({ ready: true as const })),
         exited.then((code) => ({ ready: false as const, code })),
       ]);
-      if (!outcome.ready)
-        throw new Error(`Production library executor exited ${outcome.code}: ${workerFailure ?? ''}`);
+      if (!outcome.ready) throw new Error(`Production library executor exited ${outcome.code}: ${workerFailure ?? ''}`);
       for (const queue of await workClient!.listQueues()) await queue.setMinPollingIntervalMs(5);
       childHeld = false;
     }
@@ -803,10 +799,8 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         ...row,
         route: Number(row.route),
         partition: partitionOf(Number(row.route)),
-        acquiredOn:
-          row.acquiredOn instanceof Date ? row.acquiredOn.toISOString().slice(0, 10) : row.acquiredOn,
-        disposedOn:
-          row.disposedOn instanceof Date ? row.disposedOn.toISOString().slice(0, 10) : row.disposedOn,
+        acquiredOn: row.acquiredOn instanceof Date ? row.acquiredOn.toISOString().slice(0, 10) : row.acquiredOn,
+        disposedOn: row.disposedOn instanceof Date ? row.disposedOn.toISOString().slice(0, 10) : row.disposedOn,
       })) as LibraryInspection['copies'];
       const follows = (
         await db!.admin.query(`
@@ -1178,8 +1172,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         await expectJson(`Seeding the last member of collection ${input.collectionId}`, response, 201);
       },
       async seed(scale) {
-        if (!Number.isSafeInteger(scale) || scale < seedSubjects)
-          throw new RangeError('Seed scales must increase');
+        if (!Number.isSafeInteger(scale) || scale < seedSubjects) throw new RangeError('Seed scales must increase');
         measurementScale = scale;
         measurementIndex = 0;
         if (scale === seedSubjects) return;
