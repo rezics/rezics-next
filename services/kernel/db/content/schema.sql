@@ -87,7 +87,9 @@ CREATE FUNCTION content.guard_author_item() RETURNS trigger
 BEGIN
   IF ROW(NEW.route, NEW.author_account_id, NEW.item_kind, NEW.item_id, NEW.thread_id, NEW.thread_kind, NEW.created_at)
        IS DISTINCT FROM ROW(OLD.route, OLD.author_account_id, OLD.item_kind, OLD.item_id, OLD.thread_id, OLD.thread_kind, OLD.created_at)
-     OR ROW(NEW.source_epoch, NEW.source_position) <= ROW(OLD.source_epoch, OLD.source_position) THEN
+     OR ROW(NEW.source_epoch, NEW.source_position) < ROW(OLD.source_epoch, OLD.source_position)
+     OR (ROW(NEW.source_epoch, NEW.source_position) = ROW(OLD.source_epoch, OLD.source_position)
+         AND NOT (OLD.draft_state = 'unknown' AND NEW.draft_state <> 'unknown')) THEN
     RAISE EXCEPTION 'Author item identity, creation time and source watermark cannot regress' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
@@ -747,10 +749,15 @@ CREATE TABLE content.author_item (
     created_at timestamp with time zone NOT NULL,
     source_epoch integer NOT NULL,
     source_position bigint NOT NULL,
+    draft_state text DEFAULT 'unknown'::text NOT NULL,
+    draft_revision_id uuid,
+    draft_language text,
     CONSTRAINT author_item_check CHECK ((route = ((get_byte(uuid_send(author_account_id), 10) * 256) + get_byte(uuid_send(author_account_id), 11)))),
     CONSTRAINT author_item_check1 CHECK ((((item_kind = 'thread'::text) AND (item_id = thread_id)) OR ((item_kind = 'post'::text) AND (item_id <> thread_id)))),
     CONSTRAINT author_item_check2 CHECK (((get_byte(uuid_send(item_id), 10) = get_byte(uuid_send(thread_id), 10)) AND (get_byte(uuid_send(item_id), 11) = get_byte(uuid_send(thread_id), 11)))),
     CONSTRAINT author_item_created_at_check CHECK (isfinite(created_at)),
+    CONSTRAINT author_item_draft_language_check CHECK ((octet_length(draft_language) <= 256)),
+    CONSTRAINT author_item_draft_state_check CHECK ((draft_state = ANY (ARRAY['unknown'::text, 'draft'::text, 'other'::text]))),
     CONSTRAINT author_item_item_kind_check CHECK ((item_kind = ANY (ARRAY['thread'::text, 'post'::text]))),
     CONSTRAINT author_item_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT author_item_source_epoch_check CHECK ((source_epoch > 0)),
@@ -1588,6 +1595,21 @@ CREATE TABLE content.operation (
 
 
 --
+-- Name: own_draft_progress; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.own_draft_progress (
+    singleton integer NOT NULL,
+    after_route integer NOT NULL,
+    after_thread uuid NOT NULL,
+    after_post uuid NOT NULL,
+    complete boolean DEFAULT false NOT NULL,
+    CONSTRAINT own_draft_progress_after_route_check CHECK (((after_route >= 0) AND (after_route <= 65535))),
+    CONSTRAINT own_draft_progress_singleton_check CHECK ((singleton = 0))
+);
+
+
+--
 -- Name: party_locator; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -1627,6 +1649,7 @@ CREATE TABLE content.post (
     purge_started_at timestamp with time zone,
     purge_completed boolean DEFAULT false NOT NULL,
     author_erased boolean DEFAULT false NOT NULL,
+    draft_locator_pending boolean DEFAULT true NOT NULL,
     CONSTRAINT post_availability_check CHECK ((availability = ANY (ARRAY['available'::text, 'erased'::text]))),
     CONSTRAINT post_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
     CONSTRAINT post_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
@@ -2734,6 +2757,14 @@ ALTER TABLE ONLY content.operation
 
 
 --
+-- Name: own_draft_progress own_draft_progress_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.own_draft_progress
+    ADD CONSTRAINT own_draft_progress_pkey PRIMARY KEY (singleton);
+
+
+--
 -- Name: party_locator party_locator_pkey; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3078,6 +3109,13 @@ ALTER TABLE ONLY content.thread_watch
 
 
 --
+-- Name: author_item_draft_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX author_item_draft_page_idx ON content.author_item USING btree (route, author_account_id, created_at DESC, item_id) INCLUDE (thread_id, draft_revision_id, draft_language) WHERE ((item_kind = 'post'::text) AND (draft_state = 'draft'::text));
+
+
+--
 -- Name: author_item_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -3384,6 +3422,13 @@ CREATE UNIQUE INDEX notice_route_kind_source_recipient_idx ON content.notice USI
 --
 
 CREATE INDEX post_deleted_page_idx ON content.post USING btree (route, deleted_at, post_id) WHERE ((deleted_at IS NOT NULL) AND (NOT purge_completed));
+
+
+--
+-- Name: post_pending_draft_locator_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX post_pending_draft_locator_idx ON content.post USING btree (author_account_id, route, post_id) WHERE (draft_locator_pending AND (visibility = 'draft'::text) AND (availability = 'available'::text));
 
 
 --

@@ -154,6 +154,12 @@ export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUnt
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
+export type NativeDraftMetadata = Readonly<{
+  id: string; threadId: string; firstPostId: string; revisionId: string; authorId: string;
+  kind: 'discussion' | 'review'; documentKind: 'opening' | 'reply'; title: string | null;
+  savedAt: string; licence: string; subjectIds: readonly string[]; mediaIds: readonly string[];
+  board: { id: string; title: string | null; realmId: string | null };
+}>;
 export type { Actor };
 
 type Kind = 'board' | 'thread' | 'post' | 'revision';
@@ -1163,7 +1169,8 @@ async function disclose(
   subjectScope?: { subjectId: string; placeId: string },
   threadReference = threadDetail,
   beforeFinal?: () => Promise<void>,
-): Promise<Anchored<PostEntry | ThreadView | null>> {
+  metadataOnly = false,
+): Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
       const thread = await point(client, 'thread', threadId);
@@ -1207,7 +1214,7 @@ async function disclose(
       );
     }
   }
-  const discloseCurrent = async (client: AccessClient): Promise<PostEntry | ThreadView | null> => {
+  const discloseCurrent = async (client: AccessClient): Promise<PostEntry | ThreadView | NativeDraftMetadata | null> => {
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
@@ -1236,6 +1243,21 @@ async function disclose(
         return null;
     }
     if (!current.revision || !current.posts[0]) return null;
+    if (metadataOnly) {
+      const post = current.posts[0];
+      const revision = current.revision;
+      if (erased || withheld || post.visibility !== 'draft' || context.actor.kind !== 'account' ||
+          post.author_id !== context.actor.accountId || revision.availability !== 'available') return null;
+      return {
+        id: post.id, threadId, firstPostId: current.thread.first_post_id!, revisionId: revision.id,
+        authorId: post.author_id, kind: current.thread.thread_kind!,
+        documentKind: post.id === current.thread.first_post_id ? 'opening' : 'reply',
+        title: post.id === current.thread.first_post_id ? current.thread.title?.slice(0,512) ?? null : null,
+        savedAt: revision.created_at.toISOString(), licence: revision.licence,
+        subjectIds: revision.subject_ids, mediaIds: revision.media_ids,
+        board: { id: board.value!.id, title: board.value!.title?.slice(0,512) ?? null, realmId: board.value!.realmId },
+      };
+    }
     // The receipt names one exact revision. That replay is the erased-metadata
     // proof for that revision alone; taken down and every other check still deny.
     const replayAuthorizes =
@@ -1304,7 +1326,7 @@ async function disclose(
   // snapshot, including when the pool has only one connection. Bytes and keys
   // leave this function only after both authorities have passed their final check.
   if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
-  if (disclosed.value)
+  if (disclosed.value && !('firstPostId' in disclosed.value))
     disclosed = { ...disclosed, value: await readableCitation(dependencies, context, disclosed.value) };
   return disclosed;
 }
@@ -1753,6 +1775,18 @@ export async function readPost(
         replayedRevisionId,
       )) as Anchored<PostEntry | null>,
   );
+}
+
+/** Private inventory projection of ordinary source disclosure. This path never
+ * requests revision bytes; account ownership does not replace container Access.
+ */
+export async function readOwnDraftMetadata(
+  dependencies: ContentReadDependencies, threadId: string, postId: string, context: ReadContext,
+): Promise<Anchored<NativeDraftMetadata | null>> {
+  if (routeOf(threadId) === null || routeOf(postId) !== routeOf(threadId)) throw new ContentNotFoundError();
+  return withRealmDisclosureScope(async () =>
+    await disclose(dependencies, threadId, context, postId, undefined, false, undefined, undefined, false,
+      undefined, true) as Anchored<NativeDraftMetadata | null>);
 }
 
 async function list(

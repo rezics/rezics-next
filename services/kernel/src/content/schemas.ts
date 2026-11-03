@@ -20,6 +20,7 @@ import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReporterReportView, ReportReadView, ReportView } from './reports.ts';
 import type { Operation } from './operation-contract.ts';
 import type { DocumentMediaPage } from './media-presentation.ts';
+import type { OwnDraftEntry } from './own-drafts.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -899,3 +900,29 @@ export const ContentEditionCommandSchema = t.Object(
   },
   closed,
 );
+
+/** Private account-home metadata; full document bytes are selected separately. */
+export const OwnDraftQuerySchema = t.Object({
+  cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1 })),
+}, closed);
+const draftAction = t.Union([t.String({ maxLength: 256 }), t.Null()]);
+export const OwnDraftEntrySchema = t.Unsafe<OwnDraftEntry>(t.Object({
+  id: ContentIdSchema, threadId: ContentIdSchema, firstPostId: ContentIdSchema,
+  revisionId: ContentIdSchema, authorId: ContentIdSchema,
+  kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+  documentKind: t.Union([t.Literal('opening'), t.Literal('reply')]),
+  title: t.Union([t.String({ maxLength: 512 }), t.Null()]),
+  savedAt: t.String({ format: 'date-time' }), licence,
+  language: t.Union([t.String({ maxLength: 256 }), t.Null()]),
+  subjectIds: subjects, mediaIds: media,
+  board: t.Object({ id: ContentIdSchema, title: t.Union([t.String({ maxLength: 512 }), t.Null()]),
+    realmId: nullableId }, closed),
+  actions: t.Object({ resume: t.String({ maxLength: 256 }), edit: draftAction, publish: draftAction, erase: draftAction }, closed),
+}, closed));
+export const OwnDraftResponseSchema = t.Object({
+  state: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+  viewer: t.Object({ accountId: ContentIdSchema, authnEpoch: t.Integer({ minimum: 1 }) }, closed),
+  drafts: t.Array(OwnDraftEntrySchema, { maxItems: 20 }),
+  next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+}, closed);

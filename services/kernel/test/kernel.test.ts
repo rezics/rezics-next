@@ -441,6 +441,8 @@ const typed = [
   'GET /v1/me/rating-votes',
   'GET /v1/subjects/:id/threads',
   'GET /v1/accounts/:accountId/threads',
+  'GET /v1/accounts/:accountId/drafts',
+  'GET /v1/accounts/:accountId/drafts/:id',
   'GET /v1/accounts/:accountId/posts',
   'GET /v1/accounts/:accountId/realms',
   'POST /v1/subjects/:id/source-classifications/$read',
