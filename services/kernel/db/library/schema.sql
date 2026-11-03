@@ -3891,6 +3891,20 @@ CREATE TABLE library.list_import_mal (
 
 
 --
+-- Name: list_import_mal_row; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.list_import_mal_row (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    evidence jsonb NOT NULL,
+    CONSTRAINT list_import_mal_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 499)))
+);
+
+
+--
 -- Name: members_preparation; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4421,6 +4435,8 @@ CREATE TABLE library.progress_session (
     journal_reflection text,
     reported_year_initialized boolean DEFAULT false NOT NULL,
     episode_completed_count integer DEFAULT 0 NOT NULL,
+    journal_assessment_units smallint,
+    journal_assessment_meaning_revision smallint DEFAULT 1 NOT NULL,
     CONSTRAINT progress_session_additional_measures_check CHECK (
 CASE
     WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
@@ -4433,6 +4449,8 @@ END),
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
     CONSTRAINT progress_session_episode_completed_count_check CHECK (((episode_completed_count >= 0) AND (episode_completed_count <= 20000))),
+    CONSTRAINT progress_session_journal_assessment_meaning_revision_check CHECK ((journal_assessment_meaning_revision = 1)),
+    CONSTRAINT progress_session_journal_assessment_units_check CHECK (((journal_assessment_units IS NULL) OR ((journal_assessment_units >= 0) AND (journal_assessment_units <= 20)))),
     CONSTRAINT progress_session_journal_finish_date_check CHECK ((((journal_finish_year IS NULL) AND (journal_finish_month IS NULL) AND (journal_finish_day IS NULL)) OR ((journal_finish_year IS NOT NULL) AND ((journal_finish_year >= 1) AND (journal_finish_year <= 9999)) AND ((journal_finish_month IS NULL) OR ((journal_finish_month >= 1) AND (journal_finish_month <= 12))) AND ((journal_finish_day IS NULL) OR ((journal_finish_month IS NOT NULL) AND ((journal_finish_day >= 1) AND (journal_finish_day <=
 CASE
     WHEN (journal_finish_month = 2) THEN
@@ -5167,20 +5185,6 @@ CREATE TABLE library.vndb_import (
     CONSTRAINT vndb_import_rows_check CHECK (((jsonb_typeof(rows) = 'array'::text) AND (jsonb_array_length(rows) <= 5000) AND (octet_length((rows)::text) <= 16777216))),
     CONSTRAINT vndb_import_state_check CHECK ((state = ANY (ARRAY['active'::text, 'cancelled'::text]))),
     CONSTRAINT vndb_import_xml_check CHECK ((octet_length(xml) <= 2097152))
-);
-
-
---
--- Name: list_import_mal_row; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.list_import_mal_row (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    upload_id uuid NOT NULL,
-    ordinal integer NOT NULL,
-    evidence jsonb NOT NULL,
-    CONSTRAINT list_import_mal_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 499)))
 );
 
 
@@ -6085,6 +6089,14 @@ ALTER TABLE ONLY library.list_import_mal
 
 
 --
+-- Name: list_import_mal_row list_import_mal_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_mal_row
+    ADD CONSTRAINT list_import_mal_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
+
+
+--
 -- Name: members_preparation_owner members_preparation_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6589,22 +6601,6 @@ ALTER TABLE ONLY library.vndb_import
 
 
 --
--- Name: vndb_label_adoption vndb_label_adoption_pkey; Type: CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.vndb_label_adoption
-    ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
-
-
---
--- Name: list_import_mal_row list_import_mal_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.list_import_mal_row
-    ADD CONSTRAINT list_import_mal_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
-
-
---
 -- Name: vndb_import_row vndb_import_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6618,6 +6614,14 @@ ALTER TABLE ONLY library.vndb_import_row
 
 ALTER TABLE ONLY library.vndb_label_adoption_item
     ADD CONSTRAINT vndb_label_adoption_item_pkey PRIMARY KEY (route, account_id, upload_id, item_no);
+
+
+--
+-- Name: vndb_label_adoption vndb_label_adoption_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption
+    ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
 
 
 --
@@ -7237,27 +7241,6 @@ CREATE INDEX entry_source_observation_owner ON library.entry_source_observation 
 
 
 --
--- Name: library_export_anilist_header; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX library_export_anilist_header ON library.list_import_anilist USING btree (route, account_id, import_id) WHERE (ordinal = '-1'::integer);
-
-
---
--- Name: library_export_annotation_seek; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX library_export_annotation_seek ON library.entry_personal_fact USING btree (route, account_id, subject_id) WHERE (annotation_revision > 0);
-
-
---
--- Name: library_export_journal_seek; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX library_export_journal_seek ON library.progress_session USING btree (route, account_id, session_id) WHERE ((state <> 'retired'::text) AND (journal_revision > 0));
-
-
---
 -- Name: entry_state_change_account_subject; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -7461,10 +7444,31 @@ CREATE INDEX library_archive_merge_upload_expiry ON library.library_archive_merg
 
 
 --
+-- Name: library_export_anilist_header; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_anilist_header ON library.list_import_anilist USING btree (route, account_id, import_id) WHERE (ordinal = '-1'::integer);
+
+
+--
+-- Name: library_export_annotation_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_annotation_seek ON library.entry_personal_fact USING btree (route, account_id, subject_id) WHERE (annotation_revision > 0);
+
+
+--
 -- Name: library_export_copy_seek; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX library_export_copy_seek ON library.copy USING btree (route, account_id, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: library_export_journal_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_journal_seek ON library.progress_session USING btree (route, account_id, session_id) WHERE ((state <> 'retired'::text) AND (journal_revision > 0));
 
 
 --
@@ -8259,17 +8263,17 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.li
 
 
 --
--- Name: vndb_import export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
---
-
-CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.vndb_import FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
-
-
---
 -- Name: list_import_mal_row export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
 --
 
 CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal_row FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: vndb_import export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.vndb_import FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
 --
@@ -9154,6 +9158,14 @@ ALTER TABLE ONLY library.library_archive_merge_item
 
 
 --
+-- Name: list_import_mal_row list_import_mal_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_mal_row
+    ADD CONSTRAINT list_import_mal_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.list_import_mal(route, account_id, id) ON DELETE CASCADE;
+
+
+--
 -- Name: members_preparation_result members_preparation_result_route_owner_account_id_collecti_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -9322,22 +9334,6 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 
 --
--- Name: vndb_label_adoption vndb_label_adoption_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.vndb_label_adoption
-    ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
-
-
---
--- Name: list_import_mal_row list_import_mal_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.list_import_mal_row
-    ADD CONSTRAINT list_import_mal_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.list_import_mal(route, account_id, id) ON DELETE CASCADE;
-
-
---
 -- Name: vndb_import_row vndb_import_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -9351,5 +9347,18 @@ ALTER TABLE ONLY library.vndb_import_row
 
 ALTER TABLE ONLY library.vndb_label_adoption_item
     ADD CONSTRAINT vndb_label_adoption_item_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_label_adoption(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- Name: vndb_label_adoption vndb_label_adoption_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption
+    ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
 
 
