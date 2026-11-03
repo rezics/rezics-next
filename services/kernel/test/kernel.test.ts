@@ -301,6 +301,8 @@ const typed = [
   'POST /v1/recentSearches',
   'DELETE /v1/recentSearches/:id',
   'POST /v1/recentSearches/$clear',
+  'POST /v1/libraryImports/anilist/:importId/$reviewLabels',
+  'POST /v1/libraryImports/anilist/:importId/$applyLabels',
   'POST /v1/libraryImports/bangumi/$preview',
   'GET /v1/libraryImports/bangumi/:uploadId',
   'POST /v1/libraryImports/bangumi/:uploadId/$review',
