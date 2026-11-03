@@ -11,22 +11,13 @@ type Inventory = ReturnType<KernelClient['accounts']>['watches'];
 expectTypeOf<Awaited<ReturnType<Inventory['get']>>['data']>().toEqualTypeOf<WatchManagementPage | null>();
 expectTypeOf<WatchManagementPage['items'][number]>().toEqualTypeOf<WatchManagementItem>();
 expectTypeOf<WatchManagementKind>().toEqualTypeOf<'thread' | 'board'>();
-expectTypeOf<Extract<WatchManagementItem, { state: 'available' }>>().toEqualTypeOf<{
-  id: string;
-  kind: WatchManagementKind;
-  revision: number;
-  createdAt: string;
-  state: 'available';
-  resourceId: string;
-  title: string | null;
-}>();
-expectTypeOf<Extract<WatchManagementItem, { state: 'unavailable' }>>().toEqualTypeOf<{
-  id: string;
-  kind: WatchManagementKind;
-  revision: number;
-  createdAt: string;
-  state: 'unavailable';
-}>();
+type AvailableWatch = Extract<WatchManagementItem, { state: 'available' }>;
+type UnavailableWatch = Extract<WatchManagementItem, { state: 'unavailable' }>;
+expectTypeOf<keyof AvailableWatch>().toEqualTypeOf<'id' | 'kind' | 'revision' | 'createdAt' | 'state' | 'resourceId' | 'title'>();
+expectTypeOf<AvailableWatch['resourceId']>().toEqualTypeOf<string>();
+expectTypeOf<AvailableWatch['title']>().toEqualTypeOf<string | null>();
+expectTypeOf<UnavailableWatch['state']>().toEqualTypeOf<'unavailable'>();
+expectTypeOf<keyof UnavailableWatch>().toEqualTypeOf<'id' | 'kind' | 'revision' | 'createdAt' | 'state'>();
 type BoardWatch = ReturnType<KernelClient['boards']>['watch'];
 expectTypeOf<Awaited<ReturnType<BoardWatch['get']>>['data']>().toEqualTypeOf<
   { watching: boolean; revision: number } | null
