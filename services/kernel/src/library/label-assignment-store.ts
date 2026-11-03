@@ -19,7 +19,7 @@ type Assignment = {
 
 export type SetLabelAssignmentResult =
   | { kind: 'applied' | 'existing'; assignment: Assignment }
-  | { kind: 'capacity' | 'not_found' | 'migration_required' };
+  | { kind: 'capacity' | 'not_found' | 'migration_required' | 'changed' };
 
 type Observed = Awaited<ReturnType<typeof reservations.run>>[number];
 
@@ -71,7 +71,15 @@ export async function lockLabelAssignmentSubject(
  */
 export async function setLabelAssignment(
   client: Pick<PoolClient, 'query'>,
-  input: { route: number; accountId: string; subjectId: string; labelId: string },
+  input: {
+    route: number;
+    accountId: string;
+    subjectId: string;
+    labelId: string;
+    expectedLabelRevision?: number;
+    expectedSource?: { labelId: string; assignmentId: string; revision: number; labelRevision: number };
+    expectedTarget?: { id: string; revision: number; effective: boolean } | null;
+  },
   context: { transactionId: string; time: string },
 ): Promise<SetLabelAssignmentResult> {
   const db = { query: client.query.bind(client) };
@@ -91,14 +99,42 @@ export async function setLabelAssignment(
   const locked = await parents.run(db, {
     route: input.route,
     account_id: input.accountId,
-    label_ids: [...new Set([...rows.map((row) => row.labelId), labelId])],
+    label_ids: [...new Set([...rows.map((row) => row.labelId), labelId, ...(input.expectedSource ? [input.expectedSource.labelId] : [])])],
   });
   const current = new Map(locked.map((parent) => [parent.labelId, parent]));
   const parent = current.get(labelId);
   if (!parent || parent.deletedAt !== null) return { kind: 'not_found' };
+  if (input.expectedLabelRevision !== undefined && parent.revision !== input.expectedLabelRevision)
+    return { kind: 'changed' };
+  if (input.expectedSource) {
+    const sourceParent = current.get(input.expectedSource.labelId);
+    if (!sourceParent || sourceParent.deletedAt !== null || sourceParent.revision !== input.expectedSource.labelRevision)
+      return { kind: 'changed' };
+    const source = await client.query<{ assignmentId: string; revision: number; slotNo: number | null; deletedAt: string | null }>(
+      `SELECT assignment_id AS "assignmentId",revision,slot_no AS "slotNo",deleted_at::text AS "deletedAt"
+       FROM library.label_assignment
+       WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`,
+      [input.route, input.accountId, input.subjectId, input.expectedSource.labelId],
+    );
+    const sourceAssignment = source.rows[0];
+    if (
+      !sourceAssignment ||
+      sourceAssignment.assignmentId !== input.expectedSource.assignmentId ||
+      sourceAssignment.revision !== input.expectedSource.revision ||
+      sourceAssignment.deletedAt !== null ||
+      sourceAssignment.slotNo === null
+    )
+      return { kind: 'changed' };
+  }
   // Legacy tuples require a separate bounded cutover; reads never stamp identities or claims.
   if (desired && (desired.id === null || (desired.deletedAt === null && desired.slotNo === null)))
     return { kind: 'migration_required' };
+  if (input.expectedTarget !== undefined) {
+    const observedTarget = desired
+      ? { id: desired.id!, revision: desired.revision, effective: desired.deletedAt === null && desired.slotNo !== null }
+      : null;
+    if (JSON.stringify(observedTarget) !== JSON.stringify(input.expectedTarget)) return { kind: 'changed' };
+  }
   if (desired && desired.deletedAt === null && desired.slotNo !== null)
     return { kind: 'existing', assignment: liveRecord(desired) };
 

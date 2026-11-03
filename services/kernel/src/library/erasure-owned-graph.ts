@@ -67,6 +67,7 @@ export const OWNED_PHASES = [
   'copy_archive',
   'list_import_anilist',
   'diary_navigation',
+  'label_consolidation',
 ] as const;
 const childQueries: {
   units: typeof units;

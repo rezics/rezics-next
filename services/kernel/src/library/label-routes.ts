@@ -14,6 +14,7 @@ import { LibraryConflictError } from './entries.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { createLabelConsolidationReview, LABEL_CONSOLIDATION_REVIEW_LIMITS } from './label-consolidation-review.ts';
+import { createLabelConsolidationCommands } from './label-consolidation.ts';
 import { libraryEntryTileSchema } from './library-entry-tiles.ts';
 import { fullView, subjectFields, viewQuery } from './views.ts';
 import { normalizePersonalLabelName, normalizePersonalLabelPrefix } from './label-store.ts';
@@ -63,6 +64,58 @@ const assignmentPage = t.Union([
 const expected = t.Object({ subjectId: id, assignmentId: id, revision }, closed);
 const reviewAssignment = t.Union([t.Object({ ...identity.properties, effective: t.Boolean() }, closed), t.Null()]);
 const reviewLabel = t.Object({ ...identity.properties, name: t.String() }, closed);
+const confirmationEvidence = t.Object(
+  {
+    selection: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    sourceLabel: reviewLabel,
+    targetLabel: reviewLabel,
+    items: t.Array(
+      t.Object(
+        {
+          selected: expected,
+          source: t.Object({ ...identity.properties, effective: t.Boolean() }, closed),
+          target: reviewAssignment,
+          outcome: t.Union([t.Literal('movable'), t.Literal('already_on_target')]),
+        },
+        closed,
+      ),
+      { minItems: 1, maxItems: 16 },
+    ),
+  },
+  closed,
+);
+const consolidationResult = t.Object(
+  {
+    confirmationId: id,
+    sourceLabelId: id,
+    targetLabelId: id,
+    status: t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('cancelled')]),
+    expiresAt: t.String({ format: 'date-time' }),
+    items: t.Array(
+      t.Object(
+        {
+          item: t.Integer({ minimum: 0, maximum: 15 }),
+          selected: t.Optional(expected),
+          status: t.Union([
+            t.Literal('pending'),
+            t.Literal('processing'),
+            t.Literal('moved'),
+            t.Literal('target_applied_source_retained'),
+            t.Literal('capacity_limited'),
+            t.Literal('changed'),
+            t.Literal('inaccessible'),
+          ]),
+          targetAssignment: t.Optional(identity),
+          targetUnchanged: t.Optional(t.Boolean()),
+          sourceUnassignRevision: t.Optional(identity.properties.revision),
+        },
+        closed,
+      ),
+      { maxItems: 16 },
+    ),
+  },
+  closed,
+);
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -136,6 +189,7 @@ export function personalLabelRoutes(
 ) {
   const labels = createPersonalLabelCommands(deps);
   const assignments = () => createLabelAssignmentCommands({ ...deps, access: deps.access() });
+  const consolidations = () => createLabelConsolidationCommands({ ...deps, access: deps.access() });
   return app
     .get(
       '/v1/libraryLabels',
@@ -371,6 +425,103 @@ export function personalLabelRoutes(
       async ({ actor, params, body, admission, job, set }) => {
         const result = await admission.run('normal', job, () =>
           command(() => createLabelConsolidationReview({ ...deps, access: deps.access() })(actor, params.id, body)),
+        );
+        set.headers['Cache-Control'] = 'private, no-store';
+        return result;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'confirmConsolidation'),
+      {
+        params,
+        headers,
+        body: confirmationEvidence,
+        transform: ({ request }) => queryFields(request, []),
+        response: { 201: t.Object({ confirmationId: id, expiresAt: t.String({ format: 'date-time' }), status: t.Literal('active'), itemCount: t.Integer({ minimum: 1, maximum: 16 }) }, closed), ...failures },
+        detail: detail('consolidation_confirm'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const confirmed = await admission.run('normal', job, () =>
+          command(() => consolidations().confirm(actor, params.id, body, key)),
+        );
+        session.record(confirmed);
+        set.headers['Cache-Control'] = 'private, no-store';
+        set.status = 201;
+        return confirmed.value;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'applyConsolidation'),
+      {
+        params,
+        headers,
+        body: t.Object({ confirmationId: id }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: consolidationResult, ...failures },
+        detail: detail('consolidation_apply'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const applied = await admission.run('normal', job, () =>
+          command(() => consolidations().apply(actor, params.id, body.confirmationId, key)),
+        );
+        session.record(applied.operation);
+        set.headers['Cache-Control'] = 'private, no-store';
+        return applied.result;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'retryConsolidation'),
+      {
+        params,
+        headers,
+        body: t.Object({ confirmationId: id, item: t.Integer({ minimum: 0, maximum: 15 }) }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: consolidationResult, ...failures },
+        detail: detail('consolidation_retry'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const retried = await admission.run('normal', job, () =>
+          command(() => consolidations().retry(actor, params.id, body.confirmationId, body.item, key)),
+        );
+        session.record(retried.operation);
+        set.headers['Cache-Control'] = 'private, no-store';
+        return retried.result;
+      },
+    )
+    .post(
+      customMethod('/v1/libraryLabels/:id', 'cancelConsolidation'),
+      {
+        params,
+        headers,
+        body: t.Object({ confirmationId: id }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: consolidationResult, ...failures },
+        detail: detail('consolidation_cancel'),
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const cancelled = await admission.run('normal', job, () =>
+          command(() => consolidations().cancel(actor, params.id, body.confirmationId, key)),
+        );
+        session.record(cancelled.operation);
+        set.headers['Cache-Control'] = 'private, no-store';
+        return cancelled.result;
+      },
+    )
+    .get(
+      '/v1/libraryLabels/:id/consolidations/:confirmationId',
+      {
+        params: t.Object({ id, confirmationId: id }, closed),
+        transform: ({ request }) => queryFields(request, []),
+        response: { 200: consolidationResult, ...failures },
+        detail: detail('consolidation_result', 'library_entry:read', false),
+      },
+      async ({ actor, params, admission, job, set }) => {
+        const result = await admission.run('normal', job, () =>
+          command(() => consolidations().result(actor, params.id, params.confirmationId)),
         );
         set.headers['Cache-Control'] = 'private, no-store';
         return result;

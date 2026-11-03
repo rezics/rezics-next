@@ -40,6 +40,10 @@ import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from '.
 type Client = Pick<PoolClient, 'query'>;
 type Assignment = { id: string; labelId: string; subjectId: string; revision: number };
 type Expected = { subjectId: string; assignmentId: string; revision: number };
+type ExpectedTarget =
+  | { id: string; revision: number; effective: boolean }
+  | null
+  | { labelId: string; assignmentId: string; revision: number; labelRevision: number };
 type ListOptions = { labelId?: string; subjectId?: string; limit?: number; cursor?: string; view?: 'BASIC' | 'FULL' };
 const invalid = () => new ProblemError('invalid_request');
 function object(input: unknown, keys: string[]): Record<string, unknown> {
@@ -127,6 +131,9 @@ export function createLabelAssignmentCommands(deps: {
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
     importGuard?: AniListLabelGuard | MalLabelFence,
+    expectedLabelRevision?: number,
+    expectedSource?: { labelId: string; assignmentId: string; revision: number; labelRevision: number },
+    expectedTarget?: ExpectedTarget,
   ) {
     const guard = importGuard && 'subjectId' in importGuard ? importGuard : undefined;
     const malLabelFence = importGuard && 'subject' in importGuard ? importGuard : undefined;
@@ -142,6 +149,9 @@ export function createLabelAssignmentCommands(deps: {
         ...parsed,
         ...(guard ? { importReview: guard } : {}),
         ...(malLabelFence ? { malLabelFence } : {}),
+        ...(expectedLabelRevision === undefined ? {} : { expectedLabelRevision }),
+        ...(expectedSource === undefined ? {} : { expectedSource }),
+        ...(expectedTarget === undefined ? {} : { expectedTarget }),
       },
       requestKey: key,
     };
@@ -171,7 +181,16 @@ export function createLabelAssignmentCommands(deps: {
           ).rows[0];
           if (!label || label.revision !== guard.labelRevision) throw new LibraryConflictError();
         }
-        const result = await setLabelAssignment(tx, tuple, context);
+        const result = await setLabelAssignment(
+          tx,
+          {
+            ...tuple,
+            ...(expectedLabelRevision === undefined ? {} : { expectedLabelRevision }),
+            ...(expectedSource === undefined ? {} : { expectedSource }),
+            ...(expectedTarget === null || (expectedTarget && 'id' in expectedTarget) ? { expectedTarget } : {}),
+          },
+          context,
+        );
         switch (result.kind) {
           case 'not_found':
             throw new LibraryNotFoundError();
@@ -179,18 +198,39 @@ export function createLabelAssignmentCommands(deps: {
             throw new ProblemError('library_label_capacity');
           case 'migration_required':
             throw new ProblemError('index_not_ready');
+          case 'changed':
+            throw new LibraryConflictError();
           case 'existing':
-            return noEffect({ ...minimal(result.assignment), ...(guard || malLabelFence ? { unchanged: true } : {}) });
+            return noEffect({
+              ...minimal(result.assignment),
+              ...(guard || malLabelFence || expectedLabelRevision !== undefined ? { unchanged: true } : {}),
+            });
           case 'applied':
             return {
-              value: { ...minimal(result.assignment), ...(guard || malLabelFence ? { unchanged: false } : {}) },
+              value: {
+                ...minimal(result.assignment),
+                ...(guard || malLabelFence || expectedLabelRevision !== undefined ? { unchanged: false } : {}),
+              },
               events: events(account, labelId),
             };
         }
       }
       const expected = { ...tuple, ...(parsed as Expected) };
       if (operation === 'unassign') {
-        const result = await unassignStoredLabelAssignment(tx, expected, context);
+        const result = await unassignStoredLabelAssignment(
+          tx,
+          expected,
+          context,
+          expectedLabelRevision,
+          expectedTarget && 'labelId' in expectedTarget
+            ? {
+                labelId: expectedTarget.labelId,
+                assignmentId: expectedTarget.assignmentId,
+                revision: expectedTarget.revision,
+                labelRevision: expectedTarget.labelRevision,
+              }
+            : undefined,
+        );
         switch (result.kind) {
           case 'not_found':
             throw new LibraryNotFoundError();
@@ -219,13 +259,21 @@ export function createLabelAssignmentCommands(deps: {
           return { value: minimal(result.assignment), events: events(account, labelId) };
       }
     };
-    if (operation === 'unassign') return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
+    if (operation === 'unassign' && expectedLabelRevision === undefined)
+      return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
     return (guard || malLabelFence ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
         async prepare(attempt) {
           try {
+            if (operation === 'unassign') {
+              const resolved = await withRequestDeadline(deadline, () =>
+                resolveSubject(deps, account, parsed.subjectId, attempt.time),
+              );
+              if (!resolved) throw new LibraryNotFoundError();
+              return { subjectId: resolved.subjectId };
+            }
             if (guard) {
               const prepared = await prepareAniListLabel(deps, account, guard, attempt.time);
               if (prepared.error !== undefined) throw prepared.error;
@@ -263,8 +311,53 @@ export function createLabelAssignmentCommands(deps: {
       importGuard,
     )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
+  async function assignLabelAtRevision(
+    actor: Actor,
+    labelId: string,
+    value: { subjectId: string },
+    expectedLabelRevision: number,
+    key: string,
+  ) {
+    return (await mutate(actor, labelId, value, key, 'assign', undefined, expectedLabelRevision)) as import('../command/command.ts').CommandOutcome<
+      ReturnType<typeof minimal> & { unchanged: boolean }
+    >;
+  }
+  async function assignLabelForConsolidation(
+    actor: Actor,
+    targetLabelId: string,
+    value: { subjectId: string },
+    targetLabelRevision: number,
+    source: { labelId: string; assignmentId: string; revision: number; labelRevision: number },
+    target: { id: string; revision: number; effective: boolean } | null,
+    key: string,
+  ) {
+    return (await mutate(
+      actor,
+      targetLabelId,
+      value,
+      key,
+      'assign',
+      undefined,
+      targetLabelRevision,
+      source,
+      target,
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged: boolean }>;
+  }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {
     return (await mutate(actor, labelId, value, key, 'unassign')) as import('../command/command.ts').CommandOutcome<{
+      deleted: true;
+      revision: number;
+    }>;
+  }
+  async function unassignLabelAtRevision(
+    actor: Actor,
+    labelId: string,
+    value: Expected,
+    expectedLabelRevision: number,
+    key: string,
+    expectedTarget?: { labelId: string; assignmentId: string; revision: number; labelRevision: number },
+  ) {
+    return (await mutate(actor, labelId, value, key, 'unassign', undefined, expectedLabelRevision, undefined, expectedTarget)) as import('../command/command.ts').CommandOutcome<{
       deleted: true;
       revision: number;
     }>;
@@ -387,5 +480,13 @@ export function createLabelAssignmentCommands(deps: {
       if (time) releaseOperationalTime(time);
     }
   }
-  return { assignLabel, unassignLabel, restoreAssignment, listAssignments };
+  return {
+    assignLabel,
+    assignLabelAtRevision,
+    assignLabelForConsolidation,
+    unassignLabel,
+    unassignLabelAtRevision,
+    restoreAssignment,
+    listAssignments,
+  };
 }

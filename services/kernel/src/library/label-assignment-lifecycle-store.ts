@@ -72,8 +72,16 @@ export async function readStoredLabelAssignment(client: Client, input: Tuple): P
   return row ? record(row) : null;
 }
 
-async function observe(client: Client, input: Expected, context: Context) {
+async function observe(client: Client, input: Expected, context: Context, expectedLabelRevision?: number) {
   await lockLabelAssignmentSubject(client, input);
+  if (expectedLabelRevision !== undefined) {
+    const parent = await client.query<{ revision: number }>(
+      `SELECT revision FROM library.personal_label
+       WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`,
+      [input.route, input.accountId, input.labelId],
+    );
+    if (parent.rows[0]?.revision !== expectedLabelRevision) return { row: null, parentChanged: true as const };
+  }
   return read.run(
     { query: client.query.bind(client) },
     {
@@ -81,18 +89,38 @@ async function observe(client: Client, input: Expected, context: Context) {
       assignment_id: input.assignmentId,
       time: context.time,
     },
-  );
+  ).then((row) => ({ row, parentChanged: false as const }));
 }
 
 export async function unassignStoredLabelAssignment(
   client: Client,
   input: Expected,
   context: Context,
+  expectedLabelRevision?: number,
+  expectedTarget?: { labelId: string; assignmentId: string; revision: number; labelRevision: number },
 ): Promise<UnassignStoredLabelAssignmentResult> {
-  const row = await observe(client, input, context);
+  const observation = await observe(client, input, context, expectedLabelRevision);
+  if (observation.parentChanged) return { kind: 'stale' };
+  const row = observation.row;
   if (!row) return { kind: 'not_found' };
   if (row.id === null) return { kind: 'migration_required' };
   if (!row.identityMatches || row.revision !== input.revision || row.deletedAt !== null) return { kind: 'stale' };
+  if (expectedTarget) {
+    const targetParent = await client.query<{ revision: number }>(
+      `SELECT revision FROM library.personal_label
+       WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE`,
+      [input.route, input.accountId, expectedTarget.labelId],
+    );
+    if (targetParent.rows[0]?.revision !== expectedTarget.labelRevision) return { kind: 'stale' };
+    const target = await readStoredLabelAssignment(client, { ...input, labelId: expectedTarget.labelId });
+    if (
+      target?.id !== expectedTarget.assignmentId ||
+      target.revision !== expectedTarget.revision ||
+      target.deletedAt !== null ||
+      target.slotNo === null
+    )
+      return { kind: 'stale' };
+  }
   if (row.revision === 2_147_483_647) throw new RangeError('Label assignment revision exhausted');
   const rows = await unassign.run(
     { query: client.query.bind(client) },
@@ -113,7 +141,7 @@ export async function restoreStoredLabelAssignment(
   input: Expected,
   context: Context,
 ): Promise<RestoreStoredLabelAssignmentResult> {
-  const row = await observe(client, input, context);
+  const row = (await observe(client, input, context)).row;
   if (!row) return { kind: 'not_found' };
   if (row.id === null) return { kind: 'migration_required' };
   if (!row.identityMatches || row.revision !== input.revision || row.deletedAt === null) return { kind: 'stale' };
@@ -122,6 +150,7 @@ export async function restoreStoredLabelAssignment(
   // Native timestamp predicates above retain database precision; admission owns the only capacity algorithm.
   const result = await setLabelAssignment(client, input, context);
   if (result.kind === 'existing') throw new TypeError('Label assignment restore found an impossible live observation');
+  if (result.kind === 'changed') return { kind: 'stale' };
   if (result.kind === 'applied' && (result.assignment.id !== row.id || result.assignment.revision !== row.revision + 1))
     throw new TypeError('Label assignment restore changed retained identity or revision');
   return result.kind === 'applied' ? { kind: 'applied', assignment: result.assignment } : { kind: result.kind };
