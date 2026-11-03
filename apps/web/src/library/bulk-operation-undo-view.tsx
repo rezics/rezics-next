@@ -5,7 +5,7 @@ import { undoOperand, type UndoAttempt, type UndoState } from './bulk-operation-
 type Props = {
   href: string;
   authorized: boolean;
-  state?: UndoState;
+  state?: UndoState | undefined;
   busy: boolean;
   writeAvailable: boolean;
   csrfToken?: string | null;
