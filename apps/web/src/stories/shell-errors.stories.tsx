@@ -32,9 +32,11 @@ export const Unavailable: Story = {
   render: () => <ErrorStory outcome="unavailable" />,
   play: async (context) => {
     const main = await errorReady(context);
-    await userEvent.click(main.getByRole('button', { name: m.status_retry() }));
-    await main.findByRole('heading', { name: offer.offer.title });
-    await expect(shellErrorReads()).toBe(2);
+    const retry = await main.findByRole('button', { name: m.status_retry() });
+    await waitFor(() => expect(retry).toBeEnabled());
+    await userEvent.click(retry);
+    await waitFor(() => expect(shellErrorReads()).toBe(2), { timeout: 5_000 });
+    await expect(await main.findByRole('heading', { name: offer.offer.title })).toBeVisible();
     await expect(main.queryByRole('heading', { name: m.error_heading() })).toBeNull();
   },
 };

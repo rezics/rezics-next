@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { AccountMenu, NavigationToggle } from '../shell/shell';
 import { PatternStory, pagePaths, pageReady } from './page';
 
@@ -85,12 +86,15 @@ export const Navigation: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      await userEvent.click(await canvas.findByRole('button', { name: m.shell_open_navigation() }));
-      await expect(await within(document.body).findByRole('dialog', { name: m.shell_navigation() })).toBeVisible();
-    } else {
-      await expect(await canvas.findByRole('navigation', { name: m.shell_navigation() })).toBeVisible();
+    if (!window.matchMedia('(max-width: 767px)').matches) {
+      await expect(canvas.queryByRole('button', { name: m.shell_open_navigation() })).toBeNull();
+      return;
     }
+    await userEvent.click(await canvas.findByRole('button', { name: m.shell_open_navigation() }));
+    const dialog = within(await within(document.body).findByRole('dialog', { name: m.shell_navigation() }));
+    const navigation = await dialog.findByRole('navigation', { name: m.shell_navigation() });
+    const home = await within(navigation).findByRole('link', { name: m.nav_home() });
+    await expect(home).toHaveAttribute('href', `/${getLocale()}`);
   },
   globals: { viewport: { value: 'phone' } },
   render: () => <ShellPattern visitor="Signed In" />,

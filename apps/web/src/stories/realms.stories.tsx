@@ -40,6 +40,15 @@ async function listed(context: { canvasElement: HTMLElement }) {
   link.closest('[data-slot="list-row"]')?.setAttribute('data-overlay', 'visible');
 }
 
+async function shellNavigation(context: { canvasElement: HTMLElement }) {
+  const phone = window.matchMedia('(max-width: 767px)').matches;
+  const label = phone ? m.shell_phone_tabs() : m.shell_navigation();
+  const navigation = await within(context.canvasElement).findByRole('navigation', { name: label });
+  const home = await within(navigation).findByRole('link', { name: m.nav_home() });
+  await expect(home).toHaveAttribute('href', `/${getLocale()}`);
+  await expect(home).toHaveAttribute('aria-current', 'page');
+}
+
 export const SignedIn: Story = {
   name: 'Signed In',
   play: listed,
@@ -52,19 +61,21 @@ export const AccountMenuNavigation: Story = {
   play: async (context) => {
     await pageReady(context);
     const canvas = within(context.canvasElement);
-    const trigger = await canvas.findByRole('button', { name: m.account_menu() });
+    await shellNavigation(context);
+    const phone = window.matchMedia('(max-width: 767px)').matches;
+    const menuName = phone ? m.shell_you() : m.account_menu();
+    const trigger = await canvas.findByRole('button', { name: menuName });
     trigger.focus();
     await userEvent.keyboard('{Enter}');
-    const menu = window.matchMedia('(max-width: 767px)').matches
-      ? await within(document.body).findByRole('dialog', { name: m.account_menu() })
-      : await within(document.body).findByRole('menu');
-    const link = within(menu).getByRole('link', { name: m.realms_heading() });
+    const menu = await within(document.body).findByRole('dialog', { name: menuName });
+    const link = await within(menu).findByRole('link', { name: m.realms_heading() });
     await expect(link).toBeVisible();
     link.focus();
-    await expect(link).toHaveAttribute('href', /\/realms$/);
+    await expect(link).toHaveAttribute('href', `/${getLocale()}/realms`);
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(menu).not.toBeVisible());
     await waitFor(() => expect(canvas.getByRole('heading', { level: 1, name: m.realms_heading() })).toBeVisible());
+    await waitFor(() => expect(trigger).toHaveFocus());
     await firstRealmLink(within(await canvas.findByRole('main')));
   },
   render: () => <PageStory visitor="Signed In" path="/" />,

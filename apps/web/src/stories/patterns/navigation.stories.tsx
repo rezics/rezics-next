@@ -61,7 +61,7 @@ function NavigationPattern({
 }
 
 async function publicLeaf({ canvasElement }: { canvasElement: HTMLElement }) {
-  const link = within(canvasElement).getByRole('link', { name: m.realms_heading() });
+  const link = await within(canvasElement).findByRole('link', { name: m.realms_heading() });
   await expect(link).toHaveAttribute('href', `/${getLocale()}/realms`);
   await expect(link).toHaveAttribute('aria-current', 'page');
 }
