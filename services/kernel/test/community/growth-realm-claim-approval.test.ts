@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { approveRealmClaim } from '../../src/access/realm-claim.ts';
 import { requestRealmClaim } from '../../src/community/realm-continuity.ts';
-import { createClaimApprovalFixture, type ClaimApprovalFixture } from './support/growth-realm-claim-approval-fixture.ts';
+import {
+  createClaimApprovalFixture,
+  type ClaimApprovalFixture,
+} from './support/growth-realm-claim-approval-fixture.ts';
 
 let f: ClaimApprovalFixture;
 beforeAll(async () => {
@@ -23,10 +26,14 @@ test('native orphan succession binds the original episode before real claim appr
   await expect(requestRealmClaim(deps, f.claimant.actor, selected.realmId, context())).rejects.toMatchObject({
     code: 'conflict',
   });
-  expect((await f.pool.query(
-    'SELECT request_id FROM community.realm_claim_request WHERE route=$1 AND realm_id=$2',
-    [selected.route, selected.realmId],
-  )).rows).toEqual([]);
+  expect(
+    (
+      await f.pool.query('SELECT request_id FROM community.realm_claim_request WHERE route=$1 AND realm_id=$2', [
+        selected.route,
+        selected.realmId,
+      ])
+    ).rows,
+  ).toEqual([]);
   at = new Date(selected.eligibleAt);
   await f.system.clock.setCommandTime(at.toISOString());
   const requestContext = context();
@@ -34,7 +41,9 @@ test('native orphan succession binds the original episode before real claim appr
   expect(pending.value.state).toBe('pending');
   expect(Date.parse(pending.value.orphanedAt)).toBe(Date.parse(selected.erasedAt));
   expect(Date.parse(pending.value.claimEligibleAt)).toBe(at.getTime());
-  expect((await requestRealmClaim(deps, f.claimant.actor, selected.realmId, requestContext)).value).toEqual(pending.value);
+  expect((await requestRealmClaim(deps, f.claimant.actor, selected.realmId, requestContext)).value).toEqual(
+    pending.value,
+  );
 
   const input = { realmId: selected.realmId, requestId: pending.value.requestId };
   const key = crypto.randomUUID();
@@ -48,9 +57,15 @@ test('native orphan succession binds the original episode before real claim appr
   expect(first).toMatchObject({ ...input, claimantAccountId: f.claimant.actor.accountId, state: 'owned' });
   expect(first.orphanedAt).toBe(pending.value.orphanedAt);
   const applied = await f.state(input.realmId, input.requestId);
-  expect(applied.state).toEqual([{
-    ownership_state: 'owned', orphaned_at: null, claim_eligible_at: null, state: 'approved', approved_at: first.approvedAt,
-  }]);
+  expect(applied.state).toEqual([
+    {
+      ownership_state: 'owned',
+      orphaned_at: null,
+      claim_eligible_at: null,
+      state: 'approved',
+      approved_at: first.approvedAt,
+    },
+  ]);
   expect(applied.grants).toHaveLength(1);
   expect(applied.receipts).toHaveLength(1);
   expect(applied.receipts[0]?.response).toEqual(first);

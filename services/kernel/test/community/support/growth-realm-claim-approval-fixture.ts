@@ -5,11 +5,7 @@ import { routeOf, partitionOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { accountDeletionRuntime, deletePersona } from '../../support/account-deletion.ts';
 import { contentGovernanceCredential } from '../../content/support/system.ts';
-import {
-  closeCommunityDrivers,
-  communityFixtureRuntime,
-  createCommunityDriver,
-} from '../community-driver.ts';
+import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver } from '../community-driver.ts';
 
 export async function createClaimApprovalFixture() {
   const driver: CommunityDriver = await createCommunityDriver();
@@ -64,30 +60,34 @@ export async function createClaimApprovalFixture() {
     );
     expect(original.rows).toEqual([{ ownership_state: 'owned', orphaned_at: null, claim_eligible_at: null }]);
     expect(
-      (await pool.query(
-        `SELECT subject_id::text FROM access.resource_role_grant
+      (
+        await pool.query(
+          `SELECT subject_id::text FROM access.resource_role_grant
          WHERE route=$1 AND resource_id=$2 AND grant_role='community.realm.owner'
            AND subject_kind='identity' AND subject_id=$3 AND upper_inf(valid)`,
-        [route, realm.realmId, owner.id],
-      )).rows,
+          [route, realm.realmId, owner.id],
+        )
+      ).rows,
     ).toEqual([{ subject_id: owner.id }]);
     // Finish the actual creation events before committing the account erasure root.
     await driver.settle();
     const erased = await deletePersona({ pool, auth: deletion.auth }, person);
     // This drains the normally registered worker, rather than calling the succession adapter directly.
     await driver.settle();
-    const episode = (await pool.query<{
-      ownership_state: string;
-      original_root: boolean;
-      original_deadline: boolean;
-      claim_eligible_at: string | null;
-    }>(
-      `SELECT ownership_state,orphaned_at=$3::timestamptz AS original_root,
+    const episode = (
+      await pool.query<{
+        ownership_state: string;
+        original_root: boolean;
+        original_deadline: boolean;
+        claim_eligible_at: string | null;
+      }>(
+        `SELECT ownership_state,orphaned_at=$3::timestamptz AS original_root,
               claim_eligible_at=orphaned_at + interval '720 hours' AS original_deadline,
               claim_eligible_at::text
        FROM community.realm WHERE route=$1 AND realm_id=$2`,
-      [route, realm.realmId, erased.at],
-    )).rows[0];
+        [route, realm.realmId, erased.at],
+      )
+    ).rows[0];
     expect(
       episode,
       'Native prerequisite: the registered membership eraser must apply Realm ownership succession before retiring the owner locator',
