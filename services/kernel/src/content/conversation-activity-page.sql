@@ -13,4 +13,5 @@ CROSS JOIN LATERAL (
     AND native_eligible AND contributed_at IS NOT NULL
   ORDER BY contributed_at DESC, post_id DESC
   LIMIT :limit::integer
-) contribution;
+) contribution
+ORDER BY input.thread_id, contribution.contributed_at DESC, contribution.post_id DESC;
