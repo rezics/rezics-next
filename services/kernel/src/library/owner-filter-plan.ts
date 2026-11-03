@@ -21,7 +21,6 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import {
   bindNativeOwnerFilterRead,
-  nativeOwnerFilterBinding,
   releaseNativeOwnerFilterRead,
   revalidateOwnerFilterDisclosure,
   nativeOwnerFilterBinding,
