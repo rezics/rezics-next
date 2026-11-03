@@ -777,6 +777,16 @@ producer delivery through the controller. Until then, actual native refusal/unav
 the directory alone cannot establish a successful selected feed. Original acceptance, native/default proof, visual
 review and promotion remain owed separately from this consumer source.
 
+The generated question view's optional Realm provenance, label revision and lifecycle fields are validated at the
+receiver boundary. A directory page containing a Realm-scoped or retired entry is refused without local filtering
+or refill; an active Realm point is denied and a retired point is lost while its exact selected ID remains available
+for explicit recovery or clear.
+Sparse directory pages keep their native continuation, operational retry repeats the attempted cursor, and stale or
+invalid traversal requires an explicit restart without it. Selector metadata comes from the current Global directory
+or exact point; content-card citations retain their separate historical scale and lifecycle provenance. The retained
+Home stories add sparse continuation, same-input retry, explicit restart and selected-retirement states without
+replacing their existing story IDs.
+
 The [integrated quality review](../research/terra-period-quality-review.md) supports retaining useful mixed-feed work,
 safe refusals and corrected UI, including edition admission, optional naming, qualified credits, phone controls and
 typography. It is limited source evidence, not a causal model benchmark. Adopted meaning, installed source,

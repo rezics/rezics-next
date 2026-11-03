@@ -9,12 +9,22 @@ export type HomeQuestion = NonNullable<
 >;
 export const HOME_QUESTION_LIMIT = 20;
 const integer = v.pipe(v.number(), v.integer());
+const revision = v.pipe(integer, v.minValue(1), v.maxValue(2_147_483_647));
+const lifecycleSchema = v.strictObject({
+  state: v.picklist(['active', 'retired']),
+  revision,
+});
 const questionSchema: v.GenericSchema<HomeQuestion> = v.strictObject({
   id: v.pipe(v.string(), v.uuid()),
-  revision: v.pipe(integer, v.minValue(1), v.maxValue(2_147_483_647)),
+  revision,
   label: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
   grain: v.picklist(['work', 'release', 'episode', 'character']),
   scale: v.strictObject({ min: integer, max: integer, displayStep: v.pipe(integer, v.minValue(1)) }),
+  realmId: v.optional(v.string()),
+  canonicalLabel: v.optional(v.string()),
+  labelRevision: v.optional(revision),
+  meaning: v.optional(v.string()),
+  lifecycle: v.optional(lifecycleSchema),
 });
 export type HomeQuestionPage = NonNullable<Awaited<ReturnType<KernelClient['rating-questions']['get']>>['data']>;
 const directorySchema: v.GenericSchema<HomeQuestionPage> = v.strictObject({
@@ -98,7 +108,10 @@ export async function readHomeQuestionPage(
     if (
       !parsed.success ||
       new Set(parsed.output.ratingQuestions.map((question) => question.id)).size !==
-        parsed.output.ratingQuestions.length
+        parsed.output.ratingQuestions.length ||
+      parsed.output.ratingQuestions.some(
+        (question) => question.realmId !== undefined || question.lifecycle?.state === 'retired',
+      )
     )
       return { status: 'unavailable', code: 'invalid_question_response' };
     if (cursor !== undefined && parsed.output.next === cursor)
@@ -124,9 +137,11 @@ export async function readHomeQuestion(
     });
     if (result.status !== 200 || result.error || !result.data) return refused(result.status, result.error?.value);
     const parsed = v.safeParse(questionSchema, result.data);
-    return parsed.success && parsed.output.id === id
-      ? { status: 'ready', question: parsed.output }
-      : { status: 'unavailable', code: 'invalid_question_response' };
+    if (!parsed.success || parsed.output.id !== id)
+      return { status: 'unavailable', code: 'invalid_question_response' };
+    if (parsed.output.lifecycle?.state === 'retired') return { status: 'lost', code: 'question_retired' };
+    if (parsed.output.realmId !== undefined) return { status: 'denied', code: 'question_not_global' };
+    return { status: 'ready', question: parsed.output };
   } catch (error) {
     return failed(error);
   }

@@ -23,12 +23,17 @@ export type HomeFeedStory =
   | 'space-identity-changed'
   | 'questions-selection'
   | 'question-lost'
+  | 'question-retired'
   | 'questions-unavailable'
   | 'questions-next'
+  | 'questions-sparse'
+  | 'questions-same-input-retry'
+  | 'questions-restart'
   | 'expired-page';
 let selected: HomeFeedStory = 'mixed';
 let homeActive = false;
 let spaceReads = 0;
+let questionCursorFailures = 0;
 let continuation: { requests: URL[]; wait: Promise<void>; release: () => void } | undefined;
 
 /** Hold the real fake-route request so the existing Home stories can exercise pending Next. */
@@ -54,6 +59,7 @@ export function selectHomeFeedStory(state: HomeFeedStory = 'mixed', active = tru
   continuation?.release();
   selected = state;
   spaceReads = 0;
+  questionCursorFailures = 0;
   homeActive = active;
 }
 
@@ -261,7 +267,13 @@ export const routes: FakeRoute[] = [
     story: ({ request }) => {
       if (!homeActive) return;
       if (selected === 'questions-unavailable') return { status: 503, code: 'dependency_unavailable' };
-      const page = homeQuestionStoryPage(new URL(request.url).searchParams.get('cursor') ?? undefined);
+      const cursor = new URL(request.url).searchParams.get('cursor') ?? undefined;
+      if (selected === 'questions-restart' && cursor) return { status: 409, code: 'stale_cursor' };
+      if (selected === 'questions-same-input-retry' && cursor && questionCursorFailures++ === 0)
+        return { status: 503, code: 'dependency_unavailable' };
+      if (selected === 'questions-sparse' && !cursor)
+        return { status: 200, ratingQuestions: [], next: 'illustrative-question-frontier' };
+      const page = homeQuestionStoryPage(cursor);
       return { status: 200, ...page };
     },
   },
@@ -274,6 +286,16 @@ export const routes: FakeRoute[] = [
       const question = [homeQuestionStoryPage(), homeQuestionStoryPage('illustrative-question-frontier')]
         .flatMap((page) => page.ratingQuestions)
         .find((question) => question.id === match?.[1]);
+      if (selected === 'question-retired' && question)
+        return {
+          status: 200,
+          ...question,
+          realmId: '00000000-0000-7000-8000-000000000003',
+          canonicalLabel: question.label,
+          labelRevision: 2,
+          meaning: 'A retired Realm-scoped question',
+          lifecycle: { state: 'retired', revision: 2 },
+        };
       return question ? { status: 200, ...question } : { status: 404, code: 'not_found' };
     },
   },

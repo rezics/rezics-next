@@ -88,6 +88,8 @@ native frontier shows explicit restart, which keeps the same selectors and remov
 replacement retires the current page and pending request before reading; session/viewer remounts cannot reuse the
 previous private page body. Following is restored only while the current viewer is signed in.
 Decision: Home return state is a bounded same-origin history descriptor, never URL filters or retained feed bodies.
+Decision: Global Home refuses a directory page containing any Realm-scoped or retired question, never filters or refills it locally, and treats active Realm points as denied and retired points as lost while retaining the selected ID for recovery or clear.
+The [Home question lifetime](../apps/web/src/features/pages/home-question-lifetime.md) defines the current metadata, retry and selected identity boundaries.
 
 Anonymous home invokes only the existing public DiscoverySearch producer. Following and
 Continue are `not_requested`. Authenticated responses are `private, no-store`; session

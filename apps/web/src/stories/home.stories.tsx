@@ -278,6 +278,109 @@ export const QuestionChoicesNextPage: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-next" />,
 };
 
+export const QuestionChoicesSparseContinuation: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A valid empty directory page keeps its native continuation. Continue deliberately to replace it with the next bounded page; the empty copy is page-local.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-sparse" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_load() }));
+    await expect(await canvas.findByText(m.home_questions_empty())).toBeVisible();
+    const next = canvas.getByRole('button', { name: m.home_questions_next() });
+    await expect(next).toBeEnabled();
+    await userEvent.click(next);
+    const select = canvas.getByRole('combobox', { name: m.home_question_label() });
+    await waitFor(() => expect(select.querySelector('option[value="00000000-0000-7000-8000-000000000002"]')).not.toBeNull());
+  },
+};
+
+export const QuestionChoicesSameInputRetry: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The next bounded page fails operationally once, then explicit retry repeats that page and selection without resetting the directory.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-same-input-retry" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_load() }));
+    const select = canvas.getByRole('combobox', { name: m.home_question_label() });
+    const questionId = '00000000-0000-7000-8000-000000000001';
+    await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
+    await userEvent.selectOptions(select, questionId);
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_next() }));
+    await expect(await canvas.findByText(m.home_questions_unavailable())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_retry() }));
+    await waitFor(() => expect(select.querySelector('option[value="00000000-0000-7000-8000-000000000002"]')).not.toBeNull());
+    await expect(select).toHaveValue(questionId);
+  },
+};
+
+export const QuestionChoicesRestart: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A stale native cursor keeps its explicit restart action. Restart removes the cursor and preserves the selected question identity.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="questions-restart" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_load() }));
+    const select = canvas.getByRole('combobox', { name: m.home_question_label() });
+    const questionId = '00000000-0000-7000-8000-000000000001';
+    await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
+    await userEvent.selectOptions(select, questionId);
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_next() }));
+    await expect(await canvas.findByText(m.home_questions_restart())).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_restart_action() }));
+    await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
+    await expect(select).toHaveValue(questionId);
+  },
+};
+
+export const QuestionSelectionRetired: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'An exact selected point returns generated Realm provenance and retired lifecycle metadata. Global Home keeps the identity visible as lost and does not load a fallback feed.',
+      },
+    },
+  },
+  render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="question-retired" />,
+  play: async (context) => {
+    await pageReady(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.search_filters() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.home_questions_load() }));
+    const select = canvas.getByRole('combobox', { name: m.home_question_label() });
+    const questionId = '00000000-0000-7000-8000-000000000001';
+    await waitFor(() => expect(select.querySelector(`option[value="${questionId}"]`)).not.toBeNull());
+    await userEvent.selectOptions(select, questionId);
+    await expect(await canvas.findByText(m.home_questions_lost())).toBeVisible();
+    await expect(select).toHaveValue(questionId);
+    await expect(context.canvasElement.querySelectorAll('[data-feed-id]')).toHaveLength(0);
+  },
+};
+
 export const QuestionSelectionLost: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths.home} homeFeedFixture="question-lost" />,
   play: async (context) => {
