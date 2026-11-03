@@ -339,6 +339,14 @@ async function setPartitionState(writeState: 'active' | 'fenced'): Promise<void>
   ]);
 }
 
+async function partitionSnapshot() {
+  const result = await db.admin.query(
+    'SELECT to_jsonb(p)::text AS state FROM core.partition p WHERE partition_no = $1',
+    [anchorPartition],
+  );
+  return result.rows;
+}
+
 async function waitingCommand(scale: number, repetition: number, auth: CommandAuthorization, deadline?: number) {
   return runCommand(
     db.pool,
@@ -420,6 +428,7 @@ test('Write wait deadline refusal stays bounded at three receipt history scales'
   const now = Date.now.bind(Date);
 
   await checkedGrowth('Write wait deadline refusal', async (_growthDb, scale, repetition) => {
+    const partitionBefore = await partitionSnapshot();
     const deadline = now() + 5_000;
     let expired = false;
     // Expire only after two native fenced probes, keeping the poll term independent of history and host speed.
@@ -437,6 +446,7 @@ test('Write wait deadline refusal stays bounded at three receipt history scales'
     } finally {
       clock.mockRestore();
     }
+    expect(await partitionSnapshot()).toEqual(partitionBefore);
   });
   expect(phases).toEqual({ prepared: 18, authorized: 18, finalized: 18 });
   const receipts = await db.admin.query('SELECT count(*)::int AS count FROM core.receipt WHERE command_kind = $1', [
