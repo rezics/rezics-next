@@ -587,7 +587,7 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     setStage('review-focus-read');
     const activeElement = window.document.activeElement;
     setStage('review-focus-assert');
-    expect(activeElement).toBe(reviewGroup);
+    expect(activeElement === reviewGroup).toBe(true);
     setStage('cancel');
     await clickButton(host, m.moderation_bulk_cancel(), flush);
     expect(window.document.activeElement).toBe(buttonByText(host, m.moderation_bulk_review()));
