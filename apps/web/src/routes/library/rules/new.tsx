@@ -15,10 +15,5 @@ export const Route = createFileRoute('/library/rules/new')({
 });
 function NewRulePage() {
   const loaded = Route.useLoaderData();
-  return (
-    <SavedQueryEditor
-      page={loaded.page}
-      collectionId={null}
-    />
-  );
+  return <SavedQueryEditor page={loaded.page} collectionId={null} />;
 }

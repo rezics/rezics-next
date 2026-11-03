@@ -46,13 +46,7 @@ export function takeSavedQueryHandoff(viewerId: string | null): SavedQueryHandof
   return browserHandoff?.take(viewerId) ?? null;
 }
 
-export function SaveQueryLink({
-  id,
-  selection,
-}: {
-  id: string;
-  selection: SavedQuerySelection;
-}) {
+export function SaveQueryLink({ id, selection }: { id: string; selection: SavedQuerySelection }) {
   const owner = useCollectionOwnerCurrent(JSON.stringify(['saved-query-source', id]));
   if (selection.state === 'empty') return null;
   if (selection.state === 'invalid') {

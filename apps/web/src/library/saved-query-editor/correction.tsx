@@ -13,9 +13,10 @@ export function SavedQueryCorrection({
 }) {
   const locale = getLocale();
   const stateIssue = selection.issues.some((issue) => issue.key === 'state');
-  const safeOrigin = originHref?.startsWith('/') && !originHref.startsWith('//')
-    ? new URL(originHref, 'https://rezics.local').pathname
-    : null;
+  const safeOrigin =
+    originHref?.startsWith('/') && !originHref.startsWith('//')
+      ? new URL(originHref, 'https://rezics.local').pathname
+      : null;
   return (
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       <PageHeading>{m.library_rule_new()}</PageHeading>

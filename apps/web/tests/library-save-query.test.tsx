@@ -11,10 +11,7 @@ const filter = parseFilter({
   and: [
     { owner: { presence: true } },
     {
-      and: [
-        { type: { in: ['schema:Book'] } },
-        { statement: { property: 'schema:keywords', in: ['space opera'] } },
-      ],
+      and: [{ type: { in: ['schema:Book'] } }, { statement: { property: 'schema:keywords', in: ['space opera'] } }],
     },
   ],
 });
@@ -33,7 +30,8 @@ const sessionEnv = {
   WEBSITE_CLIENT_KEY: '{}',
   SESSIONS: { idFromName: (id: string) => id, get: () => ({ credential, credentialIfFresh: credential }) },
 } as unknown as Partial<import('../src/session/client').SessionEnv>;
-const request = () => new Request('https://web.test/action', { method: 'POST', headers: { authorization: 'Bearer current-viewer' } });
+const request = () =>
+  new Request('https://web.test/action', { method: 'POST', headers: { authorization: 'Bearer current-viewer' } });
 
 test('the current representable filter reaches one private id-ordered create action unchanged', async () => {
   const selection = admitSavedQuerySelection({

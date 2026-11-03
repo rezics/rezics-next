@@ -21,10 +21,7 @@ export function SavedQueryEditor({
       : null,
   );
   const selection: SavedQuerySelection =
-    collectionId === null &&
-    page.state === 'new' &&
-    handoff?.viewerId === page.viewerId &&
-    handoff.sort === 'id'
+    collectionId === null && page.state === 'new' && handoff?.viewerId === page.viewerId && handoff.sort === 'id'
       ? { state: 'admitted', filter: handoff.filter, sort: handoff.sort }
       : { state: 'empty' };
   const seed = savedQuerySeed(collectionId, selection);

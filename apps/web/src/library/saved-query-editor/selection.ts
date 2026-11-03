@@ -32,10 +32,8 @@ function searchParams(search: string | URLSearchParams | undefined): URLSearchPa
 export function hasSavedQueryInput(input: Pick<SavedQueryInput, 'document' | 'search' | 'invalid'>): boolean {
   if (input.document || input.invalid) return true;
   const params = searchParams(input.search);
-  return (
-    [...params.keys()].some(
-      (key) => !['cursor', 'layout', 'view', 'size', 'columns'].includes(key) && !key.startsWith('l.'),
-    )
+  return [...params.keys()].some(
+    (key) => !['cursor', 'layout', 'view', 'size', 'columns'].includes(key) && !key.startsWith('l.'),
   );
 }
 
@@ -100,4 +98,3 @@ export function savedQuerySeed(
 export function savedQueryCreateHref(locale: string): string {
   return `/${locale}/library/rules/new`;
 }
-
