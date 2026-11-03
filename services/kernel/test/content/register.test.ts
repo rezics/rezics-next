@@ -56,14 +56,6 @@ function workEnvironment(mode: 'empty' | 'full'): Record<string, string | undefi
   return {
     DATABASE_URL: databaseUrl,
     KERNEL_ROUTE_KEY: routeKey,
-    KERNEL_WORKFLOW_REFERENCE_KEYS: JSON.stringify({
-      current: 1,
-      keys: { 1: Buffer.alloc(32, 8).toString('base64url') },
-    }),
-    KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 9).toString('base64url')}`,
-    AUTH_ISSUER: 'https://accounts.test',
-    AUTH_AUDIENCE: 'https://api.test',
-    AUTH_JWKS_URL: 'https://accounts.test/.well-known/jwks.json',
     CONTENT_CANARY: canary,
     ...(mode === 'full' ? contentEnv : {}),
   };
@@ -211,7 +203,6 @@ if (process.argv.includes('--content-registration')) {
       'content_subject_reaction_merge',
       'content_mention_notice',
       'content_reply_notice',
-      'content_thread_watch_notice',
     ]);
     expect(absenceLines(output)).toEqual([
       'content storage group is absent: CONTENT_R2_ENDPOINT, CONTENT_R2_BUCKET, CONTENT_R2_ACCESS_KEY_ID, CONTENT_R2_SECRET_ACCESS_KEY',

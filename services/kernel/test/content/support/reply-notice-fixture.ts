@@ -46,6 +46,7 @@ export async function replyNoticeFixture() {
     access: accounts.access,
     routeKey: new Uint8Array(32).fill(17),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) },
+    receiptKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
     writeRate: createWriteRateLimiter({ secret: 'reply-notice-fixture-secret-at-least-32-bytes' }),
   });
   const boardId = newId(0x4321);
