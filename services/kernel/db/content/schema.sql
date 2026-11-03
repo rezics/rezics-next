@@ -894,10 +894,15 @@ CREATE TABLE content.board_slow_mode (
     interval_seconds integer NOT NULL,
     security_episode bigint DEFAULT 1 NOT NULL,
     in_flight_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT board_slow_mode_in_flight_count_check CHECK ((in_flight_count >= 0)),
     CONSTRAINT board_slow_mode_interval_seconds_check CHECK (((interval_seconds >= 0) AND (interval_seconds <= 86400))),
-    CONSTRAINT board_slow_mode_security_episode_check CHECK ((security_episode > 0)),
-    CONSTRAINT board_slow_mode_in_flight_count_check CHECK ((in_flight_count >= 0))
+    CONSTRAINT board_slow_mode_security_episode_check CHECK ((security_episode > 0))
 );
+
+
+--
+-- Name: board_slow_permit; Type: TABLE; Schema: content; Owner: -
+--
 
 CREATE TABLE content.board_slow_permit (
     route integer NOT NULL,
@@ -917,15 +922,20 @@ CREATE TABLE content.board_slow_permit (
     completed_at timestamp with time zone,
     CONSTRAINT board_slow_permit_actor_key_check CHECK ((octet_length(actor_key) = 32)),
     CONSTRAINT board_slow_permit_command_key_check CHECK ((octet_length(command_key) = 32)),
-    CONSTRAINT board_slow_permit_request_digest_check CHECK ((octet_length(request_digest) = 32)),
-    CONSTRAINT board_slow_permit_thread_route_check CHECK (((thread_route >= 0) AND (thread_route <= 65535))),
     CONSTRAINT board_slow_permit_command_kind_check CHECK ((command_kind = ANY (ARRAY['content.thread.create'::text, 'content.post.create'::text, 'content.post.revise'::text]))),
     CONSTRAINT board_slow_permit_generation_check CHECK ((generation > 0)),
-    CONSTRAINT board_slow_permit_security_episode_check CHECK ((security_episode > 0)),
     CONSTRAINT board_slow_permit_interval_seconds_check CHECK (((interval_seconds >= 0) AND (interval_seconds <= 86400))),
+    CONSTRAINT board_slow_permit_recovery_from_state_check CHECK ((recovery_from_state = ANY (ARRAY['reserved'::text, 'in_flight'::text]))),
+    CONSTRAINT board_slow_permit_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT board_slow_permit_security_episode_check CHECK ((security_episode > 0)),
     CONSTRAINT board_slow_permit_state_check CHECK ((state = ANY (ARRAY['reserved'::text, 'in_flight'::text, 'reconciling'::text, 'complete'::text, 'cancelled'::text, 'pruning'::text]))),
-    CONSTRAINT board_slow_permit_recovery_from_state_check CHECK (((recovery_from_state IS NULL) OR (recovery_from_state = ANY (ARRAY['reserved'::text, 'in_flight'::text]))))
+    CONSTRAINT board_slow_permit_thread_route_check CHECK (((thread_route >= 0) AND (thread_route <= 65535)))
 );
+
+
+--
+-- Name: board_slow_ticket; Type: TABLE; Schema: content; Owner: -
+--
 
 CREATE TABLE content.board_slow_ticket (
     route integer NOT NULL,
@@ -941,15 +951,15 @@ CREATE TABLE content.board_slow_ticket (
     transaction_id uuid,
     posted_at timestamp with time zone,
     updated_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT board_slow_ticket_command_key_check CHECK ((octet_length(command_key) = 32)),
-    CONSTRAINT board_slow_ticket_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT board_slow_ticket_generation_check CHECK ((generation > 0)),
     CONSTRAINT board_slow_ticket_board_route_check CHECK (((board_route >= 0) AND (board_route <= 65535))),
-    CONSTRAINT board_slow_ticket_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT board_slow_ticket_check CHECK (((state <> 'committed'::text) OR ((target_post_id IS NOT NULL) AND (revision_id IS NOT NULL) AND (transaction_id IS NOT NULL) AND (posted_at IS NOT NULL)))),
+    CONSTRAINT board_slow_ticket_check1 CHECK (((state <> 'replayed'::text) OR ((target_post_id IS NOT NULL) AND (revision_id IS NOT NULL)))),
+    CONSTRAINT board_slow_ticket_command_key_check CHECK ((octet_length(command_key) = 32)),
     CONSTRAINT board_slow_ticket_command_kind_check CHECK ((command_kind = ANY (ARRAY['content.thread.create'::text, 'content.post.create'::text, 'content.post.revise'::text]))),
-    CONSTRAINT board_slow_ticket_state_check CHECK ((state = ANY (ARRAY['reserved'::text, 'committed'::text, 'replayed'::text, 'cancelled'::text]))),
-    CONSTRAINT board_slow_ticket_committed_witness_check CHECK (((state <> 'committed'::text) OR ((target_post_id IS NOT NULL) AND (revision_id IS NOT NULL) AND (transaction_id IS NOT NULL) AND (posted_at IS NOT NULL)))),
-    CONSTRAINT board_slow_ticket_replay_witness_check CHECK (((state <> 'replayed'::text) OR ((target_post_id IS NOT NULL) AND (revision_id IS NOT NULL))))
+    CONSTRAINT board_slow_ticket_generation_check CHECK ((generation > 0)),
+    CONSTRAINT board_slow_ticket_request_digest_check CHECK ((octet_length(request_digest) = 32)),
+    CONSTRAINT board_slow_ticket_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT board_slow_ticket_state_check CHECK ((state = ANY (ARRAY['reserved'::text, 'committed'::text, 'replayed'::text, 'cancelled'::text])))
 );
 
 
@@ -2283,8 +2293,18 @@ ALTER TABLE ONLY content.board_slow_actor
 ALTER TABLE ONLY content.board_slow_mode
     ADD CONSTRAINT board_slow_mode_pkey PRIMARY KEY (route, board_id);
 
+
+--
+-- Name: board_slow_permit board_slow_permit_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
 ALTER TABLE ONLY content.board_slow_permit
     ADD CONSTRAINT board_slow_permit_pkey PRIMARY KEY (route, board_id, actor_key, command_key);
+
+
+--
+-- Name: board_slow_ticket board_slow_ticket_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
 
 ALTER TABLE ONLY content.board_slow_ticket
     ADD CONSTRAINT board_slow_ticket_pkey PRIMARY KEY (route, command_key);
@@ -2815,32 +2835,6 @@ CREATE INDEX author_item_page_idx ON content.author_item USING btree (route, aut
 
 CREATE INDEX author_item_post_page_idx ON content.author_item USING btree (route, author_account_id, created_at DESC, item_id) WHERE (item_kind = 'post'::text);
 
--- Name: board_slow_actor_key_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX board_slow_actor_key_idx ON content.board_slow_actor USING btree (actor_key, route, board_id);
-
-CREATE INDEX board_slow_actor_retention_idx ON content.board_slow_actor USING btree (posted_at, route, board_id, actor_key);
-
-CREATE INDEX board_slow_actor_no_post_idx ON content.board_slow_actor USING btree (route, board_id, actor_key) WHERE (posted_at IS NULL);
-
--- Name: board_slow_permit_one_active_actor_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE UNIQUE INDEX board_slow_permit_one_active_actor_idx ON content.board_slow_permit USING btree (route, board_id, actor_key) WHERE (state = ANY (ARRAY['reserved'::text, 'in_flight'::text, 'reconciling'::text]));
-
-CREATE INDEX board_slow_permit_actor_key_idx ON content.board_slow_permit USING btree (actor_key, route, board_id, command_key);
-
--- Name: board_slow_permit_recovery_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX board_slow_permit_recovery_idx ON content.board_slow_permit USING btree (updated_at, route, board_id, actor_key, command_key) WHERE (state = ANY (ARRAY['reserved'::text, 'in_flight'::text, 'reconciling'::text]));
-
--- Name: board_slow_permit_retention_idx; Type: INDEX; Schema: content; Owner: -
---
-
-CREATE INDEX board_slow_permit_retention_idx ON content.board_slow_permit USING btree (completed_at, route, board_id, actor_key, command_key) WHERE (state = ANY (ARRAY['complete'::text, 'cancelled'::text, 'pruning'::text]));
-
 
 --
 -- Name: board_global_directory_page; Type: INDEX; Schema: content; Owner: -
@@ -2875,6 +2869,55 @@ CREATE INDEX board_realm_page ON content.board USING btree (route, realm_id, boa
 --
 
 CREATE INDEX board_report_candidate_page_idx ON content.board_report_candidate USING btree (route, board_id, created_at DESC, report_id DESC) INCLUDE (report_route, target_kind, target_id);
+
+
+--
+-- Name: board_slow_actor_key_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_slow_actor_key_idx ON content.board_slow_actor USING btree (actor_key, route, board_id);
+
+
+--
+-- Name: board_slow_actor_no_post_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_slow_actor_no_post_idx ON content.board_slow_actor USING btree (route, board_id, actor_key) WHERE (posted_at IS NULL);
+
+
+--
+-- Name: board_slow_actor_retention_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_slow_actor_retention_idx ON content.board_slow_actor USING btree (posted_at, route, board_id, actor_key);
+
+
+--
+-- Name: board_slow_permit_actor_key_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_slow_permit_actor_key_idx ON content.board_slow_permit USING btree (actor_key, route, board_id, command_key);
+
+
+--
+-- Name: board_slow_permit_one_active_actor_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX board_slow_permit_one_active_actor_idx ON content.board_slow_permit USING btree (route, board_id, actor_key) WHERE (state = ANY (ARRAY['reserved'::text, 'in_flight'::text, 'reconciling'::text]));
+
+
+--
+-- Name: board_slow_permit_recovery_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_slow_permit_recovery_idx ON content.board_slow_permit USING btree (updated_at, route, board_id, actor_key, command_key) WHERE (state = ANY (ARRAY['reserved'::text, 'in_flight'::text, 'reconciling'::text]));
+
+
+--
+-- Name: board_slow_permit_retention_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX board_slow_permit_retention_idx ON content.board_slow_permit USING btree (completed_at, route, board_id, actor_key, command_key) WHERE (state = ANY (ARRAY['complete'::text, 'cancelled'::text, 'pruning'::text]));
 
 
 --
@@ -3406,11 +3449,21 @@ ALTER TABLE ONLY content.board_slow_actor
 ALTER TABLE ONLY content.board_slow_mode
     ADD CONSTRAINT board_slow_mode_route_board_id_fkey FOREIGN KEY (route, board_id) REFERENCES content.board(route, board_id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY content.board_slow_permit
-    ADD CONSTRAINT board_slow_permit_route_board_id_fkey FOREIGN KEY (route, board_id) REFERENCES content.board(route, board_id) ON DELETE CASCADE;
+
+--
+-- Name: board_slow_permit board_slow_permit_route_board_id_actor_key_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
 
 ALTER TABLE ONLY content.board_slow_permit
-    ADD CONSTRAINT board_slow_permit_route_board_actor_fkey FOREIGN KEY (route, board_id, actor_key) REFERENCES content.board_slow_actor(route, board_id, actor_key) ON DELETE CASCADE;
+    ADD CONSTRAINT board_slow_permit_route_board_id_actor_key_fkey FOREIGN KEY (route, board_id, actor_key) REFERENCES content.board_slow_actor(route, board_id, actor_key) ON DELETE CASCADE;
+
+
+--
+-- Name: board_slow_permit board_slow_permit_route_board_id_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.board_slow_permit
+    ADD CONSTRAINT board_slow_permit_route_board_id_fkey FOREIGN KEY (route, board_id) REFERENCES content.board(route, board_id) ON DELETE CASCADE;
 
 
 --
