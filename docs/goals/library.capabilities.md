@@ -633,8 +633,10 @@ controller acceptance remain deferred.
 [Installed evidence methods](../library-copy-archive-recovery.md) and [progress recovery methods](../library-archive-progress-recovery.md)
 accept actual personal Library v1 artifacts. Holdings remain evidence-only; an explicitly reviewed progress
 occurrence creates a fresh native Session through the installed Session and direct episode-membership commands.
+Exact command operands and expected revisions survive a lost archive checkpoint and replay through the original
+native receipt. The owner reports `recoverable` while reconciliation is pending and withholds uncheckpointed facts.
 The focused native scenario is `services/kernel/test/library/copy-archive.test.ts`; frozen full recovery acceptance
-and native64/512/4096 executed caller growth remain deferred.
+and native64/512/4096 executed caller growth remain unmeasured and deferred.
 
 ## Canonical episode completion capability
 

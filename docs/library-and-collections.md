@@ -700,8 +700,10 @@ create canonical Episode facts or infer dates, completion, holdings or publicati
 [Native archive recovery](library-copy-archive-recovery.md) owns the admitted v1 format, private holding evidence,
 and reviewed progress recovery. Holdings never restore an Entry, entitlement, or financial fact. Progress recovery
 creates one fresh Session per explicitly selected occurrence and uses current profile meanings and native commands;
-it does not restore historical dates, History, or journal/reflection annotations. Frozen native growth and
-whole-caller acceptance remain deferred.
+it stores exact native operands and expected revisions before effects, replays lost acknowledgements through original
+receipts, and reports unreconciled outcomes as recoverable without disclosing uncheckpointed facts. It does not
+restore historical dates, History, or journal/reflection annotations. Frozen native growth and whole-caller
+acceptance remain deferred.
 
 ## Canonical episode facts
 

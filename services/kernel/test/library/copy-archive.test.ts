@@ -529,28 +529,184 @@ test('recovery selects one equal-measure occurrence, reviews current meanings an
   expect(await json(await send('DELETE', suffix))).toMatchObject({ complete: true });
 }, 120000);
 
-test('terminal account fencing denies inspection and bounded owner erasure removes evidence', async () => {
+test('checkpoint replay preserves the original create and revision-sensitive measure commands', async () => {
+  const service = createCopyArchive({
+    pool: f.pool,
+    access: f.access,
+    workClient: (workClient ??= await createWorkClient(f.pool.options.connectionString!, f.pool)),
+    tokens: f.tokens,
+    routeKey: testRouteKey(),
+    clock: () => new Date(now),
+  });
+  const sessionCount = async () =>
+    (await f.pool.query<{ count: number }>(
+      'SELECT count(*)::int AS count FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3',
+      [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
+    )).rows[0]!.count;
+  const createUpload = await json(await send('POST', '', artifact, entryKey()));
+  const createReview = await json(
+    await send(
+      'POST',
+      `/${createUpload.uploadId}/progressReviews`,
+      {
+        sessionId: sourceSessions[2]!.id,
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'chapter',
+        additionalMeasures: [],
+        unitIds: [],
+      },
+      entryKey(),
+    ),
+  );
+  const createKey = entryKey(),
+    beforeCreate = await sessionCount(),
+    createAbort = new AbortController();
+  await expect(
+    service.applyProgress(owner.actor, createUpload.uploadId, createReview.reviewId, createKey, createAbort.signal, () =>
+      createAbort.abort(),
+    ),
+  ).rejects.toThrow();
+  const createPending = await json(
+    await send('GET', `/${createUpload.uploadId}/progressReviews/${createReview.reviewId}`),
+  );
+  expect(createPending).toMatchObject({
+    application: { state: 'recoverable', sessionId: null, acceptedSteps: 0 },
+    progressSession: null,
+  });
+  expect(await sessionCount()).toBe(beforeCreate + 1);
+  const created = await service.applyProgress(owner.actor, createUpload.uploadId, createReview.reviewId, createKey);
+  expect(created).toMatchObject({ state: 'applied', acceptedSteps: 3, totalSteps: 3 });
+  expect(await sessionCount()).toBe(beforeCreate + 1);
+  expect(await service.applyProgress(owner.actor, createUpload.uploadId, createReview.reviewId, createKey)).toEqual(
+    created,
+  );
+  expect(await json(await send('DELETE', `/${createUpload.uploadId}`))).toMatchObject({ complete: true });
+
+  const measureUpload = await json(await send('POST', '', artifact, entryKey()));
+  const measureReview = await json(
+    await send(
+      'POST',
+      `/${measureUpload.uploadId}/progressReviews`,
+      {
+        sessionId: sourceSessions[0]!.id,
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'chapter',
+        additionalMeasures: additionalUnits.map((unit) => ({ sourceUnit: unit, unit })),
+        unitIds: [],
+      },
+      entryKey(),
+    ),
+  );
+  const measureKey = entryKey(),
+    beforeMeasure = await sessionCount(),
+    measureAbort = new AbortController();
+  let commands = 0;
+  await expect(
+    service.applyProgress(
+      owner.actor,
+      measureUpload.uploadId,
+      measureReview.reviewId,
+      measureKey,
+      measureAbort.signal,
+      () => {
+        if (++commands === 2) measureAbort.abort();
+      },
+    ),
+  ).rejects.toThrow();
+  const measurePending = await json(
+    await send('GET', `/${measureUpload.uploadId}/progressReviews/${measureReview.reviewId}`),
+  );
+  expect(measurePending).toMatchObject({
+    application: { state: 'recoverable', acceptedSteps: 1, error: null },
+    progressSession: null,
+    completedEpisodes: null,
+  });
+  const measured = await service.applyProgress(owner.actor, measureUpload.uploadId, measureReview.reviewId, measureKey);
+  expect(measured).toMatchObject({ state: 'applied', acceptedSteps: 10, totalSteps: 10 });
+  expect(await service.applyProgress(owner.actor, measureUpload.uploadId, measureReview.reviewId, measureKey)).toEqual(
+    measured,
+  );
+  expect(await sessionCount()).toBe(beforeMeasure + 1);
+  const native = await f.pool.query<{ revision: number }>(
+    'SELECT revision FROM library.progress_session WHERE route=$1 AND account_id=$2 AND session_id=$3',
+    [routeOf(owner.actor.accountId), owner.actor.accountId, measured.sessionId],
+  );
+  expect(native.rows[0]?.revision).toBe(10);
+  const result = await json(await send('GET', `/${measureUpload.uploadId}/progressReviews/${measureReview.reviewId}`));
+  expect(result.progressSession).toMatchObject({ id: measured.sessionId, state: 'completed' });
+  expect(result.progressSession.measures).toHaveLength(8);
+  expect(await json(await send('DELETE', `/${measureUpload.uploadId}`))).toMatchObject({ complete: true });
+}, 120000);
+
+test('terminal account fencing denies inspection and bounded owner erasure removes retained command operands', async () => {
   const uploaded = await json(await send('POST', '', artifact));
+  const review = await json(
+    await send(
+      'POST',
+      `/${uploaded.uploadId}/progressReviews`,
+      {
+        sessionId: sourceSessions[2]!.id,
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'chapter',
+        additionalMeasures: [],
+        unitIds: [],
+      },
+      entryKey(),
+    ),
+  );
+  const service = createCopyArchive({
+    pool: f.pool,
+    access: f.access,
+    workClient: (workClient ??= await createWorkClient(f.pool.options.connectionString!, f.pool)),
+    tokens: f.tokens,
+    routeKey: testRouteKey(),
+    clock: () => new Date(now),
+  });
+  const abort = new AbortController();
+  await expect(
+    service.applyProgress(owner.actor, uploaded.uploadId, review.reviewId, entryKey(), abort.signal, () =>
+      abort.abort(),
+    ),
+  ).rejects.toThrow();
+  const retained = await f.pool.query<{ active_command: unknown }>(
+    'SELECT active_command FROM library.copy_archive_progress_apply WHERE route=$1 AND account_id=$2 AND upload_id=$3',
+    [routeOf(owner.actor.accountId), owner.actor.accountId, uploaded.uploadId],
+  );
+  expect(retained.rows[0]?.active_command).not.toBeNull();
+  const nativeSessions = await f.pool.query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3',
+    [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
+  );
   await createLifecycleCommands({ pool: f.pool, access: f.access }).tombstone(
     { actor: owner.actor, deadline: Date.now() + 30000 },
     { accountId: owner.actor.accountId, key: entryKey() },
   );
   expect([401, 403]).toContain((await send('GET', `/${uploaded.uploadId}`)).status);
-  expect(
-    (
-      await purgeOwnedGraphPage(f.pool, {
-        accountId: owner.actor.accountId,
-        kind: 'copy_archive',
-        parent: null,
-        after: null,
-        ordinal: 0,
-        segment: 0,
-      })
-    ).removed,
-  ).toBe(15);
+  const purged = await purgeOwnedGraphPage(f.pool, {
+    accountId: owner.actor.accountId,
+    kind: 'copy_archive',
+    parent: null,
+    after: null,
+    ordinal: 0,
+    segment: 0,
+  });
+  expect(purged.removed).toBe(17);
   const count = await f.pool.query('SELECT 1 FROM library.copy_archive_row WHERE route=$1 AND account_id=$2', [
     routeOf(owner.actor.accountId),
     owner.actor.accountId,
   ]);
   expect(count.rowCount).toBe(0);
+  const commands = await f.pool.query(
+    'SELECT 1 FROM library.copy_archive_progress_apply WHERE route=$1 AND account_id=$2',
+    [routeOf(owner.actor.accountId), owner.actor.accountId],
+  );
+  expect(commands.rowCount).toBe(0);
+  const nativeSessionsAfter = await f.pool.query<{ count: number }>(
+    'SELECT count(*)::int AS count FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3',
+    [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
+  );
+  expect(nativeSessionsAfter.rows[0]?.count).toBe(nativeSessions.rows[0]?.count);
 }, 120000);

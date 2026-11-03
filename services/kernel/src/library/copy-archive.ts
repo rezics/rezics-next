@@ -107,7 +107,30 @@ type ProgressReviewEvidence = {
   plan: ProgressRecoveryPlan | null;
   response: CopyArchiveProgressReview;
 };
-export type CopyArchiveProgressState = 'applying' | 'partial' | 'applied' | 'stale' | 'failed';
+type ArchiveProgressStepCommand = {
+  key: string;
+  kind: 'create' | 'record' | 'episodes' | 'complete' | 'abandon';
+  input: Record<string, unknown>;
+};
+type ArchiveProgressReservation =
+  | {
+      done: true;
+      state: CopyArchiveProgressState;
+      totalSteps: number;
+      sessionId: string | null;
+      acceptedSteps: number;
+      error: string | null;
+    }
+  | {
+      done: false;
+      evidence: ProgressReviewEvidence;
+      plan: ProgressRecoveryPlan;
+      totalSteps: number;
+      step: number;
+      sessionId: string | null;
+      command: ArchiveProgressStepCommand;
+    };
+export type CopyArchiveProgressState = 'applying' | 'recoverable' | 'partial' | 'applied' | 'stale' | 'failed';
 export type CopyArchiveProgressReview = {
   uploadId: string;
   reviewId: string;
@@ -1082,6 +1105,76 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       ...(plan.transition ? [{ kind: 'transition' as const, action: plan.transition }] : []),
     ];
   }
+  function stepCommandKind(step: ReturnType<typeof recoverySteps>[number]): ArchiveProgressStepCommand['kind'] {
+    return step.kind === 'transition' ? step.action : step.kind;
+  }
+  function makeStepCommand(
+    reviewId: string,
+    index: number,
+    step: ReturnType<typeof recoverySteps>[number],
+    plan: ProgressRecoveryPlan,
+    sessionId: string | null,
+    sessionRevision: number | null,
+  ): ArchiveProgressStepCommand | null {
+    const key = 'archive:' + reviewId + ':' + index;
+    if (step.kind === 'create') {
+      return {
+        key,
+        kind: 'create',
+        input: {
+          subjectId: plan.subjectId,
+          versionSubjectId: null,
+          mode: plan.mode,
+          unit: plan.unit,
+          ...(plan.mode === 'scalar_amount' ? { total: plan.total } : {}),
+          ...(plan.additionalMeasures.length ? { additionalMeasures: plan.additionalMeasures } : {}),
+        },
+      };
+    }
+    if (!sessionId || sessionRevision === null) return null;
+    const target = { sessionId, revision: sessionRevision };
+    if (step.kind === 'record') {
+      return {
+        key,
+        kind: 'record',
+        input:
+          step.record.kind === 'measure'
+            ? { ...target, measureId: step.record.measureId, amount: step.record.amount }
+            : { ...target, locator: step.record.locator, position: step.record.position },
+      };
+    }
+    if (step.kind === 'episodes') {
+      return {
+        key,
+        kind: 'episodes',
+        input: { ...target, add: plan.unitIds, remove: [], clear: false },
+      };
+    }
+    return { key, kind: step.action, input: target };
+  }
+  function storedStepCommand(value: unknown): ArchiveProgressStepCommand | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const row = value as Record<string, unknown>;
+    if (
+      typeof row.key !== 'string' ||
+      !['create', 'record', 'episodes', 'complete', 'abandon'].includes(String(row.kind)) ||
+      !row.input ||
+      typeof row.input !== 'object' ||
+      Array.isArray(row.input)
+    )
+      return null;
+    const input = row.input as Record<string, unknown>;
+    if (row.kind === 'create') {
+      if (typeof input.subjectId !== 'string') return null;
+    } else if (
+      typeof input.sessionId !== 'string' ||
+      typeof input.revision !== 'number' ||
+      !Number.isSafeInteger(input.revision) ||
+      input.revision < 1
+    )
+      return null;
+    return { key: row.key, kind: row.kind as ArchiveProgressStepCommand['kind'], input };
+  }
   async function applyProgress(
     actor: Actor,
     id: string,
@@ -1092,52 +1185,45 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
   ): Promise<CopyArchiveProgressApplication> {
     if (routeOf(reviewId) === null) throw new ProblemError('invalid_request');
     const requestKeyHash = sha256(requestKey);
-    const initial = await operation(
-      actor,
-      signal,
-      async (tx, route, account, now) => {
-        await header(tx, route, account, id, now);
-        const review = (
-          await tx.query<{ evidence: ProgressReviewEvidence }>(
-            `SELECT evidence FROM library.copy_archive_progress_review
-            WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
-            [route, account, id, reviewId],
-          )
-        ).rows[0];
-        if (!review) throw missing();
-        if (!review.evidence.plan || !review.evidence.binding?.pin)
-          throw new ProblemError('unsupported_library_profile');
-        return { evidence: review.evidence, route };
-      },
-      'progress_session:create',
-    );
-    const steps = recoverySteps(initial.evidence.plan!),
-      totalSteps = steps.length;
-    for (;;) {
-      signal?.throwIfAborted();
-      const reservation = await operation(
+    const reserve = (): Promise<ArchiveProgressReservation> =>
+      operation<ArchiveProgressReservation>(
         actor,
         signal,
         async (tx, route, account, now) => {
           const h = await header(tx, route, account, id, now);
+          const review = (
+            await tx.query<{ evidence: ProgressReviewEvidence }>(
+              `SELECT evidence FROM library.copy_archive_progress_review
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId],
+            )
+          ).rows[0];
+          if (!review) throw missing();
+          const evidence = review.evidence;
+          if (!evidence.plan || !evidence.binding?.pin) throw new ProblemError('unsupported_library_profile');
+          const plan = evidence.plan,
+            steps = recoverySteps(plan),
+            totalSteps = steps.length;
           const app = (
             await tx.query<{
               request_key_hash: Buffer;
               state: CopyArchiveProgressState;
               next_step: number;
               active_step: number | null;
+              active_started: boolean;
+              active_command: unknown | null;
               session_id: string | null;
+              session_revision: number | null;
               error_code: string | null;
             }>(
-              `SELECT request_key_hash,state,next_step,active_step,session_id,error_code
+              `SELECT request_key_hash,state,next_step,active_step,active_started,active_command,session_id,session_revision,error_code
               FROM library.copy_archive_progress_apply
               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4 FOR UPDATE`,
               [route, account, id, reviewId],
             )
           ).rows[0];
           if (app && !app.request_key_hash.equals(requestKeyHash)) throw new ProblemError('idempotency_conflict');
-          let current = app;
-          if (!current) {
+          if (!app) {
             if (h.cancelled) throw new ProblemError('conflict');
             const keyOwner = (
               await tx.query<{ review_id: string }>(
@@ -1148,160 +1234,366 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
               )
             ).rows[0];
             if (keyOwner && keyOwner.review_id !== reviewId) throw new ProblemError('idempotency_conflict');
-            current = (
-              await tx.query({
-                text: `INSERT INTO library.copy_archive_progress_apply
-                (route,account_id,upload_id,review_id,request_key_hash,state,updated_at)
-                VALUES($1,$2,$3,$4,$5,'applying',to_timestamp($6/1000.0))
-                RETURNING request_key_hash,state,next_step,active_step,session_id,error_code`,
-                values: [route, account, id, reviewId, requestKeyHash, now],
-              })
-            ).rows[0] as NonNullable<typeof current>;
+            const command = makeStepCommand(reviewId, 0, steps[0]!, plan, null, null);
+            if (!command) throw new Error('Archive progress create command could not be prepared');
+            await tx.query(
+              `INSERT INTO library.copy_archive_progress_apply
+              (route,account_id,upload_id,review_id,request_key_hash,state,next_step,active_step,active_started,active_command,updated_at)
+              VALUES($1,$2,$3,$4,$5,'applying',0,0,true,$6::jsonb,to_timestamp($7/1000.0))`,
+              [route, account, id, reviewId, requestKeyHash, JSON.stringify(command), now],
+            );
+            return {
+              done: false,
+              evidence,
+              plan,
+              totalSteps,
+              step: 0,
+              sessionId: null,
+              command,
+            };
           }
-          if (['applied', 'partial', 'stale', 'failed'].includes(current.state))
+          if (['applied', 'partial', 'stale', 'failed'].includes(app.state))
             return {
-              done: true as const,
-              state: current.state,
-              sessionId: current.session_id,
-              acceptedSteps: current.next_step,
-              error: current.error_code,
+              done: true,
+              state: app.state,
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
+              error: app.error_code,
             };
-          if (current.active_step !== null)
+          if (app.active_step !== null) {
+            const step = steps[app.active_step],
+              command = storedStepCommand(app.active_command);
+            if (
+              app.active_step !== app.next_step ||
+              !step ||
+              !command ||
+              command.key !== 'archive:' + reviewId + ':' + app.active_step ||
+              command.kind !== stepCommandKind(step)
+            ) {
+              await tx.query(
+                `UPDATE library.copy_archive_progress_apply SET state='failed',error_code='recovery_operands_unavailable',
+                active_step=NULL,active_started=false,active_command=NULL,updated_at=to_timestamp($5/1000.0)
+                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+                [route, account, id, reviewId, now],
+              );
+              return {
+                done: true,
+                state: 'failed',
+                totalSteps,
+                sessionId: app.session_id,
+                acceptedSteps: app.next_step,
+                error: 'recovery_operands_unavailable',
+              };
+            }
+            if (h.cancelled && !app.active_started) {
+              await tx.query(
+                `UPDATE library.copy_archive_progress_apply SET state='partial',active_step=NULL,active_started=false,
+                active_command=NULL,updated_at=to_timestamp($5/1000.0)
+                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+                [route, account, id, reviewId, now],
+              );
+              return {
+                done: true,
+                state: 'partial',
+                totalSteps,
+                sessionId: app.session_id,
+                acceptedSteps: app.next_step,
+                error: null,
+              };
+            }
+            if (!app.active_started)
+              await tx.query(
+                `UPDATE library.copy_archive_progress_apply SET active_started=true,updated_at=to_timestamp($5/1000.0)
+                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+                [route, account, id, reviewId, now],
+              );
             return {
-              done: false as const,
-              step: current.active_step,
-              sessionId: current.session_id,
-              cancelled: h.cancelled,
+              done: false,
+              evidence,
+              plan,
+              totalSteps,
+              step: app.active_step,
+              sessionId: app.session_id,
+              command,
             };
+          }
           if (h.cancelled) {
             await tx.query(
-              `UPDATE library.copy_archive_progress_apply SET state='partial',updated_at=to_timestamp($5/1000.0)
+              `UPDATE library.copy_archive_progress_apply SET state='partial',active_step=NULL,active_started=false,active_command=NULL,
+              updated_at=to_timestamp($5/1000.0)
               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
               [route, account, id, reviewId, now],
             );
             return {
-              done: true as const,
-              state: 'partial' as const,
-              sessionId: current.session_id,
-              acceptedSteps: current.next_step,
+              done: true,
+              state: 'partial',
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
               error: null,
             };
           }
-          if (current.next_step >= totalSteps) {
+          if (app.next_step >= totalSteps) {
             await tx.query(
-              `UPDATE library.copy_archive_progress_apply SET state='applied',updated_at=to_timestamp($5/1000.0)
+              `UPDATE library.copy_archive_progress_apply SET state='applied',active_step=NULL,active_started=false,active_command=NULL,
+              updated_at=to_timestamp($5/1000.0)
               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
               [route, account, id, reviewId, now],
             );
             return {
-              done: true as const,
-              state: 'applied' as const,
-              sessionId: current.session_id,
-              acceptedSteps: current.next_step,
+              done: true,
+              state: 'applied',
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
               error: null,
             };
           }
-          const step = current.next_step;
+          const step = steps[app.next_step]!,
+            command = makeStepCommand(reviewId, app.next_step, step, plan, app.session_id, app.session_revision);
+          if (!command) {
+            await tx.query(
+              `UPDATE library.copy_archive_progress_apply SET state='failed',error_code='recovery_operands_unavailable',
+              active_step=NULL,active_started=false,active_command=NULL,updated_at=to_timestamp($5/1000.0)
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId, now],
+            );
+            return {
+              done: true,
+              state: 'failed',
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
+              error: 'recovery_operands_unavailable',
+            };
+          }
           await tx.query(
-            `UPDATE library.copy_archive_progress_apply SET active_step=$5,updated_at=to_timestamp($6/1000.0)
+            `UPDATE library.copy_archive_progress_apply SET active_step=$5,active_started=true,active_command=$6::jsonb,
+            updated_at=to_timestamp($7/1000.0)
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
-            [route, account, id, reviewId, step, now],
+            [route, account, id, reviewId, app.next_step, JSON.stringify(command), now],
           );
-          return { done: false as const, step, sessionId: current.session_id, cancelled: false };
+          return {
+            done: false,
+            evidence,
+            plan,
+            totalSteps,
+            step: app.next_step,
+            sessionId: app.session_id,
+            command,
+          };
         },
         'progress_session:create',
       );
+    const claimNext = (
+      evidence: ProgressReviewEvidence,
+      plan: ProgressRecoveryPlan,
+      totalSteps: number,
+    ): Promise<ArchiveProgressReservation> =>
+      operation<ArchiveProgressReservation>(
+        actor,
+        signal,
+        async (tx, route, account, now) => {
+          const h = await header(tx, route, account, id, now),
+            app = (
+              await tx.query<{
+                request_key_hash: Buffer;
+                state: CopyArchiveProgressState;
+                next_step: number;
+                active_step: number | null;
+                active_started: boolean;
+                active_command: unknown | null;
+                session_id: string | null;
+                session_revision: number | null;
+                error_code: string | null;
+              }>(
+                `SELECT request_key_hash,state,next_step,active_step,active_started,active_command,session_id,session_revision,error_code
+                FROM library.copy_archive_progress_apply
+                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4 FOR UPDATE`,
+                [route, account, id, reviewId],
+              )
+            ).rows[0];
+          if (!app) throw missing();
+          if (!app.request_key_hash.equals(requestKeyHash)) throw new ProblemError('idempotency_conflict');
+          if (['applied', 'partial', 'stale', 'failed'].includes(app.state))
+            return {
+              done: true,
+              state: app.state,
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
+              error: app.error_code,
+            };
+          if (h.cancelled && (app.active_step === null || !app.active_started)) {
+            await tx.query(
+              `UPDATE library.copy_archive_progress_apply SET state='partial',active_step=NULL,active_started=false,
+              active_command=NULL,updated_at=to_timestamp($5/1000.0)
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId, now],
+            );
+            return {
+              done: true,
+              state: 'partial',
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
+              error: null,
+            };
+          }
+          if (app.next_step >= totalSteps) {
+            await tx.query(
+              `UPDATE library.copy_archive_progress_apply SET state='applied',active_step=NULL,active_started=false,
+              active_command=NULL,updated_at=to_timestamp($5/1000.0)
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId, now],
+            );
+            return {
+              done: true,
+              state: 'applied',
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
+              error: null,
+            };
+          }
+          const steps = recoverySteps(plan),
+            stepIndex = app.active_step ?? app.next_step,
+            step = steps[stepIndex];
+          let command = storedStepCommand(app.active_command);
+          if (app.active_step === null) {
+            command = step && makeStepCommand(reviewId, stepIndex, step, plan, app.session_id, app.session_revision);
+            if (!command) {
+              await tx.query(
+                `UPDATE library.copy_archive_progress_apply SET state='failed',error_code='recovery_operands_unavailable',
+                active_step=NULL,active_started=false,active_command=NULL,updated_at=to_timestamp($5/1000.0)
+                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+                [route, account, id, reviewId, now],
+              );
+              return {
+                done: true,
+                state: 'failed',
+                totalSteps,
+                sessionId: app.session_id,
+                acceptedSteps: app.next_step,
+                error: 'recovery_operands_unavailable',
+              };
+            }
+            await tx.query(
+              `UPDATE library.copy_archive_progress_apply SET active_step=$5,active_started=true,active_command=$6::jsonb,
+              updated_at=to_timestamp($7/1000.0)
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId, stepIndex, JSON.stringify(command), now],
+            );
+          } else if (
+            app.active_step !== app.next_step ||
+            !step ||
+            !command ||
+            command.key !== 'archive:' + reviewId + ':' + stepIndex ||
+            command.kind !== stepCommandKind(step)
+          ) {
+            await tx.query(
+              `UPDATE library.copy_archive_progress_apply SET state='failed',error_code='recovery_operands_unavailable',
+              active_step=NULL,active_started=false,active_command=NULL,updated_at=to_timestamp($5/1000.0)
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId, now],
+            );
+            return {
+              done: true,
+              state: 'failed',
+              totalSteps,
+              sessionId: app.session_id,
+              acceptedSteps: app.next_step,
+              error: 'recovery_operands_unavailable',
+            };
+          } else if (!app.active_started) {
+            await tx.query(
+              `UPDATE library.copy_archive_progress_apply SET active_started=true,updated_at=to_timestamp($5/1000.0)
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+              [route, account, id, reviewId, now],
+            );
+          }
+          return {
+            done: false,
+            evidence,
+            plan,
+            totalSteps,
+            step: stepIndex,
+            sessionId: app.session_id,
+            command: command!,
+          };
+        },
+        'progress_session:create',
+      );
+    let reservation = await reserve();
+    for (;;) {
       if (reservation.done)
         return applicationResult(
           id,
           reviewId,
           reservation.state,
           reservation.sessionId,
-          totalSteps,
+          reservation.totalSteps,
           reservation.error,
           reservation.acceptedSteps,
         );
-      const step = steps[reservation.step];
-      if (!step) throw new Error('Invalid archive progress step');
       signal?.throwIfAborted();
-      const plan = initial.evidence.plan!;
-      const expected = nativeBinding(initial.evidence.binding!);
-      let sessionId = reservation.sessionId;
+      const { command } = reservation,
+        expected = nativeBinding(reservation.evidence.binding!);
+      let sessionId = reservation.sessionId,
+        sessionRevision: number | null = null,
+        nativeReceipt: { partition: number; epoch: number; position: bigint } | null = null;
       try {
-        const nativeKey = `archive:${reviewId}:${reservation.step}`;
-        if (step.kind === 'create') {
-          const created = await sessions.startSession(
-            actor,
-            {
-              subjectId: plan.subjectId,
-              versionSubjectId: null,
-              mode: plan.mode,
-              unit: plan.unit,
-              ...(plan.mode === 'scalar_amount' ? { total: plan.total } : {}),
-              ...(plan.additionalMeasures.length ? { additionalMeasures: plan.additionalMeasures } : {}),
-            },
-            nativeKey,
-            expected,
-          );
-          onCommand?.(created);
-          sessionId = created.value.id;
-        } else {
-          if (!sessionId) throw new Error('Archive progress session was not created');
-          const current = await sessions.readSession(actor, sessionId);
-          if (step.kind === 'record') {
-            const body =
-              step.record.kind === 'measure'
-                ? { revision: current.revision, measureId: step.record.measureId, amount: step.record.amount }
-                : { revision: current.revision, locator: step.record.locator, position: step.record.position };
-            const recorded = await sessions.recordProgress(actor, sessionId, body, nativeKey, expected);
-            onCommand?.(recorded);
-          } else if (step.kind === 'episodes') {
-            const recorded = await episodes.recordEpisodes(
-              actor,
-              sessionId,
-              { revision: current.revision, add: plan.unitIds },
-              nativeKey,
-              expected,
-            );
-            onCommand?.(recorded);
-          } else if (step.kind === 'transition') {
+        switch (command.kind) {
+          case 'create': {
+            const created = await sessions.startSession(actor, command.input, command.key, expected);
+            nativeReceipt = created;
+            sessionId = created.value.id;
+            sessionRevision = created.value.revision;
+            break;
+          }
+          case 'record': {
+            const commandSessionId = command.input.sessionId;
+            if (typeof commandSessionId !== 'string') throw new Error('Invalid archive progress Session command');
+            const input = { ...command.input };
+            delete input.sessionId;
+            const recorded = await sessions.recordProgress(actor, commandSessionId, input, command.key, expected);
+            nativeReceipt = recorded;
+            sessionId = commandSessionId;
+            sessionRevision = recorded.value.revision;
+            break;
+          }
+          case 'episodes': {
+            const commandSessionId = command.input.sessionId;
+            if (typeof commandSessionId !== 'string') throw new Error('Invalid archive episode command');
+            const input = { ...command.input };
+            delete input.sessionId;
+            delete input.clear;
+            const recorded = await episodes.recordEpisodes(actor, commandSessionId, input, command.key, expected);
+            nativeReceipt = recorded;
+            sessionId = commandSessionId;
+            sessionRevision = recorded.value.revision;
+            break;
+          }
+          case 'complete':
+          case 'abandon': {
+            const commandSessionId = command.input.sessionId,
+              revision = command.input.revision;
+            if (typeof commandSessionId !== 'string' || typeof revision !== 'number')
+              throw new Error('Invalid archive transition command');
+            const input = { revision };
             const transitioned =
-              step.action === 'complete'
-                ? await sessions.completeSession(actor, sessionId, { revision: current.revision }, nativeKey, expected)
-                : await sessions.abandonSession(actor, sessionId, { revision: current.revision }, nativeKey, expected);
-            onCommand?.(transitioned);
+              command.kind === 'complete'
+                ? await sessions.completeSession(actor, commandSessionId, input, command.key, expected)
+                : await sessions.abandonSession(actor, commandSessionId, input, command.key, expected);
+            nativeReceipt = transitioned;
+            sessionId = commandSessionId;
+            sessionRevision = transitioned.value.revision;
+            break;
           }
         }
-        signal?.throwIfAborted();
-        const checkpoint = await operation(
-          actor,
-          signal,
-          async (tx, route, account, now) => {
-            const h = await header(tx, route, account, id, now);
-            const current = (
-              await tx.query<{ next_step: number; active_step: number | null; request_key_hash: Buffer }>(
-                `SELECT next_step,active_step,request_key_hash FROM library.copy_archive_progress_apply
-                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4 FOR UPDATE`,
-                [route, account, id, reviewId],
-              )
-            ).rows[0];
-            if (!current || !current.request_key_hash.equals(requestKeyHash)) throw missing();
-            if (current.next_step > reservation.step) return { state: 'applying', sessionId };
-            if (current.active_step !== reservation.step) throw new ProblemError('conflict');
-            const next = reservation.step + 1,
-              state = next >= totalSteps ? 'applied' : h.cancelled ? 'partial' : 'applying';
-            await tx.query(
-              `UPDATE library.copy_archive_progress_apply SET session_id=COALESCE(session_id,$5),
-              next_step=$6,active_step=NULL,state=$7,updated_at=to_timestamp($8/1000.0)
-              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
-              [route, account, id, reviewId, sessionId, next, state, now],
-            );
-            return { state, sessionId };
-          },
-          'progress_session:create',
-        );
-        if (checkpoint.state === 'partial' || checkpoint.state === 'applied')
-          return applicationResult(id, reviewId, checkpoint.state, sessionId, totalSteps, null, reservation.step + 1);
+        if (!sessionId || sessionRevision === null || !Number.isSafeInteger(sessionRevision))
+          throw new Error('Native archive progress receipt omitted its Session identity or revision');
       } catch (error) {
         const failure: { state: CopyArchiveProgressState; code: string } | null =
           error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)
@@ -1317,23 +1609,162 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
                   ? { state: 'failed', code: 'not_found' }
                   : null;
         if (failure) {
-          await operation(
+          const failed = await operation(
             actor,
             signal,
             async (tx, route, account, now) => {
-              await tx.query(
-                `UPDATE library.copy_archive_progress_apply SET state=$5,error_code=$6,active_step=NULL,
-                session_id=COALESCE(session_id,$7),updated_at=to_timestamp($8/1000.0)
-                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
-                [route, account, id, reviewId, failure.state, failure.code, sessionId, now],
-              );
+              const current = (
+                await tx.query<{ next_step: number; active_step: number | null; active_command: unknown | null }>(
+                  `SELECT next_step,active_step,active_command FROM library.copy_archive_progress_apply
+                  WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4 FOR UPDATE`,
+                  [route, account, id, reviewId],
+                )
+              ).rows[0];
+              const active = storedStepCommand(current?.active_command);
+              if (
+                current?.next_step === reservation.step &&
+                current.active_step === reservation.step &&
+                active?.key === command.key
+              ) {
+                await tx.query(
+                  `UPDATE library.copy_archive_progress_apply SET state=$5,error_code=$6,active_step=NULL,
+                  active_started=false,active_command=NULL,session_id=COALESCE(session_id,$7),updated_at=to_timestamp($8/1000.0)
+                  WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+                  [route, account, id, reviewId, failure.state, failure.code, sessionId, now],
+                );
+                return true;
+              }
+              return false;
             },
             'progress_session:create',
           );
-          return applicationResult(id, reviewId, failure.state, sessionId, totalSteps, failure.code, reservation.step);
+          if (failed)
+            return applicationResult(
+              id,
+              reviewId,
+              failure.state,
+              sessionId,
+              reservation.totalSteps,
+              failure.code,
+              reservation.step,
+            );
+          reservation = await reserve();
+          continue;
         }
         throw error;
       }
+      if (nativeReceipt) onCommand?.(nativeReceipt);
+      signal?.throwIfAborted();
+      const checkpoint = await operation(
+        actor,
+        signal,
+        async (tx, route, account, now) => {
+          const h = await header(tx, route, account, id, now);
+          const current = (
+            await tx.query<{
+              next_step: number;
+              active_step: number | null;
+              active_command: unknown | null;
+              session_id: string | null;
+              request_key_hash: Buffer;
+              state: CopyArchiveProgressState;
+              error_code: string | null;
+            }>(
+              `SELECT next_step,active_step,active_command,session_id,request_key_hash,state,error_code
+              FROM library.copy_archive_progress_apply
+              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4 FOR UPDATE`,
+              [route, account, id, reviewId],
+            )
+          ).rows[0];
+          if (!current || !current.request_key_hash.equals(requestKeyHash)) throw missing();
+          if (current.next_step > reservation.step) {
+            if (current.state !== 'applying')
+              return {
+                state: current.state,
+                sessionId: current.session_id,
+                acceptedSteps: current.next_step,
+                error: current.error_code,
+                step: null,
+                command: null,
+              };
+            const active = storedStepCommand(current.active_command);
+            if (current.active_step === null || !active)
+              throw new Error('Archive progress checkpoint omitted its next command');
+            return {
+              state: current.state,
+              sessionId: current.session_id,
+              acceptedSteps: current.next_step,
+              error: current.error_code,
+              step: current.active_step,
+              command: active,
+            };
+          }
+          const active = storedStepCommand(current.active_command);
+          if (
+            current.next_step !== reservation.step ||
+            current.active_step !== reservation.step ||
+            active?.key !== command.key
+          )
+            throw new ProblemError('conflict');
+          if (current.session_id && current.session_id !== sessionId) throw new ProblemError('conflict');
+          const next = reservation.step + 1,
+            state = next >= reservation.totalSteps ? 'applied' : h.cancelled ? 'partial' : 'applying',
+            nextCommand =
+              state === 'applying'
+                ? makeStepCommand(
+                    reviewId,
+                    next,
+                    recoverySteps(reservation.plan)[next]!,
+                    reservation.plan,
+                    sessionId,
+                    sessionRevision,
+                  )
+                : null;
+          if (state === 'applying' && !nextCommand)
+            throw new Error('Archive progress checkpoint could not prepare the next command');
+          await tx.query(
+            `UPDATE library.copy_archive_progress_apply SET session_id=COALESCE(session_id,$5),
+            session_revision=$6,next_step=$7,active_step=$8,active_started=false,active_command=$9::jsonb,state=$10,error_code=NULL,
+            updated_at=to_timestamp($11/1000.0)
+            WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
+            [
+              route,
+              account,
+              id,
+              reviewId,
+              sessionId,
+              sessionRevision,
+              next,
+              state === 'applying' ? next : null,
+              nextCommand ? JSON.stringify(nextCommand) : null,
+              state,
+              now,
+            ],
+          );
+          return {
+            state,
+            sessionId,
+            acceptedSteps: next,
+            error: null,
+            step: state === 'applying' ? next : null,
+            command: nextCommand,
+          };
+        },
+        'progress_session:create',
+      );
+      if (checkpoint.state !== 'applying')
+        return applicationResult(
+          id,
+          reviewId,
+          checkpoint.state,
+          checkpoint.sessionId,
+          reservation.totalSteps,
+          checkpoint.error,
+          checkpoint.acceptedSteps,
+        );
+      if (checkpoint.step === null || !checkpoint.command)
+        throw new Error('Archive progress checkpoint omitted its next command');
+      reservation = await claimNext(reservation.evidence, reservation.plan, reservation.totalSteps);
     }
   }
   function applicationResult(
@@ -1353,6 +1784,19 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       acceptedSteps,
       totalSteps,
       error,
+    };
+  }
+  function applicationStatus(app: {
+    state: CopyArchiveProgressState;
+    active_step: number | null;
+    active_command: unknown | null;
+    error_code: string | null;
+  }) {
+    const missingOperands = app.state === 'applying' && app.active_step !== null && !storedStepCommand(app.active_command);
+    return {
+      state: missingOperands ? ('failed' as const) : app.state === 'applying' ? ('recoverable' as const) : app.state,
+      error: app.error_code ?? (missingOperands ? 'recovery_operands_unavailable' : null),
+      unreconciled: missingOperands || app.state === 'applying' || app.error_code === 'recovery_operands_unavailable',
     };
   }
   async function progressResult(
@@ -1379,10 +1823,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           await tx.query<{
             state: CopyArchiveProgressState;
             next_step: number;
+            active_step: number | null;
+            active_command: unknown | null;
             session_id: string | null;
             error_code: string | null;
           }>(
-            `SELECT state,next_step,session_id,error_code FROM library.copy_archive_progress_apply
+            `SELECT state,next_step,active_step,active_command,session_id,error_code FROM library.copy_archive_progress_apply
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
             [route, account, id, reviewId],
           )
@@ -1392,12 +1838,13 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       'progress_session:read',
     );
     const app = captured.app;
-    if (!app?.session_id)
+    const status = app ? applicationStatus(app) : null;
+    if (!app?.session_id || status?.unreconciled)
       return {
         uploadId: id,
         review: captured.review.response,
         application: app
-          ? { state: app.state, sessionId: null, acceptedSteps: app.next_step, error: app.error_code }
+          ? { state: status!.state, sessionId: app.session_id, acceptedSteps: app.next_step, error: status!.error }
           : null,
         progressSession: null,
         completedEpisodes: null,
@@ -1418,26 +1865,29 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           await tx.query<{
             state: CopyArchiveProgressState;
             next_step: number;
+            active_step: number | null;
+            active_command: unknown | null;
             session_id: string | null;
             error_code: string | null;
           }>(
-            `SELECT state,next_step,session_id,error_code FROM library.copy_archive_progress_apply
+            `SELECT state,next_step,active_step,active_command,session_id,error_code FROM library.copy_archive_progress_apply
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
             [route, account, id, reviewId],
           )
         ).rows[0];
         if (!current || current.session_id !== app.session_id) throw missing();
+        const currentStatus = applicationStatus(current);
         return {
           uploadId: id,
           review: captured.review.response,
           application: {
-            state: current.state,
+            state: currentStatus.state,
             sessionId: current.session_id,
             acceptedSteps: current.next_step,
-            error: current.error_code,
+            error: currentStatus.error,
           },
-          progressSession,
-          completedEpisodes,
+          progressSession: currentStatus.unreconciled ? null : progressSession,
+          completedEpisodes: currentStatus.unreconciled ? null : completedEpisodes,
           expiresAt: captured.expiresAt,
         };
       },

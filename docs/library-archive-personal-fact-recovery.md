@@ -37,7 +37,8 @@ visibility outcome as private. Journal application binds current Session and jou
 profile anchor, and selected dates. Journal application also needs the caller's current `progress_session:update`
 scope for the native journal command; the archive route's `library_entry:update` scope alone is insufficient. The
 native journal command rechecks owner authority and that binding. Imported consumption dates do not change Session
-start/completion timestamps, progress history, or native command audit time.
+start/completion timestamps, progress history, or native command audit time. Journal patch state and its native
+receipt remain independent of archive progress recovery commands, revisions and checkpoints.
 
 Outcomes are per item: `accepted`, `unchanged`, `stale`, `unsupported`, or `failed`. A changed target, incarnation,
 revision, profile, or review epoch cannot reuse an earlier confirmation or native receipt. Preview/review expose `reviewRevision`; apply requires `{items:[{ordinal,reviewRevision}]}` and checks the

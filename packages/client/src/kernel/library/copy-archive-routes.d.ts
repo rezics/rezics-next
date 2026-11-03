@@ -93,7 +93,7 @@ export type CopyArchiveProgressReview = {
     recovery: 'complete' | 'partial' | 'unsupported';
     expiresAt: string;
 };
-export type CopyArchiveProgressState = 'applying' | 'partial' | 'applied' | 'stale' | 'failed';
+export type CopyArchiveProgressState = 'applying' | 'recoverable' | 'partial' | 'applied' | 'stale' | 'failed';
 export type CopyArchiveProgressApplication = {
     uploadId: string;
     reviewId: string;

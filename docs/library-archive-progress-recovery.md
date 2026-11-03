@@ -8,6 +8,8 @@ Decision: recovery is per occurrence: the owner maps the source Subject to its c
 review creates a distinct fresh Session. A new review ID is a new review epoch; a previous apply key cannot be reused
 for it.
 
+Decision: A retained native command whose archive checkpoint is missing is recoverable; uncheckpointed facts stay hidden until the original receipt advances the checkpoint.
+
 ## Owner interface
 
 All pages are private, no-store. Every call requires the receiving owner's current account and personal_library
@@ -62,13 +64,19 @@ does not target an existing Session revision because recovery always creates a f
 shared revision checks. Replaying a review key with changed operands returns an idempotency conflict. A refreshed
 review needs a new review key and cannot reuse an apply key already assigned to another review in the upload.
 
-Apply persists one step reservation and checkpoint at a time and calls the existing Session create/record/transition
-and episode membership commands. Stable native receipt keys make an original retry after a lost acknowledgement
-return the same fresh Session and effects. Before each new effect, current Subject/profile identity is checked
-against the review. A currentness failure becomes stale; it never falls back to the archived pin or a fixture
-authority. Cancellation prevents the next reservation. An in-flight native command may finish; its exact outcome is
-checkpointed, and accepted Sessions remain. Partial reports how many bounded steps were accepted. Ordinary
-addressed Session retirement remains a separate native command.
+Before the first effect, Apply stores the exact native command key and canonical original operands. Each revision-
+sensitive command includes the expected Session revision returned by the preceding native receipt. After a command
+commits, its checkpoint stores the created Session identity and revision and pre-persists the next exact command.
+Retry replays those stored operands through the native original receipt; it never rebuilds a command from a newer
+Session revision under an older key. Native command authority, current Subject/profile checks, and revision fences
+remain inside native transactions. A currentness failure becomes stale; it never falls back to the archived pin or a
+fixture authority. A retained command with a lost checkpoint reports `recoverable`, and the result hides current
+Session and episode facts until receipt reconciliation advances that checkpoint. A changed review requires a new
+explicit binding and cannot adopt an older operation's receipt.
+
+Cancellation prevents a command that has not yet been claimed. A claimed in-flight command is replayed and
+checkpointed before the application reports a partial result; accepted Sessions remain. Partial reports how many
+bounded steps were accepted. Ordinary addressed Session retirement remains a separate native command.
 
 Upload cancellation keeps inspection available until the fixed expiry and prevents new review/apply effects. The
 owner can delete expired evidence; account erasure calls the same bounded removeCopyArchivePage cleanup. Removing
@@ -85,17 +93,30 @@ archive/review/application evidence does not undo a native Session already accep
 | A                 | 8 total measures including the primary, hence at most 7 additional                  |
 | I                 | 20 selected episode IDs, limited by the delivered direct-membership cap             |
 | review retention  | 4,096 review rows and 32 MiB evidence per upload; each review at most 32 KiB        |
+| command retention | 8 KiB canonical JSON operands per application; at most 4,096 applications per upload |
 | lifetime/cleanup  | 7 days; removal and terminal erasure delete at most 100 indexed child rows per call |
 
 Parsing is O(U+N) under the byte/depth/record limits. Review uses one selected-occurrence lookup, at most I selected
 unit rows, one current Subject/profile observation and final currentness fence, plus at most I bounded direct
 membership reads. It never scans retained owner history or arbitrary catalogue graphs. Apply performs at most ten
-native commands for a scalar Session (A measure writes plus create and optional transition), with one
-reservation/checkpoint per command, native preparation, receipts, History/event work, source invalidation,
-transaction and rollback included. Completed-unit membership is paid by the native episode command once. Page and
-cleanup work use the archive's section/session indexes. No arbitrary LIMIT over unrelated units or History
-establishes the I/P bounds.
+native commands for a scalar Session (A measure writes plus create and optional transition). The archive caller
+performs one initial owner operation to load the review and persist the create command, one checkpoint operation per
+native command, and one cancellation gate before each later command: at most twenty archive operations and no
+separate Session reads during Apply, down from the prior path's up to twenty-one archive operations and nine Session
+reads.
+Each native command still includes its own authorization, target/currentness checks, preparation, locks, receipt,
+source fences, triggers, History/events, serialization, transaction and rollback. A lost acknowledgement before a
+checkpoint adds one bounded archive reload and a retry through the same native receipt; for L such replay attempts,
+the archive transaction count is at most 20+L and no native effect is duplicated. Each command serialization is
+bounded by 8 KiB; a ten-step application writes at most 80 KiB of command JSON, while each replay reloads at most
+8 KiB. Across 4,096 retained applications, active command JSON is at most 32 MiB per upload. A cleanup call removes
+at most 100 rows; if all are application rows, it physically deletes at most 800 KiB of active command JSON. The
+seven-day expiry makes evidence eligible for deletion; it does not establish timed physical deletion. Explicit
+removal and terminal erasure use the bounded cleanup and continue while rows remain. Completed-unit membership is
+paid by the native episode command once. Page and cleanup work use the archive's section/session indexes. No
+arbitrary LIMIT over unrelated units or History establishes the I/P bounds.
 
+Performance is asked to review the complete caller equation, including nested native work and physical cleanup.
 Native64/512/4096 unrelated same-owner Session/unit/History acceptance and whole-caller row/buffer/byte/effect
-measurements remain integration acceptance. The focused native test establishes the owner outcome only; it is not a
-replacement for the frozen growth oracle. Performance review is requested for any uncertain whole-caller terms.
+measurements remain unmeasured integration acceptance. The focused native test establishes the owner outcome only;
+it is not a replacement for the frozen growth oracle.
