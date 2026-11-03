@@ -27,6 +27,7 @@ import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
+import { createProfileHistoricalNativeFixture, createProfileReceiptObservations } from './profile-historical-native-fixture.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };
@@ -430,6 +431,22 @@ export async function createProfileEntryFixture(
       activate,
       readHead,
       inspect,
+      async historical(identity: { actor: AccountActor; bearer: string }) {
+        const open = await send('steward', 'POST', '/v1/platform/exposure/reading_progress:open');
+        expect(open.status).toBe(200);
+        const receipts = createProfileReceiptObservations(pool);
+        return {
+          receipts,
+          ...createProfileHistoricalNativeFixture({
+            pool,
+            actor: identity.actor,
+            clock: options.clock,
+            createSubject: () => createSubject('game'),
+            send: (method, path, body, key) => send(identity.bearer, method, path, body, key),
+            receipts,
+          }),
+        };
+      },
       setLibraryOpen,
       async grantLibraryGate(accountId: string) {
         await grant(global, accountId, ['gate:personal_library']);

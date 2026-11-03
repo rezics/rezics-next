@@ -1,21 +1,19 @@
 import { expect, test } from 'bun:test';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
-import { authoritativeTimeValue } from '../../src/command/command.ts';
-import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { createCopyCommands } from '../../src/library/copies.ts';
 import * as facts from '../../src/library/entry-store.ts';
-import * as progress from '../../src/library/progress-store.ts';
 import {
   createLibraryProfileMigrationRuntime,
   LIBRARY_PROFILE_MIGRATION_WORKFLOW,
 } from '../../src/library/profile-migration-runtime.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { observeRetentionQueries } from './entry-retention-worker-runtime.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import type { StoredProfileReceipt } from './support/profile-historical-native-fixture.ts';
 
 // Historical fixture only: the same old native command boundary used by
 // profile-copy-compatibility.test.ts. No new production endpoint or NULL-pin default.
@@ -25,6 +23,9 @@ async function historical(f: NativeProfileFixture, subjectId: string) {
     'library_entry:update',
     'library_entry:read',
     'progress_session:read',
+    'progress_session:create',
+    'progress_session:update',
+    'copy:create',
     'copy:read',
     'copy:update',
     'copy:delete',
@@ -33,80 +34,14 @@ async function historical(f: NativeProfileFixture, subjectId: string) {
   await f.grantLibraryGate(owner.actor.accountId);
   const accountId = owner.actor.accountId;
   const route = routeOf(accountId)!;
-  const sessionId = newId(route);
-  const copyIds = [newId(route), newId(route)];
-  const runner = createLibraryCommandRunner({ pool: f.pool });
-  await runner.ownAccount(
-    owner.actor,
-    {
-      action: 'library_entry:update',
-      kind: 'fixture.pre-profile',
-      requestKey: entryKey(),
-      input: { subjectId },
-    },
-    async (tx, command) => {
-      const context = { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) };
-      await facts.insertEntry(tx, route, { accountId, subjectId, state: 'planned', requestedSubjectId: null }, context);
-      await progress.insertSession(
-        tx,
-        route,
-        {
-          id: sessionId,
-          accountId,
-          subjectId,
-          versionSubjectId: null,
-          mode: 'completed_units',
-          unit: 'chapter',
-          total: null,
-        },
-        context,
-      );
-      await progress.addUnits(tx, route, sessionId, ['1', '3', '7'], context);
-      await progress.updateSession(
-        tx,
-        route,
-        sessionId,
-        1,
-        {
-          amount: null,
-          locator: null,
-          position: null,
-          completedUnitCount: 3,
-          state: 'active',
-          completedAt: null,
-        },
-        context,
-      );
-      await progress.appendChange(tx, route, sessionId, 2, { add: ['1', '3', '7'] }, context);
-      for (const id of copyIds)
-        await facts.insertCopy(
-          tx,
-          route,
-          {
-            id,
-            accountId,
-            subjectId,
-            status: 'owned',
-            location: 'Shelf',
-            source: null,
-            acquiredOn: null,
-            disposedOn: null,
-            note: id,
-          },
-          context,
-        );
-      return {
-        value: null,
-        events: [
-          {
-            type: 'com.rezics.library.entry.updated.v1',
-            subject: accountId,
-            data: { subjectId },
-          },
-        ],
-      };
-    },
-  );
+  const fixture = await f.historical(owner);
+  await fixture.entry(subjectId, 'planned');
+  const { recorded } = await fixture.session(subjectId, 'completed_units', 'chapter');
+  const sessionId = recorded.value.id;
+  const copyIds = [
+    (await fixture.copy(subjectId, 'owned')).value.id,
+    (await fixture.copy(subjectId, 'owned')).value.id,
+  ];
   return { owner, accountId, route, sessionId, copyIds };
 }
 
@@ -259,6 +194,80 @@ test('Legacy Library profile migration has a real explicit default worker and ow
     expect((await runtime.readProgress({ accountId: f.owner.actor.accountId })).phase).toBe('ready');
   } finally {
     await worker?.stop();
+    await client.close();
+    await f.close();
+  }
+}, 120_000);
+
+test('historical fixture commits original owner facts and HTTP receipts, including exact retained entry restoration', async () => {
+  const f = await createProfileEntryFixture();
+  const client = await createWorkClient(process.env.DATABASE_URL!, f.pool);
+  try {
+    const owner = await f.identity([
+      'subject:read', 'library_entry:update', 'library_entry:read', 'library_entry:delete',
+      'progress_session:create', 'progress_session:update', 'copy:create',
+    ]);
+    const accountId = owner.actor.accountId;
+    await f.grantLibraryGate(accountId);
+    const legacy = await f.historical(owner);
+    await legacy.seed();
+    const seeded = await snapshot(f, accountId);
+    expect([seeded.entries.length, seeded.sessions.length, seeded.copies.length]).toEqual([5, 18, 4]);
+    expect(seeded.entries.map(({ row }) => row.state).sort()).toEqual(['completed', 'dropped', 'in_progress', 'paused', 'planned']);
+    expect(new Set(seeded.sessions.map(({ row }) => `${row.mode}/${row.unit}`)).size).toBe(18);
+    expect(seeded.history.flatMap((row) => row.units ?? []).map((row: { unit_id: string }) => row.unit_id)).toEqual(
+      Array.from({ length: 6 }, () => ['1', '3', '7']).flat(),
+    );
+    const scalar = await f.pool.query('SELECT amount::text,total::text FROM library.progress_session WHERE route=$1 AND account_id=$2 AND mode=$3 AND unit=$4', [routeOf(accountId), accountId, 'scalar_amount', 'page']);
+    expect(scalar.rows).toEqual([{ amount: '999999999999.999999', total: '999999999999.999999' }]);
+    expect(seeded.copies.map(({ row }) => row.status).sort()).toEqual(['disposed', 'lent', 'ordered', 'owned']);
+    for (const { row } of [...seeded.entries, ...seeded.sessions, ...seeded.copies]) {
+      expect(row.account_id).toBe(accountId);
+      expect(row.library_profile_pin).toBeNull();
+    }
+    const stored = (await f.pool.query<StoredProfileReceipt & { transactionId: string }>(
+      `SELECT principal_id AS "accountId",command_kind AS "commandKind",idempotency_key AS "storageKey",
+       encode(request_digest,'hex') AS digest,response,transaction_id AS "transactionId" FROM core.receipt
+       WHERE partition_no=$1 AND principal_id=$2 AND command_kind=ANY($3::text[]) ORDER BY command_kind,idempotency_key`,
+      [routeOf(accountId)! >> 4, accountId, ['library.entry.put', 'progress_session.start', 'progress_session.record', 'library.copy.create']],
+    )).rows;
+    const observed = stored.map((row) => legacy.receipts.bind(row));
+    expect(observed).toHaveLength(45);
+    expect(observed.filter((row) => row.status === 200)).toHaveLength(18);
+    expect(observed.filter((row) => row.status === 201)).toHaveLength(27);
+    for (let n = 0; n < stored.length; n++) {
+      expect(observed[n]!.requestKey).not.toBe(stored[n]!.storageKey);
+      expect(observed[n]!.digest).toMatch(/^[0-9a-f]{64}$/);
+    }
+    const transactions = new Set(stored.map((row) => row.transactionId));
+    for (const { row } of [...seeded.entries, ...seeded.sessions, ...seeded.copies])
+      expect(transactions.has(row.transaction_id as string)).toBe(true);
+    expect(observed.some(({ response }) => (response as { amount?: string }).amount === '999999999999.999999')).toBe(true);
+    const old = seeded.entries[0]!.row;
+    const retained = await f.commands.deleteEntry(owner.actor, old.subject_id as string, 1, entryKey(), old.incarnation_id as string);
+    if (!('deletionId' in retained.value)) throw new Error('Entry was not retained');
+    const before = await snapshot(f, accountId);
+    const runtime = createLibraryProfileMigrationRuntime({ pool: f.pool, client });
+    let state = await runtime.start({ accountId, releaseDigest: f.originalDigest });
+    await f.activate(f.replacementDigest);
+    while (state.phase !== 'ready') state = await runtime.resume({ accountId });
+    const after = await snapshot(f, accountId);
+    for (const relation of ['entries', 'sessions', 'copies'] as const)
+      expect(withoutPins(after[relation], relation === 'copies')).toEqual(withoutPins(before[relation], relation === 'copies'));
+    expect(after.history).toEqual(before.history);
+    expect(after.receipts).toEqual(before.receipts);
+    const restored = await f.commands.restoreEntry(owner.actor, old.subject_id as string, retained.value, entryKey());
+    expect(restored.value.entry).toMatchObject({
+      subjectId: old.subject_id, incarnationId: old.incarnation_id, state: old.state, createdAt: new Date(old.created_at as string).toISOString(),
+    });
+    const fact = await facts.readEntryFact(f.pool, routeOf(accountId)!, accountId, old.subject_id as string);
+    expect(fact?.pin).toEqual({ provenance: 'legacy', releaseDigest: f.originalDigest, acceptingType: null, profileId: 'legacy-fixed-v1' });
+    const original = stored.findIndex((row) => row.commandKind === 'library.entry.put');
+    const accepted = stored[original]!.response as { entry: { subjectId: string; state: string } };
+    const replay = await f.send(owner.bearer, 'PUT', `/v1/libraryEntries/${accepted.entry.subjectId}`, { state: accepted.entry.state }, observed[original]!.requestKey);
+    expect(replay.status).toBe(observed[original]!.status);
+    await expect(legacy.copy(old.subject_id as string, 'owned')).rejects.toThrow('Library owner no longer admits unpinned facts');
+  } finally {
     await client.close();
     await f.close();
   }

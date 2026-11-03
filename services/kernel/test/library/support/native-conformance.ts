@@ -7,6 +7,7 @@ import type { GrowthDatabase } from '../../support/growth.ts';
 import type { ReadTrace, Principal } from '../../../../../specs/follow-counts-driver.ts';
 import type { LibraryAccountHost } from './native-account-host.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
+import type { AccountActor } from '../../../src/request/access.ts';
 
 export type NativePersona =
   | 'owner'
@@ -36,6 +37,8 @@ export interface NativeConformanceWorld extends LibraryDriver {
     /** The same database/capture used by the established growth classifier. */
     growth: GrowthDatabase;
     token(persona: Exclude<NativePersona, 'anonymous'>): string;
+    /** Authenticate this world's existing bearer for test-only historical command bodies. */
+    accountActor(persona: 'owner' | 'other'): Promise<AccountActor>;
     request(persona: NativePersona, input: NativeRequest): Promise<Response>;
     rawRequest(
       persona: NativePersona,

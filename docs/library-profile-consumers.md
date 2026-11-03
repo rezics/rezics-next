@@ -429,6 +429,23 @@ native gate; a local typecheck is not their proof. The current
 but its historical setup and migration page/receipt observations remain incomplete. Historical pre-profile
 DATA/receipts must use the existing test-only native command fixture boundary. Current production commands require
 current pins/copy kinds and cannot manufacture that history; no production legacy-write endpoint/default is introduced.
+native gate; a local typecheck is not their proof.
+
+The native profile driver's `seedLegacyFacts(fixture, rows?)` binds the test-only
+`createProfileHistoricalNativeFixture({ pool, actor, clock?, createSubject, send, receipts })` helper to
+the conformance world's existing owner. `native.accountActor('owner' | 'other')` authenticates that world's
+actual bearer through its installed Access. The helper reuses the old `ownAccount` command/store boundary;
+it neither provisions a substitute owner nor supplies a production legacy-write endpoint/default.
+`seed(rows?)` defaults to five entry states, eighteen mode/unit pairs and four copy statuses, with sparse
+units and exact decimal/date values; explicit counts select exact fresh-fixture relation sizes.
+The entry fixture's `historical(identity)` reuses this helper for retained entry/copy runtime cases.
+
+Historical receipt HTTP status is observed by replaying each committed original command through its installed
+route, with caller key and storage identity captured from `currentCommandReceipt`; inspection reads the stored
+digest and response unchanged. Current successful HTTP observations use the installed receipt-key codec to join
+caller keys to committed rows. Missing or ambiguous observations remain unavailable. Migration pause/crash,
+page/EXPLAIN and import-run observations remain explicitly unavailable in the outcome driver; this historical
+binding does not establish a complete native suite result.
 
 ### Legacy command compatibility and retirement
 

@@ -33,6 +33,8 @@ import { placement, seed as seedRows, type Population } from '../../support/grow
 import { workerTestEnv } from '../../support/worker-env.ts';
 import type { NativeConformanceWorld } from './native-conformance.ts';
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
+import type { Access } from '../../../src/request/access.ts';
+import { deadlineFor } from '../../../src/request/deadline.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -331,6 +333,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
 
     const cursorKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
     let managementObserver: Parameters<NativeConformanceWorld['native']['observeManagement']>[0];
+    let nativeAccess: Access;
     const app = createKernel({
       requestDeadlineMs: 30_000,
       pool: db!.pool,
@@ -364,6 +367,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
             managementObserver?.({ action, resource: { route: resource.route, id: resource.id } });
           return authorize(...args);
         };
+        nativeAccess = access;
         return access;
       },
     });
@@ -910,6 +914,9 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
                 ? accounts[as]
                 : ownerAccount;
           return tokens.get(as) ?? tokenFor(person);
+        },
+        accountActor(as) {
+          return nativeAccess.authenticate(tokenFor(accounts[as]), { pool: db!.pool, deadline: deadlineFor(30_000) });
         },
         request: nativeRequest,
         async rawRequest(as, method, path, rawJson, headers = {}) {

@@ -14,6 +14,12 @@ import { compileProfileRelease, profileTypes } from './native-conformance-profil
 import { addLabel, json, write, unavailable, grantSubjectRead, deleteAccount } from './native-conformance.ts';
 import { createLibraryProfileMigrationRuntime } from '../../../src/library/profile-migration-runtime.ts';
 import { costOf } from '../../support/growth.ts';
+import { idempotencyKeyOf } from '../../../src/http/request.ts';
+import {
+  createProfileHistoricalNativeFixture,
+  createProfileReceiptObservations,
+  type StoredProfileReceipt,
+} from './profile-historical-native-fixture.ts';
 
 export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriver> {
   const world = await createLibraryDriver();
@@ -36,6 +42,23 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
     });
     const database = world.native.reader;
     const args = [world.accounts.owner.route, world.accounts.owner.id];
+    const receipts = createProfileReceiptObservations(world.native.pool);
+    const request = world.native.request.bind(world.native);
+    world.native.request = async (persona, input) => {
+      const response = await request(persona, input);
+      const key = new Headers(input.headers).get('idempotency-key');
+      if (persona === 'owner' && key !== null) receipts.observe(args[1] as string, idempotencyKeyOf(key), response);
+      return response;
+    };
+    const historical = createProfileHistoricalNativeFixture({
+      pool: world.native.pool,
+      actor: await world.native.accountActor('owner'),
+      clock: () => new Date(world.now()),
+      createSubject: async () => (await world.native.subject(profileTypes.game)).id,
+      send: (method, path, body, key) =>
+        world.native.request('owner', { method, path, body, headers: { 'Idempotency-Key': JSON.stringify(key) } }),
+      receipts,
+    });
     const driver: LibraryProfilesDriver = {
       async fixture() {
         return fixture;
@@ -79,11 +102,9 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
         assertFixture(f);
         return world.native.request(persona, { method, path, body, ...(headers ? { headers } : {}) });
       },
-      async seedLegacyFacts(f) {
+      async seedLegacyFacts(f, rows) {
         assertFixture(f);
-        return unavailable(
-          'committed historical pre-profile DATA restoration fixture; current commands cannot mint unpinned facts or old receipts',
-        );
+        await historical.seed(rows);
       },
       async ensureUnrelatedFacts(f, totalCount) {
         assertFixture(f);
@@ -195,8 +216,8 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
           )
         ).rows;
         const storedReceipts = (
-          await database.query<Omit<LibraryProfilesInspection['receipts'][number], 'status'>>(
-            `SELECT principal_id AS "accountId",idempotency_key AS "requestKey",encode(request_digest,'hex') AS digest,
+          await database.query<StoredProfileReceipt>(
+            `SELECT principal_id AS "accountId",command_kind AS "commandKind",idempotency_key AS "storageKey",encode(request_digest,'hex') AS digest,
           response FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 ORDER BY command_kind,idempotency_key`,
             [world.accounts.owner.partition, args[1]],
           )
@@ -223,9 +244,7 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
           completedUnits,
           changes,
           independentLabels,
-          receipts: storedReceipts.map(() =>
-            unavailable('native receipt HTTP status and original historical request-key observation'),
-          ),
+          receipts: storedReceipts.map((row) => receipts.bind(row)),
           events,
           ratings: (
             await database.query(
