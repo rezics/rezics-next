@@ -182,6 +182,7 @@ export async function readDecisionPage(
           JSON.stringify(initialContext) === JSON.stringify(currentContext) ? currentContext : { state: 'unavailable' };
         // Reuse the actual request authenticator, including native session floors,
         // assignment/client constraints and bearer expiry. Never reconstruct Actor.
+        if (!sameAuthorization()) return false;
         let currentActor: Actor;
         try {
           currentActor = await actorOf(deps.access, request, { pool: deps.pool, deadline: context.deadline });
