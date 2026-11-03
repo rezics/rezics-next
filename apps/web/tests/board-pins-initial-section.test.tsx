@@ -10,7 +10,12 @@ import { continuationBoardId, continuationCursor } from '../src/kernel/fake/boar
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { BoardFeed } from '../src/threads/board-feed';
-import { nativePinnedSection, ordinaryBoardThreads, type BoardFeedThread, type CommunityBoardPage } from '../src/threads/board-feed-data';
+import {
+  nativePinnedSection,
+  ordinaryBoardThreads,
+  type BoardFeedThread,
+  type CommunityBoardPage,
+} from '../src/threads/board-feed-data';
 import { BOARD_PINNED_SECTION_LIMIT } from '../src/threads/board-pins/contract';
 import { BoardPinThreadControls } from '../src/threads/board-pins/controller';
 import {
@@ -22,7 +27,10 @@ import { nativeBoardThreadPin, nativeBoardThreads } from '../src/threads/board-p
 
 const sender: BoardPinSender = { subject: 'moderator-subject', csrfToken: 'original-csrf' };
 
-async function render(page: CommunityBoardPage, extras: { pinProducer?: BoardPinProducer; pinSender?: BoardPinSender } = {}) {
+async function render(
+  page: CommunityBoardPage,
+  extras: { pinProducer?: BoardPinProducer; pinSender?: BoardPinSender } = {},
+) {
   const root = createRootRoute({
     component: () =>
       createElement(BoardFeed, {
@@ -47,7 +55,12 @@ async function fixturePage(): Promise<CommunityBoardPage> {
   );
 }
 
-function asThread(source: BoardFeedThread, id: string, title: string, availability: BoardFeedThread['availability'] = 'available'): BoardFeedThread {
+function asThread(
+  source: BoardFeedThread,
+  id: string,
+  title: string,
+  availability: BoardFeedThread['availability'] = 'available',
+): BoardFeedThread {
   return { ...source, id, title, availability };
 }
 

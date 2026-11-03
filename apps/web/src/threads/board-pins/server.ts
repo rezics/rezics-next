@@ -3,12 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client.ts';
-import {
-  validBoardPinId,
-  type BoardPinAction,
-  type BoardPinBoardRead,
-  type BoardPinCommandResult,
-} from './contract';
+import { validBoardPinId, type BoardPinAction, type BoardPinBoardRead, type BoardPinCommandResult } from './contract';
 import { changeBoardPinRequest, readBoardPinBoardRequest } from './native';
 
 function kernelOriginConfigured(): boolean {

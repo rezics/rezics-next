@@ -144,12 +144,15 @@ type BoardFeedProps = {
   pinSender?: BoardPinSender;
 };
 
-function applyBoardPinReading(page: BoardThreadPage, result: {
-  pinnedThreads: readonly unknown[];
-  threads: readonly unknown[];
-  next: string | null;
-  rankRefreshedAt: string | null;
-}): BoardThreadPage {
+function applyBoardPinReading(
+  page: BoardThreadPage,
+  result: {
+    pinnedThreads: readonly unknown[];
+    threads: readonly unknown[];
+    next: string | null;
+    rankRefreshedAt: string | null;
+  },
+): BoardThreadPage {
   return {
     ...page,
     pinnedThreads: result.pinnedThreads as BoardThreadPage['pinnedThreads'],
@@ -301,9 +304,7 @@ function BoardFeedVisit({
         <BoardPinPageStatus state={{ state: 'unavailable' }} onRetry={pins.refresh} />
       ) : null}
       {ordinary.threads.length ? (
-        <ul className="space-y-2">
-          {ordinary.threads.map((thread) => card(thread))}
-        </ul>
+        <ul className="space-y-2">{ordinary.threads.map((thread) => card(thread))}</ul>
       ) : section.state === 'ready' ? null : (
         <div className="rounded-2xl bg-muted/50 px-5 py-10 text-center">
           <MessageSquareIcon aria-hidden="true" className="mx-auto mb-4 size-8 text-muted-foreground" />
