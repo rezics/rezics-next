@@ -93,7 +93,7 @@ export async function settle(
   const resuming = worker.resuming ?? runMetadata.resuming === true;
   let lease;
   try {
-    lease = acquireDirectoryLease(`${store.attempt(ref).logPath}.settle`);
+    lease = acquireDirectoryLease(`${store.attempt(ref).logPath}.settle`, policy.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError) return; // A live settler will record checks and request landing.
     throw error;

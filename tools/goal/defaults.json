@@ -426,7 +426,38 @@
       "installAttempts": 3,
       "checkAttempts": 3,
       "findingRows": 2000,
-      "runRows": 5000
+      "runRows": 5000,
+      "concurrency": 3,
+      "findingAssertions": 64,
+      "existingProbes": 8,
+      "diagnosticCharacters": 6000,
+      "gitBufferBytes": 33554432,
+      "residentPollMs": 60000
+    },
+    "leases": {
+      "waitMs": 30000,
+      "pollMs": 50,
+      "acquisitionAttempts": 3,
+      "dispatchWaitMs": 900000,
+      "workspacePollMs": 10
+    },
+    "integration": {
+      "checkTimeoutMs": 600000,
+      "affectedTransportAttempts": 2,
+      "typecheckAttempts": 2,
+      "advanceAttempts": 5
+    },
+    "controlPlane": {
+      "devLeaseWaitMs": 30000,
+      "pollMs": 50,
+      "proofAttempts": 3,
+      "candidateValidations": 5,
+      "checkTimeoutMs": 600000,
+      "negativeProbeTimeoutMs": 60000,
+      "testTimeoutMs": 30000,
+      "launchSmokeTimeoutMs": 300000,
+      "negativeProbeFiles": 3,
+      "diagnosticCharacters": 6000
     }
   }
 }

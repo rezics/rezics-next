@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -136,11 +137,13 @@ export class WorkspaceController {
     let lease: DirectoryLease;
     for (;;) {
       try {
-        lease = acquireDirectoryLease(path);
+        lease = acquireDirectoryLease(path, this.settings.policy?.leases);
         break;
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        await new Promise((resolve) =>
+          setTimeout(resolve, (this.settings.policy ?? defaultPolicy).leases.workspacePollMs),
+        );
       }
     }
     try {

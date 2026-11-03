@@ -608,7 +608,10 @@ export class PublicationController {
   }
 
   private lease(): DirectoryLease {
-    return acquireDirectoryLease(join(this.options.stateDirectory, 'publication', 'custody.lease'));
+    return acquireDirectoryLease(
+      join(this.options.stateDirectory, 'publication', 'custody.lease'),
+      this.options.policy?.leases,
+    );
   }
 
   receive(messageId: number, actor: PublicationActor): { id: string; slotUtc: string; state: string; replay: boolean } {

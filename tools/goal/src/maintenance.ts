@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Runtime } from './config.ts';
@@ -13,7 +14,7 @@ export type MaintenanceJob = (typeof MAINTENANCE_JOBS)[number];
 export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runtime): Promise<number> {
   let lease;
   try {
-    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'maintenance.lease'));
+    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'maintenance.lease'), runtime.settings.policy?.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError) return 0;
     throw error;
@@ -95,7 +96,9 @@ export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runti
 }
 
 /** systemd owns this process; each pass waits for verification to finish before the next starts. */
-export async function runResidentVerifier(runtime: Pick<Runtime, 'verify'>): Promise<number> {
+export async function runResidentVerifier(
+  runtime: Pick<Runtime, 'verify'> & Partial<Pick<Runtime, 'settings'>>,
+): Promise<number> {
   const controller = new AbortController();
   const stop = () => controller.abort();
   process.once('SIGTERM', stop);
@@ -110,7 +113,7 @@ export async function runResidentVerifier(runtime: Pick<Runtime, 'verify'>): Pro
           controller.signal.removeEventListener('abort', finish);
           resolve();
         };
-        const timer = setTimeout(finish, 60_000);
+        const timer = setTimeout(finish, (runtime.settings?.policy ?? defaultPolicy).verifier.residentPollMs);
         controller.signal.addEventListener('abort', finish, { once: true });
       });
     }

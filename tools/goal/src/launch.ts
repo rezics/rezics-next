@@ -530,7 +530,12 @@ export async function awaitHostCapacity(
   first = false,
   taskId?: string,
   targetAttempt?: number,
-  options: { pollIntervalMs?: number; now?: () => number; policy?: ControlPolicy['capacity'] | undefined } = {},
+  options: {
+    pollIntervalMs?: number;
+    now?: () => number;
+    policy?: ControlPolicy['capacity'] | undefined;
+    leasePolicy?: ControlPolicy['leases'] | undefined;
+  } = {},
 ): Promise<CapacityRelease> {
   const policy = options.policy ?? defaultPolicy.capacity;
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
@@ -564,7 +569,7 @@ export async function awaitHostCapacity(
       });
       let admissionLease: ReturnType<typeof acquireDirectoryLease>;
       try {
-        admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'));
+        admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'), options.leasePolicy);
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
         await new Promise((resolve) => setTimeout(resolve, policy.admissionRetryMs));

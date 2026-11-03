@@ -381,7 +381,11 @@ export function installShared(
   }
   const store = join(storeRoot, key);
   mkdirSync(storeRoot, { recursive: true });
-  const lease = acquireDirectoryLeaseWaiting(join(storeRoot, '.leases', key), policy.dependencies.storeLeaseWaitMs);
+  const lease = acquireDirectoryLeaseWaiting(
+    join(storeRoot, '.leases', key),
+    policy.dependencies.storeLeaseWaitMs,
+    policy.leases,
+  );
   try {
     // Any published location belongs to its existing users, even when its skeleton is incomplete.
     if (lstatSyncSafe(store) && !existsSync(join(store, 'node_modules', '.bun'))) {

@@ -313,7 +313,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   const stateSweepIntervalMs = runtime.hostSweepIntervalMs ?? policy.host.stateSweepIntervalMs;
   if (!Number.isSafeInteger(stateSweepIntervalMs) || stateSweepIntervalMs <= 0)
     throw new Error('Manager host state sweep interval must be a positive integer');
-  const lease = acquireDirectoryLease(`${runtime.managerSocket}.lease`);
+  const lease = acquireDirectoryLease(`${runtime.managerSocket}.lease`, policy.leases);
   let activeRequests = 0,
     stopServer: (() => void) | undefined;
   let stopRequested = false;

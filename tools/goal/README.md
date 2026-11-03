@@ -436,7 +436,10 @@ a delivery keeps its first persisted report identity when retried.
 Storage, dependency preparation, promotion and verifier retention use the same startup policy. Explicit installer
 limits and injected runners retain precedence. Installer capture and cleanup limits travel in the independent
 supervisor request; global-input caches are scoped by policy identity. Resident and standalone verifier deadlines
-retain their existing four-hour and two-hour defaults respectively.
+retain their existing four-hour and two-hour defaults respectively. Directory lease acquisition and waiting, integration
+retries, control-plane lane/proof limits, and verifier concurrency and assertion/probe bounds also use that snapshot.
+Explicit runners and lease deadlines retain precedence within the configured control-plane lane ceiling. A single
+existing-failure probe samples the earliest prefix and leaves any unsampled range unproven.
 
 | Setting                                               | Default                     | Purpose                                                                              |
 | ----------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
@@ -626,6 +629,31 @@ retain their existing four-hour and two-hour defaults respectively.
 | `policy.verifier.checkAttempts`                       | `3`                         | Verifier check attempts including the first, retrying infrastructure failures.       |
 | `policy.verifier.findingRows`                         | `2000`                      | Maximum durable verifier findings and default finding page size.                     |
 | `policy.verifier.runRows`                             | `5000`                      | Maximum durable verifier cached runs.                                                |
+| `policy.leases.waitMs` | `30000` | Default synchronous directory lease wait (ms); explicit caller deadlines retain precedence. |
+| `policy.leases.pollMs` | `50` | Synchronous directory lease wait polling interval (ms). |
+| `policy.leases.acquisitionAttempts` | `3` | Atomic directory lease publication attempts, including dead-owner reclamation races. |
+| `policy.leases.dispatchWaitMs` | `900000` | Maximum wait for the worker dispatch lifecycle lease (ms). |
+| `policy.leases.workspacePollMs` | `10` | Shared module workspace launch lease polling interval (ms). |
+| `policy.integration.checkTimeoutMs` | `600000` | Default integration check deadline when no runner is injected (ms). |
+| `policy.integration.affectedTransportAttempts` | `2` | Affected-check attempts after check-host transport failure. |
+| `policy.integration.typecheckAttempts` | `2` | Required dev typecheck attempts after compiler infrastructure failure. |
+| `policy.integration.advanceAttempts` | `5` | Attempts to merge into a branch while its target ref moves. |
+| `policy.controlPlane.devLeaseWaitMs` | `30000` | Default and maximum asynchronous dev-lane wait for a control-plane release (ms). |
+| `policy.controlPlane.pollMs` | `50` | Control-plane dev-lane wait and ordinary proof interruption polling interval (ms). |
+| `policy.controlPlane.proofAttempts` | `3` | Interrupted ordinary proof attempts permitted per accepted control-plane source. |
+| `policy.controlPlane.candidateValidations` | `5` | Candidate validations permitted per accepted ordinary control-plane source. |
+| `policy.controlPlane.checkTimeoutMs` | `600000` | Mandatory control-plane install, typecheck and test-suite runner deadline (ms). |
+| `policy.controlPlane.negativeProbeTimeoutMs` | `60000` | Negative-only control-plane bisection probe runner deadline (ms). |
+| `policy.controlPlane.testTimeoutMs` | `30000` | Per-test timeout in mandatory control-plane suite and negative probe commands (ms). |
+| `policy.controlPlane.launchSmokeTimeoutMs` | `300000` | Outer launch-smoke runner deadline (ms). |
+| `policy.controlPlane.negativeProbeFiles` | `3` | Maximum failing test files inherited by a negative-only bisection probe. |
+| `policy.controlPlane.diagnosticCharacters` | `6000` | Maximum compiler output characters in a control-plane diagnostic. |
+| `policy.verifier.concurrency` | `3` | Maximum checks or existing-failure probes executed concurrently by one verifier. |
+| `policy.verifier.findingAssertions` | `64` | Maximum stable assertions per verifier result; larger results remain infrastructure/unverified. |
+| `policy.verifier.existingProbes` | `8` | Maximum intermediate commits sampled for an existing failure; one samples the earliest prefix. |
+| `policy.verifier.diagnosticCharacters` | `6000` | Maximum output characters in a verifier revert notification. |
+| `policy.verifier.gitBufferBytes` | `33554432` | Native Git revert and commit output buffer limit (bytes). |
+| `policy.verifier.residentPollMs` | `60000` | Pause between completed resident verifier passes (ms). |
 | `policy.routing.implementation.maxSteps`              | `300`                       | Implementation route step limit.                                                     |
 | `policy.routing.implementation.maxMs`                 | `7200000`                   | Implementation route attempt time budget (ms).                                       |
 | `policy.routing.interface.maxSteps`                   | `300`                       | Interface route step limit.                                                          |

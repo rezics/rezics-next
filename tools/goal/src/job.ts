@@ -257,11 +257,11 @@ export const SILENCE_WINDOW_MS = defaults.silenceMs;
 /** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
 
 /** Hold both train lanes while checking and repairing a landing with no queued request. */
-function acquireIdleTrainLeases(stateDirectory: string): DirectoryLease[] | undefined {
+function acquireIdleTrainLeases(stateDirectory: string, policy = defaultPolicy): DirectoryLease[] | undefined {
   const leases: DirectoryLease[] = [];
   try {
     for (const name of ['train-main.lease', 'train.lease'])
-      leases.push(acquireDirectoryLease(join(stateDirectory, name)));
+      leases.push(acquireDirectoryLease(join(stateDirectory, name), policy.leases));
     return leases;
   } catch (error) {
     for (const lease of leases) lease.release();
@@ -290,7 +290,8 @@ export class WorkerJob implements GateOutcomeSink {
     readonly inbox: ManagerInbox,
     readonly consultation: typeof consult = consult,
     readonly afterSettle: () => Promise<void> = async () => {},
-    private readonly acquireOrphanLease: (path: string) => DirectoryLease = acquireDirectoryLease,
+    private readonly acquireOrphanLease: (path: string) => DirectoryLease = (path) =>
+      acquireDirectoryLease(path, tasks.settings.policy?.leases),
     private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
   ) {}
   private track(work: Promise<void>): void {
@@ -631,14 +632,18 @@ export class WorkerJob implements GateOutcomeSink {
         startsFirst(task),
         task.id,
         ref.attempt,
-        { policy: this.tasks.settings.policy?.capacity },
+        { policy: this.tasks.settings.policy?.capacity, leasePolicy: this.tasks.settings.policy?.leases },
       );
       let worker: RunningWorker | undefined;
       let lease: DirectoryLease | undefined;
       try {
         // Capacity may take time. Reacquire the task lease only after it, then take the current store and Git
         // snapshot with no SQLite transaction open. A replacement attempt or reshape wins before this launch.
-        lease = acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+        lease = acquireDirectoryLeaseWaiting(
+          join(this.tasks.settings.stateDirectory, 'leases', ref.taskId),
+          undefined,
+          this.tasks.settings.policy?.leases,
+        );
         const currentTask = this.tasks.store.task(ref.taskId);
         const currentAttempt = this.tasks.store.attempt(ref);
         if (
@@ -945,7 +950,11 @@ export class WorkerJob implements GateOutcomeSink {
     }
     const lease = leaseHeld
       ? undefined
-      : await acquireDirectoryLeaseWaiting(join(this.tasks.settings.stateDirectory, 'leases', ref.taskId));
+      : await acquireDirectoryLeaseWaiting(
+          join(this.tasks.settings.stateDirectory, 'leases', ref.taskId),
+          undefined,
+          this.tasks.settings.policy?.leases,
+        );
     try {
       const store = this.tasks.store;
       const current = store.attempt(ref);
@@ -1124,7 +1133,10 @@ export class WorkerJob implements GateOutcomeSink {
     for (const taskId of candidates) {
       let lease: DirectoryLease;
       try {
-        lease = acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', taskId));
+        lease = acquireDirectoryLease(
+          join(this.tasks.settings.stateDirectory, 'leases', taskId),
+          this.tasks.settings.policy?.leases,
+        );
       } catch (error) {
         this.recoveryFailed(taskId, 'dependency release', error);
         continue;
@@ -1288,7 +1300,7 @@ export class WorkerJob implements GateOutcomeSink {
           const task = store.task(candidate.id);
           if (task.currentAttempt !== ref.attempt || task.state !== 'landing') continue;
           if (store.retryIntent(ref)?.status === 'pending') continue;
-          const trainLeases = acquireIdleTrainLeases(this.tasks.settings.stateDirectory);
+          const trainLeases = acquireIdleTrainLeases(this.tasks.settings.stateDirectory, this.tasks.settings.policy);
           if (!trainLeases) continue;
           try {
             const attempt = store.attempt(ref);
@@ -1367,7 +1379,10 @@ export class WorkerJob implements GateOutcomeSink {
           // A released `after` task must refresh its worktree base under the task lease before it starts.
           if (task.brief.after.length && this.tasks.dependenciesMet(task, tasks)) continue;
           try {
-            acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId)).release();
+            acquireDirectoryLease(
+              join(this.tasks.settings.stateDirectory, 'leases', attempt.taskId),
+              this.tasks.settings.policy?.leases,
+            ).release();
           } catch (error) {
             this.recoveryFailed(attempt.taskId, 'pending attempt recovery', error);
             continue;
@@ -1417,7 +1432,10 @@ export class WorkerJob implements GateOutcomeSink {
           continue;
         if (Date.now() - Date.parse(task.createdAt) < graceMs || waiting.has(task.id)) continue;
         try {
-          acquireDirectoryLease(join(this.tasks.settings.stateDirectory, 'leases', task.id)).release();
+          acquireDirectoryLease(
+            join(this.tasks.settings.stateDirectory, 'leases', task.id),
+            this.tasks.settings.policy?.leases,
+          ).release();
         } catch (error) {
           this.recoveryFailed(task.id, 'first start', error);
           continue;

@@ -483,7 +483,11 @@ export class WorkerTasks {
     const briefPath = join(this.settings.stateDirectory, 'briefs', `${id}.md`);
     // The lease covers worktree creation, dependency install and frozen-file formatting, about a minute under load.
     // When managers dispatched together, the 30-second default failed dispatches before their tasks existed.
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', 'dispatch'),
+      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
+      this.settings.policy?.leases,
+    );
     try {
       const module = webModule(submittedBrief, this.settings);
       if (module) {
@@ -688,7 +692,10 @@ export class WorkerTasks {
     options: { expectedAttempt: number; brief: string },
     actor?: AuthenticatedManager | null,
   ): { taskId: string; attempt: 0; status: 'amended' | 'unchanged'; contractSha256: string } {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     let briefPath: string | undefined;
     try {
       return this.store.write({ taskId, attempt: options.expectedAttempt }, () => {
@@ -803,7 +810,10 @@ export class WorkerTasks {
     status: 'released';
     checks: string[];
   } {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     try {
       const task = this.store.task(taskId);
       if (!Number.isSafeInteger(expectedAttempt) || expectedAttempt < 1 || task.currentAttempt !== expectedAttempt)
@@ -826,7 +836,10 @@ export class WorkerTasks {
     options: ProofStartOptions,
     actor?: AuthenticatedManager | null,
   ): ProofStartRegistration {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     let briefPath: string | undefined;
     try {
       const task = this.store.task(taskId);
@@ -918,7 +931,10 @@ export class WorkerTasks {
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
     const expectedAttempt = options.expectedAttempt ?? this.store.task(taskId).currentAttempt;
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     try {
       this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
     } finally {
@@ -933,7 +949,10 @@ export class WorkerTasks {
     briefFile: string,
     actor: AuthenticatedManager,
   ): void {
-    const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLease(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      this.settings.policy?.leases,
+    );
     try {
       const task = this.store.task(taskId);
       if (task.currentAttempt !== expectedAttempt)
@@ -1201,7 +1220,10 @@ export class WorkerTasks {
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
       // the others get LeaseHeldError instead of running git and bun in the same worktree at once.
-      const lease = acquireDirectoryLease(join(this.settings.stateDirectory, 'leases', taskId));
+      const lease = acquireDirectoryLease(
+        join(this.settings.stateDirectory, 'leases', taskId),
+        this.settings.policy?.leases,
+      );
       try {
         // Another process may have started it while this one waited for capacity.
         if (this.store.task(taskId).state !== 'ready') throw new LeaseHeldError(`Task already started: ${taskId}`);
@@ -1283,7 +1305,11 @@ export class WorkerTasks {
   /** Recreate a finished task's removed checkout while holding its task lease. */
   private ensureWorktree(task: Task): void {
     if (existsSync(task.worktree)) return;
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', 'dispatch'), 15 * 60_000);
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', 'dispatch'),
+      (this.settings.policy ?? defaultPolicy).leases.dispatchWaitMs,
+      this.settings.policy?.leases,
+    );
     try {
       mkdirSync(dirname(task.worktree), { recursive: true });
       try {
@@ -1415,7 +1441,13 @@ export class WorkerTasks {
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
     try {
-      lease = leased ? undefined : acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+      lease = leased
+        ? undefined
+        : acquireDirectoryLeaseWaiting(
+            join(this.settings.stateDirectory, 'leases', taskId),
+            undefined,
+            this.settings.policy?.leases,
+          );
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
@@ -1936,7 +1968,11 @@ export class WorkerTasks {
     }
   }
   async stop(taskId: string, cancelled = false): Promise<void> {
-    const lease = acquireDirectoryLeaseWaiting(join(this.settings.stateDirectory, 'leases', taskId));
+    const lease = acquireDirectoryLeaseWaiting(
+      join(this.settings.stateDirectory, 'leases', taskId),
+      undefined,
+      this.settings.policy?.leases,
+    );
     let settlementLease: ReturnType<typeof acquireDirectoryLease> | undefined;
     try {
       let task = this.store.task(taskId);
@@ -1951,7 +1987,11 @@ export class WorkerTasks {
       }
       const settleLogPath = this.store.attempt(ref).logPath;
       // A worker's exit may wake its follower while cancellation is still reaping descendants.
-      settlementLease = acquireDirectoryLeaseWaiting(`${settleLogPath}.settle`);
+      settlementLease = acquireDirectoryLeaseWaiting(
+        `${settleLogPath}.settle`,
+        undefined,
+        this.settings.policy?.leases,
+      );
       task = this.store.task(taskId);
       if (task.currentAttempt !== ref.attempt || ['integrated', 'merged'].includes(task.state))
         throw new StaleAttemptError(ref, task.currentAttempt);

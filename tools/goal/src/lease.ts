@@ -1,3 +1,4 @@
+import { defaultPolicy } from './policy.ts';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync } from 'node:fs';
@@ -45,11 +46,16 @@ export class LeaseHeldError extends Error {}
 export type DirectoryLease = { release(): void };
 
 /** Synchronous callers wait briefly for lifecycle leases, then fail with the same identifiable error. */
-export function acquireDirectoryLeaseWaiting(directory: string, timeoutMs = 30_000): DirectoryLease {
+export function acquireDirectoryLeaseWaiting(
+  directory: string,
+  timeoutMs?: number,
+  policy = defaultPolicy.leases,
+): DirectoryLease {
+  timeoutMs ??= policy.waitMs;
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
-      return acquireDirectoryLease(directory);
+      return acquireDirectoryLease(directory, policy);
     } catch (error) {
       if (!(error instanceof LeaseHeldError)) throw error;
       // This wait blocks the event loop, so a lease this process holds is never released while it waits.
@@ -58,13 +64,13 @@ export function acquireDirectoryLeaseWaiting(directory: string, timeoutMs = 30_0
         throw new LeaseHeldError(`Lease held by this process: ${directory}`);
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new LeaseHeldError(`Lease held after waiting ${timeoutMs}ms: ${directory}`);
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(50, remaining));
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(policy.pollMs, remaining));
     }
   }
 }
 
 /** Fail closed while a new owner is writing its identity. No age limit evicts a live owner. */
-export function acquireDirectoryLease(directory: string): DirectoryLease {
+export function acquireDirectoryLease(directory: string, policy = defaultPolicy.leases): DirectoryLease {
   mkdirSync(dirname(directory), { recursive: true });
   const identity = processIdentity();
   if (!identity) throw new Error('Cannot identify lease owner');
@@ -73,7 +79,7 @@ export function acquireDirectoryLease(directory: string): DirectoryLease {
   try {
     fs.mkdirSync(prepared);
     fs.writeFileSync(join(prepared, `${token}.json`), JSON.stringify({ ...identity, token }));
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < policy.acquisitionAttempts; attempt++) {
       try {
         // Publish a populated directory atomically: no empty new-owner window for a reaper.
         renameSync(prepared, directory);

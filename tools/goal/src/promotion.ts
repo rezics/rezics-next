@@ -1105,7 +1105,7 @@ export async function promote(options: PromotionOptions): Promise<void> {
   if (paused()) return;
   let lease;
   try {
-    lease = acquireDirectoryLease(join(settings.stateDirectory, 'promotion.lease'));
+    lease = acquireDirectoryLease(join(settings.stateDirectory, 'promotion.lease'), settings.policy?.leases);
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;
