@@ -7,6 +7,7 @@ import type {
 import { createLibraryDriver } from './outcome-driver.ts';
 import { mountCollectionInZone } from './native-zone-collection-fixture.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
+import { createDynamicGrowthFixture } from './native-dynamic-growth-fixture.ts';
 import {
   deleteAccount,
   grantSubjectRead,
@@ -32,6 +33,11 @@ export type NativeDynamicCollectionsDriver = Omit<DynamicCollectionsDriver, 'hol
 export async function createDynamicCollectionsDriver(
   installedWorld?: NativeConformanceWorld,
 ): Promise<NativeDynamicCollectionsDriver> {
+  return (await createDynamicCollectionsFixture(4096, installedWorld)).driver;
+}
+
+/** The bounded sanity suite uses the same binding with a smaller pre-scenario catalogue baseline. */
+export async function createDynamicCollectionsFixture(sparseCapacity = 4096, installedWorld?: NativeConformanceWorld) {
   const world = installedWorld ?? (await createLibraryDriver());
   try {
     const input = profileSources('profile-v1');
@@ -58,6 +64,7 @@ export async function createDynamicCollectionsDriver(
       recipe: fixture('recipe'),
       record: fixture('record'),
     };
+    const growth = await createDynamicGrowthFixture(world, profiles, sparseCapacity);
     const labels = new Map<string, string>();
     const privateFacts = createNativePrivateFactsFixture(world);
     const driver: NativeDynamicCollectionsDriver = {
@@ -166,9 +173,7 @@ export async function createDynamicCollectionsDriver(
         return unavailable('native durable preparation step observations');
       },
       replayProjectionEvents: (order) => replayProjectionEvents(world, order),
-      async seedUnrelatedFacts() {
-        return unavailable('native independently shaped dynamic population fixture');
-      },
+      seedUnrelatedFacts: growth.seed,
       inspect: () => inspectNativeDynamicCollections(world),
       async measure(operation) {
         await world.native.capture(operation);
@@ -185,7 +190,7 @@ export async function createDynamicCollectionsDriver(
       },
       close: world.close,
     };
-    return driver;
+    return { driver, world, growth };
   } catch (error) {
     await world.close();
     throw error;

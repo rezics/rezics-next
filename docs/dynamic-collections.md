@@ -109,6 +109,8 @@ for the finite parent required before new preparation admission.
 
 ## One Collection page
 
+Native growth fixtures stage real nonmatching catalogue subjects before scenario subjects so sparse owner-source growth can add preceding facts without rewriting selected membership; this fixed catalogue baseline is separate from each axis's grow-to total.
+
 The existing Collection resource and `GET /v1/collections/{collectionId}/members` remain the canonical page for both membership
 kinds. The Web shelf page is this page for the account's built-in dynamic Collection, with no shelf template fork; it uses the actual
 shared Collection page/template. The shelf has no independent list route or cursor.

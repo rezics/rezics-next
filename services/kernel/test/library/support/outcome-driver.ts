@@ -32,7 +32,7 @@ import {
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../../support/receipt-keys.ts';
 import type { NativeConformanceOptions, NativeConformanceWorld } from './native-conformance.ts';
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 import type { Access } from '../../../src/request/access.ts';
@@ -319,6 +319,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     let fixedInstant: string | undefined;
     const scenarioNow = () => fixedInstant ?? new Date().toISOString();
     db = await openGrowthDatabase(databaseUrl);
+    configureTestReceiptKeys(db.admin);
     restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
 
     authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
