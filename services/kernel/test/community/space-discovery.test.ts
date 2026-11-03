@@ -97,8 +97,16 @@ test('Space bootstrap has exact native positions, sparse bounded pages and curre
     expect((await hydrate([standalone.spaceId])).get(standalone.spaceId)?.avatar).toBeNull();
     await expect(source.read(partition, [newId((route + 16) % 65536)])).rejects.toThrow();
     await expect(source.read(partition, Array(101).fill(host.spaceId))).rejects.toThrow();
-    await expect(source.page(partition, { ...after, route: (route + 1) % 65536 }, 1)).rejects.toThrow();
+    await expect(source.page(partition, { id: host.spaceId, route: (route + 1) % 65536 }, 1)).rejects.toThrow();
     await expect(source.page(partition, null, 101)).rejects.toThrow();
+    await f.db.pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
+    try {
+      await expect(source.count(partition)).rejects.toThrow();
+      await expect(source.read(partition, [standalone.spaceId])).rejects.toThrow();
+      await expect(hydrate([standalone.spaceId])).rejects.toThrow();
+    } finally {
+      await f.db.pool.query("UPDATE core.partition SET write_state='active' WHERE partition_no=$1", [partition]);
+    }
 
     const patch = async (body: unknown, kernel = f.kernel) => {
       const current = await f.call('GET', `/v1/realms/${realm.realmId}`, {
