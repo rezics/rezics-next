@@ -210,12 +210,17 @@ function itemFailure(error: unknown, operation: 'add' | 'note' | 'order') {
   if (operation === 'note' && ['conflict', 'not_found'].includes(error.code))
     return { state: 'failed', reason: error.code } as const;
   if (operation === 'order' && ['conflict', 'collection_move_unsupported', 'not_found'].includes(error.code))
-    return { state: error.code === 'collection_move_unsupported' ? 'unsupported' : 'failed', reason: error.code } as const;
+    return {
+      state: error.code === 'collection_move_unsupported' ? 'unsupported' : 'failed',
+      reason: error.code,
+    } as const;
   return null;
 }
 function subjectUnavailable(error: unknown) {
-  return error instanceof SubjectIdentityUnavailableError ||
-    (error instanceof ProblemError && ['forbidden', 'not_found'].includes(error.code));
+  return (
+    error instanceof SubjectIdentityUnavailableError ||
+    (error instanceof ProblemError && ['forbidden', 'not_found'].includes(error.code))
+  );
 }
 const notFound = () => new ProblemError('not_found');
 const conflict = () => new ProblemError('conflict');
@@ -302,7 +307,12 @@ async function expireRoot(pool: Pool, row: RecoveryRoot) {
   await purgeRecoveryRows(pool, row.route, row.accountId, row.uploadId);
 }
 
-async function expireOwnerEvidence(connection: Pick<PoolClient, 'query'>, route: number, accountId: string, now: string) {
+async function expireOwnerEvidence(
+  connection: Pick<PoolClient, 'query'>,
+  route: number,
+  accountId: string,
+  now: string,
+) {
   await connection.query(
     `UPDATE library.collection_archive_recovery SET state='expired',source_record_count=0,
        source_membership_complete=false,manifest='{}'::jsonb,coverage='[]'::jsonb,source_pins=NULL,
@@ -377,8 +387,10 @@ function projectArchive(records: readonly ArchiveRecord[]) {
         sourceId: id,
         sourceSubjectId: null,
         title: typeof record.title === 'string' ? record.title : null,
-        description: record.description === null ? null : typeof record.description === 'string' ? record.description : null,
-        metadataValid: validText(record.title, 200, 800, false) &&
+        description:
+          record.description === null ? null : typeof record.description === 'string' ? record.description : null,
+        metadataValid:
+          validText(record.title, 200, 800, false) &&
           (record.description === null || validText(record.description, 2_000, 8_000, true)),
         visibility: safeString(record.visibility),
         membershipKind: safeString(record.membership_kind),
@@ -395,9 +407,8 @@ function projectArchive(records: readonly ArchiveRecord[]) {
     } else if (record.section === 'occurrences') {
       const id = record.member_id;
       if (typeof id !== 'string' || !UUID.test(id)) continue;
-      const sourceCollection = typeof record.collection_id === 'string' && UUID.test(record.collection_id)
-        ? record.collection_id
-        : '';
+      const sourceCollection =
+        typeof record.collection_id === 'string' && UUID.test(record.collection_id) ? record.collection_id : '';
       if (!sourceCollection || !collectionRows.has(sourceCollection)) membershipComplete = false;
       const order = record.ordinal_key;
       const orderPresent = isOrdinalKey(order);
@@ -419,7 +430,7 @@ function projectArchive(records: readonly ArchiveRecord[]) {
         presentationKind: null,
         memberCount: 0,
         orderedCount: 0,
-        orderKey: orderPresent ? order as string : '',
+        orderKey: orderPresent ? (order as string) : '',
         orderPresent,
         note,
         notePresent,
@@ -446,7 +457,10 @@ function projectArchive(records: readonly ArchiveRecord[]) {
 function sourcePins(records: readonly ArchiveRecord[]): string[] | null {
   const record = records.find((item) => item.section === 'collectionPins');
   if (!record) return [];
-  if (!Array.isArray(record.collection_ids) || record.collection_ids.some((id) => typeof id !== 'string' || !UUID.test(id)))
+  if (
+    !Array.isArray(record.collection_ids) ||
+    record.collection_ids.some((id) => typeof id !== 'string' || !UUID.test(id))
+  )
     return null;
   return record.collection_ids as string[];
 }
@@ -500,21 +514,26 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   async function load(owner: OwnerActor, uploadId: string): Promise<RecoveryRoot> {
     const route = routeOf(owner.accountId)!;
     if (!UUID.test(uploadId) || routeOf(uploadId) === null) throw notFound();
-    let result = await deps.pool.query<RootRow>(
-      `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
-      [route, owner.accountId, uploadId],
-    );
+    let result = await deps.pool.query<RootRow>(`${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3`, [
+      route,
+      owner.accountId,
+      uploadId,
+    ]);
     const found = result.rows[0];
     if (!found) throw notFound();
     let root = rowValue(found);
     const now = deps.clock().getTime();
-    if (Date.parse(root.expiresAt) <= now && root.state !== 'expired' &&
-      !(root.leaseUntil && Date.parse(root.leaseUntil) > now)) {
+    if (
+      Date.parse(root.expiresAt) <= now &&
+      root.state !== 'expired' &&
+      !(root.leaseUntil && Date.parse(root.leaseUntil) > now)
+    ) {
       await expireRoot(deps.pool, root);
-      result = await deps.pool.query<RootRow>(
-        `${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
-        [route, owner.accountId, uploadId],
-      );
+      result = await deps.pool.query<RootRow>(`${rootSelect()} WHERE route=$1 AND account_id=$2 AND upload_id=$3`, [
+        route,
+        owner.accountId,
+        uploadId,
+      ]);
       root = rowValue(result.rows[0]!);
     } else if (root.state === 'expired') {
       await purgeRecoveryRows(deps.pool, route, owner.accountId, uploadId);
@@ -522,7 +541,12 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return root;
   }
 
-  async function currentRoot(owner: OwnerActor, uploadId: string, signal?: AbortSignal, scopes: readonly string[] = []) {
+  async function currentRoot(
+    owner: OwnerActor,
+    uploadId: string,
+    signal?: AbortSignal,
+    scopes: readonly string[] = [],
+  ) {
     const root = await load(owner, uploadId);
     await admit(owner, scopes);
     abortIfRequested(signal);
@@ -533,8 +557,11 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const owner = await admit(actor);
     abortIfRequested(signal);
     const maxBase64Bytes = Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4;
-    if (typeof uploadBase64 !== 'string' || uploadBase64.length > maxBase64Bytes ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(uploadBase64))
+    if (
+      typeof uploadBase64 !== 'string' ||
+      uploadBase64.length > maxBase64Bytes ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(uploadBase64)
+    )
       throw new ProblemError('invalid_request');
     const bytes = Buffer.from(uploadBase64, 'base64');
     if (bytes.byteLength > LIBRARY_ARCHIVE_LIMITS.uploadBytes || bytes.toString('base64') !== uploadBase64)
@@ -564,7 +591,10 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const expiresAt = new Date(Date.parse(createdAt) + lifetime).toISOString();
     const uploadId = newId(route);
     const manifest = archive.manifest;
-    const coverage = archive.coverage.map((item) => ({ ...item, reason: sectionReasons[item.section] ?? 'Unsupported archive section.' }));
+    const coverage = archive.coverage.map((item) => ({
+      ...item,
+      reason: sectionReasons[item.section] ?? 'Unsupported archive section.',
+    }));
     const pins = sourcePins(archive.records);
     const jsonRecords = JSON.stringify(rows);
     await admit(owner);
@@ -572,7 +602,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     await withConnection(deps.pool, async (connection: PoolClient) => {
       await connection.query('BEGIN');
       try {
-        await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`library.archive.recovery:${owner.accountId}`]);
+        await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+          `library.archive.recovery:${owner.accountId}`,
+        ]);
         await expireOwnerEvidence(connection, route, owner.accountId, createdAt);
         const count = await connection.query<{ count: string }>(
           `SELECT count(*)::text AS count FROM library.collection_archive_recovery
@@ -636,7 +668,10 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   function collectionCursor(root: RecoveryRoot, collectionId: string, after: readonly CursorKey[], limit: number) {
     return encodeCursor(
       deps.tokens,
-      { operation: 'library_archive_collection.preview', parameters: { accountId: root.accountId, uploadId: root.uploadId, collectionId, limit } },
+      {
+        operation: 'library_archive_collection.preview',
+        parameters: { accountId: root.accountId, uploadId: root.uploadId, collectionId, limit },
+      },
       { epoch: cursorEpoch(root), after },
       Date.parse(root.createdAt),
     );
@@ -644,17 +679,31 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   function collectionSeek(root: RecoveryRoot, collectionId: string, token: string, limit: number) {
     const decoded = decodeCursor(
       deps.tokens,
-      { operation: 'library_archive_collection.preview', parameters: { accountId: root.accountId, uploadId: root.uploadId, collectionId, limit } },
+      {
+        operation: 'library_archive_collection.preview',
+        parameters: { accountId: root.accountId, uploadId: root.uploadId, collectionId, limit },
+      },
       token,
       deps.clock().getTime(),
     );
-    if (!decoded.ok || decoded.epoch !== cursorEpoch(root) || decoded.after.length !== 2 ||
-      typeof decoded.after[0] !== 'string' || typeof decoded.after[1] !== 'string' || !UUID.test(decoded.after[1]))
+    if (
+      !decoded.ok ||
+      decoded.epoch !== cursorEpoch(root) ||
+      decoded.after.length !== 2 ||
+      typeof decoded.after[0] !== 'string' ||
+      typeof decoded.after[1] !== 'string' ||
+      !UUID.test(decoded.after[1])
+    )
       throw new ProblemError('invalid_cursor');
     return [decoded.after[0], decoded.after[1]] as const;
   }
 
-  async function listCollections(actor: Actor, uploadId: string, options: { limit?: number; cursor?: string }, signal?: AbortSignal) {
+  async function listCollections(
+    actor: Actor,
+    uploadId: string,
+    options: { limit?: number; cursor?: string },
+    signal?: AbortSignal,
+  ) {
     const owner = await admit(actor);
     abortIfRequested(signal);
     const root = await load(owner, uploadId);
@@ -672,8 +721,14 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         options.cursor,
         deps.clock().getTime(),
       );
-      if (!decoded.ok || decoded.epoch !== cursorEpoch(root) || decoded.after.length !== 1 ||
-        typeof decoded.after[0] !== 'string' || !UUID.test(decoded.after[0])) throw new ProblemError('invalid_cursor');
+      if (
+        !decoded.ok ||
+        decoded.epoch !== cursorEpoch(root) ||
+        decoded.after.length !== 1 ||
+        typeof decoded.after[0] !== 'string' ||
+        !UUID.test(decoded.after[0])
+      )
+        throw new ProblemError('invalid_cursor');
       after = decoded.after[0];
     }
     const page = await deps.pool.query(
@@ -688,12 +743,17 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const hasMore = page.rows.length > limit;
     const collections = page.rows.slice(0, limit).map((row) => ({
       ...row,
-        eligible: row.metadataValid && row.membershipKind === 'curated' && row.builtinKind === null,
-        metadataValid: row.metadataValid,
+      eligible: row.metadataValid && row.membershipKind === 'curated' && row.builtinKind === null,
+      metadataValid: row.metadataValid,
       membershipComplete: root.sourceMembershipComplete,
       orderComplete: row.memberCount === row.orderedCount,
       visibilityDisposition: row.visibility === 'public' ? 'will_be_private' : 'private',
-      unsupported: row.membershipKind !== 'curated' ? 'dynamic_membership_not_restored' : row.builtinKind ? 'built_in_not_restored' : null,
+      unsupported:
+        row.membershipKind !== 'curated'
+          ? 'dynamic_membership_not_restored'
+          : row.builtinKind
+            ? 'built_in_not_restored'
+            : null,
     }));
     const next = hasMore
       ? encodeCursor(
@@ -726,9 +786,16 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const limit = options.limit ?? 20;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit) throw new ProblemError('invalid_request');
     const collection = await deps.pool.query<{
-      id: string; title: string | null; description: string | null; metadataValid: boolean; visibility: string | null;
-      membershipKind: string | null; builtinKind: string | null; presentationKind: string | null;
-      memberCount: number; orderedCount: number;
+      id: string;
+      title: string | null;
+      description: string | null;
+      metadataValid: boolean;
+      visibility: string | null;
+      membershipKind: string | null;
+      builtinKind: string | null;
+      presentationKind: string | null;
+      memberCount: number;
+      orderedCount: number;
     }>(
       `SELECT source_id::text AS id,title,description,metadata_valid AS "metadataValid",visibility,membership_kind AS "membershipKind",
          builtin_kind AS "builtinKind",presentation_kind AS "presentationKind",member_count AS "memberCount",
@@ -739,7 +806,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     );
     const found = collection.rows[0];
     if (!found) throw notFound();
-    const after = options.cursor ? collectionSeek(root, collectionId, options.cursor, limit) : ['', '00000000-0000-0000-0000-000000000000'];
+    const after = options.cursor
+      ? collectionSeek(root, collectionId, options.cursor, limit)
+      : ['', '00000000-0000-0000-0000-000000000000'];
     const page = await deps.pool.query(
       `SELECT source_id::text AS "sourceOccurrenceId",source_subject_id AS "sourceSubjectId",note,
          note_present AS "notePresent",note_valid AS "noteValid",order_key AS "orderKey",order_present AS "orderPresent"
@@ -751,16 +820,24 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     );
     const occurrences = page.rows.slice(0, limit).map((row) => ({
       ...row,
-      noteState: !row.notePresent ? 'missing' : !row.noteValid ? 'invalid' : row.note === null ? 'cleared' : row.note === '' ? 'empty' : 'value',
+      noteState: !row.notePresent
+        ? 'missing'
+        : !row.noteValid
+          ? 'invalid'
+          : row.note === null
+            ? 'cleared'
+            : row.note === ''
+              ? 'empty'
+              : 'value',
       orderState: row.orderPresent ? 'supported' : 'unsupported',
     }));
     const hasMore = page.rows.length > limit;
     const last = occurrences.at(-1);
-    const next = hasMore && last
-      ? collectionCursor(root, collectionId, [last.orderKey, last.sourceOccurrenceId], limit)
-      : null;
+    const next =
+      hasMore && last ? collectionCursor(root, collectionId, [last.orderKey, last.sourceOccurrenceId], limit) : null;
     const current = await currentRoot(owner, uploadId, signal);
-    if (current.state === 'expired') return { ...recoveryStatus(current), collection: null, occurrences: [], next: null };
+    if (current.state === 'expired')
+      return { ...recoveryStatus(current), collection: null, occurrences: [], next: null };
     return {
       ...recoveryStatus(current),
       collection: {
@@ -770,7 +847,12 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         membershipComplete: root.sourceMembershipComplete,
         orderComplete: found.memberCount === found.orderedCount,
         visibilityDisposition: found.visibility === 'public' ? 'will_be_private' : 'private',
-        unsupported: found.membershipKind !== 'curated' ? 'dynamic_membership_not_restored' : found.builtinKind ? 'built_in_not_restored' : null,
+        unsupported:
+          found.membershipKind !== 'curated'
+            ? 'dynamic_membership_not_restored'
+            : found.builtinKind
+              ? 'built_in_not_restored'
+              : null,
         presentationDisposition: found.presentationKind === null ? 'none' : 'unsupported_current_meaning',
       },
       occurrences,
@@ -811,13 +893,20 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const root = await load(owner, uploadId);
     if (root.state === 'expired' || root.state === 'cancelled' || root.state === 'complete' || root.state === 'partial')
       throw conflict();
-    if (!UUID.test(input.collectionId) || !Array.isArray(input.selectedOccurrenceIds) ||
+    if (
+      !UUID.test(input.collectionId) ||
+      !Array.isArray(input.selectedOccurrenceIds) ||
       input.selectedOccurrenceIds.length > LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences ||
       new Set(input.selectedOccurrenceIds).size !== input.selectedOccurrenceIds.length ||
       input.selectedOccurrenceIds.some((id) => !UUID.test(id)) ||
-      !Array.isArray(input.mappings) || input.mappings.length > LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences ||
+      !Array.isArray(input.mappings) ||
+      input.mappings.length > LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences ||
       new Set(input.mappings.map((item) => item.sourceSubjectId)).size !== input.mappings.length ||
-      input.mappings.some((item) => !UUID.test(item.sourceSubjectId) || (item.targetSubjectId !== null && !UUID.test(item.targetSubjectId))))
+      input.mappings.some(
+        (item) =>
+          !UUID.test(item.sourceSubjectId) || (item.targetSubjectId !== null && !UUID.test(item.targetSubjectId)),
+      )
+    )
       throw new ProblemError('invalid_request');
     const requestDigest = digestOf(input);
     if (root.reviewKey === requestKey) {
@@ -826,8 +915,13 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     }
     if (root.state === 'applying' || root.nativeCollectionId) throw conflict();
     const selected = await deps.pool.query<{
-      id: string; subjectId: string | null; note: string | null; notePresent: boolean; noteValid: boolean;
-      orderKey: string; orderPresent: boolean;
+      id: string;
+      subjectId: string | null;
+      note: string | null;
+      notePresent: boolean;
+      noteValid: boolean;
+      orderKey: string;
+      orderPresent: boolean;
     }>(
       `SELECT source_id::text AS id,source_subject_id AS "subjectId",note,note_present AS "notePresent",
          note_valid AS "noteValid",
@@ -840,10 +934,16 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     );
     if (selected.rows.length !== input.selectedOccurrenceIds.length) throw new ProblemError('invalid_request');
     const collectionResult = await deps.pool.query<{
-      id: string; title: string | null; description: string | null; visibility: string | null;
+      id: string;
+      title: string | null;
+      description: string | null;
+      visibility: string | null;
       metadataValid: boolean;
-      membershipKind: string | null; builtinKind: string | null; presentationKind: string | null;
-      memberCount: number; orderedCount: number;
+      membershipKind: string | null;
+      builtinKind: string | null;
+      presentationKind: string | null;
+      memberCount: number;
+      orderedCount: number;
     }>(
       `SELECT source_id::text AS id,title,description,metadata_valid AS "metadataValid",visibility,membership_kind AS "membershipKind",
          builtin_kind AS "builtinKind",presentation_kind AS "presentationKind",member_count AS "memberCount",
@@ -855,15 +955,26 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const collection = collectionResult.rows[0];
     if (!collection) throw notFound();
     if (collection.membershipKind !== 'curated' || collection.builtinKind !== null) throw conflict();
-    if (!collection.metadataValid || !validText(collection.title, 200, 800, false) ||
-      (collection.description !== null && !validText(collection.description, 2_000, 8_000, true)))
+    if (
+      !collection.metadataValid ||
+      !validText(collection.title, 200, 800, false) ||
+      (collection.description !== null && !validText(collection.description, 2_000, 8_000, true))
+    )
       throw new ProblemError('invalid_request');
-    const validSubjectIds = [...new Set(selected.rows.flatMap((row) =>
-      row.subjectId && UUID.test(row.subjectId) && row.orderPresent ? [row.subjectId] : [],
-    ))].sort();
-    const requestedMappings = [...input.mappings].sort((a, b) => a.sourceSubjectId < b.sourceSubjectId ? -1 : a.sourceSubjectId > b.sourceSubjectId ? 1 : 0);
-    if (requestedMappings.length !== validSubjectIds.length ||
-      requestedMappings.some((item, index) => item.sourceSubjectId !== validSubjectIds[index]))
+    const validSubjectIds = [
+      ...new Set(
+        selected.rows.flatMap((row) =>
+          row.subjectId && UUID.test(row.subjectId) && row.orderPresent ? [row.subjectId] : [],
+        ),
+      ),
+    ].sort();
+    const requestedMappings = [...input.mappings].sort((a, b) =>
+      a.sourceSubjectId < b.sourceSubjectId ? -1 : a.sourceSubjectId > b.sourceSubjectId ? 1 : 0,
+    );
+    if (
+      requestedMappings.length !== validSubjectIds.length ||
+      requestedMappings.some((item, index) => item.sourceSubjectId !== validSubjectIds[index])
+    )
       throw new ProblemError('invalid_request');
     for (const row of selected.rows) {
       if (row.notePresent && (!row.noteValid || (row.note !== null && !validText(row.note, 1_000, 4_000, true))))
@@ -876,16 +987,18 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     const operands = selected.rows.map((row) => ({
       memberId: row.id,
       subjectId: row.subjectId,
-      targetSubjectId: row.subjectId && mappingBySource.get(row.subjectId)?.state === 'mapped'
-        ? mappingBySource.get(row.subjectId)!.currentSubjectId
-        : null,
+      targetSubjectId:
+        row.subjectId && mappingBySource.get(row.subjectId)?.state === 'mapped'
+          ? mappingBySource.get(row.subjectId)!.currentSubjectId
+          : null,
       orderKey: row.orderKey,
       orderPresent: row.orderPresent,
       note: row.note,
       notePresent: row.notePresent,
     }));
     const sourceOrderComplete = selected.rows.every((row) => row.orderPresent);
-    const completeMembership = root.sourceMembershipComplete && input.selectedOccurrenceIds.length === collection.memberCount;
+    const completeMembership =
+      root.sourceMembershipComplete && input.selectedOccurrenceIds.length === collection.memberCount;
     const snapshot: ReviewSnapshot = {
       reviewId,
       reviewEpoch,
@@ -910,8 +1023,10 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       const mapping = subjectValid ? mapped.get(row.subjectId!) : undefined;
       let addState = 'pending';
       let reason: string | null = row.notePresent ? null : 'missing_note';
-      if (!row.orderPresent) { addState = 'unsupported'; reason = 'order_unavailable'; }
-      else if (!subjectValid || !mapping || mapping.state !== 'mapped') {
+      if (!row.orderPresent) {
+        addState = 'unsupported';
+        reason = 'order_unavailable';
+      } else if (!subjectValid || !mapping || mapping.state !== 'mapped') {
         addState = 'unresolved';
         reason = mapping?.state === 'canonical-changed' ? 'canonical_mapping_changed' : 'subject_unresolved';
       }
@@ -924,10 +1039,13 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
         outcome_reason: reason,
       };
     });
-    const pinSectionCaptured = root.coverage.some((value) =>
-      value !== null && typeof value === 'object' && !Array.isArray(value) &&
-      (value as { section?: unknown; capture?: unknown }).section === 'collectionPins' &&
-      (value as { section?: unknown; capture?: unknown }).capture === 'present',
+    const pinSectionCaptured = root.coverage.some(
+      (value) =>
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        (value as { section?: unknown; capture?: unknown }).section === 'collectionPins' &&
+        (value as { section?: unknown; capture?: unknown }).capture === 'present',
     );
     const pinsRequested = root.sourcePins?.includes(input.collectionId) ?? false;
     let pinState: RecoveryRoot['pinState'] = 'none';
@@ -967,8 +1085,11 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       await connection.query('BEGIN');
       try {
         const current = await connection.query<{
-          state: RecoveryState; review_epoch: string; review_id: string | null;
-          review_key: string | null; review_request_digest: string | null;
+          state: RecoveryState;
+          review_epoch: string;
+          review_id: string | null;
+          review_key: string | null;
+          review_request_digest: string | null;
         }>(
           `SELECT state,review_epoch::text,review_id::text,review_key,review_request_digest
            FROM library.collection_archive_recovery
@@ -976,7 +1097,8 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           [root.route, owner.accountId, uploadId],
         );
         const latest = current.rows[0];
-        if (!latest || latest.state === 'applying' || latest.state === 'cancelled' || latest.state === 'expired') throw conflict();
+        if (!latest || latest.state === 'applying' || latest.state === 'cancelled' || latest.state === 'expired')
+          throw conflict();
         if (latest.review_key === requestKey) {
           if (latest.review_request_digest !== requestDigest) throw new ProblemError('idempotency_conflict');
           await connection.query('COMMIT');
@@ -1002,9 +1124,22 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
              last_added_member_id=NULL,pin_state=$11,pin_reason=$12,pin_revision=$13::bigint,pin_after=$14::uuid,
              cancel_requested=false
            WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
-          [root.route, owner.accountId, uploadId, input.collectionId, input.selectedOccurrenceIds.length,
-            reviewId, requestKey, requestDigest, reviewDigest, JSON.stringify(snapshot), pinState,
-            pinReason, pinRevision, pinAfter],
+          [
+            root.route,
+            owner.accountId,
+            uploadId,
+            input.collectionId,
+            input.selectedOccurrenceIds.length,
+            reviewId,
+            requestKey,
+            requestDigest,
+            reviewDigest,
+            JSON.stringify(snapshot),
+            pinState,
+            pinReason,
+            pinRevision,
+            pinAfter,
+          ],
         );
         await connection.query('COMMIT');
       } catch (error) {
@@ -1020,16 +1155,25 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return {
       ...recoveryStatus(root),
       selectedCollectionId: root.selectedCollectionId,
-      review: root.reviewSnapshot && root.reviewDigest ? {
-        reviewId: root.reviewSnapshot.reviewId,
-        digest: root.reviewDigest,
-        epoch: root.reviewSnapshot.reviewEpoch,
-        completeOrder: root.reviewSnapshot.completeOrder,
-        completeMembership: root.reviewSnapshot.completeMembership,
-        selectedOccurrences: root.reviewSnapshot.selectedOccurrenceIds.length,
-        mappings: root.reviewSnapshot.mappings.map(({ sourceSubjectId, targetSubjectId, currentSubjectId, state }) =>
-          ({ sourceSubjectId, targetSubjectId, currentSubjectId, state })),
-      } : null,
+      review:
+        root.reviewSnapshot && root.reviewDigest
+          ? {
+              reviewId: root.reviewSnapshot.reviewId,
+              digest: root.reviewDigest,
+              epoch: root.reviewSnapshot.reviewEpoch,
+              completeOrder: root.reviewSnapshot.completeOrder,
+              completeMembership: root.reviewSnapshot.completeMembership,
+              selectedOccurrences: root.reviewSnapshot.selectedOccurrenceIds.length,
+              mappings: root.reviewSnapshot.mappings.map(
+                ({ sourceSubjectId, targetSubjectId, currentSubjectId, state }) => ({
+                  sourceSubjectId,
+                  targetSubjectId,
+                  currentSubjectId,
+                  state,
+                }),
+              ),
+            }
+          : null,
       mappings: root.reviewSnapshot?.mappings ?? [],
       completeOrder: root.reviewSnapshot?.completeOrder ?? false,
       completeMembership: root.reviewSnapshot?.completeMembership ?? false,
@@ -1056,7 +1200,8 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           owner,
           mapping.targetSubjectId,
         );
-        if (!current || current.subjectId !== mapping.targetSubjectId || current.requestedSubjectId !== null) return false;
+        if (!current || current.subjectId !== mapping.targetSubjectId || current.requestedSubjectId !== null)
+          return false;
       } catch (error) {
         if (!subjectUnavailable(error)) throw error;
         return false;
@@ -1108,7 +1253,10 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       [root.route, root.accountId, root.uploadId, leaseId, action, sourceId],
     );
     if ((started.rowCount ?? 0) === 1) return true;
-    const current = await deps.pool.query<{ inflight_action: RecoveryRoot['inflightAction']; inflight_source_id: string | null }>(
+    const current = await deps.pool.query<{
+      inflight_action: RecoveryRoot['inflightAction'];
+      inflight_source_id: string | null;
+    }>(
       `SELECT inflight_action,inflight_source_id::text FROM library.collection_archive_recovery
        WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
       [root.route, root.accountId, root.uploadId, leaseId],
@@ -1142,13 +1290,23 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     });
   }
 
-  async function apply(actor: Actor, uploadId: string, confirmation: { reviewId: string; digest: string }, signal?: AbortSignal) {
+  async function apply(
+    actor: Actor,
+    uploadId: string,
+    confirmation: { reviewId: string; digest: string },
+    signal?: AbortSignal,
+  ) {
     const owner = await admit(actor, ['collection:create', 'collection:update']);
     abortIfRequested(signal);
     let root = await load(owner, uploadId);
     if (root.state === 'expired' || root.state === 'cancelled' || root.state === 'partial' || root.state === 'complete')
       return recoveryStatus(await currentRoot(owner, uploadId, signal, ['collection:create', 'collection:update']));
-    if (!root.reviewId || root.reviewId !== confirmation.reviewId || root.reviewDigest !== confirmation.digest || !root.reviewSnapshot)
+    if (
+      !root.reviewId ||
+      root.reviewId !== confirmation.reviewId ||
+      root.reviewDigest !== confirmation.digest ||
+      !root.reviewSnapshot
+    )
       throw conflict();
     if (root.state === 'reviewed' && !(await reviewedMappingsCurrent(owner, root.reviewSnapshot, signal))) {
       await invalidateStaleReview(root);
@@ -1162,8 +1320,17 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       while (commandCount < applyLimit) {
         abortIfRequested(signal);
         root = await load(owner, uploadId);
-        if (root.state === 'cancelled' || root.state === 'expired' || (root.cancelRequested && root.inflightAction === null)) break;
-        if (root.reviewId !== confirmation.reviewId || root.reviewDigest !== confirmation.digest || !root.reviewSnapshot)
+        if (
+          root.state === 'cancelled' ||
+          root.state === 'expired' ||
+          (root.cancelRequested && root.inflightAction === null)
+        )
+          break;
+        if (
+          root.reviewId !== confirmation.reviewId ||
+          root.reviewDigest !== confirmation.digest ||
+          !root.reviewSnapshot
+        )
           throw conflict();
         const snapshot = root.reviewSnapshot;
         if (!root.nativeCollectionId) {
@@ -1188,7 +1355,8 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           continue;
         }
         const add = await deps.pool.query<{
-          source_id: string; target_subject_id: string;
+          source_id: string;
+          target_subject_id: string;
         }>(
           `SELECT source_id::text,target_subject_id
            FROM library.collection_archive_recovery_record
@@ -1224,8 +1392,16 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               `UPDATE library.collection_archive_recovery_record SET add_state=$7,outcome_reason=$8
                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                  AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-              [root.route, owner.accountId, uploadId, root.selectedCollectionId, item.source_id,
-                confirmation.reviewId, failure.state, failure.reason],
+              [
+                root.route,
+                owner.accountId,
+                uploadId,
+                root.selectedCollectionId,
+                item.source_id,
+                confirmation.reviewId,
+                failure.state,
+                failure.reason,
+              ],
             );
             commandCount++;
             await refreshLease(root, leaseId);
@@ -1240,7 +1416,15 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             `UPDATE library.collection_archive_recovery_record SET native_member_id=$7::uuid,add_state='applied'
              WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-            [root.route, owner.accountId, uploadId, root.selectedCollectionId, item.source_id, confirmation.reviewId, member.value.id],
+            [
+              root.route,
+              owner.accountId,
+              uploadId,
+              root.selectedCollectionId,
+              item.source_id,
+              confirmation.reviewId,
+              member.value.id,
+            ],
             {
               statement: `UPDATE library.collection_archive_recovery SET last_added_member_id=$4::uuid
                 WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$5::uuid`,
@@ -1252,7 +1436,10 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           continue;
         }
         const note = await deps.pool.query<{
-          source_id: string; native_member_id: string; note: string | null; note_present: boolean;
+          source_id: string;
+          native_member_id: string;
+          note: string | null;
+          note_present: boolean;
         }>(
           `SELECT source_id::text,native_member_id::text,note,note_present
            FROM library.collection_archive_recovery_record
@@ -1282,8 +1469,15 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               `UPDATE library.collection_archive_recovery_record SET note_state='failed',outcome_reason=$7
                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                  AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-              [root.route, owner.accountId, uploadId, root.selectedCollectionId, item.source_id,
-                confirmation.reviewId, failure.reason],
+              [
+                root.route,
+                owner.accountId,
+                uploadId,
+                root.selectedCollectionId,
+                item.source_id,
+                confirmation.reviewId,
+                failure.reason,
+              ],
             );
             commandCount++;
             await refreshLease(root, leaseId);
@@ -1305,7 +1499,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           continue;
         }
         const order = await deps.pool.query<{
-          source_id: string; native_member_id: string; order_key: string;
+          source_id: string;
+          native_member_id: string;
+          order_key: string;
         }>(
           `SELECT source_id::text,native_member_id::text,order_key
            FROM library.collection_archive_recovery_record
@@ -1325,7 +1521,15 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
                AND native_member_id IS NOT NULL AND order_state='applied'
                AND (order_key COLLATE "C",source_id)<($6::text COLLATE "C",$7::uuid)
              ORDER BY order_key COLLATE "C" DESC,source_id DESC LIMIT 1`,
-            [root.route, owner.accountId, uploadId, root.selectedCollectionId, confirmation.reviewId, item.order_key, item.source_id],
+            [
+              root.route,
+              owner.accountId,
+              uploadId,
+              root.selectedCollectionId,
+              confirmation.reviewId,
+              item.order_key,
+              item.source_id,
+            ],
           );
           try {
             await commands.moveMember(
@@ -1344,8 +1548,16 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
               `UPDATE library.collection_archive_recovery_record SET order_state=$7,outcome_reason=$8
                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND record_kind='occurrence'
                  AND collection_id=$4 AND source_id=$5::uuid AND review_id=$6::uuid`,
-              [root.route, owner.accountId, uploadId, root.selectedCollectionId, item.source_id,
-                confirmation.reviewId, failure.state, failure.reason],
+              [
+                root.route,
+                owner.accountId,
+                uploadId,
+                root.selectedCollectionId,
+                item.source_id,
+                confirmation.reviewId,
+                failure.state,
+                failure.reason,
+              ],
             );
             commandCount++;
             await refreshLease(root, leaseId);
@@ -1386,7 +1598,10 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
             await pins().mutate(
               owner,
               collectionId,
-              { revision: Number(root.pinRevision), ...(root.pinAfter === null ? { after: null } : { after: root.pinAfter }) },
+              {
+                revision: Number(root.pinRevision),
+                ...(root.pinAfter === null ? { after: null } : { after: root.pinAfter }),
+              },
               commandKey(root, 'pin'),
             );
             pinApplied = true;
@@ -1434,12 +1649,21 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   }
 
   function commandKey(root: RecoveryRoot, action: string, sourceId?: string) {
-    return JSON.stringify(['library.collection.archive-recovery', root.uploadId, root.reviewId, action, sourceId ?? null]);
+    return JSON.stringify([
+      'library.collection.archive-recovery',
+      root.uploadId,
+      root.reviewId,
+      action,
+      sourceId ?? null,
+    ]);
   }
 
   async function finish(root: RecoveryRoot, leaseId: string, reviewId: string) {
     const totals = await deps.pool.query<{
-      all_count: string; selected_count: string; completed_count: string; incomplete_count: string;
+      all_count: string;
+      selected_count: string;
+      completed_count: string;
+      incomplete_count: string;
     }>(
       `SELECT count(*) FILTER (WHERE selected)::text AS selected_count,
          count(*)::text AS all_count,
@@ -1451,9 +1675,13 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       [root.route, root.accountId, root.uploadId, root.selectedCollectionId, reviewId],
     );
     const row = totals.rows[0]!;
-    const complete = root.sourceMembershipComplete && root.reviewSnapshot?.completeMembership === true &&
-      root.reviewSnapshot.completeOrder && Number(row.selected_count) === root.reviewSnapshot.collection.memberCount &&
-      Number(row.completed_count) === Number(row.selected_count) && Number(row.incomplete_count) === 0;
+    const complete =
+      root.sourceMembershipComplete &&
+      root.reviewSnapshot?.completeMembership === true &&
+      root.reviewSnapshot.completeOrder &&
+      Number(row.selected_count) === root.reviewSnapshot.collection.memberCount &&
+      Number(row.completed_count) === Number(row.selected_count) &&
+      Number(row.incomplete_count) === 0;
     await deps.pool.query(
       `UPDATE library.collection_archive_recovery SET state=$5
        WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid AND state='applying'`,
@@ -1461,7 +1689,12 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     );
   }
 
-  async function outcomes(actor: Actor, uploadId: string, options: { limit?: number; cursor?: string }, signal?: AbortSignal) {
+  async function outcomes(
+    actor: Actor,
+    uploadId: string,
+    options: { limit?: number; cursor?: string },
+    signal?: AbortSignal,
+  ) {
     const owner = await admit(actor);
     abortIfRequested(signal);
     const root = await load(owner, uploadId);
@@ -1478,8 +1711,14 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     let after: readonly CursorKey[] = ['', '00000000-0000-0000-0000-000000000000'];
     if (options.cursor) after = collectionSeek(root, root.selectedCollectionId, options.cursor, limit);
     const page = await deps.pool.query<{
-      sourceOccurrenceId: string; sourceSubjectId: string | null; targetSubjectId: string | null;
-      nativeMemberId: string | null; note: string | null; notePresent: boolean; noteValid: boolean; orderKey: string;
+      sourceOccurrenceId: string;
+      sourceSubjectId: string | null;
+      targetSubjectId: string | null;
+      nativeMemberId: string | null;
+      note: string | null;
+      notePresent: boolean;
+      noteValid: boolean;
+      orderKey: string;
       orderPresent: boolean;
       addState: 'pending' | 'applied' | 'failed' | 'unresolved' | 'unsupported';
       noteState: 'pending' | 'applied' | 'failed' | 'unsupported';
@@ -1500,13 +1739,29 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     );
     const items = page.rows.slice(0, limit).map((item) => ({
       ...item,
-      sourceNoteState: !item.notePresent ? 'missing' : !item.noteValid ? 'invalid' : item.note === null ? 'cleared' : item.note === '' ? 'empty' : 'value',
-      outcome: item.addState !== 'applied' ? item.addState : item.noteState !== 'applied' ? 'partial' : item.orderState !== 'applied' ? 'partial' : 'applied',
+      sourceNoteState: !item.notePresent
+        ? 'missing'
+        : !item.noteValid
+          ? 'invalid'
+          : item.note === null
+            ? 'cleared'
+            : item.note === ''
+              ? 'empty'
+              : 'value',
+      outcome:
+        item.addState !== 'applied'
+          ? item.addState
+          : item.noteState !== 'applied'
+            ? 'partial'
+            : item.orderState !== 'applied'
+              ? 'partial'
+              : 'applied',
     }));
     const last = items.at(-1);
-    const next = page.rows.length > limit && last
-      ? collectionCursor(root, root.selectedCollectionId, [last.orderKey, last.sourceOccurrenceId], limit)
-      : null;
+    const next =
+      page.rows.length > limit && last
+        ? collectionCursor(root, root.selectedCollectionId, [last.orderKey, last.sourceOccurrenceId], limit)
+        : null;
     const current = await currentRoot(owner, uploadId, signal);
     if (current.state === 'expired') return { ...recoveryStatus(current), collection: null, outcomes: [], next: null };
     return {

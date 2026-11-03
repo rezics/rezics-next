@@ -238,11 +238,13 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
         const removed = (evidence.rowCount ?? 0) + (roots.rowCount ?? 0);
         return {
           value: { kind, removed, parent: null, retain: false, blocked: false },
-          events: [{
-            type: 'com.rezics.library.account-graph.purged.v1',
-            subject: accountId,
-            data: { accountId, kind, removed },
-          }],
+          events: [
+            {
+              type: 'com.rezics.library.account-graph.purged.v1',
+              subject: accountId,
+              data: { accountId, kind, removed },
+            },
+          ],
         };
       }
       if (kind === 'bangumi_upload') {

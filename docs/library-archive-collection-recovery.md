@@ -13,16 +13,16 @@ pin when the current native pin revision can express it.
 
 The typed client exposes these owner-only methods under `libraryArchiveCollectionRecoveries`:
 
-| Method | Purpose |
-| --- | --- |
-| `POST /v1/libraryArchiveCollectionRecoveries` | Upload a completed archive as canonical base64 JSON. The request key replays the same upload. |
-| `GET /:id` | Read private status, manifest, coverage, lifetime and confirmation. |
-| `GET /:id/collections` | Page source Collections in source UUID order. |
-| `GET /:id/collections/:collectionId/occurrences` | Page member occurrences in their archived presentation order. |
-| `POST /:id/review` | Select one curated Collection and its occurrence IDs, then submit explicit source-to-current-Subject mappings. |
-| `POST /:id/apply` | Confirm the current review ID and digest; each call admits at most 25 native recovery steps. |
-| `GET /:id/outcomes` | Page each selected occurrence's membership, note and ordering outcomes. |
-| `DELETE /:id` | Stop new work and retain already accepted native mutations and their precise outcomes. |
+| Method                                           | Purpose                                                                                                        |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/libraryArchiveCollectionRecoveries`    | Upload a completed archive as canonical base64 JSON. The request key replays the same upload.                  |
+| `GET /:id`                                       | Read private status, manifest, coverage, lifetime and confirmation.                                            |
+| `GET /:id/collections`                           | Page source Collections in source UUID order.                                                                  |
+| `GET /:id/collections/:collectionId/occurrences` | Page member occurrences in their archived presentation order.                                                  |
+| `POST /:id/review`                               | Select one curated Collection and its occurrence IDs, then submit explicit source-to-current-Subject mappings. |
+| `POST /:id/apply`                                | Confirm the current review ID and digest; each call admits at most 25 native recovery steps.                   |
+| `GET /:id/outcomes`                              | Page each selected occurrence's membership, note and ordering outcomes.                                        |
+| `DELETE /:id`                                    | Stop new work and retain already accepted native mutations and their precise outcomes.                         |
 
 Every response is `private, no-store`; cursors are sealed to the owner, upload, page size and review epoch. Admission
 uses the current Collections gate and `collection:read`; review and apply also require the native create/update
