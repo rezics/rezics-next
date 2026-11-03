@@ -99,6 +99,7 @@ export async function decodeRatingCursor(
   // Authenticate the original request/viewer/operation before inspecting eligibility metadata.
   const decoded = await decodeSearchCursor(ring, binding, token, now);
   if (!decoded.ok) return decoded;
+  if (!validContext(context)) return { ok: false, reason: 'invalid' };
   const [signedPrefix, questionId, populationId, priorEpoch, phase, ...after] = decoded.after;
   const realmToken = typeof signedPrefix === 'string' && /^rating-realm-v1:[0-9a-f]{64}$/.test(signedPrefix);
   const signedContext = {
@@ -110,8 +111,7 @@ export async function decodeRatingCursor(
   if (
     (signedPrefix !== PREFIX && !realmToken) ||
     !validContext(signedContext) ||
-    !validPosition(signedContext.priorEpoch, phase, after) ||
-    !validContext(context)
+    !validPosition(signedContext.priorEpoch, phase, after)
   )
     return { ok: false, reason: 'invalid' };
   if (

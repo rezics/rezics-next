@@ -9,7 +9,7 @@ import type { SearchCursorBinding, SearchSortValue } from './cursor.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import { compileFilter } from './filter.ts';
 import type { SearchHit } from './query.ts';
-import { decodeRatingCursor, encodeRatingCursor, type RatingCursorContext } from './rating-cursor.ts';
+import { decodeRatingCursor, encodeRatingCursor, type RatingCursorContext, type RatingPhase } from './rating-cursor.ts';
 import type { PublicRatingFigure } from './rating-source.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type SubjectSource } from './source.ts';
@@ -33,6 +33,7 @@ export type RealmRatingQuery = {
   authority?: { access: Access; actor: Actor };
 };
 export type RealmRatingHit = SearchHit & {
+  ratingPhase: RatingPhase;
   /** Same subject-home snapshot as the figure, including a proven absent figure. */
   position: bigint;
   threshold: 5 | 10;
