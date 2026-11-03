@@ -3,7 +3,6 @@ import type { Release } from '@rezics/definitions';
 import release from '../../../../packages/definitions/release/rezics.json';
 import {
   discoveryBulkBody,
-  discoveryDocumentId,
   mixedDiscoveryIndexDefinition,
   parseDiscoveryDocumentKey,
   parseDiscoveryHitKey,
