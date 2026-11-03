@@ -26,6 +26,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const selection = reportSelection(search);
   const queue: WorkbenchQueueKind =
     search.queue === 'appeals' || search.queue === 'resolved' ? search.queue : 'reports';
+  const cursor = token(search.cursor, 4096);
   if (search.scope === 'catalogue') {
     return {
       queue,
@@ -33,20 +34,36 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
       targetKind: 'all',
       order: selection.order,
       scope: 'catalogue',
-      ...(token(search.cursor, 4096) ? { cursor: token(search.cursor, 4096) } : {}),
+      ...(cursor ? { cursor } : {}),
     };
   }
+  const realm = token(search.realm, 128);
+  const board = token(search.board, 128);
+  const realmsCursor = token(search.realmsCursor, 4096);
+  const boardsCursor = token(search.boardsCursor, 4096);
   return {
     queue,
     status: queue === 'resolved' ? 'resolved' : queue === 'reports' ? 'pending' : selection.status,
     targetKind: selection.targetKind,
     order: selection.order,
-    ...(token(search.realm, 128) ? { realm: token(search.realm, 128) } : {}),
-    ...(token(search.board, 128) ? { board: token(search.board, 128) } : {}),
-    ...(token(search.cursor, 4096) ? { cursor: token(search.cursor, 4096) } : {}),
-    ...(token(search.realmsCursor, 4096) ? { realmsCursor: token(search.realmsCursor, 4096) } : {}),
-    ...(token(search.boardsCursor, 4096) ? { boardsCursor: token(search.boardsCursor, 4096) } : {}),
+    ...(realm ? { realm } : {}),
+    ...(board ? { board } : {}),
+    ...(cursor ? { cursor } : {}),
+    ...(realmsCursor ? { realmsCursor } : {}),
+    ...(boardsCursor ? { boardsCursor } : {}),
   };
+}
+
+export function workbenchWithoutContinuation(search: WorkbenchSearch): WorkbenchSearch {
+  return workbenchSearch({
+    queue: search.queue,
+    status: search.status,
+    targetKind: search.targetKind,
+    order: search.order,
+    ...(search.scope ? { scope: search.scope } : {}),
+    ...(search.realm ? { realm: search.realm } : {}),
+    ...(search.board ? { board: search.board } : {}),
+  });
 }
 
 export function workbenchScope(search: WorkbenchSearch): WorkbenchScope {

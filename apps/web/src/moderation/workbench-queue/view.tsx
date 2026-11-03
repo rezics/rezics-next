@@ -3,7 +3,13 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
-import { workbenchCaseHref, workbenchScope, type WorkbenchSearch } from './scope';
+import {
+  workbenchCaseHref,
+  workbenchScope,
+  workbenchSearch,
+  workbenchWithoutContinuation,
+  type WorkbenchSearch,
+} from './scope';
 import { workbenchQueueScope, type WorkbenchCase, type WorkbenchDirectoryItem, type WorkbenchRead } from './read';
 
 const control =
@@ -103,6 +109,9 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
   const search = page.search;
   const scope = workbenchScope(search);
   const queueScope = workbenchQueueScope(search);
+  const next = page.next;
+  const realmsNext = page.realmsNext;
+  const boardsNext = page.boardsNext;
   const status =
     page.state === 'denied'
       ? m.moderation_workbench_denied()
@@ -129,7 +138,7 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
         </Button>
       ) : null}
       {page.state === 'stale' ? (
-        <Button type="button" className={control} onClick={() => onSearch({ ...search, cursor: undefined, realmsCursor: undefined, boardsCursor: undefined })}>
+        <Button type="button" className={control} onClick={() => onSearch(workbenchWithoutContinuation(search))}>
           {m.moderation_queue_restart()}
         </Button>
       ) : null}
@@ -140,12 +149,27 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
             variant={scope.kind === 'catalogue' ? 'default' : 'outline'}
             className={control}
             aria-pressed={scope.kind === 'catalogue'}
-            onClick={() => onSearch({ queue: search.queue === 'appeals' ? 'reports' : search.queue, status: search.queue === 'resolved' ? 'resolved' : 'pending', targetKind: 'all', order: search.order, scope: 'catalogue' })}
+            onClick={() =>
+              onSearch(
+                workbenchSearch({
+                  queue: search.queue === 'appeals' ? 'reports' : search.queue,
+                  status: search.queue === 'resolved' ? 'resolved' : 'pending',
+                  targetKind: 'all',
+                  order: search.order,
+                  scope: 'catalogue',
+                }),
+              )
+            }
           >
             {m.moderation_workbench_catalogue()}
           </Button>
           {scope.kind !== 'none' ? (
-            <Button type="button" variant="outline" className={control} onClick={() => onSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest' })}>
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              onClick={() => onSearch(workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest' }))}
+            >
               {m.public_account_realms()}
             </Button>
           ) : null}
@@ -157,8 +181,10 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
           items={page.realms}
           next={page.realmsNext}
           empty={m.moderation_workbench_realms_empty()}
-          onSelect={(realm) => onSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest', realm })}
-          onNext={page.realmsNext ? () => onSearch({ ...search, realmsCursor: page.realmsNext! }) : undefined}
+          onSelect={(realm) =>
+            onSearch(workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest', realm }))
+          }
+          {...(realmsNext ? { onNext: () => onSearch(workbenchSearch({ ...search, realmsCursor: realmsNext })) } : {})}
         />
       ) : null}
       {page.state === 'ready' && scope.kind === 'realm' ? (
@@ -167,8 +193,19 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
           items={page.boards}
           next={page.boardsNext}
           empty={m.moderation_workbench_boards_empty()}
-          onSelect={(board) => onSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: search.order, realm: search.realm, board })}
-          onNext={page.boardsNext ? () => onSearch({ ...search, boardsCursor: page.boardsNext! }) : undefined}
+          onSelect={(board) =>
+            onSearch(
+              workbenchSearch({
+                queue: 'reports',
+                status: 'pending',
+                targetKind: 'all',
+                order: search.order,
+                ...(search.realm ? { realm: search.realm } : {}),
+                board,
+              }),
+            )
+          }
+          {...(boardsNext ? { onNext: () => onSearch(workbenchSearch({ ...search, boardsCursor: boardsNext })) } : {})}
         />
       ) : null}
       {page.state === 'ready' && scope.kind === 'none' ? (
@@ -184,7 +221,15 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
                 variant="ghost"
                 aria-current={search.queue === queue ? 'page' : undefined}
                 className={`${control} rounded-none border-b-2 ${search.queue === queue ? 'border-primary font-semibold' : 'border-transparent'}`}
-                onClick={() => onSearch({ ...search, queue, cursor: undefined, status: queue === 'resolved' ? 'resolved' : 'pending' })}
+                onClick={() =>
+                  onSearch(
+                    workbenchSearch({
+                      ...workbenchWithoutContinuation(search),
+                      queue,
+                      status: queue === 'resolved' ? 'resolved' : 'pending',
+                    }),
+                  )
+                }
               >
                 {queue === 'appeals'
                   ? m.moderation_workbench_queue_appeals()
@@ -208,11 +253,12 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
                   className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
                   value={search.targetKind}
                   onChange={(event) =>
-                    onSearch({
-                      ...search,
-                      targetKind: event.target.value as WorkbenchSearch['targetKind'],
-                      cursor: undefined,
-                    })
+                    onSearch(
+                      workbenchSearch({
+                        ...workbenchWithoutContinuation(search),
+                        targetKind: event.target.value,
+                      }),
+                    )
                   }
                 >
                   <NativeSelectOption value="all">{m.moderation_filter_all_kinds()}</NativeSelectOption>
@@ -227,7 +273,7 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
                   className="w-full min-w-0 max-w-full [&_select]:min-h-11 [&_select]:min-w-11"
                   value={search.order}
                   onChange={(event) =>
-                    onSearch({ ...search, order: event.target.value as WorkbenchSearch['order'], cursor: undefined })
+                    onSearch(workbenchSearch({ ...workbenchWithoutContinuation(search), order: event.target.value }))
                   }
                 >
                   <NativeSelectOption value="newest">{m.moderation_filter_newest()}</NativeSelectOption>
@@ -238,13 +284,17 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
           ) : null}
           {search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
             <p role="status" className="text-muted-foreground">
-              {page.next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
+              {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
             </p>
           ) : (
             <ul className="min-w-0">{page.cases.map((item) => <CaseRow key={`${item.kind}:${item.id}`} item={item} search={search} />)}</ul>
           )}
-          {page.next ? (
-            <Button type="button" className={control} onClick={() => onSearch({ ...search, cursor: page.next! })}>
+          {next ? (
+            <Button
+              type="button"
+              className={control}
+              onClick={() => onSearch(workbenchSearch({ ...search, cursor: next }))}
+            >
               {m.threads_next_page()}
             </Button>
           ) : null}
