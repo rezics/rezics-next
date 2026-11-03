@@ -2855,6 +2855,20 @@ CREATE INDEX review_discovery_dependency_resource ON content.review_discovery_de
 
 
 --
+-- Name: review_discovery_change_latest; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX review_discovery_change_latest ON content.review_discovery_change USING btree (route, thread_id, "position" DESC);
+
+
+--
+-- Name: review_discovery_work_pending; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX review_discovery_work_pending ON content.review_discovery_work USING btree (route, id) WHERE (NOT complete);
+
+
+--
 -- Name: revision_post_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
@@ -2880,6 +2894,13 @@ CREATE UNIQUE INDEX thread_one_live_review_idx ON content.thread USING btree (ro
 --
 
 CREATE INDEX thread_review_discovery_page_idx ON content.thread USING btree (route, thread_id) WHERE ((kind = 'review'::text) AND review_live AND (availability = 'available'::text) AND (visibility = 'published'::text));
+
+
+--
+-- Name: thread_review_discovery_population_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX thread_review_discovery_population_idx ON content.thread USING btree (route, thread_id) WHERE (kind = 'review'::text);
 
 
 --
