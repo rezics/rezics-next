@@ -13,7 +13,11 @@ afterAll(() => fixture.close());
 
 const routeKey = new Uint8Array(32).fill(73);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
-const request = () => ({ idempotencyKey: Bun.randomUUIDv7(), deadline: Date.now() + 30_000, requestId: Bun.randomUUIDv7() });
+const request = () => ({
+  idempotencyKey: Bun.randomUUIDv7(),
+  deadline: Date.now() + 30_000,
+  requestId: Bun.randomUUIDv7(),
+});
 
 describe('public review discovery adapter', () => {
   test('uses Content pages and current hydration for sparse progress, publication and lifecycle', async () => {
@@ -167,12 +171,7 @@ describe('public review discovery adapter', () => {
       request(),
     );
     expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'ready', value: new Map() });
-    await restorePost(
-      { pool: fixture.pool, access: fixture.access, routeKey },
-      author,
-      initial[4]!.postId,
-      request(),
-    );
+    await restorePost({ pool: fixture.pool, access: fixture.access, routeKey }, author, initial[4]!.postId, request());
     expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'preparing' });
 
     const restoredPage = await adapter.page(partition, sparse.value.next, 1);
@@ -184,6 +183,7 @@ describe('public review discovery adapter', () => {
     expect(BigInt(restoredDocument.source_position)).toBeGreaterThan(BigInt(revisedDocument.source_position));
     const restoredCard = await adapter.currentSummaries([restoredDocument], context);
     expect(restoredCard.status).toBe('ready');
-    if (restoredCard.status === 'ready') expect(restoredCard.value.get(restoredDocument.identity)?.text).toBe('Revised public opening.');
+    if (restoredCard.status === 'ready')
+      expect(restoredCard.value.get(restoredDocument.identity)?.text).toBe('Revised public opening.');
   });
 });

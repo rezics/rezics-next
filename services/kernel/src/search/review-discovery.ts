@@ -4,7 +4,6 @@ import {
   REVIEW_DISCOVERY_PAGE_LIMIT as CONTENT_REVIEW_PAGE_LIMIT,
   REVIEW_DISCOVERY_READ_LIMIT as CONTENT_REVIEW_READ_LIMIT,
   type ReviewDiscoveryCount as NativeReviewDiscoveryCount,
-  type ReviewDiscoveryHydration as NativeReviewDiscoveryHydration,
   type ReviewDiscoverySource as NativeReviewDiscoverySource,
 } from '../content/review-discovery.ts';
 import type { ReadContext } from '../content/model.ts';
@@ -68,6 +67,7 @@ export type ContentReviewDiscoverySource = NativeReviewDiscoverySource;
 export type ReviewDiscoverySourceProvider = (context?: DiscoveryReadContext) => NativeReviewDiscoverySource;
 
 type ReviewDiscoveryKey = { id: string; route: number };
+type ReviewDiscoveryHydration = { partition: number; position: bigint; reviews: readonly ReviewDiscoveryRecord[] };
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -144,7 +144,13 @@ function nativeRecord(value: unknown, partition: number): ReviewDiscoveryRecord 
 }
 
 function nativeSummary(value: unknown, partition: number): ReviewDiscoveryRecord {
-  if (!object(value) || typeof value.authorId !== 'string' || routeOf(value.authorId) === null)
+  if (
+    !object(value) ||
+    Object.keys(value).some((field) => !['id', 'subjectId', 'authorId', 'title', 'excerpt', 'revisionId'].includes(field)) ||
+    !['id', 'subjectId', 'authorId', 'title', 'revisionId'].every((field) => Object.hasOwn(value, field)) ||
+    typeof value.authorId !== 'string' ||
+    routeOf(value.authorId) === null
+  )
     throw new TypeError('Invalid current Content review summary');
   const row = {
     id: value.id,
@@ -265,7 +271,7 @@ export function reviewDiscoveryDocument(
   };
 }
 
-function hydration(value: unknown, partition: number, ids: readonly string[]): NativeReviewDiscoveryHydration {
+function hydration(value: unknown, partition: number, ids: readonly string[]): ReviewDiscoveryHydration {
   const requested = new Set(ids);
   if (
     !object(value) ||
@@ -282,15 +288,7 @@ function hydration(value: unknown, partition: number, ids: readonly string[]): N
     if (!requested.has(row.id) || seen.has(row.id))
       throw new TypeError('Content review hydration returned a wrong or duplicate key');
     seen.add(row.id);
-    if (!object(raw) || typeof raw.authorId !== 'string') throw new TypeError('Invalid Content review author key');
-    return {
-      id: row.id,
-      subjectId: (raw as Record<string, unknown>).subjectId as string,
-      authorId: (raw as Record<string, unknown>).authorId as string,
-      title: row.title,
-      ...(row.text === '' ? {} : { excerpt: row.text }),
-      revisionId: row.openingRevisionId,
-    };
+    return row;
   });
   return { partition, position: value.position, reviews };
 }
@@ -312,7 +310,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
     ownerSource: NativeReviewDiscoverySource,
     partition: number,
     ids: readonly string[],
-  ): Promise<NativeReviewDiscoveryHydration> {
+  ): Promise<ReviewDiscoveryHydration> {
     const raw = await ownerSource.hydrate(partition, ids);
     return hydration(raw, partition, ids);
   }
