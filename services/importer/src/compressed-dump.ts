@@ -202,7 +202,7 @@ export async function* gunzipDumpChunks(
   const iterator = input[Symbol.asyncIterator]();
   let incoming: Uint8Array | undefined;
   let incomingOffset = 0;
-  let rest = new Uint8Array(0);
+  let rest: Uint8Array = new Uint8Array(0);
   let inflate: InflateRaw | undefined;
   let closed = false;
   const close = () => {
