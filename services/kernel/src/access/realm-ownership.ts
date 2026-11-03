@@ -119,6 +119,7 @@ export async function assertRealmOwnerMayLeave(client: AccessClient, input: Inpu
 }
 
 export type RealmErasureSuccessionInput = Readonly<{ resource: Resource; accountId: string }>;
+export type RealmErasureSuccessionQualification = 'owner-or-replay' | 'not-owner';
 export type RealmErasureSuccessionSource = Readonly<{
   route: number;
   accountId: string;
@@ -288,6 +289,58 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
   const admitted = new WeakMap<CommandTransaction, PreparedRealmErasureSuccession>();
   const consumed = new WeakSet<CommandTransaction>();
   const completed = new WeakSet<CommandTransaction>();
+
+  async function qualifyErasureSuccession(
+    input: RealmErasureSuccessionInput,
+    context: Readonly<{ deadline: number }>,
+  ): Promise<RealmErasureSuccessionQualification> {
+    const { resource, accountId } = input;
+    const accountRoute = routeOf(accountId);
+    if (
+      !resource ||
+      accountRoute === null ||
+      routeOf(resource.id) !== resource.route ||
+      !Number.isFinite(context.deadline)
+    )
+      throw new ResourceAccessWriteDeniedError();
+
+    // Read and release the account-home checkout before opening the Realm home.
+    const source = await within(context.deadline, () =>
+      withConnection(config.pool, (client) =>
+        erasureSource.run(deadlineClient(client, context.deadline), {
+          route: accountRoute,
+          account_id: accountId,
+        }),
+      ),
+    );
+    if (
+      !source ||
+      source.route !== accountRoute ||
+      source.accountId !== accountId ||
+      !Number.isSafeInteger(source.version) ||
+      typeof source.at !== 'string'
+    )
+      throw new ResourceAccessWriteDeniedError();
+
+    const result = await within(context.deadline, () =>
+      withConnection(config.pool, (client) =>
+        deadlineClient(client, context.deadline).query<{ qualifies: boolean }>(
+          `SELECT
+             EXISTS (SELECT 1 FROM access.resource_role_grant
+               WHERE route=$1 AND resource_id=$2 AND subject_kind='identity' AND subject_id=$3
+                 AND subject_role='' AND grant_role=$7 AND valid @> $6::timestamptz)
+             OR EXISTS (SELECT 1 FROM access.realm_erasure_succession
+               WHERE route=$1 AND resource_id=$2 AND account_id=$3 AND source_route=$4
+                 AND source_version=$5 AND source_at=$6::timestamptz AND decision_state IS NOT NULL)
+             AS qualifies`,
+          [resource.route, resource.id, accountId, source.route, source.version, source.at, REALM_OWNER_ROLE],
+        ),
+      ),
+    );
+    const qualifies = result.rows[0]?.qualifies;
+    if (typeof qualifies !== 'boolean') throw new ResourceAccessWriteDeniedError();
+    return qualifies ? 'owner-or-replay' : 'not-owner';
+  }
 
   async function prepareErasureSuccession(
     attempt: CommandAttempt,
@@ -665,5 +718,10 @@ export function createRealmOwnershipCommands(config: { pool: Pool; access: Acces
     return result(state, best, operationId, at, false);
   }
 
-  return { prepareErasureSuccession, applyErasureSuccession, erasureSuccessionAuthorization };
+  return {
+    qualifyErasureSuccession,
+    prepareErasureSuccession,
+    applyErasureSuccession,
+    erasureSuccessionAuthorization,
+  };
 }

@@ -393,13 +393,13 @@ Ordinary non-owner memberships require Accounts' exact owner-at-root or durable-
 deciding whether to call the segment. The required constructor port is
 `qualifyErasureSuccession({resource,accountId},{deadline}): Promise<'owner-or-replay'|'not-owner'>`.
 It must read the committed erasure root, release account checkout before Realm checkout, and throw on unavailable
-sources; its result is selection only and never replaces native command authorization. This Accounts port is not
-yet delivered in this checkout. Decision: absent native qualification fails closed and retains the locator;
-an authorization denial is never interpreted as non-ownership.
+sources; its result is selection only and never replaces native command authorization. It matches durable replay
+to the same root as the exact owner interval. Decision: only a qualified non-owner takes ordinary cleanup; missing
+root or role evidence fails closed and retains the locator, and authorization denial is never non-ownership.
 `account_erasure_progress` is orchestration only; neither role loss nor a final ACK supplies succession authority.
 The existing Community participant remains the sole coordinator and ACK writer. Native default-path readiness still
-requires that Accounts qualification port and executed registered-path acceptance; authored composition alone
-does not establish it. Domain ownership and the Cost budgets below remain unchanged and unmeasured here.
+requires executed registered-path acceptance; authored composition alone does not establish it. Domain ownership
+and the Cost budgets below remain unchanged and unmeasured here.
 
 Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester
 key and a bounded receipt/event bundle, without enumerating members, requests or grants. The claim-requested

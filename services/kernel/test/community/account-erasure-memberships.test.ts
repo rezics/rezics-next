@@ -151,7 +151,9 @@ test.serial(
   "account erasure closes the account's current memberships and erases its membership history in every Realm",
   async () => {
     const { eraseAccountMembershipsPage } = await import('../../src/community/account-erasure-memberships.ts');
-    const pool = communityFixtureRuntime().system.database.pool;
+    const { system } = communityFixtureRuntime();
+    const pool = system.database.pool;
+    const access = system.access;
     const snapshot = async () =>
       (
         await pool.query(
@@ -174,13 +176,13 @@ test.serial(
     expect(
       (await pool.query('SELECT * FROM community.realm_member_terminal WHERE account_id=$1', [member.accountId])).rows,
     ).toHaveLength(2);
-    await expect(eraseAccountMembershipsPage({ pool }, fixture.outsider.id, null)).rejects.toThrow();
+    await expect(eraseAccountMembershipsPage({ pool, access }, fixture.outsider.id, null)).rejects.toThrow();
     await deletePersona({ version: 1, pool, auth: deletion.auth }, member);
     await drainEffects(pool, partitionOf(routeOf(member.accountId)!));
     let after: string | null = null;
     let found = 0;
     for (let step = 0; step < 20; step++) {
-      const page = await eraseAccountMembershipsPage({ pool }, member.accountId, after);
+      const page = await eraseAccountMembershipsPage({ pool, access }, member.accountId, after);
       found += page.found;
       if (page.next === null && page.pending === 0) break;
       after = page.next;
@@ -197,7 +199,7 @@ test.serial(
     expect(
       (await pool.query('SELECT * FROM community.realm_ban WHERE account_id=$1', [member.accountId])).rows,
     ).toEqual(bans);
-    expect(await eraseAccountMembershipsPage({ pool }, member.accountId, null)).toEqual({
+    expect(await eraseAccountMembershipsPage({ pool, access }, member.accountId, null)).toEqual({
       next: null,
       found: 0,
       pending: 0,
@@ -211,7 +213,9 @@ test.serial(
   'an account membership erasure page stays within its bound as other Realms and members grow',
   async () => {
     const { eraseAccountMembershipsPage } = await import('../../src/community/account-erasure-memberships.ts');
-    const pool = communityFixtureRuntime().system.database.pool;
+    const { system } = communityFixtureRuntime();
+    const pool = system.database.pool;
+    const access = system.access;
     await driver.settle();
     await worker.stop();
     growth = await openGrowthDatabase(pool.options.connectionString!);
@@ -283,7 +287,7 @@ test.serial(
       },
       async operation() {
         await restore();
-        const page = await eraseAccountMembershipsPage({ pool: growth.pool }, member.accountId, null);
+        const page = await eraseAccountMembershipsPage({ pool: growth.pool, access }, member.accountId, null);
         expect(page).toEqual({ next: expect.any(String), found: 50, pending: 0 });
         return page;
       },
