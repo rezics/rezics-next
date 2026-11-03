@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Account, Method } from '../../../../specs/community-driver.ts';
 import { noEffect, runCommand, type CommandTransaction } from '../../src/command/command.ts';
+import { createPool } from '../../src/database/pool.ts';
 import { retireRealmRatingQuestion } from '../../src/rating/question-lifecycle.ts';
 import {
   createQuestionVoteAdmission,
@@ -25,9 +26,13 @@ const definition = {
 
 test('Realm curators retire and restore without changing question meaning or private vote history', async () => {
   const driver = await createCommunityDriver();
+  let admissionPool: ReturnType<typeof createPool> | undefined;
   try {
     const fixture = await driver.provision();
     const { system } = communityFixtureRuntime();
+    // Independent native executors must contend in PostgreSQL, beyond one pool's FIFO gate.
+    const commandPool = createPool(system.database.pool.options.connectionString!);
+    admissionPool = commandPool;
     const call = (method: Method, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
       driver.request({ method, path, actor, body, key: JSON.stringify(key) });
     const json = async (response: Response, status = 200) => {
@@ -78,7 +83,7 @@ test('Realm curators retire and restore without changing question meaning or pri
       } = {},
     ) =>
       runCommand(
-        system.database.pool,
+        commandPool,
         { partition: options.home ?? questionHome, deadline: options.deadline ?? Date.now() + 30_000 },
         async (tx) => {
           await options.before?.(tx);
@@ -155,14 +160,19 @@ test('Realm curators retire and restore without changing question meaning or pri
     });
     try {
       await Promise.race([locked.promise, holding]);
-      await expect(
-        retireRealmRatingQuestion(
-          { pool: system.database.pool, access: system.access },
-          memberActor,
-          { questionId: question.id, expectedRevision: 1 },
-          { deadline: Date.now() + 1_000, idempotencyKey: randomUUID() },
-        ),
-      ).rejects.toMatchObject({ reason: 'deadline' });
+      const blocked = await retireRealmRatingQuestion(
+        { pool: system.database.pool, access: system.access },
+        memberActor,
+        { questionId: question.id, expectedRevision: 1 },
+        { deadline: Date.now() + 1_000, idempotencyKey: randomUUID() },
+      ).then(
+        () => {
+          throw new Error('Retirement committed through the held question');
+        },
+        (error: unknown) => error,
+      );
+      expect(blocked).toMatchObject({ name: 'CommandUnavailableError' });
+      expect(['deadline', 'contention']).toContain((blocked as { reason: string }).reason);
     } finally {
       release.resolve();
       await holding;
@@ -357,6 +367,7 @@ test('Realm curators retire and restore without changing question meaning or pri
       { state: 'active', revision: '5', generation: '4' },
     ]);
   } finally {
+    await admissionPool?.end();
     await driver.close();
     await closeCommunityDrivers();
   }
