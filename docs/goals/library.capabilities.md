@@ -667,9 +667,9 @@ scopes, disclosure, eight navigation slots, cancellation and exact Session/journ
 query shape and lifecycle. Focused typed-client scenarios extend `services/kernel/test/library/diary.test.ts`.
 Web318 continued by Web142 remains the history interface owner. Frozen acceptance, Web integration and executed
 whole-caller native64/512/4096 growth remain deferred to integration.
-Archive Entry/label confirmation uses generated upload/preview/review/apply methods and explicit per-item
+Archive Entry/label confirmation declares generator-visible upload/preview/review/apply methods and explicit per-item
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
-`services/kernel/test/library/library-archive-merge.test.ts`; the typed transport journey is
-`packages/client/tests/library-archive-merge.test.ts`. The canonical Web archive consumer8bb owns file/recovery UI
-integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
+`services/kernel/test/library/library-archive-merge.test.ts`. Regenerating the retained client declarations and
+installing their typed transport journey remain required before Web file admission. The canonical Web archive
+consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
