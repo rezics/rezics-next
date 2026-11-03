@@ -23,7 +23,7 @@ export function currentHistoryEnvelope(
         title: 'Admitted conversation',
         authorId: selected.authorId,
         boardId: selected.boardId,
-        subjectIds: selected.subjectIds,
+        subjectIds: [...selected.subjectIds],
         createdAt: selected.createdAt,
       },
       board: {
