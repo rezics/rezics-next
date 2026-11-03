@@ -8,6 +8,7 @@ import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } fr
 import { realmClaimSnapshot, type RealmClaimSnapshot } from './realm-claim';
 import { readRealmHomePresentation, type RealmHomePresentation } from './realm-home-presentation-native';
 import { nativeMembershipEffect, nativeRealmLeaveOwnerReason } from './realm-leave-recovery';
+import { formatMyRealmsInventory, type MyRealmsInventoryLink } from './my-realms-native';
 
 /** Boards listed on a Realm page. The kernel allows at most 100. */
 export const BOARD_ROW_LIMIT = 20;
@@ -85,7 +86,7 @@ export async function namePublishedTypes(page: SpacePageData, locale: string): P
   };
 }
 
-export type RealmLink = { realmId: string; name: string; description?: string | null };
+export type RealmLink = MyRealmsInventoryLink & { description?: string | null };
 export type MyRealmsReaderOrigin =
   | { kind: 'session'; subject: string; csrfFingerprint: string }
   | { kind: 'anonymous' }
@@ -503,11 +504,7 @@ export async function loadMyRealms(
   const page = readCommunity(result);
   return {
     signedIn: true,
-    realms: page.items.map((item) => ({
-      realmId: item.realmId,
-      name: item.name,
-    })),
-    next: page.next,
+    ...formatMyRealmsInventory(page),
     readerOrigin,
   };
 }

@@ -182,6 +182,9 @@ recorded examples; do not treat the existing ID-based link as native evidence of
 continuation will bind the admitted destination and selected action to that response, then document the delivered
 pending/readback and retry meanings here.
 
+Decision: derive the inventory projection from the installed generated `me.realms.get` response, explicitly admitting
+only `realmId` and `name` until the producer publishes current-entry and action fields and examples.
+
 #### Current native cost
 
 - Touches: one existing `/v1/me/realms` page read with its normal session preparation; Web formats the returned rows
