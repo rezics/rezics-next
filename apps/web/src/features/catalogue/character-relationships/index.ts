@@ -22,7 +22,6 @@ export {
 } from './reading';
 export { associationCorrection, associationSlot, appearanceFactsStayOnSlot, voiceStaysIndependent } from './correction';
 export { characterRelationshipsHref, parseCharacterRelationshipsAddress, associationReadingKey } from './navigation';
-export { readCharacterRelationshipsPage } from './actions';
 export { CharacterRelationshipsView, type CharacterRelationshipsTransport } from './view';
 export { CharacterRelationshipsSession } from './session';
 export { CharacterRelationshipsEntry } from './entry';

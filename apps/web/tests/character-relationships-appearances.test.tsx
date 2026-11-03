@@ -2,6 +2,10 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { bundledRelease } from '@rezics/definitions/bundled';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
 import {
   appearanceWorkA,
   appearanceWorkB,
@@ -9,17 +13,14 @@ import {
   characterRelationshipsId,
   relatedCharacterId,
 } from '../src/kernel/fake/character-relationships';
+import { associationCorrection } from '../src/features/catalogue/character-relationships/correction';
 import {
-  associationCorrection,
+  appearanceProperty,
   characterAssociationStreams,
   unavailableConfigurations,
-} from '../src/features/catalogue/character-relationships';
-import { appearanceProperty } from '../src/features/catalogue/character-relationships/reading';
+} from '../src/features/catalogue/character-relationships/reading';
 import { CharacterRelationshipsView } from '../src/features/catalogue/character-relationships/view';
-import { bundledRelease } from '@rezics/definitions/bundled';
 import { characterType } from '../src/features/catalogue/character-profile';
-
-mock.module('cloudflare:workers', () => ({ env: {} }));
 
 async function withHost(run: (host: HTMLElement, render: (node: ReactNode) => Promise<void>) => Promise<void>) {
   const require = createRequire(import.meta.url);
