@@ -10,5 +10,5 @@ test('consolidation facts identify the private plan without disclosing review ev
   expect(Value.Check(LIBRARY_EVENTS[type], {})).toBe(false);
   for (const key of ['selection', 'sourceLabel', 'targetLabel', 'items'])
     expect(Value.Check(LIBRARY_EVENTS[type], { ...data, [key]: 'private review evidence' })).toBe(false);
-  expect(() => classifyEvent(type)).not.toThrow();
+  expect(classifyEvent(type)).toEqual({ kind: 'account-bearing', roles: ['subject'] });
 });
