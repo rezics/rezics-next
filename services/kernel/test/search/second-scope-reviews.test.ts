@@ -144,12 +144,13 @@ describe('public review discovery adapter', () => {
       position: 21n,
       observation: { state: 'withdrawn', id: active.id, route: active.route, version: 7n },
     };
+    let authorizedSummary = active;
     let summaryCalls = 0;
     const native = source({
       read: async () => ({ partition, position: current.position, observations: [current.observation] }),
       summaries: async () => {
         summaryCalls += 1;
-        return [active];
+        return [authorizedSummary];
       },
     });
     const adapter = createReviewDiscoveryAdapter(native);
@@ -176,6 +177,7 @@ describe('public review discovery adapter', () => {
     expect(beforeReindex.value.size).toBe(0);
 
     const restoredDocument = reviewDiscoveryDocument(partition, 23n, restored);
+    authorizedSummary = restored;
     const summaries = await adapter.currentSummaries([restoredDocument], context);
     expect(summaryCalls).toBe(1);
     expect(summaries.status).toBe('ready');
