@@ -51,6 +51,15 @@ test('Board comments require a current matching cohort witness and reaction zero
   });
   expect(projectBoardOpeningComments('other-thread', publicZero, anonymous)).toEqual({ state: 'unavailable' });
 
+  const selected = projectBoardOpeningComments(threadId, publicZero, anonymous);
+  // A producer may refresh a retained summary object while the page hydrates.
+  Object.assign(publicZero.count, { value: 1 });
+  Object.assign(publicZero.source, { position: '11' });
+  const refreshed = projectBoardOpeningComments(threadId, publicZero, anonymous);
+  expect(selected).toMatchObject({ count: { value: 0 }, source: { position: '10' } });
+  expect(refreshed).toMatchObject({ count: { value: 1 }, source: { position: '11' } });
+  expect(selected).not.toEqual(refreshed);
+
   expect(projectBoardOpeningReactionCounts(true, {}, { epoch: 2, position: '10' })).toEqual({
     state: 'as-of',
     values: {},
