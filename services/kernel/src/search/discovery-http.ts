@@ -337,17 +337,18 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
 /** Close the owner/summary union and snapshot nested owner values before serialization. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
+  const { viewerFacts: originalViewerFacts, ...publicPage } = page;
   const viewerFacts: DiscoveryHttpPage['viewerFacts'] =
-    page.viewerFacts === undefined || page.viewerFacts === null
-      ? page.viewerFacts
-      : page.viewerFacts.state === 'unavailable'
-        ? { ...page.viewerFacts }
+    originalViewerFacts === undefined || originalViewerFacts === null
+      ? originalViewerFacts
+      : originalViewerFacts.state === 'unavailable'
+        ? { ...originalViewerFacts }
         : {
             state: 'current',
-            question: page.viewerFacts.question
-              ? { ...page.viewerFacts.question, scale: { ...page.viewerFacts.question.scale } }
+            question: originalViewerFacts.question
+              ? { ...originalViewerFacts.question, scale: { ...originalViewerFacts.question.scale } }
               : null,
-            rows: page.viewerFacts.rows.map((row) => ({
+            rows: originalViewerFacts.rows.map((row) => ({
               rowKey: row.rowKey,
               subjectId: row.subjectId,
               entry: structuredClone(row.entry),
@@ -355,7 +356,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
             })),
           };
   return {
-    ...page,
+    ...publicPage,
     hits: page.hits.map((hit): DiscoveryHttpPage['hits'][number] => {
       if (hit.summary.kind === 'account') {
         if (hit.key.owner !== 'accounts') throw new SearchUnavailableError('Discovery summary owner disagrees');
