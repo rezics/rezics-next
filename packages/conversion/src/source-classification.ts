@@ -127,6 +127,8 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
   const value = object(input);
   if (!value) return { state: 'unavailable', reason: 'unsupported-record' };
   const required = ['sourceAlias', 'sourceRecordId', 'sourceRevision', 'converterRevision', 'observedAt', 'coverage', 'attribution', 'licence', 'value'];
+  if (required.some((key) => !Object.hasOwn(value, key)))
+    return { state: 'unavailable', reason: 'incomplete-input' };
   if (Object.keys(value).some((key) => ![...required, 'sourceDigest'].includes(key)))
     return { state: 'unavailable', reason: 'unsupported-record' };
   if (
