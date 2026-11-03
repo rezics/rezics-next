@@ -16,6 +16,7 @@ import readDecision from './read-moderation-decision.sql';
 import readHistorySource from './moderation-history-source.sql';
 import projectHistory from './project-moderation-history.sql';
 import author from './author-moderation-decision.sql';
+import boardTarget from './moderation-history-board.sql';
 
 const takedownType = 'com.rezics.content.moderation.takedown.v1';
 const appealWindowMs = 183 * 24 * 60 * 60 * 1000;
@@ -87,11 +88,13 @@ export async function readModerationDecision(
   const observed = await snapshot(deps.pool, route, context.deadline, async (client) => {
     const decision = await readDecision.run(client, { route, decision_id: id });
     if (!decision) return null;
-    const [target] = await author.run(client, {
-      route,
-      target_kind: decision.target_kind,
-      target_id: decision.target_id,
-    });
+    const [target] = decision.target_kind === 'board'
+      ? await boardTarget.run(client, { route, id: decision.target_id })
+      : await author.run(client, {
+          route,
+          target_kind: decision.target_kind,
+          target_id: decision.target_id,
+        });
     return target ? { decision, target } : null;
   });
   if (!observed.value || context.actor.kind !== 'account') return null;
