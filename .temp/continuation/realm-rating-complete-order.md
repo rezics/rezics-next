@@ -33,8 +33,8 @@ estimate:
   files: 21
 acceptance:
   tests:
-    - "Complete scored/unscored canonical Realm traversal uses native selected-question publication, current disclosure and coherent invalidation across pages."
-    - "Three-scale native growth at 256/1024/4096 validates source-derived physical row, statement, transaction-control, memory and ordered-index bounds, including selected-question observations and the actual question_identity prefix."
+    - 'Complete scored/unscored canonical Realm traversal uses native selected-question publication, current disclosure and coherent invalidation across pages.'
+    - 'Three-scale native growth at 256/1024/4096 validates source-derived physical row, statement, transaction-control, memory and ordered-index bounds, including selected-question observations and the actual question_identity prefix.'
     - "Search consumes the producer's delivered method while retaining query admission, predicate semantics, cross-partition composition, useful-page accounting, public response and signed outer cursor."
 ---
 
