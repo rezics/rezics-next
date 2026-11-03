@@ -212,7 +212,7 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
   });
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
   const target = await native.createSubject('game');
-  const occurrences = [];
+  const occurrences: { id: string }[] = [];
   for (let index = 0; index < 4; index++) {
     const started = await json(
       'POST',
