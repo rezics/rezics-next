@@ -671,7 +671,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 | public curated                 | APPLICABLE: `collection-actions` readable-unlisted follow and occurrence-faithful ItemList export; existing native Library follows only partial.                 |
 | Everything WITHOUT state       | APPLICABLE: `collection-actions` own identity follow/read and eligible published output; Bob/anonymous cannot infer private predicates; dynamic binding MISSING. |
 | own-state Collection/predicate | APPLICABLE: `collection-actions` state-source eligibility and unique dynamic export, no private predicate projection; binding MISSING.                           |
-| mounted Zone                   | APPLICABLE: `collection-actions` mounted source canonical uniqueness/current authority; native source factory unimplemented.                                     |
+| mounted Zone                   | APPLICABLE: `collection-actions` mounted source canonical uniqueness/current authority; curated/private built-in ready-source factory exists; mounted composition remains unmeasured.                                     |
 | TypeList                       | APPLICABLE: `collection-actions` configured source consumption agrees with member/export identity; composed binding MISSING.                                     |
 
 **Frozen scenarios:** [library outcomes](../../specs/library-outcomes.test.ts): `explicit follow and unfollow of a public Collection remain private and list only following`.

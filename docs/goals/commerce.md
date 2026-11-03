@@ -118,8 +118,9 @@ native handle reservation, pending registration, Auth provisioning evidence, han
 production Auth/Access binding. Positive accounts and active definitions are no longer installed by fixture SQL.
 
 The [released profile cases](../../services/kernel/test/library/released-profile-user-cases.test.ts) remain bundled
-first-public coverage, not proof of the broader custom-profile or migration suite. All five kernel entry points
-and native adapters now exist; the profile migration runtime and registered worker also exist. Current kernel
+first-public coverage, not proof of the broader custom-profile or migration suite. [Public scope](../scope.md)
+closes custom catalogue publication behind platform grants; it does not exclude historic fact clearing or authorize
+skipping frozen cases. No suite is skipped here. All five kernel entry points and native adapters now exist; the profile migration runtime and registered worker also exist. Current kernel
 composition mounts label HTTP routes and default shelf reads, while Collection Source supports ready curated and
 private built-in authority. None of those source bindings establishes a useful-page or whole-suite result.
 

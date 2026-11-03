@@ -238,31 +238,31 @@ semantic identity allowance. No emitted-row count can substitute for these charg
 
 - Touches: owner admission, live-name B-tree range, cursor basis and exact continuation-name reread.
 - Bound: <=100 raw candidates, O(P) memory, fixed metadata points; long legal names require no linear catalogue work.
-- Growth check: native q/continuation plans at growing catalogue sizes and long Unicode boundaries are unimplemented.
+- Growth check: native prefix/catalogue growth suites exist; current q/continuation and Unicode-boundary measurements are unrecorded.
 
 ### Create label
 
 - Touches: owner admission, exact definition/name uniqueness, shared receipt/outbox and source metadata as needed.
 - Bound: fixed keys/statements; unrelated catalogue growth adds at most logarithmic index work, with no catalogue cap.
-- Growth check: end-to-end native create growth remains unimplemented; [catalogue tests][catalogue-tests] cover the DAO.
+- Growth check: native catalogue growth source exists; end-to-end create measurements remain unrecorded; [catalogue tests][catalogue-tests] are narrower.
 
 ### Rename label
 
 - Touches: exact label CAS, old/new name keys, receipt/outbox and source evidence; never child rows.
 - Bound: fixed keys/statements independent of assignment population; unchanged canonical name has no domain effect.
-- Growth check: [outcome acceptance][outcomes] requires unrelated-data traces; a production driver remains unimplemented.
+- Growth check: [outcome acceptance][outcomes] has a native adapter; unrelated-data rename traces remain unmeasured.
 
 ### Delete label
 
 - Touches: exact parent CAS/tombstone, source fence and shared receipt/outbox/durable cleanup intent.
 - Bound: fixed keys/statements with no assignment fanout; child count affects only eventual paged cleanup.
-- Growth check: [outcome acceptance][outcomes] requires delete growth/crash/replay; integrated execution is unimplemented.
+- Growth check: [outcome acceptance][outcomes] retains delete growth/crash/replay; current integrated results remain unmeasured.
 
 ### Restore label
 
 - Touches: exact historic parent CAS/deadline/name uniqueness, source fence and minimal receipt/outbox.
 - Bound: fixed keys/statements; restore unchanged reservations implicitly, never enumerate or revive reclaimed children.
-- Growth check: [catalogue tests][catalogue-tests] cover DAO undo/name collision; integrated restore growth is unimplemented.
+- Growth check: [catalogue tests][catalogue-tests] cover DAO undo/name collision; native lifecycle growth exists but current restore measurements are unrecorded.
 
 ### Assign label
 
@@ -274,31 +274,31 @@ semantic identity allowance. No emitted-row count can substitute for these charg
 
 - Touches: owner/subject admission, guard, current parent, exact assignment-ID/tuple/revision CAS, fence and receipt/outbox.
 - Bound: fixed points/statements; clear one reservation and retain only that episode for 720 hours.
-- Growth check: integrated native unassign growth is unimplemented; [outcome acceptance][outcomes] defines required behavior.
+- Growth check: native assignment lifecycle growth source exists; [outcome acceptance][outcomes] remains unmeasured.
 
 ### Restore assignment
 
 - Touches: historic assignment-ID/tuple/revision/deadline, guard, <=32 reservations/current parents and shared command keys.
 - Bound: <=33 parent locks and one reclaim to reacquire capacity; no history scan or renewal of the original undo deadline.
-- Growth check: explicit native undo/admission integration remains unimplemented; reassignment evidence is not undo proof.
+- Growth check: native undo/admission source exists; reassignment evidence alone is not measured Undo proof.
 
 ### BASIC assignment list
 
 - Touches: owner/subject admission, exact parent metadata and indexed label or reserved-subject source candidates.
 - Bound: <=100 raw page candidates; subject source <=32 plus necessary current-parent/metapoints, charged separately.
-- Growth check: native read-driver plans and deep-cursor measurements remain unimplemented; DAO admission is not read proof.
+- Growth check: native read/growth source exists; current deep-cursor measurements remain unrecorded; DAO admission is not read proof.
 
 ### FULL assignments by subject
 
 - Touches: BASIC sources and <=32 exact current-parent name points; no progress or display-summary reads.
 - Bound: same bounded reservation window plus separately charged metadata points; no retained-history or catalogue scan.
-- Growth check: native FULL-by-subject producer and all-pool measurements remain unimplemented.
+- Growth check: FULL-by-subject HTTP source and growth cases exist; complete all-pool measurements remain unrecorded.
 
 ### FULL assignments by label
 
 - Touches: admission/gates, parent/page and owner entry/session batch in one RR snapshot, then standard subject summaries.
 - Bound: raw page<=100 and native subject-ID batch<=100; fixed per-subject points, finite summary concurrency, all pools charged.
-- Growth check: native batch/FULL producers and end-to-end all-pool measurements remain unimplemented.
+- Growth check: batch/FULL HTTP source and growth cases exist; end-to-end all-pool measurements remain unrecorded.
 
 ### Automatic purge and terminal account cleanup
 
