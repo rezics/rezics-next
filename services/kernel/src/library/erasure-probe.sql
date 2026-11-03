@@ -8,6 +8,7 @@ WITH input AS NOT MATERIALIZED (
 ),
 probe AS (
   SELECT
+    EXISTS (SELECT 1 FROM library.diary_navigation WHERE route=input.route AND account_id=input.account_id) AS diary_navigation,
     EXISTS (SELECT 1 FROM library.collection_publication_operation WHERE route=input.route AND owner_account_id=input.account_id) AS collection_publication_operation,
     EXISTS (SELECT 1 FROM library.collection_source_output WHERE route=input.route AND account_id=input.account_id) AS collection_source_output,
     EXISTS (SELECT 1 FROM library.collection_source_output_publication WHERE route=input.route AND account_id=input.account_id) AS collection_source_output_publication,
@@ -53,6 +54,7 @@ probe AS (
 SELECT stores.store
 FROM probe
 CROSS JOIN LATERAL (VALUES
+  (diary_navigation, 'diary_navigation'::text),
   (members_preparation_owner, 'members_preparation_owner'::text),
   (members_preparation, 'members_preparation'::text),
   (members_preparation_result, 'members_preparation_result'::text),
