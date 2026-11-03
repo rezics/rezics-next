@@ -448,7 +448,9 @@ function ScreenProfileLive({
               const membership = membershipCreateStatement(read.release, read.series?.subject.type, membershipDraft);
               if (membership) statements.push(membership);
               const prepared = screenInitialFacts(read.release, item, statements);
-              setFailure(prepared.errors.length ? { ok: false, reason: 'invalid', errors: prepared.errors } : undefined);
+              setFailure(
+                prepared.errors.length ? { ok: false, reason: 'invalid', errors: prepared.errors } : undefined,
+              );
               return prepared;
             },
             fields: (type, disabled, canEdit, invalidate) => {
@@ -557,9 +559,9 @@ function ScreenProfileLive({
                       stale={stale}
                       onJump={jump}
                       factId={(property, index) => {
-                        const match = (drafts[item.type] ?? []).filter(
-                          (row) => row.statement.property.id === property,
-                        )[index];
+                        const match = (drafts[item.type] ?? []).filter((row) => row.statement.property.id === property)[
+                          index
+                        ];
                         return match ? screenRowId(match) : screenFactId(property);
                       }}
                     />

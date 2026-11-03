@@ -116,8 +116,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     act(async () => user.click(within(scope).getByRole('button', { name })));
   const confirm = async () => {
     await click(host, m.catalogue_create_submit());
-    if (host.querySelector('[data-screen-create-review]'))
-      await click(host, m.catalogue_create_submit());
+    if (host.querySelector('[data-screen-create-review]')) await click(host, m.catalogue_create_submit());
   };
   const choose = (scope: HTMLElement, name: string, value: string) =>
     act(async () => user.selectOptions(select(scope, name), value));

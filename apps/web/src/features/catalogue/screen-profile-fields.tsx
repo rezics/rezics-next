@@ -534,8 +534,7 @@ export function ScreenInitialFields({
         const fieldPrefix = `/statements/${encoded}`;
         const presented: PresentedViolation[] = presentStatementViolations(
           errors.flatMap((error) => {
-            if (error.pointer === fieldPrefix)
-              return [{ pointer: '/statement', code: error.code as never }];
+            if (error.pointer === fieldPrefix) return [{ pointer: '/statement', code: error.code as never }];
             if (error.pointer !== prefix && !error.pointer.startsWith(`${prefix}/`)) return [];
             return [{ pointer: `/statement${error.pointer.slice(prefix.length)}`, code: error.code as never }];
           }),

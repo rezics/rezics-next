@@ -55,7 +55,10 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
   const canvas = () => within(host);
   const name = (property: string) => screenName(recorded.release as Release, property, 'en').text;
   const row = (property: string) =>
-    canvas().getAllByRole('heading', { name: name(property), level: 3 }).at(-1)!.closest('section')! as HTMLElement;
+    canvas()
+      .getAllByRole('heading', { name: name(property), level: 3 })
+      .at(-1)!
+      .closest('section')! as HTMLElement;
   async function render(node: ReactNode, subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10') {
     await act(async () =>
       root.render(
@@ -116,10 +119,10 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
       />,
     );
     await choose('schema:Movie');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed film'));
     await act(async () =>
-      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_aliases() }), 'Picture'),
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed film'),
     );
+    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_aliases() }), 'Picture'));
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_add_language() })));
     await act(async () => user.type(host.querySelector<HTMLInputElement>('#create-language-1')!, 'ja'));
     await act(async () => user.type(host.querySelector<HTMLInputElement>('#create-label-1')!, '映画'));
@@ -172,7 +175,9 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
     await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept film'));
     await fillUrl(await add('schema:url'), 'https://example.org/movie-draft', 'https://example.org/movie-cite');
     await choose('schema:Episode');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept episode'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept episode'),
+    );
     await fillUrl(await add('schema:url'), 'https://example.org/episode-draft', 'https://example.org/episode-cite');
     await confirm();
     await waitFor(() => expect(switched.creation.calls.filter((call) => call.method === 'POST')).toHaveLength(1));
@@ -207,16 +212,16 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
       />,
     );
     await choose('schema:Movie');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Repair nested'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Repair nested'),
+    );
     const repairUrl = await add('schema:url');
     const repairLanguage = await add('schema:inLanguage');
     await fillUrl(repairUrl, 'https://example.org/url', 'https://example.org/bad');
     await act(async () => user.type(within(repairLanguage).getByRole('textbox', { name: m.correction_value() }), 'en'));
     const languageCitation = citation(repairLanguage).id;
     await confirm();
-    const link = await waitFor(() =>
-      canvas().getByRole('link', { name: new RegExp(name('schema:url')) }),
-    );
+    const link = await waitFor(() => canvas().getByRole('link', { name: new RegExp(name('schema:url')) }));
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).toBe(citation(repairUrl).id);
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).not.toBe(languageCitation);
     await act(async () => user.click(within(repairUrl).getByRole('button', { name: m.relation_remove() })));
@@ -252,7 +257,9 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
       ),
     );
     await act(async () =>
-      user.click(within(host.querySelector('[data-fact-reuse]')!).getByRole('checkbox', { name: name('schema:inLanguage') })),
+      user.click(
+        within(host.querySelector('[data-fact-reuse]')!).getByRole('checkbox', { name: name('schema:inLanguage') }),
+      ),
     );
     await act(async () => {
       await user.clear(citation(source));
@@ -267,10 +274,18 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
 
     const lost = screenProfileFixture('uncertain');
     await render(
-      <ScreenProfile locale="en" session="signed-in" transport={lost.transport} search={async () => []} onNavigate={() => {}} />,
+      <ScreenProfile
+        locale="en"
+        session="signed-in"
+        transport={lost.transport}
+        search={async () => []}
+        onNavigate={() => {}}
+      />,
     );
     await choose('schema:Movie');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Uncertain film'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Uncertain film'),
+    );
     await confirm();
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
     const first = lost.creation.calls.filter((call) => call.method === 'POST');
@@ -300,7 +315,9 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
       />,
     );
     await choose('schema:Movie');
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Unread film'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Unread film'),
+    );
     await confirm();
     await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
     expect(unread.creation.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
@@ -352,7 +369,9 @@ test('standalone Screen creation reviews evidence, copies references, and retrie
       />,
     );
     await waitFor(() => expect(canvas().getByRole('textbox', { name: m.catalogue_create_label() })).toBeDefined());
-    await act(async () => user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Series episode'));
+    await act(async () =>
+      user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Series episode'),
+    );
     expect(canvas().queryByRole('combobox', { name: m.catalogue_create_type() })).toBeNull();
     expect(host.querySelector('#create-type')?.textContent).toMatch(/episode/i);
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
