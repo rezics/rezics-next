@@ -2,10 +2,13 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { realmBoardWorld } from './realm-board-create-support.ts';
 import {
+  projectBoardOpeningActivitySelection,
   projectBoardOpeningComments,
   projectBoardOpeningReactionCounts,
   type BoardOpeningActivityWitness,
 } from '../../src/content/board-page.ts';
+import type { ConversationActivitySelection } from '../../src/content/conversation-activity.ts';
+import type { AnchoredPosition } from '../../src/content/model.ts';
 import type { Actor } from '../../src/request/access.ts';
 
 let world: Awaited<ReturnType<typeof realmBoardWorld>>;
@@ -66,6 +69,42 @@ test('Board comments require a current matching cohort witness and reaction zero
     source: { epoch: 2, position: '10' },
   });
   expect(projectBoardOpeningReactionCounts(true, undefined, undefined)).toEqual({ state: 'unavailable' });
+});
+
+test('Board projects only the producer count and source head while retaining its partition anchor', () => {
+  const threadId = 'thread-one';
+  const anchor = { partition: {} as AnchoredPosition['partition'], epoch: 2, position: 12n };
+  const selected: ConversationActivitySelection = {
+    threadId,
+    status: 'current',
+    cohort: 'public',
+    replyCount: { kind: 'lower-bound', value: 10_000 },
+    lastContributionAt: '2026-11-04T00:00:00.000Z',
+    witness: {
+      threadId,
+      boardId: 'board-one',
+      threadSecurityRevision: '1',
+      boardSecurityRevision: '1',
+      realmId: null,
+      boardGeneration: '1',
+      generation: '1',
+      sourceHead: { epoch: 3, position: 17n, eventSeq: 1_000 },
+      source: anchor,
+    },
+  };
+  expect(projectBoardOpeningActivitySelection([selected])).toEqual({
+    items: [
+      {
+        state: 'current',
+        threadId,
+        cohort: { kind: 'public' },
+        count: { kind: 'lower-bound', value: 10_000 },
+        lastActivityAt: '2026-11-04T00:00:00.000Z',
+        source: { epoch: 3, position: '17' },
+      },
+    ],
+    anchors: [anchor],
+  });
 });
 
 test.serial('the mounted opening page combines current Realm context and a disclosed discussion card', async () => {

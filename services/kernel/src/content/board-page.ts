@@ -235,7 +235,7 @@ function imageProjection(
 
 const unavailableComments: BoardOpeningComments = { state: 'unavailable' };
 
-function projectConversationActivitySelection(
+export function projectBoardOpeningActivitySelection(
   selected: readonly ConversationActivitySelection[],
 ): BoardOpeningActivityRead {
   return {
@@ -268,10 +268,10 @@ function createConversationActivityReader(dependencies: BoardOpeningDependencies
       observed = true;
       selectedIds = [...threadIds];
       selected = await activity.select(threadIds, deadline);
-      return projectConversationActivitySelection(selected);
+      return projectBoardOpeningActivitySelection(selected);
     }
     if (!isDeepStrictEqual(selectedIds, threadIds)) throw new BoardOpeningChangedError();
-    return projectConversationActivitySelection(await activity.confirm(selected, deadline));
+    return projectBoardOpeningActivitySelection(await activity.confirm(selected, deadline));
   };
 }
 
