@@ -163,8 +163,8 @@ is not a selected classification. Current assertions, other languages, qualifier
 drafting. Name maps link to the actual terms adapter; an unavailable native producer stays unavailable. Original text
 links to the existing authored editor with explicit language and licence. No candidate is presented as current
 publication.
-Decision: Character and Screen profile classification corrections opt into the shared changed-set review and evidence
-reuse controls. Album, Manga, StoryArc and add-on callers keep immediate per-field confirmation.
+Decision: Character, Screen and StoryArc profile classification corrections opt into the shared changed-set review and evidence
+reuse controls. Album, Manga and add-on callers keep immediate per-field confirmation.
 
 ## Browser flow: Screen classification correction
 
@@ -398,7 +398,7 @@ normal Web captures and native integration acceptance remain pending. There is n
 
 ## Browser flow: cited fact correction review and evidence reuse
 
-Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character classification corrections on the Character caller use that same review and reuse coordinator on their per-field holders. The Game classification caller binds the same coordinator. Album, Manga, Screen, StoryArc and add-on classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path. Decision: after native selection the Character caller rereads that Character through the existing facts read, and the explicit Read current selection control remains for a failed or differing current result.
+Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character classification corrections on the Character caller use that same review and reuse coordinator on their per-field holders. The Game classification caller binds the same coordinator. StoryArc classification correction on an existing disclosed `wd:Q2620972` opts into the same Character classification coordinator. Album, Manga and add-on classification writers that duplicate their own submit keep immediate confirmation. Screen classification correction already binds that coordinator. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path. Decision: after native selection the Character caller rereads that Character through the existing facts read, and the explicit Read current selection control remains for a failed or differing current result.
 
 Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
 
@@ -427,6 +427,17 @@ as emitted. Creating an arc creates no parent statement. The arc's own series, p
 admitted relationships open the existing relationship workspace. Acceptance and adoption use current heads and
 the actual reader; an unselected adoption stays pending. Other slots and their evidence remain intact. Ordinary
 forms submit no ingestion Source metadata, and existing source-or-consent and disclosure decisions remain native.
+
+Classification correction on an existing disclosed StoryArc reviews the complete changed admitted set through the
+shared Character classification coordinator, copies one complete citation group onto other editable holders in the
+same visit, and proposes each holder independently. A work suggestion cannot identify a classification, confer copy
+rights or select a candidate. Candidate review and selection remain a later native decision; after selection the
+exact arc is reread and shown even when it differs from the earlier proposal. Current-read failure stays on the
+classification overlay and does not empty the profile or adopt the work identity.
+Decision: StoryArc classification correction opts into CharacterClassifications `changedSetReview`. A successful
+current reread updates only the same arc UUID; failed reads keep the last admitted public identity and the
+classification overlay. Draft rank keeps a selected `preferred` assertion; Character48 staging still emits
+`statementInput` `normal` until that producer projects richer rank into its holders.
 
 ## Ordinary multilingual correction
 

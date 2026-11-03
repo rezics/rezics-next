@@ -6,7 +6,8 @@ import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { StoryArcProfile } from './story-arc-profile-view';
-import { storyArcFacts, type StoryArcAddress } from './story-arc-profile';
+import type { StoryArcAddress } from './story-arc-profile';
+import { storyArcClassificationCurrent } from './story-arc-classification-review';
 import { loadStoryArcProfile } from './story-arc-profile-actions';
 import { readCreateDefinitions, createCatalogueSubject, readCreatedCatalogueSubject } from './create-subject-actions';
 import { relationTargetSearch } from './relation-editor-search';
@@ -48,10 +49,7 @@ function StoryArcProfileSessionLive({
         },
       }}
       facts={(id) => ({
-        read: async () => {
-          const read = await loadStoryArcProfile({ data: { id } });
-          return read.ok ? storyArcFacts(read) : read;
-        },
+        read: async () => storyArcClassificationCurrent(await loadStoryArcProfile({ data: { id } })),
         propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       })}
       review={(id, _property, initialSession) => {

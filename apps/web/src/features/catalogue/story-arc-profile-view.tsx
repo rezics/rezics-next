@@ -6,7 +6,7 @@ import {
 } from './editor-lifetime';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -20,8 +20,12 @@ import type { CreateResult } from './create-subject';
 import { StoryArcCreate } from './story-arc-create';
 import { EditorFailure } from './statement-editor-view';
 import { SubjectFacts } from './subject-facts-view';
-import { CharacterClassifications } from './character-profile-classification';
 import type { FactsTransport } from './subject-facts';
+import { StoryArcClassificationReview } from './story-arc-classification-review-view';
+import {
+  applyStoryArcClassificationObservation,
+  storyArcClassificationCurrent,
+} from './story-arc-classification-review';
 import { RelationEditor } from './relation-editor';
 import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
 import { storyArcEntry } from './story-arc-profile-entry';
@@ -88,6 +92,7 @@ function StoryArcProfileLive({
   relations,
 }: StoryArcProfileProps) {
   const lifetime = useEditorLifetime();
+  const client = useQueryClient();
   const o = { locale: locale as never };
   const [id, setId] = useState(initialId);
   const [work, setWork] = useState(initialWork);
@@ -96,8 +101,9 @@ function StoryArcProfileLive({
   const [reloadAttempt, setReloadAttempt] = useState<{ selection: string; sequence: number }>();
   const reloadSequence = useRef(0);
   const reloading = reloadAttempt?.selection === selection;
+  const queryKey = [...['story-arc-profile', id, work, locale, session], lifetime.generation];
   const query = useQuery({
-    queryKey: [...['story-arc-profile', id, work, locale, session], lifetime.generation],
+    queryKey,
     queryFn: () => transport.load({ id, work }),
     retry: false,
     staleTime: Infinity,
@@ -132,6 +138,7 @@ function StoryArcProfileLive({
   const readable = !reloading && !query.isError && query.data?.ok === true;
   const current = readable && query.data?.ok ? query.data : undefined;
   const privateRead = retained.current?.read;
+  const classification = privateRead ? storyArcClassificationCurrent(privateRead) : undefined;
   const arc = current?.arc;
   const label = pageText(arc?.subject.labels, locale);
   const href = arc ? subjectHref({ id: arc.subject.id, label: label.text }, locale).href : undefined;
@@ -386,22 +393,25 @@ function StoryArcProfileLive({
                 transport={facts(privateRead.arc.subject.id)}
                 review={(property, token) => review(privateRead.arc!.subject.id, property, token)}
               />
-              <CharacterClassifications
-                key={privateRead.arc.subject.id}
-                properties={privateRead.release.types[storyArcType]!.properties.filter(
-                  (property) => privateRead.release.properties[property]?.relation?.group === 'classification',
-                )}
-                read={{
-                  ok: true,
-                  release: privateRead.release,
-                  public: privateRead.arc,
-                  source: null,
-                }}
-                locale={locale}
-                search={search}
-                transport={facts(privateRead.arc.subject.id)}
-                review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
-              />
+              {classification?.ok && (
+                <AuthoringDepartureBoundary>
+                  <StoryArcClassificationReview
+                    key={privateRead.arc.subject.id}
+                    read={classification}
+                    locale={locale}
+                    search={search}
+                    transport={facts(privateRead.arc.subject.id)}
+                    review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
+                    observe={(next) => {
+                      if (!lifetime.active() || observation.current.token !== token) return;
+                      client.setQueryData<StoryArcRead>(
+                        queryKey,
+                        applyStoryArcClassificationObservation(privateRead, next),
+                      );
+                    }}
+                  />
+                </AuthoringDepartureBoundary>
+              )}
               {editable && (
                 <section className="space-y-4">
                   <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
