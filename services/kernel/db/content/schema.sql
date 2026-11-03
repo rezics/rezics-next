@@ -1090,30 +1090,6 @@ CREATE TABLE content.conversation_activity_episode (
 
 
 --
--- Name: conversation_activity_episode; Type: TABLE; Schema: content; Owner: -
---
-
-CREATE TABLE content.conversation_activity_episode (
-    route integer NOT NULL,
-    post_id uuid NOT NULL,
-    thread_id uuid NOT NULL,
-    opening boolean NOT NULL,
-    contributed_at timestamp with time zone,
-    native_eligible boolean NOT NULL,
-    security_revision bigint NOT NULL,
-    source_epoch integer NOT NULL,
-    source_position bigint NOT NULL,
-    CONSTRAINT conversation_activity_episode_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
-    CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
-    CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
-    CONSTRAINT conversation_activity_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT conversation_activity_episode_security_revision_check CHECK ((security_revision > 0)),
-    CONSTRAINT conversation_activity_episode_source_epoch_check CHECK ((source_epoch > 0)),
-    CONSTRAINT conversation_activity_episode_source_position_check CHECK ((source_position > 0))
-);
-
-
---
 -- Name: creator_edition; Type: TABLE; Schema: content; Owner: -
 --
 
