@@ -21,7 +21,16 @@ afterAll(async () => {
 
 test('a curator creates and edits a saved rule with native CAS, exact replay and real useful members', async () => {
   const subjectId = await f.subject('Saved rule matching Book');
-  await f.entry(subjectId);
+  // A copy is a Library fact without an entry state.
+  const copy = await f.send('POST', '/v1/copies', {
+    subjectId,
+    status: 'owned',
+    location: 'Shelf',
+    source: 'Personal purchase',
+    acquiredOn: '2026-11-03',
+    disposedOn: null,
+  });
+  expect(copy.status).toBe(201);
   const key = randomUUID();
   const input = draft();
   const created = await f.send('POST', '/v1/collections', input, f.owner, key);

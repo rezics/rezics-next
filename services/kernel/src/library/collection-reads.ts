@@ -44,6 +44,7 @@ import {
   type CollectionMemberQuery,
 } from './owner-filter.ts';
 import type { SearchService } from '../search/service-scope.ts';
+import { releaseNativeOwnerFilterRead } from './owner-filter-native-binding.ts';
 import { bindOwnerFilterRead, readBoundOwnerFilterPage, readOwnerFilterPage } from './owner-filter-plan.ts';
 import { readCollectionSourceMembers } from './owner-index-members.ts';
 import { readCollectionPreviews, type CollectionPreview } from './collection-preview.ts';
@@ -709,39 +710,43 @@ export function createCollectionReads(
     const bound = await bindOwnerFilterRead(dependencies, viewer, collectionId, admission, deadline);
     if (bound.status !== 'bound') throw new ProblemError('dependency_unavailable');
     const { binding } = bound;
-    if (
-      binding.input.actor !== viewer ||
-      binding.input.collectionId !== collectionId ||
-      binding.input.deadline > deadline ||
-      binding.scope.key.source.kind !== 'library' ||
-      binding.scope.key.source.identity.scope !== 'private_builtin' ||
-      binding.scope.key.source.identity.accountId !== viewer.accountId ||
-      binding.scope.key.source.identity.route !== route ||
-      binding.scope.key.source.identity.generation !== saved.sourceGeneration
-    )
-      throw new ProblemError('dependency_unavailable');
-    const authorize = async (time: AuthoritativeTime) => {
-      const checks = await prepareCollectionRuleAuthority(
-        dependencies,
-        viewer,
-        admission.filter!,
-        { time, read: true },
-        deadline,
-      );
-      await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
-      await revalidate();
-    };
-    await authorize(binding.input.at);
-    const result = await readBoundOwnerFilterPage(dependencies, admission, options, binding);
-    const finalTime = await withConnection(pool, (client) =>
-      mintReadTime(deadlineClient(client, deadline), dependencies.clock),
-    );
     try {
-      await authorize(finalTime);
+      if (
+        binding.input.actor !== viewer ||
+        binding.input.collectionId !== collectionId ||
+        binding.input.deadline > deadline ||
+        binding.scope.key.source.kind !== 'library' ||
+        binding.scope.key.source.identity.scope !== 'private_builtin' ||
+        binding.scope.key.source.identity.accountId !== viewer.accountId ||
+        binding.scope.key.source.identity.route !== route ||
+        binding.scope.key.source.identity.generation !== saved.sourceGeneration
+      )
+        throw new ProblemError('dependency_unavailable');
+      const authorize = async (time: AuthoritativeTime) => {
+        const checks = await prepareCollectionRuleAuthority(
+          dependencies,
+          viewer,
+          admission.filter!,
+          { time, read: true },
+          deadline,
+        );
+        await readOnly(pool, (client) => authorizeCollectionRule(client, { time }, checks));
+        await revalidate();
+      };
+      await authorize(binding.input.at);
+      const result = await readBoundOwnerFilterPage(dependencies, admission, options, binding);
+      const finalTime = await withConnection(pool, (client) =>
+        mintReadTime(deadlineClient(client, deadline), dependencies.clock),
+      );
+      try {
+        await authorize(finalTime);
+      } finally {
+        releaseOperationalTime(finalTime);
+      }
+      return result;
     } finally {
-      releaseOperationalTime(finalTime);
+      releaseNativeOwnerFilterRead(binding);
     }
-    return result;
   }
 
   /** Sitemap timestamps belong to stored metadata, never to the public dynamic Collection DTO. */

@@ -255,11 +255,14 @@ AST and no new work payload retains it. Existing terminal header deidentificatio
 row mutation. No public Collection projection selects its AST, release or private family operands. Dynamic
 metadata omits curated counts and timestamps; it never turns an unavailable source into ready-empty output.
 
-`createCollectionSource`, `createMembersPreparation`, saved-rule admission and native owner-read binding now
-have production implementations. Their presence does not establish a complete executable saved-source plan:
-current native source, identity and whole-query disclosure evidence remain required. Missing evidence returns
-explicit `503 dependency_unavailable`; dynamic reads never fall back to curated occurrences or false empty output.
-The HTTP outcome suite still requires actual saved creation, CAS/replay and useful member/clear/Undo outcomes.
+Decision: ordinary private saved dynamic IDs use the same OWNER-wide native fact population as Everything, then
+evaluate the currently admitted pinned rule; copy-only facts satisfy presence without synthesizing an entry state.
+
+Private saved reads bind that native population and release their read-time binding on every exit. Whole-query
+original/terminal/foreign disclosure still requires its actual producer; missing evidence remains
+`503 dependency_unavailable`. Dynamic reads never fall back to curated occurrences or false empty output, and
+public execution remains unavailable without the complete Publication provider. Preserve the native saved
+creation, CAS/replay, useful member, clear/Undo, and unavailable-public-provider outcomes.
 
 Public dynamic execution requires the actual complete explicit Publication provider. Native episode, work,
 staging and final-command bodies are present; their saved-source composition and complete output must be proved.
