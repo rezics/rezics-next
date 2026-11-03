@@ -210,6 +210,6 @@ test('the shipped platform profile validates against the shared registry and lis
     ['visual-novels', ['wd:Q689445'], 12],
     ['recipes', ['schema:Recipe'], 12],
   ]);
-  expect(resolveTemplate(value, { type: 'schema:Recipe' }).scope).toBe('type');
+  expect(resolveTemplate(value, { type: 'schema:Recipe' }).scope).toBe('generic');
   expect(resolveTemplate(value, { type: 'schema:Book', bases: ['schema:CreativeWork'] }).scope).toBe('base');
 });
