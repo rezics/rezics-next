@@ -46,7 +46,9 @@ test('mounted discussion, reply and review expose admitted context and exact rev
         expect(inspector.textContent).toContain('Recorded rating question');
         expect(inspector.textContent).toContain(m.post_history_scale_value({ min: '0', max: '20', step: '1' }));
         expect(inspector.textContent).toContain(m.post_history_question_retired());
-        expect(inspector.querySelectorAll('dd')[2]?.textContent).not.toBe('14');
+        const recorded = inspector.querySelector(`[aria-label="${m.post_history_recorded_context()}"]`)!;
+        expect(recorded.querySelector('dd')?.textContent).toBe('0');
+        expect(recorded.textContent).toContain(`${selected.voteCitation!.questionId} / 2`);
       }
       expect(view.host.querySelectorAll('[data-history-inspector]')).toHaveLength(1);
     } finally {
