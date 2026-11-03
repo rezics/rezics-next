@@ -698,9 +698,9 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       const resetsSetting = mayResetCaptureSetting(text);
       if (!resetsSetting) {
         const wanted = state.active !== undefined;
-        // A pg client queues concurrent queries. A preceding queued query may fail or roll back the transaction after
-        // this call observes `explaining`, so reassert the setting between queued statements as well as on transitions.
-        if (explaining !== wanted || pendingQueries > 0) switchTo(wanted);
+        // Reassert before every captured statement: transaction-local settings and queued controls must never
+        // leave a successful native occurrence without its plan. Outside a capture, keep explaining disabled.
+        if (wanted || explaining !== wanted || pendingQueries > 0) switchTo(wanted);
       }
       // COMMIT can roll back an already-failed transaction, which also rolls back SET changes. Treat every end as
       // unknown and reassert on the next query; a successful commit simply repeats the harmless session setting.
@@ -1056,7 +1056,12 @@ async function captureInternal<T>(
       const owners = record.background ? backgroundPlanOwners : foregroundPlanOwners;
       if (!owners.has(record.index))
         throw new Error(
-          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; plan owners: ${JSON.stringify([...owners])}; preceding occurrences: ${JSON.stringify(active.statementRecords.filter((statement) => statement.background === record.background && statement.index <= record.index).map((statement) => ({ index: statement.index, text: statement.text.slice(0, 180) })))}`,
+          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; plan owners: ${JSON.stringify([...owners].slice(0, 16))}; preceding occurrences: ${JSON.stringify(
+            active.statementRecords
+              .filter((statement) => statement.background === record.background && statement.index <= record.index)
+              .slice(-8)
+              .map((statement) => ({ index: statement.index, text: statement.text.slice(0, 180) })),
+          )}`,
         );
     }
     const run = measuredRun.getStore();
