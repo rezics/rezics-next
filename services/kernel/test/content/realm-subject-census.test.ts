@@ -58,9 +58,9 @@ test.serial(
       },
       context(),
     );
-    const first = await world.subject('schema:CreativeWork');
-    const second = await world.subject('schema:CreativeWork');
-    const replyOnly = await world.subject('schema:CreativeWork');
+    const first = await world.subject('skos:Concept', world.schemeId);
+    const second = await world.subject('skos:Concept', world.schemeId);
+    const replyOnly = await world.subject('skos:Concept', world.schemeId);
     async function thread(boardId: string, kind: 'discussion' | 'review', subjectIds: string[]) {
       return (
         await createThread(
