@@ -77,7 +77,8 @@ test('a current identity deletion and failed final target read never restore ear
   const path = `${item.path}&inspect=${item.record.appealId}`;
   const before = await fixture.call('GET', path, { bearer: fixture.people.reviewer.bearer });
   expect(before.body?.selectedAppeal.appellantIdentity.state).toBe('available');
-  const barrier = fixture.observer.hold({ statement: identities.sql, occurrence: 2 }, 'before');
+  // Retire the label after its first observation, before the final identity snapshot opens.
+  const barrier = fixture.observer.hold({ statement: identities.sql, occurrence: 1 }, 'after');
   fixture.observer.armFault({
     match: { statement: targets.sql, occurrence: 2 },
     boundary: 'before',
