@@ -38,11 +38,7 @@ const perOrderHistoryLimit = 255;
 type HistoryAxis = 'transactions' | 'orders' | 'receipts';
 type NamedOperation = 'settlement-first-apply' | 'settlement-replay' | 'royalty-first-apply';
 
-async function insertOrderRows(
-  database: GrowthDatabase,
-  anchor: Order,
-  count: number,
-) {
+async function insertOrderRows(database: GrowthDatabase, anchor: Order, count: number) {
   if (!count) return [] as string[];
   const route = routeOf(anchor.id);
   if (route === null) throw new Error('Growth anchor order has no route');
@@ -171,7 +167,8 @@ function indexProbeBudget(axis: HistoryAxis, operation: NamedOperation) {
   // named transaction/probe keys, and the command receipt key plus its unique insert.
   if (operation === 'settlement-replay') return axis === 'receipts' ? 1 : 0;
   if (axis === 'transactions') return operation === 'settlement-first-apply' ? 4 : 1;
-  if (axis === 'orders') return operation === 'settlement-first-apply' ? 4 : operation === 'royalty-first-apply' ? 1 : 0;
+  if (axis === 'orders')
+    return operation === 'settlement-first-apply' ? 4 : operation === 'royalty-first-apply' ? 1 : 0;
   return 2;
 }
 
@@ -348,12 +345,12 @@ for (const axis of ['transactions', 'orders', 'receipts'] as const) {
             ...Array.from({ length: perOrderHistoryLimit - 1 }, (_, index) => transaction(`txn_seed${tag}n${index}`)),
           ];
           const seedIds = snapshot.transactions.map(({ id }) => id);
-          expect(
-            await native.commands.applyCheckoutSnapshot(snapshot, `growth:seed:${tag}`),
-          ).toMatchObject({ changed: true });
-          expect(
-            await payouts.recordTransactions(order.id, seedIds, `growth:royalty:seed:${tag}`),
-          ).toMatchObject({ changed: true });
+          expect(await native.commands.applyCheckoutSnapshot(snapshot, `growth:seed:${tag}`)).toMatchObject({
+            changed: true,
+          });
+          expect(await payouts.recordTransactions(order.id, seedIds, `growth:royalty:seed:${tag}`)).toMatchObject({
+            changed: true,
+          });
 
           const next = transaction(`txn_change${tag}`);
           const delta = structuredClone(snapshot);
@@ -370,11 +367,7 @@ for (const axis of ['transactions', 'orders', 'receipts'] as const) {
 
         async function runScenario(scenario: Awaited<ReturnType<typeof prepareScenario>>) {
           if (operation === 'royalty-first-apply') {
-            const result = await payouts.recordTransactions(
-              scenario.order.id,
-              [scenario.next.id],
-              scenario.royaltyKey,
-            );
+            const result = await payouts.recordTransactions(scenario.order.id, [scenario.next.id], scenario.royaltyKey);
             expect(result).toMatchObject({ changed: true });
             return result;
           }
@@ -405,8 +398,7 @@ for (const axis of ['transactions', 'orders', 'receipts'] as const) {
           repetitions: 1,
           warmups: 1,
           async grow(database, scale, previous) {
-            if (axis === 'transactions')
-              await growTransactionRows(database, orderRoute, parentOrders, previous, scale);
+            if (axis === 'transactions') await growTransactionRows(database, orderRoute, parentOrders, previous, scale);
             else if (axis === 'orders') await insertOrderRows(database, anchor, scale - previous);
             else await growReceiptRows(database, receiptPartition, principalId, commandKind, previous, scale);
           },
