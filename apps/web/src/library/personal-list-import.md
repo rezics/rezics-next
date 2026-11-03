@@ -20,6 +20,12 @@ Review inputs and selected apply commands are copied and frozen before sending, 
 the original operands and key even if the form changes. A new review returns to review before confirmation, and an
 authoritative page without a decision removes the previous local selection.
 
+Decision: derive page, review and apply-result types from the installed generated methods, freeze apply operands
+when confirmation opens, and withdraw the previous selection as soon as replacement review begins, including refusal.
+The installed declarations still lack `action: 'score'`, `nativeScore`, `scoreDecision` and `scoreReviewId`; the request
+aliases remain the minimal seam for their publication. Score review can become usable when those types are published;
+vote effects separately require Content's conditional writer.
+
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into
 public facts. VN and release identifiers remain distinct. Titles can assist display and explicit catalogue search;
@@ -43,6 +49,13 @@ bounded, and cancellation or departure stops new work without rolling back ackno
 retain the original command and exact selection for explicit retry. Session or source replacement retires the upload,
 preview, late callbacks, and retry authority. Upload contents, notes, and private evidence stay out of URLs, persistent
 browser storage, public metadata, and diagnostics.
+
+Score context cost follows the native owner: at most one question and one current-own-vote read per addressed VN
+target on a page of eight rows. Each score review repeats that pair plus the bounded owner/upload read, tuple match,
+target observation, review receipt and locked decision update. The native owner reserves 32 KiB per possible page row
+within the existing 16 MiB evidence cap and keeps baselines and command operands within the 8 MiB decision bound.
+An apply admits at most eight total actions and currently executes zero Content vote or aggregate writes. Journey
+calls remain one upload plus bounded pages, explicit reviews, selected actions, lifecycle cleanup and exact retries.
 
 MAL remains a separate uploaded format with its existing native prerequisite and journey owner. VNDB has a separate
 Commerce producer dependency; neither is a generic multi-provider client parser or synchronizer.

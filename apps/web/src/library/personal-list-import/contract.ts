@@ -3,6 +3,9 @@ import type { KernelClient } from '@rezics/client';
 type UploadedVndb = ReturnType<KernelClient['libraryImports']['vndb']>;
 export type GeneratedVndbReview = Parameters<UploadedVndb['$review']['post']>[0];
 export type GeneratedVndbApply = Parameters<UploadedVndb['$apply']['post']>[0];
+export type GeneratedVndbPage = NonNullable<Awaited<ReturnType<UploadedVndb['get']>>['data']>;
+export type GeneratedVndbDecision = NonNullable<Awaited<ReturnType<UploadedVndb['$review']['post']>>['data']>;
+export type GeneratedVndbApplyResult = NonNullable<Awaited<ReturnType<UploadedVndb['$apply']['post']>>['data']>;
 
 export const VNDB_XML_BYTES = 2 * 1024 * 1024;
 export const VNDB_JSON_WIRE_BYTES = 12 * 1024 * 1024 + 64;
@@ -11,51 +14,12 @@ export const VNDB_PAGE = 8;
 export const VNDB_APPLY = 8;
 export const VNDB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type VndbSourceValue = {
-  kind: 'missing' | 'unknown' | 'invalid' | 'value';
-  raw: string | null;
-  value?: string | number;
-  precision?: 'year' | 'month' | 'day';
-  scale?: { min: number; max: number; step: number };
-};
-
+/** Keep native fields intact; the decoder additionally admits only JSON source evidence. */
+export type VndbRow = GeneratedVndbPage['rows'][number] & { evidence: VndbJson };
+export type VndbSourceValue = VndbRow['fields'][string];
+export type VndbState = NonNullable<VndbRow['target']>['states'][number];
+export type VndbBaseline = NonNullable<VndbRow['target']>['baseline'];
 export type VndbJson = null | boolean | number | string | VndbJson[] | { [key: string]: VndbJson };
-
-export type VndbState = {
-  id: string;
-  labels: Record<string, string>;
-  role?: 'planned' | 'active' | 'completed' | 'paused' | 'dropped';
-};
-
-export type VndbBaseline = { state: string; revision: number; incarnationId: string | null } | null;
-
-export type VndbRow = {
-  ordinal: number;
-  kind: 'vn' | 'retained';
-  identifier: { provider: 'vndb'; kind: 'vn'; value: string } | null;
-  title: string;
-  labels: string[];
-  suggestedRole: string | null;
-  fields: Record<string, VndbSourceValue>;
-  retainedReason: string;
-  evidence: VndbJson;
-  match:
-    | { status: 'unsupported'; candidates: string[] }
-    | {
-        status: 'ambiguous' | 'matched' | 'unavailable' | 'unmatched';
-        candidates: string[];
-      };
-  target: { targetId: string; states: VndbState[]; baseline: VndbBaseline } | null;
-  decision: {
-    reviewId: string;
-    status: 'applied' | 'applying' | 'failed' | 'reviewed' | 'skipped' | 'stale' | 'unsupported';
-    targetId: string | null;
-    state: string | null;
-    baseline: VndbBaseline;
-    replace: boolean;
-  } | null;
-  fieldsTreatment: { state: string; other: string };
-};
 
 export type VndbPreview = {
   uploadId: string;
@@ -73,21 +37,9 @@ export type VndbPreview = {
   };
 };
 
-export type VndbPage = {
-  uploadId: string;
-  state: 'active' | 'cancelled';
-  expiresAt: string;
-  total: number;
-  next: number | null;
-  rows: VndbRow[];
-};
-
-export type VndbDecision = NonNullable<VndbRow['decision']>;
-export type VndbApplyResult = {
-  uploadId: string;
-  outcomes: { ordinal: number; reviewId: string; status: string }[];
-  stopped: 'cancelled' | 'deadline' | null;
-};
+export type VndbPage = Omit<GeneratedVndbPage, 'rows'> & { rows: VndbRow[] };
+export type VndbDecision = GeneratedVndbDecision;
+export type VndbApplyResult = GeneratedVndbApplyResult;
 
 export type VndbReviewInput = GeneratedVndbReview &
   (

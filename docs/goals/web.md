@@ -348,7 +348,9 @@ parser, synchronizer or import endpoint. VNDB label-apply remains a later native
 reads at most eight rows per page, displays native match states and private source evidence, and requires an explicit
 catalogue target and released Library state before a row can enter the confirmed selection. Skip and retain remain
 explicit choices. Confirmation names only the displayed selection, and unknown commands can retry only with their
-captured operands and current signed-in visit.
+captured operands and current signed-in visit. Page, review and apply-result shapes come from the installed generated
+methods. Confirmation freezes its selected commands; beginning a replacement review withdraws its prior selection
+even when native admission refuses the replacement.
 
 Decision: A row enters apply selection only after explicit target and released Library-state review; confirmation
 applies only the displayed admitted selection.

@@ -290,6 +290,7 @@ test('a lost review acknowledgement freezes its body and key and a new review ne
       page: async () => ({ kind: 'page', value: pageValue([row(0)]) }),
       review: async (command) => {
         commands.push(command);
+        if (commands.length === 4) return { kind: 'denied', status: 403 };
         return commands.length === 1
           ? { kind: 'unknown', command }
           : {
@@ -319,6 +320,14 @@ test('a lost review acknowledgement freezes its body and key and a new review ne
   await journey.review(body);
   expect(commands[2]?.key).not.toBe(commands[0]?.key);
   expect(journey.snapshot().stage).toBe('review');
+  await journey.confirm();
+  expect(journey.snapshot().outcomes).toEqual([]);
+  journey.openConfirm();
+  expect(journey.snapshot().stage).toBe('confirm');
+  await journey.review(body);
+  expect(journey.snapshot().notice).toEqual({ kind: 'denied', status: 403 });
+  expect(journey.snapshot().stage).toBe('review');
+  expect(journey.snapshot().selection).toEqual([]);
   await journey.confirm();
   expect(journey.snapshot().outcomes).toEqual([]);
   await journey.loadPage(0);
