@@ -366,6 +366,8 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
     expect(parsed.holdings).toHaveLength(12);
     expect(parsed.progress).toHaveLength(6);
     expect(parsed.manifest).toEqual(a.manifest);
+    expect(parsed.holdings[0]!.evidence).toEqual(a.records.find((row) => row.section === 'holdings'));
+    if (version === 1) expect(parsed.coverage.some((row) => row.section === 'annotations')).toBe(false);
     if (version !== 1) {
       expect(parsed.coverage.find((row) => row.section === 'journals')).toMatchObject({
         records: 1,
@@ -396,7 +398,12 @@ test('fixed V1 and current V2/V3 preserve exact accounting and unsupported facts
         mutate(malformed.manifest);
         expect(() => parseCopyArchive(bytes(malformed))).toThrow('invalid_request');
       }
-      a.records.find((row) => row.section === 'journals')!.journal.extra = true;
+      const journal = a.records.find((row) => row.section === 'journals')!;
+      const before = bytes(journal).length;
+      journal.journal.extra = true;
+      const delta = bytes(journal).length - before;
+      a.manifest.recordBytes += delta;
+      a.manifest.sectionTotals.journals.recordBytes += delta;
       expect(() => parseCopyArchive(bytes(a))).toThrow('invalid_request');
     }
   }
@@ -735,6 +742,8 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
 test('V1 and declared V3 use the existing native upload/review/apply/result journey', async () => {
   for (const version of [1, 3]) {
     const a = artifactVersion(version);
+    a.manifest.capturedAt = '2000-01-01T00:00:00.000001Z';
+    a.manifest.expiresAt = '2000-01-01T00:15:00.000001Z'; // A completed local file outlives capture delivery.
     const uploaded = await json(await send('POST', '', a, entryKey()));
     const suffix = `/${uploaded.uploadId}`;
     const page = await json(await send('GET', suffix));
