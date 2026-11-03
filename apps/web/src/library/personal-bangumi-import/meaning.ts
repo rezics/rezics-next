@@ -52,7 +52,8 @@ export function bangumiOutcomeLabel(status: BangumiOutcomeStatus): string {
 
 export function bangumiFailureLabel(kind: BangumiFailureKind, detail?: string): string {
   if (kind === 'denied') return m.library_bangumi_denied();
-  if (kind === 'malformed') return detail ? m.library_bangumi_malformed_detail({ detail }) : m.library_bangumi_malformed();
+  if (kind === 'malformed')
+    return detail ? m.library_bangumi_malformed_detail({ detail }) : m.library_bangumi_malformed();
   if (kind === 'too-large') return m.library_bangumi_too_large();
   if (kind === 'conflict') return detail ?? m.library_bangumi_conflict_upload();
   if (kind === 'not-found') return m.library_bangumi_missing_upload();
@@ -76,14 +77,14 @@ export function bangumiFieldValue(field: BangumiRetainedField): string {
   if (field.field === 'rate') {
     if (field.meaning === 'invalid') return m.library_bangumi_invalid({ raw: String(field.value ?? '') });
     if (field.value === 0) return m.library_bangumi_rate_none();
-    if (typeof field.value === 'number')
-      return `${field.value} (${m.library_bangumi_rate_scale({ min: 1, max: 10 })})`;
+    if (typeof field.value === 'number') return `${field.value} (${m.library_bangumi_rate_scale({ min: 1, max: 10 })})`;
   }
   if (field.value === undefined) return m.library_bangumi_missing();
   if (field.value === null) return m.library_bangumi_unknown();
   if (typeof field.value === 'string') return field.value;
   if (typeof field.value === 'number' || typeof field.value === 'boolean') return String(field.value);
-  if (Array.isArray(field.value) && field.value.every((item) => typeof item === 'string')) return field.value.join(', ');
+  if (Array.isArray(field.value) && field.value.every((item) => typeof item === 'string'))
+    return field.value.join(', ');
   try {
     return JSON.stringify(field.value);
   } catch {

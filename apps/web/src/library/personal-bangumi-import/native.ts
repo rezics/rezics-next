@@ -37,10 +37,7 @@ type PreviewResource = {
   post: (body: { upload: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
 };
 type ReviewResource = {
-  post: (
-    body: { ordinal: number; target?: string },
-    options: { headers: NativeHeaders },
-  ) => Promise<NativeResult>;
+  post: (body: { ordinal: number; target?: string }, options: { headers: NativeHeaders }) => Promise<NativeResult>;
 };
 type ApplyResource = {
   post: (body: BangumiApplyBody, options: { headers: NativeHeaders }) => Promise<NativeResult>;
@@ -128,7 +125,8 @@ function isMatch(value: unknown): value is BangumiMatch {
 }
 
 function isJson(value: unknown): value is import('./contract').BangumiJson {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
+    return true;
   if (Array.isArray(value)) return value.every(isJson);
   if (!record(value)) return false;
   return Object.values(value).every(isJson);
@@ -141,7 +139,13 @@ function isField(value: unknown): value is BangumiRetainedField {
 }
 
 function isEvidence(value: unknown): value is BangumiEvidence {
-  if (!record(value) || !isJson(value.source) || typeof value.source !== 'object' || value.source === null || Array.isArray(value.source))
+  if (
+    !record(value) ||
+    !isJson(value.source) ||
+    typeof value.source !== 'object' ||
+    value.source === null ||
+    Array.isArray(value.source)
+  )
     return false;
   if (!Array.isArray(value.fields) || typeof value.medium !== 'string') return false;
   if (value.stateRole !== null && typeof value.stateRole !== 'string') return false;
@@ -175,7 +179,12 @@ function isReview(value: unknown): value is BangumiReview {
 }
 
 function isOutcome(value: unknown): value is BangumiOutcome {
-  if (!record(value) || typeof value.ordinal !== 'number' || !Array.isArray(value.applied) || !Array.isArray(value.retained))
+  if (
+    !record(value) ||
+    typeof value.ordinal !== 'number' ||
+    !Array.isArray(value.applied) ||
+    !Array.isArray(value.retained)
+  )
     return false;
   return (
     value.status === 'applied' ||
@@ -202,7 +211,12 @@ function isPage(value: unknown): value is BangumiPage {
 }
 
 function isApply(value: unknown): value is BangumiApplyResult {
-  if (!record(value) || typeof value.uploadId !== 'string' || !Array.isArray(value.outcomes) || !Array.isArray(value.remaining))
+  if (
+    !record(value) ||
+    typeof value.uploadId !== 'string' ||
+    !Array.isArray(value.outcomes) ||
+    !Array.isArray(value.remaining)
+  )
     return false;
   return value.outcomes.every(isOutcome) && value.remaining.every((ordinal) => typeof ordinal === 'number');
 }

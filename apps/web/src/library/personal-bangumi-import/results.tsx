@@ -20,7 +20,9 @@ function Outcome({ outcome, titles }: { outcome: BangumiOutcome; titles: Map<num
           </p>
         </details>
       ) : null}
-      {outcome.status === 'stale' ? <p className="text-sm text-muted-foreground">{m.library_bangumi_stale_help()}</p> : null}
+      {outcome.status === 'stale' ? (
+        <p className="text-sm text-muted-foreground">{m.library_bangumi_stale_help()}</p>
+      ) : null}
     </li>
   );
 }
@@ -50,7 +52,11 @@ export function BangumiResultPage({
   const locale = getLocale();
   return (
     <section className="space-y-4" data-bangumi-stage="results">
-      {cancelled ? <p role="status">{m.library_bangumi_stopped()}</p> : <p role="status">{m.library_bangumi_partial()}</p>}
+      {cancelled ? (
+        <p role="status">{m.library_bangumi_stopped()}</p>
+      ) : (
+        <p role="status">{m.library_bangumi_partial()}</p>
+      )}
       <p className="text-sm text-muted-foreground">{m.library_bangumi_erasure_limit()}</p>
       <ul className="space-y-3">
         {outcomes.map((outcome) => (

@@ -99,10 +99,25 @@ function evidence(index: number) {
       subject: { name: `Show ${index + 1}` },
     },
     fields: [
-      { field: 'subject_id', value: index + 1, meaning: 'known' as const, reason: 'Bangumi provider identifier; never a title match' },
-      { field: 'rate', value: index === 0 ? 0 : 8, meaning: 'known' as const, reason: 'Bangumi 1–10 scale; no native vote or aggregate' },
+      {
+        field: 'subject_id',
+        value: index + 1,
+        meaning: 'known' as const,
+        reason: 'Bangumi provider identifier; never a title match',
+      },
+      {
+        field: 'rate',
+        value: index === 0 ? 0 : 8,
+        meaning: 'known' as const,
+        reason: 'Bangumi 1–10 scale; no native vote or aggregate',
+      },
       { field: 'ep_status', value: 0, meaning: 'known' as const, reason: 'episodes; no historical session inferred' },
-      { field: 'extra_unknown', value: 'keep', meaning: 'unknown' as const, reason: 'No native field mapping; retained privately' },
+      {
+        field: 'extra_unknown',
+        value: 'keep',
+        meaning: 'unknown' as const,
+        reason: 'No native field mapping; retained privately',
+      },
     ],
     medium: 'anime',
     stateRole: 'active',
@@ -137,7 +152,10 @@ function pageOf(rows: BangumiRow[], extra: Partial<BangumiPage> = {}): BangumiPa
   return { uploadId: id, cancelled: false, rows, next: null, ...extra };
 }
 
-function recordingPort(total: number, options: { failApplyOnce?: boolean; replace?: boolean } = {}): {
+function recordingPort(
+  total: number,
+  options: { failApplyOnce?: boolean; replace?: boolean } = {},
+): {
   port: BangumiImportPort;
   previews: string[];
   applies: unknown[];
@@ -371,9 +389,9 @@ test('growth at 10, 50 and 100 rows stays within native page, apply and retained
         retries: cost.retries,
       }),
     );
-    expect(applies.every((command) => (command as { body: { rows: unknown[] } }).body.rows.length <= BANGUMI_APPLY)).toBe(
-      true,
-    );
+    expect(
+      applies.every((command) => (command as { body: { rows: unknown[] } }).body.rows.length <= BANGUMI_APPLY),
+    ).toBe(true);
     const discarded = await journey.discard();
     expect(discarded.stage).toBe('removed');
     expect(discarded.page).toEqual([]);

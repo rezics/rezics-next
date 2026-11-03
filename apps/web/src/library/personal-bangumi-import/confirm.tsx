@@ -30,7 +30,9 @@ export function BangumiConfirmPage({
                 state: row.choice.skip ? m.library_bangumi_match_skipped() : bangumiStateLabel(row.choice.state),
               })}
             </p>
-            {row.proposedState ? <p className="text-sm">{m.library_bangumi_proposed({ state: row.proposedState })}</p> : null}
+            {row.proposedState ? (
+              <p className="text-sm">{m.library_bangumi_proposed({ state: row.proposedState })}</p>
+            ) : null}
             {row.target ? <p className="text-sm [overflow-wrap:anywhere]">{row.target}</p> : null}
             {row.current ? (
               <p className="text-sm">

@@ -11,12 +11,7 @@ import { useBangumiImportPort } from './port';
 import { BangumiResultPage } from './results';
 import { BangumiReviewPage } from './review';
 import type { RowDraft } from './row';
-import {
-  BangumiApplying,
-  BangumiCancelledNotice,
-  BangumiRemovedNotice,
-  BangumiSignedOut,
-} from './states';
+import { BangumiApplying, BangumiCancelledNotice, BangumiRemovedNotice, BangumiSignedOut } from './states';
 import { BangumiUploadForm } from './upload';
 import { useBangumiVisit, type BangumiVisit } from './visit';
 
@@ -77,7 +72,9 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
           snap={snap}
           busy={snap.busy}
           onSave={(draft) => void saveReview(draft)}
-          onChoose={(draft) => act((current) => current.choose(draft.ordinal, { state: draft.state, skip: draft.skip }))}
+          onChoose={(draft) =>
+            act((current) => current.choose(draft.ordinal, { state: draft.state, skip: draft.skip }))
+          }
           onNext={() => void act((current) => current.nextPage())}
           onConfirm={() => act((current) => current.openConfirm())}
         />
@@ -111,11 +108,21 @@ function BangumiImportSession({ visit }: { visit: BangumiVisit }) {
       {snap.uploadId && snap.stage !== 'removed' ? (
         <div className="flex flex-wrap gap-3">
           {snap.stage === 'applying' || snap.stage === 'review' || snap.stage === 'confirm' ? (
-            <BangumiAction type="button" variant="outline" disabled={locked && snap.stage !== 'applying'} onClick={() => void act((current) => current.cancelAdmission())}>
+            <BangumiAction
+              type="button"
+              variant="outline"
+              disabled={locked && snap.stage !== 'applying'}
+              onClick={() => void act((current) => current.cancelAdmission())}
+            >
               {snap.busy ? m.library_bangumi_cancelling() : m.library_bangumi_cancel()}
             </BangumiAction>
           ) : null}
-          <BangumiAction type="button" variant="outline" disabled={locked} onClick={() => void act((current) => current.discard())}>
+          <BangumiAction
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={() => void act((current) => current.discard())}
+          >
             {m.library_bangumi_discard()}
           </BangumiAction>
         </div>

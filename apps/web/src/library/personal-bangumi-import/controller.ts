@@ -18,21 +18,9 @@ import { BangumiCostLedger, type BangumiCostSnapshot } from './cost';
 import { bangumiTitle } from './meaning';
 import type { BangumiVisit } from './visit';
 
-export type BangumiStage =
-  | 'upload'
-  | 'review'
-  | 'confirm'
-  | 'applying'
-  | 'results'
-  | 'cancelled'
-  | 'removed';
+export type BangumiStage = 'upload' | 'review' | 'confirm' | 'applying' | 'results' | 'cancelled' | 'removed';
 
-export type BangumiNotice =
-  | BangumiFailure
-  | BangumiUnknown
-  | { kind: 'too-large' }
-  | { kind: 'empty' }
-  | null;
+export type BangumiNotice = BangumiFailure | BangumiUnknown | { kind: 'too-large' } | { kind: 'empty' } | null;
 
 export type BangumiJourneySnapshot = {
   stage: BangumiStage;
@@ -103,7 +91,10 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
 
   function live(): boolean {
     return (
-      visit.current() && sender.subject === visit.subject && sender.csrfToken === visit.csrfToken && !visit.controller.signal.aborted
+      visit.current() &&
+      sender.subject === visit.subject &&
+      sender.csrfToken === visit.csrfToken &&
+      !visit.controller.signal.aborted
     );
   }
 
@@ -230,7 +221,11 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
     const previous = uploadId;
     if (previous) {
-      const remove: Extract<BangumiCommand, { kind: 'delete' }> = { kind: 'delete', uploadId: previous, key: newCommandKey() };
+      const remove: Extract<BangumiCommand, { kind: 'delete' }> = {
+        kind: 'delete',
+        uploadId: previous,
+        key: newCommandKey(),
+      };
       await port.delete(remove);
       cost.recordCall('delete');
       if (!live()) return snapshot();
@@ -264,7 +259,15 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     const row = page.find((item) => item.ordinal === ordinal);
     if (row) row.review = response.review;
     meta.set(ordinal, {
-      ...(current ?? metaFromRow(row ?? { ordinal, evidence: { source: {}, fields: [], medium: 'unknown', stateRole: null }, review: response.review, outcome: null })),
+      ...(current ??
+        metaFromRow(
+          row ?? {
+            ordinal,
+            evidence: { source: {}, fields: [], medium: 'unknown', stateRole: null },
+            review: response.review,
+            outcome: null,
+          },
+        )),
       match: response.review.match,
       target: response.review.target,
       proposedState: response.review.proposedState,
@@ -411,7 +414,11 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
   async function discard(): Promise<BangumiJourneySnapshot> {
     const id = uploadId;
     if (id) {
-      const command: Extract<BangumiCommand, { kind: 'delete' }> = { kind: 'delete', uploadId: id, key: newCommandKey() };
+      const command: Extract<BangumiCommand, { kind: 'delete' }> = {
+        kind: 'delete',
+        uploadId: id,
+        key: newCommandKey(),
+      };
       await run(command, () => port.delete(command));
     }
     if (live()) clearPrivate(id ? 'removed' : 'upload');

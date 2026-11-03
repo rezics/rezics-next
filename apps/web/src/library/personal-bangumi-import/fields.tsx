@@ -55,7 +55,11 @@ export function BangumiEvidencePanel({ row }: { row: BangumiRow }) {
       {bangumiEmptyFields(evidence) ? <p>{m.library_bangumi_empty_fields()}</p> : null}
       <dl className="grid gap-3 sm:grid-cols-2">
         {subjectId ? (
-          <Fact label={bangumiFieldLabel(subjectId, evidence.medium)} value={bangumiFieldValue(subjectId)} reason={subjectId.reason} />
+          <Fact
+            label={bangumiFieldLabel(subjectId, evidence.medium)}
+            value={bangumiFieldValue(subjectId)}
+            reason={subjectId.reason}
+          />
         ) : null}
         {type ? (
           <Fact
@@ -76,10 +80,18 @@ export function BangumiEvidencePanel({ row }: { row: BangumiRow }) {
           <Fact label={bangumiFieldLabel(vol, evidence.medium)} value={bangumiFieldValue(vol)} reason={vol.reason} />
         ) : null}
         {privacy ? (
-          <Fact label={bangumiFieldLabel(privacy, evidence.medium)} value={bangumiFieldValue(privacy)} reason={privacy.reason} />
+          <Fact
+            label={bangumiFieldLabel(privacy, evidence.medium)}
+            value={bangumiFieldValue(privacy)}
+            reason={privacy.reason}
+          />
         ) : null}
         {updated ? (
-          <Fact label={bangumiFieldLabel(updated, evidence.medium)} value={bangumiFieldValue(updated)} reason={updated.reason} />
+          <Fact
+            label={bangumiFieldLabel(updated, evidence.medium)}
+            value={bangumiFieldValue(updated)}
+            reason={updated.reason}
+          />
         ) : null}
       </dl>
       <p>{m.library_bangumi_not_vote()}</p>

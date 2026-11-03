@@ -32,13 +32,7 @@ export type BangumiApplyState = 'preserve' | 'replace' | 'omit';
 export type BangumiOutcomeStatus = 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
 export type BangumiFieldMeaning = 'known' | 'unknown' | 'invalid';
 
-export type BangumiJson =
-  | string
-  | number
-  | boolean
-  | null
-  | BangumiJson[]
-  | { readonly [key: string]: BangumiJson };
+export type BangumiJson = string | number | boolean | null | BangumiJson[] | { readonly [key: string]: BangumiJson };
 export type BangumiRecord = { readonly [key: string]: BangumiJson };
 export type BangumiRetainedField = {
   field: string;
@@ -126,16 +120,16 @@ export type BangumiCommand =
   | { kind: 'delete'; key: string; uploadId: string };
 
 export type BangumiUnknown = { kind: 'unknown'; command: BangumiCommand };
-export type BangumiPreviewResult = { kind: 'previewed'; uploadId: string; count: number } | BangumiFailure | BangumiUnknown;
+export type BangumiPreviewResult =
+  | { kind: 'previewed'; uploadId: string; count: number }
+  | BangumiFailure
+  | BangumiUnknown;
 export type BangumiPageResult = { kind: 'page'; page: BangumiPage } | BangumiFailure | BangumiUnknown;
 export type BangumiReviewResult =
   | { kind: 'reviewed'; ordinal: number; review: BangumiReview }
   | BangumiFailure
   | BangumiUnknown;
-export type BangumiApplyCallResult =
-  | { kind: 'applied'; result: BangumiApplyResult }
-  | BangumiFailure
-  | BangumiUnknown;
+export type BangumiApplyCallResult = { kind: 'applied'; result: BangumiApplyResult } | BangumiFailure | BangumiUnknown;
 export type BangumiMutateResult =
   | { kind: 'cancelled'; uploadId: string }
   | { kind: 'deleted' }

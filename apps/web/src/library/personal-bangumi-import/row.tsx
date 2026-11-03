@@ -88,11 +88,7 @@ export function BangumiRowReview({
         <p>{m.library_bangumi_changed_target()}</p>
       ) : null}
       {canTarget ? (
-        <BangumiTargetSearch
-          disabled={busy}
-          value={draft.target}
-          onChange={(target) => update({ ...draft, target })}
-        />
+        <BangumiTargetSearch disabled={busy} value={draft.target} onChange={(target) => update({ ...draft, target })} />
       ) : null}
       <BangumiCheck
         id={`${base}-skip`}

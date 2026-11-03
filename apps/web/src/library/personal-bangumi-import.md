@@ -15,14 +15,14 @@ Mounted under `/v1/libraryImports/bangumi` after Commerce dependency `fd3f1482`.
 `KernelClient.libraryImports.bangumi` when present (`$preview`, page GET, `$review`, `$apply`, `$cancel`, DELETE).
 Missing methods render unavailable rather than a local parser or successful fixture.
 
-| Step    | Native                                                                                          | Page                                                                                          |
-| ------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Upload  | `POST :preview` `{ upload }` with quoted Idempotency-Key                                        | File stays local until submit; bytes drop after native ownership                              |
-| Preview | `GET :uploadId?after=-1` pages of 10                                                            | Current page only; titles assist display/search, never automatic identity                     |
-| Review  | `POST :uploadId:review` `{ ordinal, target? }`                                                  | Unmatched rows may set an explicit readable subject; titles never auto-match                  |
-| Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip }] }` batches of 5         | Default `preserve`; `replace` authorizes the reviewed revision/incarnation, including absence |
-| Stop    | `POST :uploadId:cancel`                                                                         | Stops new admission; acknowledged effects remain                                              |
-| Discard | `DELETE :uploadId`                                                                              | Clears this upload's evidence and reviews now; Library facts stay                             |
+| Step    | Native                                                                                  | Page                                                                                          |
+| ------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Upload  | `POST :preview` `{ upload }` with quoted Idempotency-Key                                | File stays local until submit; bytes drop after native ownership                              |
+| Preview | `GET :uploadId?after=-1` pages of 10                                                    | Current page only; titles assist display/search, never automatic identity                     |
+| Review  | `POST :uploadId:review` `{ ordinal, target? }`                                          | Unmatched rows may set an explicit readable subject; titles never auto-match                  |
+| Confirm | `POST :uploadId:apply` `{ rows: [{ ordinal, reviewToken, state, skip }] }` batches of 5 | Default `preserve`; `replace` authorizes the reviewed revision/incarnation, including absence |
+| Stop    | `POST :uploadId:cancel`                                                                 | Stops new admission; acknowledged effects remain                                              |
+| Discard | `DELETE :uploadId`                                                                      | Clears this upload's evidence and reviews now; Library facts stay                             |
 
 The envelope is `{ "format": "rezics.bangumi-collection.v1", "collections": [...] }`. It is a REZICS wrapper, not an
 official Bangumi export. Types 1/2/3/4/6 are book/anime/music/game/live action. Collection types 1–5 map to unique
