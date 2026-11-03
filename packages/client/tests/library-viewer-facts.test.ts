@@ -25,6 +25,7 @@ import type { ViewerFactsPage, MAX_VIEWER_FACTS_ROWS } from ${JSON.stringify(res
 type LibraryPage = NonNullable<Awaited<ReturnType<KernelClient['libraryEntries']['get']>>['data']>;
 type CollectionPage = Extract<NonNullable<Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']>, { members: unknown[] }>;
 type Facts = NonNullable<LibraryPage['viewerFacts']>;
+expectTypeOf<LibraryPage['viewerFacts']>().toEqualTypeOf<Facts | undefined>();
 expectTypeOf<CollectionPage['viewerFacts']>().toEqualTypeOf<Facts | undefined>();
 expectTypeOf<Facts>().toMatchTypeOf<Extract<ViewerFactsPage, { state: 'current' }>>();
 expectTypeOf<Facts['state']>().toEqualTypeOf<'current'>();
