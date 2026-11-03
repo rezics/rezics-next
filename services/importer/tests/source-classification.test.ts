@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -131,13 +130,18 @@ async function classificationFixture(
     admit?: boolean;
   } = {},
 ) {
-  const directory = await mkdtemp(join(tmpdir(), 'classification-'));
+  const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
+  await mkdir(temporaryRoot, { recursive: true });
+  const directory = await mkdtemp(join(temporaryRoot, 'classification-'));
   const stored = new Map<string, Record<string, unknown>>();
   const writes: { method: string; path: string; body: unknown; key: string | null }[] = [];
   const sequence = { value: 0 };
   let lost = false;
   let facts: unknown = options.facts === undefined ? admittedFacts() : options.facts;
   let bound: ClassificationAssociation | null = options.association === undefined ? association : options.association;
+  let emptyReadReason: 'not_observed' | 'not_found' = 'not_observed';
+  let hideNextConfirmation = false;
+  let hideConfirmationAfterWrite = false;
   const metadata = sourceRecordMetadataFixture();
   const transport = {
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -149,9 +153,13 @@ async function classificationFixture(
     },
     async writeSourceStatistic() {},
     async readSourceClassifications(input: { subjectId: string; associations: readonly ClassificationAssociation[] }) {
+      if (hideNextConfirmation) {
+        hideNextConfirmation = false;
+        return [{ state: 'unavailable' as const, reason: 'changed' as const }];
+      }
       return input.associations.map((item) => {
         const row = stored.get(`${input.subjectId}:${JSON.stringify(item)}`);
-        if (!row) return { state: 'unavailable' as const, reason: 'not_observed' as const };
+        if (!row) return { state: 'unavailable' as const, reason: emptyReadReason };
         return {
           state: 'available' as const,
           value: {
@@ -203,6 +211,10 @@ async function classificationFixture(
       if (lost) throw new TypeError('delivery lost');
       const digest = classificationObservation(input.association, input.value as never).digest;
       stored.set(`${input.subjectId}:${JSON.stringify(input.association)}`, { ...input.value, digest });
+      if (hideConfirmationAfterWrite) {
+        hideConfirmationAfterWrite = false;
+        hideNextConfirmation = true;
+      }
       return { observationDigest: digest, state: 'published' as const };
     },
     async clearSourceClassification() {
@@ -232,6 +244,12 @@ async function classificationFixture(
     setAssociation(next: ClassificationAssociation | null) {
       bound = next;
     },
+    setEmptyReadReason(next: 'not_observed' | 'not_found') {
+      emptyReadReason = next;
+    },
+    hideNextConfirmationAfterWrite() {
+      hideConfirmationAfterWrite = true;
+    },
     lose() {
       lost = true;
     },
@@ -259,7 +277,8 @@ async function classificationFixture(
 test('admitted classification writes through the converter, binds the association, and is independently readable', async () => {
   const f = await classificationFixture();
   try {
-    expect((await f.run()).status).toBe('committed');
+    const result = await f.run();
+    expect(result.status, result.diagnostic).toBe('committed');
     expect(f.writes).toHaveLength(1);
     const body = f.writes[0]!.body as {
       expectedObservation: string | null;
@@ -356,6 +375,19 @@ test('production converter withholds classification from dump payload until admi
     }).sourceClassification,
   ).toEqual({ state: 'unavailable', reason: 'unadmitted' });
 });
+test('a successful response without an independent matching head stays uncertain and retries the sealed request', async () => {
+  const f = await classificationFixture();
+  try {
+    f.hideNextConfirmationAfterWrite();
+    expect((await f.run()).status).toBe('bulk-failed');
+    const sealed = f.writes[0]!;
+    expect((await f.run()).status).toBe('committed');
+    expect(f.writes).toHaveLength(2);
+    expect(f.writes[1]).toEqual(sealed);
+  } finally {
+    await f.close();
+  }
+});
 
 test('unadmitted licences, missing association and absent admission have zero native classification effects', async () => {
   for (const options of [
@@ -380,6 +412,18 @@ test('unadmitted licences, missing association and absent admission have zero na
     } finally {
       await f.close();
     }
+  }
+});
+
+test('an unavailable Semantic association is withheld before native classification writes', async () => {
+  const f = await classificationFixture();
+  try {
+    f.setEmptyReadReason('not_found');
+    expect((await f.run()).status).toBe('committed');
+    expect(f.writes).toHaveLength(0);
+    expect(f.stored.size).toBe(0);
+  } finally {
+    await f.close();
   }
 });
 

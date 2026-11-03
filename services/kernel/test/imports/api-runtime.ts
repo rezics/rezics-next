@@ -54,6 +54,7 @@ type GrowthSqliteCapture = {
   };
 };
 type GrowthObserver = NonNullable<ConstructorParameters<typeof Importer>[0]['observer']>;
+type ClassificationAdmission = NonNullable<ConstructorParameters<typeof Importer>[0]['classificationAdmission']>;
 type StartupWriteRate = { maximum: number; seconds: number };
 type ScheduledDeadline = { scheduledAtMs: number; deadlineAtMs: number; durationMs: number };
 type HttpEvent = {
@@ -135,7 +136,10 @@ afterAll(async () => {
 
 /** One owner of credentials, public transport, worker, durable journal and cleanup. */
 export async function openApiRuntime(
-  options: DriverOptions & { readonly sourceStatistics?: 'vndb' },
+  options: DriverOptions & {
+    readonly sourceStatistics?: 'vndb';
+    readonly classificationAdmission?: ClassificationAdmission;
+  },
   growthSqlite?: GrowthSqliteCapture,
   growthObserver?: GrowthObserver,
   growthWriteRate?: StartupWriteRate,
@@ -601,6 +605,9 @@ export async function openApiRuntime(
           await sleep(ms, undefined, { signal });
         },
         instrumentDatabase: growthSqlite?.instrument ?? measurement.instrument,
+        ...(options.classificationAdmission === undefined
+          ? {}
+          : { classificationAdmission: options.classificationAdmission }),
         transport: {
           setSourceRecordMetadata: (input, signal) =>
             transport.setSourceRecordMetadata(input, signal ?? current?.abort.signal),

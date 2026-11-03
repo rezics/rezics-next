@@ -46,6 +46,7 @@ import {
   ClassificationConflictError,
   ClassificationRefusedError,
   classificationAssociationKey,
+  classificationOperationDigest,
   classificationOperationId,
   classifyClassification,
   headFromClassification,
@@ -173,6 +174,22 @@ const success = (result: BatchWriteResult['results'][number]) => result.status =
 class Interrupted extends Error {}
 type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
 type Write = <T>(operation: () => Promise<T>) => Promise<T>;
+type ClassificationConfirmation = Readonly<{
+  state: 'available' | 'absent' | 'unavailable';
+  head: RetainedClassificationHead | null;
+  figure: unknown;
+  figureUnavailable: boolean;
+}>;
+
+function classificationDeliveryHead(
+  intended: IntendedClassification,
+  confirmed: ClassificationConfirmation,
+): RetainedClassificationHead | null {
+  if (intended.kind === 'clear') return confirmed.state === 'absent' ? headFromClassification(intended) : null;
+  if (confirmed.state !== 'available' || confirmed.head?.digest !== classificationOperationDigest(intended)) return null;
+  return confirmed.head;
+}
+
 // Platform policy per logical write and run, independent of width recovery.
 const MAX_WRITE_INVOCATIONS = 8;
 type Planned = {
@@ -1307,18 +1324,20 @@ export class Importer {
     const associationKey = classificationAssociationKey(intended.association);
     const retained = this.session.store.retainedClassificationHead(owner.source, subjectId, associationKey);
     const read = this.options.transport.readSourceClassifications;
-    if (!read) return retained ? { kind: 'head', head: retained } : { kind: 'absent' };
+    if (!read) return { kind: 'unavailable', reason: 'association-unavailable' };
     try {
       const items = await write(() =>
         read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
       );
       const item = items[0];
       if (item?.state === 'available') {
+        if (classificationAssociationKey(item.value.association) !== associationKey)
+          return { kind: 'unavailable', reason: 'association-unavailable' };
         return {
           kind: 'head',
           head: {
             associationKey,
-            association: intended.association,
+            association: item.value.association,
             sourceAlias: item.value.sourceAlias,
             sourceRecordId: item.value.sourceRecordId,
             sourceAssociationId: item.value.sourceAssociationId,
@@ -1328,7 +1347,9 @@ export class Importer {
           },
         };
       }
-      return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+      if (item?.state === 'unavailable' && item.reason === 'not_observed')
+        return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+      return { kind: 'unavailable', reason: 'association-unavailable' };
     } catch (error) {
       if (
         error instanceof ImportTransportError &&
@@ -1339,6 +1360,7 @@ export class Importer {
           ...(error.status === undefined ? {} : { status: error.status }),
           ...(error.code === undefined ? {} : { code: error.code }),
         };
+      if (error instanceof TypeError) return { kind: 'unavailable', reason: 'association-unavailable' };
       throw error;
     }
   }
@@ -1348,31 +1370,37 @@ export class Importer {
     intended: IntendedClassification,
     signal: AbortSignal,
     write: Write,
-  ): Promise<{ head: RetainedClassificationHead | null; figure: unknown; figureUnavailable: boolean }> {
+  ): Promise<ClassificationConfirmation> {
     const read = this.options.transport.readSourceClassifications;
     let head: RetainedClassificationHead | null = null;
-    if (read) {
-      try {
-        const items = await write(() =>
-          read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
-        );
-        const item = items[0];
-        if (item?.state === 'available')
-          head = {
-            associationKey: classificationAssociationKey(intended.association),
-            association: intended.association,
-            sourceAlias: item.value.sourceAlias,
-            sourceRecordId: item.value.sourceRecordId,
-            sourceAssociationId: item.value.sourceAssociationId,
-            asOf: item.value.asOf,
-            cleared: false,
-            digest: item.value.observation.digest,
-          };
-      } catch {
-        return { head: null, figure: null, figureUnavailable: true };
+    if (!read) return { state: 'unavailable', head, figure: null, figureUnavailable: true };
+    let state: ClassificationConfirmation['state'] = 'unavailable';
+    try {
+      const items = await write(() =>
+        read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
+      );
+      const item = items[0];
+      if (item?.state === 'available') {
+        if (classificationAssociationKey(item.value.association) !== classificationAssociationKey(intended.association))
+          return { state: 'unavailable', head: null, figure: null, figureUnavailable: true };
+        head = {
+          associationKey: classificationAssociationKey(intended.association),
+          association: item.value.association,
+          sourceAlias: item.value.sourceAlias,
+          sourceRecordId: item.value.sourceRecordId,
+          sourceAssociationId: item.value.sourceAssociationId,
+          asOf: item.value.asOf,
+          cleared: false,
+          digest: item.value.observation.digest,
+        };
+        state = 'available';
+      } else if (item?.state === 'unavailable' && item.reason === 'not_observed') {
+        state = 'absent';
       }
+    } catch {
+      return { state: 'unavailable', head: null, figure: null, figureUnavailable: true };
     }
-    if (intended.kind === 'clear' && !head) head = headFromClassification(intended);
+    if (state === 'unavailable') return { state, head: null, figure: null, figureUnavailable: true };
     let figure: unknown = null;
     let figureUnavailable = false;
     const readFigure = this.options.transport.readPublicFigure;
@@ -1383,7 +1411,41 @@ export class Importer {
         figureUnavailable = true;
       }
     }
-    return { head, figure, figureUnavailable };
+    return { state, head, figure, figureUnavailable };
+  }
+
+  private acknowledgeClassification(
+    run: Run,
+    owner: Owner,
+    subjectId: string,
+    operationId: string,
+    intended: IntendedClassification,
+    confirmed: ClassificationConfirmation,
+    signal: AbortSignal,
+    countEffect: boolean,
+  ): RetainedClassificationHead {
+    const store = this.session.store;
+    const head = classificationDeliveryHead(intended, confirmed);
+    if (!head) {
+      if (confirmed.state === 'available' && confirmed.head) {
+        store.markAggregate(run, operationId, {
+          status: 'conflict',
+          nativeReason: 'concurrent-head',
+          reviewedHead: confirmed.head,
+        });
+        throw new ClassificationConflictError(operationId, 'concurrent-head');
+      }
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      throw new Error('Source classification delivery could not be independently verified');
+    }
+    store.retainClassificationHead(owner.source, { ...head, subjectId });
+    store.markAggregate(run, operationId, {
+      status: 'delivered',
+      reviewedHead: head,
+      outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+    });
+    if (countEffect) this.progress(signal)?.onAcknowledgedEffects?.(1);
+    return head;
   }
 
   private async deliverClassification(
@@ -1396,10 +1458,11 @@ export class Importer {
   ): Promise<'delivered' | 'conflict'> {
     const body = JSON.parse(requestBytes) as ReturnType<typeof intendedClassificationRequest>;
     try {
+      const expectedDigest = classificationOperationDigest(intended);
       if (intended.kind === 'write') {
         const put = this.options.transport.writeSourceClassification;
         if (!put) throw new Error('Source classification transport is unavailable');
-        await write(() =>
+        const result = await write(() =>
           put.call(
             this.options.transport,
             {
@@ -1412,10 +1475,12 @@ export class Importer {
             signal,
           ),
         );
+        if (result.state !== 'published' || result.observationDigest !== expectedDigest)
+          throw new Error('Source classification response did not match its immutable request');
       } else {
         const clear = this.options.transport.clearSourceClassification;
         if (!clear) throw new Error('Source classification clear transport is unavailable');
-        await write(() =>
+        const result = await write(() =>
           clear.call(
             this.options.transport,
             {
@@ -1428,6 +1493,8 @@ export class Importer {
             signal,
           ),
         );
+        if (result.state !== 'cleared' || result.observationDigest !== expectedDigest)
+          throw new Error('Source classification clear response did not match its immutable request');
       }
       return 'delivered';
     } catch (error) {
@@ -1464,17 +1531,16 @@ export class Importer {
         throw new ClassificationConflictError(existing.operationId, 'cas-mismatch');
       }
       const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
-      const head =
-        intended.kind === 'clear'
-          ? headFromClassification(intended)
-          : (confirmed.head ?? headFromClassification(intended));
-      store.retainClassificationHead(owner.source, { ...head, subjectId });
-      store.markAggregate(run, existing.operationId, {
-        status: 'delivered',
-        reviewedHead: head,
-        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
-      });
-      this.progress(signal)?.onAcknowledgedEffects?.(1);
+      this.acknowledgeClassification(
+        run,
+        owner,
+        subjectId,
+        existing.operationId,
+        intended,
+        confirmed,
+        signal,
+        true,
+      );
       return true;
     }
     if (existing?.status === 'conflict' || existing?.status === 'refused') {
@@ -1485,7 +1551,10 @@ export class Importer {
       throw new ClassificationConflictError(existing.operationId, reason);
     }
     const head = await this.readClassificationHead(owner, subjectId, intended, signal, write);
-    if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+    if (head.kind === 'unavailable') {
+      if (head.reason === 'association-unavailable') return false;
+      throw new ImportTransportError(head.status, undefined, head.code);
+    }
     const decision = classifyClassification(intended, head);
     if (decision.action === 'identical') return true;
     const reviewed = head.kind === 'head' ? head.head : null;
@@ -1530,17 +1599,7 @@ export class Importer {
       throw error;
     }
     const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
-    const retained =
-      intended.kind === 'clear'
-        ? headFromClassification(intended)
-        : (confirmed.head ?? headFromClassification(intended));
-    store.retainClassificationHead(owner.source, { ...retained, subjectId });
-    store.markAggregate(run, operationId, {
-      status: 'delivered',
-      reviewedHead: retained,
-      outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
-    });
-    this.progress(signal)?.onAcknowledgedEffects?.(1);
+    this.acknowledgeClassification(run, owner, subjectId, operationId, intended, confirmed, signal, true);
     return true;
   }
 
@@ -1589,7 +1648,17 @@ export class Importer {
       if (prior.kind === 'write' && omissions.some((omission) => omission.field_group === 'facts'))
         return { status: 'conflict', operationId };
       const head = await this.readClassificationHead(owner, prior.subjectId, prior.intended, signal, write);
-      if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+      if (head.kind === 'unavailable') {
+        if (head.reason === 'association-unavailable') {
+          this.session.store.markAggregate(run, operationId, {
+            status: 'conflict',
+            nativeReason: 'association-unavailable',
+            reviewedHead: null,
+          });
+          return { status: 'conflict', operationId };
+        }
+        throw new ImportTransportError(head.status, undefined, head.code);
+      }
       const currentDigest = head.kind === 'head' ? head.head.digest : null;
       if (currentDigest !== reviewedObservation) {
         this.session.store.markAggregate(run, operationId, {
@@ -1653,16 +1722,22 @@ export class Importer {
         return { status: 'conflict', operationId: successor.operationId };
       }
       const confirmed = await this.confirmClassification(prior.subjectId, prior.intended, signal, write);
-      const retained =
-        prior.intended.kind === 'clear'
-          ? headFromClassification(prior.intended)
-          : (confirmed.head ?? headFromClassification(prior.intended));
-      this.session.store.retainClassificationHead(source, { ...retained, subjectId: prior.subjectId });
-      this.session.store.markAggregate(run, successor.operationId, {
-        status: 'delivered',
-        reviewedHead: retained,
-        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
-      });
+      try {
+        this.acknowledgeClassification(
+          run,
+          owner,
+          prior.subjectId,
+          successor.operationId,
+          prior.intended,
+          confirmed,
+          signal,
+          false,
+        );
+      } catch (error) {
+        if (error instanceof ClassificationConflictError)
+          return { status: 'conflict', operationId: successor.operationId };
+        throw error;
+      }
       return { status: 'delivered', operationId: successor.operationId };
     } finally {
       this.session.release(ownership);

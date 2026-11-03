@@ -24,6 +24,26 @@ const observation = {
   licence: 'Fixture-1.0',
   confidence: 2.4,
 };
+const figure = {
+  provider: 'vndb' as const,
+  association,
+  observation: { digest, sourceVersion: observation.sourceVersion },
+  sourceAlias: observation.sourceAlias,
+  sourceRecordId: observation.sourceRecordId,
+  sourceAssociationId: observation.sourceAssociationId,
+  confidence: {
+    state: 'available' as const,
+    value: 2.4,
+    unit: 'vndb-tag-rating' as const,
+    minExclusive: 0 as const,
+    max: 3 as const,
+  },
+  lie: { state: 'unavailable' as const, reason: 'not_supplied' as const },
+  asOf: observation.asOf,
+  ageSeconds: 0,
+  attribution: observation.attribution,
+  licence: observation.licence,
+};
 
 test('import transport posts generated classification read, put and clear client methods', async () => {
   const requests: { method: string; path: string; key: string | null; body: unknown }[] = [];
@@ -40,7 +60,7 @@ test('import transport posts generated classification read, put and clear client
       const path = new URL(request.url).pathname;
       if (path.endsWith(':read')) return Response.json({ items: [{ state: 'unavailable', reason: 'not_observed' }] });
       if (path.endsWith(':clear')) return Response.json({ observationDigest: digest, state: 'cleared' });
-      return Response.json({ observationDigest: digest, state: 'published' });
+      return Response.json({ observationDigest: digest, state: 'published', figure });
     }) as typeof fetch,
     maxAttempts: 1,
   });
@@ -56,7 +76,7 @@ test('import transport posts generated classification read, put and clear client
       expectedObservation: null,
       idempotencyKey: 'classification:write-1',
     }),
-  ).resolves.toEqual({ observationDigest: digest, state: 'published' });
+  ).resolves.toEqual({ observationDigest: digest, state: 'published', figure });
   await expect(
     transport.clearSourceClassification({
       subjectId,

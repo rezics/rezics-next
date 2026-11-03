@@ -73,7 +73,7 @@ export type RetainedClassificationHead = Readonly<{
 export type ClassificationHeadRead =
   | { kind: 'absent' }
   | { kind: 'head'; head: RetainedClassificationHead }
-  | { kind: 'unavailable'; status?: number; code?: string };
+  | { kind: 'unavailable'; status?: number; code?: string; reason?: ClassificationReason };
 
 export type ClassificationDecision =
   | { action: 'identical' }
