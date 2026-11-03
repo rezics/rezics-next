@@ -152,9 +152,9 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges',
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: text }),
-        // Ingress preserves raw bytes for strict decoding; this schema declares the wire
-        // envelope for generated clients. Raw-mode validation belongs to the decoder.
-        body: t.Object({ manifest: t.Record(text, t.Unknown()), records: t.Array(t.Record(text, t.Unknown())) }, closed),
+        // Ingress supplies bytes, not the parsed envelope. The decoder validates those
+        // bytes after owner admission; this declares the client's JSON wire body only.
+        body: t.Unsafe<{ manifest: Record<string, unknown>; records: Record<string, unknown>[] }>(t.Any()),
         response: { 200: statusSchema, ...failures },
         detail: {
           ...detail('library_archive_merge.upload', 'library_entry:update', true),

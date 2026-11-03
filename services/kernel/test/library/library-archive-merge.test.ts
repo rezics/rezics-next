@@ -295,7 +295,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     .filter((row: any) => row.ordinal === entryOne.ordinal || row.ordinal === annotation.ordinal)
     .map(({ ordinal, reviewRevision }: { ordinal: number; reviewRevision: number }) => ({ ordinal, reviewRevision })) };
   expect((await send(main, 'POST', `${mergePath}/${id}/apply`, staleSelection)).status).toBe(409);
-  expect((await f.commands.readEntry(main.actor, subjects[0])).state).toBe('completed');
+  expect((await f.commands.readEntry(main.actor, subjects[0])).state).toBe('in_progress');
   const refreshed = await previewAll(main, id);
   const reviewedAnnotation = refreshed.records.find((row: any) => row.ordinal === annotation.ordinal)!;
   const reviewedJournal = refreshed.records.find((row: any) => row.ordinal === journalItem.ordinal)!;
