@@ -1340,6 +1340,37 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: bangumi_upload; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.bangumi_upload (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    cancelled boolean DEFAULT false NOT NULL,
+    CONSTRAINT bangumi_upload_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: bangumi_upload_row; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.bangumi_upload_row (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    evidence jsonb NOT NULL,
+    review jsonb,
+    choice jsonb,
+    outcome jsonb,
+    CONSTRAINT bangumi_upload_row_evidence_check CHECK ((octet_length((evidence)::text) <= 32768)),
+    CONSTRAINT bangumi_upload_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99)))
+);
+
+
+--
 -- Name: builtin_collection_reference; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -3803,6 +3834,22 @@ CREATE TABLE library.type_preparation_slot (
 --
 
 COMMENT ON TABLE library.type_preparation_slot IS 'Active owner binding slot. Digest hits require exact full binding, principal and native input comparison; collisions never alias. Equal live work converges. Only an admitted producer under current account/gate locks may replace cancelled/missing generations with a fresh UUID; source/owner epoch changes binding. Old receipts cannot trap replacement; purged owners cannot recreate slots. PKs support bounded owner enumeration: retirement/purge removes slots, progress, then headers/reservations and retains a minimal terminal fence. No automatic TTL or cascade.';
+
+
+--
+-- Name: bangumi_upload bangumi_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bangumi_upload
+    ADD CONSTRAINT bangumi_upload_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: bangumi_upload_row bangumi_upload_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bangumi_upload_row
+    ADD CONSTRAINT bangumi_upload_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
 
 
 --
@@ -6477,6 +6524,14 @@ CREATE TRIGGER zzz_owner_activity_progress_rows AFTER INSERT OR DELETE ON librar
 --
 
 CREATE TRIGGER zzz_owner_activity_progress_update AFTER UPDATE OF last_changed_at, subject_id ON library.progress_head FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.maintain_owner_activity();
+
+
+--
+-- Name: bangumi_upload_row bangumi_upload_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.bangumi_upload_row
+    ADD CONSTRAINT bangumi_upload_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.bangumi_upload(route, account_id, upload_id) ON DELETE CASCADE;
 
 
 --
