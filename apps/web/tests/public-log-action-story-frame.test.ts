@@ -77,11 +77,7 @@ test('the public-log action pattern shows the retained note and owner confirmati
   const router = createRouter({
     routeTree: createRootRoute({
       component: () =>
-        createElement(
-          AppShell,
-          null,
-          createElement(PublishedLogPageView, { log, isOwner: true, revision: 1 }),
-        ),
+        createElement(AppShell, null, createElement(PublishedLogPageView, { log, isOwner: true, revision: 1 })),
     }),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
