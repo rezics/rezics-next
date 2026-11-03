@@ -186,11 +186,9 @@ async function checkAxis(
           },
         }
       : {}),
-    operation: (db, scale, repetition) =>
-      observePhase(db, scale, repetition, 'measurement candidate', operation),
+    operation: (db, scale, repetition) => observePhase(db, scale, repetition, 'measurement candidate', operation),
     ...(hooks.prepare === undefined ? {} : { prepare: hooks.prepare }),
-    warmup: (db, scale, repetition) =>
-      observePhase(db, scale, repetition, 'warmup', hooks.warmup ?? operation),
+    warmup: (db, scale, repetition) => observePhase(db, scale, repetition, 'warmup', hooks.warmup ?? operation),
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
@@ -244,9 +242,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       },
     });
     await runtime.launch();
-    const workflowQueues = (await DBOS.listQueues()).filter((queue) =>
-      ['workflows', 'effects'].includes(queue.name),
-    );
+    const workflowQueues = (await DBOS.listQueues()).filter((queue) => ['workflows', 'effects'].includes(queue.name));
     const originalWorkerConcurrency = new Map(
       await Promise.all(workflowQueues.map(async (queue) => [queue.name, await queue.getWorkerConcurrency()] as const)),
     );

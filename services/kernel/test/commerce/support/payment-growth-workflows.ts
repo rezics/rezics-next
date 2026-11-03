@@ -1,5 +1,10 @@
 import type { DBOSClient } from '@dbos-inc/dbos-sdk';
-import { KNOWN_ORDER_REPAIR_WORKFLOW, STRIPE_EVENT_WORKFLOW, knownOrderRepairWorkflowId, stripeEventWorkflowId } from '../../../src/commerce/work-contract.ts';
+import {
+  KNOWN_ORDER_REPAIR_WORKFLOW,
+  STRIPE_EVENT_WORKFLOW,
+  knownOrderRepairWorkflowId,
+  stripeEventWorkflowId,
+} from '../../../src/commerce/work-contract.ts';
 import type { StripeEventRef } from '../../../src/commerce/model.ts';
 import type { createCommerceWork } from '../../../src/commerce/enqueue.ts';
 import { newId, routeOf } from '../../../src/route/route.ts';
@@ -83,7 +88,8 @@ export function createPaymentGrowthWorkflowSeeder(client: DBOSClient, work: Comm
           workflowName: KNOWN_ORDER_REPAIR_WORKFLOW,
           async enqueue() {
             const enqueuedId = await work.enqueueKnownOrderRepair(orderId, name);
-            if (enqueuedId !== workflowId) throw new Error('Commerce repair enqueue returned an unexpected workflow ID');
+            if (enqueuedId !== workflowId)
+              throw new Error('Commerce repair enqueue returned an unexpected workflow ID');
           },
         };
       });
