@@ -1,65 +1,58 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "interface",
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "account",
-    "deletion",
-    "rights"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "paths": [
-    "apps/web/src/community/space.ts",
-    "apps/web/src/community/space-actions.ts",
-    "apps/web/src/community/space-queries.ts",
-    "apps/web/src/community/space-page.tsx",
-    "apps/web/src/community/space-page-lifetime.tsx",
-    "apps/web/src/community/space-page-lifetime.md",
-    "apps/web/src/community/realm-home*.ts*",
-    "apps/web/src/community/realm-membership.tsx",
-    "apps/web/src/community/publication-controls*.ts*",
-    "apps/web/src/stories/realm-home*.stories.tsx",
-    "apps/web/tests/space-page*.test.ts*",
-    "apps/web/tests/realm-home*.test.ts*",
-    "apps/web/tests/realm-shelf-continuation-focus.test.tsx",
-    "apps/web/messages/*.json",
-    "docs/goals/web.md",
-    "services/kernel/src/community/realm-home.ts",
-    "services/kernel/src/community/routes.ts",
-    "packages/client/src/kernel/community/routes.d.ts"
-  ],
-  "after": [
-    "67d35a0b-0266-40a7-ad13-76769a662e5a"
-  ],
-  "estimate": {
-    "lines": 1500,
-    "files": 22
-  },
-  "acceptance": {
-    "command": [
-      "bun",
-      "apps/web/scripts/focused.ts",
-      "--private-network",
-      "--",
-      "bun",
-      "test",
-      "tests/space-page-render.test.ts",
-      "tests/space-page-lifetime.test.tsx",
-      "tests/realm-home-header-interface.test.tsx",
-      "tests/realm-shelf-continuation-focus.test.tsx"
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'interface',
+  'riskAreas': ['authorization', 'disclosure', 'account', 'deletion', 'rights'],
+  'criticalPath': false,
+  'waiting': [],
+  'paths':
+    [
+      'apps/web/src/community/space.ts',
+      'apps/web/src/community/space-actions.ts',
+      'apps/web/src/community/space-queries.ts',
+      'apps/web/src/community/space-page.tsx',
+      'apps/web/src/community/space-page-lifetime.tsx',
+      'apps/web/src/community/space-page-lifetime.md',
+      'apps/web/src/community/realm-home*.ts*',
+      'apps/web/src/community/realm-membership.tsx',
+      'apps/web/src/community/publication-controls*.ts*',
+      'apps/web/src/stories/realm-home*.stories.tsx',
+      'apps/web/tests/space-page*.test.ts*',
+      'apps/web/tests/realm-home*.test.ts*',
+      'apps/web/tests/realm-shelf-continuation-focus.test.tsx',
+      'apps/web/messages/*.json',
+      'docs/goals/web.md',
+      'services/kernel/src/community/realm-home.ts',
+      'services/kernel/src/community/routes.ts',
+      'packages/client/src/kernel/community/routes.d.ts',
     ],
-    "placement": "default",
-    "tests": [
-      "A person enters the current Realm through its Space address or Realm destination, recognizes native identity/standing and opens disclosed boards/publications with independent continuation.",
-      "Anonymous, member, denied, banned, orphaned, missing carrier and operational failure retain distinct truthful states; readable identity never grants actions.",
-      "Viewer/credentials, source/container/locale changes retire presentation/media/standing/actions and stale continuations before late effects; 1/6/12 publications use native batches with no per-cover read or refill."
-    ],
-    "failing": true
-  }
+  'after': ['67d35a0b-0266-40a7-ad13-76769a662e5a'],
+  'estimate': { 'lines': 1500, 'files': 22 },
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'apps/web/scripts/focused.ts',
+          '--private-network',
+          '--',
+          'bun',
+          'test',
+          'tests/space-page-render.test.ts',
+          'tests/space-page-lifetime.test.tsx',
+          'tests/realm-home-header-interface.test.tsx',
+          'tests/realm-shelf-continuation-focus.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          'A person enters the current Realm through its Space address or Realm destination, recognizes native identity/standing and opens disclosed boards/publications with independent continuation.',
+          'Anonymous, member, denied, banned, orphaned, missing carrier and operational failure retain distinct truthful states; readable identity never grants actions.',
+          'Viewer/credentials, source/container/locale changes retire presentation/media/standing/actions and stale continuations before late effects; 1/6/12 publications use native batches with no per-cover read or refill.',
+        ],
+      'failing': true,
+    },
 }
 ---
 
