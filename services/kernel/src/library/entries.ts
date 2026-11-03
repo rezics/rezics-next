@@ -246,9 +246,7 @@ export function createEntryCommands(config: Dependencies) {
     counters = createShelfCounters();
   const types = createTypePreparationPorts({
     ...config,
-    keys: createShelfTypeKeys(
-      config.shelfTypeDigest === undefined ? undefined : { digest: config.shelfTypeDigest },
-    ),
+    keys: createShelfTypeKeys(config.shelfTypeDigest === undefined ? undefined : { digest: config.shelfTypeDigest }),
     observe: (id) => observePreparationSource(config, id),
     observeIdentity: (id) => observePreparationIdentity(config, id),
   });
