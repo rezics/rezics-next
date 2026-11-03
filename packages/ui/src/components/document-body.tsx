@@ -86,11 +86,18 @@ type Props = {
 
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
 export function DocumentBody({
-  document, className, labels, mentions, locale = 'en', renderImage, headingAttributes, onDisclosureChange,
+  document,
+  className,
+  labels,
+  mentions,
+  locale = 'en',
+  renderImage,
+  headingAttributes,
+  onDisclosureChange,
 }: Props) {
   // Published readers admit immutable snapshots; ordinary consumers retain semantic replacement detection.
   const anchored = !!headingAttributes;
-  const cachedSemantic = useMemo(() => anchored ? semanticSnapshotJson(document) : null, [document, anchored]);
+  const cachedSemantic = useMemo(() => (anchored ? semanticSnapshotJson(document) : null), [document, anchored]);
   const semanticSnapshot = cachedSemantic ?? semanticSnapshotJson(document);
   const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
   const concealment = useRef({ id: 0, revealed: new Set<number>() });
@@ -133,18 +140,24 @@ export function DocumentBody({
     options: {
       nodeMapping: {
         // Without the optional port, the installed extension retains its exact default markup.
-        ...(headingAttributes ? {
-          heading: ({ node, children }: any) => {
-            const attributes = headingAttributes(node.attrs.id ?? '');
-            return createElement(`h${node.attrs.level}`, {
-              'data-block-id': node.attrs.id ?? undefined,
-              lang: node.attrs.lang ?? undefined,
-              dir: node.attrs.dir ?? undefined,
-              draggable: 'true',
-              ...attributes,
-            }, children);
-          },
-        } : {}),
+        ...(headingAttributes
+          ? {
+              heading: ({ node, children }: any) => {
+                const attributes = headingAttributes(node.attrs.id ?? '');
+                return createElement(
+                  `h${node.attrs.level}`,
+                  {
+                    'data-block-id': node.attrs.id ?? undefined,
+                    lang: node.attrs.lang ?? undefined,
+                    dir: node.attrs.dir ?? undefined,
+                    draggable: 'true',
+                    ...attributes,
+                  },
+                  children,
+                );
+              },
+            }
+          : {}),
         mention: ({ node }: any) => {
           const account = Object.hasOwn(mentions ?? {}, node.attrs?.accountId)
             ? mentions?.[node.attrs.accountId]

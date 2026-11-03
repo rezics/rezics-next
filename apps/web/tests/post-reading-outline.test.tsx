@@ -13,16 +13,21 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 afterAll(() => mock.restore());
-const snapshot = (content: DocumentNode[]) => parseDocument({
-  version: 'rezics-document-v1', profile: 'blocks', doc: withDocumentIds({ type: 'doc', content }),
-});
+const snapshot = (content: DocumentNode[]) =>
+  parseDocument({
+    version: 'rezics-document-v1',
+    profile: 'blocks',
+    doc: withDocumentIds({ type: 'doc', content }),
+  });
 const heading = (label: string, level = 2): DocumentNode => ({
-  type: 'heading', attrs: { level }, content: [{ type: 'text', text: label }],
+  type: 'heading',
+  attrs: { level },
+  content: [{ type: 'text', text: label }],
 });
 
 test('one bounded projection preserves visible hierarchy, duplicate positions, Unicode and truthful overflow', () => {
   for (const count of [1, 32, 100]) {
-    const body = snapshot(Array.from({ length: count }, (_, index) => heading(`Section ${index}`, index % 3 + 1)));
+    const body = snapshot(Array.from({ length: count }, (_, index) => heading(`Section ${index}`, (index % 3) + 1)));
     const outline = outlines.projectReadingOutline(body);
     expect(outline.entries).toHaveLength(count);
     expect(outline.byPosition.size).toBe(count);
@@ -30,15 +35,27 @@ test('one bounded projection preserves visible hierarchy, duplicate positions, U
     expect(outline.overflow).toBe(0);
   }
   const body = snapshot([
-    heading('Root', 1), heading('Twin'), heading('Twin', 3),
+    heading('Root', 1),
+    heading('Twin'),
+    heading('Twin', 3),
     heading(`漢字${'é😀'.repeat(70)}`),
-    { type: 'heading', attrs: { level: 2 }, content: [
-      { type: 'text', text: 'Secret heading', marks: [{ type: 'spoiler' }] },
-    ] },
-    { type: 'heading', attrs: { level: 2 }, content: [
-      { type: 'text', text: 'Visible link', marks: [{ type: 'link', attrs: { href: 'https://secret.test', title: 'Private title' } }] },
-      { type: 'mention', attrs: { accountId: '0192f3a0-6c1e-7b2a-9d4e-000000000001' } },
-    ] },
+    {
+      type: 'heading',
+      attrs: { level: 2 },
+      content: [{ type: 'text', text: 'Secret heading', marks: [{ type: 'spoiler' }] }],
+    },
+    {
+      type: 'heading',
+      attrs: { level: 2 },
+      content: [
+        {
+          type: 'text',
+          text: 'Visible link',
+          marks: [{ type: 'link', attrs: { href: 'https://secret.test', title: 'Private title' } }],
+        },
+        { type: 'mention', attrs: { accountId: '0192f3a0-6c1e-7b2a-9d4e-000000000001' } },
+      ],
+    },
     { type: 'image', attrs: { src: 'private-image', alt: 'Private alt', conceal: true } },
     { type: 'codeBlock', content: [{ type: 'text', text: '# Not a heading\n'.repeat(10000) }] },
     ...Array.from({ length: 100 }, (_, index) => heading(`More ${index}`)),
@@ -65,16 +82,25 @@ test('existing admission still rejects oversized and over-depth snapshots before
   const { projectWriting, writingInspectionLimits } = await import('../src/threads/writing-inspection');
   const facts = { pendingUploads: 0, attachmentIssues: [], refusal: null, unknown: false, sending: false };
   const candidate = (node: DocumentNode) => ({
-    version: 'rezics-document-v1', profile: 'blocks', doc: { type: 'doc', content: [node] },
+    version: 'rezics-document-v1',
+    profile: 'blocks',
+    doc: { type: 'doc', content: [node] },
   });
-  expect(projectWriting(candidate(heading('x'.repeat(writingInspectionLimits.bytes + 1))), null, facts))
-    .toEqual({ ok: false, problem: 'size' });
+  expect(projectWriting(candidate(heading('x'.repeat(writingInspectionLimits.bytes + 1))), null, facts)).toEqual({
+    ok: false,
+    problem: 'size',
+  });
   let nested = heading('Too deep');
-  for (let index = 0; index < writingInspectionLimits.depth; index++) nested = { type: 'blockquote', content: [nested] };
+  for (let index = 0; index < writingInspectionLimits.depth; index++)
+    nested = { type: 'blockquote', content: [nested] };
   expect(projectWriting(candidate(nested), null, facts)).toEqual({ ok: false, problem: 'depth' });
   const image = mock(() => <span>Admitted image</span>);
-  renderToStaticMarkup(<PostReadingBody document={snapshot([{ type: 'image', attrs: { src: 'native-id', alt: 'Original alt' } }])}
-    renderImage={image} />);
+  renderToStaticMarkup(
+    <PostReadingBody
+      document={snapshot([{ type: 'image', attrs: { src: 'native-id', alt: 'Original alt' } }])}
+      renderImage={image}
+    />,
+  );
   expect(image).toHaveBeenCalledWith({ mediaId: 'native-id', alt: 'Original alt' });
 });
 
@@ -83,18 +109,37 @@ test('mounted published reader jumps, dismisses, returns and retires current/rev
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: 'https://site.test/en/#post-retained', width: 1280, height: 900 });
   const globals = {
-    window, document: window.document, navigator: window.navigator, location: window.location,
-    HTMLElement: window.HTMLElement, HTMLButtonElement: window.HTMLButtonElement, Element: window.Element,
-    Node: window.Node, Document: window.Document, DocumentFragment: window.DocumentFragment,
-    MutationObserver: window.MutationObserver, ResizeObserver: window.ResizeObserver,
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    location: window.location,
+    HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
-    requestAnimationFrame: window.requestAnimationFrame.bind(window), cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
-  const prior = new Map([...Object.keys(globals), 'fetch', 'IntersectionObserver'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  const network = mock(() => { throw new Error('Sections must not fetch'); });
-  const observer = mock(() => { throw new Error('No scroll observer is needed'); });
+  const prior = new Map(
+    [...Object.keys(globals), 'fetch', 'IntersectionObserver'].map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(globalThis, key),
+    ]),
+  );
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const network = mock(() => {
+    throw new Error('Sections must not fetch');
+  });
+  const observer = mock(() => {
+    throw new Error('No scroll observer is needed');
+  });
   globalThis.fetch = network as unknown as typeof fetch;
   Object.defineProperty(globalThis, 'IntersectionObserver', { configurable: true, value: observer });
   const { createRoot } = await import('react-dom/client');
@@ -106,11 +151,16 @@ test('mounted published reader jumps, dismisses, returns and retires current/rev
   const { sessionQuery } = await import('../src/session/query');
   const { m } = await import('../src/paraglide/messages.js');
   const { setLocale } = await import('../src/paraglide/runtime.js');
-  const { default: userEvent } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event'));
+  const { default: userEvent } = await import(
+    createRequire(require.resolve('storybook/test')).resolve('@testing-library/user-event')
+  );
   const user = userEvent.setup({ document: window.document });
   setLocale('en', { reload: false });
   const supplied = preparedPostReading(1);
-  const body = fromMarkdown('# Opening\n\nIntro >!ordinary secret!<\n\n## Twin\n\nFirst\n\n### Twin\n\nSecond\n\n## Public >!private title!<\n\nEnding', 'blocks');
+  const body = fromMarkdown(
+    '# Opening\n\nIntro >!ordinary secret!<\n\n## Twin\n\nFirst\n\n### Twin\n\nSecond\n\n## Public >!private title!<\n\nEnding',
+    'blocks',
+  );
   const post = { ...supplied.post, body };
   const page = { ...supplied.page, posts: { ...supplied.page.posts, posts: [post] } };
   const revision = supplied.revision.state === 'ready' ? { ...supplied.revision, revision: post } : supplied.revision;
@@ -119,10 +169,22 @@ test('mounted published reader jumps, dismisses, returns and retires current/rev
   function Journey() {
     const [view, setView] = useState<{ exact?: boolean; current?: boolean }>({ current: true });
     update = setView;
-    return view.exact ? <ExactRevisionView identity={identity} page={revision} /> : <ThreadReading
-      page={page} pageCurrent={view.current ?? true} Post={ThreadReadingPost} session="signed-out"
-      personal={undefined} returnTo="/en/" signedOut="" renderHeader={() => <h1>Published visit</h1>}
-      onMutation={async () => {}} onPageRefresh={async () => page} />;
+    return view.exact ? (
+      <ExactRevisionView identity={identity} page={revision} />
+    ) : (
+      <ThreadReading
+        page={page}
+        pageCurrent={view.current ?? true}
+        Post={ThreadReadingPost}
+        session="signed-out"
+        personal={undefined}
+        returnTo="/en/"
+        signedOut=""
+        renderHeader={() => <h1>Published visit</h1>}
+        onMutation={async () => {}}
+        onPageRefresh={async () => page}
+      />
+    );
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
@@ -132,18 +194,32 @@ test('mounted published reader jumps, dismisses, returns and retires current/rev
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
-  const button = (name: string) => Array.from(window.document.querySelectorAll('button')).find(node =>
-    node.textContent === name || node.getAttribute('aria-label') === name)!;
+  const button = (name: string) =>
+    Array.from(window.document.querySelectorAll('button')).find(
+      (node) => node.textContent === name || node.getAttribute('aria-label') === name,
+    )!;
   const sections = () => window.document.querySelector<HTMLElement>('nav[aria-label="Sections"]')!;
-  const click = async (element: Element) => { await act(async () => { await user.click(element); }); };
+  const click = async (element: Element) => {
+    await act(async () => {
+      await user.click(element);
+    });
+  };
   const projection = spyOn(outlines, 'projectReadingOutline');
   try {
-    await act(async () => root.render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>));
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
     const reading = () => host.querySelector<HTMLElement>('[data-slot="post-reading-body"]')!;
     const originalTargets = Array.from(reading().querySelectorAll<HTMLHeadingElement>('h1,h2,h3'));
     const margins: string[] = [];
-    const scrolls = originalTargets.map(target => {
-      const scroll = mock(() => { margins.push(target.style.scrollMarginBlockStart); });
+    const scrolls = originalTargets.map((target) => {
+      const scroll = mock(() => {
+        margins.push(target.style.scrollMarginBlockStart);
+      });
       target.scrollIntoView = scroll;
       return scroll;
     });
@@ -165,18 +241,22 @@ test('mounted published reader jumps, dismisses, returns and retires current/rev
     expect(window.document.activeElement).toBe(reading());
     expect(button(m.post_sections_return())).toBeUndefined();
     await click(button(m.post_sections_title()));
-    await act(async () => { await user.keyboard('{Escape}'); });
+    await act(async () => {
+      await user.keyboard('{Escape}');
+    });
     expect(window.document.activeElement).toBe(button(m.post_sections_title()));
     expect(projection.mock.calls.length).toBe(projected);
     // The live renderer, rather than opening Sections, supplies disclosure changes.
-    const revealButtons = Array.from(reading().querySelectorAll('button')).filter(node => node.getAttribute('aria-label') === m.thread_reveal_spoiler());
+    const revealButtons = Array.from(reading().querySelectorAll('button')).filter(
+      (node) => node.getAttribute('aria-label') === m.thread_reveal_spoiler(),
+    );
     await click(revealButtons[1]!);
     await click(button(m.post_sections_title()));
     expect(sections().textContent).toContain('Public private title');
     await click(button(m.post_sections_close()));
-    const oldIds = originalTargets.map(node => node.id).filter(Boolean);
+    const oldIds = originalTargets.map((node) => node.id).filter(Boolean);
     await act(async () => update({ exact: true }));
-    expect(Array.from(reading().querySelectorAll('h1,h2,h3')).some(node => oldIds.includes(node.id))).toBe(false);
+    expect(Array.from(reading().querySelectorAll('h1,h2,h3')).some((node) => oldIds.includes(node.id))).toBe(false);
     expect(button(m.post_sections_return())).toBeUndefined();
     expect(reading().querySelector('.document-spoiler-revealed')).toBeNull();
     await act(async () => update({ current: false }));
@@ -207,7 +287,13 @@ test('mounted published reader jumps, dismisses, returns and retires current/rev
     await click(button(m.post_sections_close()));
     for (const count of [1, 32, 100, 103]) {
       const scale = snapshot(Array.from({ length: count }, (_, index) => heading(`Scale ${index}`)));
-      await act(async () => root.render(<StrictMode><PostReadingBody document={scale} /></StrictMode>));
+      await act(async () =>
+        root.render(
+          <StrictMode>
+            <PostReadingBody document={scale} />
+          </StrictMode>,
+        ),
+      );
       expect(host.querySelectorAll('h2[id]')).toHaveLength(Math.min(count, 100));
       await click(button(m.post_sections_title()));
       expect(sections().querySelectorAll('li')).toHaveLength(Math.min(count, 100));
@@ -285,5 +371,7 @@ test('queued jump and return cannot run after retirement, including a guard that
       expect(jump.mock.calls.length).toBe(jumps);
       expect(returning.mock.calls.length).toBe(returns);
     }
-  } finally { await window.happyDOM.close(); }
+  } finally {
+    await window.happyDOM.close();
+  }
 });

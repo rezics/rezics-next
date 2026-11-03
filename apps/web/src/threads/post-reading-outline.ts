@@ -20,12 +20,30 @@ export type ReadingOutline = Readonly<{
 }>;
 
 const containers = new Set([
-  'doc', 'blockquote', 'bulletList', 'orderedList', 'listItem', 'taskList', 'taskItem',
-  'table', 'tableRow', 'tableCell', 'tableHeader',
+  'doc',
+  'blockquote',
+  'bulletList',
+  'orderedList',
+  'listItem',
+  'taskList',
+  'taskItem',
+  'table',
+  'tableRow',
+  'tableCell',
+  'tableHeader',
 ]);
 const inline = new Set(['text', 'hardBreak', 'ruby', 'mention', 'extensionInline']);
 const marks = new Set([
-  'bold', 'italic', 'underline', 'strike', 'code', 'link', 'textStyle', 'textEmphasis', 'language', 'spoiler',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'code',
+  'link',
+  'textStyle',
+  'textEmphasis',
+  'language',
+  'spoiler',
 ]);
 
 type Label = { characters: string[]; space: boolean; truncated: boolean; hidden: boolean };
@@ -39,11 +57,17 @@ function append(label: Label, text: string) {
       continue;
     }
     if (label.space) {
-      if (label.characters.length >= readingOutlineLabelLimit) { label.truncated = true; return; }
+      if (label.characters.length >= readingOutlineLabelLimit) {
+        label.truncated = true;
+        return;
+      }
       label.characters.push(' ');
       label.space = false;
     }
-    if (label.characters.length >= readingOutlineLabelLimit) { label.truncated = true; return; }
+    if (label.characters.length >= readingOutlineLabelLimit) {
+      label.truncated = true;
+      return;
+    }
     label.characters.push(point);
   }
 }
@@ -77,7 +101,11 @@ export function projectReadingOutline(
       const label = heading.label.characters;
       if (heading.label.truncated) label[readingOutlineLabelLimit - 1] = '…';
       const entry = {
-        position: heading.position, nodeId: heading.nodeId, level: heading.level, depth: hierarchy.length, label: label.join(''),
+        position: heading.position,
+        nodeId: heading.nodeId,
+        level: heading.level,
+        depth: hierarchy.length,
+        label: label.join(''),
       };
       entries.push(entry);
       byPosition.set(entry.position, entry);
@@ -90,8 +118,7 @@ export function projectReadingOutline(
       if (mark.type === 'spoiler') {
         const disclosed = revealed.has(spoilerPosition++);
         hidden ||= !disclosed;
-      }
-      else if (!marks.has(mark.type)) hidden = true;
+      } else if (!marks.has(mark.type)) hidden = true;
     }
     let heading = frame.heading;
     if (node.type === 'heading') {
@@ -99,7 +126,9 @@ export function projectReadingOutline(
       const nodeId = typeof node.attrs?.id === 'string' ? node.attrs.id : '';
       hidden ||= !nodeId;
       heading = {
-        position: headingPosition++, nodeId, level: typeof level === 'number' ? level : 1,
+        position: headingPosition++,
+        nodeId,
+        level: typeof level === 'number' ? level : 1,
         label: { characters: [], space: false, truncated: false, hidden },
       };
       stack.push({ node, hidden, finish: heading });

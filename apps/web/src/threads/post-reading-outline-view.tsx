@@ -12,8 +12,14 @@ const activeOutlines = new WeakMap<Document, () => void>();
 const control = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]';
 
 export function PostReadingOutlineView({
-  outline, position, locale,
-}: { outline: ReadingOutline; position: PostReadingPosition; locale: string }) {
+  outline,
+  position,
+  locale,
+}: {
+  outline: ReadingOutline;
+  position: PostReadingPosition;
+  locale: string;
+}) {
   const [enhanced, setEnhanced] = useState(false);
   const [open, setOpen] = useState(false);
   const [returning, setReturning] = useState(false);
@@ -76,10 +82,12 @@ export function PostReadingOutlineView({
     setOpen(false);
   }
   // Base UI owns Escape, outside dismissal, focus trapping and sheet gestures. Local jumps never use Back.
-  const finalFocus = () => position.isCurrent() && !transferFocus.current ? launcher.current ?? false : false;
+  const finalFocus = () => (position.isCurrent() && !transferFocus.current ? (launcher.current ?? false) : false);
   const content = (
     <nav aria-label={title} id={id} className="min-w-0 space-y-3" lang={locale}>
-      <p className="text-sm text-muted-foreground">{m.post_sections_count({ count: outline.entries.length }, options)}</p>
+      <p className="text-sm text-muted-foreground">
+        {m.post_sections_count({ count: outline.entries.length }, options)}
+      </p>
       <ol className="m-0 list-none space-y-1 p-0">
         {outline.entries.map((entry) => (
           <li key={entry.position} data-heading-level={entry.level} style={{ paddingInlineStart: `${entry.depth}rem` }}>
@@ -89,7 +97,9 @@ export function PostReadingOutlineView({
               aria-label={m.post_sections_entry({ level: entry.level, label: entry.label }, options)}
               onClick={() => choose(entry.position)}
             >
-              <bdi dir="auto" className="min-w-0 whitespace-normal">{entry.label}</bdi>
+              <bdi dir="auto" className="min-w-0 whitespace-normal">
+                {entry.label}
+              </bdi>
             </Button>
           </li>
         ))}
@@ -104,31 +114,66 @@ export function PostReadingOutlineView({
 
   if (!enhanced || !outline.entries.length) return null;
   return (
-    <div ref={(element) => position.setControls(element)} data-slot="post-reading-sections" className="sticky top-24 z-10 mb-3 w-fit max-w-full rounded-xl bg-background/95 p-1 shadow-sm" lang={locale}>
+    <div
+      ref={(element) => position.setControls(element)}
+      data-slot="post-reading-sections"
+      className="sticky top-24 z-10 mb-3 w-fit max-w-full rounded-xl bg-background/95 p-1 shadow-sm"
+      lang={locale}
+    >
       <div className="flex max-w-full flex-wrap gap-1">
-        <Button ref={launcher} type="button" variant="outline" className={control}
-          aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined}
-          onClick={() => changeOpen(true)}>{title}</Button>
+        <Button
+          ref={launcher}
+          type="button"
+          variant="outline"
+          className={control}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? id : undefined}
+          onClick={() => changeOpen(true)}
+        >
+          {title}
+        </Button>
         {returning ? (
-          <Button type="button" variant="ghost" className={control} onClick={() => {
-            if (!position.requestReturn()) return;
-            const result = position.complete();
-            if (!position.isCurrent()) return;
-            setReturning(position.canReturn);
-            setUnavailable(result === 'unavailable');
-          }}>{m.post_sections_return({}, options)}</Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className={control}
+            onClick={() => {
+              if (!position.requestReturn()) return;
+              const result = position.complete();
+              if (!position.isCurrent()) return;
+              setReturning(position.canReturn);
+              setUnavailable(result === 'unavailable');
+            }}
+          >
+            {m.post_sections_return({}, options)}
+          </Button>
         ) : null}
       </div>
-      {unavailable ? <p role="status" className="max-w-prose p-2 text-sm">{m.post_sections_unavailable({}, options)}</p> : null}
+      {unavailable ? (
+        <p role="status" className="max-w-prose p-2 text-sm">
+          {m.post_sections_unavailable({}, options)}
+        </p>
+      ) : null}
       {mobile ? (
-        <BottomSheet open={open} onOpenChange={changeOpen} onOpenChangeComplete={complete}
-          finalFocus={finalFocus} title={title} closeLabel={closeLabel}>{content}</BottomSheet>
+        <BottomSheet
+          open={open}
+          onOpenChange={changeOpen}
+          onOpenChangeComplete={complete}
+          finalFocus={finalFocus}
+          title={title}
+          closeLabel={closeLabel}
+        >
+          {content}
+        </BottomSheet>
       ) : (
         <Dialog open={open} onOpenChange={changeOpen} onOpenChangeComplete={complete}>
           <DialogContent showCloseButton={false} finalFocus={finalFocus} className="gap-3 motion-reduce:animate-none">
             <div className="flex min-w-0 items-start gap-2">
               <DialogTitle className="min-w-0 flex-1 break-words">{title}</DialogTitle>
-              <Button variant="ghost" className={control} onClick={() => changeOpen(false)}>{closeLabel}</Button>
+              <Button variant="ghost" className={control} onClick={() => changeOpen(false)}>
+                {closeLabel}
+              </Button>
             </div>
             {content}
           </DialogContent>

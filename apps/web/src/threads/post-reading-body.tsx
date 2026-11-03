@@ -22,12 +22,19 @@ type ReadingProps = ComponentProps<typeof DocumentBody> & {
  */
 export function PostReadingBody(props: ReadingProps) {
   const [visit, setVisit] = useState(() => ({
-    document: props.document, identity: props.readerIdentity, generation: 0, position: new PostReadingPosition(),
+    document: props.document,
+    identity: props.readerIdentity,
+    generation: 0,
+    position: new PostReadingPosition(),
   }));
   if (visit.document !== props.document || visit.identity !== props.readerIdentity) {
     visit.position.retire();
-    setVisit({ document: props.document, identity: props.readerIdentity,
-      generation: visit.generation + 1, position: new PostReadingPosition() });
+    setVisit({
+      document: props.document,
+      identity: props.readerIdentity,
+      generation: visit.generation + 1,
+      position: new PostReadingPosition(),
+    });
     return null;
   }
   visit.position.setGuard(props.isReaderCurrent);
@@ -35,34 +42,63 @@ export function PostReadingBody(props: ReadingProps) {
 }
 
 function ReadingVisit({
-  position, className, readerIdentity: _identity, isReaderCurrent: _current, locale = getLocale(),
-  headingAttributes: callerAttributes, onDisclosureChange: callerDisclosure, ...props
+  position,
+  className,
+  readerIdentity: _identity,
+  isReaderCurrent: _current,
+  locale = getLocale(),
+  headingAttributes: callerAttributes,
+  onDisclosureChange: callerDisclosure,
+  ...props
 }: ReadingProps & { position: PostReadingPosition }) {
   const namespace = `reading-${useId().replaceAll(':', '')}`;
   const [disclosed, setDisclosed] = useState<ReadonlySet<number>>(() => new Set());
   const outline = useMemo(() => projectReadingOutline(props.document, disclosed), [props.document, disclosed]);
   useLayoutEffect(() => position.connect(), [position]);
   const attributes = useMemo(() => {
-    const bindings = new Map(outline.entries.map((entry) => [entry.nodeId, {
-      id: `${namespace}-h-${entry.position}`, tabIndex: -1 as const,
-      ref: (element: HTMLHeadingElement | null) => position.bind(entry.position, element),
-    }]));
+    const bindings = new Map(
+      outline.entries.map((entry) => [
+        entry.nodeId,
+        {
+          id: `${namespace}-h-${entry.position}`,
+          tabIndex: -1 as const,
+          ref: (element: HTMLHeadingElement | null) => position.bind(entry.position, element),
+        },
+      ]),
+    );
     return (nodeId: string) => bindings.get(nodeId) ?? callerAttributes?.(nodeId);
   }, [outline, namespace, position, callerAttributes]);
-  const disclosure = useCallback((revealed: ReadonlySet<number>) => {
-    if (!position.isCurrent()) return;
-    setDisclosed(revealed);
-    callerDisclosure?.(revealed);
-  }, [position, callerDisclosure]);
+  const disclosure = useCallback(
+    (revealed: ReadonlySet<number>) => {
+      if (!position.isCurrent()) return;
+      setDisclosed(revealed);
+      callerDisclosure?.(revealed);
+    },
+    [position, callerDisclosure],
+  );
   // Opening, dismissing and returning only render the controls; they never traverse the snapshot again.
-  const body = useMemo(() => <DocumentBody {...props} locale={locale}
-    headingAttributes={attributes} onDisclosureChange={disclosure}
-    className={`post-reading-document ${className ?? ''}`} />,
-    [props.document, props.mentions, props.labels, props.renderImage, locale, attributes, disclosure, className]);
+  const body = useMemo(
+    () => (
+      <DocumentBody
+        {...props}
+        locale={locale}
+        headingAttributes={attributes}
+        onDisclosureChange={disclosure}
+        className={`post-reading-document ${className ?? ''}`}
+      />
+    ),
+    [props.document, props.mentions, props.labels, props.renderImage, locale, attributes, disclosure, className],
+  );
   return (
-    <div ref={(element) => position.setRoot(element)} data-slot="post-reading-body"
-      className="post-reading-body min-w-0" lang="" dir="auto" tabIndex={-1}
-      onFocusCapture={(event) => position.rememberFocus(event.target as HTMLElement)}>
+    <div
+      ref={(element) => position.setRoot(element)}
+      data-slot="post-reading-body"
+      className="post-reading-body min-w-0"
+      lang=""
+      dir="auto"
+      tabIndex={-1}
+      onFocusCapture={(event) => position.rememberFocus(event.target as HTMLElement)}
+    >
       <PostReadingOutlineView outline={outline} position={position} locale={locale} />
       {body}
     </div>
