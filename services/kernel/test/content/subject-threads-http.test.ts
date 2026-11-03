@@ -131,6 +131,20 @@ test('subject thread listing is mounted as a subject read and conceals unknown o
   expect((await get(path(hidden, { place: GLOBAL_CONTEXT, kind: 'discussion' }))).response.status).toBe(404);
 
   const readable = await subject();
+  const empty = await get(path(readable, { place: GLOBAL_CONTEXT, kind: 'review' }));
+  expect(empty.response.status).toBe(200);
+  expect(empty.body).toMatchObject({
+    threads: [],
+    next: null,
+    context: {
+      subject: { id: readable, label: null, source: { partition: subjectRoute >> 4 } },
+      place: { kind: 'global', id: GLOBAL_CONTEXT },
+      kind: 'review',
+    },
+  });
+  const missingPlace = await get(path(readable, { place: newId(0x789a), kind: 'review' }));
+  expect(missingPlace.response.status).toBe(404);
+  expect(missingPlace.body).not.toHaveProperty('threads');
   for (const values of [
     { kind: 'discussion' },
     { place: GLOBAL_CONTEXT },
@@ -165,6 +179,11 @@ test('subject thread pages sort by activity, bind signed cursors, and skip hidde
 
   const first = await get(path(subjectId, { place: GLOBAL_CONTEXT, kind: 'discussion', limit: '1' }));
   expect(first.response.status).toBe(200);
+  expect(first.body.context).toMatchObject({
+    subject: { id: subjectId },
+    place: { kind: 'global', id: GLOBAL_CONTEXT },
+    kind: 'discussion',
+  });
   expect(first.body.threads.map((value: { id: string }) => value.id)).toEqual([newest]);
   expect(first.body.next).toEqual(expect.any(String));
   expect(first.response.headers.get(SESSION_HEADER)).toEqual(expect.any(String));
@@ -173,6 +192,7 @@ test('subject thread pages sort by activity, bind signed cursors, and skip hidde
     path(subjectId, { place: GLOBAL_CONTEXT, kind: 'discussion', limit: '1', cursor: first.body.next }),
   );
   expect(second.response.status).toBe(200);
+  expect(second.body.context).toEqual(first.body.context);
   expect(second.body.threads.map((value: { id: string }) => value.id)).toEqual([nextNewest]);
   expect(second.body.threads.map((value: { id: string }) => value.id)).not.toContain(topHidden);
   expect(second.body.threads.map((value: { id: string }) => value.id)).not.toContain(containerHidden);

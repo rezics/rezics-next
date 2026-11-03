@@ -1193,6 +1193,63 @@ for one Global Context or Realm and one kind. `limit` is 1–20, default 20. Res
 newest first, with the indexed thread id as a stable tie-breaker. The signed keyset cursor binds the subject, place,
 kind, viewer and subject partition epoch. It does not use an offset or a count.
 
+The response retains `threads` and `next` and adds required `context: {subject, place, kind}`. Subject identity
+uses Semantic's `readSubjectReference` and Content's installed current label disclosure
+`prepareEditionSubjectIdentities`; a readable Subject without a label carries `label: null`. The Subject's
+`source: {partition, epoch, position}` is the actual Semantic reference component, with its position serialized
+as a decimal string. Realm identity uses the ordinary `readRealm` result: its exact id, current title, Space id
+and head revision. Only the exact Global Context id produces `place.kind: global`. Missing and concealed Realms
+both return 404, including on an empty index; they never produce a Global page.
+
+Decision: retain requested Subject/place keys, conceal redirected Subject identities, and fail the page when
+a required current context observation changes; context conveys no creation or command authority.
+
+`prepareSubjectThreadContext(dependencies: ContentReadDependencies, subjectId: string, placeId: string,
+kind: 'discussion' | 'review', context: ReadContext)` returns `{finish(): Promise<SubjectThreadContext>}`.
+Preparation releases the Subject home before opening the Realm home. After bounded native candidate disclosure,
+`finish` repeats ordinary Realm/Subject reads and compares the actual observations, including the Semantic source
+component and Realm head. A current denial returns 404; a changed observation returns the ordinary 503
+`dependency_unavailable` problem, preserving the caller's input cursor for retry. Operational failures propagate;
+they cannot become a missing label or a successful empty page. The Author list keeps its existing response schema.
+
+For example, a readable unlabeled empty Global review page has
+`{threads:[],next:null,context:{subject:{id,label:null,source:{partition,epoch,position}},place:{kind:"global",id},kind:"review"}}`.
+A concealed selection returns the ordinary 404 problem without context or threads; a failed or changed required
+observation returns the ordinary problem without an advanced cursor. Existing native `ThreadView` entries still
+lack the shared current interaction/action card and Home parent/target-context projections; those producers must
+be installed before composing their recorded citations, reactions, activity and command advice here. The current
+page context does not certify any such action or rendered Web acceptance. Derived OpenAPI/client publication and
+the Web binding review remain with the controller and existing Subject interface owner.
+
+### Cost: listSubjectThreads context
+
+- Touches: one label-disclosure preparation round, then two Subject observations, each sharing one released
+  repeatable-read snapshot between the Semantic reference and current label reader. Each observation prepares
+  ordinary Subject Access outside that snapshot and evaluates it inside; the label reader additionally evaluates
+  its prepared native Subject check. For a Realm selection, two separate ordinary Realm reads include current
+  Realm/Space binding, membership/ban and native Access work. Global needs neither Realm read. Add the existing
+  selection partition/Subject Access snapshot and up to 80 raw candidate ordinary disclosures, stopping at 20
+  outputs. Every disclosure retains source chains, Board/place/Realm checks, citation/history and final authority
+  costs from its native reader. No connection spans the Subject, Realm and candidate phases. Denied preparation
+  stops selection; final failure withholds the whole page. Transaction controls, pool releases and nested Access
+  preparation/executor/fence work remain charged even on empty or denied branches; a retry repeats these phases.
+- Bound: the selection prefix is `(route,subject_id,place_id,kind,last_activity_at DESC,thread_id ASC)`;
+  candidates use exact route/identity source probes, without a second index, refill, totals or reordered output.
+  Context adds one Subject and at most one Realm. Subject reference uses route/id plus the latest redirect seek;
+  current labels include the native current-term view's intermediate rows, language aggregation and ordering.
+  Its examined/history work must not be inferred from one chosen label. Realm title admission is 1024 Unicode
+  code points, at most 4096 UTF-8 bytes or 6144 JSON-escaped bytes before serialization copies; ordinary Realm
+  reads also retain summary/presentation bytes not returned in context. Chosen-label bytes and all-label
+  intermediate rows inherit Semantic admission, rather than a fabricated page byte ceiling. Retained memory
+  includes both initial/final context observations and up to 20 native bodies of at most 2 MiB each, their parsed
+  documents and wire serialization, plus native citation/context/identity authority intermediates. No complete
+  nested byte or examined-work ceiling is claimed for the pending shared card projection.
+- Growth check: focused HTTP/context tests cover Global empty/populated/continued identity, readable public and
+  protected Realms, anonymous denial, current Realm revision change/retry and Subject withdrawal. Three-scale
+  selection/history/authority measurement, all-pool runner accounting and full withheld/failed card outcomes
+  remain deferred to integration and the card-composition continuation. Performance must review the current-term,
+  nested Access/citation/history and serialization terms before a complete numerical bound is adopted.
+
 The route returns a 404 for an unknown or unreadable subject. Index rows are candidates only: each candidate passes
 the current thread, opening post, board, Realm and Access disclosure checks, and the final snapshot confirms that the
 thread still references the subject and its board still belongs to the requested place. Hidden or stale candidates

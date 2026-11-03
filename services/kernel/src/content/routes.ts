@@ -1348,7 +1348,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             );
             session.record(sessionComponent(page.anchor));
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { threads: [...page.entries], next: page.nextCursor };
+            return { threads: [...page.entries], next: page.nextCursor, context: page.context };
           }),
         );
       },

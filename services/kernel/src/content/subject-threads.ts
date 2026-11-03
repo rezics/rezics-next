@@ -10,6 +10,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, type ThreadView } from './reads.ts';
 import page from './page-subject-threads.sql';
+import { prepareSubjectThreadContext, type SubjectThreadContext } from './subject-threads-context.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
 export type SubjectThreadPageInput = {
@@ -19,6 +20,7 @@ export type SubjectThreadPageInput = {
   limit?: number;
 };
 export type SubjectThreadPage = {
+  context: SubjectThreadContext;
   entries: readonly ThreadView[];
   nextCursor: string | null;
   anchor: AnchoredPosition;
@@ -164,6 +166,7 @@ export async function listSubjectThreads(
   const now = (dependencies.cursorNow ?? Date.now)();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const scope = binding(subjectId, input, context.actor);
+  const pageContext = await prepareSubjectThreadContext(dependencies, subjectId, input.place, input.kind, context);
   const candidates = await pageCandidates(dependencies, subjectId, input, context, limit * SCAN_FACTOR, scope, now);
   const entries: ThreadView[] = [];
   const anchors: AnchoredPosition[] = [candidates.anchor];
@@ -180,6 +183,7 @@ export async function listSubjectThreads(
 
   const hasMore = scanned < candidates.candidates.length || candidates.candidates.length === limit * SCAN_FACTOR;
   return {
+    context: await pageContext.finish(),
     entries,
     anchor: candidates.anchor,
     anchors,

@@ -453,6 +453,40 @@ export const SubjectThreadsResponseSchema = t.Object(
   {
     threads: t.Array(ThreadViewSchema, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
+    context: t.Object(
+      {
+        subject: t.Object(
+          {
+            id: ContentIdSchema,
+            label: t.Union([t.Object({ value: t.String(), language: t.String() }, closed), t.Null()]),
+            source: t.Object(
+              {
+                partition: t.Integer({ minimum: 0, maximum: 4095 }),
+                epoch: t.Integer({ minimum: 1 }),
+                position: t.String({ pattern: '^[0-9]+$' }),
+              },
+              closed,
+            ),
+          },
+          closed,
+        ),
+        place: t.Union([
+          t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+          t.Object(
+            {
+              kind: t.Literal('realm'),
+              id: ContentIdSchema,
+              title: t.String(),
+              spaceId: ContentIdSchema,
+              headRevisionId: ContentIdSchema,
+            },
+            closed,
+          ),
+        ]),
+        kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+      },
+      closed,
+    ),
   },
   closed,
 );
@@ -471,7 +505,13 @@ export const AuthorThreadsQuerySchema = t.Object(
   },
   closed,
 );
-export const AuthorThreadsResponseSchema = SubjectThreadsResponseSchema;
+export const AuthorThreadsResponseSchema = t.Object(
+  {
+    threads: t.Array(ThreadViewSchema, { maxItems: 20 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
+  closed,
+);
 export const AuthorPostsResponseSchema = t.Object(
   {
     posts: t.Array(
