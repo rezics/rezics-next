@@ -1,5 +1,5 @@
-import { defaultPolicy, readControlPolicy, type ControlPolicy } from '../src/policy.ts';
 #!/usr/bin/env bun
+import { defaultPolicy, readControlPolicy, type ControlPolicy } from '../src/policy.ts';
 import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import {
@@ -101,7 +101,11 @@ export function requireSmokeWaitingCheckId(checks: unknown): string {
 type Reporter = (line: string) => void;
 
 /** Store bounded diagnostics, never prompts, account configuration, or unrestricted tool arguments. */
-export function saveSmokeEvidence(path: string, evidence: unknown, policy: SmokePolicy = defaultPolicy.launchSmoke): void {
+export function saveSmokeEvidence(
+  path: string,
+  evidence: unknown,
+  policy: SmokePolicy = defaultPolicy.launchSmoke,
+): void {
   let remaining = policy.evidenceBudgetBytes;
   const clean = (value: unknown, depth = 0): unknown => {
     if (remaining <= 0 || depth > policy.evidenceDepth) return '<truncated>';
@@ -210,7 +214,11 @@ export function observeSmokeAdapter(adapter: AgentAdapter, record: (value: Smoke
 }
 
 /** Only the current run's bounded suffix; omit raw tool arguments, environment and tool output. */
-export function smokeRunSuffix(path: string, offset: number, policy: SmokePolicy = defaultPolicy.launchSmoke): unknown[] {
+export function smokeRunSuffix(
+  path: string,
+  offset: number,
+  policy: SmokePolicy = defaultPolicy.launchSmoke,
+): unknown[] {
   if (!existsSync(path)) return [];
   const fd = openSync(path, 'r');
   try {
@@ -266,17 +274,30 @@ function reportLine(line: string): void {
 }
 
 function message(error: unknown, policy: SmokePolicy = defaultPolicy.launchSmoke): string {
-  return (error instanceof Error ? error.message : String(error)).replace(/[\r\n]+/g, ' ').slice(0, policy.diagnosticCharacters);
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/[\r\n]+/g, ' ')
+    .slice(0, policy.diagnosticCharacters);
 }
 
-function stepFailure(step: string, error: unknown, report: Reporter, policy: SmokePolicy = defaultPolicy.launchSmoke): Error {
+function stepFailure(
+  step: string,
+  error: unknown,
+  report: Reporter,
+  policy: SmokePolicy = defaultPolicy.launchSmoke,
+): Error {
   const detail = message(error, policy);
   report(`${step}: failed: ${detail}`);
   return new Error(`${step}: ${detail}`);
 }
 
 function smokeTools(policy: SmokePolicy) {
-  const checked = (command: string, args: string[], cwd: string, timeout = policy.commandTimeoutMs, env = process.env): string => {
+  const checked = (
+    command: string,
+    args: string[],
+    cwd: string,
+    timeout = policy.commandTimeoutMs,
+    env = process.env,
+  ): string => {
     const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout, maxBuffer: policy.outputBytes });
     if (result.status !== 0) {
       const detail = result.stderr?.trim() || result.stdout?.trim() || result.error?.message || `exit ${result.status}`;
@@ -639,7 +660,12 @@ function fakeStep(
   env: NodeJS.ProcessEnv,
   policy: SmokePolicy,
 ): { status: number | null; stdout: string; stderr: string; error?: Error } {
-  const result = spawnSync(agent, [step], { encoding: 'utf8', env, timeout: policy.fakeCommandTimeoutMs, maxBuffer: policy.outputBytes });
+  const result = spawnSync(agent, [step], {
+    encoding: 'utf8',
+    env,
+    timeout: policy.fakeCommandTimeoutMs,
+    maxBuffer: policy.outputBytes,
+  });
   return {
     status: result.status,
     stdout: result.stdout ?? '',
@@ -803,7 +829,13 @@ async function runFakeSmoke(
   }
 }
 
-function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number, report: Reporter, policy: SmokePolicy): Promise<number> {
+function runInnerProcess(
+  tree: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  report: Reporter,
+  policy: SmokePolicy,
+): Promise<number> {
   return new Promise((resolvePromise, reject) => {
     const script = join(tree, 'tools/goal/scripts/launch-smoke.ts');
     const child = spawn(process.execPath, [script, '--inner'], {
@@ -820,17 +852,25 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
     let outputTruncated = false;
     const appendTail = (current: string, text: string): string => {
       const next = Buffer.concat([Buffer.from(current), Buffer.from(text)]);
-      return next.byteLength <= policy.outputBytes ? next.toString('utf8') : next.subarray(-policy.outputBytes).toString('utf8');
+      return next.byteLength <= policy.outputBytes
+        ? next.toString('utf8')
+        : next.subarray(-policy.outputBytes).toString('utf8');
     };
     const reportBounded = (line: string) => {
       if (reportedBytes >= policy.outputBytes) {
-        if (!outputTruncated) report(`[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`);
+        if (!outputTruncated)
+          report(
+            `[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`,
+          );
         outputTruncated = true;
         return;
       }
       const remaining = policy.outputBytes - reportedBytes - 1;
       if (remaining <= 0) {
-        if (!outputTruncated) report(`[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`);
+        if (!outputTruncated)
+          report(
+            `[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`,
+          );
         outputTruncated = true;
         return;
       }
@@ -840,7 +880,10 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
       report(bounded);
       reportedBytes += Buffer.byteLength(bounded) + 1;
       if (Buffer.byteLength(bounded) < bytes.byteLength) {
-        if (!outputTruncated) report(`[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`);
+        if (!outputTruncated)
+          report(
+            `[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`,
+          );
         outputTruncated = true;
       }
     };
@@ -957,14 +1000,18 @@ async function runRealSmoke(
     } catch {
       // Replace an incomplete prior write with the current bounded facts.
     }
-    saveSmokeEvidence(runEvidencePath, {
-      ...previous,
-      runId,
-      candidate,
-      startedAt: new Date(startedAt).toISOString(),
-      stage: currentStep,
-      ...extra,
-    }, policy);
+    saveSmokeEvidence(
+      runEvidencePath,
+      {
+        ...previous,
+        runId,
+        candidate,
+        startedAt: new Date(startedAt).toISOString(),
+        stage: currentStep,
+        ...extra,
+      },
+      policy,
+    );
   };
   persistReport(root, reportPath, evidence);
   saveRunEvidence();
@@ -1177,7 +1224,11 @@ function cleanupSmokeScopes(path: string, policy: SmokePolicy): void {
     }),
   );
   for (const unit of units)
-    spawnSync('systemctl', ['--user', 'stop', unit], { encoding: 'utf8', timeout: policy.scopeCleanupTimeoutMs, maxBuffer: policy.outputBytes });
+    spawnSync('systemctl', ['--user', 'stop', unit], {
+      encoding: 'utf8',
+      timeout: policy.scopeCleanupTimeoutMs,
+      maxBuffer: policy.outputBytes,
+    });
 }
 
 function withDeadline<T>(promise: Promise<T>, deadline: number, step: string): Promise<T> {
@@ -1192,7 +1243,11 @@ function withDeadline<T>(promise: Promise<T>, deadline: number, step: string): P
   ]);
 }
 
-async function waitForCheck(resultPath: string, deadline: number, policy: SmokePolicy): Promise<Record<string, unknown>> {
+async function waitForCheck(
+  resultPath: string,
+  deadline: number,
+  policy: SmokePolicy,
+): Promise<Record<string, unknown>> {
   while (Date.now() < deadline) {
     if (existsSync(resultPath)) {
       try {
@@ -1229,7 +1284,9 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   const workerCheckScript = resolve(
     process.env.REZICS_LAUNCH_SMOKE_WORKER_CHECK ?? join(tree, 'scripts/worker-check.ts'),
   );
-  const deadline = Number(process.env.REZICS_LAUNCH_SMOKE_DEADLINE ?? Date.now() + (startupPolicy ?? defaultPolicy).launchSmoke.budgetMs);
+  const deadline = Number(
+    process.env.REZICS_LAUNCH_SMOKE_DEADLINE ?? Date.now() + (startupPolicy ?? defaultPolicy).launchSmoke.budgetMs,
+  );
   const reportPath = resolve(
     process.env.REZICS_LAUNCH_SMOKE_REPORT_PATH ?? join(tree, '.temp/goal/lifecycle-smoke/report.json'),
   );
@@ -1405,49 +1462,55 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
         result = attempt.result;
       }
     }
-    saveSmokeEvidence(evidencePath, {
-      runId: process.env.REZICS_LAUNCH_SMOKE_RUN_ID,
-      candidate: process.env.REZICS_LAUNCH_SMOKE_CANDIDATE,
-      mergedCandidate: git(tree, 'rev-parse', 'HEAD'),
-      stage: currentStep,
-      failure: currentFailure,
-      current: attempt
-        ? {
-            taskId: attempt.taskId,
-            attempt: attempt.attempt,
-            state: attempt.state,
-            activeRun,
-            result,
-            blocker: activeRun ? null : attempt.blocker,
-            failureKind: activeRun ? null : attempt.failureKind,
-            session: attempt.session,
-            profile: attempt.profile,
-            pool: attempt.pool,
-            process: attempt.process,
-            driver: attempt.driver,
-            exitCode: activeRun ? null : attempt.exitCode,
-            worktree: task!.worktree,
-            branch: task!.branch,
+    saveSmokeEvidence(
+      evidencePath,
+      {
+        runId: process.env.REZICS_LAUNCH_SMOKE_RUN_ID,
+        candidate: process.env.REZICS_LAUNCH_SMOKE_CANDIDATE,
+        mergedCandidate: git(tree, 'rev-parse', 'HEAD'),
+        stage: currentStep,
+        failure: currentFailure,
+        current: attempt
+          ? {
+              taskId: attempt.taskId,
+              attempt: attempt.attempt,
+              state: attempt.state,
+              activeRun,
+              result,
+              blocker: activeRun ? null : attempt.blocker,
+              failureKind: activeRun ? null : attempt.failureKind,
+              session: attempt.session,
+              profile: attempt.profile,
+              pool: attempt.pool,
+              process: attempt.process,
+              driver: attempt.driver,
+              exitCode: activeRun ? null : attempt.exitCode,
+              worktree: task!.worktree,
+              branch: task!.branch,
+            }
+          : null,
+        launches,
+        selection: { configuredProfile: selected, currentAttemptProfile: attempt?.profile, pool: attempt?.pool },
+        currentRun: run ? { sequence: run.sequence, at: run.at, ...runBody } : null,
+        events: events
+          .slice(-policy.snapshotEvents)
+          .map((event) => ({ sequence: event.sequence, kind: event.kind, at: event.at })),
+        logSuffix: attempt && runBody ? smokeRunSuffix(attempt.logPath, runBody.logStartOffset, policy) : [],
+        stderrSuffix: attempt && runBody ? smokeStderrSuffix(`${attempt.logPath}.err`, policy) : '',
+        checks: (attempt?.checks ?? []).map((id) => {
+          const path = join(task!.worktree, '.temp/goal/checks/results', `${id}.json`);
+          let record: unknown = null;
+          try {
+            record = JSON.parse(readFileSync(path, 'utf8'));
+          } catch {
+            /* No terminal record yet. */
           }
-        : null,
-      launches,
-      selection: { configuredProfile: selected, currentAttemptProfile: attempt?.profile, pool: attempt?.pool },
-      currentRun: run ? { sequence: run.sequence, at: run.at, ...runBody } : null,
-      events: events.slice(-policy.snapshotEvents).map((event) => ({ sequence: event.sequence, kind: event.kind, at: event.at })),
-      logSuffix: attempt && runBody ? smokeRunSuffix(attempt.logPath, runBody.logStartOffset, policy) : [],
-      stderrSuffix: attempt && runBody ? smokeStderrSuffix(`${attempt.logPath}.err`, policy) : '',
-      checks: (attempt?.checks ?? []).map((id) => {
-        const path = join(task!.worktree, '.temp/goal/checks/results', `${id}.json`);
-        let record: unknown = null;
-        try {
-          record = JSON.parse(readFileSync(path, 'utf8'));
-        } catch {
-          /* No terminal record yet. */
-        }
-        return { id, record };
-      }),
-      launchErrors: launchErrors.slice(-policy.launchErrors),
-    }, policy);
+          return { id, record };
+        }),
+        launchErrors: launchErrors.slice(-policy.launchErrors),
+      },
+      policy,
+    );
   };
   const observed = observeSmokeAdapter(agentAdapter('codex'), (launch) => {
     launches.push(launch);
