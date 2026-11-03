@@ -36,16 +36,30 @@ async function decision(title: string) {
 }
 
 /** Observe the mounted route, with a real competing native operation at selection. */
-async function withheld(path: string, bearer: string, change: (request: Request) => Promise<void>, occurrence = 1) {
+async function withheld(
+  path: string,
+  bearer: string,
+  change: (request: Request) => Promise<void>,
+  occurrence = 1,
+  afterCommit = false,
+) {
   const request = new Request(`https://content.test${path}`, { headers: { authorization: `Bearer ${bearer}` } });
   const observer = observeSql(fixture.system.database.pool);
   const barrier = observer.hold({ statement: source.sql, occurrence }, 'after');
   const reading = fixture.system.kernel.handle(request);
+  let commit: ReturnType<typeof observer.hold> | undefined;
   try {
     await barrier.entered;
+    if (afterCommit) {
+      commit = observer.hold({ statement: 'COMMIT' }, 'after');
+      barrier.release();
+      await commit.entered;
+    }
     await change(request);
   } finally {
     barrier.release();
+    commit?.release();
+    await reading;
     await observer.close();
   }
   const response = await reading;
@@ -73,15 +87,16 @@ for (const differentClient of [false, true]) {
       scopes: system.auth.ordinaryScopes,
     });
     expect(replacement.bearer).not.toBe(author.bearer);
-    // Also cover replacement after the final source query, before disclosure.
-    for (const occurrence of [1, 2])
+    // Cover selection, final source and final transaction release before disclosure.
+    for (const phase of [1, 2, 3])
       await withheld(
         path,
         author.bearer,
         async (request) => {
           request.headers.set('authorization', `Bearer ${replacement.bearer}`);
         },
-        occurrence,
+        Math.min(phase, 2),
+        phase === 3,
       );
     const reopened = await fixture.call('GET', path, { bearer: replacement.bearer });
     expect(reopened.response.status).toBe(200);

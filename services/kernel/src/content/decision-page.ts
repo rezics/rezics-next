@@ -128,8 +128,11 @@ export async function readDecisionPage(
 ) {
   const actor = context.actor;
   if (actor.kind !== 'account') return null;
+  // Equal account/client claims can belong to different bearer sessions. Keep
+  // the original request binding across selection and final serialization.
   const authorization = request.headers.get('authorization');
-  return composeModerationDecision(deps, id, context, async (source) => {
+  const sameAuthorization = () => authorization !== null && request.headers.get('authorization') === authorization;
+  const result = await composeModerationDecision(deps, id, context, async (source) => {
     const identity = await identityWitness(deps, actor, context.deadline);
     const affectedAuthor = source.target_kind !== 'board' && source.author_account_id === actor.accountId;
     const readContext = async (): Promise<TargetContext> => {
@@ -173,12 +176,12 @@ export async function readDecisionPage(
     }
     return {
       async observe() {
+        if (!sameAuthorization()) return false;
         const currentContext = await readContext();
         targetContext =
           JSON.stringify(initialContext) === JSON.stringify(currentContext) ? currentContext : { state: 'unavailable' };
         // Reuse the actual request authenticator, including native session floors,
         // assignment/client constraints and bearer expiry. Never reconstruct Actor.
-        if (request.headers.get('authorization') !== authorization) return false;
         let currentActor: Actor;
         try {
           currentActor = await actorOf(deps.access, request, { pool: deps.pool, deadline: context.deadline });
@@ -196,7 +199,7 @@ export async function readDecisionPage(
         return identity !== null && identity === (await identityWitness(deps, actor, context.deadline));
       },
       async value(client, finalSource) {
-        if (request.headers.get('authorization') !== authorization) throw new ProblemError('not_found');
+        if (!sameAuthorization()) throw new ProblemError('not_found');
         try {
           verifiedBearerExpiry(deps.access, observedActor, { pool: deps.pool, deadline: context.deadline });
         } catch (error) {
@@ -220,8 +223,10 @@ export async function readDecisionPage(
           }
           appeal = allowed ? { state: 'permitted' } : { state: 'unavailable', reason: 'command_unavailable' };
         }
+        if (!sameAuthorization()) throw new ProblemError('not_found');
         return { viewer: { affectedAuthor, observedAt: now.toISOString(), appeal }, targetContext };
       },
     };
   });
+  return sameAuthorization() ? result : null;
 }
