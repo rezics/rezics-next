@@ -323,7 +323,6 @@ function parameters(identity: NativeSourceIdentity): Parameters {
 }
 /** Fixed projections and primary-key/route-leading range plans only; no observed row-count cost classifier. */
 function footprint(text: string, values: unknown[], rows: number, points: number, keys = 0, metadata = 0) {
-  const projection = sameSQL(text) === sameSQL(readQuery.sql) ? captureProjectionBytes : 4096;
   return {
     nativeRows: rows,
     nativePoints: points,
@@ -332,10 +331,7 @@ function footprint(text: string, values: unknown[], rows: number, points: number
     witnessKeys: 0,
     statements: 1,
     bytes:
-      Buffer.byteLength(text) +
-      Buffer.byteLength(JSON.stringify(values)) +
-      (rows || points ? projection : 0) +
-      keys * 1024,
+      Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(values)) + (rows || points ? 4096 : 0) + keys * 1024,
     // Native point probes can miss even without a returned raw key. Keep these
     // admitted slots inclusive; a positive outer join result cannot measure inner misses.
     emptySeeks: keys ? 1 : points,
