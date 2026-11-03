@@ -287,8 +287,10 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   ) {
     const requestHeaders = new Headers(headers);
     requestHeaders.set('authorization', `Bearer ${tokens.get(seller.id)!}`);
-    if (body !== undefined && !requestHeaders.has('content-type')) requestHeaders.set('content-type', 'application/json');
-    if (!requestHeaders.has('idempotency-key')) requestHeaders.set('idempotency-key', JSON.stringify(Bun.randomUUIDv7()));
+    if (body !== undefined && !requestHeaders.has('content-type'))
+      requestHeaders.set('content-type', 'application/json');
+    if (!requestHeaders.has('idempotency-key'))
+      requestHeaders.set('idempotency-key', JSON.stringify(Bun.randomUUIDv7()));
     return app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
@@ -301,20 +303,26 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     const context = { pool: db.pool, deadline: Date.now() + 30_000 };
     const actor = await grantAccess.authenticate(tokens.get(governor.id)!, context);
     const grants = createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' });
-    await grants.create({ ...context, actor }, {
-      resource: PLATFORM_RESOURCE,
-      subject: { kind: 'account', id: seller.id },
-      actions: ['offer:create', 'subject:create'],
-      valid: '(,)',
-      key: Bun.randomUUIDv7(),
-    });
-    await grants.create({ ...context, actor }, {
-      resource: GLOBAL_CONTEXT,
-      subject: { kind: 'account', id: seller.id },
-      actions: ['subject:create', 'board:create'],
-      valid: '(,)',
-      key: Bun.randomUUIDv7(),
-    });
+    await grants.create(
+      { ...context, actor },
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: seller.id },
+        actions: ['offer:create', 'subject:create'],
+        valid: '(,)',
+        key: Bun.randomUUIDv7(),
+      },
+    );
+    await grants.create(
+      { ...context, actor },
+      {
+        resource: GLOBAL_CONTEXT,
+        subject: { kind: 'account', id: seller.id },
+        actions: ['subject:create', 'board:create'],
+        valid: '(,)',
+        key: Bun.randomUUIDv7(),
+      },
+    );
   }
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let workerFailure: string | undefined;

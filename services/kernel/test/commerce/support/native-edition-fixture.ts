@@ -72,7 +72,12 @@ export async function createNativeEditionFixture(request: NativeEditionRequest):
     request,
     'POST',
     '/v1/boards',
-    { conceptId: category.subject.id, title: `Native edition board ${suffix}`, visibility: 'published', purpose: 'discussion' },
+    {
+      conceptId: category.subject.id,
+      title: `Native edition board ${suffix}`,
+      visibility: 'published',
+      purpose: 'discussion',
+    },
     201,
   );
 
@@ -121,14 +126,9 @@ export async function createNativeEditionFixture(request: NativeEditionRequest):
         },
         201,
       );
-      await command(
-        request,
-        'POST',
-        `/v1/contentEditions/${edition.editionId}:publish`,
-        {},
-        200,
-        { 'if-match': JSON.stringify(edition.editionRevision) },
-      );
+      await command(request, 'POST', `/v1/contentEditions/${edition.editionId}:publish`, {}, 200, {
+        'if-match': JSON.stringify(edition.editionRevision),
+      });
       return {
         contentEditionId: edition.editionId,
         targetSubjectId: subject.subject.id,

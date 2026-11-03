@@ -13,7 +13,11 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createNativeContentSystem, type NativeContentSystem } from '../content/support/native-system.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
-import { createNativeEditionFixture, type NativeContentEdition, type NativeEditionRequest } from './support/native-edition-fixture.ts';
+import {
+  createNativeEditionFixture,
+  type NativeContentEdition,
+  type NativeEditionRequest,
+} from './support/native-edition-fixture.ts';
 
 let native: NativeContentSystem;
 let app: Kernel;
@@ -29,7 +33,8 @@ function requestAs(bearer: string | null): NativeEditionRequest {
     const headers = new Headers(extraHeaders);
     if (bearer) headers.set('authorization', `Bearer ${bearer}`);
     if (body !== undefined && !headers.has('content-type')) headers.set('content-type', 'application/json');
-    if (method !== 'GET' && !headers.has('idempotency-key')) headers.set('idempotency-key', JSON.stringify(crypto.randomUUID()));
+    if (method !== 'GET' && !headers.has('idempotency-key'))
+      headers.set('idempotency-key', JSON.stringify(crypto.randomUUID()));
     return app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
@@ -119,7 +124,11 @@ beforeAll(async () => {
     scopes: native.auth.ordinaryScopes,
   });
   grant = createGrantCommands({ pool: native.database.pool, access: native.access, managementAction: 'access:grant' });
-  await grantAccess(native.actors.author.actor.accountId, GLOBAL_CONTEXT, ['subject:create', 'board:create', 'offer:create']);
+  await grantAccess(native.actors.author.actor.accountId, GLOBAL_CONTEXT, [
+    'subject:create',
+    'board:create',
+    'offer:create',
+  ]);
   for (const group of ['purchases', 'selling']) {
     expect((await requestAs(governance.bearer)('POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   }
@@ -152,20 +161,18 @@ test('paid Content editions navigate to exact captured bytes and lose access onl
   });
   const paid = await purchase(authored);
 
-  const orderRead = await json<{ order: { id: string; offerId: string; settlement: string; entitlementId: string | null } }>(
-    await requestAs(buyer.bearer)('GET', `/v1/orders/${paid.order.id}`),
-    200,
-  );
+  const orderRead = await json<{
+    order: { id: string; offerId: string; settlement: string; entitlementId: string | null };
+  }>(await requestAs(buyer.bearer)('GET', `/v1/orders/${paid.order.id}`), 200);
   expect(orderRead.order).toMatchObject({
     id: paid.order.id,
     offerId: paid.offer.id,
     settlement: 'paid',
     entitlementId: expect.any(String),
   });
-  const owned = await json<{ entitlements: { id: string; orderId: string; targetSubjectId: string; active: boolean }[] }>(
-    await requestAs(buyer.bearer)('GET', '/v1/entitlements'),
-    200,
-  );
+  const owned = await json<{
+    entitlements: { id: string; orderId: string; targetSubjectId: string; active: boolean }[];
+  }>(await requestAs(buyer.bearer)('GET', '/v1/entitlements'), 200);
   expect(owned.entitlements).toContainEqual(
     expect.objectContaining({
       id: orderRead.order.entitlementId,
@@ -189,17 +196,22 @@ test('paid Content editions navigate to exact captured bytes and lose access onl
   expect((await protectedRevision(null, authored)).status).toBe(401);
 
   const newer = await json<{ post: { revisionId: string } }>(
-    await requestAs(native.actors.author.bearer)('POST', `/v1/posts/${authored.postId}/revisions`, {
-      body: fromPlainText('Newer source publication bytes'),
-    }, { 'if-match': JSON.stringify(authored.revisionId) }),
+    await requestAs(native.actors.author.bearer)(
+      'POST',
+      `/v1/posts/${authored.postId}/revisions`,
+      {
+        body: fromPlainText('Newer source publication bytes'),
+      },
+      { 'if-match': JSON.stringify(authored.revisionId) },
+    ),
     201,
   );
   const newerDraft = await json<{ editionId: string; editionRevision: string }>(
-    await requestAs(native.actors.author.bearer)(
-      'POST',
-      '/v1/contentEditions',
-      { postId: authored.postId, revisionId: newer.post.revisionId, targetSubjectId: authored.targetSubjectId },
-    ),
+    await requestAs(native.actors.author.bearer)('POST', '/v1/contentEditions', {
+      postId: authored.postId,
+      revisionId: newer.post.revisionId,
+      targetSubjectId: authored.targetSubjectId,
+    }),
     201,
   );
   await json(
@@ -231,7 +243,10 @@ test('paid Content editions navigate to exact captured bytes and lose access onl
   const refunded = await purchase(refundedEdition);
   expect((await protectedRevision(buyer.bearer, refundedEdition)).status).toBe(200);
   fake.refundRemaining(refunded.order.checkoutSessionId!, 'remaining');
-  await commands.applyCheckoutSnapshot(await stripe.readCheckout(refunded.order.checkoutSessionId!), crypto.randomUUID());
+  await commands.applyCheckoutSnapshot(
+    await stripe.readCheckout(refunded.order.checkoutSessionId!),
+    crypto.randomUUID(),
+  );
   expect((await protectedRevision(buyer.bearer, refundedEdition)).status).toBe(404);
 
   const sourceLostEdition = await editions.publish({
@@ -241,8 +256,8 @@ test('paid Content editions navigate to exact captured bytes and lose access onl
   });
   await purchase(sourceLostEdition);
   expect((await protectedRevision(buyer.bearer, sourceLostEdition)).status).toBe(200);
-  expect(
-    (await requestAs(native.actors.author.bearer)('DELETE', `/v1/posts/${sourceLostEdition.postId}`)).status,
-  ).toBe(200);
+  expect((await requestAs(native.actors.author.bearer)('DELETE', `/v1/posts/${sourceLostEdition.postId}`)).status).toBe(
+    200,
+  );
   expect((await protectedRevision(buyer.bearer, sourceLostEdition)).status).toBe(404);
 });

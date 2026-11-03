@@ -103,7 +103,9 @@ test('seller price revision through HTTP binds target intent preserves captured 
     subjectTitle: 'Second owned source',
     body: 'Second seller edition bytes',
   });
-  const bobEdition = await (await publisher(bob.bearer)).publish({
+  const bobEdition = await (
+    await publisher(bob.bearer)
+  ).publish({
     title: 'Bob owned edition',
     subjectTitle: 'Bob owned source',
     body: 'Bob edition bytes',
