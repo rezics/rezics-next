@@ -1818,3 +1818,52 @@ One opaque HMAC key/timestamp per board/actor is retained, without bodies, accou
 Setting changes use one board point validation and one setting PK upsert; status uses one setting point and at
 most one actor point plus ordinary disclosure/Access bounds. B-tree work is O(log N), constant returned rows;
 no thread, grant, account or history enumeration. Focused outcomes are in `test/content/board-slow.test.ts`.
+
+## Realm Subject structural census
+
+`realm-subject-source.ts:createRealmSubjectSource` owns the population port and its types.
+Search adapts its planned `resolve/current/prefix/match` port to these exports. The separate
+`RealmSubjectDisclosure` capability owns current Realm read/ban authority, reader binding,
+original and terminal Subject identity/disclosure, thread, opening revision, board and place
+checks. `RealmSubjectMaintenance` owns live cut coverage and its currentness. Neither
+capability is inferred from structural rows; without both, population remains unavailable.
+
+Decision: retain unresolved original references with a null terminal, and withhold population
+readiness until live maintenance resolves them; never assume that an original maps to itself.
+
+`createRealmSubjectCandidates` is the single live writer/coverage observation seam. Maintenance
+first fences a thread with its native epoch/position, then reconciles its exact candidate range
+and writes individual current candidates or tombstones under that fence. Old fences and writes
+cannot replace newer ones. Baseline writes are insert-only and lose to any live thread fence,
+including a removal that arrived before census. Repair, identity changes and erasure use the
+same thread keyset and exact writer; removed rows retain only structural locators until the
+maintenance owner's replay floor permits reclamation. No author, text or grant data is stored.
+
+`createRealmSubjectCensus` captures one immutable upper thread key and native cut per source
+route (all 65,536 routes, including empty routes). Steps retain a thread/opening snapshot and
+an original ordinal durably, export one original at a time, and resume after crashes. Both
+kinds use only the opening's current references; reviews retain their exact original target.
+Census completion is structural coverage only. Maintenance must cover every captured route
+and subsequent changes, mapping dependencies and foreign repairs before asserting a live cut.
+A cut is not a historical content snapshot: later native reads may supersede it, while live
+fences prevent a delayed baseline from replacing newer content. There is no deployment replay.
+
+Reader prefix and aligned match inspect at most 32 raw candidates per call; match accepts at
+most 32 input positions. Prefix retains the full terminal/original/thread frontier, including
+withheld rows, and suppresses repeated terminal Subjects across continuations. A sparse empty
+page carries its exact frontier, never exhaustion inferred from disclosure rejects. Match
+returns unknown when its raw budget ends, and withheld when disclosure cannot establish a
+negative. Only complete, current, readable coverage can produce not_published.
+
+Every page charges structural SQL and its raw rows to the caller's additive ScopeWork root
+before querying; disclosure and maintenance capabilities charge their own actual bounded work
+to that same root, including Access work. Deadlines and the exact LeafOptions are forwarded.
+Structural reads cost at most 34 home checkouts for match or 3 for prefix (initial/final
+coverage plus at most 32 exact subject ranges), 5 statements per checkout, 32 candidate rows
+plus fixed partition/coverage rows, and 4 KiB per candidate. There is one checked-out home
+at a time; each is released before identity or disclosure work. Census uses one source
+keyset of one thread, at most two opening/revision points, one board point, one native identity
+mapping and one candidate write per step. A revision holds at most 128 original references.
+Native bigint positions, revisions and identity epochs remain decimal strings or bigint.
+Generation/revision, Realm/place, reader and disclosure dependencies are checked again after
+pages; changes refuse the page. Production lifecycle registration belongs to live maintenance.
