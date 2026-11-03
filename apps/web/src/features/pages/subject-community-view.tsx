@@ -105,9 +105,7 @@ export function SubjectCommunityRegion({
                 ? m.subject_reviews_empty({}, options)
                 : m.subject_threads_empty({}, options)}
           </p>
-          {!next ? (
-            <p>{m.subject_community_board_unavailable({}, options)}</p>
-          ) : null}
+          {!next ? <p>{m.subject_community_board_unavailable({}, options)}</p> : null}
         </div>
       )}
       {threads.length > 0 && (

@@ -234,4 +234,3 @@ test('ordinary discussion creation keeps the chosen subject and review conflicts
   bodies.push(await discussion.requests[0]!.json());
   expect(bodies[0]).toMatchObject({ subjectIds: [communitySubject.id] });
 });
-

@@ -62,12 +62,7 @@ export function SubjectCommunityPreview({
   return (
     <div className="min-w-0 space-y-2" data-slot="subject-community-preview">
       {kind === 'review' ? (
-        <div
-          data-slot="review-citation"
-          data-state={
-            thread.voteCitation === null ? 'unscored' : 'unavailable'
-          }
-        >
+        <div data-slot="review-citation" data-state={thread.voteCitation === null ? 'unscored' : 'unavailable'}>
           {thread.voteCitation !== null ? (
             <p role="status" className="text-sm text-muted-foreground">
               {m.subject_community_citation_unavailable()}

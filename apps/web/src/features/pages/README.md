@@ -31,12 +31,12 @@ titles open the admitted thread; Board links remain read destinations. See the [
 ## Cost
 
 - [x] **Touches:** Each full discussion or review view consumes one planned native page at limit 20 or less; the
-  overview keeps its existing five-row preview and one shared author batch. Opening a conversation is deliberate.
-  Explicit retry repeats its cursor. Current Subject cards issue no per-card hydration, mutation or readback.
+      overview keeps its existing five-row preview and one shared author batch. Opening a conversation is deliberate.
+      Explicit retry repeats its cursor. Current Subject cards issue no per-card hydration, mutation or readback.
 - [ ] **Bound:** The card projection carries at most 20 rows and excerpts up to 280 UTF-16 code units; the direct
-  helper caps cursors at 2048 characters and the native query schema at 4096. These are character limits, not byte
-  bounds. Unbounded titles, the retained source response and unpublished media/citation/action/context caps prevent a
-  complete wire and retained-memory bound.
+      helper caps cursors at 2048 characters and the native query schema at 4096. These are character limits, not byte
+      bounds. Unbounded titles, the retained source response and unpublished media/citation/action/context caps prevent a
+      complete wire and retained-memory bound.
 - [ ] **Growth:** Projection and indexing are O(N) for N≤20, with no refill, local totals or reordering. The native
-  raw80 selection and 256/1024/4096 growth evidence remain Content producer checks; Web fixtures do not establish
-  them.
+      raw80 selection and 256/1024/4096 growth evidence remain Content producer checks; Web fixtures do not establish
+      them.
