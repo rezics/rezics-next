@@ -49,7 +49,7 @@ async function original(pool: GrowthDatabase['pool'], outcome: { partition: numb
     datacontenttype: 'application/json' as const,
     id: row.id,
     type: row.type,
-    subject: row.subject ?? undefined,
+    ...(row.subject === null ? {} : { subject: row.subject }),
     data: row.data,
     time: row.recorded_at.toISOString(),
     source: `urn:rezics:log:${outcome.partition}.${outcome.epoch}`,
@@ -251,7 +251,7 @@ test('Review discovery source versions and continued reads stay physically bound
       if (first.state !== 'ready' || !first.next || first.reviews.length !== 1)
         throw new Error('Native review page did not retain a bounded continuation');
       const versions = [first.reviews[0]!.sourceVersion];
-      let after = first.next;
+      let after: NonNullable<typeof first.next> | null = first.next;
       let sparse = false;
       for (let offset = 0; offset < liveReviews.length + 1; offset++) {
         const page = await source.pageWithCut!(partition, after, 1);
@@ -267,7 +267,7 @@ test('Review discovery source versions and continued reads stay physically bound
       }
       await assertReviewWithheld(growthDb, source, partition);
       const current = (await source.hydrate(partition, [first.reviews[0]!.id])).reviews[0]!;
-      expect(current.sourceVersion).toBe(versions[0]);
+      expect(current.sourceVersion).toBe(versions[0]!);
       expect(sparse).toBe(true);
       expect(first.next.token.length).toBeLessThan(65_536);
       const candidateStatement = trace.records.find(
@@ -292,7 +292,7 @@ test('Review discovery source versions and continued reads stay physically bound
       const first = await source.pageWithCut!(partition, null, 1);
       if (first.state !== 'ready' || !first.next || first.reviews.length !== 1)
         throw new Error('Native review page did not retain a bounded continuation');
-      let after = first.next;
+      let after: NonNullable<typeof first.next> | null = first.next;
       let pages = 1;
       let sparse = false;
       for (let offset = 0; offset < liveReviews.length + 1; offset++) {
