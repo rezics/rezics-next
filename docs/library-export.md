@@ -176,7 +176,7 @@ whole-caller budget measurements remain unmeasured here and belong to controller
 References inspected: `legacy-final:packages/model/src/native-export.ts` (bounded continuation and revision binding),
 `legacy-final:services/main/src/modules/library-import/formats/vndb.ts` (private identifiers and precision), installed
 VNDB/AniList parsers and upload lifetime owners, and the retained AniList MediaList/FuzzyDate reference. No legacy
-code was copied. Web323 retains the existing export interface; canonical archive8bb receives the V3 handoff.
+code was copied. The existing Web export interface and canonical archive consumer retain their owners for the V3 handoff.
 
 ## Version 2 accounting and work bounds
 
