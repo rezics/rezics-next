@@ -1,39 +1,34 @@
 ---
 {
-  "goal": "search",
-  "manager": "search",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/search/discovery-filter.ts",
-    "services/kernel/src/search/discovery-request.ts",
-    "services/kernel/src/search/discovery-current.ts",
-    "services/kernel/src/search/discovery-service.ts",
-    "services/kernel/src/search/discovery-http.ts",
-    "services/kernel/src/search/discovery-query.ts",
-    "services/kernel/src/search/discovery-query.md",
-    "services/kernel/test/search/second-scope-mixed-query.test.ts",
-    "services/kernel/test/search/discovery-service.test.ts"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure"
-  ],
-  "criticalPath": false,
-  "after": [
-    "df29fac0-b261-407f-b5ca-84c529a99ce5"
-  ],
-  "waiting": [],
-  "acceptance": {
-    "tests": [
-      "One native mixed traversal executes public Collection/review/Space queries with Subject/Account using the delivered registry, strict common-generation documents and current hydration.",
-      "Full text/kind semantics and three-valued catalogue predicates hold, including NOT; unavailable counts and withheld hydration never become false empty success.",
-      "Native first/next/final pages preserve full-key deterministic order, exact current exclusion and opaque principal/generation ownership across withdrawals."
-    ]
-  },
-  "estimate": {
-    "lines": 700,
-    "files": 9
-  }
+  'goal': 'search',
+  'manager': 'search',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/search/discovery-filter.ts',
+      'services/kernel/src/search/discovery-request.ts',
+      'services/kernel/src/search/discovery-current.ts',
+      'services/kernel/src/search/discovery-service.ts',
+      'services/kernel/src/search/discovery-http.ts',
+      'services/kernel/src/search/discovery-query.ts',
+      'services/kernel/src/search/discovery-query.md',
+      'services/kernel/test/search/second-scope-mixed-query.test.ts',
+      'services/kernel/test/search/discovery-service.test.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': ['df29fac0-b261-407f-b5ca-84c529a99ce5'],
+  'waiting': [],
+  'acceptance':
+    {
+      'tests':
+        [
+          'One native mixed traversal executes public Collection/review/Space queries with Subject/Account using the delivered registry, strict common-generation documents and current hydration.',
+          'Full text/kind semantics and three-valued catalogue predicates hold, including NOT; unavailable counts and withheld hydration never become false empty success.',
+          'Native first/next/final pages preserve full-key deterministic order, exact current exclusion and opaque principal/generation ownership across withdrawals.',
+        ],
+    },
+  'estimate': { 'lines': 700, 'files': 9 },
 }
 ---
 
