@@ -505,13 +505,7 @@ export function createDiscoveryProjection(options: {
         ...snapshot,
         subjects: snapshot.subjects.filter((row) => kinds.get(row.id)?.has(row.type)),
       };
-      actions = discoveryDocumentActions(
-        registry,
-        { owner, snapshot: keyedSnapshot },
-        chunk,
-        counts,
-        codec,
-      );
+      actions = discoveryDocumentActions(registry, { owner, snapshot: keyedSnapshot }, chunk, counts, codec);
     }
     // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.
     return prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), actions);

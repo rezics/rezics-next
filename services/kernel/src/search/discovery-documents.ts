@@ -28,13 +28,13 @@ export type MixedDiscoveryDocumentCodec = 'mixed-public-v1' | 'mixed-calendar-v1
 
 /** Bind each physical mixed mapping to exactly one writer codec. */
 export function mixedDiscoveryDocumentCodec(mappings: unknown): MixedDiscoveryDocumentCodec | undefined {
-  if (!record(mappings) || !record(mappings._meta) || mappings._meta.comparator !== 'mixed-public-v1')
-    return undefined;
+  if (!record(mappings) || !record(mappings._meta) || mappings._meta.comparator !== 'mixed-public-v1') return undefined;
   const metadata = mappings._meta;
   const properties = record(mappings.properties) ? mappings.properties : undefined;
-  const facts = properties && record(properties.facts) && record(properties.facts.properties)
-    ? properties.facts.properties
-    : undefined;
+  const facts =
+    properties && record(properties.facts) && record(properties.facts.properties)
+      ? properties.facts.properties
+      : undefined;
   if (!facts) return undefined;
   if (metadata.discovery_document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT) {
     if (

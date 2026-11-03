@@ -44,11 +44,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Calendar precision survives current matching, API and display; a precise range requires the exact ready physical generation and active release."
-    - "Disclosure, redirects, dates and producer changes invalidate group and child continuations; missing, unknown, conflicting and duplicate work links remain truthful and never leak children."
-    - "Reload/back navigation, filters, language order, sort, spoilers, expansion and both continuations preserve request meaning across all eight locales, with accessible loading, repair, unavailable, empty and terminal states."
-    - "Native 1x/4x/16x first, next, final and empty pages measure every all-pool seek, high-fanout bound, preparation/resume and invalidation case."
-    - "Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar, including contextual work/release cards, keyboard use and repair states."
+    - 'Calendar precision survives current matching, API and display; a precise range requires the exact ready physical generation and active release.'
+    - 'Disclosure, redirects, dates and producer changes invalidate group and child continuations; missing, unknown, conflicting and duplicate work links remain truthful and never leak children.'
+    - 'Reload/back navigation, filters, language order, sort, spoilers, expansion and both continuations preserve request meaning across all eight locales, with accessible loading, repair, unavailable, empty and terminal states.'
+    - 'Native 1x/4x/16x first, next, final and empty pages measure every all-pool seek, high-fanout bound, preparation/resume and invalidation case.'
+    - 'Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar, including contextual work/release cards, keyboard use and repair states.'
   workerOwned: true
 estimate:
   lines: 1900
