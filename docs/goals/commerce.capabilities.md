@@ -44,19 +44,19 @@ Paths and argv below are existing, scoped native acceptance entry points to run 
 this documentation change**. Kernel paths in argv are relative to `services/kernel`. The check runner provisions
 native dependencies; directly importing an unbound spec is not equivalent.
 
-| Suite               | Exact literal count | Inspected production wrapper and driver                                                                                                                                | Native acceptance argv                                                                  |
-| ------------------- | ------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Library             |                  24 | `services/kernel/test/library/outcomes.test.ts` sets `LIBRARY_DRIVER` to `services/kernel/test/library/support/outcome-driver.ts`, exporting `createLibraryDriver`     | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/outcomes.test.ts"]`  |
-| Commerce            |                  23 | `services/kernel/test/commerce/outcomes.test.ts` sets `COMMERCE_DRIVER` to `services/kernel/test/commerce/support/outcome-driver.ts`, exporting `createCommerceDriver` | `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/outcomes.test.ts"]` |
-| Library profiles    |                  37 | `services/kernel/test/library/profiles-outcomes.test.ts` and `support/native-profiles-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/profiles-outcomes.test.ts"]` |
-| Library labels      |                  29 | `services/kernel/test/library/labels-outcomes.test.ts` and `support/native-labels-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/labels-outcomes.test.ts"]` |
-| Dynamic Collections |                  30 | `services/kernel/test/library/dynamic-outcomes.test.ts` and `support/native-dynamic-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/dynamic-outcomes.test.ts"]` |
-| Library bulk        |                  38 | `specs/library-bulk-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                              | NOTREGISTERED                                                                           |
-| Collection source   |                  30 | `specs/collection-source-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                         | NOTREGISTERED                                                                           |
-| Listing freshness   |                  14 | `specs/library-listing-freshness-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                 | NOTREGISTERED                                                                           |
-| Library deletion    |                  18 | `specs/library-deletion-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                          | NOTREGISTERED                                                                           |
-| Follow counts       |                  17 | `services/kernel/test/library/follow-counts-outcomes.test.ts` and `support/follow-counts-driver.ts`; provisional source binding | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/follow-counts-outcomes.test.ts"]` |
-| Viewer actions      |                  16 | `specs/viewer-actions-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                            | NOTREGISTERED                                                                           |
+| Suite               | Exact literal count | Inspected production wrapper and driver                                                                                                                                | Native acceptance argv                                                                               |
+| ------------------- | ------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Library             |                  24 | `services/kernel/test/library/outcomes.test.ts` sets `LIBRARY_DRIVER` to `services/kernel/test/library/support/outcome-driver.ts`, exporting `createLibraryDriver`     | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/outcomes.test.ts"]`               |
+| Commerce            |                  23 | `services/kernel/test/commerce/outcomes.test.ts` sets `COMMERCE_DRIVER` to `services/kernel/test/commerce/support/outcome-driver.ts`, exporting `createCommerceDriver` | `["bun", "run", "--cwd", "services/kernel", "check", "test/commerce/outcomes.test.ts"]`              |
+| Library profiles    |                  37 | `services/kernel/test/library/profiles-outcomes.test.ts` and `support/native-profiles-driver.ts`; provisional source binding                                           | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/profiles-outcomes.test.ts"]`      |
+| Library labels      |                  29 | `services/kernel/test/library/labels-outcomes.test.ts` and `support/native-labels-driver.ts`; provisional source binding                                               | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/labels-outcomes.test.ts"]`        |
+| Dynamic Collections |                  30 | `services/kernel/test/library/dynamic-outcomes.test.ts` and `support/native-dynamic-driver.ts`; provisional source binding                                             | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/dynamic-outcomes.test.ts"]`       |
+| Library bulk        |                  38 | `specs/library-bulk-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                              | NOTREGISTERED                                                                                        |
+| Collection source   |                  30 | `specs/collection-source-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                         | NOTREGISTERED                                                                                        |
+| Listing freshness   |                  14 | `specs/library-listing-freshness-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                 | NOTREGISTERED                                                                                        |
+| Library deletion    |                  18 | `specs/library-deletion-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                          | NOTREGISTERED                                                                                        |
+| Follow counts       |                  17 | `services/kernel/test/library/follow-counts-outcomes.test.ts` and `support/follow-counts-driver.ts`; provisional source binding                                        | `["bun", "run", "--cwd", "services/kernel", "check", "test/library/follow-counts-outcomes.test.ts"]` |
+| Viewer actions      |                  16 | `specs/viewer-actions-driver.ts`; native wrapper/complete driver NOTPRESENT                                                                                            | NOTREGISTERED                                                                                        |
 
 The two bound drivers use isolated migrated PostgreSQL, native Auth/Access and `createKernel.handle` returning raw
 Responses. Library boots the bundled release, uses production worker modules and store-backed volume seeding plus
@@ -254,6 +254,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Current entry/session/copy commands consume compiled profiles and stored accepted pins, and the native adapter calls the installed migration runtime. Authentic pre-profile DATA/receipts, page/receipt instrumentation, persistence faults and complete privacy/growth observations remain unavailable or unmeasured. Reuse the accepted native historical fixture seam; current writes cannot create pre-profile history. See [profile/label review](../research/profiles-labels-quality.md).
 
 **Stages:** Specification validated red: unknown; native driver registered: provisional profile adapter; implementation exposed: profile-aware writers/compiler/runtime exist; complete historical/released journey evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## independent-labels
 
 **User job:** Organize an own library with private labels, including a label-only subject, without creating an exclusive state or public classification.
@@ -284,6 +285,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** POST :assign/minimal DTOs, lifecycle routes/pages and retention source exist. Complete Collection grant/outbox/work and cleanup run/page/crash inspections remain unavailable; source cutover and complete shared cleanup still need native evidence. A label definition alone supports nothing; fabricated empty arrays cannot satisfy inspection. See [profile/label review](../research/profiles-labels-quality.md).
 
 **Stages:** Specification validated red: unknown; native driver registered: provisional label adapter; implementation exposed: label commands/HTTP and retention source exist; composed source/cleanup evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## typed-progress-and-continue
 
 **User job:** Record bounded typed progress, correct sparse units, finish/restart sessions, and find Continue items by their pinned active role.
@@ -314,6 +316,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Session creation/recording now consumes current profile metadata and accepted pins. Native profile and Library wrappers exist, while the composed Continue/released recipe journey remains unmeasured. No completion infers state/holding/purchase; the current Continue owner contract remains authoritative.
 
 **Stages:** Specification validated red: unknown; native driver registered: Library/profile adapters; implementation exposed: profile-aware session commands/history; composed Continue evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## independent-holdings
 
 **User job:** Keep two physical/digital holdings of one edition with distinct kind/status/history and delete/undo one without inferring acquisition, progress or rights.
@@ -344,6 +347,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Current Copy commands/HTTP admit declared kind/status with profile lookup and accepted pins. Historical kindless receipts and retained-copy Undo keep their owner semantics; complete historical fixture and composed journey evidence remain missing. Copies are neither purchase evidence nor a rights grant.
 
 **Stages:** Specification validated red: unknown; native driver registered: Library/profile adapters; implementation exposed: profile-aware Copy commands/HTTP and retained Undo; complete historical/composed evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## builtin-discovery-and-population
 
 **User job:** Discover stable read-only Everything/state/Liked logical identities and browse supported unique subjects without materializing a header on GET.
@@ -374,6 +378,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Native built-in identity and Content Liked raw membership/version source exist, as does ready curated/private built-in Collection Source support. Useful pages, positive reaction-only membership, complete current disclosure and original dynamic/shelf outcomes remain unmeasured. Preserve the full Everything union and accepted state-support lifetime. See [Collection review](../research/collections-outcomes-quality.md).
 
 **Stages:** Specification validated red: unknown; native driver registered: provisional dynamic/shelf adapters; implementation exposed: native built-in/Liked/source interfaces; useful-page and whole-outcome evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## canonical-own-state-order
 
 **User job:** See one canonical state after alias/merge changes, deterministically select the newest owner write and Undo as a new write while preserving original facts and pins.
@@ -665,14 +670,14 @@ curated occurrences preserves permitted duplicates, notes and order.
 
 **Surface cells:**
 
-| Cell                           | Applicability and scenario/binding                                                                                                                               |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| catalogue                      | APPLICABLE: `collection-actions` canonical public target URLs/detail links agree with factual subject eligibility; composed binding MISSING.                     |
-| public curated                 | APPLICABLE: `collection-actions` readable-unlisted follow and occurrence-faithful ItemList export; existing native Library follows only partial.                 |
-| Everything WITHOUT state       | APPLICABLE: `collection-actions` own identity follow/read and eligible published output; Bob/anonymous cannot infer private predicates; dynamic binding MISSING. |
-| own-state Collection/predicate | APPLICABLE: `collection-actions` state-source eligibility and unique dynamic export, no private predicate projection; binding MISSING.                           |
-| mounted Zone                   | APPLICABLE: `collection-actions` mounted source canonical uniqueness/current authority; curated/private built-in ready-source factory exists; mounted composition remains unmeasured.                                     |
-| TypeList                       | APPLICABLE: `collection-actions` configured source consumption agrees with member/export identity; composed binding MISSING.                                     |
+| Cell                           | Applicability and scenario/binding                                                                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| catalogue                      | APPLICABLE: `collection-actions` canonical public target URLs/detail links agree with factual subject eligibility; composed binding MISSING.                                          |
+| public curated                 | APPLICABLE: `collection-actions` readable-unlisted follow and occurrence-faithful ItemList export; existing native Library follows only partial.                                      |
+| Everything WITHOUT state       | APPLICABLE: `collection-actions` own identity follow/read and eligible published output; Bob/anonymous cannot infer private predicates; dynamic binding MISSING.                      |
+| own-state Collection/predicate | APPLICABLE: `collection-actions` state-source eligibility and unique dynamic export, no private predicate projection; binding MISSING.                                                |
+| mounted Zone                   | APPLICABLE: `collection-actions` mounted source canonical uniqueness/current authority; curated/private built-in ready-source factory exists; mounted composition remains unmeasured. |
+| TypeList                       | APPLICABLE: `collection-actions` configured source consumption agrees with member/export identity; composed binding MISSING.                                                          |
 
 **Frozen scenarios:** [library outcomes](../../specs/library-outcomes.test.ts): `explicit follow and unfollow of a public Collection remain private and list only following`.
 
@@ -807,6 +812,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Counts use actual Collection/Space management or current actual-account management through existing Access. Reuse installed Accounts/Auth operated/organization host bindings and native approve/execute deletion at committed T. Preserve anonymous 401, suspended old bearer 401 invalid_credentials, missing scope 403, concealed 404 and unavailable 503; unavailable is never zero. Native ordering/privacy/growth and whole shared cleanup remain unmeasured. See [Library outcome review](../research/library-outcomes-quality.md).
 
 **Stages:** Specification validated red: unknown; native driver registered: provisional follow-count driver; implementation exposed: private count/follow HTTP and native projection; host fixtures and full native evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## current-viewer-actions-and-delegation
 
 **User job:** Discover operations actually allowed now and execute them under current actor AND principal grants, consent and containing authority.
@@ -868,6 +874,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Subject detail is APPLICABLE to discovery/factual projection and the final benefit resource to access. GET /v1/subjects/:id/offers, its generated Web caller, WorkerAuthorization factory/getter and native Content edition-sale producer exist. The retained native/revision/Web purchase fixtures still use subject-only provisioning: this is a source-inferred gap, not an observed failed exit. One journey owner must bind published native editions and real sale authority, then join payment/entitlement/navigation to exact revision/hash/bytes, with refund, foreign/anonymous and current ancestry denials. No manual grant substitutes. See [buyer/creator review](../research/commerce-outcomes-quality.md). Purchase creates no Library state/session/copy.
 
 **Stages:** Specification validated red: unknown; native driver registered: Commerce suite; implementation exposed: public discovery/native sale/buyer fact interfaces; paid-to-protected-use and reviewed-page evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## offer-lifecycle-and-target-receipts
 
 **User job:** Hide a delisted offer publicly, reject new purchase with 409, preserve captured existing order/benefit history and bind exact authorized revise target in receipt intent.
@@ -898,6 +905,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Current revise intent binds offerId and reauthorizes before receipt. Delisted public GET concealment and revision-bound HTTP tests exist; offer-revision-http.test.ts still provisions subject-only sales. Preserve expectedOfferRevision, original intent/key and captured history; measure the repaired fixture rather than claim a current failure or absent route. Subject discovery must omit delisted offers.
 
 **Stages:** Specification validated red: unknown; native driver registered: Commerce suite and supporting revision cases; implementation exposed: target-bound revision HTTP and public delist concealment; current fixture/journey evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## receipt-aware-native-provider-refresh
 
 **User job:** Keep older/abandoned observations from revoking or restoring newer admitted truth, including a newer business no-op and retry of already completed work.
@@ -928,6 +936,7 @@ curated occurrences preserves permitted duplicates, notes and order.
 **Coverage gap:** Under SAME order lock check metadata-only stable apply completion BEFORE claiming, so completed A retry cannot suppress B; a matching completion exits without a claim or provider read. Uncompleted physical attempt claims native revision via real UPDATE+event/receipt, commits/releases then freshly reads full provider truth. Apply under same order lock validates captured revision/session and stable wf:{id}:apply intent; superseded attempt has no apply receipt. Never recapture during SQL retry. No-op admission persists. One provider-account/mode/session serial queue, distinct triggers, independent sessions concurrent; compatible cached-history drain/fork/rewind, no SDK patch. Known late-paid repair must work after expiry/reconcile stop. Provider send/byte/deadline/retry bounds include abandoned work; times are metadata only. The completion helper, beginCheckoutRefresh/applyClaimedCheckoutSnapshot, default queues and buyer reconcile are installed; current native race/recovery evidence remains missing.
 
 **Stages:** Specification validated red: unknown; native driver registered: Commerce suite and focused admission/refresh/recovery cases; implementation exposed: receipt-aware revision protocol/default work/buyer reconcile; full execution/operator evidence missing; user-case accepted at revision: unknown; promoted: pending.
+
 ## signed-webhook-replay-and-provider-truth
 
 **User job:** Accept authentic retried provider events once, reject forged/stale/tampered bytes and derive settlement from current provider truth rather than claimed payload state.
