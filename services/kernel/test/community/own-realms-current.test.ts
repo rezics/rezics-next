@@ -22,7 +22,11 @@ async function inventory(actor: Account) {
   const client = createKernelClient('https://community.test', {
     fetch: async (input) => {
       const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-      return driver.request({ actor, method: 'GET', path: url.pathname + url.search });
+      return driver.request({
+        actor,
+        method: 'GET',
+        path: url.pathname + url.search,
+      });
     },
   });
   const result = await client.me.realms.get();
@@ -60,9 +64,16 @@ test('current native identity and presentation follow membership completion and 
   const { realm } = await created.json();
   const membership = `/v1/realms/${realm.realmId}/membership`;
   const join = async () => {
-    expect((await driver.request({ actor: fixture.member, method: 'POST', path: membership, key: key() })).status).toBe(
-      202,
-    );
+    expect(
+      (
+        await driver.request({
+          actor: fixture.member,
+          method: 'POST',
+          path: membership,
+          key: key(),
+        })
+      ).status,
+    ).toBe(202);
     await driver.settle();
   };
   await join();
@@ -77,7 +88,17 @@ test('current native identity and presentation follow membership completion and 
       destination: { kind: 'realm', realmId: realm.realmId },
       spaceId: space.spaceId,
       viewer: { membership: { state: 'member' }, participation: 'allowed' },
-      actions: { state: 'unavailable' },
+      actions: {
+        state: 'current',
+        enter: { state: 'available', method: 'GET', expectedStatus: 200 },
+        manage: { state: 'prohibited', reason: 'not_authorized' },
+        leave: {
+          state: 'available',
+          method: 'DELETE',
+          path: membership,
+          expectedStatus: 202,
+        },
+      },
     },
   });
   expect(first.realmId).not.toBe(first.current.spaceId);
@@ -94,14 +115,61 @@ test('current native identity and presentation follow membership completion and 
   const second = (await inventory(fixture.member)).items.find((item) => item.realmId === realm.realmId)!;
   expect(second.name).toBe('Renamed community');
   expect(second.current.description).toBe('New description');
-  const leave = await driver.request({ actor: fixture.member, method: 'DELETE', path: membership });
+  const advice = second.current.actions.leave;
+  if (advice.state !== 'available' || advice.method !== 'DELETE') throw new Error('Native leave unavailable');
+  const leave = await driver.request({
+    actor: fixture.member,
+    method: advice.method,
+    path: advice.path,
+  });
   expect(leave.status).toBe(202);
   await driver.settle();
   expect((await inventory(fixture.member)).items.some((item) => item.realmId === realm.realmId)).toBe(false);
   await join();
   const rejoined = (await inventory(fixture.member)).items.find((item) => item.realmId === realm.realmId)!;
   expect(rejoined.current.viewer.membership.since).not.toBe(first.current.viewer.membership.since);
-  expect(rejoined.current.actions).toEqual({ state: 'unavailable' });
+  expect(rejoined.current.viewer.membership.reservationId).not.toBe(first.current.viewer.membership.reservationId);
+  expect(rejoined.current.viewer.membership.transactionId).not.toBe(first.current.viewer.membership.transactionId);
+  expect(rejoined.current.actions.leave.state).toBe('available');
+
+  // Management is admitted by the actual native action, never by member status.
+  expect(
+    (
+      await driver.request({
+        actor: fixture.owner,
+        method: 'POST',
+        path: membership,
+        key: key(),
+      })
+    ).status,
+  ).toBe(202);
+  await driver.settle();
+  const owned = (await inventory(fixture.owner)).items.find((item) => item.realmId === realm.realmId)!;
+  const manage = owned.current.actions.manage;
+  expect(manage.state).toBe('available');
+  if (manage.state !== 'available' || manage.method !== 'GET') throw new Error('Native management unavailable');
+  expect(
+    (
+      await driver.request({
+        actor: fixture.owner,
+        method: manage.method,
+        path: manage.path,
+      })
+    ).status,
+  ).toBe(200);
+  expect(owned.current.actions.leave).toEqual({
+    state: 'unavailable',
+    reason: 'owner_invariant_observation_unavailable',
+  });
+  expect(
+    (
+      await driver.request({
+        actor: fixture.owner,
+        method: 'DELETE',
+        path: membership,
+      })
+    ).status,
+  ).toBe(409);
   expect((await inventory(fixture.outsider)).items).toEqual([]);
 
   const lifecycle = await driver.request({
@@ -117,7 +185,10 @@ test('current native identity and presentation follow membership completion and 
     path: `/v1/spaces/${space.spaceId}/removal`,
     key: key(),
     ifMatch: JSON.stringify(container.headRevisionId),
-    body: { expectedVersion: container.version, reason: 'Inventory source removed' },
+    body: {
+      expectedVersion: container.version,
+      reason: 'Inventory source removed',
+    },
   });
   expect(removed.status).toBe(200);
   expect((await inventory(fixture.member)).items.some((item) => item.realmId === realm.realmId)).toBe(false);
@@ -133,11 +204,29 @@ test('an unfinished inverse cut cannot certify an empty inventory and retry reco
     );
   await setComplete(false);
   try {
-    const result = await driver.request({ actor: account, method: 'GET', path: '/v1/me/realms' });
+    const result = await driver.request({
+      actor: account,
+      method: 'GET',
+      path: '/v1/me/realms',
+    });
     expect(result.status).toBe(503);
     expect((await result.json()).code).toBe('dependency_unavailable');
   } finally {
     await setComplete(true);
   }
   expect((await inventory(account)).items).toEqual([]);
+});
+
+test('revoked native account cannot retain inventory actions or continuation', async () => {
+  const isolated = await driver.provision();
+  expect((await driver.suspend(isolated.member)).status).toBe(200);
+  const response = await driver.request({
+    actor: isolated.member,
+    method: 'GET',
+    path: '/v1/me/realms',
+  });
+  expect(response.status).not.toBe(200);
+  const body = await response.json();
+  expect(body.items).toBeUndefined();
+  expect(body.next).toBeUndefined();
 });

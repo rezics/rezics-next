@@ -926,11 +926,44 @@ optional media checks. An optional absent image is `none`; an unavailable option
 Operational errors fail the page and preserve the caller's continuation. No cached description or image fallback
 is permitted. No count, rank, join, follow, owner or administrator status is inferred.
 
-The action projection currently says `{ state: 'unavailable' }`. This is a partial native delivery:
-the installed mounted action catalogue does not supply a current observation of the leave holder invariant
-or a composed Realm-home management destination. Those owner protocols and transition advice remain in the
-continuation; do not infer them from `role`, successful entry, or presentation. Commands keep their existing
-authorization, `202`, replay, last-owner refusal and uncertain-outcome behaviour.
+`createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, 'pool' | 'access' | 'clock'>)`
+is exported from `own-realms-viewer.ts`. Its returned async function takes
+`{ actor: Actor, realmId: string, deadline: number, selected?: OwnRealmMembership }` and returns
+`null` for concealment or `{ current, finish() }`. `current` carries the actual Realm, native
+Realm/Space revision/lifecycle/partition source references, selected reservation/publication/interval,
+ordinary readability, participation and action advice. `finish()` re-prepares native Access and returns
+those actual final values, or null for concealment; changed readable source, episode or advice throws
+`transaction_retry_exhausted`. Comparison values and the original selection are captured privately.
+An assembler must finish after its dependent observations and serialize the final values. This is a
+released observation protocol, not an atomic cross-home snapshot or a command reservation.
+
+The mounted closed DTO remains `ownRealmsResponseSchema` in `schemas.ts`, with reusable
+`realmViewerActionSchema` and `realmViewerActionsSchema`. `current.viewer.membership` includes the
+native reservation and publication transaction, so a rejoin is a distinct episode. `current.actions`
+is current advice with `enter`, `manage`, and `leave`: available method/path/body/expectedStatus,
+prohibited reason, or a specific unavailable reason. Management requires native `realm:manage`,
+ordinary Realm and carrying Space reads and writable native governance. Leave checks the mounted
+writer's actual `realm:join` action on the exact Realm and selected current membership. Direct native
+ownership data only selects the command invariant; it never supplies permission. No presentation join
+literal, Account role prefix, follow or Collection authority is consumed.
+
+Decision: offer native leave for permitted non-owner members; owner leave stays explicitly
+`owner_invariant_observation_unavailable` because the installed holder assertion requires a live
+SERIALIZABLE command lock and forbids read preflight. The owner must supply a read observation of
+that predicate before advice can distinguish a last holder from an owner who may leave. Commands
+retain their native last-holder refusal and authorize every attempt before receipts.
+
+Protocol examples (IDs stand for exact native returned IDs): a member has available enter and DELETE
+membership advice, prohibited manage, and its reservation/publication pair; an authorized owner member
+has available GET settings advice and the specific unavailable leave variant. An empty inventory is
+`{ items: [], next: null }`; concealed selected rows are omitted without refill. Failed dependencies
+remain failed requests, never an empty inventory. Revocation returns the native authentication/Access
+failure or conceals the entry; readable source or episode change returns the retry problem and retains
+the caller's original cursor. Optional image unavailability remains independent of supported actions.
+
+The independent Realm-home assembler has not installed this factory. The current Web inventory formatter
+still admits only realmId/name, and its shared phone/desktop view has no action or recovery control for
+this advice; installed backend advice alone does not close that experience gap.
 
 ### Cost
 
@@ -939,8 +972,13 @@ authorization, `202`, replay, last-owner refusal and uncertain-outcome behaviour
   and partition checks plus at most four released scan transactions. Inverse traversal uses the physical
   `(route, account_id, kind = realm, group_id > after)` prefix and full-key ordering. Every confirmation uses
   `(route, realm_id, account_id)` with `upper_inf(valid)` before the exact Realm head and revision joins. There
-  are R selection and S final membership observations, each with its own partition/control round. Hydration adds
-  two ordinary Realm reads and two participation checks per initially readable selected item. Each home composes
+  are R selection and S final membership observations, each with its own partition/control round. Hydration adds one locating ordinary Realm read, then two viewer source rounds and two
+  participation checks per initially readable selected item. Each source round prepares/evaluates ordinary
+  Realm read, plain manage, plain join (leave), and carrying Space read on native resources, with one
+  released REPEATABLE READ transaction, authoritative time, partition read, Realm head, exact lifecycle
+  binding, exact membership episode and, when leave is authorized, five native direct-role key probes.
+  A denied manage skips host evaluation; a non-member skips ownership probes. Preparation is outside
+  the source checkout, including every native Access actor/account/client/delegator/consent dependency. Each home composes
   one native presentation batch: two Realm/Space/membership/ban/Access snapshots, two native count reads per
   visible Realm, exact rules hydration and up to two media sources per Realm. Discarded count/rules still cost work.
   Nested Access prepares, account/session checks, container bindings, native membership proofs, ban checks and
@@ -957,7 +995,17 @@ authorization, `202`, replay, last-owner refusal and uncertain-outcome behaviour
   dates and enum punctuation are fixed. Image summaries admit two slots and twelve variants per slot, but their
   credit/placeholder and optional rules have separate producer caps and intermediate copies. Their full wire/bind,
   retained-memory, executor/control/fence, warm/cold release and runner terms remain unproved; do not substitute the
-  output size or a LIMIT for those bounds. This partial engine creates no new command or runner work; completed
+  output size or a LIMIT for those bounds. Viewer hydration adds at most 40 source transactions and 80 BEGIN/COMMIT controls,
+  40 time reads, 40 partition reads, 40 Realm head reads, 40 Realm/Space bindings, 40 membership statements
+  and 200 direct-role probes. Each source binding materializes at most one Realm, one Space and no
+  publication (subject is null); role probes materialize at most five rows per round. Two source records,
+  two membership records, two bounded advice records and one private source/episode copy are retained
+  per handle, in addition to the native presentation's materialized and retained bytes. Source references
+  contain only fixed UUIDs, integer placement and decimal lifecycle versions; advice paths are bounded
+  by one UUID and fixed operation text. Each item serializes three advice variants and one selected
+  reservation/publication pair. Permission preparation/evaluation retains the native producer's physical
+  row and byte terms, rather than replacing them with these output caps. No authority pool is held across
+  presentation, participation or a foreign read. This engine creates no new command or runner work; completed
   membership transitions retain all work in their native producers.
 - **Growth check:** The existing inventory suite retains native page20/21, stale inverse, leave, account cursor
   rejection and growth cases. `own-realms-current.test.ts` adds the installed client, current title/description,

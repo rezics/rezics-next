@@ -54,7 +54,11 @@ export const SitemapRealmItemSchema = t.Object(
   closed,
 );
 export const SitemapSpaceItemSchema = t.Object(
-  { id: ContentIdSchema, address: t.String(), lastModified: t.String({ format: 'date-time' }) },
+  {
+    id: ContentIdSchema,
+    address: t.String(),
+    lastModified: t.String({ format: 'date-time' }),
+  },
   closed,
 );
 export const SitemapRealmPageSchema = sitemapPageSchema(SitemapRealmItemSchema);
@@ -91,6 +95,48 @@ export const discoveryResponseSchema = t.Object(
 
 export const ownRealmsQuerySchema = t.Object({ cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed);
 
+/** Advice is an observation; commands still authorize every attempt before receipts. */
+export const realmViewerActionSchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      method: t.Union([t.Literal('GET'), t.Literal('DELETE')]),
+      path: t.String({ maxLength: 128 }),
+      body: t.Null(),
+      expectedStatus: t.Union([t.Literal(200), t.Literal(202)]),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('prohibited'),
+      reason: t.Union([
+        t.Literal('not_authorized'),
+        t.Literal('not_member'),
+        t.Literal('signed_out'),
+        t.Literal('governance_read_only'),
+      ]),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('unavailable'),
+      reason: t.Literal('owner_invariant_observation_unavailable'),
+    },
+    closed,
+  ),
+]);
+export const realmViewerActionsSchema = t.Object(
+  {
+    state: t.Literal('current'),
+    enter: realmViewerActionSchema,
+    manage: realmViewerActionSchema,
+    leave: realmViewerActionSchema,
+  },
+  closed,
+);
+
 export const ownRealmsResponseSchema = t.Object(
   {
     items: t.Array(
@@ -103,26 +149,56 @@ export const ownRealmsResponseSchema = t.Object(
             {
               description: t.String({ maxLength: 4096 }),
               avatar: t.Union([
-                t.Object({ state: t.Literal('available'), value: RealmPresentationImageSchema }, closed),
-                t.Object({ state: t.Union([t.Literal('none'), t.Literal('unavailable')]), value: t.Null() }, closed),
+                t.Object(
+                  {
+                    state: t.Literal('available'),
+                    value: RealmPresentationImageSchema,
+                  },
+                  closed,
+                ),
+                t.Object(
+                  {
+                    state: t.Union([t.Literal('none'), t.Literal('unavailable')]),
+                    value: t.Null(),
+                  },
+                  closed,
+                ),
               ]),
               banner: t.Union([
-                t.Object({ state: t.Literal('available'), value: RealmPresentationImageSchema }, closed),
-                t.Object({ state: t.Union([t.Literal('none'), t.Literal('unavailable')]), value: t.Null() }, closed),
+                t.Object(
+                  {
+                    state: t.Literal('available'),
+                    value: RealmPresentationImageSchema,
+                  },
+                  closed,
+                ),
+                t.Object(
+                  {
+                    state: t.Union([t.Literal('none'), t.Literal('unavailable')]),
+                    value: t.Null(),
+                  },
+                  closed,
+                ),
               ]),
               destination: t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
               spaceId: id,
               viewer: t.Object(
                 {
+                  readability: t.Literal('allowed'),
                   membership: t.Object(
-                    { state: t.Literal('member'), since: t.String({ format: 'date-time' }) },
+                    {
+                      state: t.Literal('member'),
+                      since: t.String({ format: 'date-time' }),
+                      reservationId: id,
+                      transactionId: id,
+                    },
                     closed,
                   ),
                   participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
                 },
                 closed,
               ),
-              actions: t.Object({ state: t.Literal('unavailable') }, closed),
+              actions: realmViewerActionsSchema,
             },
             closed,
           ),

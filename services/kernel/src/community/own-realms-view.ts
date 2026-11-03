@@ -1,11 +1,10 @@
 import { readCommunityPresentations } from '../content/community-presentation.ts';
 import { communityPresentationResponse } from '../content/community-presentation-model.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { AccountActor, AccessClient } from '../request/access.ts';
+import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { OwnRealmMembership, OwnRealmsDependencies } from './own-realms.ts';
-import { createRealmParticipationCheck } from './participation.ts';
-import { readRealm } from './realm.ts';
+import { createRealmViewerObservation, type RealmViewerObservation } from './own-realms-viewer.ts';
 
 /** Compose the installed home owners, with no account transaction held and no
  * per-card HTTP. Disclosure never feeds back into raw inventory selection.
@@ -22,60 +21,57 @@ export async function hydrateOwnRealms(
     homes.set(home, [...(homes.get(home) ?? []), member]);
   }
   const items = [];
-  const participation = createRealmParticipationCheck(deps);
+  const observe = createRealmViewerObservation(deps);
   for (const members of homes.values()) {
-    const initial = new Map<string, NonNullable<Awaited<ReturnType<typeof readRealm>>>>();
-    const participates = new Map<string, boolean>();
+    const observations = new Map<string, RealmViewerObservation>();
     for (const member of members) {
-      const realm = await readRealm(deps, actor, member.realmId, context);
-      if (!realm) continue;
-      if (realm.headRevisionId !== member.headRevisionId) throw new ProblemError('transaction_retry_exhausted');
-      initial.set(member.realmId, realm);
-      participates.set(
-        member.realmId,
-        await participation(deps.pool as unknown as AccessClient, { realmId: member.realmId, actor }),
-      );
+      const observation = await observe({
+        actor,
+        realmId: member.realmId,
+        selected: member,
+        deadline: context.deadline,
+      });
+      if (observation) observations.set(member.realmId, observation);
     }
-    const presentations = await readCommunityPresentations(deps, [...initial.keys()], { ...context, actor });
+    const presentations = await readCommunityPresentations(deps, [...observations.keys()], { ...context, actor });
     for (const member of members) {
-      const before = initial.get(member.realmId);
-      if (!before) continue;
-      // The native presentation protocol owns Realm/Space and optional media
-      // rounds. Its missing entry is concealment or a changed source, never a
-      // licence to return the inventory's previously readable name.
-      const presentation = presentations.get(member.realmId);
-      const current = await readRealm(deps, actor, member.realmId, context);
+      const observation = observations.get(member.realmId);
+      if (!observation) continue;
+      const current = await observation.finish();
       if (!current) continue;
-      if (!presentation) throw new ProblemError('transaction_retry_exhausted');
+      const presentation = presentations.get(member.realmId);
       if (
-        JSON.stringify(before) !== JSON.stringify(current) ||
-        presentation.name !== current.title ||
-        presentation.description !== current.summary ||
-        presentation.spaceId !== current.spaceId ||
-        presentation.join.membership !== 'member'
+        !presentation ||
+        presentation.name !== current.realm.title ||
+        presentation.description !== current.realm.summary ||
+        presentation.spaceId !== current.source.spaceId
       )
         throw new ProblemError('transaction_retry_exhausted');
-      const allowed = await participation(deps.pool as unknown as AccessClient, { realmId: member.realmId, actor });
-      if (allowed !== participates.get(member.realmId)) throw new ProblemError('transaction_retry_exhausted');
+      if (!current.membership) throw new ProblemError('transaction_retry_exhausted');
       const { avatar, banner } = communityPresentationResponse(presentation);
       items.push({
-        realmId: current.realmId,
-        name: current.title,
+        realmId: current.realm.realmId,
+        name: current.realm.title,
         role: 'member' as const,
         current: {
-          description: current.summary,
+          description: current.realm.summary,
           avatar,
           banner,
-          destination: { kind: 'realm' as const, realmId: current.realmId },
-          spaceId: current.spaceId,
-          viewer: {
-            membership: { state: 'member' as const, since: new Date(member.since).toISOString() },
-            participation: allowed ? ('allowed' as const) : ('denied' as const),
+          destination: {
+            kind: 'realm' as const,
+            realmId: current.realm.realmId,
           },
-          // Mounted permission advice lacks the leave holder invariant and a
-          // Realm home action observation. Keep these capabilities unavailable
-          // until their owner supplies that protocol; member is not authority.
-          actions: { state: 'unavailable' as const },
+          spaceId: current.source.spaceId,
+          viewer: {
+            ...current.viewer,
+            membership: {
+              state: 'member' as const,
+              since: new Date(current.membership.since).toISOString(),
+              reservationId: current.membership.reservationId,
+              transactionId: current.membership.transactionId,
+            },
+          },
+          actions: current.actions,
         },
       });
     }

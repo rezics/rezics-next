@@ -1263,7 +1263,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           security: readSecurity,
         },
       },
-      async ({ query, actor, admission, job }) => {
+      async ({ query, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return admission.run('normal', job, () =>
           listOwnRealms(
