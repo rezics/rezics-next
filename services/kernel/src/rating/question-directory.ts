@@ -169,3 +169,23 @@ export async function readSelectedQuestionDirectory(
   if (input.realmId !== undefined) await authorize();
   return page;
 }
+
+/** Exact released measurement identity; labels do not change the measurement. */
+export function ratingQuestionIdentity(question: {
+  revision: number;
+  grain: string;
+  minimumUnits: number;
+  maximumUnits: number;
+  stepUnits: number;
+}): string {
+  return JSON.stringify([
+    question.revision, question.grain, question.minimumUnits, question.maximumUnits, question.stepUnits,
+  ]);
+}
+
+/** The released vote/event contract admits integer units in 0..20. */
+export function realmRankQuestionEligible(question: {
+  minimumUnits: number; maximumUnits: number; stepUnits: number;
+}): boolean {
+  return question.minimumUnits >= 0 && question.maximumUnits <= 20 && question.stepUnits > 0;
+}

@@ -15,6 +15,7 @@ import {
 } from './events.ts';
 import applyTotal from './population-total-component-apply.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 
 const AGGREGATE_APPLIED = 'com.rezics.rating.aggregate.applied.v1';
 const MAX_SERIAL = 9223372036854775807n;
@@ -174,7 +175,7 @@ async function receive(pool: Pool, item: Address): Promise<boolean> {
         shard: delta.shard,
         count_delta: delta.count,
         sum_delta: delta.sum,
-        check_epoch: delta.questionId === STANDARD_QUESTION_ID,
+        check_epoch: delta.questionId === STANDARD_QUESTION_ID || item.populationId !== GLOBAL_CONTEXT.id,
       });
       if (!updated.length) throw new Error('Rating population total shard unavailable');
     }

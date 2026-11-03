@@ -3,7 +3,7 @@ import type { WorkModule } from '../work/registry.ts';
 import { createRatingAggregateEffect } from './aggregate-effect.ts';
 import { createVoterEligibilityEffect } from './eligibility.ts';
 import { createPopulationTotalEffect } from './population-total.ts';
-import { createPublicFigureDrainEffect } from './public-figure.ts';
+import { createPublicFigureDrainEffect, resumeRealmRankPublication } from './public-figure.ts';
 import { registerRatingSegmentWork } from './segment-job.ts';
 import { createVoterRealmsEffect } from './voter-realms.ts';
 import { registerRatingSubjectMergeWork } from './merge-job.ts';
@@ -38,6 +38,10 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
       ]);
       // The direct module-registration test uses a minimal context; composed workers always provide a DBOS client.
       if (context.client) {
+        context.addService(async () => {
+          await resumeRealmRankPublication(context.pool);
+          return { async stop() {} };
+        });
         registerRatingSegmentWork(context, counter);
         registerRatingSubjectMergeWork(context);
       }

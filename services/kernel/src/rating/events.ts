@@ -70,6 +70,11 @@ export const RATING_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.rating.realm_rank.changed.v1': Type.Object(
+    { questionId: Type.String({ pattern: UUID }), populationId: Type.String({ pattern: UUID }),
+      subjectId: Type.String({ pattern: UUID }), revision: serial },
+    { additionalProperties: false },
+  ),
   [RATING_IDENTITY_PAGE]: identityPage,
   [RATING_IDENTITY_WORK]: Type.Object(
     {

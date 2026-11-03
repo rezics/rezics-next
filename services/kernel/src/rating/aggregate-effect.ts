@@ -19,7 +19,9 @@ import rekeyPopulationVote from './population-vote-rekey-upsert.sql';
 import { PopulationTotalCapture, flushPopulationTotalDeliveries } from './population-total.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import readQuestionScale from './question-scale-read.sql';
+import readQuestionScale from './question-read.sql';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { ratingQuestionIdentity, realmRankQuestionEligible } from './question-directory.ts';
 import readPublicFigurePosition from './public-figure-next-position.sql';
 import markPublicFigurePending from './public-figure-pending.sql';
 import { STANDARD_QUESTION_ID } from './votes.ts';
@@ -55,7 +57,7 @@ export type RatingChange = RatingChangeFields &
   );
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
-type QuestionScale = { minimumUnits: number; maximumUnits: number; stepUnits: number };
+type QuestionScale = { minimumUnits: number; maximumUnits: number; stepUnits: number; identity: string };
 type CountedVote = { voterId: string; units: number; at: string };
 
 export type RatingAggregate = {
@@ -203,7 +205,8 @@ async function applyPartition(
       let received = 0;
       let figurePosition: string | undefined;
       const markFigurePending = async (change: RatingChange, route: number): Promise<void> => {
-        if (change.questionId !== STANDARD_QUESTION_ID) return;
+        if (change.questionId !== STANDARD_QUESTION_ID &&
+            (change.populationId === GLOBAL_CONTEXT.id || !realmRankQuestionEligible(scales.get(change.questionId)!))) return;
         if (figurePosition === undefined) {
           const row = await readPublicFigurePosition.run(tx, { partition_no: partition });
           if (!row) throw new Error('Rating figure partition is unavailable');
@@ -216,6 +219,7 @@ async function applyPartition(
           population_id: change.populationId,
           subject_id: change.targetId,
           position: figurePosition,
+          question_identity: scales.get(change.questionId)!.identity,
         });
         if (!returnedRows(rows)) throw new Error('Rating public figure could not be marked pending');
       };
@@ -365,7 +369,7 @@ export async function applyRatingChanges(pool: Pool, input: readonly RatingChang
     });
     if (!scale) throw new Error('Rating question unavailable');
     histogramSize(scale);
-    scales.set(questionId, scale);
+    scales.set(questionId, { ...scale, identity: ratingQuestionIdentity(scale) });
   }
   // A page has <=100 changes, <=100 destinations and <=200 counted shard deltas per destination.
   // Its aggregate event plus deliveries stays below the native 1000-event command cap.
