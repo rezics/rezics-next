@@ -3332,8 +3332,8 @@ CREATE TABLE library.progress_session (
     transaction_id uuid NOT NULL,
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
-    additional_measures jsonb DEFAULT '[]'::jsonb NOT NULL,
     episode_completed_count integer DEFAULT 0 NOT NULL,
+    additional_measures jsonb DEFAULT '[]'::jsonb NOT NULL,
     CONSTRAINT progress_session_additional_measures_check CHECK (
 CASE
     WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
