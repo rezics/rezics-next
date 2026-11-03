@@ -268,7 +268,8 @@ export async function initializeCanonicalCollectionSource(
     resources.pool !== input.pool ||
     command.partition !== partitionOf(input.route) ||
     command.authorization?.mode !== 'execute' ||
-    command.authorization.action !== 'collection:update' ||
+    !(command.authorization.action === 'collection:update' ||
+      (command.authorization.action === 'collection:create' && creationDeclares(tx, resource))) ||
     !(isDeepStrictEqual(command.authorization.resource, resource) || creationDeclares(tx, resource))
   )
     throw new TypeError('Source allocation requires the live original Collection update');

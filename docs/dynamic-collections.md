@@ -157,7 +157,8 @@ Collection cannot become public through follow or mount; existing Zone rules dec
 
 Liked is always private. Other dynamic Collections are private until their curator explicitly changes visibility. Reads authorize the Collection before searching
 candidates. A private or unknown Collection has the same not-found response for another account and an anonymous viewer. Suspended valid bearers receive 403 `account_suspended` everywhere, including public/unlisted reads. Missing/invalid/revoked credentials use 401 where required; there is no anonymous-floor exception. Changing visibility uses the existing Collection authorization and revision check. Unlisted and public
-visibility continue to use the existing direct-read and listing rules.
+visibility continue to use the existing direct-read and listing rules. A pending saved Publication supplies no
+shared members until complete output exists, including on the curator's ordinary shared read.
 
 The curator's private descriptor may identify the built-in profile and state. It never appears for another viewer. A public or
 unlisted members page returns only its ordinary Collection metadata and subject summaries that pass the current viewer's native original AND terminal eligibility, Access, consent, foreign target and source-tuple fence checks. It returns no state, label, progress, holding, query body, predicate, profile pin, private candidate count, or
@@ -266,8 +267,17 @@ creation, CAS/replay, useful member, clear/Undo, and unavailable-public-provider
 
 Public dynamic execution requires the actual complete explicit Publication provider. Native episode, work,
 staging and final-command bodies are present; their saved-source composition and complete output must be proved.
-Non-private saved creation currently refuses with `dependency_unavailable`. Public/unlisted requests, including an
-editor's public request, cannot evaluate current private curator facts. Source presence is no successful public
+Non-private saved creation requires the bound native Publication provider and its full source/rule admission;
+without it creation returns `dependency_unavailable`. The creation command atomically stores the Collection,
+grants, Publication operation, work and original receipt; failed admission leaves none of them. Decision: the
+existing `201 {collection}` response records the requested visibility while complete output is pending; it does
+not claim ready membership. Publication uses the existing publish/status API and creates no public rule URL.
+Public/unlisted requests, including an editor's ordinary public request, read only the last complete adopted
+output and apply current subject eligibility; absent complete output returns readiness/unavailability, never
+empty success. Public Collections enter public listing; unlisted Collections allow direct reads only. Private
+and unknown Collections remain identically concealed from other accounts and anonymous viewers. Shared DTOs
+omit rules, release/profile pins, fact values and private counts. An explicit admitted owner filter continues
+to select the private working graph. Source presence is no successful public
 membership claim. Generated artifacts and native outcome checks remain controller-owned after integration.
 
 Saved-rule drafts compare exact title, description and filter structure (including operand order) with their initial

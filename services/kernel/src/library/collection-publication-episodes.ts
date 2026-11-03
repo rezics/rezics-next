@@ -41,6 +41,7 @@ import { initializeCanonicalCollectionSource, nativeSourceFence } from './canoni
 import { prepareBuiltinMaterialization, readBuiltinPublicationRule } from './builtin-materialization.ts';
 import type { BuiltinCollectionKey } from './builtin-identity.ts';
 import { readCollection } from './collection-store.ts';
+import type { Collection } from './collection-model.ts';
 import { readNativeCollectionWorkingMetadata } from './collection-source-native.ts';
 import {
   authorizeCollectionRule,
@@ -70,12 +71,21 @@ type Client = Pick<PoolClient, 'query'>;
 export type CollectionPublicationBeginResult = Readonly<{
   locator: CollectionPublicationLocator;
   durableInitiator: string;
+  collection?: Collection;
+}>;
+/** Server-owned saved creation joins the ordinary Publication command, never a second transaction. */
+export type SavedPublicationCreation = Readonly<{
+  input: unknown;
+  rule: SavedCollectionRule;
+  authorization: CommandAuthorization;
+  materialize(tx: CommandTransaction): Promise<Collection>;
 }>;
 export type CollectionPublicationEpisodes = Readonly<{
   begin(
     actor: Actor,
     input: CollectionPublicationBeginInput,
     requestKey: string,
+    creation?: SavedPublicationCreation,
   ): Promise<CommandOutcome<CollectionPublicationBeginResult>>;
 }>;
 export type CollectionPublicationEpisodeReader = (
@@ -383,7 +393,7 @@ export function createCollectionPublicationEpisodes(config: {
 }): CollectionPublicationEpisodes {
   const { pool, access } = config;
   return {
-    async begin(actor, request, requestKey) {
+    async begin(actor, request, requestKey, creation) {
       const input = structuredClone(request);
       if (
         actor.kind !== 'account' ||
@@ -400,14 +410,17 @@ export function createCollectionPublicationEpisodes(config: {
         throw new ProblemError('invalid_request');
       const route = routeOf(input.collectionId);
       if (route === null || routeOf(actor.accountId) !== route) throw new GrantDeniedError();
-      if (!actor.scopes.includes('collection:read')) throw new GrantDeniedError();
+      if (!actor.scopes.includes('collection:read') || (creation && !actor.scopes.includes('collection:update')))
+        throw new GrantDeniedError();
       const identity = principalCommandIdentity(actor),
         deadline = deadlineFor(30000);
       const requestDigest = createHash('sha256')
-        .update(canonical([identity, COLLECTION_PUBLICATION_COMMAND, input]))
+        .update(canonical([identity, COLLECTION_PUBLICATION_COMMAND, creation ? { create: creation.input } : input]))
         .digest();
       const resource = { route, id: input.collectionId };
-      const materialization = await prepareBuiltinMaterialization(config, actor, input, deadline);
+      const materialization = creation
+        ? { ...creation, key: null }
+        : await prepareBuiltinMaterialization(config, actor, input, deadline);
       const ordinary =
         materialization?.authorization ??
         resourceAuthorization({
@@ -547,14 +560,21 @@ export function createCollectionPublicationEpisodes(config: {
             if (original.creation.initiator.creation.requestDigest !== requestDigest.toString('hex'))
               throw new IdempotencyConflictError(partitionOf(route));
             if (
+              !creation && (
               !(await readCollectionPublicationRule(tx, original.creation.source.locator)) ||
               !prepared.metadata ||
-              !isDeepStrictEqual(original.creation.source.input.identity, await readCurrentInput(tx, prepared.metadata))
+              !isDeepStrictEqual(original.creation.source.input.identity, await readCurrentInput(tx, prepared.metadata)))
             )
               throw unavailable();
           }
           const current = await readCurrentMeaning(tx, route, input.collectionId);
-          if (materialization ? current !== null : !isDeepStrictEqual(current, prepared.meaning)) throw conflict();
+          if (creation) {
+            if (prior) {
+              const collection = await readCollection(tx, route, input.collectionId);
+              if (!collection || collection.state !== 'active' || collection.curatorAccountId !== actor.accountId)
+                throw new ProblemError('not_found');
+            } else if (current !== null) throw conflict();
+          } else if (materialization ? current !== null : !isDeepStrictEqual(current, prepared.meaning)) throw conflict();
           return mode;
         },
         async finalize(tx, attempt, evidence) {
@@ -587,8 +607,10 @@ export function createCollectionPublicationEpisodes(config: {
         },
         async (tx, command) => {
           if (!prepared || currentCommand(tx).time !== command.time) throw unavailable();
-          if (materialization) await materialization.materialize(tx);
-          else {
+          const collection = creation ? await creation.materialize(tx) : undefined;
+          if (materialization) {
+            if (!creation) await materialization.materialize(tx);
+          } else {
             // CAS holds the actual header through commit without rewriting A's native Source fence.
             const current = (
               await tx.query<{ revision: number }>(
@@ -742,7 +764,7 @@ export function createCollectionPublicationEpisodes(config: {
             ]),
           });
           return {
-            value: { locator, durableInitiator: commitment },
+            value: { locator, durableInitiator: commitment, ...(collection ? { collection } : {}) },
             events: [
               {
                 type: 'com.rezics.library.collection.updated.v1',

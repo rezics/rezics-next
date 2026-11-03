@@ -1,4 +1,4 @@
-import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
+import { createCollectionPublicationEpisodes, type CollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { createShelfCounters } from './shelf-counters.ts';
@@ -367,6 +367,7 @@ export function createCollectionCommands(config: {
   access: Access;
   clock?: KernelClock;
   routeKey?: Uint8Array;
+  publication?: CollectionPublicationEpisodes;
 }) {
   const { pool, access, clock } = config;
   const owned = createLibraryCommandRunner({ pool: writerPool(pool), ...(clock ? { clock } : {}) });
@@ -386,6 +387,50 @@ export function createCollectionCommands(config: {
     restoreMember,
     ...createCollectionBatchCommands(config, mutate),
   };
+
+  function creationAuthorization(
+    actor: AccountActor,
+    route: number,
+    id: string,
+    inserted: () => { transactionId: string; at: string } | null,
+  ) {
+    const resource = Object.freeze({ route, id });
+    return parentCreationAuthorization({
+          access: creation,
+          actor,
+          action: 'collection:create',
+          parent: {
+            resource: Object.freeze({ route, id: actor.accountId }),
+            async validate(client, time) {
+              authoritativeTimeValue(time);
+              const account = await readAccount(client, route, actor.accountId);
+              return account !== null && account.kind === 'actor' && account.state === 'active' && !account.fenced;
+            },
+          },
+          context: {
+            pool,
+            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+            resource,
+            creation: {
+              async validate(inner, target, time) {
+                const provenance = inserted();
+                if (!provenance || target.route !== route || target.id !== id) return false;
+                authoritativeTimeValue(time);
+                const found = await inner.query(
+                  `SELECT 1
+                     FROM library.collection
+                    WHERE route = $1 AND collection_id = $2 AND curator_account_id = $3
+                      AND revision = 1 AND state = 'active'
+                      AND transaction_id = $4 AND created_at = $5::timestamptz
+                      AND xmin = pg_current_xact_id()::xid`,
+                  [route, id, actor.accountId, provenance.transactionId, provenance.at],
+                );
+                return found.rows.length === 1;
+              },
+            },
+          },
+        });
+  }
 
   async function createCollection(
     actor: Actor,
@@ -408,8 +453,44 @@ export function createCollectionCommands(config: {
       ...(draft.membershipKind === 'dynamic' ? { membershipKind: 'dynamic', rule: draft.rule } : {}),
     };
     const route = actor.kind === 'account' ? routeOf(actor.accountId) : null;
-    const id = route === null ? newId(1) : newId(route);
+    const previous = rule && visibility !== 'private' && route !== null
+      ? (await pool.query<{ id: string }>(
+          'SELECT collection_id::text AS id FROM library.collection_publication_operation WHERE route=$1 AND owner_account_id=$2 AND creation_key=$3',
+          [route, actor.kind === 'account' ? actor.accountId : null, requestKey],
+        )).rows[0]
+      : undefined;
+    const id = previous?.id ?? (route === null ? newId(1) : newId(route));
     let provenance: { transactionId: string; at: string } | null = null;
+
+    if (rule && visibility !== 'private') {
+      if (!config.publication) throw new ProblemError('dependency_unavailable');
+      if (actor.kind !== 'account' || route === null) throw new GrantDeniedError();
+      const failure = await preparePresentationSelection(config, actor, selection, deadlineFor(WORK_STEP_DEADLINE_MS));
+      if (failure) throw failure;
+      const admitted = await admitCollectionRule(pool, rule);
+      const result = await config.publication.begin(actor, { collectionId: id, revision: 1, visibility }, requestKey, {
+        input,
+        rule: { ...admitted, revision: 1, collectionRevision: 1, sourceGeneration: '1' },
+        authorization: creationAuthorization(actor, route, id, () => provenance),
+        async materialize(tx) {
+          provenance = null;
+          const command = currentCommand(tx);
+          const at = authoritativeTimeValue(command.time);
+          const shelf = { client: tx, route, accountId: actor.accountId };
+          await enterShelfWrite(shelf);
+          // The pending header advertises intent; only COMPLETE output can supply shared members.
+          await insertSavedCollection(tx, route, {
+            id, curatorAccountId: actor.accountId, title, description, visibility, ...selection,
+          }, admitted, { transactionId: command.transactionId, time: at });
+          await createShelfCounters().collection(shelf, 1);
+          provenance = { transactionId: command.transactionId, at };
+          await initializeResourceGrants(tx, { resource: { route, id }, type: 'library.collection', creator: actor.accountId });
+          return activeCollection(tx, route, id);
+        },
+      });
+      if (!result.value.collection) throw new ProblemError('dependency_unavailable');
+      return { ...result, value: result.value.collection };
+    }
 
     return owned.ownAccountPrepared(
       actor,
@@ -444,40 +525,7 @@ export function createCollectionCommands(config: {
         if (prepared.failure) throw prepared.failure;
         provenance = null;
         const resource = Object.freeze({ route, id });
-        const authorization = parentCreationAuthorization({
-          access: creation,
-          actor,
-          action: 'collection:create',
-          parent: {
-            resource: Object.freeze({ route, id: actor.accountId }),
-            async validate(client, time) {
-              authoritativeTimeValue(time);
-              const account = await readAccount(client, route, actor.accountId);
-              return account !== null && account.kind === 'actor' && account.state === 'active' && !account.fenced;
-            },
-          },
-          context: {
-            pool,
-            deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-            resource,
-            creation: {
-              async validate(inner, target, time) {
-                if (!provenance || target.route !== route || target.id !== id) return false;
-                authoritativeTimeValue(time);
-                const found = await inner.query(
-                  `SELECT 1
-                     FROM library.collection
-                    WHERE route = $1 AND collection_id = $2 AND curator_account_id = $3
-                      AND revision = 1 AND state = 'active'
-                      AND transaction_id = $4 AND created_at = $5::timestamptz
-                      AND xmin = pg_current_xact_id()::xid`,
-                  [route, id, actor.accountId, provenance.transactionId, provenance.at],
-                );
-                return found.rows.length === 1;
-              },
-            },
-          },
-        });
+        const authorization = creationAuthorization(actor, route, id, () => provenance);
         const attempt = accountAttempt(tx);
         const proof = await authorization.prepare!(attempt);
         if ((await authorization.authorize(tx, attempt, proof)) !== 'execute') throw new GrantDeniedError();
@@ -500,8 +548,6 @@ export function createCollectionCommands(config: {
       async (tx, attempt, prepared) => {
         if (!prepared.admitted) return;
         await authorizeCollectionRule(tx, attempt, prepared.checks);
-        // A create stores a private definition. Public metadata/membership needs explicit publication.
-        if (visibility !== 'private') throw new ProblemError('dependency_unavailable');
       },
     );
   }

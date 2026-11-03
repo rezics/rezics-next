@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { createAccess } from '../../src/access/index.ts';
+import { createCollectionCommands } from '../../src/library/collections.ts';
 import { builtinCollectionId } from '../../src/library/builtin-identity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
@@ -124,9 +126,12 @@ test('clear and Undo change actual saved membership without changing its retaine
 }, 120_000);
 
 test('public saved execution is explicitly unavailable without the complete Publication provider', async () => {
-  const response = await f.send('POST', '/v1/collections', { ...draft(), visibility: 'public' });
-  expect(response.status).toBe(503);
-  expect(await response.json()).toMatchObject({ code: 'dependency_unavailable' });
+  const access = createAccess(f.runtime.identity.accessConfig);
+  const actor = await access.authenticate(f.owner, { pool: f.database.pool, deadline: performance.now() + 30_000 });
+  const commands = createCollectionCommands({ pool: f.database.pool, access });
+  await expect(commands.createCollection(actor, {
+    membershipKind: 'dynamic', title: 'Unbound Publication', visibility: 'public', rule: { filter: presence },
+  }, randomUUID())).rejects.toMatchObject({ code: 'dependency_unavailable' });
 }, 120_000);
 
 test('native suspension rejects a previously issued editor bearer and its old receipt', async () => {

@@ -18,6 +18,7 @@ import type { WorkClient } from '../work/client.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import type { Collection, CollectionMember } from './collection-model.ts';
 import { collectionReadView, createCollectionReads } from './collection-reads.ts';
+import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { createCollectionCommands } from './collections.ts';
 import { createCollectionPublications } from './collection-publication.ts';
 import { createCollectionPublicationService } from './collection-publication-service.ts';
@@ -361,6 +362,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       access: dependencies.access(),
       clock,
       routeKey: dependencies.routeKey,
+      publication: createCollectionPublicationEpisodes({ pool, access: dependencies.access(), clock }),
     }));
   const read = () =>
     (reads ??= createCollectionReads({
