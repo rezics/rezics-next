@@ -141,7 +141,7 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
     case 'staff': {
       const code = environment.sourceCode(row.roleCode);
       const property = code === null ? undefined : creditProperties[code];
-      if (!property) {
+      if (code === null || !property) {
         rowGap(environment, row, 'unknown_code', 'vn_staff.role', code ?? undefined);
         return;
       }

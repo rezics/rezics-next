@@ -127,6 +127,13 @@ export type SourceVocabularyResult = Readonly<{
   proposals: readonly BatchCommand[];
   gaps: readonly SourceVocabularyGap[];
 }>;
+type SourceVocabularyGapInput = Omit<SourceVocabularyGap, 'provider'> & {
+  provider?: SourceVocabularyProvider;
+  code?: string | undefined;
+  endpoint?: string | undefined;
+  requiredProfile?: string | undefined;
+  property?: string | undefined;
+};
 
 export type MappingEnvironment = Readonly<{
   input: SourceVocabularyInput;
@@ -136,7 +143,7 @@ export type MappingEnvironment = Readonly<{
   proposals: BatchCommand[];
   gaps: SourceVocabularyGap[];
   admit(subject: NativeIdentity, property: string, path: string, code?: string, endpoint?: string): boolean;
-  pushGap(gap: Omit<SourceVocabularyGap, 'provider'> & { provider?: SourceVocabularyProvider }): void;
+  pushGap(gap: SourceVocabularyGapInput): void;
   propose(args: {
     row: SourceVocabularyRow;
     subject: NativeIdentity;
@@ -277,7 +284,7 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
     commandLimit,
   };
 
-  const pushGap = (gap: Omit<SourceVocabularyGap, 'provider'> & { provider?: SourceVocabularyProvider }) => {
+  const pushGap = (gap: SourceVocabularyGapInput) => {
     if (gaps.length >= sourceVocabularyLimits.gaps) return;
     const path = typeof gap.path === 'string' && /^\/[A-Za-z0-9_./~\-]{1,180}$/u.test(gap.path) ? gap.path : '/sourceVocabulary';
     const code = sourceText(gap.code, 64) ? gap.code : undefined;
