@@ -3,11 +3,11 @@ import type { PublicationPrepare } from '../src/community/realm-publication-prep
 /** Supplied-port native reference shape, not a recorded or generated response. */
 export function preparationFixture(
   accountId: string,
-  head: () => string | null,
+  head: (subjectId: string) => string | null,
   verdict: 'adopt' | 'withdraw' | 'reject' = 'adopt',
 ): PublicationPrepare {
   return async ({ realmId, subjectId }) => {
-    const current = head();
+    const current = head(subjectId);
     const command = (action: 'publish' | 'withdraw' | 'reject') => ({
       method: 'POST' as const,
       href: `/v1/realms/${realmId}/publications${action === 'publish' ? '' : `/${subjectId}:${action}`}`,

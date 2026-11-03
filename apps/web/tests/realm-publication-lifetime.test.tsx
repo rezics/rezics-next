@@ -82,7 +82,7 @@ let rerenderMarker = 0;
 let shelfSubjects = subjects();
 const prepare = preparationFixture(
   reader,
-  () => shelfSubjects.find((item) => item.id === target().id)?.publicationId ?? null,
+  () => shelfSubjects.find((item) => item.id === subjectId)?.publicationId ?? null,
 );
 
 function HookHarness() {
@@ -387,9 +387,9 @@ describe('Complete Realm publication original caller lifetime', () => {
     await mountHook();
     const privateTarget = { ...target(), id: id(41) };
     await act(async () => latestControl.choose(privateTarget));
-    const current = await startChange('publish');
+    const firstCommand = await startChange('publish');
     await settle(0, { kind: 'unavailable' });
-    await current.completion;
+    await firstCommand.completion;
     expect(latestControl.outcome).toEqual({ kind: 'unavailable' });
     const retired = latestControl;
 
