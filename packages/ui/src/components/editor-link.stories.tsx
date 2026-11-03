@@ -2,6 +2,7 @@ import { checkDocument, fromPlainText, type DocumentProfile, type DocumentSnapsh
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { waitForFocus } from '../test/focus.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 
 function demo(linked = false) {
@@ -334,14 +335,21 @@ async function selectJourneyText(canvas: ReturnType<typeof within>) {
 async function selectJourneyParagraph(canvas: ReturnType<typeof within>, paragraph: number, collapse: boolean) {
   const textbox = canvas.getByRole('textbox', { name: 'Post' });
   await userEvent.click(textbox);
-  const node = textbox.querySelectorAll('p')[paragraph]?.firstChild;
-  if (!node) throw new Error(`Paragraph ${paragraph} has no text node`);
-  const range = document.createRange();
-  range.selectNodeContents(node);
-  if (collapse) range.collapse(true);
-  window.getSelection()?.removeAllRanges();
-  window.getSelection()?.addRange(range);
-  document.dispatchEvent(new Event('selectionchange'));
+  const apply = () => {
+    const node = textbox.querySelectorAll('p')[paragraph]?.firstChild;
+    if (!node) throw new Error(`Paragraph ${paragraph} has no text node`);
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    if (collapse) range.collapse(true);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  };
+  apply();
+  await waitForFocus(textbox, undefined, () => {
+    textbox.focus();
+    apply();
+  });
   return textbox;
 }
 
@@ -565,7 +573,7 @@ export const InlineLifetimeJourney: Story = {
     address = await canvas.findByRole('textbox', { name: 'URL' });
     expect(address).toHaveValue('https://retained-draft.example');
     textbox = await selectJourneyParagraph(canvas, 0, true);
-    await userEvent.type(textbox, 'X');
+    await userEvent.keyboard('X');
     await waitFor(() => expect(journeyText(evidence.latest)).toContain('XFirst line'));
     address = await canvas.findByRole('textbox', { name: 'URL' });
     expect(address).toHaveValue('https://retained-draft.example');

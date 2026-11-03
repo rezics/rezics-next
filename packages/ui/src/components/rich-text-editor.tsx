@@ -30,7 +30,14 @@ import { assertSnapshotSize, editorSnapshot } from './rich-text-editor-snapshot.
 import { richTextEditorLabels, type RichTextEditorLabels } from './editor-labels.ts';
 import { SelectionMenu } from './editor-selection-menu.tsx';
 import { EditorTouchBar } from './editor-touch-bar.tsx';
-import { isLinkRangeValid, LinkMenu, linkHref, type LinkRange, type LinkVisitRange } from './editor-link.tsx';
+import {
+  isLinkRangeValid,
+  LinkMenu,
+  linkHref,
+  revalidateTextSelection,
+  type LinkRange,
+  type LinkVisitRange,
+} from './editor-link.tsx';
 import { ImageInsert, withImageView } from './editor-image.tsx';
 import { editorUploads, type ImageUploader, type UploadEntry, type UploadState } from './editor-uploads.ts';
 import { availableCommands, imageCommand, runEditorCommand } from './editor-commands.ts';
@@ -701,6 +708,11 @@ export function RichTextEditor({
       }
     } else if (incomingChanged && echo) {
       emittedKey.current = null;
+      if (editor && !editor.isDestroyed) {
+        revalidateTextSelection(editor);
+        const range = linkRangeRef.current;
+        if (range?.visit === visitRef.current && !isLinkRangeValid(editor, range)) setOwnedLinkRange(null);
+      }
     } else if (incomingChanged) {
       emittedKey.current = null;
     }

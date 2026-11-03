@@ -82,6 +82,31 @@ export function applyLink(
   return chain.setMark('link', { href }).run();
 }
 
+/** Keep a live ProseMirror selection if its mapped positions still resolve; never invent a retired range. */
+export function revalidateTextSelection(editor: Editor): boolean {
+  if (editor.isDestroyed || !editor.isEditable) return false;
+  const { selection, doc } = editor.state;
+  const from = Math.max(0, Math.min(selection.from, doc.content.size));
+  const to = Math.max(0, Math.min(selection.to, doc.content.size));
+  try {
+    const next = TextSelection.create(doc, from, to);
+    if (next.eq(selection)) return true;
+    editor.view.dispatch(editor.state.tr.setSelection(next).setMeta('addToHistory', false));
+    return true;
+  } catch {
+    try {
+      const next = TextSelection.near(doc.resolve(from));
+      if (next.eq(selection)) return true;
+      editor.view.dispatch(editor.state.tr.setSelection(next).setMeta('addToHistory', false));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+const capturedLinkFocus = new WeakMap<Editor, { id: number; visit: number }>();
+
 /**
  * Inline address editing on a saved document range. The bubble menu places it against the text, which a shadcn popover
  * cannot do: its anchor is a trigger element, not a range in the document.
@@ -111,7 +136,14 @@ export function LinkField({
   const linked = Boolean(linkHref(editor, range));
   const current = () => isCurrent() && isRangeCurrent(range);
   useLayoutEffect(() => {
-    if (current()) input.current?.focus();
+    if (!current()) return;
+    const captured = capturedLinkFocus.get(editor);
+    const justOpened = captured?.id !== range.id || captured?.visit !== range.visit;
+    const active = editor.view.dom.ownerDocument.activeElement;
+    if (!justOpened && editor.view.dom.contains(active)) return;
+    revalidateTextSelection(editor);
+    if (editor.view.dom.ownerDocument.activeElement !== input.current) input.current?.focus();
+    capturedLinkFocus.set(editor, { id: range.id, visit: range.visit });
   }, [editor, focusEditor, isCurrent, isRangeCurrent, range.id, range.visit]);
 
   function finish(href: string | null) {
