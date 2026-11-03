@@ -37,12 +37,29 @@ export type DocumentBodyLabels = {
 
 export type DocumentMentions = Readonly<Record<string, { handle: string }>>;
 
-const DocumentRenderContext = createContext<DocumentBodyLabels>(documentBodyLabels);
+type DocumentRenderValue = {
+  labels: DocumentBodyLabels;
+  revealed: ReadonlySet<number>;
+  reveal: (index: number) => void;
+  nextSpoilerIndex: () => number;
+};
 
-/** Stable mark component so a parent re-render does not remount spoilers or drop keyboard focus. */
+const DocumentRenderContext = createContext<DocumentRenderValue | null>(null);
+
+/** Stable mark component; visit-scoped revealed indices survive a parent re-render. */
 function SpoilerMark({ children }: { children?: ReactNode }) {
-  const labels = useContext(DocumentRenderContext);
-  return <DocumentSpoiler label={labels.revealSpoiler}>{children}</DocumentSpoiler>;
+  const render = useContext(DocumentRenderContext);
+  if (!render) return <DocumentSpoiler>{children}</DocumentSpoiler>;
+  const index = render.nextSpoilerIndex();
+  return (
+    <DocumentSpoiler
+      label={render.labels.revealSpoiler}
+      revealed={render.revealed.has(index)}
+      onReveal={() => render.reveal(index)}
+    >
+      {children}
+    </DocumentSpoiler>
+  );
 }
 
 type Props = {
@@ -58,14 +75,34 @@ type Props = {
 /** Render a document snapshot without creating an editor or requiring a browser DOM. */
 export function DocumentBody({ document, className, labels, mentions, locale = 'en', renderImage }: Props) {
   const semanticSnapshot = semanticSnapshotJson(document);
-  const [visit, setVisit] = useState(() => ({ semanticSnapshot, id: 0 }));
+  const [visit, setVisit] = useState(() => ({
+    semanticSnapshot,
+    id: 0,
+    revealed: new Set<number>(),
+  }));
   if (visit.semanticSnapshot !== semanticSnapshot) {
     // Restart this render before its children commit so replacement text cannot paint revealed.
-    setVisit({ semanticSnapshot, id: visit.id + 1 });
+    setVisit({ semanticSnapshot, id: visit.id + 1, revealed: new Set() });
     return null;
   }
 
+  const visitId = visit.id;
+  const reveal = (index: number) => {
+    setVisit((previous) => {
+      if (previous.id !== visitId || previous.revealed.has(index)) return previous;
+      const revealed = new Set(previous.revealed);
+      revealed.add(index);
+      return { ...previous, revealed };
+    });
+  };
+  let spoilerIndex = 0;
   const resolved = { ...documentBodyLabels, ...labels };
+  const renderValue: DocumentRenderValue = {
+    labels: resolved,
+    revealed: visit.revealed,
+    reveal,
+    nextSpoilerIndex: () => spoilerIndex++,
+  };
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -150,7 +187,7 @@ export function DocumentBody({ document, className, labels, mentions, locale = '
     },
   });
   return (
-    <DocumentRenderContext.Provider value={resolved}>
+    <DocumentRenderContext.Provider value={renderValue}>
       <Prose className={className} data-slot="document-body">
         {content}
       </Prose>
