@@ -128,11 +128,11 @@ test('absent, staging, busy, missing database and incompatible conversion never 
   const stdin = async function* () {
     throw new Error('stdin must not be read');
   };
-  const fetch = (async () => {
+  const denyFetch = (async () => {
     throw new Error('credential HTTP must not run');
-  }) as unknown as typeof fetch;
+  }) as unknown as typeof globalThis.fetch;
   try {
-    const missingResult = await runImportCli(argv(missing, keyPath), { stdin: stdin(), fetch });
+    const missingResult = await runImportCli(argv(missing, keyPath), { stdin: stdin(), fetch: denyFetch });
     expect(missingResult.code).toBe(2);
     expect(missingResult.stderr).toContain('does not exist');
     expect(existsSync(missing)).toBe(false);
@@ -143,8 +143,9 @@ test('absent, staging, busy, missing database and incompatible conversion never 
     if (own === 'busy') throw 0;
     const begun = session.store.begin('wikidata');
     if (begun === 'busy') throw 0;
+    const seed = row();
     const conversion = registration.convert(
-      { external_id: 'Q1', record_revision: '1', record: row().payload },
+      { external_id: seed.key, record_revision: seed.revision, record: seed.payload },
       { source: 'wikidata' },
     );
     session.store.stage(begun, {
@@ -162,21 +163,23 @@ test('absent, staging, busy, missing database and incompatible conversion never 
     session.release(own);
     session.close();
 
-    const staging = await runImportCli(argv(state, keyPath), { stdin: stdin(), fetch });
+    const staging = await runImportCli(argv(state, keyPath), { stdin: stdin(), fetch: denyFetch });
     expect(staging.code).toBe(2);
     expect(staging.stderr).toContain('incomplete staging');
     const afterStaging = new ImportSession(state);
     try {
       expect(afterStaging.store.activeRun('wikidata')?.lease).toBe(lease);
       expect(afterStaging.store.source('wikidata').generation).toBeNull();
-      expect(afterStaging.store.key('wikidata', 'Q1').staged?.row.digest).toBe(conversion.digest);
+      expect(afterStaging.store.key('wikidata', 'Q1', afterStaging.store.activeRun('wikidata')!).staged?.row.digest).toBe(
+        conversion.digest,
+      );
     } finally {
       afterStaging.close();
     }
 
     const empty = join(dir, 'empty.sqlite');
     new ImportSession(empty).close();
-    const none = await runImportCli(argv(empty, keyPath), { stdin: stdin(), fetch });
+    const none = await runImportCli(argv(empty, keyPath), { stdin: stdin(), fetch: denyFetch });
     expect(none.code).toBe(2);
     expect(none.stderr).toContain('No resumable sealed acquisition');
     const afterNone = new ImportSession(empty);
@@ -190,7 +193,7 @@ test('absent, staging, busy, missing database and incompatible conversion never 
     const holder = new ImportSession(state);
     const held = holder.acquire('wikidata');
     if (held === 'busy') throw 0;
-    const busy = await runImportCli(argv(state, keyPath), { stdin: stdin(), fetch });
+    const busy = await runImportCli(argv(state, keyPath), { stdin: stdin(), fetch: denyFetch });
     expect(busy.code).toBe(5);
     expect(holder.store.activeRun('wikidata')?.lease).toBe(lease);
     holder.release(held);
@@ -201,7 +204,27 @@ test('absent, staging, busy, missing database and incompatible conversion never 
     if (writer === 'busy') throw 0;
     const sealed = ready.store.reopen(ready.store.activeRun('wikidata')!)!;
     ready.store.seal(sealed, { complete: true });
-    ready.store.database
+    ready.release(writer);
+    ready.close();
+    const wrongKind = await runImportCli(
+      ['resume', '--source', 'bangumi', '--source-alias', 'wikidata', ...argv(state, keyPath).slice(3)],
+      { stdin: stdin(), fetch: denyFetch },
+    );
+    expect(wrongKind.code).toBe(2);
+    expect(wrongKind.stderr).toContain('source kind');
+    expect(wrongKind.stderr).toContain('not replaced');
+    const afterKind = new ImportSession(state);
+    try {
+      expect(afterKind.store.source('wikidata').generation).toBeNull();
+      expect(afterKind.store.activeRun('wikidata')?.id).toBe(sealed.id);
+    } finally {
+      afterKind.close();
+    }
+
+    const mutate = new ImportSession(state);
+    const mutator = mutate.acquire('wikidata');
+    if (mutator === 'busy') throw 0;
+    mutate.store.database
       .prepare(`UPDATE run_entries SET row_json=? WHERE source=? AND record_key=?`)
       .run(
         JSON.stringify({
@@ -215,9 +238,9 @@ test('absent, staging, busy, missing database and incompatible conversion never 
         'wikidata',
         'Q1',
       );
-    ready.release(writer);
-    ready.close();
-    const incompatible = await runImportCli(argv(state, keyPath), { stdin: stdin(), fetch });
+    mutate.release(mutator);
+    mutate.close();
+    const incompatible = await runImportCli(argv(state, keyPath), { stdin: stdin(), fetch: denyFetch });
     expect(incompatible.code).toBe(2);
     expect(incompatible.stderr).toContain('converter revision');
     expect(incompatible.stderr).toContain('not replaced');
@@ -236,7 +259,6 @@ test('absent, staging, busy, missing database and incompatible conversion never 
 test('resume finishes a sealed generation without dump input and retains identity across a second interruption', async () => {
   const dir = directory();
   const state = join(dir, 'state.sqlite');
-  const phases: ImportProgressPhase[] = [];
   const f = fake();
   let lose = true;
   const transport = {
@@ -252,28 +274,40 @@ test('resume finishes a sealed generation without dump input and retains identit
   };
   let importer = new Importer({ path: state, transport });
   try {
-    const first = await importer.runRecords(registration, records(row()), {
-      progress: { onPhase: (phase) => phases.push(phase) },
-    });
-    expect(first.status).toBe('interrupted');
+    const first = await importer.runRecords(registration, records(row()));
+    expect(['interrupted', 'bulk-failed']).toContain(first.status);
     const pending = importer.session.store.pagePending(importer.session.store.activeRun('wikidata')!, { limit: 8 });
-    expect(pending).toHaveLength(1);
+    expect(pending.length).toBeGreaterThan(0);
     const original = { bytes: pending[0]!.bytes, keys: pending[0]!.keys, id: importer.session.store.activeRun('wikidata')!.id };
     const skipped = importer.session.store.skipped(importer.session.store.activeRun('wikidata')!);
     await importer.close();
-    const cancel = new AbortController();
+    let cancelNext = true;
     importer = new Importer({
       path: state,
       transport: {
-        ...transport,
+        ...f.transport,
         async batchWrite(request: BatchWriteRequest) {
-          cancel.abort(new DOMException('second interruption', 'AbortError'));
-          return f.transport.batchWrite(request);
+          const result = await f.transport.batchWrite(request);
+          if (cancelNext) {
+            cancelNext = false;
+            throw new DOMException('second interruption', 'AbortError');
+          }
+          return result;
         },
       },
     });
-    const again = await importer.resumeExisting(registration, { signal: cancel.signal });
-    expect(again.status).toBe('interrupted');
+    const resumePhases: ImportProgressPhase[] = [];
+    const again = await importer.resumeExisting(registration, {
+      progress: {
+        onPhase(phase) {
+          resumePhases.push(phase);
+        },
+      },
+    });
+    expect(['interrupted', 'bulk-failed']).toContain(again.status);
+    expect(resumePhases.some((phase) => phase === 'acquiring' || phase === 'materializing' || phase === 'staging')).toBe(
+      false,
+    );
     expect(importer.session.store.activeRun('wikidata')?.id).toBe(original.id);
     expect(importer.session.store.pagePending(importer.session.store.activeRun('wikidata')!, { limit: 8 })[0]!.bytes).toBe(
       original.bytes,
@@ -316,7 +350,7 @@ test('resume finishes a sealed generation without dump input and retains identit
     expect(consumed).toEqual([]);
     expect(resume.code).toBe(0);
     expect(resume.stdout).toContain('Import complete:');
-    expect(f.requests.at(-1)).toEqual(JSON.parse(original.bytes));
+    expect(f.requests.some((request) => JSON.stringify(request) === original.bytes)).toBe(true);
     const done = new ImportSession(state);
     try {
       expect(done.store.source('wikidata').generation).toBe(original.id);

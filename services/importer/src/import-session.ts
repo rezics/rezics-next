@@ -49,7 +49,7 @@ export class ImportSession {
   readonly bindings: RecordBindings;
   private readonly identity = processIdentity(process.pid).birth;
   private readonly held = new Map<string, ImportOwnership>();
-  private readonly descriptor?: FileHandle;
+  private readonly descriptor: FileHandle | undefined;
   private closed = false;
 
   constructor(path: string | Database, options: ImportSessionOptions = {}) {

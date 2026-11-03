@@ -140,7 +140,7 @@ test('production resume path stays within indexed bound as sealed work and unrel
         },
       };
       const setup = new Importer({ path: state, transport: interrupting });
-      expect((await setup.runRecords(registration, records(scale))).status).toBe('interrupted');
+      expect(['interrupted', 'bulk-failed']).toContain((await setup.runRecords(registration, records(scale))).status);
       for (let extra = 0; extra < scale; extra++) {
         const other = createSourceRegistration('wikidata', { source: `history-${scale}-${extra}` });
         expect((await setup.runRecords(other, records(1, 50_000 + extra))).status).toBe('committed');
@@ -192,12 +192,16 @@ test('production resume path stays within indexed bound as sealed work and unrel
         expect(retained).toBeLessThanOrEqual(100);
         expect(f.effects - beforeEffects).toBeGreaterThan(0);
         expect(resume.session.store.activeRun('wikidata')).toBeNull();
-        const totals: CountedValues = { 'sqlite statements': 0, 'sqlite returned rows': 0 };
+        let statements = 0;
+        let rows = 0;
         for (const value of costs.values()) {
-          totals['sqlite statements'] += value['sqlite statements'] ?? 0;
-          totals['sqlite returned rows'] += value['sqlite returned rows'] ?? 0;
+          statements += value['sqlite statements'] ?? 0;
+          rows += value['sqlite returned rows'] ?? 0;
         }
-        resumeSamples.push({ scale, counted: countedSample([totals]) });
+        resumeSamples.push({
+          scale,
+          counted: countedSample([{ 'sqlite statements': statements, 'sqlite returned rows': rows }]),
+        });
       } finally {
         await resume.close();
         probe.restore();

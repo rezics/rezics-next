@@ -248,7 +248,7 @@ export async function runSealedResumeJourney() {
       const resumed = await invoke(feed, 'resume');
       expect(resumed.code, resumed.stderr).toBe(0);
       const after = inspect(feed);
-      expect(after.source.generation).toBe(pending.active?.id);
+      expect(after.source.generation).toBe(pending.active!.id);
       expect(after.active).toBeNull();
       const replayed = resumed.captured.filter((exchange) => exchange.path === '/v1/subjects:batchWrite');
       expect(replayed.some((exchange) => originalBytes.includes(exchange.bytes))).toBe(true);

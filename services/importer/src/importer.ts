@@ -1141,14 +1141,18 @@ export class Importer {
     }
   }
 
-  private async finishCursor(run: Run, signal: AbortSignal, current: 'more' | 'complete'): Promise<'more' | 'complete'> {
+  private async finishCursor(
+    run: Run,
+    signal: AbortSignal,
+    current: 'more' | 'complete',
+  ): Promise<'complete' | 'incomplete'> {
     let final: 'incomplete' | 'more' | 'complete' = current;
     while (final === 'more') {
       await Promise.resolve();
       if (signal.aborted) throw new Interrupted('Import was interrupted');
       final = this.session.store.finalize(run, 100);
     }
-    return final;
+    return final === 'complete' ? 'complete' : 'incomplete';
   }
 
   private async applySealed(
@@ -1298,17 +1302,17 @@ export class Importer {
       const peeked = this.session.peekActive(ownership);
       if (!peeked)
         return finish(
-          'not-resumable',
+          'invalid-dump',
           'No resumable sealed acquisition for this source. Use ordinary import with a complete dump, or inspect this state read-only.',
         );
       if (peeked.status === 'staging')
         return finish(
-          'not-resumable',
+          'invalid-dump',
           'This source still has incomplete staging and cannot be resumed without its original dump. Use ordinary import with complete input, or inspect this state read-only.',
         );
       if (peeked.status === 'unsupported')
         return finish(
-          'not-resumable',
+          'invalid-dump',
           'Stored generation status is not resumable. Use inspect for a read-only view.',
         );
       if (peeked.status === 'ready') {
@@ -1316,18 +1320,19 @@ export class Importer {
         try {
           compatibility = this.compatible(registration, peeked.run);
         } catch {
-          return finish('unavailable', 'Importer state is damaged or unavailable.');
+          return finish('invalid-dump', 'Importer state is damaged or unavailable.');
         }
-        if (!compatibility.ok) return finish('incompatible', compatibility.reason);
+        if (!compatibility.ok)
+          return finish('invalid-dump', `${compatibility.reason} The generation was not replaced.`);
       }
       if (options.activateNetwork) await options.activateNetwork();
       const run = this.session.reopen(ownership);
-      if (!run) return finish('not-resumable', 'Sealed acquisition disappeared after ownership was taken.');
+      if (!run) return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
       const recheck = this.session.store.peekActive(ownership.source);
       if (!recheck || recheck.run.id !== run.id)
-        return finish('not-resumable', 'Sealed acquisition disappeared after ownership was taken.');
+        return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
       if (recheck.status !== peeked.status && recheck.status !== 'finalizing' && recheck.status !== 'ready')
-        return finish('not-resumable', 'Stored generation status is not resumable. Use inspect for a read-only view.');
+        return finish('invalid-dump', 'Stored generation status is not resumable. Use inspect for a read-only view.');
       const skipped = this.session.store.skipped(run);
       result.skipped = skipped;
       options.progress?.onRun?.(run.id, true);

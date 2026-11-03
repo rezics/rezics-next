@@ -22,10 +22,7 @@ export type ExistingImporterState = Readonly<{
   descriptor: FileHandle;
 }>;
 
-function sameFile(
-  left: Awaited<ReturnType<FileHandle['stat']>>,
-  right: Awaited<ReturnType<typeof stat>>,
-): boolean {
+function sameFile(left: { dev: number | bigint; ino: number | bigint }, right: { dev: number | bigint; ino: number | bigint }): boolean {
   return left.dev === right.dev && left.ino === right.ino;
 }
 

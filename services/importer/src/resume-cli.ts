@@ -258,20 +258,7 @@ function resultFor(run: ImportRunResult, httpStatus: number | undefined, signal:
       stderr: diagnostic('This source already has an active import.', counts, run.skipped),
       openHandles: 0,
     };
-  if (run.status === 'not-resumable')
-    return { code: 2, stdout: '', stderr: diagnostic(run.diagnostic, counts, run.skipped), openHandles: 0 };
-  if (run.status === 'incompatible')
-    return {
-      code: 2,
-      stdout: '',
-      stderr: diagnostic(
-        `${run.diagnostic} The generation was not replaced. Use inspect for a read-only view.`,
-        counts,
-        run.skipped,
-      ),
-      openHandles: 0,
-    };
-  if (run.status === 'unavailable')
+  if (run.status === 'invalid-dump')
     return { code: 2, stdout: '', stderr: diagnostic(run.diagnostic, counts, run.skipped), openHandles: 0 };
   if (run.status === 'interrupted' || signal.aborted)
     return {
