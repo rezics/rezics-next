@@ -3392,6 +3392,8 @@ Library telemetry, guessed current-offer links, mixed-currency totals or payout/
 operation uses the existing selling gate and exact action/catalogue/website scope helpers without widening consent.
 The existing client transport uses a narrow consumer-local typed bridge until canonical OpenAPI/client generation
 lands through dev integration; standalone ambient declarations are not another contract.
+Named Sales Storybook states remain constructed PatternStory plus AppShell examples; ActualRoute mounts the served
+path without claiming admitted producer-owned availability.
 
 Cost: current sales read
 
