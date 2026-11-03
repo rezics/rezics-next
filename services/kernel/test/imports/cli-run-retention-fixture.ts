@@ -168,7 +168,11 @@ export async function runCliRunRetentionJourney() {
       fetch: fetchBoundary,
     });
     expect(listed.code).toBe(0);
-    const list = JSON.parse(listed.stdout) as { baseline: string; active: string; generations: { id: string; eligible: boolean }[] };
+    const list = JSON.parse(listed.stdout) as {
+      baseline: string | null;
+      active: string | null;
+      generations: { id: string; eligible: boolean }[];
+    };
     expect(list.baseline).toBe(before.source.generation);
     expect(list.active).toBe(before.source.lease_run);
     expect(list.generations.find((row) => row.id === superseded!.id)?.eligible).toBe(true);
