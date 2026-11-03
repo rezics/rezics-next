@@ -117,7 +117,7 @@ export type SourceObservationPayload = Static<typeof observationPayloadSchema>;
 export type SourceObservationReadItem = Static<typeof observationSchema>;
 export type SourceObservationReadResponse = Static<typeof SourceObservationReadResponseSchema>;
 
-type Dependencies = Readonly<{ pool: Pool; routeKey: Uint8Array; clock?: KernelClock }>;
+export type SourceObservationReadDependencies = Readonly<{ pool: Pool; routeKey: Uint8Array; clock?: KernelClock }>;
 type MetaRow = Readonly<{
   digest: string | null;
   sourceAlias: string;
@@ -138,7 +138,7 @@ type Cursor = Readonly<{
   order: string | null;
   digest: string;
 }>;
-type ReadInput = Readonly<{
+export type SourceObservationReadInput = Readonly<{
   subjectId: string;
   source: string;
   digest?: string;
@@ -226,7 +226,7 @@ function metadataTuple(routeKey: Uint8Array, source: SourceProvider, row: MetaRo
 }
 
 async function readFenceSnapshot(
-  dependencies: Dependencies,
+  dependencies: SourceObservationReadDependencies,
   tuple: SourceFenceTuple,
   deadline: number,
 ): Promise<FenceSnapshot> {
@@ -346,7 +346,7 @@ function sameRows(left: readonly MetaRow[], right: readonly MetaRow[]): boolean 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function createSourceObservationReadCommands(dependencies: Dependencies) {
+export function createSourceObservationReadCommands(dependencies: SourceObservationReadDependencies) {
   async function query<T>(
     sql: { run: (client: ReturnType<typeof deadlineClient>, parameters: never) => Promise<unknown[]> },
     parameters: unknown,
@@ -359,7 +359,7 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
     ) as Promise<T[]>;
   }
 
-  async function metadataFor(input: ReadInput, source: SourceProvider, route: number, cursor: Cursor | null) {
+  async function metadataFor(input: SourceObservationReadInput, source: SourceProvider, route: number, cursor: Cursor | null) {
     const currentRows = await query<MetaRow>(headQuery, { route, subject_id: input.subjectId, source }, input.deadline);
     const current = currentRows[0] ?? null;
     if (input.digest !== undefined) {
@@ -409,7 +409,7 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
     };
   }
 
-  async function inspect(input: ReadInput): Promise<SourceObservationReadResponse> {
+  async function inspect(input: SourceObservationReadInput): Promise<SourceObservationReadResponse> {
     const route = routeOf(input.subjectId);
     const provider = sourceProvider(input.source);
     if (route === null || !provider) throw new ProblemError('not_found');
@@ -427,10 +427,15 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
     const currentMeta = initial.current;
     // Current and exact observations are required resources. History positions are
     // consumed independently of disclosure, including an unreturned lookahead.
-    const required = [currentMeta, ...(input.digest === undefined ? [] : [initial.selected, initial.legacySelection])].filter(
-      (row): row is MetaRow => row !== null,
-    );
-    const allForFence = [...required, ...initial.historyItems, ...(initial.lookahead === null ? [] : [initial.lookahead])];
+    const required = [
+      currentMeta,
+      ...(input.digest === undefined ? [] : [initial.selected, initial.legacySelection]),
+    ].filter((row): row is MetaRow => row !== null);
+    const allForFence = [
+      ...required,
+      ...initial.historyItems,
+      ...(initial.lookahead === null ? [] : [initial.lookahead]),
+    ];
     const tuples = new Map<string, SourceFenceTuple>();
     for (const row of allForFence) {
       const tuple = metadataTuple(dependencies.routeKey, source, row);
@@ -448,9 +453,11 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
     // A concealed raw candidate still advances history, but never enters payload
     // acquisition, validation or presentation. A lookahead never enters hydration.
     const historyMeta = initial.historyItems[0] ?? null;
-    const disclosedHistory = historyMeta !== null &&
+    const disclosedHistory =
+      historyMeta !== null &&
       !before.get(tupleKey(metadataTuple(dependencies.routeKey, source, historyMeta)))?.fence.takenDown
-      ? historyMeta : null;
+        ? historyMeta
+        : null;
     const hydrated = [...required, ...(disclosedHistory === null ? [] : [disclosedHistory])];
     const payloadDigests = [...new Set(hydrated.flatMap((row) => (row.digest === null ? [] : [row.digest])))];
     const storedPayloads = payloadDigests.length
@@ -483,11 +490,14 @@ export function createSourceObservationReadCommands(dependencies: Dependencies) 
       return payloadOf(payload, row, input.subjectId, source);
     };
     const currentItem = currentMeta ? itemOf(currentMeta) : null;
-    const selectedItem = input.digest === undefined ? null : initial.selected
-      ? itemOf(initial.selected)
-      : initial.legacySelection
-        ? itemOf(initial.legacySelection)
-        : null;
+    const selectedItem =
+      input.digest === undefined
+        ? null
+        : initial.selected
+          ? itemOf(initial.selected)
+          : initial.legacySelection
+            ? itemOf(initial.legacySelection)
+            : null;
     if (input.digest !== undefined && selectedItem?.digest !== input.digest) throw new ProblemError('not_found');
     const historyItem = disclosedHistory ? itemOf(disclosedHistory) : null;
 
