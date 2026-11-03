@@ -1673,6 +1673,7 @@ writer, asset picker or upload/lifecycle engine here.
   variants. The outer composer makes two source signatures, at most six selected-value signatures
   and one response serialization. These derived producer ceilings do not include the nested
   Access/Auth SQL and runner work, which remains part of connected all-pool growth evidence.
+
 - **Growth check:** existing `growth-realm-presentation-settings` proves the update command,
   not this GET. `realm-settings-page.test.ts` connects native creation, empty/read-only effects,
   exact pinned and concealed rules, host removal, CAS updates/readback, omission, account switching,
