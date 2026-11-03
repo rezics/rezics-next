@@ -114,7 +114,7 @@ export class AniListCostLedger {
     const meta = [...input.meta];
     this.snapshot.uploadBytes = input.upload ? encodedBytes(input.upload) : 0;
     this.snapshot.pageBytes = input.page ? encodedBytes(input.page) : 0;
-    this.snapshot.metaBytes = encodedBytes(meta);
+    this.snapshot.metaBytes = meta.length ? encodedBytes(meta) : 0;
     this.snapshot.commandBytes = input.command ? encodedBytes(input.command) : 0;
     this.snapshot.retainedBytes =
       this.snapshot.uploadBytes + this.snapshot.pageBytes + this.snapshot.metaBytes + this.snapshot.commandBytes;
