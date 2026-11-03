@@ -1128,6 +1128,16 @@ function admitConstructed(
           ? {
               property: admittedStatement.property,
               in: [...admittedStatement.in],
+              ...(admittedStatement.concept
+                ? {
+                    concept: {
+                      scheme: admittedStatement.concept.scheme,
+                      ...(admittedStatement.concept.includeChildren === undefined
+                        ? {}
+                        : { includeChildren: admittedStatement.concept.includeChildren }),
+                    },
+                  }
+                : {}),
               ...(admittedStatement.qualifiers
                 ? {
                     qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
