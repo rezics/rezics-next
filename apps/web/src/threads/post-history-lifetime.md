@@ -2,7 +2,12 @@
 
 ## Native page admission
 
-The loader derives both revisions and the closed `page` context from the generated Kernel client. One native
+The installed Kernel client currently declares only `revisions` and `next`; it does not admit the closed `page`
+context. The prepared consumer's `NativeHistoryPage['page']` binding therefore remains unavailable. Preserve
+that binding until supported shared publication delivers the response; service schemas and constructed fixtures
+cannot enable it. Do not replace it with a copied DTO, cast or separate transport.
+
+After publication, the loader derives both revisions and the closed `page` context from the generated Kernel client. One native
 GET supplies the admitted conversation, Board, place, current head identity and current author presentation,
 plus revision-keyed citations, question scales, subjects, mentions, media and navigation. Before projecting
 any presentation, the consumer checks the requested post, shared conversation and Board, prepared viewer,
@@ -29,11 +34,14 @@ its exact-reader provenance. It cannot read the current head endpoint or create 
 
 ### Cost
 
-For N returned revisions and K supplied related keys/references, validation and projection use O(N + K) work and
+For N returned revisions and K supplied related keys/references, the prepared closed-page validation and projection
+use O(N + K) work and
 memory. Maps index scores by revision identity, comparisons by their from-revision, subjects by their original
 key, identities by account key and images by media key. Documents are retained by reference and never copied
 for summaries. Only the selected inspector mounts, and only an explicit comparison opens an exact destination.
 No continuation accumulates earlier pages, rehydrates native enrichment or refills a sparse native page.
+These are consumer source bounds at 1/20/100 rows, pending installed publication and mounted acceptance;
+they do not establish a delivered native-enrichment path.
 
 The native 20-row default, 100-row maximum, opaque cursor and unchanged retry/media/exact-reader assertions remain.
 Native growth256/1024/4096, browser inspection and frozen integration acceptance are controller work.

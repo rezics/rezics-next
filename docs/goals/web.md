@@ -994,16 +994,17 @@ requests, retries failed or denied pages at that exact cursor, shares deduplicat
 and displays the selected revision and immutable author references. Decision: cursor replacement retires the
 previous page immediately; account/provenance replacement starts a new visit.
 
-The closed-page consumer binds scores and comparison destinations by exact immutable revision identity. A bounded
+The prepared closed-page consumer binds scores and comparison destinations by exact immutable revision identity. A bounded
 Subject summary that omits a recorded target withholds its presentation while retaining its original ID; only an
 empty recorded target list means absence. Failed enrichment retains the same history address for explicit retry.
 Exact destinations and comparison return keep selection and focus only within the admitted page lifetime.
 
-Consumer Cost: for N returned revisions and K supplied related keys/references, page validation and indexed
+Consumer Cost: for N returned revisions and K supplied related keys/references, prepared closed-page validation and indexed
 projection use O(N + K) work and memory at 1/20/100 rows. One replacing page retains documents by reference and
 mounts one selected inspector. Closed native enrichment requires no follow-up hydration; the revisions/next seam
 retains its bounded deduplicated author/mention, Subject, media and current-vote joins until publication replaces
-them. These consumer bounds do not establish native 256/1024/4096 growth. Generated publication, the original
+them. The installed declaration still lacks `page`, so these bounds describe preparation rather than installed
+closed-page delivery. These consumer bounds do not establish native 256/1024/4096 growth. Generated publication, the original
 mounted variant/retirement acceptance and eight-locale phone/desktop browser/Storybook inspection remain required
 for the complete visit; source review and constructed examples cannot substitute for them.
 References inspected: the earlier Work history region, the other post History page and UnitRevisionHistory,
