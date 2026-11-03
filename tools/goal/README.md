@@ -438,7 +438,9 @@ limits and injected runners retain precedence. Installer capture and cleanup lim
 supervisor request; global-input caches are scoped by policy identity. Resident and standalone verifier deadlines
 retain their existing four-hour and two-hour defaults respectively. Directory lease acquisition and waiting, integration
 retries, control-plane lane/proof limits, and verifier concurrency and assertion/probe bounds also use that snapshot.
-Explicit runners and lease deadlines retain precedence within the configured control-plane lane ceiling. A single
+Explicit runners and lease deadlines retain precedence within the configured control-plane lane ceiling. Launch context, proof admission and attempt/inbox readers use the same snapshot; numeric page limits and message
+windows remain validated independently of protocol identities. The default inbox page size must not exceed its maximum;
+operators lowering the maximum below the default must also lower the default page size. A single
 existing-failure probe samples the earliest prefix and leaves any unsampled range unproven.
 
 | Setting                                               | Default                     | Purpose                                                                                         |
@@ -467,6 +469,38 @@ existing-failure probe samples the earliest prefix and leaves any unsampled rang
 | `flow.oldestQueueMs`                                  | `3600000`                   | Alarm when the oldest queue entry exceeds this age (ms).                                        |
 | `flow.landingP90Ms`                                   | `1800000`                   | Alarm when the landing p90 exceeds this duration (ms).                                          |
 | `flow.attemptsPerIntegrated`                          | `1.5`                       | Alarm above this attempts-per-integrated-task ratio.                                            |
+| `policy.history.attemptPageSize`                      | `100`                       | Maximum attempt or attempt-record page size.                                                    |
+| `policy.history.diagnosticCharacters`                 | `2000`                      | Maximum retained historical proof reader error characters.                                      |
+| `policy.proof.concurrency`                            | `3`                         | Concurrent ordinary and active historical proof admissions per Goal.                            |
+| `policy.proof.producerErrorCharacters`                | `8192`                      | Native proof producer bridge error tail characters.                                             |
+| `policy.proof.sourceBufferBytes`                      | `8388608`                   | Captured historical producer source Git buffer (bytes).                                         |
+| `policy.launchContext.dependencies`                   | `48`                        | Maximum dependency observations captured for a launch.                                          |
+| `policy.launchContext.textCharacters`                 | `512`                       | Maximum ordinary launch context text characters.                                                |
+| `policy.launchContext.diagnosticCharacters`           | `300`                       | Maximum source and dependency observation reason characters.                                    |
+| `policy.launchContext.stateCharacters`                | `80`                        | Maximum launch state text characters.                                                           |
+| `policy.launchContext.pathCharacters`                 | `1024`                      | Maximum captured contract path characters.                                                      |
+| `policy.launchContext.revisionCharacters`             | `128`                       | Maximum stored launch base revision characters.                                                 |
+| `policy.launchContext.renderedBytes`                  | `12000`                     | Dependency lines and task JSON rendering budget (bytes).                                        |
+| `policy.launchContext.gitBufferBytes`                 | `65536`                     | Launch identity Git output buffer (bytes).                                                      |
+| `policy.launchContext.probeBufferBytes`               | `16384`                     | Launch ancestry and commit probe output buffer (bytes).                                         |
+| `policy.inbox.defaultPageSize`                        | `50`                        | Default inbox read, log, thread and digest page size.                                           |
+| `policy.inbox.maxPageSize`                            | `100`                       | Maximum inbox page size.                                                                        |
+| `policy.inbox.dedupeWindowMs`                         | `3600000`                   | Window folding identical inbox deliveries (ms).                                                 |
+| `policy.inbox.managerSends`                           | `6`                         | Manager sends allowed within the send window.                                                   |
+| `policy.inbox.managerMessageCharacters`               | `600`                       | Maximum characters per manager send.                                                            |
+| `policy.inbox.sendWindowMs`                           | `3600000`                   | Manager send rate window (ms).                                                                  |
+| `policy.inbox.questionAgeMs`                          | `1800000`                   | Unanswered question age requiring intervention (ms).                                            |
+| `policy.inbox.blockerAgeMs`                           | `3600000`                   | Unanswered blocker age requiring intervention (ms).                                             |
+| `policy.inbox.threadDepth`                            | `10000`                     | Maximum reply ancestry depth before refusing an invalid thread.                                 |
+| `policy.inbox.pollMs`                                 | `2000`                      | Inbox signal watcher fallback polling interval (ms).                                            |
+| `policy.integration.candidateGitBufferBytes`          | `262144`                    | Candidate integrity Git output buffer (bytes).                                                  |
+| `policy.integration.candidateDetailCharacters`        | `800`                       | Maximum characters per candidate Git diagnostic field.                                          |
+| `policy.integration.candidatePaths`                   | `64`                        | Maximum candidate paths listed or inspected for a safe patch.                                   |
+| `policy.integration.candidateStatCharacters`          | `4000`                      | Maximum candidate safe diff stat characters.                                                    |
+| `policy.integration.candidatePatchLines`              | `80`                        | Maximum redacted candidate patch lines.                                                         |
+| `policy.integration.candidatePatchCharacters`         | `5000`                      | Maximum redacted candidate patch characters.                                                    |
+| `policy.promotion.commandRecordBytes`                 | `32768`                     | Maximum full promotion command record size before hash-only omission (bytes).                   |
+| `policy.promotion.reasonBytes`                        | `1024`                      | Maximum promotion observation reason before hash-only omission (bytes).                         |
 | `policy.backlog.lowWater`                             | `8`                         | Ready briefs below which a running manager is woken.                                            |
 | `policy.backlog.wakeIntervalMs`                       | `3600000`                   | Minimum interval between low-backlog wakeups (ms).                                              |
 | `policy.backlog.stoppedTaskLimitMs`                   | `3600000`                   | Stopped product task age before cancellation into failed backlog (ms).                          |

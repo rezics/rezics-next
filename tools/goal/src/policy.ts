@@ -53,6 +53,8 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
     ['pacing.alertUnusedPercent', policy.pacing.alertUnusedPercent],
   ] as const)
     if (percent > 100) throw new Error(`invalid policy.${label}`);
+  if (policy.inbox.defaultPageSize > policy.inbox.maxPageSize)
+    throw new Error('policy.inbox.defaultPageSize must not exceed policy.inbox.maxPageSize');
   if (policy.host.maxBackoffMs < policy.host.minBackoffMs)
     throw new Error('policy.host.maxBackoffMs must be at least policy.host.minBackoffMs');
   return policy;

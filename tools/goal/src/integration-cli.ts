@@ -408,7 +408,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   try {
     await stopRecordedAppServers(registryPath, policy.appServer);
     registrySafe = true;
-    const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
+    const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory, undefined, policy.inbox);
     const onAppServerStart = runtime.managerServices.onAppServerStart;
     managers = new ManagerSessions(runtime.db, inbox, {
       ...runtime.managerServices,
@@ -549,8 +549,8 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   const policy = runtime.managerServices.policy ?? defaultPolicy;
   const requestHost = (request: HostRequest, timeoutMs?: number) =>
     hostRequest(runtime.managerSocket, request, timeoutMs, undefined, policy.host);
-  const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory);
-  const sharedInbox = runtime.sharedInbox ?? new SharedInboxQueries(runtime.db);
+  const inbox = runtime.inbox ?? new SqliteManagerInbox(runtime.db, runtime.stateDirectory, undefined, policy.inbox);
+  const sharedInbox = runtime.sharedInbox ?? new SharedInboxQueries(runtime.db, policy.inbox);
   const queue = runtime.queue ?? new SqliteLandingQueue(runtime.db, runtime.fence);
   if (command === 'land' && subcommand) {
     if (flags.length) throw new Error('usage: land <task>');

@@ -127,15 +127,19 @@ type Body = { body: string };
 const decode = <T>(row: unknown): T | undefined => (row ? (JSON.parse((row as Body).body) as T) : undefined);
 export type AttemptPage<T> = { items: T[]; hasMore: boolean; nextAfter?: number };
 export type AttemptPageOptions = { afterAttempt?: number; limit: number };
-export const MAX_ATTEMPT_PAGE_SIZE = 100;
+export const MAX_ATTEMPT_PAGE_SIZE = defaultPolicy.history.attemptPageSize;
 
-function attemptPageOptions(taskId: string, options: AttemptPageOptions): Required<AttemptPageOptions> {
+function attemptPageOptions(
+  taskId: string,
+  options: AttemptPageOptions,
+  max = MAX_ATTEMPT_PAGE_SIZE,
+): Required<AttemptPageOptions> {
   const afterAttempt = options.afterAttempt ?? 0;
   if (!taskId) throw new Error('task id is required');
   if (!Number.isSafeInteger(afterAttempt) || afterAttempt < 0)
     throw new Error('after attempt must be a non-negative integer');
-  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > MAX_ATTEMPT_PAGE_SIZE)
-    throw new Error(`limit must be between 1 and ${MAX_ATTEMPT_PAGE_SIZE}`);
+  if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > max)
+    throw new Error(`limit must be between 1 and ${max}`);
   return { afterAttempt, limit: options.limit };
 }
 
@@ -158,7 +162,7 @@ export class WorkerStore implements AttemptFence {
   private decodedAttemptBytes = 0;
   constructor(
     readonly db: Database,
-    private readonly policy = defaultPolicy,
+    readonly policy = defaultPolicy,
   ) {
     migrate(db, workerMigrations);
     ensureFlow(db);
@@ -358,7 +362,7 @@ export class WorkerStore implements AttemptFence {
   }
   /** Read one task's attempts in ascending order without decoding any other task's history. */
   attemptsPage(taskId: string, options: AttemptPageOptions): AttemptPage<Attempt> {
-    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options, this.policy.history.attemptPageSize);
     this.refreshSnapshot();
     const rows = this.db
       .query(
@@ -511,7 +515,7 @@ export class WorkerStore implements AttemptFence {
           .query(`SELECT body FROM worker_events
         WHERE kind='historical-proof-reader-unavailable' ORDER BY sequence DESC LIMIT 1`)
           .get() as { body: string } | null;
-        const body = JSON.stringify({ cause: cause.slice(0, 2000) });
+        const body = JSON.stringify({ cause: cause.slice(0, this.policy.history.diagnosticCharacters) });
         if (previous?.body === body) return;
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
@@ -559,7 +563,7 @@ export class WorkerStore implements AttemptFence {
     );
     // An orphaned pending preparation may be replaced, but an active command cannot be retried by admission.
     return (
-      ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < 3 &&
+      ordinary.filter((slot) => slot.taskId !== taskId).length + historical.length < this.policy.proof.concurrency &&
       !ordinary.some((slot) => slot.taskId === taskId && slot.state !== 'pending') &&
       !historical.some((check) => check.taskId === taskId)
     );
@@ -570,7 +574,7 @@ export class WorkerStore implements AttemptFence {
       (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
     );
     return (
-      `Proof cap 3 pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
+      `Proof cap ${this.policy.proof.concurrency} pending: ${ordinary.length} current ordinary runs; current running/waiting checks: ` +
       (checks.map((check) => `${check.checkId} (${check.taskId}/${check.attempt})`).join(', ') || 'none') +
       `; requesting task ${taskId}. Historical and stopped/exited runs do not occupy logical slots; physical leases remain independent`
     );
@@ -597,7 +601,8 @@ export class WorkerStore implements AttemptFence {
         (check) => !ordinary.some((slot) => slot.taskId === check.taskId && slot.attempt === check.attempt),
       );
       if (
-        ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >= 3 ||
+        ordinary.filter((slot) => slot.taskId !== binding.taskId).length + historical.length >=
+          this.policy.proof.concurrency ||
         historical.some((check) => check.taskId === binding.taskId)
       )
         return null;
@@ -775,7 +780,7 @@ export class WorkerStore implements AttemptFence {
   }
   /** Read a bounded page of one task's records without decoding unrelated task histories. */
   recordsPage(taskId: string, options: AttemptPageOptions): AttemptPage<AttemptRecord> {
-    const { afterAttempt, limit } = attemptPageOptions(taskId, options);
+    const { afterAttempt, limit } = attemptPageOptions(taskId, options, this.policy.history.attemptPageSize);
     const rows = this.db
       .query('SELECT attempt, body FROM worker_records WHERE task_id=? AND attempt>? ORDER BY attempt LIMIT ?')
       .all(taskId, afterAttempt, limit + 1) as { attempt: number; body: string }[];
@@ -1551,7 +1556,8 @@ export class WorkerStore implements AttemptFence {
         task.state === 'cancelled'
       )
         throw new Error(`cannot retry ${task.state} task`);
-      if (admitProof && !this.proofCapacityAvailable(task.brief.goal, task.id)) throw new ProofCapacityQueuedError();
+      if (admitProof && !this.proofCapacityAvailable(task.brief.goal, task.id))
+        throw new ProofCapacityQueuedError(this.policy.proof.concurrency);
       if (ref.attempt) {
         const old = this.attempt(ref);
         old.state = 'superseded';

@@ -418,7 +418,9 @@
     "promotion": {
       "gateTimeoutMs": 14400000,
       "infrastructureReruns": 2,
-      "advanceAttempts": 5
+      "advanceAttempts": 5,
+      "commandRecordBytes": 32768,
+      "reasonBytes": 1024
     },
     "verifier": {
       "gateTimeoutMs": 14400000,
@@ -445,7 +447,13 @@
       "checkTimeoutMs": 600000,
       "affectedTransportAttempts": 2,
       "typecheckAttempts": 2,
-      "advanceAttempts": 5
+      "advanceAttempts": 5,
+      "candidateGitBufferBytes": 262144,
+      "candidateDetailCharacters": 800,
+      "candidatePaths": 64,
+      "candidateStatCharacters": 4000,
+      "candidatePatchLines": 80,
+      "candidatePatchCharacters": 5000
     },
     "controlPlane": {
       "devLeaseWaitMs": 30000,
@@ -458,6 +466,38 @@
       "launchSmokeTimeoutMs": 300000,
       "negativeProbeFiles": 3,
       "diagnosticCharacters": 6000
+    },
+    "history": {
+      "attemptPageSize": 100,
+      "diagnosticCharacters": 2000
+    },
+    "proof": {
+      "concurrency": 3,
+      "producerErrorCharacters": 8192,
+      "sourceBufferBytes": 8388608
+    },
+    "launchContext": {
+      "dependencies": 48,
+      "textCharacters": 512,
+      "diagnosticCharacters": 300,
+      "stateCharacters": 80,
+      "pathCharacters": 1024,
+      "revisionCharacters": 128,
+      "renderedBytes": 12000,
+      "gitBufferBytes": 65536,
+      "probeBufferBytes": 16384
+    },
+    "inbox": {
+      "defaultPageSize": 50,
+      "maxPageSize": 100,
+      "dedupeWindowMs": 3600000,
+      "managerSends": 6,
+      "managerMessageCharacters": 600,
+      "sendWindowMs": 3600000,
+      "questionAgeMs": 1800000,
+      "blockerAgeMs": 3600000,
+      "threadDepth": 10000,
+      "pollMs": 2000
     }
   }
 }

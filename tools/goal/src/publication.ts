@@ -597,7 +597,8 @@ export class PublicationController {
     this.db = options.db;
     this.process = options.process ?? nativeProcess;
     this.now = options.now ?? Date.now;
-    this.inbox = options.inbox ?? new SqliteManagerInbox(options.db, options.stateDirectory);
+    this.inbox =
+      options.inbox ?? new SqliteManagerInbox(options.db, options.stateDirectory, undefined, options.policy?.inbox);
     migrate(this.db, publicationMigrations);
     this.legacy = new PublicationLegacyReconciliation({ ...options, process: this.process }, (path, body) => {
       if (body.toolExit === undefined) return null;

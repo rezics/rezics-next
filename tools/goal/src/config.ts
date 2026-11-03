@@ -520,7 +520,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const store = options.tasks?.store ?? new WorkerStore(db, settings.policy);
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
-  const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+  const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory, undefined, settings.policy?.inbox);
   const problem = configurationProblem(settings);
   if (problem && !problem.reported) {
     const summary = `Local settings ${problem.file} are invalid: ${problem.error}. Goal keeps using the last valid version of that file until it changes; validate an edit with \`goal config check\` first.`;
@@ -528,7 +528,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       if (managerId) inbox.deliver({ managerId, kind: 'instruction', summary });
     reportedConfigurationProblem(problem);
   }
-  const sharedInbox = new SharedInboxQueries(db);
+  const sharedInbox = new SharedInboxQueries(db, settings.policy?.inbox);
   const checkResultOptions = {
     root: settings.mainCheckout,
     results: store.checkResults,
@@ -851,7 +851,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     promote: () => promoteNow(),
     verify: () => verifyDev({ settings, store, inbox, runGate: verifierGate }),
     async evaluateFlow() {
-      const flowInbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
+      const flowInbox = new SqliteManagerInbox(
+        db,
+        settings.integration.inboxDirectory,
+        undefined,
+        settings.policy?.inbox,
+      );
       const now = new Date();
       const metrics = await lifecycleMetricsAsync(db, now, settings.policy);
       const flow = flowReport(

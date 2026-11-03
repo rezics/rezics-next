@@ -283,16 +283,22 @@ async function gateAt(
   if (results.length === commands.length) return results;
   const missingCommands = commands.slice(results.length).map((command) => [...command]);
   const observationWindowId = observe(() =>
-    beginPromotionGroupWindow(store.db, {
-      ...(options.observationParentId === undefined ? {} : { parentWindowId: options.observationParentId }),
-      promotionId: run.id,
-      group: label,
-      commit,
-      commands: missingCommands,
-    }),
+    beginPromotionGroupWindow(
+      store.db,
+      {
+        ...(options.observationParentId === undefined ? {} : { parentWindowId: options.observationParentId }),
+        promotionId: run.id,
+        group: label,
+        commit,
+        commands: missingCommands,
+      },
+      options.settings.policy?.promotion,
+    ),
   );
   observe(() => linkPromotionParentWindow(store.db, options.observationParentId, run.id));
-  observe(() => recordPromotionCustodyUnavailable(store.db, observationWindowId));
+  observe(() =>
+    recordPromotionCustodyUnavailable(store.db, observationWindowId, undefined, options.settings.policy?.promotion),
+  );
   observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'wait-ended'));
   observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'admitted'));
   observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'preparation-started'));

@@ -238,11 +238,16 @@ export type CandidateGitResult = {
 
 export type CandidateGitRunner = (cwd: string, args: readonly string[]) => CandidateGitResult | undefined;
 
-function candidateGit(cwd: string, args: string[], run?: CandidateGitRunner): CandidateGitResult {
+function candidateGit(
+  cwd: string,
+  args: string[],
+  run?: CandidateGitRunner,
+  policy = defaultPolicy.integration,
+): CandidateGitResult {
   try {
     const injected = run?.(cwd, args);
     if (injected) return injected;
-    const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 });
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.candidateGitBufferBytes });
     return {
       status: result.status,
       signal: result.signal,
@@ -261,8 +266,9 @@ function candidateGit(cwd: string, args: string[], run?: CandidateGitRunner): Ca
   }
 }
 
-function candidateGitDetails(result: CandidateGitResult): string {
-  const detail = (value: string) => JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, 800));
+function candidateGitDetails(result: CandidateGitResult, policy = defaultPolicy.integration): string {
+  const detail = (value: string) =>
+    JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, policy.candidateDetailCharacters));
   return [
     `exit=${result.status === null ? 'null' : result.status}`,
     `signal=${result.signal ?? 'none'}`,
@@ -276,8 +282,8 @@ function nulPaths(result: CandidateGitResult): string[] {
   return result.stdout.split('\0').filter(Boolean);
 }
 
-function boundedPaths(paths: readonly string[]): string {
-  const exact = paths.slice(0, 64).map((path) => JSON.stringify(path));
+function boundedPaths(paths: readonly string[], policy = defaultPolicy.integration): string {
+  const exact = paths.slice(0, policy.candidatePaths).map((path) => JSON.stringify(path));
   return `[${exact.join(', ')}]${paths.length > exact.length ? ` (${paths.length - exact.length} more omitted)` : ''}`;
 }
 
@@ -290,14 +296,15 @@ function candidateIntegrityEvidence(
   observedHead: string,
   quiet: CandidateGitResult,
   run?: CandidateGitRunner,
+  policy = defaultPolicy.integration,
 ): void {
-  const stagedResult = candidateGit(cwd, ['diff', '--cached', '--name-only', '-z', 'HEAD', '--'], run);
-  const unstagedResult = candidateGit(cwd, ['diff', '--name-only', '-z', '--'], run);
-  const trackedResult = candidateGit(cwd, ['diff', '--name-only', '-z', expected, '--'], run);
+  const stagedResult = candidateGit(cwd, ['diff', '--cached', '--name-only', '-z', 'HEAD', '--'], run, policy);
+  const unstagedResult = candidateGit(cwd, ['diff', '--name-only', '-z', '--'], run, policy);
+  const trackedResult = candidateGit(cwd, ['diff', '--name-only', '-z', expected, '--'], run, policy);
   const headResult =
     observedHead === expected
       ? undefined
-      : candidateGit(cwd, ['diff', '--name-only', '-z', expected, observedHead, '--'], run);
+      : candidateGit(cwd, ['diff', '--name-only', '-z', expected, observedHead, '--'], run, policy);
   const staged = nulPaths(stagedResult);
   const unstaged = nulPaths(unstagedResult);
   const tracked = nulPaths(trackedResult);
@@ -306,28 +313,29 @@ function candidateIntegrityEvidence(
     `Candidate integrity evidence phase=${phase}`,
     `expected HEAD=${expected}`,
     `observed HEAD=${observedHead}`,
-    `git diff --quiet HEAD --: ${candidateGitDetails(quiet)}`,
-    `tracked paths vs expected HEAD: ${boundedPaths(tracked)}`,
-    `staged paths vs observed HEAD: ${boundedPaths(staged)}`,
-    `unstaged paths: ${boundedPaths(unstaged)}`,
-    `committed paths vs expected HEAD: ${boundedPaths(committed)}`,
+    `git diff --quiet HEAD --: ${candidateGitDetails(quiet, policy)}`,
+    `tracked paths vs expected HEAD: ${boundedPaths(tracked, policy)}`,
+    `staged paths vs observed HEAD: ${boundedPaths(staged, policy)}`,
+    `unstaged paths: ${boundedPaths(unstaged, policy)}`,
+    `committed paths vs expected HEAD: ${boundedPaths(committed, policy)}`,
     [
       'path-query exits:',
-      `tracked=${candidateGitDetails(trackedResult)};`,
-      `staged=${candidateGitDetails(stagedResult)};`,
-      `unstaged=${candidateGitDetails(unstagedResult)}`,
-      ...(headResult ? [`; committed=${candidateGitDetails(headResult)}`] : []),
+      `tracked=${candidateGitDetails(trackedResult, policy)};`,
+      `staged=${candidateGitDetails(stagedResult, policy)};`,
+      `unstaged=${candidateGitDetails(unstagedResult, policy)}`,
+      ...(headResult ? [`; committed=${candidateGitDetails(headResult, policy)}`] : []),
     ].join(' '),
   ];
-  const stat = candidateGit(cwd, ['diff', '--stat', '--no-ext-diff', expected, '--'], run);
+  const stat = candidateGit(cwd, ['diff', '--stat', '--no-ext-diff', expected, '--'], run, policy);
   report.push(
-    `safe diff stat: ${stat.status === 0 ? stat.stdout.trim().slice(0, 4000) || '(empty)' : candidateGitDetails(stat)}`,
+    `safe diff stat: ${stat.status === 0 ? stat.stdout.trim().slice(0, policy.candidateStatCharacters) || '(empty)' : candidateGitDetails(stat, policy)}`,
   );
-  if (tracked.length <= 64 && tracked.length) {
+  if (tracked.length <= policy.candidatePaths && tracked.length) {
     const patch = candidateGit(
       cwd,
       ['diff', '--no-ext-diff', '--no-color', '--unified=0', expected, '--', ...tracked],
       run,
+      policy,
     );
     if (patch.status === 0) {
       const redacted = patch.stdout
@@ -337,14 +345,14 @@ function candidateIntegrityEvidence(
             ? `${line[0]}[content redacted]`
             : line,
         )
-        .slice(0, 80)
+        .slice(0, policy.candidatePatchLines)
         .join('\n')
-        .slice(0, 5000);
+        .slice(0, policy.candidatePatchCharacters);
       report.push(`safe patch (changed line contents redacted):\n${redacted || '(empty)'}`);
-    } else report.push(`safe patch unavailable: ${candidateGitDetails(patch)}`);
+    } else report.push(`safe patch unavailable: ${candidateGitDetails(patch, policy)}`);
   } else
     report.push(
-      `safe patch omitted: ${tracked.length > 64 ? 'path bound exceeded' : 'no tracked paths were returned'}`,
+      `safe patch omitted: ${tracked.length > policy.candidatePaths ? 'path bound exceeded' : 'no tracked paths were returned'}`,
     );
   appendFileSync(logPath, `${report.join('\n')}\n`);
 }
@@ -356,19 +364,20 @@ export function assertCandidateIntegrity(
   phase: string,
   logPath: string,
   run?: CandidateGitRunner,
+  policy = defaultPolicy.integration,
 ): void {
-  const head = candidateGit(cwd, ['rev-parse', 'HEAD'], run);
+  const head = candidateGit(cwd, ['rev-parse', 'HEAD'], run, policy);
   const observedHead = head.status === 0 ? head.stdout.trim() : '(unavailable)';
-  const quiet = candidateGit(cwd, ['diff', '--quiet', 'HEAD', '--'], run);
+  const quiet = candidateGit(cwd, ['diff', '--quiet', 'HEAD', '--'], run, policy);
   if (head.status === 0 && observedHead === expected && quiet.status === 0 && !quiet.error && !quiet.signal) {
     appendFileSync(logPath, `Candidate integrity verified phase=${phase} HEAD=${expected}\n`);
     return;
   }
 
-  candidateIntegrityEvidence(cwd, expected, phase, logPath, observedHead, quiet, run);
+  candidateIntegrityEvidence(cwd, expected, phase, logPath, observedHead, quiet, run, policy);
   if (head.status !== 0 || head.error || head.signal)
     throw new Error(
-      `Candidate Git infrastructure failure phase=${phase}: git rev-parse HEAD ${candidateGitDetails(head)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
+      `Candidate Git infrastructure failure phase=${phase}: git rev-parse HEAD ${candidateGitDetails(head, policy)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
     );
   if (observedHead !== expected)
     throw new Error(
@@ -379,7 +388,7 @@ export function assertCandidateIntegrity(
       `Candidate integrity violation phase=${phase}: tracked working-tree changes detected (git diff --quiet HEAD -- exited 1); evidence recorded before candidate cleanup`,
     );
   throw new Error(
-    `Candidate Git infrastructure failure phase=${phase}: git diff --quiet HEAD -- ${candidateGitDetails(quiet)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
+    `Candidate Git infrastructure failure phase=${phase}: git diff --quiet HEAD -- ${candidateGitDetails(quiet, policy)}; expected HEAD=${expected}; evidence recorded before candidate cleanup`,
   );
 }
 
@@ -1420,7 +1429,14 @@ export class MergeTrain {
           timedOut: false,
         };
       }
-      assertCandidateIntegrity(tree, candidate, 'dev root typecheck', logPath, this.options.runCandidateGit);
+      assertCandidateIntegrity(
+        tree,
+        candidate,
+        'dev root typecheck',
+        logPath,
+        this.options.runCandidateGit,
+        this.options.policy?.integration,
+      );
       if (
         !compilerInfrastructureFailure(result.output, result.timedOut) ||
         attempt + 1 >= (this.options.policy ?? defaultPolicy).integration.typecheckAttempts
@@ -1579,7 +1595,12 @@ export class MergeTrain {
                   if (store.record(failure)) o.sink.onGateOutcome(failure);
                   else {
                     const task = store.task(failure.taskId);
-                    new SqliteManagerInbox(store.db, o.inboxDirectory ?? join(o.stateDirectory, 'inboxes')).deliver({
+                    new SqliteManagerInbox(
+                      store.db,
+                      o.inboxDirectory ?? join(o.stateDirectory, 'inboxes'),
+                      undefined,
+                      o.policy?.inbox,
+                    ).deliver({
                       managerId: task.brief.manager,
                       taskId: task.id,
                       kind: 'instruction',
@@ -2071,6 +2092,7 @@ export class MergeTrain {
               'dev root typecheck before batch ref advance',
               logPaths.get(prepared[0]!.entry.id)!,
               o.runCandidateGit,
+              o.policy?.integration,
             );
             try {
               git(o.mainCheckout, 'update-ref', targetRef, head, base);
@@ -2404,7 +2426,7 @@ export class MergeTrain {
   private async integrate(entry: LandingEntry, custody?: OrdinaryProofCustody): Promise<GateOutcome> {
     const o = this.options;
     const assertCandidate = (cwd: string, expected: string, phase: string, logPath: string) =>
-      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit);
+      assertCandidateIntegrity(cwd, expected, phase, logPath, o.runCandidateGit, o.policy?.integration);
     const request = entry.request;
     const mainBranch = o.mainBranch ?? 'main';
     const recorded = taskIntegrationTarget(o.stateDirectory, request.taskId, o.policy?.storage);
@@ -3460,6 +3482,8 @@ export class MergeTrain {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const manager of managers)
         inbox.deliver({ managerId: manager, taskId, kind: 'instruction', evidencePath: logPath, summary });
@@ -3596,6 +3620,7 @@ export class MergeTrain {
               'dev root typecheck before ref advance',
               logPath,
               this.options.runCandidateGit,
+              this.options.policy?.integration,
             );
           git(checkout, 'update-ref', targetRef, commit, targetHead);
           if (targetBranch === (this.options.integrationBranch ?? 'dev'))
@@ -3689,6 +3714,8 @@ export class MergeTrain {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
     } finally {
@@ -3955,6 +3982,8 @@ export class MergeTrain {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const [manager, changed] of byManager) {
         const unions = changed.filter((file) => unionFiles.has(file));
@@ -4008,6 +4037,8 @@ export class MergeTrain {
       const inbox = new SqliteManagerInbox(
         db,
         this.options.inboxDirectory ?? join(this.options.stateDirectory, 'inboxes'),
+        undefined,
+        this.options.policy?.inbox,
       );
       for (const manager of managers) inbox.deliver({ managerId: manager, taskId, kind: 'spec-conflict', summary });
     } finally {
@@ -5731,7 +5762,7 @@ export class MergeTrain {
       gateRunner((o.policy ?? defaultPolicy).controlPlane.checkTimeoutMs, o.stateDirectory);
     const run = custody ? custody.run(runner) : runner;
     const integrity = (cwd: string, head: string, phase: string) =>
-      assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit);
+      assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit, o.policy?.integration);
     const moved = () => !this.controlPlaneSnapshotMatches(snapshot);
     const finish = (result: ControlPlaneProof): ControlPlaneProof => {
       // Failure evidence is durable before publication-ref movement can request a rebuild.
@@ -5937,6 +5968,7 @@ export class MergeTrain {
         tree,
         ['merge', '--no-ff', '--no-edit', '-m', `Merge ${sourceBranch} into ${targetBranch}`, sourceCommit],
         this.options.runCandidateGit,
+        this.options.policy?.integration,
       );
       const cause = `${merged.stdout ?? ''}${merged.stderr ?? ''}`.trim() || merged.error?.message || '';
       if (merged.status !== 0) {

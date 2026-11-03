@@ -294,7 +294,7 @@ export class WorkerTasks {
     ),
   ) {
     this.poolPolicies = new PoolPolicyReloader(settings.localFile, settings.pools, (summary) => {
-      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory).deliver({
+      new SqliteManagerInbox(store.db, settings.integration.inboxDirectory, undefined, settings.policy?.inbox).deliver({
         managerId: settings.integration.supermanager,
         kind: 'instruction',
         summary,
@@ -1958,7 +1958,12 @@ export class WorkerTasks {
             kind: 'environment' as const,
             summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, 1000),
           };
-          new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory).deliver(event);
+          new SqliteManagerInbox(
+            this.store.db,
+            this.settings.integration.inboxDirectory,
+            undefined,
+            this.settings.policy?.inbox,
+          ).deliver(event);
         }
         throw error;
       }
@@ -2044,7 +2049,12 @@ export class WorkerTasks {
       held.push(task.id);
       heldByManager.set(task.brief.manager, held);
     }
-    const inbox = new SqliteManagerInbox(this.store.db, this.settings.integration.inboxDirectory);
+    const inbox = new SqliteManagerInbox(
+      this.store.db,
+      this.settings.integration.inboxDirectory,
+      undefined,
+      this.settings.policy?.inbox,
+    );
     for (const [managerId, heldTasks] of heldByManager) {
       const event = {
         managerId,

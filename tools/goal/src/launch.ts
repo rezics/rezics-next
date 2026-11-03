@@ -284,7 +284,7 @@ export function workerPrompt(
       `Work only in ${task.worktree}, at captured commit ${task.brief.proof?.sourceCommit}. The applicable AGENTS.md is already loaded.`,
       `The main checkout ${mainCheckout} is read-only.`,
       task.brief.markdown,
-      ...(launchContext ? [renderLaunchContext(launchContext)] : []),
+      ...(launchContext ? [renderLaunchContext(launchContext, policy.launchContext)] : []),
       'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
       workerCheckProtocol(
         task.worktree,
@@ -346,7 +346,7 @@ export function workerPrompt(
     evidenceText
       ? 'The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.'
       : '',
-    renderLaunchContext(launchContext),
+    renderLaunchContext(launchContext, policy.launchContext),
     consultation ? `Read-only consultation:\n${consultation}` : '',
     storybookPrompt(task),
     resolutionFiles.length
