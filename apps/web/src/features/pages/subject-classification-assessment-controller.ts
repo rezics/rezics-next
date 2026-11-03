@@ -71,7 +71,11 @@ export function emptyClassificationSnapshot(
 
 export function retireClassificationSnapshot(
   previous: ClassificationAssessmentSnapshot | null,
-  next: { identity: ClassificationAssociationIdentity | null; reader: string | null; session: ClassificationAssessmentSession },
+  next: {
+    identity: ClassificationAssociationIdentity | null;
+    reader: string | null;
+    session: ClassificationAssessmentSession;
+  },
 ): ClassificationAssessmentSnapshot {
   if (
     previous &&
@@ -83,7 +87,9 @@ export function retireClassificationSnapshot(
   return emptyClassificationSnapshot(next.session, next.identity, next.reader);
 }
 
-export function concealClassificationSnapshot(snapshot: ClassificationAssessmentSnapshot): ClassificationAssessmentSnapshot {
+export function concealClassificationSnapshot(
+  snapshot: ClassificationAssessmentSnapshot,
+): ClassificationAssessmentSnapshot {
   return {
     ...emptyClassificationSnapshot(snapshot.session, snapshot.identity, snapshot.reader),
     own: { kind: 'concealed' },
@@ -102,23 +108,27 @@ export function applyClassificationRead(
   if (snapshot.command?.kind === 'uncertain') {
     return {
       ...snapshot,
-      own: { kind: 'pending', value: snapshot.command.command.operands.kind === 'withdraw'
-        ? {
-            associationId: snapshot.identity.associationId,
-            hasBallot: false,
-            assessment: null,
-            falsePositive: false,
-            revision: null,
-            pending: true,
-          }
-        : {
-            associationId: snapshot.identity.associationId,
-            hasBallot: true,
-            assessment: snapshot.command.command.operands.assessment,
-            falsePositive: snapshot.command.command.operands.falsePositive,
-            revision: null,
-            pending: true,
-          } },
+      own: {
+        kind: 'pending',
+        value:
+          snapshot.command.command.operands.kind === 'withdraw'
+            ? {
+                associationId: snapshot.identity.associationId,
+                hasBallot: false,
+                assessment: null,
+                falsePositive: false,
+                revision: null,
+                pending: true,
+              }
+            : {
+                associationId: snapshot.identity.associationId,
+                hasBallot: true,
+                assessment: snapshot.command.command.operands.assessment,
+                falsePositive: snapshot.command.command.operands.falsePositive,
+                revision: null,
+                pending: true,
+              },
+      },
       aggregate: read.aggregate.kind === 'ready' ? read.aggregate : snapshot.aggregate,
       cost: addAssessmentCost(snapshot.cost, read.cost),
     };
@@ -130,7 +140,12 @@ export function applyClassificationRead(
     session: snapshot.session,
     own: read.own,
     aggregate: read.aggregate,
-    command: snapshot.command?.kind === 'pending' && read.own.kind === 'pending' ? snapshot.command : read.own.kind === 'acknowledged' || read.own.kind === 'absent' ? null : snapshot.command,
+    command:
+      snapshot.command?.kind === 'pending' && read.own.kind === 'pending'
+        ? snapshot.command
+        : read.own.kind === 'acknowledged' || read.own.kind === 'absent'
+          ? null
+          : snapshot.command,
     cost: addAssessmentCost(snapshot.cost, read.cost),
   };
 }
@@ -139,10 +154,14 @@ export function applyClassificationCommand(
   snapshot: ClassificationAssessmentSnapshot,
   outcome: ClassificationCommandOutcome,
 ): ClassificationAssessmentSnapshot {
-  if (!snapshot.identity || classificationAssociationKey(snapshot.identity) !== classificationAssociationKey(outcome.command.identity))
+  if (
+    !snapshot.identity ||
+    classificationAssociationKey(snapshot.identity) !== classificationAssociationKey(outcome.command.identity)
+  )
     return concealClassificationSnapshot(snapshot);
   if (snapshot.reader !== outcome.command.expectedReader) return concealClassificationSnapshot(snapshot);
-  if (outcome.kind === 'uncertain') return { ...snapshot, command: outcome, own: { kind: 'pending', value: pendingOwn(outcome.command) } };
+  if (outcome.kind === 'uncertain')
+    return { ...snapshot, command: outcome, own: { kind: 'pending', value: pendingOwn(outcome.command) } };
   if (outcome.kind === 'pending')
     return {
       ...snapshot,
@@ -159,7 +178,8 @@ export function applyClassificationCommand(
       },
     };
   if (outcome.kind === 'conflict') return { ...snapshot, command: outcome, own: { kind: 'conflict' } };
-  if (outcome.kind === 'denied') return { ...snapshot, command: outcome, own: { kind: 'denied' }, aggregate: { kind: 'denied' } };
+  if (outcome.kind === 'denied')
+    return { ...snapshot, command: outcome, own: { kind: 'denied' }, aggregate: { kind: 'denied' } };
   if (outcome.kind === 'concealed') return concealClassificationSnapshot(snapshot);
   return { ...snapshot, command: outcome, own: { kind: 'unavailable' } };
 }
@@ -184,7 +204,9 @@ function pendingOwn(command: ClassificationCommand, revision: string | null = nu
   };
 }
 
-export function retryableClassificationCommand(snapshot: ClassificationAssessmentSnapshot): ClassificationCommand | null {
+export function retryableClassificationCommand(
+  snapshot: ClassificationAssessmentSnapshot,
+): ClassificationCommand | null {
   if (snapshot.command?.kind !== 'uncertain') return null;
   return replayClassificationCommand(snapshot.command.command);
 }

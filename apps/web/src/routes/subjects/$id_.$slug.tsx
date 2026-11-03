@@ -437,98 +437,98 @@ export function SubjectOverview({
         title: subjectPageTitle(page, locale),
       }}
     >
-    <RatingControlContext.Provider
-      value={{
-        subjectId: id,
-        locale,
-        returnTo,
-        session,
-        own: ownRating,
-        ...(personal.binding ? { binding: personal.binding } : {}),
-        ...(ratingFailure ? { failure: true } : {}),
-      }}
-    >
-      <RatingsRecoveryContext.Provider value={retryRatingSource}>
-        <RatingPopulationsContext.Provider
-          value={
-            ratings.question.kind === 'ready' ? (
-              <SubjectRatingPopulations
-                subjectId={id}
-                question={ratings.question.value}
-                locale={locale}
-                session={browserSession}
-                enabled={currentReader}
-              />
-            ) : null
-          }
-        >
-          <RatingsContext.Provider value={ratings}>
-            <SubjectPage
-              page={page}
-              connections={
-                currentReader ? (
-                  <SubjectConnections page={page} viewer={browserSession} returnTo={search.via} />
-                ) : undefined
-              }
-              curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
-              locale={getLocale()}
-              messages={subjectPageMessages()}
-              reader={reader}
-              {...(frame.label ? { typeLabel: frame.label } : {})}
-              {...(frame.ratio ? { ratio: frame.ratio } : {})}
-              relations={relations}
-              link={SubjectLink}
-              tabs={tabs}
-              tabLabels={viewTabLabels()}
-              invitation={m.subject_empty()}
-              {...(nonce !== undefined ? { nonce } : {})}
-              renderJsonLd={false}
-              actions={(subject) => (
-                <SubjectHeaderActions
-                  id={subject.id}
-                  reactions={reactions}
-                  signedIn={session === 'signed-in'}
-                  personalReady={session !== 'signed-in' || subjectReaction.ready}
-                  reactionOrigin={subjectReaction.origin}
-                  reactionRecovery={{
-                    failed: subjectReaction.recoveryFailed,
-                    pending: subjectReaction.recoveryPending,
-                    retry: subjectReaction.retryOwnReaction,
-                  }}
-                  onPersonalChange={async (kind) => {
-                    if (!subjectReaction.origin.isCurrent()) return;
-                    subjectReaction.applyMutation(kind);
-                    if (!subjectReaction.origin.isCurrent()) return;
-                    await queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] });
-                  }}
-                  returnTo={returnTo}
-                  verification={verification}
-                >
-                  <SubjectLibrarySlot
-                    subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
-                    locale={subject.locale}
-                    data={
-                      library ?? {
-                        session: 'signed-out',
-                        csrfToken: null,
-                        entryAvailable: false,
-                        entry: null,
-                        publicCollections: null,
-                        publicCollectionsNext: null,
-                        collectionsLoaded: false,
-                        collections: null,
-                        labels: null,
+      <RatingControlContext.Provider
+        value={{
+          subjectId: id,
+          locale,
+          returnTo,
+          session,
+          own: ownRating,
+          ...(personal.binding ? { binding: personal.binding } : {}),
+          ...(ratingFailure ? { failure: true } : {}),
+        }}
+      >
+        <RatingsRecoveryContext.Provider value={retryRatingSource}>
+          <RatingPopulationsContext.Provider
+            value={
+              ratings.question.kind === 'ready' ? (
+                <SubjectRatingPopulations
+                  subjectId={id}
+                  question={ratings.question.value}
+                  locale={locale}
+                  session={browserSession}
+                  enabled={currentReader}
+                />
+              ) : null
+            }
+          >
+            <RatingsContext.Provider value={ratings}>
+              <SubjectPage
+                page={page}
+                connections={
+                  currentReader ? (
+                    <SubjectConnections page={page} viewer={browserSession} returnTo={search.via} />
+                  ) : undefined
+                }
+                curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
+                locale={getLocale()}
+                messages={subjectPageMessages()}
+                reader={reader}
+                {...(frame.label ? { typeLabel: frame.label } : {})}
+                {...(frame.ratio ? { ratio: frame.ratio } : {})}
+                relations={relations}
+                link={SubjectLink}
+                tabs={tabs}
+                tabLabels={viewTabLabels()}
+                invitation={m.subject_empty()}
+                {...(nonce !== undefined ? { nonce } : {})}
+                renderJsonLd={false}
+                actions={(subject) => (
+                  <SubjectHeaderActions
+                    id={subject.id}
+                    reactions={reactions}
+                    signedIn={session === 'signed-in'}
+                    personalReady={session !== 'signed-in' || subjectReaction.ready}
+                    reactionOrigin={subjectReaction.origin}
+                    reactionRecovery={{
+                      failed: subjectReaction.recoveryFailed,
+                      pending: subjectReaction.recoveryPending,
+                      retry: subjectReaction.retryOwnReaction,
+                    }}
+                    onPersonalChange={async (kind) => {
+                      if (!subjectReaction.origin.isCurrent()) return;
+                      subjectReaction.applyMutation(kind);
+                      if (!subjectReaction.origin.isCurrent()) return;
+                      await queryClient.invalidateQueries({ queryKey: ['subject-reactions', id, locale] });
+                    }}
+                    returnTo={returnTo}
+                    verification={verification}
+                  >
+                    <SubjectLibrarySlot
+                      subject={{ id: subject.id, type: subject.type, label: subjectPageTitle(page, subject.locale) }}
+                      locale={subject.locale}
+                      data={
+                        library ?? {
+                          session: 'signed-out',
+                          csrfToken: null,
+                          entryAvailable: false,
+                          entry: null,
+                          publicCollections: null,
+                          publicCollectionsNext: null,
+                          collectionsLoaded: false,
+                          collections: null,
+                          labels: null,
+                        }
                       }
-                    }
-                    {...(library && undoKey ? { data: { ...library, labelUndoKey: undoKey } } : {})}
-                  />
-                </SubjectHeaderActions>
-              )}
-            />
-          </RatingsContext.Provider>
-        </RatingPopulationsContext.Provider>
-      </RatingsRecoveryContext.Provider>
-    </RatingControlContext.Provider>
+                      {...(library && undoKey ? { data: { ...library, labelUndoKey: undoKey } } : {})}
+                    />
+                  </SubjectHeaderActions>
+                )}
+              />
+            </RatingsContext.Provider>
+          </RatingPopulationsContext.Provider>
+        </RatingsRecoveryContext.Provider>
+      </RatingControlContext.Provider>
     </ClassificationAssessmentProviders>
   );
 }

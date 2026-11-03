@@ -5,8 +5,7 @@ import type {
 } from './subject-classification-assessment';
 import { classificationAssociationKey, isClassificationUuid } from './subject-classification-assessment';
 
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type ClassificationCommandKind = 'set' | 'withdraw';
 
@@ -57,7 +56,8 @@ export function captureClassificationCommand(input: {
   idempotencyKey?: string;
   operands: ClassificationCommandOperands;
 }): ClassificationCommand {
-  if (!input.expectedReader || input.expectedReader.length > 128) throw new Error('Classification command reader unavailable');
+  if (!input.expectedReader || input.expectedReader.length > 128)
+    throw new Error('Classification command reader unavailable');
   if (!input.csrfToken) throw new Error('Classification command credential unavailable');
   const idempotencyKey = input.idempotencyKey ?? crypto.randomUUID();
   if (!uuid.test(idempotencyKey)) throw new Error('Classification command key unavailable');
@@ -121,8 +121,7 @@ export function admitClassificationCommand(value: unknown): ClassificationComman
     (identity.spoilerLevel as number) < 0 ||
     (identity.spoilerLevel as number) > 2 ||
     (identity.release !== undefined && (typeof identity.release !== 'string' || identity.release.length > 128)) ||
-    (identity.revision !== undefined &&
-      (!Number.isSafeInteger(identity.revision) || (identity.revision as number) < 1))
+    (identity.revision !== undefined && (!Number.isSafeInteger(identity.revision) || (identity.revision as number) < 1))
   )
     throw new Error('Invalid classification command identity');
   const operands = input.operands as Record<string, unknown>;

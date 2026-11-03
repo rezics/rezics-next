@@ -745,7 +745,8 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       statements: read.subject.statements,
       related: read.related,
       propertyLabel: (propertyId) => fieldLabel(relatedLabel(propertyId), options.locale).text,
-      targetLabel: (targetId) => pageText(Object.hasOwn(read.related, targetId) ? read.related[targetId]?.labels : {}, options.locale).text,
+      targetLabel: (targetId) =>
+        pageText(Object.hasOwn(read.related, targetId) ? read.related[targetId]?.labels : {}, options.locale).text,
       inspectHref: (identity) =>
         classificationInspectHref(
           identity,

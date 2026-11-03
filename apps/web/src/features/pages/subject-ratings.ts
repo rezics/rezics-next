@@ -243,9 +243,7 @@ function isStatistic(value: unknown): value is Statistic {
     (value.licence === undefined ||
       (typeof value.licence === 'string' && value.licence.length >= 1 && value.licence.length <= 1024)) &&
     (value.attribution === undefined ||
-      (typeof value.attribution === 'string' &&
-        value.attribution.length >= 1 &&
-        value.attribution.length <= 2000)) &&
+      (typeof value.attribution === 'string' && value.attribution.length >= 1 && value.attribution.length <= 2000)) &&
     (value.sourceAlias === undefined ||
       (typeof value.sourceAlias === 'string' && value.sourceAlias.length >= 1 && value.sourceAlias.length <= 128)) &&
     (record === undefined || (typeof record === 'string' && record.length >= 1 && record.length <= 1024)) &&

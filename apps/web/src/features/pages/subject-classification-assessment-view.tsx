@@ -38,7 +38,9 @@ const summaryClass =
   'list-item list-inside min-h-11 min-w-11 max-w-full cursor-pointer rounded-sm px-2 py-3 text-start text-sm font-medium whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export const ClassificationAssessmentContext = createContext<ClassificationAssessmentSnapshot | null>(null);
-export const ClassificationAssessmentSelectionContext = createContext<DisclosedClassificationAssociation[] | null>(null);
+export const ClassificationAssessmentSelectionContext = createContext<DisclosedClassificationAssociation[] | null>(
+  null,
+);
 export const ClassificationAssessmentHandlerContext = createContext<ClassificationAssessmentHandlers | null>(null);
 export const ClassificationAssessmentChromeContext = createContext<{
   csrfToken: string | null;
@@ -106,9 +108,7 @@ function AggregateResult({
           )}
         </p>
       )}
-      <p>
-        {m.subject_classification_assessment_support_count({ count: number(published.supportCount) }, options)}
-      </p>
+      <p>{m.subject_classification_assessment_support_count({ count: number(published.supportCount) }, options)}</p>
       <p>{m.subject_classification_assessment_oppose_count({ count: number(published.opposeCount) }, options)}</p>
       <p>{m.subject_classification_assessment_lie_count({ count: number(published.falsePositiveCount) }, options)}</p>
       <p>
@@ -121,7 +121,15 @@ function AggregateResult({
   );
 }
 
-function ClassificationSourceReports({ statistics, locale, sourcesHref }: { statistics: Statistic[]; locale: string; sourcesHref: string }) {
+function ClassificationSourceReports({
+  statistics,
+  locale,
+  sourcesHref,
+}: {
+  statistics: Statistic[];
+  locale: string;
+  sourcesHref: string;
+}) {
   const options = localeOptions(locale);
   const number = (value: number, digits = 0) =>
     new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(value);
@@ -142,7 +150,12 @@ function ClassificationSourceReports({ statistics, locale, sourcesHref }: { stat
   return (
     <div data-slot="classification-source-reports" className="space-y-3 text-sm">
       {rows.map((item) => (
-        <p key={item.source} data-slot="classification-source-report" data-provider={item.source} className="min-w-0 break-words">
+        <p
+          key={item.source}
+          data-slot="classification-source-report"
+          data-provider={item.source}
+          className="min-w-0 break-words"
+        >
           <MetaLine
             items={[
               <span className="font-medium">{providerStatisticLabel(item.source)}</span>,
@@ -189,8 +202,7 @@ function AssessmentEditor({
   const options = localeOptions(locale);
   const formId = useId();
   const own = snapshot.own;
-  const current =
-    own.kind === 'acknowledged' || own.kind === 'pending' || own.kind === 'absent' ? own.value : null;
+  const current = own.kind === 'acknowledged' || own.kind === 'pending' || own.kind === 'absent' ? own.value : null;
   const [assessment, setAssessment] = useState<NonNullable<typeof current>['assessment']>(
     current?.assessment ?? 'support',
   );
@@ -214,8 +226,7 @@ function AssessmentEditor({
     return <p role="status">{m.subject_classification_assessment_denied({}, options)}</p>;
   if (own.kind === 'unavailable')
     return <p role="status">{m.subject_classification_assessment_unavailable({}, options)}</p>;
-  if (own.kind === 'conflict' || own.kind === 'stale')
-    return <p role="status">{ownStatusText(own, locale)}</p>;
+  if (own.kind === 'conflict' || own.kind === 'stale') return <p role="status">{ownStatusText(own, locale)}</p>;
 
   const submit = (operands: ClassificationCommand['operands']) => {
     if (!snapshot.identity || !snapshot.reader || !csrfToken || !editable) return;
@@ -281,9 +292,7 @@ function AssessmentEditor({
         {ownStatusText(own, locale)}
         {current?.falsePositive ? ` ${m.subject_classification_assessment_own_lie({}, options)}` : ''}
       </p>
-      {uncertain && (
-        <p role="status">{m.subject_classification_assessment_uncertain({}, options)}</p>
-      )}
+      {uncertain && <p role="status">{m.subject_classification_assessment_uncertain({}, options)}</p>}
       <div className="flex flex-wrap gap-2">
         {uncertain && retry ? (
           <Button type="button" className={actionClass} onClick={onRetry}>
@@ -352,7 +361,11 @@ export function ClassificationAssessmentView({
   const realm = snapshot.identity && snapshot.identity.contextId !== PAGE_GLOBAL_CONTEXT;
 
   return (
-    <section data-slot="classification-assessment" aria-labelledby="classification-assessment-title" className={sectionClass}>
+    <section
+      data-slot="classification-assessment"
+      aria-labelledby="classification-assessment-title"
+      className={sectionClass}
+    >
       <h2 id="classification-assessment-title" className={headingClass}>
         {m.subject_classification_assessment({}, options)}
       </h2>
@@ -363,7 +376,8 @@ export function ClassificationAssessmentView({
       ) : (
         <ul className="grid min-w-0 gap-2">
           {associations.map((item) => {
-            const active = selected?.associationId === item.associationId && selected.qualifiersKey === item.qualifiersKey;
+            const active =
+              selected?.associationId === item.associationId && selected.qualifiersKey === item.qualifiersKey;
             return (
               <li key={`${item.associationId}:${item.qualifiersKey}`}>
                 <Button
@@ -441,8 +455,7 @@ export function ClassificationAssessmentSection({
 }) {
   const snapshot = useContext(ClassificationAssessmentContext);
   const page = useContext(OverviewContext);
-  const associations =
-    useContext(ClassificationAssessmentSelectionContext) ?? page?.classifications ?? [];
+  const associations = useContext(ClassificationAssessmentSelectionContext) ?? page?.classifications ?? [];
   const view = snapshot ?? {
     visit: 'idle',
     identity: null,
@@ -476,7 +489,13 @@ export function classificationInspectHref(
   locale: string,
 ): string {
   return valueExplanationHref(
-    { id: identity.subjectId, title, property: identity.property, statement: identity.associationId, context: identity.contextId },
+    {
+      id: identity.subjectId,
+      title,
+      property: identity.property,
+      statement: identity.associationId,
+      context: identity.contextId,
+    },
     locale,
   );
 }
@@ -520,7 +539,9 @@ export function ClassificationAssessmentProviders({
     <ClassificationAssessmentSelectionContext.Provider value={associationValue}>
       <ClassificationAssessmentHandlerContext.Provider value={handlers ?? null}>
         <ClassificationAssessmentChromeContext.Provider value={chrome ?? null}>
-          <ClassificationAssessmentContext.Provider value={snapshot}>{children}</ClassificationAssessmentContext.Provider>
+          <ClassificationAssessmentContext.Provider value={snapshot}>
+            {children}
+          </ClassificationAssessmentContext.Provider>
         </ClassificationAssessmentChromeContext.Provider>
       </ClassificationAssessmentHandlerContext.Provider>
     </ClassificationAssessmentSelectionContext.Provider>

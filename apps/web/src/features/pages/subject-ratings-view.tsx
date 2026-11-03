@@ -388,7 +388,12 @@ export function RatingsView({
             'statistics',
             statistics.length
               ? statistics.map((item) => (
-                  <p key={`${item.source}:${item.sourceRecordId ?? ''}`} data-slot="imported-score" data-provider={item.source} className="min-w-0 break-words">
+                  <p
+                    key={`${item.source}:${item.sourceRecordId ?? ''}`}
+                    data-slot="imported-score"
+                    data-provider={item.source}
+                    className="min-w-0 break-words"
+                  >
                     <MetaLine
                       items={[
                         <span className="font-medium">{providerStatisticLabel(item.source)}</span>,

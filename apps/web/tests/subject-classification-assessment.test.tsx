@@ -27,7 +27,13 @@ import {
   measureClassificationVisit,
   retireClassificationSnapshot,
 } from '../src/features/pages/subject-classification-assessment-controller';
-import { providerStatisticLabel, readRatings, GLOBAL, QUESTION, type Statistic } from '../src/features/pages/subject-ratings';
+import {
+  providerStatisticLabel,
+  readRatings,
+  GLOBAL,
+  QUESTION,
+  type Statistic,
+} from '../src/features/pages/subject-ratings';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ClassificationAssessmentView } = await import('../src/features/pages/subject-classification-assessment-view');
@@ -97,7 +103,13 @@ function client(store: Store) {
         method: request.method,
         path,
         key,
-        body: request.method === 'PUT' ? await request.clone().json().catch(() => null) : null,
+        body:
+          request.method === 'PUT'
+            ? await request
+                .clone()
+                .json()
+                .catch(() => null)
+            : null,
         authorization,
       });
       if (store.failNext) {
@@ -169,23 +181,41 @@ test('support, independent lie flag, oppose change, withdrawal, exact retry and 
   const session = {};
   const own = await readClassificationOwnBallot(transport, request(), session, identity, undefined);
   expect(own.outcome.kind).toBe('absent');
-  const support = await writeClassificationBallot(transport, identity, 'Bearer token', '00000000-0000-4000-8000-000000000001', {
-    kind: 'set',
-    assessment: 'support',
-    falsePositive: true,
-  });
+  const support = await writeClassificationBallot(
+    transport,
+    identity,
+    'Bearer token',
+    '00000000-0000-4000-8000-000000000001',
+    {
+      kind: 'set',
+      assessment: 'support',
+      falsePositive: true,
+    },
+  );
   expect(support).toMatchObject({ kind: 'accepted', result: { delivery: 'enqueued' } });
   expect(store.own).toMatchObject({ assessment: 'support', falsePositive: true, pending: true });
-  const oppose = await writeClassificationBallot(transport, identity, 'Bearer token', '00000000-0000-4000-8000-000000000002', {
-    kind: 'set',
-    assessment: 'oppose',
-    falsePositive: true,
-  });
+  const oppose = await writeClassificationBallot(
+    transport,
+    identity,
+    'Bearer token',
+    '00000000-0000-4000-8000-000000000002',
+    {
+      kind: 'set',
+      assessment: 'oppose',
+      falsePositive: true,
+    },
+  );
   expect(oppose).toMatchObject({ kind: 'accepted' });
   expect(store.own.assessment).toBe('oppose');
-  const withdrawn = await writeClassificationBallot(transport, identity, 'Bearer token', '00000000-0000-4000-8000-000000000003', {
-    kind: 'withdraw',
-  });
+  const withdrawn = await writeClassificationBallot(
+    transport,
+    identity,
+    'Bearer token',
+    '00000000-0000-4000-8000-000000000003',
+    {
+      kind: 'withdraw',
+    },
+  );
   expect(withdrawn.kind).toBe('accepted');
   expect(store.own.hasBallot).toBe(false);
   store.failNext = 503;
@@ -261,7 +291,11 @@ test('stale revision, association and viewer replacement retire previous rows', 
   });
   expect(snapshot.own.kind).toBe('acknowledged');
   const other = { ...identity, associationId: '00000000-0000-8000-8000-000000000099' };
-  const replaced = retireClassificationSnapshot(snapshot, { identity: other, reader: 'reader-1', session: 'signed-in' });
+  const replaced = retireClassificationSnapshot(snapshot, {
+    identity: other,
+    reader: 'reader-1',
+    session: 'signed-in',
+  });
   expect(replaced.own.kind).toBe('preparing');
   expect(replaced.command).toBeNull();
   const viewer = retireClassificationSnapshot(snapshot, { identity, reader: 'reader-2', session: 'signed-in' });
@@ -282,10 +316,7 @@ test('suppressed aggregate leaks no counts; published keeps lie flags separate f
   const suppressed = { associationId, state: 'suppressed' as const, pending: 'unknown' as const, supportCount: 3 };
   expect(admitClassificationAggregate(suppressed, associationId)).toBeNull();
   expect(aggregateLeaksCounts(suppressed)).toBe(true);
-  const clean = admitClassificationAggregate(
-    { associationId, state: 'suppressed', pending: 'unknown' },
-    associationId,
-  );
+  const clean = admitClassificationAggregate({ associationId, state: 'suppressed', pending: 'unknown' }, associationId);
   expect(clean).toEqual({ associationId, state: 'suppressed', pending: 'unknown' });
   expect(JSON.stringify(publicAggregateProjection(clean!))).not.toMatch(
     /supportCount|opposeCount|falsePositiveCount|supportFraction|denominator/,
@@ -522,15 +553,15 @@ test('growth at 20, 200 and 2,000 eligible ballots keeps Web work bounded to one
       }),
     );
     expect(aggregateLeaksCounts(aggregate.outcome.kind === 'ready' ? aggregate.outcome.value : {})).toBe(false);
-    expect(store.writes.filter((item) => item.path.includes('/assessment') || item.path.includes('/aggregate'))).toHaveLength(
-      2,
-    );
+    expect(
+      store.writes.filter((item) => item.path.includes('/assessment') || item.path.includes('/aggregate')),
+    ).toHaveLength(2);
   }
   expect(new Set(costs.map((item) => item.nativeCalls)).size).toBe(1);
   expect(costs.every((item) => item.valuesProcessed === costs[0]!.valuesProcessed)).toBe(true);
-  expect(Math.max(...costs.map((item) => item.bytesRetained)) - Math.min(...costs.map((item) => item.bytesRetained))).toBeLessThan(
-    64,
-  );
+  expect(
+    Math.max(...costs.map((item) => item.bytesRetained)) - Math.min(...costs.map((item) => item.bytesRetained)),
+  ).toBeLessThan(64);
   expect(costs[0]!.nativeCalls).toBeLessThanOrEqual(7);
   expect(costs[0]!.valuesProcessed).toBe(5);
 });

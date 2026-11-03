@@ -108,8 +108,7 @@ export type ClassificationVisit = Readonly<{
   incarnation: number;
 }>;
 
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const revisionPattern = /^[1-9][0-9]*$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -295,7 +294,11 @@ export function classificationBallotHandle(
   return handle;
 }
 
-export function classificationProducerAvailable(client: KernelClient, subjectId: string, associationId: string): boolean {
+export function classificationProducerAvailable(
+  client: KernelClient,
+  subjectId: string,
+  associationId: string,
+): boolean {
   return classificationBallotHandle(client, subjectId, associationId) !== null;
 }
 
@@ -384,29 +387,26 @@ export function admitClassificationAggregate(value: unknown, associationId: stri
   };
 }
 
-export function ownOutcomeFromState(value: ClassificationOwnState): Extract<
-  ClassificationOwnOutcome,
-  { kind: 'absent' | 'acknowledged' | 'pending' }
-> {
+export function ownOutcomeFromState(
+  value: ClassificationOwnState,
+): Extract<ClassificationOwnOutcome, { kind: 'absent' | 'acknowledged' | 'pending' }> {
   if (value.pending) return { kind: 'pending', value };
   if (!value.hasBallot) return { kind: 'absent', value };
   return { kind: 'acknowledged', value };
 }
 
-export function ownOutcomeFromStatus(status: number): Extract<
-  ClassificationOwnOutcome,
-  { kind: 'denied' | 'concealed' | 'unavailable' | 'conflict' }
-> {
+export function ownOutcomeFromStatus(
+  status: number,
+): Extract<ClassificationOwnOutcome, { kind: 'denied' | 'concealed' | 'unavailable' | 'conflict' }> {
   if (status === 404) return { kind: 'concealed' };
   if (status === 401 || status === 403) return { kind: 'denied' };
   if (status === 409) return { kind: 'conflict' };
   return { kind: 'unavailable' };
 }
 
-export function aggregateOutcomeFromStatus(status: number): Extract<
-  ClassificationAggregateOutcome,
-  { kind: 'denied' | 'concealed' | 'unavailable' }
-> {
+export function aggregateOutcomeFromStatus(
+  status: number,
+): Extract<ClassificationAggregateOutcome, { kind: 'denied' | 'concealed' | 'unavailable' }> {
   if (status === 404) return { kind: 'concealed' };
   if (status === 401 || status === 403) return { kind: 'denied' };
   return { kind: 'unavailable' };
@@ -450,8 +450,7 @@ export async function readClassificationOwnBallot(
     reader = await preparedRatingReader(request, authorization);
     if (!authorization || (expectedReader !== undefined && reader !== expectedReader))
       return { outcome: { kind: 'unavailable' }, reader, cost };
-    if (identity.contextId !== PAGE_GLOBAL_CONTEXT)
-      return { outcome: { kind: 'unavailable' }, reader, cost };
+    if (identity.contextId !== PAGE_GLOBAL_CONTEXT) return { outcome: { kind: 'unavailable' }, reader, cost };
     const handle = classificationBallotHandle(client, identity.subjectId, identity.associationId);
     if (!handle) return { outcome: { kind: 'unavailable' }, reader, cost };
     cost.nativeCalls += 1;
@@ -520,7 +519,8 @@ export async function readClassificationAggregate(
 
 /** Published numbers stay; suppressed projections omit every count, fraction and progress hint. */
 export function publicAggregateProjection(value: ClassificationAggregate): ClassificationAggregate {
-  if (value.state === 'suppressed') return { associationId: value.associationId, state: 'suppressed', pending: 'unknown' };
+  if (value.state === 'suppressed')
+    return { associationId: value.associationId, state: 'suppressed', pending: 'unknown' };
   return {
     associationId: value.associationId,
     state: 'published',
@@ -587,9 +587,7 @@ export async function writeClassificationBallot(
   }
 }
 
-export function isUnversionedObservation(
-  value: unknown,
-): value is { kind: 'unversioned'; digest: string } {
+export function isUnversionedObservation(value: unknown): value is { kind: 'unversioned'; digest: string } {
   return (
     isRecord(value) &&
     value.kind === 'unversioned' &&

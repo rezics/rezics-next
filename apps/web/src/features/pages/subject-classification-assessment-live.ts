@@ -59,11 +59,16 @@ export function useClassificationAssessmentVisit(input: {
       if (visit !== incarnation.current) return;
       if (!sameClassificationAssociation(current.current.selected, identity)) return;
       if (current.current.reader !== reader || current.current.session !== input.session) return;
-      setSnapshot((previous) => applyClassificationRead(retireClassificationSnapshot(previous, {
-        identity,
-        reader,
-        session: input.session,
-      }), read));
+      setSnapshot((previous) =>
+        applyClassificationRead(
+          retireClassificationSnapshot(previous, {
+            identity,
+            reader,
+            session: input.session,
+          }),
+          read,
+        ),
+      );
     })().catch(() => {
       if (visit !== incarnation.current) return;
       setSnapshot((previous) => ({
