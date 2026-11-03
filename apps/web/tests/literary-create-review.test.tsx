@@ -124,7 +124,13 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
   }
   const profile = (fixture: ReturnType<typeof literaryFixture>) => (
-    <LiteraryProfile locale="en" session="signed-in" transport={fixture.transport} facts={fixture.facts} review={fixture.review} />
+    <LiteraryProfile
+      locale="en"
+      session="signed-in"
+      transport={fixture.transport}
+      facts={fixture.facts}
+      review={fixture.review}
+    />
   );
   try {
     const fixture = literaryFixture();
@@ -318,9 +324,9 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
     await waitFor(() => expect(canvas().getByRole('button', { name: m.catalogue_create_retry() })).toBeDefined());
     expect(unread.calls.filter((call) => call.method === 'POST')).toHaveLength(1);
-    expect(unread.calls.filter((call) => call.method === 'GET' && call.path === `/v1/subjects/${literaryWorkId}`)).toHaveLength(
-      2,
-    );
+    expect(
+      unread.calls.filter((call) => call.method === 'GET' && call.path === `/v1/subjects/${literaryWorkId}`),
+    ).toHaveLength(2);
     expect(reads).toBe(1);
 
     await render(profile(unread), 'replacement-reader');

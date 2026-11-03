@@ -177,7 +177,12 @@ export function LiteraryCreateReview({
               {rows.map((statement, index) => (
                 <div key={index} className="min-w-0 space-y-2">
                   <Assertion statement={statement} read={context} locale={locale} />
-                  <Button type="button" variant="outline" className={wrap} onClick={() => onJump(factId(property, index))}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={wrap}
+                    onClick={() => onJump(factId(property, index))}
+                  >
                     {m.literary_review_open({}, o)}
                   </Button>
                 </div>

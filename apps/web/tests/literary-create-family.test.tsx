@@ -166,18 +166,18 @@ test('Literary keyboard Add reaches the exact repeated row and cancels retired f
           {},
           h('input', { 'aria-label': 'Terms', defaultValue: 'Private title' }),
           h(InitialFacts, {
-          type: 'schema:Book',
-          read: { ok: true, release: literaryRelease, current: null },
-          locale: 'en',
-          disabled,
-          rows,
-          change: (next) => {
-            rows = mode === 'replace' ? structuredClone(next) : next;
-            if (mode === 'move') host.querySelector<HTMLInputElement>('[aria-label="Terms"]')!.focus();
-            if (mode === 'retire') disabled = true;
-            update((value) => value + 1);
-          },
-        }),
+            type: 'schema:Book',
+            read: { ok: true, release: literaryRelease, current: null },
+            locale: 'en',
+            disabled,
+            rows,
+            change: (next) => {
+              rows = mode === 'replace' ? structuredClone(next) : next;
+              if (mode === 'move') host.querySelector<HTMLInputElement>('[aria-label="Terms"]')!.focus();
+              if (mode === 'retire') disabled = true;
+              update((value) => value + 1);
+            },
+          }),
         ),
       );
     }
@@ -384,8 +384,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     };
     const confirm = async (scope: HTMLElement = host) => {
       await click(m.catalogue_create_submit(), scope);
-      if (scope.querySelector('[data-literary-create-review]'))
-        await click(m.catalogue_create_submit(), scope);
+      if (scope.querySelector('[data-literary-create-review]')) await click(m.catalogue_create_submit(), scope);
     };
     const cite = 'https://Example.org/Original%2FSource?edition=First&language=ja#' + 'Bibliography'.repeat(25);
 

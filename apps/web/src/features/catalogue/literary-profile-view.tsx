@@ -386,9 +386,7 @@ export function InitialFacts({
                         ? { disabled, onReuse: (index) => onReuse(row, index) }
                         : undefined
                     }
-                    focusReference={
-                      focusCopy && focusCopy.holder === `literary-fact-${id}` ? focusCopy : undefined
-                    }
+                    focusReference={focusCopy && focusCopy.holder === `literary-fact-${id}` ? focusCopy : undefined}
                   />
                 ) : (
                   <EditorFailure locale={locale} reason="stale" />

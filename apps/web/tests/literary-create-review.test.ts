@@ -46,7 +46,9 @@ test('Literary creation admits exact identity and reuses evidence across 32/128/
   });
   const otherLiteraryType = { ...ready, identity: { ...ready.identity, type: 'schema:BookSeries' } };
   expect(literaryAdmitCreatedReader(otherLiteraryType, ready.identity.id, 'schema:Book')).toEqual({ state: 'stale' });
-  expect(literaryAdmitCreatedReader(otherLiteraryType, ready.identity.id, 'schema:BookSeries')).toEqual(otherLiteraryType);
+  expect(literaryAdmitCreatedReader(otherLiteraryType, ready.identity.id, 'schema:BookSeries')).toEqual(
+    otherLiteraryType,
+  );
   expect(
     literaryAdmitCreatedReader(
       { ...ready, identity: { ...ready.identity, type: 'schema:Person' } },
@@ -60,11 +62,18 @@ test('Literary creation admits exact identity and reuses evidence across 32/128/
   expect(literaryAdmitCreatedReader({ state: 'concealed' }, ready.identity.id, 'schema:Book')).toEqual({
     state: 'concealed',
   });
-  expect(literaryAdmitCreatedReader({ state: 'denied' }, ready.identity.id, 'schema:Book')).toEqual({ state: 'denied' });
+  expect(literaryAdmitCreatedReader({ state: 'denied' }, ready.identity.id, 'schema:Book')).toEqual({
+    state: 'denied',
+  });
 
   const prepared = literaryInitialItem(
     release,
-    { type: 'schema:Book', labels: { en: 'Book', ja: '書籍' }, descriptions: { en: 'A work.' }, aliases: { en: ['Volume'] } },
+    {
+      type: 'schema:Book',
+      labels: { en: 'Book', ja: '書籍' },
+      descriptions: { en: 'A work.' },
+      aliases: { en: ['Volume'] },
+    },
     [
       {
         property: { id: 'schema:url' },
@@ -72,9 +81,7 @@ test('Literary creation admits exact identity and reuses evidence across 32/128/
         qualifiers: [],
         references: [
           {
-            parts: [
-              { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/src' } },
-            ],
+            parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/src' } }],
           },
         ],
         rank: 'normal',
@@ -101,7 +108,12 @@ test('Literary creation admits exact identity and reuses evidence across 32/128/
   // Four admitted holders, zero qualifiers; copying the source's seven-part group to three targets adds 21 parts.
   for (const { groupLengths, input, output } of scales) {
     const rows = Array.from({ length: 4 }, (_, index) => languageRow(index, groupLengths));
-    const projected = literaryInitialItem(release, initial, rows.map((row) => row.statement), 'en');
+    const projected = literaryInitialItem(
+      release,
+      initial,
+      rows.map((row) => row.statement),
+      'en',
+    );
     expect(projected.errors).toEqual([]);
     expect(literaryDraftStructuredParts(rows)).toBe(input);
     expect(literaryStructuredParts(projected.item)).toBe(input);
@@ -120,7 +132,12 @@ test('Literary creation admits exact identity and reuses evidence across 32/128/
       copied[2]!.statement.references[groupLengths.length],
     );
     expect(copied[1]!.statement.value).toEqual(rows[1]!.statement.value);
-    const prepared = literaryInitialItem(release, initial, copied.map((row) => row.statement), 'en');
+    const prepared = literaryInitialItem(
+      release,
+      initial,
+      copied.map((row) => row.statement),
+      'en',
+    );
     expect(prepared.errors).toEqual([]);
     expect(literaryStructuredParts(prepared.item)).toBe(output);
   }
