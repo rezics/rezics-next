@@ -86,6 +86,24 @@ function viewerRowKey(hit: SemanticDiscoveryHit) {
   return JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
 }
 
+/** Publication owns the retained read until both private and public final authority have completed. */
+export async function readAdmittedDiscoveryPage(
+  read: Pick<RetainedDiscoveryRead, 'search' | 'finish' | 'close'>,
+  assemble: (page: DiscoveryPage) => Promise<Readonly<{ page: DiscoveryPage; viewerCurrent: boolean }>>,
+): Promise<DiscoveryPage> {
+  try {
+    const assembled = await assemble(await read.search());
+    // Losing viewer authority invalidates the whole assembly, including its cursors.
+    // A producer's unavailable envelope is separate: it can accompany a current public page.
+    if (!assembled.viewerCurrent) throw new ProblemError('search_restart_required');
+    await read.finish();
+    return assembled.page;
+  } finally {
+    // close also settles the native execution when assembly or a final guard refuses publication.
+    await read.close();
+  }
+}
+
 async function enrichDiscoveryPage(
   config: DefaultDiscoverySearchConfig,
   principal: string,
@@ -739,11 +757,9 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
     const context = { ...inputContext, languages };
     const operation = (async () => {
       const read = await open(principal, request, context);
-      try {
-        const page = await read.search();
-        let enriched: EnrichedDiscoveryPage;
+      return readAdmittedDiscoveryPage(read, async (page) => {
         try {
-          enriched = await enrichDiscoveryPage(config, principal, page, {
+          const enriched = await enrichDiscoveryPage(config, principal, page, {
             ...context,
             descriptions: request.descriptions === true,
           });
@@ -764,25 +780,20 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             ? await readDiscoveryFigures(config, enriched.figureIds, context.deadline)
             : enriched.figures;
           if (!isDeepStrictEqual(enriched.figures, finalFigures)) throw new ProblemError('search_restart_required');
-          if (
-            enriched.viewer &&
-            !(await viewerFactsCurrent(
+          const viewerCurrent =
+            !enriched.viewer ||
+            (await viewerFactsCurrent(
               { pool: config.pool, access: config.access },
               enriched.viewer.actor,
               enriched.viewer.prepared,
               context.deadline,
-            ))
-          )
-            enriched.page.viewerFacts = { state: 'unavailable', reason: 'currentness', retryable: true };
+            ));
+          return { page: enriched.page, viewerCurrent };
         } catch (error) {
           if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
         }
-        await read.finish();
-        return enriched.page;
-      } finally {
-        await read.close();
-      }
+      });
     })();
     pending.add(operation);
     void operation.finally(() => pending.delete(operation)).catch(() => {});

@@ -12,8 +12,13 @@ ready and cannot contribute a count otherwise.
 Decision: Render current viewer entry state and rating inline on each admitted Subject card; when the one viewer-facts
 envelope is unavailable, suppress its private rows and show one localized page notice while keeping current public hits.
 
-Decision: Open a Subject card's native destination for Library and rating actions; their existing subject-page command
-ports remain the only write path and reauthorize each action.
+Decision: A false final `viewerFactsCurrent` check discards the entire assembly and returns
+`search_restart_required`, including on an initial or empty final page; fresh traversal must precede disclosure.
+
+Eligible Subject cards must offer inline Library entry and supported own-score actions through existing native command
+ports, which reauthorize every write. Native destinations remain available for richer workflows. Entry facts alone
+do not establish a writable profile or capability. Collection, Review, Space and Account actions retain their native
+owners. Conditional score actions remain unavailable when the native provider cannot enforce its atomic guard.
 
 Decision: Mixed Search uses English when the caller omits languages; the web caller continues to send its selected
 locale preferences, keeping every current label and alias projection bounded to the requested languages.
@@ -109,9 +114,23 @@ For an authenticated principal, the one Library envelope has at most `V <= S` or
 16,384 UTF-8 input bytes. `readViewerFacts` uses the caller-owned account-home repeatable-read client; the client is
 released before `viewerFactsCurrent`, which rechecks the actor, identity mappings and question. The producer enforces
 65,536 UTF-8 output bytes. An input or output response-limit outcome withholds all private rows while retaining the
-public Search page. The web page retains only the current `H` hits and their at most `V` viewer rows; cursors remain
-transient under the existing request owner.
+public Search page if final authority remains current. Ordinary producer unavailability also withholds private rows
+and permits one notice on an independently current public page. Failed viewer currentness is an authority change,
+not an unavailable overlay: Search returns neither hits nor hit or kind cursors from that assembly.
 
-Search does not issue Library or rating mutations from result rows. The Subject destination opens the existing
-command-port surface, where each write reauthorizes. Native all-pool accounting and connected browser inspection
-remain controller acceptance; no per-seek cap, second cursor or runtime funding protocol is introduced here.
+The admission lifecycle performs one assembly and at most one final viewer check, followed by the retained public
+`finish` guard only when viewer authority is current. It always closes the retained read, including assembly errors,
+guard failures and cancellation. Closing a refused assembly settles the original native execution; it does not open
+a replacement read. Search adds no automatic retry, extra connection checkout, per-row read, or cursor protocol for
+this outcome. Preparation still precedes account-home checkout, and the repeatable-read connection is released before
+the final viewer check. Empty pages use the same admission lifecycle and cannot bypass either final authority.
+
+The web page retains only the current `H` hits and their at most `V` viewer rows; cursors remain transient under the
+existing request owner. Inline actions must retire the affected private assembly after successful or uncertain work
+and obtain one authoritative bounded page, reconciling duplicate occurrences together. Command lifetimes bind the
+viewer, credential, full row and resolved Subject identity, question revision and scale, locale and page/request owner.
+Retired lifetimes cannot dispatch or publish into a newer reader. A score of zero remains distinct from absence;
+entry and score commands are independent.
+
+Native all-pool accounting and connected browser inspection remain controller acceptance; no per-seek cap, second
+cursor or runtime funding protocol is introduced here.
