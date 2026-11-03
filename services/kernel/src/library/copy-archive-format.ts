@@ -128,11 +128,7 @@ function stamp(value: unknown): value is string {
   );
 }
 function decimal(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    value.length <= 19 &&
-    /^(0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/.test(value)
-  );
+  return typeof value === 'string' && value.length <= 19 && /^(0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/.test(value);
 }
 function date(value: unknown): boolean {
   if (value === null) return true;
@@ -226,11 +222,7 @@ function subjectReference(value: Record<string, unknown>, key: string) {
   if (!uuid(id)) return false;
   if (!reference || typeof reference !== 'object' || Array.isArray(reference)) return false;
   const ref = reference as Record<string, unknown>;
-  return (
-    Object.keys(ref).length === 2 &&
-    ref.id === id &&
-    ref.href === `https://rezics.com/subjects/${id}`
-  );
+  return Object.keys(ref).length === 2 && ref.id === id && ref.href === `https://rezics.com/subjects/${id}`;
 }
 
 function progressSession(value: Record<string, unknown>): ArchivedProgressSession {
@@ -276,7 +268,12 @@ function progressSession(value: Record<string, unknown>): ArchivedProgressSessio
     !Number.isInteger(value.revision) ||
     Number(value.revision) < 1 ||
     Number(value.revision) > 2_147_483_647 ||
-    !(value.library_profile_pin === null || (!!value.library_profile_pin && typeof value.library_profile_pin === 'object' && !Array.isArray(value.library_profile_pin))) ||
+    !(
+      value.library_profile_pin === null ||
+      (!!value.library_profile_pin &&
+        typeof value.library_profile_pin === 'object' &&
+        !Array.isArray(value.library_profile_pin))
+    ) ||
     !stamp(value.started_at) ||
     !(value.completed_at === null || stamp(value.completed_at)) ||
     !stamp(value.last_changed_at)
@@ -421,7 +418,8 @@ export function parseCopyArchive(bytes: Uint8Array): ParsedCopyArchive {
     coverage: [...coverage].map(([section, records]) => ({
       section,
       records,
-      support: section === 'holdings' || section === 'sessions' || section === 'units' ? 'evidence-only' : 'unsupported',
+      support:
+        section === 'holdings' || section === 'sessions' || section === 'units' ? 'evidence-only' : 'unsupported',
     })),
     holdings,
     progress,

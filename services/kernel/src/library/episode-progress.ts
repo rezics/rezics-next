@@ -177,7 +177,9 @@ export function createEpisodeProgressCommands(config: Dependencies) {
             const observation = expected
                 ? await readLibraryProfileSourceObservation(deps, fact.session.subjectId)
                 : null,
-              source = expected ? observation?.source ?? null : await readLibraryProfileSource(deps, fact.session.subjectId);
+              source = expected
+                ? (observation?.source ?? null)
+                : await readLibraryProfileSource(deps, fact.session.subjectId);
             if (
               expected &&
               (!observation ||

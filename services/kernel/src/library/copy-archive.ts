@@ -22,11 +22,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { withConnection } from '../database/pool.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
-import {
-  createEpisodeProgressCommands,
-  MAX_EPISODE_IDS,
-  type EpisodeProgressView,
-} from './episode-progress.ts';
+import { createEpisodeProgressCommands, MAX_EPISODE_IDS, type EpisodeProgressView } from './episode-progress.ts';
 import {
   readLibraryProfileSourceObservation,
   sameLibraryProfileAnchor,
@@ -91,7 +87,10 @@ type ProgressRecoveryPlan = {
   unit: string;
   total: string | null;
   additionalMeasures: { unit: string; total: string | null }[];
-  records: ({ kind: 'measure'; measureId: string; amount: string } | { kind: 'cursor'; locator: string; position: string })[];
+  records: (
+    | { kind: 'measure'; measureId: string; amount: string }
+    | { kind: 'cursor'; locator: string; position: string }
+  )[];
   unitIds: string[];
   transition: 'complete' | 'abandon' | null;
   unsupported: string[];
@@ -129,7 +128,13 @@ export type CopyArchiveProgressReview = {
     sourceTimes: { startedAt: string; completedAt: string | null; lastChangedAt: string };
   };
   current: {
-    profile: { kind: 'supported' | 'unsupported'; subjectId: string; acceptingType: string; profileId?: string; releaseDigest?: string };
+    profile: {
+      kind: 'supported' | 'unsupported';
+      subjectId: string;
+      acceptingType: string;
+      profileId?: string;
+      releaseDigest?: string;
+    };
     mode: ProgressMode;
     unit: string;
   };
@@ -206,7 +211,8 @@ function parseReviewRequest(value: unknown): ProgressReviewRequest {
   )
     throw new ProblemError('invalid_request');
   const additionalMeasures: CopyArchiveProgressMeasureMapping[] = row.additionalMeasures.map((candidate) => {
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) throw new ProblemError('invalid_request');
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+      throw new ProblemError('invalid_request');
     const mapping = candidate as Record<string, unknown>;
     if (
       Object.keys(mapping).length !== 2 ||
@@ -230,7 +236,9 @@ function parseReviewRequest(value: unknown): ProgressReviewRequest {
     new Set(additionalMeasures.map((measure) => measure.sourceUnit)).size !== additionalMeasures.length
   )
     throw new ProblemError('invalid_request');
-  additionalMeasures.sort((left, right) => (left.sourceUnit < right.sourceUnit ? -1 : left.sourceUnit > right.sourceUnit ? 1 : 0));
+  additionalMeasures.sort((left, right) =>
+    left.sourceUnit < right.sourceUnit ? -1 : left.sourceUnit > right.sourceUnit ? 1 : 0,
+  );
   return {
     sessionId: row.sessionId,
     subjectId: row.subjectId,
@@ -302,11 +310,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     routeKey: deps.routeKey,
     clock,
   });
-  const episodeUnits = async (
-    actor: Actor,
-    subjectId: string,
-    ids: readonly string[],
-  ) => {
+  const episodeUnits = async (actor: Actor, subjectId: string, ids: readonly string[]) => {
     const at = await withConnection(deps.pool, (client) => mintReadTime(client, clock));
     try {
       return await readEpisodeSources(
@@ -363,8 +367,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         progressAction === 'progress_session:create'
           ? ['progress_session:read', 'progress_session:create', 'progress_session:update']
           : [progressAction];
-      for (const scope of requiredScopes)
-        if (!a.scopes.includes(scope)) throw new ProblemError('forbidden');
+      for (const scope of requiredScopes) if (!a.scopes.includes(scope)) throw new ProblemError('forbidden');
       await admitGroup({
         pool: deps.pool,
         access: () => deps.access,
@@ -526,7 +529,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       const h = await header(tx, route, account, id, now);
       const rows = (
         await tx.query<{ ordinal: number; evidence: ArchivedHolding }>(
-        `SELECT ordinal,evidence FROM library.copy_archive_row
+          `SELECT ordinal,evidence FROM library.copy_archive_row
         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND section='holdings' AND ordinal>$4 ORDER BY ordinal LIMIT 11`,
           [route, account, id, after],
         )
@@ -540,13 +543,11 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         manifest: h.manifest,
         coverage: h.coverage,
         holdings: h.holding_count,
-        rows: rows
-          .slice(0, COPY_ARCHIVE_LIMITS.page)
-          .map((r) => ({
-            ...r,
-            resolution: 'unresolved' as const,
-            reason: 'Historical evidence requires current identity, profile and explicit copy review',
-          })),
+        rows: rows.slice(0, COPY_ARCHIVE_LIMITS.page).map((r) => ({
+          ...r,
+          resolution: 'unresolved' as const,
+          reason: 'Historical evidence requires current identity, profile and explicit copy review',
+        })),
         next: rows.length > COPY_ARCHIVE_LIMITS.page ? rows[COPY_ARCHIVE_LIMITS.page - 1]!.ordinal : null,
       };
     });
@@ -595,12 +596,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     after = -1,
     signal?: AbortSignal,
   ): Promise<CopyArchiveProgressUnitPage> {
-    if (
-      !Number.isInteger(after) ||
-      after < -1 ||
-      after >= COPY_ARCHIVE_LIMITS.records ||
-      routeOf(sessionId) === null
-    )
+    if (!Number.isInteger(after) || after < -1 || after >= COPY_ARCHIVE_LIMITS.records || routeOf(sessionId) === null)
       throw new ProblemError('invalid_request');
     return operation(
       actor,
@@ -630,7 +626,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           uploadId: id,
           sourceSessionId: sessionId,
           state: h.cancelled ? ('cancelled' as const) : ('inspecting' as const),
-          units: rows.slice(0, COPY_ARCHIVE_LIMITS.page).map((row) => ({ ordinal: row.ordinal, evidence: row.evidence })),
+          units: rows
+            .slice(0, COPY_ARCHIVE_LIMITS.page)
+            .map((row) => ({ ordinal: row.ordinal, evidence: row.evidence })),
           next: rows.length > COPY_ARCHIVE_LIMITS.page ? rows[COPY_ARCHIVE_LIMITS.page - 1]!.ordinal : null,
         };
       },
@@ -703,11 +701,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         admitted = new Map(canonicalUnitIds.map((unitId, index) => [unitId, membership[index]?.membership]));
       unitReview = request.unitIds.map((unitId, index) => ({
         unitId,
-        admission: admitted.get(unitId) === 'member'
-          ? 'member'
-          : admitted.get(unitId) === 'detached'
-            ? 'detached'
-            : 'unavailable',
+        admission:
+          admitted.get(unitId) === 'member'
+            ? 'member'
+            : admitted.get(unitId) === 'detached'
+              ? 'detached'
+              : 'unavailable',
       }));
     } else {
       unitReview = request.unitIds.map((unitId) => ({ unitId, admission: 'unavailable' as const }));
@@ -730,9 +729,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     let plan: ProgressRecoveryPlan | null = null;
     if (archived.mode !== request.mode) unsupported.push('mode-mapping-not-supported');
     if (observation.source.kind !== 'supported') unsupported.push('current-profile-unavailable');
-    const stateAdmitted = archived.state === 'active' || archived.state === 'completed' || archived.state === 'abandoned';
-    if (!stateAdmitted)
-      unsupported.push('historical-state-not-expressible');
+    const stateAdmitted =
+      archived.state === 'active' || archived.state === 'completed' || archived.state === 'abandoned';
+    if (!stateAdmitted) unsupported.push('historical-state-not-expressible');
     if (archived.version_subject_id !== null) unsupported.push('version-subject-mapping-not-supported');
     if (!Object.hasOwn(archived, 'additional_measures')) unsupported.push('additional-measures-not-in-source-record');
 
@@ -876,7 +875,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           sourceTotal: archived.total,
           currentUnit: request.unit,
           currentMeaning: descriptor,
-          amount: archived.amount === null ? 'absent' : records.some((record) => record.kind === 'measure' && record.measureId === request.unit) ? 'supported' : 'unsupported',
+          amount:
+            archived.amount === null
+              ? 'absent'
+              : records.some((record) => record.kind === 'measure' && record.measureId === request.unit)
+                ? 'supported'
+                : 'unsupported',
           total: total === archived.total ? 'supported' : 'unsupported',
         });
         const create = parseSessionCreate(
@@ -1245,9 +1249,10 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           if (!sessionId) throw new Error('Archive progress session was not created');
           const current = await sessions.readSession(actor, sessionId);
           if (step.kind === 'record') {
-            const body = step.record.kind === 'measure'
-              ? { revision: current.revision, measureId: step.record.measureId, amount: step.record.amount }
-              : { revision: current.revision, locator: step.record.locator, position: step.record.position };
+            const body =
+              step.record.kind === 'measure'
+                ? { revision: current.revision, measureId: step.record.measureId, amount: step.record.amount }
+                : { revision: current.revision, locator: step.record.locator, position: step.record.position };
             const recorded = await sessions.recordProgress(actor, sessionId, body, nativeKey, expected);
             onCommand?.(recorded);
           } else if (step.kind === 'episodes') {
@@ -1260,9 +1265,10 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             );
             onCommand?.(recorded);
           } else if (step.kind === 'transition') {
-            const transitioned = step.action === 'complete'
-              ? await sessions.completeSession(actor, sessionId, { revision: current.revision }, nativeKey, expected)
-              : await sessions.abandonSession(actor, sessionId, { revision: current.revision }, nativeKey, expected);
+            const transitioned =
+              step.action === 'complete'
+                ? await sessions.completeSession(actor, sessionId, { revision: current.revision }, nativeKey, expected)
+                : await sessions.abandonSession(actor, sessionId, { revision: current.revision }, nativeKey, expected);
             onCommand?.(transitioned);
           }
         }
@@ -1280,8 +1286,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
               )
             ).rows[0];
             if (!current || !current.request_key_hash.equals(requestKeyHash)) throw missing();
-            if (current.next_step > reservation.step)
-              return { state: 'applying', sessionId };
+            if (current.next_step > reservation.step) return { state: 'applying', sessionId };
             if (current.active_step !== reservation.step) throw new ProblemError('conflict');
             const next = reservation.step + 1,
               state = next >= totalSteps ? 'applied' : h.cancelled ? 'partial' : 'applying';
@@ -1300,7 +1305,10 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       } catch (error) {
         const failure: { state: CopyArchiveProgressState; code: string } | null =
           error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)
-            ? { state: error.code === 'unsupported_library_profile' || error.code === 'conflict' ? 'stale' : 'failed', code: error.code }
+            ? {
+                state: error.code === 'unsupported_library_profile' || error.code === 'conflict' ? 'stale' : 'failed',
+                code: error.code,
+              }
             : error instanceof ProgressConflictError
               ? { state: 'stale', code: 'conflict' }
               : error instanceof ProgressInvalidError
@@ -1388,7 +1396,9 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       return {
         uploadId: id,
         review: captured.review.response,
-        application: app ? { state: app.state, sessionId: null, acceptedSteps: app.next_step, error: app.error_code } : null,
+        application: app
+          ? { state: app.state, sessionId: null, acceptedSteps: app.next_step, error: app.error_code }
+          : null,
         progressSession: null,
         completedEpisodes: null,
         expiresAt: captured.expiresAt,
@@ -1405,12 +1415,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       async (tx, route, account, now) => {
         await header(tx, route, account, id, now);
         const current = (
-            await tx.query<{
-              state: CopyArchiveProgressState;
-              next_step: number;
-              session_id: string | null;
-              error_code: string | null;
-            }>(
+          await tx.query<{
+            state: CopyArchiveProgressState;
+            next_step: number;
+            session_id: string | null;
+            error_code: string | null;
+          }>(
             `SELECT state,next_step,session_id,error_code FROM library.copy_archive_progress_apply
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
             [route, account, id, reviewId],
@@ -1456,7 +1466,17 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       return { uploadId: id, ...removed };
     });
   }
-  return { upload, page, progressPage, progressUnitPage, reviewProgress, applyProgress, progressResult, cancel, remove };
+  return {
+    upload,
+    page,
+    progressPage,
+    progressUnitPage,
+    reviewProgress,
+    applyProgress,
+    progressResult,
+    cancel,
+    remove,
+  };
 }
 
 /** Caller holds the root lock and owns account/terminal admission. Never cascade an unbounded child set. */

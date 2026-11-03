@@ -313,7 +313,7 @@ export function createSessionCommands(config: Dependencies) {
                 ? await readLibraryProfileSourceObservation(sourceDeps, fact.session.subjectId)
                 : null,
               source = expected
-                ? observation?.source ?? null
+                ? (observation?.source ?? null)
                 : await readLibraryProfileSource(sourceDeps, fact.session.subjectId);
             assertExpectedBinding(observation, expected);
             return { original, source, pin: fact.pin };

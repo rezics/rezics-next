@@ -57,7 +57,11 @@ function detail(name: string, write = false, progressAction?: 'progress_session:
     operationId: `library_copy_archive.${name}`,
     'x-action': progressAction ?? 'copy:list',
     'x-required-actions': progressAction
-      ? ['copy:list', progressAction, ...(progressAction === 'progress_session:create' ? ['progress_session:read', 'progress_session:update'] : [])]
+      ? [
+          'copy:list',
+          progressAction,
+          ...(progressAction === 'progress_session:create' ? ['progress_session:read', 'progress_session:update'] : []),
+        ]
       : ['copy:list'],
     'x-exposure': progressAction ? 'gate:reading_progress' : 'gate:personal_library',
     ...(progressAction ? { 'x-required-exposures': ['gate:personal_library', 'gate:reading_progress'] } : {}),
@@ -84,7 +88,10 @@ export function copyArchiveRoutes(
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }),
         response: {
-          200: t.Object({ uploadId: id, holdings: t.Integer(), progressRecords: t.Integer(), expiresAt: t.String() }, closed),
+          200: t.Object(
+            { uploadId: id, holdings: t.Integer(), progressRecords: t.Integer(), expiresAt: t.String() },
+            closed,
+          ),
           ...failures,
         },
         detail: {
@@ -137,20 +144,28 @@ export function copyArchiveRoutes(
       '/v1/libraryCopyArchives/:id/progress',
       {
         params,
-        query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) }, closed),
+        query: t.Object(
+          { after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) },
+          closed,
+        ),
         response: { 200: t.Unsafe<ProgressPage>(t.Any()), ...failures },
         detail: detail('progress_page', false, 'progress_session:read'),
       },
       async ({ actor, params, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().progressPage(actor, params.id, query.after ?? -1, job.signal));
+        return admission.run('normal', job, () =>
+          service().progressPage(actor, params.id, query.after ?? -1, job.signal),
+        );
       },
     )
     .get(
       '/v1/libraryCopyArchives/:id/progress/:sessionId/units',
       {
         params: unitParams,
-        query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) }, closed),
+        query: t.Object(
+          { after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) },
+          closed,
+        ),
         response: { 200: t.Unsafe<ProgressUnitPage>(t.Any()), ...failures },
         detail: detail('progress_units', false, 'progress_session:read'),
       },
@@ -208,7 +223,9 @@ export function copyArchiveRoutes(
       },
       async ({ actor, params, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().progressResult(actor, params.id, params.reviewId, job.signal));
+        return admission.run('normal', job, () =>
+          service().progressResult(actor, params.id, params.reviewId, job.signal),
+        );
       },
     )
     .post(

@@ -15,17 +15,17 @@ All requests require the receiving owner's bearer identity, `copy:list`, current
 `personal_library` gate. Operational reads hold the native account barrier through the page transaction.
 Responses are private and no-store. Upload IDs never authorize another account, even on a shared route.
 
-| Method                                     | Input                                                       | Result                                                          |
-| ------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------------------- |
-| `POST /v1/libraryCopyArchives`             | Actual JSON file bytes, structured-string `Idempotency-Key` | `{uploadId,holdings,progressRecords,expiresAt}`                 |
-| `GET /v1/libraryCopyArchives/{id}?after=…` | Original archive ordinal; default -1                        | Manifest, coverage and ten unresolved holding rows             |
-| `GET /v1/libraryCopyArchives/{id}/progress` | Session ordinal; default -1                                 | Ten archived Session occurrences and `next`                    |
-| `GET /v1/libraryCopyArchives/{id}/progress/{sessionId}/units` | Session occurrence and unit ordinal | Ten exact archived unit IDs and `next` |
-| `POST /v1/libraryCopyArchives/{id}/progressReviews` | Selected occurrence, current Subject/mode/unit mappings | Typed current review and support report |
-| `POST /v1/libraryCopyArchives/{id}/progressReviews/{reviewId}:apply` | Idempotency key | Bounded native Session outcomes |
-| `GET /v1/libraryCopyArchives/{id}/progressReviews/{reviewId}` | Review ID | Review, application status and current accepted Session facts |
-| `POST /v1/libraryCopyArchives/{id}:cancel` | No body | `{uploadId,cancelled:true}` |
-| `DELETE /v1/libraryCopyArchives/{id}` | No body; repeat while incomplete | `{uploadId,removed,complete}` |
+| Method                                                               | Input                                                       | Result                                                        |
+| -------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| `POST /v1/libraryCopyArchives`                                       | Actual JSON file bytes, structured-string `Idempotency-Key` | `{uploadId,holdings,progressRecords,expiresAt}`               |
+| `GET /v1/libraryCopyArchives/{id}?after=…`                           | Original archive ordinal; default -1                        | Manifest, coverage and ten unresolved holding rows            |
+| `GET /v1/libraryCopyArchives/{id}/progress`                          | Session ordinal; default -1                                 | Ten archived Session occurrences and `next`                   |
+| `GET /v1/libraryCopyArchives/{id}/progress/{sessionId}/units`        | Session occurrence and unit ordinal                         | Ten exact archived unit IDs and `next`                        |
+| `POST /v1/libraryCopyArchives/{id}/progressReviews`                  | Selected occurrence, current Subject/mode/unit mappings     | Typed current review and support report                       |
+| `POST /v1/libraryCopyArchives/{id}/progressReviews/{reviewId}:apply` | Idempotency key                                             | Bounded native Session outcomes                               |
+| `GET /v1/libraryCopyArchives/{id}/progressReviews/{reviewId}`        | Review ID                                                   | Review, application status and current accepted Session facts |
+| `POST /v1/libraryCopyArchives/{id}:cancel`                           | No body                                                     | `{uploadId,cancelled:true}`                                   |
+| `DELETE /v1/libraryCopyArchives/{id}`                                | No body; repeat while incomplete                            | `{uploadId,removed,complete}`                                 |
 
 `createCopyArchive` owns these methods. Archived Session/unit records remain private evidence. Apply calls the
 existing native Session create/record/transition commands and exact current episode-membership command; it adds no
