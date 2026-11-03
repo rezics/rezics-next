@@ -21,7 +21,7 @@ test('mapped episode ordinal reaches an ordinary current-authority reader after 
   const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
     const editor = await openApiObserver(runtime);
-    const created = await runtime.importTransport.batchWrite({ commands: [{
+    const created = await runtime.importTransport.batch({ commands: [{
       op: 'create', source, key: 'source-vocabulary-episode-create',
       subject: { type: 'schema:Episode', labels: { en: 'Episode 1.5' } },
     }] });
@@ -43,7 +43,7 @@ test('mapped episode ordinal reaches an ordinary current-authority reader after 
     const mapped = mapBangumiVocabulary(mappingInput);
     expect(mapped.gaps).toEqual([]);
     expect(mapped.proposals).toHaveLength(1);
-    const published: BatchWriteResult = await runtime.importTransport.batchWrite({ commands: [...mapped.proposals] });
+    const published: BatchWriteResult = await runtime.importTransport.batch({ commands: [...mapped.proposals] });
     expect(published.results).toHaveLength(1);
     expect(published.results[0]?.status).toBe(201);
 
