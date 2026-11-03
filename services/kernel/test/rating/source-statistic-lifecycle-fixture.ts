@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createHash } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
@@ -115,6 +116,7 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
 
     let access: ReturnType<typeof createAccess>;
     const app = createKernel({
+      receiptKeys: testReceiptKeys(),
       pool: database.pool,
       routeKey,
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) },

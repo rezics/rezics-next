@@ -354,8 +354,8 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           licence: input.value.licence,
           attribution: input.value.attribution,
           transaction_id: command.transactionId,
-          observation_digest:
-            input.source === 'bangumi' || input.value.expectedObservation !== undefined ? next.digest : null,
+          observation_digest: next.digest,
+          expose_observation: input.source === 'bangumi' || input.value.expectedObservation !== undefined,
         });
         const row = rows[0];
         if (!row) throw new SourceStatisticNotFoundError();

@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 // Cost: at most one current row per admitted provider; observation/fence work is indexed.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { sourceObservation } from '../../src/rating/source-provider.ts';
@@ -90,6 +91,7 @@ beforeAll(async () => {
   const signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'source-statistics-test', alg: 'ES256' };
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: database.pool,
     writeRate: createWriteRateLimiter({
       secret: 'source-statistics-write-rate-secret-32-bytes',
