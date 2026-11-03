@@ -20,8 +20,7 @@ type State =
       selected: SourceObservationItem | null;
       request: SourceObservationRequest;
     };
-const controlClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
+const controlClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
@@ -64,7 +63,9 @@ function ObservationDetails({
         <dd className="break-all font-mono text-xs">{item.digest}</dd>
         <dt className="font-medium">{m.source_observation_provenance({}, options)}</dt>
         <dd>{m.source_observation_unversioned({}, options)}</dd>
-        <dt className="font-medium">{m.source_observation_payload_version({ version: item.payloadVersion }, options)}</dt>
+        <dt className="font-medium">
+          {m.source_observation_payload_version({ version: item.payloadVersion }, options)}
+        </dt>
         <dd>{item.legacy ? m.source_observation_legacy({}, options) : m.source_observation_immutable({}, options)}</dd>
         <dt className="font-medium">{m.source_observation_native_order({}, options)}</dt>
         <dd>
@@ -77,7 +78,9 @@ function ObservationDetails({
         <p role="status">{m.source_observation_cleared({}, options)}</p>
       ) : (
         <>
-          <p>{m.source_observation_units({ min: number(payload.scale.min), max: number(payload.scale.max) }, options)}</p>
+          <p>
+            {m.source_observation_units({ min: number(payload.scale.min), max: number(payload.scale.max) }, options)}
+          </p>
           <p>{m.source_observation_mean({ mean: number(payload.mean) }, options)}</p>
           <p>{m.source_observation_count({ count: number(payload.count) }, options)}</p>
           <p>{m.rating_import_licence({ licence: payload.licence }, options)}</p>
@@ -157,7 +160,7 @@ export function SourceObservationReader({
         setState({
           kind: 'ready',
           inspection: outcome.inspection,
-          selected: request.digest === undefined ? null : outcome.inspection.selectedObservation ?? null,
+          selected: request.digest === undefined ? null : (outcome.inspection.selectedObservation ?? null),
           request,
         });
       } else {
@@ -176,13 +179,16 @@ export function SourceObservationReader({
 
   const options = { locale: locale as never };
   const retry = () => {
-    if (state.kind === 'failure' && state.outcome.kind !== 'denied' && state.outcome.kind !== 'missing' && state.outcome.kind !== 'invalid')
+    if (
+      state.kind === 'failure' &&
+      state.outcome.kind !== 'denied' &&
+      state.outcome.kind !== 'missing' &&
+      state.outcome.kind !== 'invalid'
+    )
       void run(state.request);
   };
   const chooseHistory = (item: SourceObservationItem) => {
-    setState((current) =>
-      current.kind === 'ready' ? { ...current, selected: item } : current,
-    );
+    setState((current) => (current.kind === 'ready' ? { ...current, selected: item } : current));
   };
   const loadHistory = () => {
     if (state.kind !== 'ready') return;
@@ -275,10 +281,7 @@ export function SourceObservationReader({
                           aria-pressed={state.selected?.digest === item.digest}
                           onClick={() => chooseHistory(item)}
                         >
-                          {m.source_observation_select(
-                            { record: item.sourceRecordId, date: item.asOf },
-                            options,
-                          )}
+                          {m.source_observation_select({ record: item.sourceRecordId, date: item.asOf }, options)}
                         </Button>
                       </li>
                     ))}

@@ -82,12 +82,13 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function onlyKeys(value: Record<string, unknown>, required: readonly string[], optional: readonly string[] = []): boolean {
+function onlyKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): boolean {
   const allowed = new Set([...required, ...optional]);
-  return (
-    required.every((key) => Object.hasOwn(value, key)) &&
-    Object.keys(value).every((key) => allowed.has(key))
-  );
+  return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.has(key));
 }
 
 export function isSourceObservationProvider(value: unknown): value is SourceObservationProvider {
@@ -178,8 +179,7 @@ function validFigures(value: unknown, count: number): value is SourceObservation
       total += bin.count as number;
       if (!Number.isSafeInteger(total) || total > count) return false;
     }
-    if (distribution.completeness === 'complete' && (distribution.bins.length !== 10 || total !== count))
-      return false;
+    if (distribution.completeness === 'complete' && (distribution.bins.length !== 10 || total !== count)) return false;
   }
   if (Object.hasOwn(value, 'rank')) {
     const rank = value.rank;
@@ -198,14 +198,20 @@ function validFigures(value: unknown, count: number): value is SourceObservation
 }
 
 function validPayload(source: SourceObservationProvider, value: unknown): value is SourceObservationPayload {
-  if (!isRecord(value) || !validAlias(value.sourceAlias) || !validRecord(value.sourceRecordId) || !validDate(value.asOf))
-    return false;
-  if (value.count === 0)
-    return onlyKeys(value, ['sourceAlias', 'sourceRecordId', 'count', 'asOf']);
   if (
-    !onlyKeys(value, ['sourceAlias', 'sourceRecordId', 'scale', 'mean', 'count', 'asOf', 'licence', 'attribution'], [
-      'figures',
-    ]) ||
+    !isRecord(value) ||
+    !validAlias(value.sourceAlias) ||
+    !validRecord(value.sourceRecordId) ||
+    !validDate(value.asOf)
+  )
+    return false;
+  if (value.count === 0) return onlyKeys(value, ['sourceAlias', 'sourceRecordId', 'count', 'asOf']);
+  if (
+    !onlyKeys(
+      value,
+      ['sourceAlias', 'sourceRecordId', 'scale', 'mean', 'count', 'asOf', 'licence', 'attribution'],
+      ['figures'],
+    ) ||
     !validScale(value.scale) ||
     typeof value.mean !== 'number' ||
     !Number.isFinite(value.mean) ||
@@ -235,13 +241,24 @@ function validPayload(source: SourceObservationProvider, value: unknown): value 
 function validItem(source: SourceObservationProvider, value: unknown): value is SourceObservationItem {
   if (
     !isRecord(value) ||
-    !onlyKeys(value, ['digest', 'payloadVersion', 'sourceAlias', 'sourceRecordId', 'asOf', 'nativeOrder', 'legacy', 'provenance', 'payload']) ||
+    !onlyKeys(value, [
+      'digest',
+      'payloadVersion',
+      'sourceAlias',
+      'sourceRecordId',
+      'asOf',
+      'nativeOrder',
+      'legacy',
+      'provenance',
+      'payload',
+    ]) ||
     !isSourceObservationDigest(value.digest) ||
     value.payloadVersion !== 1 ||
     !validAlias(value.sourceAlias) ||
     !validRecord(value.sourceRecordId) ||
     !validDate(value.asOf) ||
-    (value.nativeOrder !== null && (typeof value.nativeOrder !== 'string' || !/^[1-9][0-9]*$/.test(value.nativeOrder))) ||
+    (value.nativeOrder !== null &&
+      (typeof value.nativeOrder !== 'string' || !/^[1-9][0-9]*$/.test(value.nativeOrder))) ||
     typeof value.legacy !== 'boolean' ||
     value.legacy !== (value.nativeOrder === null) ||
     !isRecord(value.provenance) ||
@@ -285,10 +302,12 @@ export function admitSourceObservation(
     !onlyKeys(value.resolution, ['put', 'clear']) ||
     !isRecord(value.resolution.put) ||
     !onlyKeys(value.resolution.put, ['expectedObservation']) ||
-    (value.resolution.put.expectedObservation !== null && !isSourceObservationDigest(value.resolution.put.expectedObservation)) ||
+    (value.resolution.put.expectedObservation !== null &&
+      !isSourceObservationDigest(value.resolution.put.expectedObservation)) ||
     !isRecord(value.resolution.clear) ||
     !onlyKeys(value.resolution.clear, ['expectedObservation']) ||
-    (value.resolution.clear.expectedObservation !== null && !isSourceObservationDigest(value.resolution.clear.expectedObservation))
+    (value.resolution.clear.expectedObservation !== null &&
+      !isSourceObservationDigest(value.resolution.clear.expectedObservation))
   )
     return null;
   const observation = value.head.observation as SourceObservationItem | null;
@@ -303,7 +322,8 @@ export function admitSourceObservation(
     return null;
 
   if (request.digest !== undefined) {
-    if (!Object.hasOwn(value, 'selectedObservation') || !validItem(request.source, value.selectedObservation)) return null;
+    if (!Object.hasOwn(value, 'selectedObservation') || !validItem(request.source, value.selectedObservation))
+      return null;
     if (value.selectedObservation.digest !== request.digest) return null;
   } else if (Object.hasOwn(value, 'selectedObservation')) return null;
 

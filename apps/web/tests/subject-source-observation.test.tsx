@@ -84,12 +84,8 @@ function ready(inspection: SourceObservationInspection) {
 }
 
 test('the consumer admits ten supplied bins and one native history row while preserving empty continuation', async () => {
-  const {
-    admitSourceObservation,
-    inspectSourceObservation,
-    sourceObservationHref,
-    SOURCE_OBSERVATION_GENERATED_SEAM,
-  } = await import('../src/features/catalogue/source-observation/contract');
+  const { admitSourceObservation, inspectSourceObservation, sourceObservationHref, SOURCE_OBSERVATION_GENERATED_SEAM } =
+    await import('../src/features/catalogue/source-observation/contract');
   const request: SourceObservationRequest = { subjectId, source: 'bangumi', history: true };
   const base = {
     source: 'bangumi',
@@ -120,9 +116,10 @@ test('the consumer admits ten supplied bins and one native history row while pre
     `/en/subjects/${subjectId}/sources?realm=realm-a&provider=bangumi&digest=${selectedDigest}`,
   );
   expect(sourceObservationHref(`/en/subjects/${subjectId}/sources`, 'other-provider', selectedDigest)).toBeNull();
-  expect(
-    await inspectSourceObservation(null, { subjectId, source: 'bangumi', digest: selectedDigest }),
-  ).toEqual({ kind: 'unavailable', capability: SOURCE_OBSERVATION_GENERATED_SEAM });
+  expect(await inspectSourceObservation(null, { subjectId, source: 'bangumi', digest: selectedDigest })).toEqual({
+    kind: 'unavailable',
+    capability: SOURCE_OBSERVATION_GENERATED_SEAM,
+  });
 });
 
 test('one selected reading compares with the current head and each explicit history action replaces one bounded page', async () => {
@@ -195,7 +192,9 @@ test('one selected reading compares with the current head and each explicit hist
     expect(host.textContent).not.toContain('opaque-native-cursor');
     expect(host.querySelectorAll('[data-slot="source-observation-item"]')).toHaveLength(2);
 
-    const load = [...host.querySelectorAll('button')].find((button) => button.textContent === m.source_observation_load_history());
+    const load = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.source_observation_load_history(),
+    );
     expect(load).toBeTruthy();
     await act(async () => {
       load!.click();
@@ -206,7 +205,9 @@ test('one selected reading compares with the current head and each explicit hist
     expect(host.textContent).not.toContain(m.source_observation_exhausted());
     expect(host.querySelectorAll('[data-slot="source-observation-history-page"] li')).toHaveLength(0);
 
-    const next = [...host.querySelectorAll('button')].find((button) => button.textContent === m.source_observation_continue());
+    const next = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.source_observation_continue(),
+    );
     expect(next).toBeTruthy();
     await act(async () => {
       next!.click();
@@ -214,8 +215,8 @@ test('one selected reading compares with the current head and each explicit hist
     });
     expect(calls[2]).toEqual({ subjectId, source: 'bangumi', cursor: 'opaque-native-cursor' });
     expect(host.querySelectorAll('[data-slot="source-observation-history-page"] li')).toHaveLength(1);
-    const compare = [...host.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('248001') && button.textContent.includes('2026-10-19'),
+    const compare = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent?.includes('248001') && button.textContent.includes('2026-10-19'),
     );
     expect(compare).toBeTruthy();
     await act(async () => compare!.click());
@@ -256,7 +257,10 @@ test('a conflict retry replays the exact original cursor and a late retired obse
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: 'https://site.test/en' });
-  const keys = 'window document navigator HTMLElement Element Node MutationObserver getComputedStyle IS_REACT_ACT_ENVIRONMENT'.split(' ');
+  const keys =
+    'window document navigator HTMLElement Element Node MutationObserver getComputedStyle IS_REACT_ACT_ENVIRONMENT'.split(
+      ' ',
+    );
   const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const key of keys)
     Object.defineProperty(globalThis, key, {
@@ -321,7 +325,9 @@ test('a conflict retry replays the exact original cursor and a late retired obse
     expect(calls[1]).toEqual(calls[0]);
     expect(host.textContent).toContain('248001');
 
-    const load = [...host.querySelectorAll('button')].find((button) => button.textContent === m.source_observation_load_history());
+    const load = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.source_observation_load_history(),
+    );
     expect(load).toBeTruthy();
     await act(async () => {
       load!.click();
