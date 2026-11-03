@@ -31,6 +31,7 @@ import {
 } from './sitemap/export.ts';
 import { trendingResponse } from './search/trending.ts';
 import { suggestionResponse } from './search/suggestions.ts';
+import { identityIntakeResponse } from './features/catalogue/identity-intake-server.ts';
 import { limitRead, readLimitKey, type ReadRateLimitEnv } from './rate-limit/read.ts';
 import { orderStatusResponse } from './checkout/order.server.ts';
 import { startCheckout } from './checkout/start.ts';
@@ -451,7 +452,8 @@ async function fetchRequest(request: Request): Promise<Response> {
     !isServerFn &&
     !url.pathname.startsWith('/auth/') &&
     url.pathname !== '/api/search/suggestions' &&
-    url.pathname !== '/api/search/trending'
+    url.pathname !== '/api/search/trending' &&
+    url.pathname !== '/api/catalogue/identity-intake'
   ) {
     const redirect = await pageRedirect(request, url);
     if (redirect) return redirect;
@@ -468,7 +470,12 @@ async function fetchRequest(request: Request): Promise<Response> {
         mediaSessionError = error;
       }
       subject = sessionSubject(request);
-    } else if (isServerFn || url.pathname === '/api/search/suggestions' || url.pathname === '/api/search/trending') {
+    } else if (
+      isServerFn ||
+      url.pathname === '/api/search/suggestions' ||
+      url.pathname === '/api/search/trending' ||
+      url.pathname === '/api/catalogue/identity-intake'
+    ) {
       const identity = await readSessionState(request, sessionEnv);
       if (identity.state === 'signed-in') subject = identity.subject;
     }
@@ -517,6 +524,7 @@ async function fetchRequest(request: Request): Promise<Response> {
   if (url.pathname === '/api/search/suggestions') {
     return suggestionResponse(request, sessionEnv);
   }
+  if (url.pathname === '/api/catalogue/identity-intake') return identityIntakeResponse(request, sessionEnv);
   if (url.pathname !== '/media' && !url.pathname.startsWith('/media/')) return siteRequest(request);
   try {
     if (!isRead) clearSessionCookie = await prepareSession(request, env as Partial<SessionEnv>);

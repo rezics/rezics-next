@@ -25,7 +25,7 @@ export const Route = createFileRoute('/catalogue/new')({
 
 function NewSubjectPage() {
   const editorWork = useCatalogueLifetime('transport');
-  const { state, csrfToken } = useSession();
+  const { state, csrfToken, subject } = useSession();
   const { relatedWorkHandoff } = Route.useSearch();
   return (
     <RelatedWorkCreate
@@ -35,6 +35,7 @@ function NewSubjectPage() {
       reader={editorWork.reader}
       readerLive={editorWork.live}
       {...(relatedWorkHandoff ? { token: relatedWorkHandoff } : {})}
+      identityIntake={{ viewerKey: JSON.stringify([state, subject ?? '', csrfToken ?? '']), viewerState: state }}
       transport={{
         typeDirectory: {
           page: (input) => readCreateTypePage({ data: input }),

@@ -5,6 +5,23 @@ to the current Subject reader and explains an individual change without inventin
 owns browser binding. Semantic owns these native contracts. Subject creation, proposal, acceptance and adoption
 keep their existing APIs and authority. A selected scalar `schema:name` statement is independent of labels.
 
+## Browser flow: direct generic identity intake
+
+The direct `/{locale}/catalogue/new` visit asks for the current released Type and explicit data language, then
+searches the entered name before the ordinary initial-facts and review flow. Search suggestions show available
+language labels, Type/grain and bounded summaries; opening one uses its normal current reader. A result never
+establishes equality or copies terms, facts, aliases or relationships. Type and term edits retire the prior result
+and continue confirmation while preserving the private draft. The private read binds the current query, language,
+Type release and viewer state; native Search has no suggestion cursor, so this visit offers its finite first page.
+
+Search failures remain distinct from an empty result. Retry stays available, and an explicit unverified-discovery
+acknowledgement permits a deliberate attempt to continue after an outage. Creation permission remains unknown in
+the browser; the existing native create command checks current Global `subject:create` authority, and an acknowledged
+create retry reads the exact returned identity. Specialized creators and the private related-work handoff keep their
+existing routes and writers.
+
+Decision: after unavailable discovery, direct generic creation may continue only with an explicit unverified-search acknowledgement; the failure never counts as no matches or as creation authority.
+
 ## Browser flow: multilingual subject terms
 
 The subject header and compact subject frame offer **Edit names and descriptions** at

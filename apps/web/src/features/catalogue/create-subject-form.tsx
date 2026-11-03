@@ -24,6 +24,8 @@ import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
 import { AlbumProfileEntry } from './album-profile-entry';
 import { MusicContextCreateEntry } from './music-context-create-entry';
+import { identityIntentKey, type IdentityIntakeInput } from './identity-intake';
+import { IdentityIntakePanel } from './identity-intake-view';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import {
   GenericCreateFactsWorkspace,
@@ -156,6 +158,7 @@ function CreateSubjectFormLive({
   onCreated,
   navigation,
   typeAdmission,
+  identityIntake,
 }: {
   profile?: {
     title: string;
@@ -203,6 +206,7 @@ function CreateSubjectFormLive({
     unavailable?: readonly string[];
     admitType?: (type: CreateType) => boolean;
   };
+  identityIntake?: { viewerKey: string; viewerState: Session };
 }) {
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
@@ -235,8 +239,10 @@ function CreateSubjectFormLive({
   const [directoryCheckError, setDirectoryCheckError] = useState<'missing' | 'unavailable' | 'unadmitted' | null>(null);
   const [directoryRefreshToken, setDirectoryRefreshToken] = useState(0);
   const [rows, setRows] = useState<TermDraft[]>([
-    { language: profile?.initialLanguage ?? locale, label: '', description: '', aliases: '' },
+    { language: profile?.initialLanguage ?? (identityIntake ? '' : locale), label: '', description: '', aliases: '' },
   ]);
+  const [identityRevision, setIdentityRevision] = useState(0);
+  const [identityConfirmation, setIdentityConfirmation] = useState<{ key: string; unverified: boolean } | null>(null);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const typeRows = useRef(new Map<string, TermDraft[]>());
@@ -285,6 +291,21 @@ function CreateSubjectFormLive({
   const errors = failure?.errors ?? [];
   const readOnlyType = !!profile?.type && profile.readOnlyType;
   const hasDraft = !!type || rows.some((row) => !!(row.label || row.description || row.aliases));
+  const directIdentityIntake = !!identityIntake && directoryMode && !specializedCreatePath;
+  const identityInput: IdentityIntakeInput | null =
+    directIdentityIntake && directoryType?.releaseDigest
+      ? {
+          q: rows[0]?.label ?? '',
+          language: rows[0]?.language ?? '',
+          typeId: directoryType.id,
+          releaseDigest: directoryType.releaseDigest,
+          locale,
+        }
+      : null;
+  const identityKey = identityIntentKey(identityInput, identityRevision, identityIntake?.viewerKey ?? '');
+  const identityConfirmed =
+    !directIdentityIntake || (!!identityKey && identityConfirmation?.key === identityKey);
+  const draftDisabled = directIdentityIntake ? locked : disabled;
   // Retrying an uncertain command needs its original identity, even while definitions are unavailable.
   const definitionsFailed = directoryMode ? false : profile?.metadata ? !profile.metadata.ready : definitions.isError;
   const hasCurrentType = directoryMode
@@ -307,7 +328,7 @@ function CreateSubjectFormLive({
   // Profile callbacks share this form's workspace and command lock, including before busy renders.
   const typeEditable = !profile?.metadata?.pending && (!profile?.canEditType || profile.canEditType(type));
   const profileEditable =
-    !disabled && !definitionsBlocked && !profile?.metadata?.pending && typeEditable && !!selectedType && !created;
+    !draftDisabled && !definitionsBlocked && !profile?.metadata?.pending && typeEditable && !!selectedType && !created;
   const currentEdit = useRef<object | null>(null);
   const edit = useMemo(() => {
     const token = {};
@@ -379,8 +400,15 @@ function CreateSubjectFormLive({
     if (profile?.retainTypeDrafts) profile.onTypeDraftChange?.(ownerType, hasTermInput(next));
   }
 
+  function retireIdentityConfirmation() {
+    if (!identityIntake) return;
+    setIdentityRevision((revision) => revision + 1);
+    setIdentityConfirmation(null);
+  }
+
   function changeType(nextType: string) {
     if (nextType === type) return;
+    retireIdentityConfirmation();
     currentEdit.current = null;
     if (profile?.retainTypeDrafts) {
       const current = structuredClone(rowsRef.current);
@@ -412,6 +440,7 @@ function CreateSubjectFormLive({
   }
 
   function update(index: number, field: keyof TermDraft, value: string) {
+    if (index === 0 && (field === 'label' || field === 'language')) retireIdentityConfirmation();
     writeRows(rowsRef.current.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
     setFailure(undefined);
     invalidateReview();
@@ -420,7 +449,14 @@ function CreateSubjectFormLive({
   async function submit(event: FormEvent<HTMLFormElement>) {
     if (!lifetime.active()) return;
     event.preventDefault();
-    if (running.current || session !== 'signed-in' || created || failure?.reason === 'conflict' || definitionsBlocked)
+    if (
+      running.current ||
+      session !== 'signed-in' ||
+      created ||
+      failure?.reason === 'conflict' ||
+      definitionsBlocked ||
+      (directIdentityIntake && (!identityKey || identityConfirmation?.key !== identityKey))
+    )
       return;
     running.current = true;
     setBusy(true);
@@ -671,7 +707,7 @@ function CreateSubjectFormLive({
               {rows.map((row, index) => (
                 <fieldset
                   key={index}
-                  disabled={disabled || !typeEditable}
+                  disabled={draftDisabled || !typeEditable}
                   className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
                 >
                   <legend className="px-1 text-sm font-semibold">{m.catalogue_create_terms({}, options)}</legend>
@@ -758,7 +794,7 @@ function CreateSubjectFormLive({
               <Button
                 type="button"
                 variant="outline"
-                disabled={disabled}
+                disabled={draftDisabled}
                 onClick={() => {
                   writeRows([...rowsRef.current, { language: '', label: '', description: '', aliases: '' }]);
                   invalidateReview();
@@ -800,12 +836,14 @@ function CreateSubjectFormLive({
                       locale={locale}
                       transport={transport.typeDirectory!}
                       selected={directoryType}
-                      disabled={disabled}
+                      disabled={draftDisabled}
                       invalid={invalid('create-type')}
                       describedBy={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       refreshToken={directoryRefreshToken}
                       onSelectionChange={(nextType) => {
                         const previous = directoryType;
+                        if (previous?.id !== nextType?.id || previous?.releaseDigest !== nextType?.releaseDigest)
+                          retireIdentityConfirmation();
                         setDirectoryType(nextType);
                         setType(nextType?.id ?? '');
                         if (nextType) {
@@ -833,11 +871,13 @@ function CreateSubjectFormLive({
                       onPendingChange={setDirectoryPending}
                       onDescriptorState={(typeId, state) => {
                         if (state === 'current') {
+                          if (typeId !== directoryType?.id) return;
                           setDirectoryDescriptorState(state);
                           setDirectoryCheckError(null);
                           return;
                         }
                         if (typeId !== directoryType?.id) return;
+                        if (directoryDescriptorState !== state) retireIdentityConfirmation();
                         setDirectoryDescriptorState(state);
                         setDirectoryCheckError(state === 'reading' ? null : state);
                       }}
@@ -853,7 +893,7 @@ function CreateSubjectFormLive({
                     <NativeSelect
                       id="create-type"
                       value={type}
-                      disabled={disabled || !!profile?.metadata?.pending}
+                      disabled={draftDisabled || !!profile?.metadata?.pending}
                       aria-invalid={invalid('create-type')}
                       aria-describedby={`create-grain create-type-help${invalid('create-type') ? ' create-type-error' : ''}`}
                       onChange={(event) => changeType(event.target.value)}
@@ -908,6 +948,28 @@ function CreateSubjectFormLive({
                   <FieldError id="create-type-error">{guidance('create-type', 'type')}</FieldError>
                 )}
               </Field>
+              {directIdentityIntake && identityIntake ? (
+                <IdentityIntakePanel
+                  locale={locale}
+                  intent={identityInput}
+                  version={identityRevision}
+                  viewerKey={identityIntake.viewerKey}
+                  viewerState={identityIntake.viewerState}
+                  hasType={!!directoryType}
+                  typeLabel={directoryType?.label}
+                  typeCurrent={directoryDescriptorState === 'current' && !!directoryType?.releaseDigest}
+                  disabled={locked}
+                  confirmed={identityConfirmed}
+                  confirmedUnverified={identityConfirmation?.unverified === true && identityConfirmed}
+                  onContinue={(key, unverified) => setIdentityConfirmation({ key, unverified })}
+                  onClear={() => setIdentityConfirmation(null)}
+                  onRefreshType={() => {
+                    retireIdentityConfirmation();
+                    setDirectoryRefreshToken((token) => token + 1);
+                  }}
+                  inputId="create-label-0"
+                />
+              ) : null}
               {profile && (
                 <CreateSubjectProfileDraft type={type} onDirty={setProfileDirty}>
                   {profile.fields(type, disabled, edit.active, invalidateReview, discardTypeDraft)}
@@ -920,7 +982,7 @@ function CreateSubjectFormLive({
                   descriptor={genericDescriptor}
                   facts={genericFacts}
                   onChange={updateGenericFacts}
-                  disabled={disabled}
+                  disabled={draftDisabled}
                   canEdit={edit.active}
                   locale={locale}
                   errors={errors}
@@ -1032,8 +1094,15 @@ function CreateSubjectFormLive({
               )}
               <div>
                 <Button
+                  id="create-subject-submit"
                   type="submit"
-                  disabled={busy || session !== 'signed-in' || failure?.reason === 'conflict' || definitionsBlocked}
+                  disabled={
+                    busy ||
+                    session !== 'signed-in' ||
+                    failure?.reason === 'conflict' ||
+                    definitionsBlocked ||
+                    (directIdentityIntake && !identityConfirmed)
+                  }
                 >
                   {busy
                     ? m.catalogue_create_saving({}, options)

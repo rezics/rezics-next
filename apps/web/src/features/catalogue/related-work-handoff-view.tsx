@@ -42,6 +42,7 @@ export function RelatedWorkCreate({
   token,
   reader,
   readerLive,
+  identityIntake,
 }: {
   locale: string;
   session: Session;
@@ -50,6 +51,7 @@ export function RelatedWorkCreate({
   token?: string;
   reader: string;
   readerLive: () => boolean;
+  identityIntake?: { viewerKey: string; viewerState: Session };
 }) {
   const options = { locale: locale as never };
   const [handoff, setHandoff] = useState<RelatedWorkHandoff>();
@@ -185,6 +187,7 @@ export function RelatedWorkCreate({
           if (handoff) recordCreated(result);
         }}
         onNavigate={handoff ? () => {} : onNavigate}
+        {...(!token && identityIntake ? { identityIntake } : {})}
         {...(handoff
           ? {
               typeAdmission: {
