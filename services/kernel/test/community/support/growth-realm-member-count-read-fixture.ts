@@ -34,8 +34,9 @@ export async function openRealmMemberCountReadFixture(): Promise<RealmMemberCoun
     const accounts = await driver.provision();
     const growth = await driver.growthFixture();
     growth.database.pool.options.max = 1;
-    const route = routeOf(growth.realmId);
-    if (route === null) throw new Error('Growth Realm is not a native routed id');
+    const routeValue = routeOf(growth.realmId);
+    if (routeValue === null) throw new Error('Growth Realm is not a native routed id');
+    const route: number = routeValue;
     const partition = partitionOf(route);
 
     async function createRealm(title: string, visibility: 'public' | 'protected' = 'public'): Promise<string> {

@@ -4,10 +4,22 @@ import openMembership from '../../src/community/membership-open.sql';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { communityFixtureRuntime } from './community-driver.ts';
-import { capture, checkGrowth, costOf, seed, type Cost, type Population } from '../support/growth.ts';
-import { openRealmMemberCountReadFixture, type RealmMemberCountReadFixture, type RealmMemberSummary } from './support/growth-realm-member-count-read-fixture.ts';
+import {
+  capture,
+  checkGrowth,
+  costOf,
+  seed,
+  type Cost,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
+import {
+  openRealmMemberCountReadFixture,
+  type RealmMemberCountReadFixture,
+  type RealmMemberSummary,
+} from './support/growth-realm-member-count-read-fixture.ts';
 
-const scales = [256, 1024, 4096] as const;
+const scales: [number, number, number] = [256, 1024, 4096];
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 const currentTime = '2020-01-01T00:00:00.000Z';
 let fixture: RealmMemberCountReadFixture;
@@ -129,7 +141,7 @@ function retainedHistory(): Population {
   };
 }
 
-async function growHistory(scale: number, previous: number): Promise<void> {
+async function growHistory(_database: GrowthDatabase, scale: number, previous: number): Promise<void> {
   await seed(fixture.database, retainedHistory(), { from: previous, to: scale });
   const count = await fixture.database.admin.query<{ count: number }>(
     `SELECT count(*)::integer AS count FROM community.realm_member
