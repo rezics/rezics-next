@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { readCurrentResourceRolePage } from '../access/current-resource-roles.ts';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -10,7 +11,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import memberActions from './member-page-actions.sql';
 import currentMembers from './member-page-current.sql';
-import selectMembers from './member-page-select.sql';
+import memberFrontier from './member-page-frontier.sql';
 import { PublicationCursorError } from './publication.ts';
 
 export const REALM_MEMBER_PAGE_SIZE = 20;
@@ -34,12 +35,17 @@ export type MemberAnchor = {
   transactionId: string;
 };
 
+export type SelectedMemberAnchor =
+  | { accountId: string; membership: 'member'; anchor: MemberAnchor }
+  | { accountId: string; membership: 'none'; anchor: null };
+
 export type MemberSelection =
   | {
       state: 'ready';
+      epoch: number;
       members: readonly MemberAnchor[];
       next: string | null;
-      selected: { accountId: string; membership: 'member' | 'none' } | null;
+      selected: SelectedMemberAnchor | null;
     }
   | {
       state: 'preparing';
@@ -76,6 +82,68 @@ function checkedAnchor(row: Record<string, unknown>, realmRoute: number): Member
   if (accountRoute === null || routeOf(row.reservationId) !== accountRoute || routeOf(row.transactionId) !== realmRoute)
     throw new MemberPageUnavailableError();
   return { accountId: row.accountId, reservationId: row.reservationId, transactionId: row.transactionId };
+}
+
+export function sameMemberAnchor(expected: MemberAnchor, actual: MemberAnchor | undefined): boolean {
+  return (
+    actual !== undefined &&
+    expected.accountId === actual.accountId &&
+    expected.reservationId === actual.reservationId &&
+    expected.transactionId === actual.transactionId
+  );
+}
+
+export function sameSelectedMember(expected: SelectedMemberAnchor, actual: MemberAnchor | undefined): boolean {
+  return expected.membership === 'none' ? actual === undefined : sameMemberAnchor(expected.anchor, actual);
+}
+
+export function samePublicIdentityObservation(
+  before: PublicIdentity | undefined,
+  after: PublicIdentity | undefined,
+): boolean {
+  if (!before || !after) return before === after;
+  if (before.id !== after.id || before.kind !== after.kind || before.state !== after.state) return false;
+  if (before.state === 'deleted' || after.state === 'deleted') return before.state === after.state;
+  return (
+    before.handle === after.handle &&
+    before.displayName === after.displayName &&
+    before.automated === after.automated &&
+    before.operatorId === after.operatorId
+  );
+}
+
+/** Stable, viewer-scoped proof of the exact selected membership observation without exposing its native IDs. */
+export function realmMemberEpisodeToken(input: {
+  tokens: KeyRing;
+  realmId: string;
+  viewerAccountId: string;
+  accountId: string;
+  epoch: number;
+  anchor: MemberAnchor | null;
+}): string {
+  const key = input.tokens.keys.get(input.tokens.current);
+  if (
+    !key ||
+    !Number.isInteger(input.tokens.current) ||
+    input.tokens.current < 0 ||
+    input.tokens.current > 255 ||
+    key.byteLength < 32 ||
+    !Number.isSafeInteger(input.epoch) ||
+    input.epoch < 1 ||
+    (input.anchor !== null && input.anchor.accountId !== input.accountId)
+  )
+    throw new MemberPageUnavailableError();
+  const scope = JSON.stringify([input.realmId, input.viewerAccountId, input.accountId]);
+  const observation = JSON.stringify([
+    input.epoch,
+    input.anchor === null ? 'none' : 'member',
+    input.anchor?.reservationId ?? null,
+    input.anchor?.transactionId ?? null,
+  ]);
+  const digest = createHmac('sha256', key)
+    .update(`community.realm.member-episode.v1\0${scope}\0${observation}`, 'utf8')
+    .digest('base64url');
+  return `mep1.${input.tokens.current}.${digest}`;
 }
 
 function cursorBinding(realmId: string, viewerAccountId: string): MemberCursorBinding {
@@ -138,7 +206,7 @@ async function readTransaction<T>(pool: Pool, deadline: number, run: (client: Po
   });
 }
 
-/** Selects raw current Realm keys first; identity hydration never changes the cursor. */
+/** Selects a bounded raw frontier and its exact current source episodes before identity hydration. */
 export async function selectRealmMembers(
   input: {
     pool: Pool;
@@ -176,7 +244,7 @@ export async function selectRealmMembers(
       if (!partition || partition.writeState === 'moved') throw new MemberPageUnavailableError();
       if (cursorEpoch !== undefined && cursorEpoch !== partition.epoch) throw new PublicationCursorError('stale');
 
-      const rawRows = await selectMembers.run(client, {
+      const rawRows = await memberFrontier.run(client, {
         route,
         realm_id: request.realmId,
         after,
@@ -184,51 +252,64 @@ export async function selectRealmMembers(
       });
       if (rawRows.length > REALM_MEMBER_PAGE_SIZE) throw new MemberPageUnavailableError();
       const raw = rawRows.map((row) => {
-        if (typeof row.hasMore !== 'boolean') throw new MemberPageUnavailableError();
-        return { ...checkedAnchor(row, route), hasMore: row.hasMore };
+        if (typeof row.current !== 'boolean' || typeof row.hasMore !== 'boolean')
+          throw new MemberPageUnavailableError();
+        return { ...checkedAnchor(row, route), current: row.current, hasMore: row.hasMore };
       });
       const ids = uniqueIds([
-        ...raw.map((member) => member.accountId),
+        ...raw.filter((member) => member.current).map((member) => member.accountId),
         ...(request.selectedAccountId === undefined ? [] : [request.selectedAccountId]),
       ]);
+
       const current = await readCurrentMembers(client, {
         route,
         realmId: request.realmId,
         accountIds: ids,
         at: request.at,
       });
+      const rawMembers = raw.filter((member) => member.current);
 
       if (
-        raw.some((member) => {
+        rawMembers.some((member) => {
           const observed = current.get(member.accountId);
           return (
             !observed ||
             !observed.committed ||
             observed.terminalized ||
-            observed.reservationId !== member.reservationId ||
-            observed.transactionId !== member.transactionId
+            !sameMemberAnchor(member, observed)
           );
         })
       )
         return { state: 'preparing', members: [], next: request.cursor ?? null, selected: null };
 
-      const selectedAnchor = request.selectedAccountId ? current.get(request.selectedAccountId) : undefined;
+      const selectedAnchor =
+        request.selectedAccountId === undefined ? undefined : current.get(request.selectedAccountId);
       if (selectedAnchor && (!selectedAnchor.committed || selectedAnchor.terminalized))
         return { state: 'preparing', members: [], next: request.cursor ?? null, selected: null };
 
-      const members = raw.map(({ hasMore: _hasMore, ...member }) => member);
+      const members = rawMembers.map((member) => {
+        const observed = current.get(member.accountId)!;
+        return {
+          accountId: observed.accountId,
+          reservationId: observed.reservationId,
+          transactionId: observed.transactionId,
+        };
+      });
       const last = raw.at(-1);
       const next = last?.hasMore
         ? encodeCursor(input.tokens, binding, { epoch: partition.epoch, after: [last.accountId] })
         : null;
       return {
         state: 'ready',
+        epoch: partition.epoch,
         members,
         next,
         selected:
           request.selectedAccountId === undefined
             ? null
-            : { accountId: request.selectedAccountId, membership: selectedAnchor ? 'member' : 'none' },
+            : selectedAnchor
+              ? { accountId: request.selectedAccountId, membership: 'member', anchor: selectedAnchor }
+              : { accountId: request.selectedAccountId, membership: 'none', anchor: null },
       };
     });
   } catch (error) {
@@ -244,7 +325,7 @@ export async function confirmRealmMemberSelection(
     realmId: string;
     at: string;
     members: readonly MemberAnchor[];
-    selected: { accountId: string; membership: 'member' | 'none' } | null;
+    selected: SelectedMemberAnchor | null;
   },
 ): Promise<boolean> {
   const route = routeOf(request.realmId);
@@ -261,21 +342,19 @@ export async function confirmRealmMemberSelection(
         accountIds: ids,
         at: request.at,
       });
-      const sameMember = (expected: MemberAnchor) => {
-        const actual = current.get(expected.accountId);
-        return (
-          actual !== undefined &&
-          actual.committed &&
-          !actual.terminalized &&
-          actual.reservationId === expected.reservationId &&
-          actual.transactionId === expected.transactionId
-        );
-      };
-      if (request.members.some((member) => !sameMember(member))) return false;
+      if (
+        request.members.some((member) => {
+          const actual = current.get(member.accountId);
+          return !actual?.committed || actual.terminalized || !sameMemberAnchor(member, actual);
+        })
+      )
+        return false;
       if (request.selected === null) return true;
       const selected = current.get(request.selected.accountId);
-      if (request.selected.membership === 'none') return selected === undefined;
-      return selected !== undefined && sameMember(selected);
+      return (
+        (selected === undefined || (selected.committed && !selected.terminalized)) &&
+        sameSelectedMember(request.selected, selected)
+      );
     });
   } catch (error) {
     if (error instanceof MemberPageUnavailableError) throw error;
