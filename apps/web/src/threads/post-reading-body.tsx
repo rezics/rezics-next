@@ -4,9 +4,10 @@ import { getLocale } from '../paraglide/runtime.js';
 import { NativeDocumentImage } from './document-media';
 import { documentImagesForPost, type ThreadDocumentMedia } from './document-media-read';
 import type { ThreadPost } from './reads';
-import { projectReadingOutline } from './post-reading-outline';
+import { projectPostReading } from './post-reference-list';
 import { PostReadingOutlineView } from './post-reading-outline-view';
 import { PostReadingPosition } from './post-reading-position';
+import { PostReferenceView } from './post-reference-view';
 import './post-reading.css';
 
 type ReadingProps = ComponentProps<typeof DocumentBody> & {
@@ -53,7 +54,8 @@ function ReadingVisit({
 }: ReadingProps & { position: PostReadingPosition }) {
   const namespace = `reading-${useId().replaceAll(':', '')}`;
   const [disclosed, setDisclosed] = useState<ReadonlySet<number>>(() => new Set());
-  const outline = useMemo(() => projectReadingOutline(props.document, disclosed), [props.document, disclosed]);
+  const projection = useMemo(() => projectPostReading(props.document, disclosed), [props.document, disclosed]);
+  const outline = projection.outline;
   useLayoutEffect(() => position.connect(), [position]);
   const attributes = useMemo(() => {
     const bindings = new Map(
@@ -76,6 +78,17 @@ function ReadingVisit({
     },
     [position, callerDisclosure],
   );
+  const linkAttributes = useCallback(
+    (occurrence: number) => {
+      if (!projection.references.byPosition.has(occurrence)) return undefined;
+      const entry = projection.references.byPosition.get(occurrence)!;
+      return {
+        id: `${namespace}-r-${entry.ordinal}`,
+        ref: (element: HTMLAnchorElement | null) => position.bindReference(occurrence, element),
+      };
+    },
+    [namespace, position, projection.references.byPosition],
+  );
   // Opening, dismissing and returning only render the controls; they never traverse the snapshot again.
   const body = useMemo(
     () => (
@@ -83,11 +96,12 @@ function ReadingVisit({
         {...props}
         locale={locale}
         headingAttributes={attributes}
+        linkAttributes={linkAttributes}
         onDisclosureChange={disclosure}
         className={`post-reading-document ${className ?? ''}`}
       />
     ),
-    [props.document, props.mentions, props.labels, props.renderImage, locale, attributes, disclosure, className],
+    [props.document, props.mentions, props.labels, props.renderImage, locale, attributes, linkAttributes, disclosure, className],
   );
   return (
     <div
@@ -99,7 +113,17 @@ function ReadingVisit({
       tabIndex={-1}
       onFocusCapture={(event) => position.rememberFocus(event.target as HTMLElement)}
     >
-      <PostReadingOutlineView outline={outline} position={position} locale={locale} />
+      <div
+        ref={(element) => position.setControls(element)}
+        data-slot="post-reading-controls"
+        className="sticky top-24 z-10 mb-3 w-fit max-w-full rounded-xl bg-background/95 p-1 shadow-sm"
+        lang={locale}
+      >
+        <div className="flex max-w-full flex-wrap gap-1">
+          <PostReadingOutlineView outline={outline} position={position} locale={locale} />
+          <PostReferenceView references={projection.references} position={position} locale={locale} />
+        </div>
+      </div>
       {body}
     </div>
   );

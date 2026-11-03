@@ -7,6 +7,8 @@ import { documentExtensions } from './document-extensions.ts';
 import { safeDocumentUrl } from './document-url.ts';
 import { NativeCheckbox } from './native-checkbox.tsx';
 
+export { safeDocumentUrl } from './document-url.ts';
+
 const rel = 'noopener noreferrer nofollow ugc';
 
 function semanticSnapshotJson(value: unknown): string {
@@ -70,6 +72,12 @@ export type DocumentHeadingAttributes = {
   ref: Ref<HTMLHeadingElement>;
 };
 
+/** Optional local source targets for admitted link occurrences. */
+export type DocumentLinkAttributes = {
+  id?: string;
+  ref?: Ref<HTMLAnchorElement>;
+};
+
 type Props = {
   document: DocumentSnapshot;
   className?: string;
@@ -78,6 +86,8 @@ type Props = {
   locale?: string;
   /** Existing admitted node identity, independent of render attempts or heading text. */
   headingAttributes?: (nodeId: string) => DocumentHeadingAttributes | undefined;
+  /** Optional occurrence-indexed attributes; omitted consumers keep their ordinary anchor markup. */
+  linkAttributes?: (occurrence: number) => DocumentLinkAttributes | undefined;
   /** Spoiler mark positions in document order, from the renderer's live disclosure authority. */
   onDisclosureChange?: (revealed: ReadonlySet<number>) => void;
   /** A reader without current native derivative summaries must render explicit unavailability, never guess a URL. */
@@ -93,6 +103,7 @@ export function DocumentBody({
   locale = 'en',
   renderImage,
   headingAttributes,
+  linkAttributes,
   onDisclosureChange,
 }: Props) {
   // Published readers admit immutable snapshots; ordinary consumers retain semantic replacement detection.
@@ -134,6 +145,7 @@ export function DocumentBody({
       return index;
     },
   };
+  let linkOccurrence = 0;
   const content = renderToReactElement({
     extensions: documentExtensions,
     content: document.doc,
@@ -222,10 +234,16 @@ export function DocumentBody({
       },
       markMapping: {
         link: ({ mark, children, node }: any) => {
+          const occurrence = linkOccurrence++;
           if (node.type.name === 'mention') return <>{children}</>;
           const href = safeDocumentUrl(mark.attrs?.href);
           return href ? (
-            <a href={href} rel={rel}>
+            <a
+              href={href}
+              rel={rel}
+              title={typeof mark.attrs?.title === 'string' ? mark.attrs.title : undefined}
+              {...linkAttributes?.(occurrence)}
+            >
               {children}
             </a>
           ) : (

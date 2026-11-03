@@ -476,3 +476,35 @@ intact; the installed copy helper offers a selectable same-origin URL if clipboa
 stay out of ordinary summary labels. No private text, credentials or history cursor enter return navigation.
 Prepared revision-history stories exercise loaded, inspected, removed, partial-failure and terminal states at
 390px and 1280px, in both themes; prepared fixtures do not establish native response authorization.
+
+## Inspecting authored references while reading
+
+Decision: use one responsive References sheet/dialog for an ordered, bounded occurrence list and one selected
+detail, with separate actions to follow, copy, or return to the exact source occurrence.
+
+The live [Photosynthesis References list on Wikipedia](https://en.wikipedia.org/wiki/Photosynthesis) keeps work
+titles distinct from separately linked DOI and PubMed destinations. REZICS keeps the authored link label distinct
+from its admitted destination for the same reason; a host is shown only as a location, never as a trust signal.
+
+`ThreadPostReadingBody` enhances the exact available published snapshot only after hydration. Its single iterative
+O(B + N) projection shares traversal with Sections, follows the renderer's spoiler-mark order and omits concealed,
+unsupported-visibility, unsupported-URL and mention occurrences. It retains at most 64 descriptors, each with a
+label of at most 120 Unicode code points; excess disclosed links receive a truthful omitted count. The installed
+link schema has no narrower `href` size than the admitted snapshot, whose authoring ceiling is 2 MiB. Descriptors
+refer to that snapshot's original URL strings, and only the selected destination is retained by the detail view.
+Repeated labels and URLs remain separate occurrences in authored order with distinct namespace-scoped source
+targets. The list makes no metadata requests and does not inspect media, shell, reply or provenance links.
+
+The ordinary renderer keeps authored text, admitted `href`, optional authored `title` and its normal anchor
+navigation. References opens only from its 44px control; a reader selects one occurrence, sees the full wrapping,
+isolated destination, and may follow its ordinary link, explicitly copy that exact address, or return to the source
+without changing the fragment, revision or reply target. `mailto:` destinations are identified by their scheme;
+web hostnames are location labels only. A denied or missing clipboard leaves the exact read-only address available
+for manual selection. Pending writes capture their original destination, and their feedback retires when selection,
+reader lifetime or source identity changes.
+
+Source ids, selection, focus bookmarks and copy feedback are local to one mounted reader and its viewer/route
+lifetime. Replacing the account, document, revision or admitted snapshot retires them even when the text is equal.
+The whole-body disclosure owner stays in front of the reading body, and the original spoiler controls remain the
+only authority for inline disclosure. Plain reading and ordinary links still render without JavaScript or if the
+optional References visit cannot hydrate.

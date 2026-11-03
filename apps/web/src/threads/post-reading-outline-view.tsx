@@ -114,44 +114,37 @@ export function PostReadingOutlineView({
 
   if (!enhanced || !outline.entries.length) return null;
   return (
-    <div
-      ref={(element) => position.setControls(element)}
-      data-slot="post-reading-sections"
-      className="sticky top-24 z-10 mb-3 w-fit max-w-full rounded-xl bg-background/95 p-1 shadow-sm"
-      lang={locale}
-    >
-      <div className="flex max-w-full flex-wrap gap-1">
+    <>
+      <Button
+        ref={launcher}
+        type="button"
+        variant="outline"
+        className={control}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        onClick={() => changeOpen(true)}
+      >
+        {title}
+      </Button>
+      {returning ? (
         <Button
-          ref={launcher}
           type="button"
-          variant="outline"
+          variant="ghost"
           className={control}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? id : undefined}
-          onClick={() => changeOpen(true)}
+          onClick={() => {
+            if (!position.requestReturn()) return;
+            const result = position.complete();
+            if (!position.isCurrent()) return;
+            setReturning(position.canReturn);
+            setUnavailable(result === 'unavailable');
+          }}
         >
-          {title}
+          {m.post_sections_return({}, options)}
         </Button>
-        {returning ? (
-          <Button
-            type="button"
-            variant="ghost"
-            className={control}
-            onClick={() => {
-              if (!position.requestReturn()) return;
-              const result = position.complete();
-              if (!position.isCurrent()) return;
-              setReturning(position.canReturn);
-              setUnavailable(result === 'unavailable');
-            }}
-          >
-            {m.post_sections_return({}, options)}
-          </Button>
-        ) : null}
-      </div>
+      ) : null}
       {unavailable ? (
-        <p role="status" className="max-w-prose p-2 text-sm">
+        <p role="status" className="max-w-prose basis-full p-2 text-sm">
           {m.post_sections_unavailable({}, options)}
         </p>
       ) : null}
@@ -179,6 +172,6 @@ export function PostReadingOutlineView({
           </DialogContent>
         </Dialog>
       )}
-    </div>
+    </>
   );
 }

@@ -7,7 +7,9 @@ type Bookmark = {
   focus: HTMLElement | null;
 };
 
-type Pending = { kind: 'jump'; position: number; bookmark: Bookmark | null } | { kind: 'return' };
+type Pending =
+  | { kind: 'jump'; target: 'heading' | 'reference'; position: number; bookmark: Bookmark | null }
+  | { kind: 'return' };
 export type ReadingMove = 'jumped' | 'returned' | 'unavailable' | null;
 
 /** Bounded target lookups and one deferred action, completed only after the responsive modal releases focus. */
@@ -15,6 +17,7 @@ export class PostReadingPosition {
   private root: HTMLElement | null = null;
   private controls: HTMLElement | null = null;
   private targets = new Map<number, HTMLHeadingElement>();
+  private referenceTargets = new Map<number, HTMLAnchorElement>();
   private previous: Bookmark | null = null;
   private opening: Bookmark | null = null;
   private readingFocus: HTMLElement | null = null;
@@ -47,6 +50,7 @@ export class PostReadingPosition {
   }
   private clear() {
     this.targets.clear();
+    this.referenceTargets.clear();
     this.controls = null;
     this.previous = null;
     this.opening = null;
@@ -65,6 +69,14 @@ export class PostReadingPosition {
     if (this.retired) return;
     if (element) this.targets.set(position, element);
     else this.targets.delete(position);
+  }
+  bindReference(position: number, element: HTMLAnchorElement | null) {
+    if (this.retired) return;
+    if (element) this.referenceTargets.set(position, element);
+    else this.referenceTargets.delete(position);
+  }
+  fallbackFocus() {
+    return this.root?.isConnected ? this.root : null;
   }
   get targetCount() {
     return this.targets.size;
@@ -107,7 +119,12 @@ export class PostReadingPosition {
   }
   choose(position: number) {
     if (!this.isCurrent()) return false;
-    this.pending = { kind: 'jump', position, bookmark: this.opening };
+    this.pending = { kind: 'jump', target: 'heading', position, bookmark: this.opening };
+    return true;
+  }
+  chooseReference(position: number) {
+    if (!this.isCurrent()) return false;
+    this.pending = { kind: 'jump', target: 'reference', position, bookmark: this.opening };
     return true;
   }
   requestReturn() {
@@ -129,7 +146,10 @@ export class PostReadingPosition {
     this.opening = null;
     if (!pending || !this.isCurrent()) return null;
     if (pending.kind === 'jump') {
-      const target = this.targets.get(pending.position) ?? null;
+      const target =
+        pending.target === 'reference'
+          ? (this.referenceTargets.get(pending.position) ?? null)
+          : (this.targets.get(pending.position) ?? null);
       if (!this.live(target)) {
         this.focusReader();
         return 'unavailable';
