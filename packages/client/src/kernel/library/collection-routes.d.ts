@@ -5483,10 +5483,9 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         }[];
                     } | {
                         kind: "query";
-                        filter: {
-                            state?: string;
-                            primaryType?: string;
-                        };
+                        sourceId: string;
+                        filter?: string;
+                        sort?: "id";
                     };
                 } | {
                     action: "add_to_collection";
@@ -5498,10 +5497,9 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         }[];
                     } | {
                         kind: "query";
-                        filter: {
-                            state?: string;
-                            primaryType?: string;
-                        };
+                        sourceId: string;
+                        filter?: string;
+                        sort?: "id";
                     };
                 } | {
                     action: "remove_from_library";
@@ -5512,15 +5510,24 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                         }[];
                     } | {
                         kind: "query";
-                        filter: {
-                            state?: string;
-                            primaryType?: string;
-                        };
+                        sourceId: string;
+                        filter?: string;
+                        sort?: "id";
                     };
                 } | {
                     action: "remove_from_collection";
                     collectionId: string;
                     selection: {
+                        kind: "explicit";
+                        targets: {
+                            subjectId: string;
+                        }[];
+                    } | {
+                        kind: "query";
+                        sourceId: string;
+                        filter?: string;
+                        sort?: "id";
+                    } | {
                         kind: "occurrences";
                         memberIds: string[];
                     };
@@ -5539,6 +5546,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             selectionKind: import("./bulk-contract.ts").BulkAdmission['selection']['kind'];
                             state: import("./entry-model.ts").EntryState | null;
                             collectionId: string | null;
+                            selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
                             phase: import("./bulk-contract.ts").BulkPhase;
                             selectionComplete: boolean;
                             occurrencesComplete: boolean;
@@ -5561,6 +5569,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             selectionKind: "explicit" | "occurrences" | "query";
                             state: string | null;
                             collectionId: string | null;
+                            selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
                             phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                             selectionComplete: boolean;
                             occurrencesComplete: boolean;
@@ -5592,6 +5601,9 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                             finishedAt: string | null;
                             reason: "authority_lost" | "cancel_requested" | "collection_full" | "deadline" | "dependency_unavailable" | "evidence_missing" | "execution_expired" | "incarnation_mismatch" | "invalid_subject" | "missing_target" | "revision_mismatch" | "target_denied" | null;
                         };
+                    };
+                    202: {
+                        preparing: true;
                     };
                     400: Response | {
                         type: unknown;
@@ -5695,6 +5707,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                 selectionKind: "explicit" | "occurrences" | "query";
                                 state: string | null;
                                 collectionId: string | null;
+                                selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
                                 phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                                 selectionComplete: boolean;
                                 occurrencesComplete: boolean;
@@ -5955,6 +5968,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     selectionKind: "explicit" | "occurrences" | "query";
                                     state: string | null;
                                     collectionId: string | null;
+                                    selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
                                     phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                                     selectionComplete: boolean;
                                     occurrencesComplete: boolean;
@@ -6094,6 +6108,7 @@ export declare function collectionRoutes(app: ReturnType<typeof definitionRoutes
                                     selectionKind: "explicit" | "occurrences" | "query";
                                     state: string | null;
                                     collectionId: string | null;
+                                    selectionSource: import("./bulk-contract.ts").BulkSelectionSource | null;
                                     phase: "applying" | "cancelled" | "completed" | "completed_with_errors" | "discovering" | "expanding" | "expired" | "preview" | "queued" | "reconciling" | "stopped";
                                     selectionComplete: boolean;
                                     occurrencesComplete: boolean;

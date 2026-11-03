@@ -17,14 +17,26 @@ export type ExplicitLibraryRemoval = Extract<BulkAdmission, { action: 'remove_fr
 const validate = Compile(bulkAdmissionSchema);
 
 /** Validate the whole native command before any subject access or canonicalization. */
-export function explicitLibraryRemoval(input: BulkAdmission): ExplicitLibraryRemoval {
+export function explicitLibraryRemoval(
+  input: BulkAdmission,
+  options: { allowEmptyQueryCapture?: boolean } = {},
+): ExplicitLibraryRemoval {
   if (Buffer.byteLength(JSON.stringify(input)) > BULK_ADMISSION_BODY_BYTES)
     throw new RangeError('Bulk command exceeds 64 KiB');
-  if (!validate.Check(input)) throw new TypeError('Invalid bulk selection');
+  const emptyQueryCapture =
+    options.allowEmptyQueryCapture === true &&
+    input.action === 'remove_from_library' &&
+    input.selection.kind === 'explicit' &&
+    input.selection.targets.length === 0;
+  const validationInput: BulkAdmission = emptyQueryCapture
+    ? { ...input, selection: { kind: 'explicit', targets: [{ subjectId: '00000000-0000-0000-0000-000000000000' }] } }
+    : input;
+  if (!validate.Check(validationInput)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'remove_from_library' || input.selection.kind !== 'explicit')
     throw new ProblemError('dependency_unavailable');
   const targets = input.selection.targets.map(({ subjectId }) => ({ subjectId: subjectId.toLowerCase() }));
-  if (!targets.length || targets.length > BULK_MAX_SELECTION_IDS) throw new RangeError('Select 1 to 1,000 subjects');
+  if ((!targets.length && !options.allowEmptyQueryCapture) || targets.length > BULK_MAX_SELECTION_IDS)
+    throw new RangeError('Select 1 to 1,000 subjects');
   return { ...input, selection: { kind: 'explicit', targets } };
 }
 
@@ -55,6 +67,7 @@ export async function captureLibraryRemovalTargets(
   owner: AccountActor,
   subjects: readonly ResolvedSubject[],
 ): Promise<CollectionBulkTarget[]> {
+  if (subjects.length === 0) return [];
   const route = routeOf(owner.accountId);
   if (route === null) throw new TypeError('Invalid owner route');
   const counter = (

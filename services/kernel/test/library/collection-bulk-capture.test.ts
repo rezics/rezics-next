@@ -62,6 +62,12 @@ test('captures every Members page, canonical filter and unique subject operand',
   expect(result.source.sourceDigest).toMatch(/^[a-f0-9]{64}$/);
 });
 
+test('a stable exhausted empty source is a complete zero-target capture', async () => {
+  const result = await captureCollectionBulkSource(readsFor([]), actor, selection, Date.now() + 5000);
+  expect(result.subjects).toEqual([]);
+  expect(result.source).toMatchObject({ scannedCandidates: 0, selectedSubjects: 0 });
+});
+
 test('refuses the 1,001st unique selected subject without returning a partial capture', async () => {
   await expect(
     captureCollectionBulkSource(

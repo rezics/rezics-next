@@ -21,16 +21,28 @@ export type ExplicitCollectionBulkAdd = Extract<BulkAdmission, { action: 'add_to
 const validator = Compile(bulkAdmissionSchema);
 
 /** Validate and freeze the explicit add intent before any destination or Subject read. */
-export function explicitCollectionBulkAdd(input: BulkAdmission): ExplicitCollectionBulkAdd {
+export function explicitCollectionBulkAdd(
+  input: BulkAdmission,
+  options: { allowEmptyQueryCapture?: boolean } = {},
+): ExplicitCollectionBulkAdd {
   if (Buffer.byteLength(JSON.stringify(input)) > BULK_ADMISSION_BODY_BYTES)
     throw new RangeError('Bulk command exceeds 64 KiB');
-  if (!validator.Check(input)) throw new TypeError('Invalid bulk selection');
+  const emptyQueryCapture =
+    options.allowEmptyQueryCapture === true &&
+    input.action === 'add_to_collection' &&
+    input.selection.kind === 'explicit' &&
+    input.selection.targets.length === 0;
+  const validationInput: BulkAdmission = emptyQueryCapture
+    ? { ...input, selection: { kind: 'explicit', targets: [{ subjectId: '00000000-0000-0000-0000-000000000000' }] } }
+    : input;
+  if (!validator.Check(validationInput)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'add_to_collection' || input.selection.kind !== 'explicit')
     throw new ProblemError('dependency_unavailable');
   const collectionId = input.collectionId.toLowerCase();
   if (routeOf(collectionId) === null) throw new TypeError('Invalid target Collection');
   const targets = [...new Set(input.selection.targets.map(({ subjectId }) => subjectId.toLowerCase()))];
-  if (!targets.length || targets.length > BULK_MAX_SELECTION_IDS) throw new RangeError('Select 1 to 1,000 subjects');
+  if ((!targets.length && !options.allowEmptyQueryCapture) || targets.length > BULK_MAX_SELECTION_IDS)
+    throw new RangeError('Select 1 to 1,000 subjects');
   return {
     action: 'add_to_collection',
     collectionId,

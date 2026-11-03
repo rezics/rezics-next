@@ -77,16 +77,28 @@ export const bulkHash = (value: unknown) => createHash('sha256').update(canonica
 const validator = Compile(bulkAdmissionSchema);
 
 /** Validate the entire command before canonicalization or any source read. */
-export function explicitBulkStatus(input: BulkAdmission): Extract<BulkAdmission, { action: 'set_status' }> & {
+export function explicitBulkStatus(
+  input: BulkAdmission,
+  options: { allowEmptyQueryCapture?: boolean } = {},
+): Extract<BulkAdmission, { action: 'set_status' }> & {
   selection: Extract<BulkAdmission['selection'], { kind: 'explicit' }>;
 } {
   if (Buffer.byteLength(JSON.stringify(input)) > BULK_ADMISSION_BODY_BYTES)
     throw new RangeError('Bulk command exceeds 64 KiB');
-  if (!validator.Check(input)) throw new TypeError('Invalid bulk selection');
+  const emptyQueryCapture =
+    options.allowEmptyQueryCapture === true &&
+    input.action === 'set_status' &&
+    input.selection.kind === 'explicit' &&
+    input.selection.targets.length === 0;
+  const validationInput: BulkAdmission = emptyQueryCapture
+    ? { ...input, selection: { kind: 'explicit', targets: [{ subjectId: '00000000-0000-0000-0000-000000000000' }] } }
+    : input;
+  if (!validator.Check(validationInput)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'set_status' || input.selection.kind !== 'explicit')
     throw new ProblemError('dependency_unavailable');
   const targets = [...new Set(input.selection.targets.map((target) => target.subjectId.toLowerCase()))];
-  if (!targets.length || targets.length > BULK_MAX_SELECTION_IDS) throw new RangeError('Select 1 to 1,000 subjects');
+  if ((!targets.length && !options.allowEmptyQueryCapture) || targets.length > BULK_MAX_SELECTION_IDS)
+    throw new RangeError('Select 1 to 1,000 subjects');
   return { ...input, selection: { kind: 'explicit', targets: targets.map((subjectId) => ({ subjectId })) } };
 }
 export function bulkOwner(actor: Actor, action: string): AccountActor {
@@ -384,10 +396,10 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                 ? parsed
                 : captured
                   ? parsed.action === 'remove_from_library'
-                    ? explicitLibraryRemoval(materialized)
+                    ? explicitLibraryRemoval(materialized, { allowEmptyQueryCapture: true })
                     : parsed.action === 'add_to_collection'
-                      ? explicitCollectionBulkAdd(materialized)
-                      : explicitBulkStatus(materialized)
+                      ? explicitCollectionBulkAdd(materialized, { allowEmptyQueryCapture: true })
+                      : explicitBulkStatus(materialized, { allowEmptyQueryCapture: true })
                   : parsed;
             const base = {
               capture,

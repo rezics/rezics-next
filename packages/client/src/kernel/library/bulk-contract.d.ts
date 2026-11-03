@@ -21,11 +21,21 @@ export type SubjectSelection = {
     }[];
 } | {
     kind: 'query';
-    filter: {
-        state?: EntryState;
-        /** Raw type identifier; no per-id length cap. The shelf reader's opaque type-key codec is a dependency. */ primaryType?: string;
-    };
+    sourceId: string;
+    filter?: string;
+    sort?: 'id';
 };
+export type BulkSelectionSource = Readonly<{
+    id: string;
+    revision: number;
+    membershipKind: 'curated' | 'dynamic';
+    exposure: 'private' | 'unlisted' | 'public';
+    sourceDigest: string;
+    filter: string | null;
+    sort: 'id' | null;
+    scannedCandidates: number;
+    selectedSubjects: number;
+}>;
 export type OccurrenceSelection = {
     kind: 'occurrences';
     memberIds: readonly string[];
@@ -78,6 +88,7 @@ export type OperationView = Readonly<{
     selectionKind: BulkAdmission['selection']['kind'];
     state: EntryState | null;
     collectionId: string | null;
+    selectionSource: BulkSelectionSource | null;
     phase: BulkPhase;
     selectionComplete: boolean;
     occurrencesComplete: boolean;
