@@ -18,7 +18,8 @@ const bytes = (value: string) => encoder.encode(value).byteLength;
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const integer = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
-const identity = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 128;
+const identity = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= 128;
 
 export type WritingScope = {
   kind: 'thread' | 'reply';
@@ -79,17 +80,30 @@ export function writingScope(input: {
         : []
     : [];
   const scope = input.containerId
-    ? { kind: 'reply' as const, threadId: input.containerId, ...(input.replyTargetId ? { parentId: input.replyTargetId } : {}), subjects: [] }
+    ? {
+        kind: 'reply' as const,
+        threadId: input.containerId,
+        ...(input.replyTargetId ? { parentId: input.replyTargetId } : {}),
+        subjects: [],
+      }
     : input.boardId
       ? { kind: 'thread' as const, boardId: input.boardId, subjects: [...new Set(subjects)].sort() }
       : null;
   if (!scope) return null;
-  try { return scopeValue(scope); } catch { return null; }
+  try {
+    return scopeValue(scope);
+  } catch {
+    return null;
+  }
 }
 
 /** No installed reload admission exists for uploaded media or opaque component capabilities. */
 export function prepareWriting(title: string, body: DocumentSnapshot): WritingPayload {
-  try { parseDocument(body); } catch { throw new WritingError('document'); }
+  try {
+    parseDocument(body);
+  } catch {
+    throw new WritingError('document');
+  }
   let attachmentRepair = false;
   const visit = (node: DocumentNode): DocumentNode => {
     if (['image', 'media', 'extensionBlock', 'extensionInline'].includes(node.type)) {
@@ -103,15 +117,27 @@ export function prepareWriting(title: string, body: DocumentSnapshot): WritingPa
     return { ...node, ...(node.content ? { content: node.content.map(visit) } : {}) };
   };
   const sanitized = { version: body.version, profile: body.profile, doc: withDocumentIds(visit(body.doc)) };
-  try { parseDocument(sanitized); } catch { throw new WritingError('document'); }
+  try {
+    parseDocument(sanitized);
+  } catch {
+    throw new WritingError('document');
+  }
   return { title, body: sanitized, text: documentText(sanitized), attachmentRepair };
 }
 
 function metadata(value: unknown): WritingMetadata {
-  if (!record(value) || !integer(value.slot) || value.slot >= writingLimits.entries || !identity(value.actor) ||
-      !identity(value.revision) || !integer(value.updated) || !integer(value.bytes) || value.bytes > writingLimits.bytes ||
-      (value.state !== 'unsent' && value.state !== 'unknown') ||
-      Object.keys(value).some((key) => !['slot', 'actor', 'scope', 'revision', 'updated', 'bytes', 'state'].includes(key)))
+  if (
+    !record(value) ||
+    !integer(value.slot) ||
+    value.slot >= writingLimits.entries ||
+    !identity(value.actor) ||
+    !identity(value.revision) ||
+    !integer(value.updated) ||
+    !integer(value.bytes) ||
+    value.bytes > writingLimits.bytes ||
+    (value.state !== 'unsent' && value.state !== 'unknown') ||
+    Object.keys(value).some((key) => !['slot', 'actor', 'scope', 'revision', 'updated', 'bytes', 'state'].includes(key))
+  )
     throw new WritingError('corrupt');
   scopeValue(value.scope);
   return value as WritingMetadata;
@@ -121,27 +147,47 @@ function parseIndex(raw: string | null): Index {
   if (raw === null) return { version: 1, entries: [] };
   if (raw.length > indexLimit || bytes(raw) > indexLimit) throw new WritingError('corrupt');
   let value: unknown;
-  try { value = JSON.parse(raw); } catch { throw new WritingError('corrupt'); }
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new WritingError('corrupt');
+  }
   if (!record(value)) throw new WritingError('corrupt');
   if (value.version !== 1) throw new WritingError('version');
-  if (!Array.isArray(value.entries) || value.entries.length > writingLimits.entries ||
-      Object.keys(value).some((key) => !['version', 'entries'].includes(key))) throw new WritingError('corrupt');
+  if (
+    !Array.isArray(value.entries) ||
+    value.entries.length > writingLimits.entries ||
+    Object.keys(value).some((key) => !['version', 'entries'].includes(key))
+  )
+    throw new WritingError('corrupt');
   const entries = value.entries.map(metadata);
-  if (new Set(entries.map((entry) => entry.slot)).size !== entries.length ||
-      new Set(entries.map((entry) => entry.revision)).size !== entries.length) throw new WritingError('corrupt');
+  if (
+    new Set(entries.map((entry) => entry.slot)).size !== entries.length ||
+    new Set(entries.map((entry) => entry.revision)).size !== entries.length
+  )
+    throw new WritingError('corrupt');
   return { version: 1, entries };
 }
 
 function decodePayload(raw: string | null, entry: WritingMetadata): WritingPayload {
   if (raw === null || raw.length > writingLimits.bytes || bytes(raw) !== entry.bytes) throw new WritingError('corrupt');
   let value: unknown;
-  try { value = JSON.parse(raw); } catch { throw new WritingError('corrupt'); }
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new WritingError('corrupt');
+  }
   if (!record(value) || value.version !== 1) throw new WritingError('version');
   if (value.revision !== entry.revision || !record(value.payload)) throw new WritingError('corrupt');
   const payload = value.payload;
-  if (typeof payload.title !== 'string' || typeof payload.text !== 'string' || typeof payload.attachmentRepair !== 'boolean' ||
-      Object.keys(value).some((key) => !['version', 'revision', 'payload'].includes(key)) ||
-      Object.keys(payload).some((key) => !['title', 'body', 'text', 'attachmentRepair'].includes(key))) throw new WritingError('corrupt');
+  if (
+    typeof payload.title !== 'string' ||
+    typeof payload.text !== 'string' ||
+    typeof payload.attachmentRepair !== 'boolean' ||
+    Object.keys(value).some((key) => !['version', 'revision', 'payload'].includes(key)) ||
+    Object.keys(payload).some((key) => !['title', 'body', 'text', 'attachmentRepair'].includes(key))
+  )
+    throw new WritingError('corrupt');
   if (!record(payload.body) || payload.body.version !== 'rezics-document-v1') throw new WritingError('version');
   const sanitized = prepareWriting(payload.title, payload.body as unknown as DocumentSnapshot);
   // Stored native capabilities are rejected, including a tampered v1 payload.
@@ -151,57 +197,96 @@ function decodePayload(raw: string | null, entry: WritingMetadata): WritingPaylo
 
 /** O(K) index operations and O(B) for one payload. Never reads another account's body. */
 export class BrowserWritingStore {
-  constructor(private readonly storage: WritingStorage, private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly storage: WritingStorage,
+    private readonly now: () => number = Date.now,
+  ) {}
   private access<T>(action: () => T): T {
-    try { return action(); } catch (error) {
+    try {
+      return action();
+    } catch (error) {
       if (error instanceof WritingError) throw error;
       throw new WritingError('storage');
     }
   }
-  private index() { return parseIndex(this.storage.getItem(writingIndexKey)); }
-  private writeIndex(index: Index) { this.storage.setItem(writingIndexKey, JSON.stringify(index)); }
+  private index() {
+    return parseIndex(this.storage.getItem(writingIndexKey));
+  }
+  private writeIndex(index: Index) {
+    this.storage.setItem(writingIndexKey, JSON.stringify(index));
+  }
 
   load(actor: string, scope: WritingScope): SavedWriting | null {
     return this.access(() => {
-      const entry = this.index().entries.filter((item) => item.actor === actor && sameWritingScope(item.scope, scope))
+      const entry = this.index()
+        .entries.filter((item) => item.actor === actor && sameWritingScope(item.scope, scope))
         .sort((a, b) => b.updated - a.updated)[0];
       if (!entry) return null;
       return { ...entry, payload: decodePayload(this.storage.getItem(writingSlotKey(entry.slot)), entry) };
     });
   }
 
-  save(actor: string, scope: WritingScope, payload: WritingPayload, previous: SavedWriting | null, consent?: string): SaveResult {
+  save(
+    actor: string,
+    scope: WritingScope,
+    payload: WritingPayload,
+    previous: SavedWriting | null,
+    consent?: string,
+  ): SaveResult {
     return this.access(() => {
       if (!identity(actor)) throw new WritingError('corrupt');
       scopeValue(scope);
       const index = this.index();
-      const exact = previous && index.entries.find((entry) => entry.revision === previous.revision && entry.actor === actor);
+      const exact =
+        previous && index.entries.find((entry) => entry.revision === previous.revision && entry.actor === actor);
       if (previous && !exact) throw new WritingError('changed');
       if (exact?.state === 'unknown') throw new WritingError('changed');
       const matched = index.entries.find((entry) => entry.actor === actor && sameWritingScope(entry.scope, scope));
       const oldest = [...index.entries].sort((a, b) => a.updated - b.updated)[0];
-      const victim = exact ? undefined : (matched ?? (index.entries.length === writingLimits.entries ? oldest : undefined));
+      const victim = exact
+        ? undefined
+        : (matched ?? (index.entries.length === writingLimits.entries ? oldest : undefined));
       if (victim && consent !== victim.revision)
-        return { replace: { revision: victim.revision, updated: victim.updated, expired: this.now() - victim.updated > writingLimits.age } };
+        return {
+          replace: {
+            revision: victim.revision,
+            updated: victim.updated,
+            expired: this.now() - victim.updated > writingLimits.age,
+          },
+        };
       const occupied = new Set(index.entries.map((entry) => entry.slot));
-      const slot = exact?.slot ?? victim?.slot ?? Array.from({ length: writingLimits.entries }, (_, n) => n).find((n) => !occupied.has(n))!;
+      const slot =
+        exact?.slot ??
+        victim?.slot ??
+        Array.from({ length: writingLimits.entries }, (_, n) => n).find((n) => !occupied.has(n))!;
       const revision = crypto.randomUUID();
       // Revalidate the allowlisted envelope even for callers other than the mounted composer.
       const safe = prepareWriting(payload.title, payload.body);
       safe.attachmentRepair ||= payload.attachmentRepair;
       const raw = JSON.stringify({ version: 1, revision, payload: safe });
       if (bytes(raw) > writingLimits.bytes) throw new WritingError('limit');
-      const entry: WritingMetadata = { slot, actor, scope, revision, updated: this.now(), bytes: bytes(raw), state: 'unsent' };
+      const entry: WritingMetadata = {
+        slot,
+        actor,
+        scope,
+        revision,
+        updated: this.now(),
+        bytes: bytes(raw),
+        state: 'unsent',
+      };
       // A failed/crashed payload/index pair cannot be decoded as a different revision.
       // Restore the old bytes on an index failure where possible; live writing always stays with the caller.
       const oldRaw = this.storage.getItem(writingSlotKey(slot));
       this.storage.setItem(writingSlotKey(slot), raw);
-      try { this.writeIndex({ version: 1, entries: [...index.entries.filter((item) => item.slot !== slot), entry] }); }
-      catch (error) {
+      try {
+        this.writeIndex({ version: 1, entries: [...index.entries.filter((item) => item.slot !== slot), entry] });
+      } catch (error) {
         try {
           if (oldRaw === null) this.storage.removeItem(writingSlotKey(slot));
           else this.storage.setItem(writingSlotKey(slot), oldRaw);
-        } catch { /* A mismatched revision remains unavailable, never restored. */ }
+        } catch {
+          /* A mismatched revision remains unavailable, never restored. */
+        }
         throw error;
       }
       return { saved: { ...entry, payload: safe } };
@@ -214,7 +299,10 @@ export class BrowserWritingStore {
       const index = this.index();
       const exact = index.entries.find((entry) => entry.revision === saved.revision && entry.actor === saved.actor);
       if (!exact) throw new WritingError('changed');
-      this.writeIndex({ version: 1, entries: index.entries.map((entry) => entry === exact ? { ...entry, state } : entry) });
+      this.writeIndex({
+        version: 1,
+        entries: index.entries.map((entry) => (entry === exact ? { ...entry, state } : entry)),
+      });
       return { ...saved, state };
     });
   }
@@ -253,7 +341,14 @@ export class LocalWritingDraft {
   private previewFenced = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private queued: (() => WritingPayload) | undefined;
-  private state: WritingStatus = { enabled: false, preview: null, saved: null, replacement: null, issue: null, pending: false };
+  private state: WritingStatus = {
+    enabled: false,
+    preview: null,
+    saved: null,
+    replacement: null,
+    issue: null,
+    pending: false,
+  };
   private listeners = new Set<() => void>();
   constructor(
     private readonly store: () => BrowserWritingStore,
@@ -261,16 +356,31 @@ export class LocalWritingDraft {
     readonly scope: WritingScope,
     private readonly current: () => boolean,
     readonly signal: AbortSignal,
-    private readonly clock: { set: typeof setTimeout; clear: typeof clearTimeout } = { set: setTimeout, clear: clearTimeout },
-  ) { signal.addEventListener('abort', this.retire, { once: true }); }
+    private readonly clock: { set: typeof setTimeout; clear: typeof clearTimeout } = {
+      set: setTimeout,
+      clear: clearTimeout,
+    },
+  ) {
+    signal.addEventListener('abort', this.retire, { once: true });
+  }
   snapshot = () => this.state;
-  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-  private valid() { if (!this.current() || this.signal.aborted) this.retire(); return this.active; }
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  private valid() {
+    if (!this.current() || this.signal.aborted) this.retire();
+    return this.active;
+  }
   private update(next: Partial<WritingStatus>) {
     this.state = { ...this.state, ...next };
     this.listeners.forEach((listener) => listener());
   }
-  private fail(error: unknown) { this.update({ issue: error instanceof WritingError ? error.issue : 'storage', pending: false }); }
+  private fail(error: unknown) {
+    this.update({ issue: error instanceof WritingError ? error.issue : 'storage', pending: false });
+  }
   cancel = () => {
     if (this.timer !== undefined) this.clock.clear(this.timer);
     this.timer = undefined;
@@ -285,15 +395,21 @@ export class LocalWritingDraft {
   };
   load() {
     if (!this.valid()) return;
-    try { this.update({ preview: this.store().load(this.actor, this.scope), issue: null }); }
-    catch (error) { this.fail(error); }
+    try {
+      this.update({ preview: this.store().load(this.actor, this.scope), issue: null });
+    } catch (error) {
+      this.fail(error);
+    }
   }
   enable(read: () => WritingPayload) {
     if (!this.valid() || this.state.pending || this.state.preview) return;
     this.update({ enabled: true, issue: null });
     this.schedule(read);
   }
-  pause() { this.cancel(); this.update({ enabled: false, replacement: null }); }
+  pause() {
+    this.cancel();
+    this.update({ enabled: false, replacement: null });
+  }
   retry(read: () => WritingPayload) {
     if (!this.valid() || this.state.pending || this.state.preview) return;
     this.update({ issue: null, enabled: true });
@@ -301,7 +417,15 @@ export class LocalWritingDraft {
   }
   schedule(read: () => WritingPayload) {
     this.cancel();
-    if (!this.valid() || !this.state.enabled || this.state.pending || this.state.preview || this.state.issue || this.state.replacement) return;
+    if (
+      !this.valid() ||
+      !this.state.enabled ||
+      this.state.pending ||
+      this.state.preview ||
+      this.state.issue ||
+      this.state.replacement
+    )
+      return;
     this.queued = read;
     this.timer = this.clock.set(() => {
       this.timer = undefined;
@@ -316,20 +440,27 @@ export class LocalWritingDraft {
       const result = this.store().save(this.actor, this.scope, read(), this.state.saved, consent);
       if ('replace' in result) this.update({ replacement: result.replace });
       else this.update({ saved: result.saved, replacement: null, issue: null });
-    } catch (error) { this.fail(error); }
+    } catch (error) {
+      this.fail(error);
+    }
   }
   replace(read: () => WritingPayload) {
     if (!this.valid() || this.state.pending || !this.state.replacement) return;
     this.persist(read, this.state.replacement.revision);
   }
   restore(): WritingPayload | null {
-    if (!this.valid() || this.state.pending || !this.state.preview || this.state.preview.state === 'unknown') return null;
+    if (!this.valid() || this.state.pending || !this.state.preview || this.state.preview.state === 'unknown')
+      return null;
     try {
       const fresh = this.store().load(this.actor, this.scope);
-      if (!fresh || fresh.revision !== this.state.preview.revision || fresh.state !== 'unsent') throw new WritingError('changed');
+      if (!fresh || fresh.revision !== this.state.preview.revision || fresh.state !== 'unsent')
+        throw new WritingError('changed');
       this.update({ preview: null, saved: fresh, issue: null, enabled: false });
       return fresh.payload;
-    } catch (error) { this.fail(error); return null; }
+    } catch (error) {
+      this.fail(error);
+      return null;
+    }
   }
   discard() {
     if (!this.valid() || this.state.pending) return;
@@ -338,7 +469,9 @@ export class LocalWritingDraft {
       const saved = this.state.preview ?? this.state.saved;
       if (saved) this.store().discard(saved);
       this.update({ enabled: false, preview: null, saved: null, replacement: null, issue: null });
-    } catch (error) { this.fail(error); }
+    } catch (error) {
+      this.fail(error);
+    }
   }
   discardBroken() {
     if (!this.valid() || this.state.pending) return;
@@ -346,7 +479,9 @@ export class LocalWritingDraft {
     try {
       this.store().discardNamespace();
       this.update({ enabled: false, preview: null, saved: null, replacement: null, issue: null });
-    } catch (error) { this.fail(error); }
+    } catch (error) {
+      this.fail(error);
+    }
   }
   /** Save uncertainty first. A denied marker never permits a saved draft to become a new replay. */
   beginSubmission(): boolean {
@@ -361,7 +496,10 @@ export class LocalWritingDraft {
       }
       this.update({ pending: true });
       return true;
-    } catch (error) { this.fail(error); return false; }
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
   }
   settle(outcome: 'success' | 'refused' | 'unknown') {
     if (!this.valid()) return;
@@ -378,6 +516,9 @@ export class LocalWritingDraft {
         this.update({ pending: false });
       }
       // Unknown stays suspended through the exact current-visit retry.
-    } catch (error) { this.fail(error); this.update({ pending: outcome === 'unknown' }); }
+    } catch (error) {
+      this.fail(error);
+      this.update({ pending: outcome === 'unknown' });
+    }
   }
 }

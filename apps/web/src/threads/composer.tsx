@@ -1,6 +1,12 @@
 import { sessionCsrfToken, sessionQuery } from '../session/query';
 import { QueryClientContext } from '@tanstack/react-query';
-import { documentText, fromPlainText, hasDocumentContent, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import {
+  documentText,
+  fromPlainText,
+  hasDocumentContent,
+  type DocumentNode,
+  type DocumentSnapshot,
+} from '@rezics/document';
 import { RichTextEditor, type RichTextEditorLabels, type UploadState } from '@rezics/ui';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Input } from '@rezics/ui/shadcn/input';
@@ -656,7 +662,7 @@ function PostComposerContent<T, Context = undefined>({
   );
 
   const localWriting = useLocalWritingDraft({
-    actor: session?.state === 'signed-in' ? session.subject ?? null : null,
+    actor: session?.state === 'signed-in' ? (session.subject ?? null) : null,
     scope: writingScope({ containerId, boardId, replyTargetId, submissionContext }),
     current: () => lifetime.current(),
     signal: lifetime.controller.signal,
@@ -1123,7 +1129,13 @@ function PostComposerContent<T, Context = undefined>({
           restoreDisabled={pendingUploads > 0}
           hasLiveWriting={Boolean(title) || hasDocumentContent(body)}
           onRestore={(payload) => {
-            if (!lifetime.current() || submittingRef.current || replyIntent.current.unresolved || pendingRef.current > 0) return;
+            if (
+              !lifetime.current() ||
+              submittingRef.current ||
+              replyIntent.current.unresolved ||
+              pendingRef.current > 0
+            )
+              return;
             const nextKey = crypto.randomUUID();
             replyIntent.current.reset(nextKey);
             setIdempotencyKey(nextKey);
