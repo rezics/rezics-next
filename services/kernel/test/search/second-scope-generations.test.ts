@@ -86,7 +86,11 @@ test('default native owner readers register through the canonical slots without 
 
 test('default review population stays unready when the source has only the legacy key page', async () => {
   const ownerAdapters = createDefaultDiscoveryOwnerAdapters({
-    pool: { connect: async () => { throw new Error('readiness must not open a connection'); } } as unknown as Pool,
+    pool: {
+      connect: async () => {
+        throw new Error('readiness must not open a connection');
+      },
+    } as unknown as Pool,
     routeKey: new Uint8Array(32),
     access: {} as never,
     reviewSource: {} as never,

@@ -809,8 +809,7 @@ export function createDiscoveryProjection(options: {
   }
   async function prepareOwnerActions(kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) {
     const producer = metadataProducers[kind];
-    if (!producer)
-      throw new Error(`Native ${kind} discovery producer is not ready`);
+    if (!producer) throw new Error(`Native ${kind} discovery producer is not ready`);
     if (!Array.isArray(ids) || ids.length > 100 || new Set(ids).size !== ids.length)
       throw new RangeError('Metadata discovery read exceeds its bound or repeats an identity');
     const snapshot = await producer.read(partition, ids);
@@ -834,11 +833,9 @@ export function createDiscoveryProjection(options: {
   }
   async function ownerPosition(kind: DiscoveryMetadataKind, partition: number) {
     const producer = metadataProducers[kind];
-    if (!producer)
-      throw new Error(`Native ${kind} discovery producer is not ready`);
+    if (!producer) throw new Error(`Native ${kind} discovery producer is not ready`);
     const value = await producer.position(partition);
-    if (value < 0n || value > 9_223_372_036_854_775_807n)
-      throw new TypeError(`Native ${kind} position is invalid`);
+    if (value < 0n || value > 9_223_372_036_854_775_807n) throw new TypeError(`Native ${kind} position is invalid`);
     return value;
   }
   return {

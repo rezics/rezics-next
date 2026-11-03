@@ -381,18 +381,25 @@ export type DiscoveryMetadataProducer = Readonly<{
     after: Readonly<{ route: number; id: string }> | null,
     continuation: string | null,
     limit: number,
-  ): Promise<Readonly<{
-    position: bigint;
-    next: Readonly<{ route: number; id: string }> | null;
-    continuation: string | null;
-    keys: readonly SecondScopeDiscoveryKey[];
-    records: readonly SecondScopeDiscoveryRecord[];
-  }>>;
-  read(partition: number, ids: readonly string[]): Promise<Readonly<{
-    position: bigint;
-    keys: readonly SecondScopeDiscoveryKey[];
-    records: readonly SecondScopeDiscoveryRecord[];
-  }>>;
+  ): Promise<
+    Readonly<{
+      position: bigint;
+      next: Readonly<{ route: number; id: string }> | null;
+      continuation: string | null;
+      keys: readonly SecondScopeDiscoveryKey[];
+      records: readonly SecondScopeDiscoveryRecord[];
+    }>
+  >;
+  read(
+    partition: number,
+    ids: readonly string[],
+  ): Promise<
+    Readonly<{
+      position: bigint;
+      keys: readonly SecondScopeDiscoveryKey[];
+      records: readonly SecondScopeDiscoveryRecord[];
+    }>
+  >;
   position(partition: number): Promise<bigint>;
 }>;
 export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
@@ -456,16 +463,18 @@ export function assertDiscoveryProducerCoverage(
     space: 'content',
   };
   const available = new Set(producerKinds);
-  const unsupportedKinds = [...new Set([
-    ...[...owners]
-      .filter(([kind, owner]) =>
-        expectedOwners[kind] === undefined ? owner !== 'semantic' : expectedOwners[kind] !== owner,
-      )
-      .map(([kind]) => kind),
-    ...[...owners.keys()].filter((kind) => expectedOwners[kind] !== undefined && !available.has(kind)),
-    ...requiredKinds.filter((kind) => owners.has(kind) && !available.has(kind)),
-    ...producerKinds.filter((kind) => expectedOwners[kind] === undefined),
-  ])].sort();
+  const unsupportedKinds = [
+    ...new Set([
+      ...[...owners]
+        .filter(([kind, owner]) =>
+          expectedOwners[kind] === undefined ? owner !== 'semantic' : expectedOwners[kind] !== owner,
+        )
+        .map(([kind]) => kind),
+      ...[...owners.keys()].filter((kind) => expectedOwners[kind] !== undefined && !available.has(kind)),
+      ...requiredKinds.filter((kind) => owners.has(kind) && !available.has(kind)),
+      ...producerKinds.filter((kind) => expectedOwners[kind] === undefined),
+    ]),
+  ].sort();
   const duplicateKinds = [...duplicates].sort();
   if (missingKinds.length || unsupportedKinds.length || duplicateKinds.length)
     throw new DiscoveryProducerCoverageError({ missingKinds, unsupportedKinds, duplicateKinds });
@@ -536,7 +545,11 @@ export async function allocateDiscovery(
         [
           prefix,
           generation,
-          ['accounts', 'semantic', ...SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind))],
+          [
+            'accounts',
+            'semantic',
+            ...SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind)),
+          ],
         ],
       );
       await client.query(
@@ -853,7 +866,11 @@ async function reconcileMetadataDiscoveryPage(
       throw new GenerationReconciliationMismatch();
     return { route: key.route, id: key.id };
   });
-  const snapshot = await projection.prepareOwnerActions(kind, row.partition, keys.map(({ id }) => id));
+  const snapshot = await projection.prepareOwnerActions(
+    kind,
+    row.partition,
+    keys.map(({ id }) => id),
+  );
   if (row.reconcile_position !== null && BigInt(row.reconcile_position) !== snapshot.position) {
     await withConnection(pool, (client) =>
       client.query(
@@ -929,14 +946,16 @@ export async function advanceDiscovery(options: {
   const active = generations.find((row) => row.state === 'active');
   let activeCoverageComplete = true;
   if (active && requiredKinds.length > 0) {
-    const coverage = await withConnection(pool, async (client) =>
-      (
-        await client.query<{ owner: string; complete: boolean; partitions: string }>(
-          `SELECT owner,bool_and(complete AND certified) AS complete,count(*)::text AS partitions
+    const coverage = await withConnection(
+      pool,
+      async (client) =>
+        (
+          await client.query<{ owner: string; complete: boolean; partitions: string }>(
+            `SELECT owner,bool_and(complete AND certified) AS complete,count(*)::text AS partitions
           FROM search.discovery_population WHERE prefix=$1 AND generation=$2 AND owner=ANY($3::text[]) GROUP BY owner`,
-          [prefix, active.generation, requiredKinds],
-        )
-      ).rows,
+            [prefix, active.generation, requiredKinds],
+          )
+        ).rows,
     );
     const byOwner = new Map(coverage.map((row) => [row.owner, row]));
     activeCoverageComplete = requiredKinds.every((kind) => {
@@ -948,9 +967,7 @@ export async function advanceDiscovery(options: {
     generations.length === 0 ||
     (generations.every((row) => ['active', 'retiring', 'quarantined'].includes(row.state)) &&
       generations.some(
-        (row) =>
-          row.state === 'active' &&
-          (!isDeepStrictEqual(row.kinds, kinds) || !activeCoverageComplete),
+        (row) => row.state === 'active' && (!isDeepStrictEqual(row.kinds, kinds) || !activeCoverageComplete),
       ))
   ) {
     await allocateDiscovery(pool, prefix, registry, requiredKinds, producerKinds);

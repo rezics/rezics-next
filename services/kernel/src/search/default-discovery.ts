@@ -9,11 +9,7 @@ import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
 import { createReviewDiscoveryAdapter } from './review-discovery.ts';
 import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
-import type {
-  DiscoveryOwnerAdapterSlots,
-  DiscoveryOwnerMetadataSummary,
-  DiscoveryReadContext,
-} from './discovery.ts';
+import type { DiscoveryOwnerAdapterSlots, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
 import type { DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './generations.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
@@ -67,11 +63,12 @@ function requestedKeys(
   return keys;
 }
 
-function collectionRecords(items: readonly import('../library/collection-discovery-source.ts').CollectionDiscoveryItem[]) {
+function collectionRecords(
+  items: readonly import('../library/collection-discovery-source.ts').CollectionDiscoveryItem[],
+) {
   const records: SecondScopeDiscoveryRecord[] = [];
   for (const item of items) {
-    if (item.status === 'unavailable')
-      throw new CollectionDiscoveryReadinessError('unavailable', item.reason);
+    if (item.status === 'unavailable') throw new CollectionDiscoveryReadinessError('unavailable', item.reason);
     if (item.status !== 'indexable') continue;
     records.push({
       key: { owner: 'commerce', kind: 'collection', ...item.key },
@@ -109,10 +106,7 @@ function reviewRecords(
   return records;
 }
 
-function spaceRecords(
-  partition: number,
-  spaces: readonly import('../community/space-discovery.ts').IndexedSpace[],
-) {
+function spaceRecords(partition: number, spaces: readonly import('../community/space-discovery.ts').IndexedSpace[]) {
   return spaces.map((space): SecondScopeDiscoveryRecord => {
     const key = metadataKey('content', 'space', space.id);
     if (partitionOf(key.route) !== partition) throw new TypeError('Space source returned a foreign partition key');
@@ -139,8 +133,7 @@ function createCollectionPopulationProducer(
     async page(partition, after, continuation, limit) {
       if (continuation !== null) throw new TypeError('Collection discovery does not use an opaque continuation');
       const page = await adapter.source.page(partition, after, limit);
-      if (page.status !== 'available')
-        throw new CollectionDiscoveryReadinessError('unavailable', page.reason);
+      if (page.status !== 'available') throw new CollectionDiscoveryReadinessError('unavailable', page.reason);
       return {
         position: BigInt(page.stamp.position),
         next: page.next,
@@ -151,9 +144,11 @@ function createCollectionPopulationProducer(
     },
     async read(partition, ids) {
       const keys = requestedKeys('commerce', 'collection', partition, ids);
-      const snapshot = await adapter.source.read(partition, keys.map(({ route, id }) => ({ route, id })));
-      if (snapshot.status !== 'available')
-        throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
+      const snapshot = await adapter.source.read(
+        partition,
+        keys.map(({ route, id }) => ({ route, id })),
+      );
+      if (snapshot.status !== 'available') throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
       return {
         position: BigInt(snapshot.stamp.position),
         keys,
@@ -162,8 +157,7 @@ function createCollectionPopulationProducer(
     },
     async position(partition) {
       const snapshot = await adapter.source.read(partition, []);
-      if (snapshot.status !== 'available')
-        throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
+      if (snapshot.status !== 'available') throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
       return BigInt(snapshot.stamp.position);
     },
   };
@@ -177,14 +171,17 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
       return source?.pageWithCut ? 'ready' : 'unavailable';
     },
     async page(partition, after, continuation, limit) {
-      if (!source?.pageWithCut)
-        throw new TypeError('Content review discovery pageWithCut capability is unavailable');
+      if (!source?.pageWithCut) throw new TypeError('Content review discovery pageWithCut capability is unavailable');
       if (continuation !== null && after === null)
         throw new TypeError('Review continuation has no native full-key frontier');
       const cursor = continuation === null ? null : { ...after!, token: continuation };
       const page = await source.pageWithCut(partition, cursor, limit);
       if (page.state !== 'ready')
-        throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: ['review'], duplicateKinds: [] });
+        throw new DiscoveryProducerCoverageError({
+          missingKinds: [],
+          unsupportedKinds: ['review'],
+          duplicateKinds: [],
+        });
       if (page.next && (typeof page.next.token !== 'string' || !page.next.token))
         throw new TypeError('Content review population returned an invalid opaque continuation');
       return {
@@ -199,7 +196,11 @@ function createReviewPopulationProducer(source: ReviewDiscoverySource | undefine
       if (!source) throw new TypeError('Content review discovery source is unavailable');
       const keys = requestedKeys('content', 'review', partition, ids);
       const snapshot = await source.read(partition, ids);
-      return { position: snapshot.position, keys, records: reviewRecords(partition, snapshot.position, snapshot.reviews) };
+      return {
+        position: snapshot.position,
+        keys,
+        records: reviewRecords(partition, snapshot.position, snapshot.reviews),
+      };
     },
     async position(partition) {
       if (!source) throw new TypeError('Content review discovery source is unavailable');
