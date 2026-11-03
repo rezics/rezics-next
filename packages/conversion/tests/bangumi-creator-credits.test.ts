@@ -178,8 +178,8 @@ test('absent endpoints, unknown roles and a changed role withhold or replace the
   );
   expect(missing.proposals).toEqual([]);
   expect(missing.gaps).toMatchObject([
-    { reason: 'missing_identity', property: 'schema:director' },
     { reason: 'missing_identity', property: 'wdt:P453' },
+    { reason: 'missing_identity', property: 'schema:director' },
     { reason: 'unknown_code', code: '9999', property: 'staff.2' },
   ]);
   const original = mapBangumiVocabulary(input([director], bindings.concepts, bindings.schemes)).proposals[0];

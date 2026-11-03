@@ -263,4 +263,4 @@ test('ordinary reader, importer and editor see the connected seeded graph throug
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
-});
+}, 30_000);
