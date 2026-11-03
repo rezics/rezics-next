@@ -11,11 +11,11 @@ test('generated archive methods carry the raw envelope and the exact reviewed re
     { uploadId: id, applied: [{ ordinal: 0, status: 'acknowledged', result: { effect: 'label.create' } }] },
   ];
   const client = createKernelClient('https://kernel.test', {
-    fetch: async (input, init) => {
+    fetch: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       requests.push({ method: request.method, path: new URL(request.url).pathname, body: request.body ? await request.json() : null });
       return Response.json(replies.shift());
-    },
+    }, { preconnect: fetch.preconnect }),
   });
   const archive = { manifest: { version: 2 }, records: [{ section: 'labels', normalized_name: 'chosen' }] };
   const upload = await client.libraryArchiveMerges.post(archive, { headers: { 'idempotency-key': 'upload-reviewed-archive' } });
