@@ -112,9 +112,13 @@ function hasValue(content: unknown): boolean {
 export function creationStatement(statement: StatementInput, _release: Release): StatementInput {
   return {
     ...statement,
-    qualifiers: statement.qualifiers?.filter(
-      (part) => part.value.type !== 'value' || hasValue(part.value.content),
-    ),
+    ...(statement.qualifiers
+      ? {
+          qualifiers: statement.qualifiers.filter(
+            (part) => part.value.type !== 'value' || hasValue(part.value.content),
+          ),
+        }
+      : {}),
     references: statement.references.flatMap((reference) => {
       const parts = reference.parts.filter((part) => part.value.type !== 'value' || hasValue(part.value.content));
       return parts.length ? [{ ...reference, parts }] : [];
