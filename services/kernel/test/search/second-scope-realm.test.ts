@@ -8,7 +8,7 @@ import {
   type RealmSubjectMembership,
 } from '../../src/search/realm-scope.ts';
 import { scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
-import { createSearchService } from '../../src/search/service.ts';
+import { createSearchService, requiresAdvancedSearch } from '../../src/search/service.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { createRealmSubjectSource, type RealmSubjectDisclosure } from '../../src/content/realm-subject-source.ts';
 
@@ -95,6 +95,12 @@ test('Realm is closed and request-only; full tree and expanded saved leaves shar
   const plan = compileCurrentRealmFilter(parseDiscoveryFilter({ and: [leaf, { not: leaf }] }));
   expect(plan.leaves).toHaveLength(1);
   expect(plan.evaluate(['not_proven'])).toBe('not_proven');
+});
+
+test('text search under Realm keeps canonical name ordering', () => {
+  expect(requiresAdvancedSearch({ filter: leaf, text: 'title' })).toBe(true);
+  expect(() => requiresAdvancedSearch({ filter: leaf, text: 'title', sort: 'relevance' })).toThrow();
+  expect(() => requiresAdvancedSearch({ filter: leaf, sort: 'id' })).toThrow();
 });
 
 test('all Realm resources resolve under NOT and a true catalogue OR before any population read', async () => {
