@@ -82,9 +82,7 @@ test('seal captures immutable missing identities and later staging cannot rewrit
     });
     expect(header.evidence_id).toMatch(/^[a-f0-9]{48}$/);
     const missing = store.database
-      .query(
-        'SELECT record_key FROM run_disappearance_missing WHERE source=? AND run_id=? ORDER BY record_key',
-      )
+      .query('SELECT record_key FROM run_disappearance_missing WHERE source=? AND run_id=? ORDER BY record_key')
       .all(source, stopped.id) as { record_key: string }[];
     expect(missing.map((row) => row.record_key)).toEqual(['Q4', 'Q5']);
 
@@ -93,9 +91,7 @@ test('seal captures immutable missing identities and later staging cannot rewrit
     store.stage(later, staged(source, 'Q4'));
     expect(store.seal(later, { complete: false, reason: 'truncated' }).status).toBe('invalid-input');
     const after = store.database
-      .query(
-        'SELECT record_key FROM run_disappearance_missing WHERE source=? AND run_id=? ORDER BY record_key',
-      )
+      .query('SELECT record_key FROM run_disappearance_missing WHERE source=? AND run_id=? ORDER BY record_key')
       .all(source, stopped.id) as { record_key: string }[];
     expect(after.map((row) => row.record_key)).toEqual(['Q4', 'Q5']);
 
@@ -125,8 +121,9 @@ test('evidence capture failure rolls the seal back and all-missing stays blocked
     const stopped = store.begin(source, { disappearanceThreshold: 1 });
     if (stopped === 'busy') throw new Error('stopped');
     expect(() => store.seal(stopped, { complete: true })).toThrow('injected evidence failure');
-    expect(store.database.query('SELECT status FROM run_generations WHERE id=?').get(stopped.id) as { status: string })
-      .toMatchObject({ status: 'staging' });
+    expect(
+      store.database.query('SELECT status FROM run_generations WHERE id=?').get(stopped.id) as { status: string },
+    ).toMatchObject({ status: 'staging' });
     expect(store.database.query('SELECT count(*) AS n FROM run_disappearance_stops').get() as { n: number }).toEqual({
       n: 0,
     });
@@ -221,7 +218,9 @@ test('retention child deletion removes only one eligible generation and leaves o
         },
       ).toEqual({ n: 0 });
       expect(
-        after.database.query('SELECT count(*) AS n FROM run_disappearance_missing WHERE run_id=?').get(superseded.id) as {
+        after.database
+          .query('SELECT count(*) AS n FROM run_disappearance_missing WHERE run_id=?')
+          .get(superseded.id) as {
           n: number;
         },
       ).toEqual({ n: 0 });

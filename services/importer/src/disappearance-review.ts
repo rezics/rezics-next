@@ -43,14 +43,7 @@ const STOP_COLUMNS = [
   'threshold',
   'input_complete',
 ] as const;
-const MISSING_COLUMNS = [
-  'source',
-  'run_id',
-  'record_key',
-  'record_revision',
-  'digest',
-  'converter_revision',
-] as const;
+const MISSING_COLUMNS = ['source', 'run_id', 'record_key', 'record_revision', 'digest', 'converter_revision'] as const;
 
 export class DisappearanceReviewFailure extends InspectionFailure {}
 
@@ -215,7 +208,8 @@ function inspectSchema(database: Database): Schema {
   if (stop && missing) {
     const stopMissing = STOP_COLUMNS.find((column) => !stop.has(column));
     const missingMissing = MISSING_COLUMNS.find((column) => !missing.has(column));
-    if (stopMissing) fail(`Unsupported importer state schema: column run_disappearance_stops.${stopMissing} is missing.`, 2);
+    if (stopMissing)
+      fail(`Unsupported importer state schema: column run_disappearance_stops.${stopMissing} is missing.`, 2);
     if (missingMissing)
       fail(`Unsupported importer state schema: column run_disappearance_missing.${missingMissing} is missing.`, 2);
     evidence = 'complete';
@@ -254,7 +248,11 @@ function admitIdentity(value: unknown, label: string, maxBytes: number, pattern:
 }
 
 function parseMissing(row: MissingRow): DisappearanceMissingRow {
-  if (typeof row.record_key !== 'string' || utf8Bytes(row.record_key) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(row.record_key))
+  if (
+    typeof row.record_key !== 'string' ||
+    utf8Bytes(row.record_key) > MAX_RECORD_KEY_BYTES ||
+    !RECORD_KEY.test(row.record_key)
+  )
     fail('Malformed journal row: missing identity is not an exact source record key.');
   const recordRevision = admitIdentity(
     row.record_revision,
@@ -294,7 +292,11 @@ function decodeCursor(value: string, request: DisappearanceReviewRequest, eviden
     result.evidence !== evidenceId
   )
     fail('Cursor belongs to a different source, generation or stop-evidence snapshot.', 2);
-  if (typeof result.record !== 'string' || utf8Bytes(result.record) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(result.record))
+  if (
+    typeof result.record !== 'string' ||
+    utf8Bytes(result.record) > MAX_RECORD_KEY_BYTES ||
+    !RECORD_KEY.test(result.record)
+  )
     fail('Cursor record ordering key is invalid.', 2);
   return result.record;
 }
@@ -341,9 +343,7 @@ function schemaColumns(database: Database, table: string): Set<string> | null {
     found: number;
   } | null;
   if (!found) return null;
-  return new Set(
-    (database.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((row) => row.name),
-  );
+  return new Set((database.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((row) => row.name));
 }
 
 /** Read-only review of one stopped mass-disappearance generation. Never constructs RunStore. */
@@ -402,7 +402,10 @@ export class DisappearanceReview {
         // Preserve the original bounded read failure.
       }
       if (error instanceof InspectionFailure) throw error;
-      if (error instanceof Error && /SQLITE_BUSY|SQLITE_LOCKED|database is locked|database is busy/i.test(error.message))
+      if (
+        error instanceof Error &&
+        /SQLITE_BUSY|SQLITE_LOCKED|database is locked|database is busy/i.test(error.message)
+      )
         fail('State database is busy or locked; retry the local review.');
       if (error instanceof Error && /no such (?:table|column)|no query solution|no such index/i.test(error.message))
         fail('Unsupported importer state schema: a required journal field or index is unavailable.', 2);
@@ -432,15 +435,23 @@ export class DisappearanceReview {
     if (!generation) fail(`No retained generation ${JSON.stringify(request.generation)} exists for this source.`, 2);
     if (generation.id !== request.generation)
       fail('Malformed journal row: generation identity does not match its lookup key.');
-    if (typeof generation.status !== 'string' || utf8Bytes(generation.status) > 64 || !/^[a-z][a-z0-9-]*$/u.test(generation.status))
+    if (
+      typeof generation.status !== 'string' ||
+      utf8Bytes(generation.status) > 64 ||
+      !/^[a-z][a-z0-9-]*$/u.test(generation.status)
+    )
       fail('Malformed journal row: generation status is not a stored status identifier.');
     const retentionState = availability(generation.status, generation.retired, generation.retention_state);
     const counts = {
       supplied: integer(generation.supplied, 'run_generations.supplied'),
       survivors: integer(generation.survivors, 'run_generations.survivors'),
       prior: integer(generation.prior, 'run_generations.prior'),
-      missing: integer(generation.prior, 'run_generations.prior') - integer(generation.survivors, 'run_generations.survivors'),
-      threshold: typeof generation.threshold === 'number' && Number.isFinite(generation.threshold) ? generation.threshold : fail('Malformed journal row: disappearance threshold is invalid.'),
+      missing:
+        integer(generation.prior, 'run_generations.prior') - integer(generation.survivors, 'run_generations.survivors'),
+      threshold:
+        typeof generation.threshold === 'number' && Number.isFinite(generation.threshold)
+          ? generation.threshold
+          : fail('Malformed journal row: disappearance threshold is invalid.'),
     };
     const stop =
       this.schema.evidence === 'complete'
@@ -468,7 +479,8 @@ export class DisappearanceReview {
         fail('Malformed journal row: stored stop threshold is invalid.');
       counts.threshold = stop.threshold;
     }
-    const evidenceId = evidenceAvailability === 'complete' && typeof stop?.evidence_id === 'string' ? stop.evidence_id : null;
+    const evidenceId =
+      evidenceAvailability === 'complete' && typeof stop?.evidence_id === 'string' ? stop.evidence_id : null;
     const comparedBaseline =
       evidenceAvailability === 'complete' && stop
         ? typeof stop.baseline_generation === 'string' && stop.baseline_generation.length
@@ -478,7 +490,9 @@ export class DisappearanceReview {
           ? null
           : String(sourceRow.generation);
     const completeFlag =
-      evidenceAvailability === 'complete' && stop ? integer(stop.input_complete, 'run_disappearance_stops.input_complete') : null;
+      evidenceAvailability === 'complete' && stop
+        ? integer(stop.input_complete, 'run_disappearance_stops.input_complete')
+        : null;
     let after = '';
     if (request.cursor !== undefined) {
       if (evidenceAvailability !== 'complete' || !evidenceId)

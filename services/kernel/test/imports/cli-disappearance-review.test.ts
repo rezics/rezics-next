@@ -36,7 +36,12 @@ test('an operator reviews a native mass-disappearance stop, repairs the capture,
     expect(first.network).toEqual([]);
     expect(first.openHandles).toBe(0);
     const document = JSON.parse(first.stdout) as {
-      generation: { status: string; input: string; counts: { prior: number; missing: number }; comparedBaseline: { generation: string } };
+      generation: {
+        status: string;
+        input: string;
+        counts: { prior: number; missing: number };
+        comparedBaseline: { generation: string };
+      };
       evidence: { availability: string };
       page: { rows: { recordKey: string }[]; end: string; nextCursor: string };
       authority: { disappearanceApproval: string; thresholdChange: string; transport: string };

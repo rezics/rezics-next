@@ -56,7 +56,12 @@ function complete(store: RunStore<SourceProjection>, run: Run, keys: string[]): 
   }
 }
 
-function stopHalf(store: RunStore<SourceProjection>, source: string, keys: string[], kind: SourceProjection['sourceKind']) {
+function stopHalf(
+  store: RunStore<SourceProjection>,
+  source: string,
+  keys: string[],
+  kind: SourceProjection['sourceKind'],
+) {
   const baseline = store.begin(source);
   if (baseline === 'busy') throw new Error('baseline');
   for (const key of keys) store.stage(baseline, staged(source, key, kind));
@@ -136,7 +141,13 @@ test('an operator pages exact missing identities, repairs locally, and is handed
     expect(first.openHandles).toBe(0);
     const document = JSON.parse(first.stdout) as {
       source: string;
-      generation: { id: string; status: string; input: string; counts: { prior: number; missing: number }; comparedBaseline: { generation: string } };
+      generation: {
+        id: string;
+        status: string;
+        input: string;
+        counts: { prior: number; missing: number };
+        comparedBaseline: { generation: string };
+      };
       evidence: { availability: string; identity: string };
       page: { rows: { recordKey: string }[]; end: string; nextCursor: string; storedMissing: number };
       authority: { disappearanceApproval: string; thresholdChange: string; transport: string };
@@ -232,7 +243,15 @@ test('older unsupported schema and malformed input stay honest', async () => {
   try {
     const empty = join(directory, 'empty.sqlite');
     writeFileSync(empty, '');
-    const missing = await runDisappearanceReviewCli(['--state', empty, '--source', 'wikidata', '--generation', '1', '--json']);
+    const missing = await runDisappearanceReviewCli([
+      '--state',
+      empty,
+      '--source',
+      'wikidata',
+      '--generation',
+      '1',
+      '--json',
+    ]);
     expect(missing.code).toBe(2);
 
     const path = join(directory, 'state.sqlite');

@@ -125,7 +125,17 @@ export async function openDisappearanceReviewCli() {
     async function review(generation: string, extra: string[] = []) {
       const network: string[] = [];
       const result = await runImportCli(
-        ['disappearance-review', '--state', state, '--source', 'bangumi', '--generation', generation, '--json', ...extra],
+        [
+          'disappearance-review',
+          '--state',
+          state,
+          '--source',
+          'bangumi',
+          '--generation',
+          generation,
+          '--json',
+          ...extra,
+        ],
         {
           fetch: (async (input: RequestInfo | URL) => {
             network.push(String(input));

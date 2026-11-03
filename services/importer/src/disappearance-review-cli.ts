@@ -117,7 +117,10 @@ export function parseDisappearanceReviewArgs(argv: readonly string[]): ParsedDis
     if (limit > MAX_DISAPPEARANCE_PAGE) throw new UsageFailure('--limit must be an integer from 1 through 100.');
   }
   const cursor = values.get('--cursor');
-  const page = pageValue === 'missing' || limit !== undefined || cursor !== undefined || record === undefined ? 'missing' : undefined;
+  const page =
+    pageValue === 'missing' || limit !== undefined || cursor !== undefined || record === undefined
+      ? 'missing'
+      : undefined;
   const request: DisappearanceReviewRequest = {
     source,
     generation,
@@ -158,9 +161,7 @@ function identityLine(row: DisappearanceMissingRow): string {
   return `${terminalString(row.recordKey)} revision=${terminalString(row.recordRevision)} digest=${row.digest} converter=${terminalString(row.converterRevision)}`;
 }
 
-function renderRecord(
-  record: NonNullable<DisappearanceReviewDocument['record']>,
-): string[] {
+function renderRecord(record: NonNullable<DisappearanceReviewDocument['record']>): string[] {
   if (!record.found) {
     return [
       `Exact record ${terminalString(record.recordKey)}: not present in this stop's missing-identity evidence.`,
@@ -185,7 +186,9 @@ function renderPage(page: NonNullable<DisappearanceReviewDocument['page']>): str
       ? `More missing identities remain. Next cursor: ${page.nextCursor}`
       : 'End of this missing page; no next cursor.',
   );
-  lines.push('Each page is one short consistent read. A later page revalidates the same source, generation and evidence identity.');
+  lines.push(
+    'Each page is one short consistent read. A later page revalidates the same source, generation and evidence identity.',
+  );
   return lines;
 }
 
@@ -217,11 +220,17 @@ export function renderDisappearanceReview(document: DisappearanceReviewDocument)
     `Authority: inspection=${document.authority.inspection}; disappearanceApproval=${document.authority.disappearanceApproval}; thresholdChange=${document.authority.thresholdChange}; nativePublication=${document.authority.nativePublication}; transport=${document.authority.transport}.`,
   );
   lines.push('Review does not approve disappearance, change a baseline, or change the disappearance threshold.');
-  lines.push('Verify the selected file, source and families with the existing diagnostics command and complete-set producer.');
-  lines.push('Correct the local capture, then invoke ordinary import with current input and credentials at execution time:');
+  lines.push(
+    'Verify the selected file, source and families with the existing diagnostics command and complete-set producer.',
+  );
+  lines.push(
+    'Correct the local capture, then invoke ordinary import with current input and credentials at execution time:',
+  );
   lines.push(`  bun services/importer/src/cli.ts ${document.ordinaryImport.replace(/^rezics-import /, '')}`);
   lines.push('Ordinary rerun reacquires current authority and keeps the existing disappearance barrier.');
-  lines.push('Uncertain earlier requests still use original native custody. Acknowledged but unread work uses ordinary readback.');
+  lines.push(
+    'Uncertain earlier requests still use original native custody. Acknowledged but unread work uses ordinary readback.',
+  );
   return `${lines.join('\n')}\n`;
 }
 
