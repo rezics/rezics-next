@@ -112,7 +112,7 @@ test('default native worker removes private sessions/history, labels, archives, 
       total: '500',
     })
   ).progressSession;
-  await f.json(as, 'POST', `/v1/progressSessions/${session.id}:record`, 200, {
+  await f.json(as, 'POST', `/v1/progressSessions/${session.id}/$record`, 200, {
     revision: session.revision,
     amount: '3',
   });
@@ -122,7 +122,7 @@ test('default native worker removes private sessions/history, labels, archives, 
   const retirementKey = crypto.randomUUID();
   const retire = () =>
     f.kernel.handle(
-      new Request(`http://kernel.test/v1/progressSessions/${session.id}:retire`, {
+      new Request(`http://kernel.test/v1/progressSessions/${session.id}/$retire`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${as.bearer}`,
@@ -158,7 +158,7 @@ test('default native worker removes private sessions/history, labels, archives, 
   ).toHaveLength(1);
   await deletePersona(f.options, as);
   expect((await retire()).status).toBe(401); // Terminal authority precedes the original receipt.
-  expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}:reopen`, { revision: 3 })).status).toBe(401);
+  expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}/$reopen`, { revision: 3 })).status).toBe(401);
   expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(401);
   await f.start();
   const results = await terminal(as.accountId);
@@ -260,14 +260,14 @@ test('native owned graph crosses its finite segment boundary, commits heads last
       await f.json(as, 'POST', '/v1/progressSessions', 201, { subjectId, mode: 'scalar_amount', unit: 'page' })
     ).progressSession;
     ids.push(session.id);
-    await f.json(as, 'POST', `/v1/progressSessions/${session.id}:record`, 200, {
+    await f.json(as, 'POST', `/v1/progressSessions/${session.id}/$record`, 200, {
       revision: session.revision,
       amount: '1',
     });
   }
   await deletePersona(f.options, as);
   expect(
-    (await f.request(as, 'POST', `/v1/progressSessions/${ids[0]}:record`, { revision: 2, amount: '2' })).status,
+    (await f.request(as, 'POST', `/v1/progressSessions/${ids[0]}/$record`, { revision: 2, amount: '2' })).status,
   ).toBe(401);
   const results = await terminal(as.accountId);
   expect(results.length).toBeGreaterThan(1);

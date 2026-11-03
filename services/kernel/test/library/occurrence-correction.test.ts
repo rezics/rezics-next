@@ -1,6 +1,4 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { compileCatalogue } from '@rezics/definitions/compile';
-import { fixture, legacyProfile } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { entryKey, createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
 
@@ -23,7 +21,6 @@ const scopes = [
 beforeAll(async () => {
   native = await createProfileEntryFixture();
   owner = await native.identity(scopes);
-  await native.activate(await native.publish(await compileCatalogue(fixture(legacyProfile()))));
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
 }, 120_000);
 afterAll(async () => {
@@ -44,33 +41,33 @@ async function send(
 }
 async function start(subjectId: string) {
   return (
-    await send('POST', '/v1/progressSessions', { subjectId, mode: 'scalar_amount', unit: 'page', total: '10' }, 201)
+    await send('POST', '/v1/progressSessions', { subjectId, mode: 'scalar_amount', unit: 'minute', total: '10' }, 201)
   ).progressSession;
 }
 
 test('one terminal occurrence reopens and a duplicate retires, with immutable snapshots and independent personal facts', async () => {
   const subjectId = await native.createSubject('game');
   await send('PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned' }, 201);
-  await send('POST', '/v1/copies', { subjectId, kind: 'legacy-unspecified', status: 'owned' }, 201);
+  await send('POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, 201);
   const first = await start(subjectId);
   const duplicate = await start(subjectId);
   const repeat = await start(subjectId);
   const path = `/v1/progressSessions/${first.id}`;
-  const record = (await send('POST', `${path}:record`, { revision: 1, amount: '10' })).progressSession;
+  const record = (await send('POST', `${path}/$record`, { revision: 1, amount: '10' })).progressSession;
   expect(record.state).toBe('active'); // A full amount is not completion.
-  const completed = (await send('POST', `${path}:complete`, { revision: 2 })).progressSession;
+  const completed = (await send('POST', `${path}/$complete`, { revision: 2 })).progressSession;
   const publicLog = (await send('POST', '/v1/publishedLogs', { sessionId: first.id, note: 'Captured' }, 201))
     .publishedLog;
   const before = await native.inspect(owner.actor.accountId);
-  await send('POST', `${path}:reopen`, { revision: 2 }, 409);
+  await send('POST', `${path}/$reopen`, { revision: 2 }, 409);
   const foreign = await native.identity(scopes, undefined, routeOf(owner.actor.accountId)!);
-  await send('POST', `${path}:reopen`, { revision: 3 }, 404, entryKey(), foreign.bearer);
+  await send('POST', `${path}/$reopen`, { revision: 3 }, 404, entryKey(), foreign.bearer);
   const key = entryKey();
-  const reopened = await send('POST', `${path}:reopen`, { revision: 3 }, 200, key);
+  const reopened = await send('POST', `${path}/$reopen`, { revision: 3 }, 200, key);
   expect(reopened.progressSession).toEqual({ ...completed, state: 'active', completedAt: null, revision: 4 });
-  expect(await send('POST', `${path}:reopen`, { revision: 3 }, 200, key)).toEqual(reopened);
-  await send('POST', `${path}:reopen`, { revision: 4 }, 400);
-  await send('POST', `${path}:record`, { revision: 4, amount: '7' });
+  expect(await send('POST', `${path}/$reopen`, { revision: 3 }, 200, key)).toEqual(reopened);
+  await send('POST', `${path}/$reopen`, { revision: 4 }, 400);
+  await send('POST', `${path}/$record`, { revision: 4, amount: '7' });
   const changes = (await send('GET', `${path}/changes`)).changes;
   expect(changes.map((row: { intent: unknown }) => row.intent)).toEqual([
     { amount: '10' },
@@ -78,14 +75,14 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
     { amount: '7' },
   ]);
   const retireKey = entryKey();
-  const retired = await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 1 }, 200, retireKey);
+  const retired = await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 1 }, 200, retireKey);
   expect(retired.progressSession).toEqual({ ...duplicate, state: 'retired', revision: 2 });
-  expect(await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 1 }, 200, retireKey)).toEqual(
+  expect(await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 1 }, 200, retireKey)).toEqual(
     retired,
   );
   for (const suffix of ['', '/changes', '/completedUnits'])
     await send('GET', `/v1/progressSessions/${duplicate.id}${suffix}`, undefined, 404);
-  await send('POST', `/v1/progressSessions/${duplicate.id}:retire`, { revision: 2 }, 404);
+  await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 2 }, 404);
   await send('POST', '/v1/publishedLogs', { sessionId: duplicate.id }, 404);
   const ids: string[] = [];
   let next: string | null = null;
@@ -99,7 +96,7 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   } while (next);
   expect(ids.sort()).toEqual([first.id, repeat.id].sort());
   expect((await send('GET', `/v1/progressSessions/${repeat.id}`)).progressSession).toEqual(repeat);
-  await send('POST', `${path}:retire`, { revision: 5 });
+  await send('POST', `${path}/$retire`, { revision: 5 });
   expect((await send('GET', `/v1/publishedLogs/${publicLog.id}`)).publishedLog).toEqual(publicLog);
   const after = await native.inspect(owner.actor.accountId);
   expect(after.entries).toEqual(before.entries);
@@ -113,7 +110,7 @@ test('retiring the last occurrence removes its native support; concealment and a
   const first = await start(subjectId);
   const path = `/v1/progressSessions/${first.id}`;
   const key = entryKey();
-  const retired = await send('POST', `${path}:retire`, { revision: 1 }, 200, key);
+  const retired = await send('POST', `${path}/$retire`, { revision: 1 }, 200, key);
   const support = await native.pool.query(
     `SELECT 1 FROM library.owner_member_support WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
     [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
@@ -121,31 +118,31 @@ test('retiring the last occurrence removes its native support; concealment and a
   expect(support.rows).toEqual([]);
   const hidden = await native.createSubject('game');
   const occurrence = await start(hidden);
-  await send('POST', `/v1/progressSessions/${occurrence.id}:complete`, { revision: 1 });
+  await send('POST', `/v1/progressSessions/${occurrence.id}/$complete`, { revision: 1 });
   expect(
-    (await native.send('steward', 'POST', `/v1/subjects/${hidden}:hide`, { reason: 'Mistaken source' })).status,
+    (await native.send('steward', 'POST', `/v1/subjects/${hidden}/$hide`, { reason: 'Mistaken source' })).status,
   ).toBe(200);
-  await send('POST', `/v1/progressSessions/${occurrence.id}:reopen`, { revision: 2 }, 404);
-  await send('POST', `/v1/progressSessions/${occurrence.id}:retire`, { revision: 2 }, 404);
-  expect(await send('POST', `${path}:retire`, { revision: 1 }, 200, key)).toEqual(retired);
+  await send('POST', `/v1/progressSessions/${occurrence.id}/$reopen`, { revision: 2 }, 404);
+  await send('POST', `/v1/progressSessions/${occurrence.id}/$retire`, { revision: 2 }, 404);
+  expect(await send('POST', `${path}/$retire`, { revision: 1 }, 200, key)).toEqual(retired);
   const isolated = await native.identity(scopes);
   const session = (
     await send(
       'POST',
       '/v1/progressSessions',
-      { subjectId, mode: 'scalar_amount', unit: 'page' },
+      { subjectId, mode: 'scalar_amount', unit: 'minute' },
       201,
       entryKey(),
       isolated.bearer,
     )
   ).progressSession;
   const isolatedKey = entryKey();
-  await send('POST', `/v1/progressSessions/${session.id}:retire`, { revision: 1 }, 200, isolatedKey, isolated.bearer);
+  await send('POST', `/v1/progressSessions/${session.id}/$retire`, { revision: 1 }, 200, isolatedKey, isolated.bearer);
   await native.revokeIdentity(isolated.actor.accountId);
   const response = await native.send(
     isolated.bearer,
     'POST',
-    `/v1/progressSessions/${session.id}:retire`,
+    `/v1/progressSessions/${session.id}/$retire`,
     { revision: 1 },
     isolatedKey,
   );

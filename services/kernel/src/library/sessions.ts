@@ -102,7 +102,7 @@ function event(session: ProgressSession) {
 /** Private progress commands and snapshot/keyset reads on the owning account's partition. */
 export function createSessionCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
-  const runner = createLibraryCommandRunner({ pool, access, ...(clock === undefined ? {} : { clock }) });
+  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
   const heads = createShelfHeads();
   const activity = createProgressActivity();

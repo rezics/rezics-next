@@ -11,16 +11,17 @@ until account erasure, and never changes an independently published snapshot.
 
 The default authenticated progress routes mount these existing session-writer methods:
 
-- `POST /v1/progressSessions/:sessionId:reopen` / `reopenSession(actor, sessionId, {revision}, requestKey)`
+- `POST /v1/progressSessions/:sessionId/$reopen` / `reopenSession(actor, sessionId, {revision}, requestKey)`
   changes `completed` or `abandoned` to `active`, and clears `completedAt`. Values, units, totals, original
-  meaning and identity remain. Use the normal `:record` command afterward to correct values. Completion requires
-  another explicit `:complete`; reopening never supplies replacement dates or duration.
-- `POST /v1/progressSessions/:sessionId:retire` / `retireSession(actor, sessionId, {revision}, requestKey)`
+  meaning and identity remain. Use the normal `$record` command afterward to correct values. Completion requires
+  another explicit `$complete`; reopening never supplies replacement dates or duration.
+- `POST /v1/progressSessions/:sessionId/$retire` / `retireSession(actor, sessionId, {revision}, requestKey)`
   changes an active or terminal occurrence to `retired`. The successful response includes its incremented revision
   and explicit retired state. Ordinary addressed reads, units/history pages, native lists and private source exports
   subsequently conceal it. There is no Undo or implicit replacement occurrence.
 
-Both operations use `progress_session:update`, the reading-progress gate, current account and terminal authority,
+The command runner retains native intrinsic own-account authority; authenticated HTTP scopes and the locked
+account/authentication epoch fence govern admission. Both operations use `progress_session:update`, the reading-progress gate, current account and terminal authority,
 current subject disclosure, the existing owner command runner and durable receipts. No new progress value needs
 current profile admission. Subsequent value recording retains the original-pin/current-capability checks.
 A fresh hidden/missing/foreign occurrence returns `not_found`; a stale current revision returns `conflict`.
@@ -30,7 +31,7 @@ For uncertain responses, retain the exact sender, credential, method, session ID
 retry that command. An admitted replay returns the original response, including after later retirement or subject
 concealment; current account/command authority still applies before receipt disclosure. A definitive conflict needs
 an explicit current-detail review and a fresh intent/key. A not-found detail cannot be accepted as a new revision.
-Existing `:record {revision,clear:true}` clears values without reopening or retiring the occurrence; per-measure clear
+Existing `$record {revision,clear:true}` clears values without reopening or retiring the occurrence; per-measure clear
 retains its established sibling/total semantics. Clear does not delete history or reset dates.
 
 ## Native history, support and public outputs
