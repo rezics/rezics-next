@@ -513,8 +513,8 @@ messaging.
 ## Protected Realm rank source
 
 The adopted second scope includes Realm rating order. Private Realm numbers stay outside the common Search
-index. Search imports `createRealmRankSource` and `RealmRankSource` from [realm-rank.ts](realm-rank.ts), composes
-the factory with the production `{ pool, access, tokens }`, and calls
+index. The scored-only compatibility factory `createRealmRankSource` and `RealmRankSource` in
+[realm-rank.ts](realm-rank.ts) use the production `{ pool, access, tokens }` dependencies and expose
 `page(actor, { realmId, questionId, partition, sort: 'score_desc', limit, cursor? }, { deadline })`.
 The actor comes from native credential verification. The factory performs current Realm authorization itself,
 then checks every consumed candidate through native subject Access and current identity before release; an
