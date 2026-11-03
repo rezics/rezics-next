@@ -219,12 +219,12 @@ function assertSamePage(
 
 /** Native one-call opening envelope for the existing Web Board reader. */
 export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
-  const reads: ContentReadDependencies = {
+  const readDependencies = (): ContentReadDependencies => ({
     pool: dependencies.pool,
     access: dependencies.access,
     tokens: dependencies.tokens,
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
-  };
+  });
   return async function readBoardOpeningPage(
     boardId: string,
     context: ReadContext,
@@ -255,6 +255,7 @@ export function createBoardPageReader(dependencies: BoardOpeningDependencies) {
     const actionThreads = uniqueThreads.filter(
       (thread) => thread.availability === 'available' && thread.firstPost.availability === 'available',
     );
+    const reads = readDependencies();
     const actionEvidence = await readBoardPageActionEvidence(
       reads,
       boardId,
