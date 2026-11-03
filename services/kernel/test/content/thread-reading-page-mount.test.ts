@@ -31,8 +31,9 @@ const kernel = createKernel({
 });
 
 test('thread reading page is mounted once with its closed public read contract', () => {
-  expect(kernel.routes.filter((route) => route.method === 'GET' && route.path === '/v1/threads/:id/reading-page'))
-    .toHaveLength(1);
+  expect(
+    kernel.routes.filter((route) => route.method === 'GET' && route.path === '/v1/threads/:id/reading-page'),
+  ).toHaveLength(1);
   const operation = openApiDocument(kernel).paths['/v1/threads/{id}/reading-page']?.get;
   expect(operation).toMatchObject({
     operationId: 'thread.reading_page',
