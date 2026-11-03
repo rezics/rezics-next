@@ -8,6 +8,12 @@ import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export type {
+  BanReviewIdentity,
+  BanReviewPage,
+  BanReviewPageItem,
+  BanReviewPageQuery,
+} from './kernel/community/ban-review-page-schemas.ts';
+export type {
   PersonalEntry,
   PersonalEntryAnnotationWrite,
   PersonalEntryFieldChange,

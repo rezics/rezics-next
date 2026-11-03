@@ -102,12 +102,7 @@ async function createNativeContentSystemWithOptions(
   const authAdmin = new Pool({ connectionString: connection('postgres') });
   const pool = new Pool({ connectionString: connection(appName) });
   configureTestReceiptKeys(pool);
-  const authPool = new Pool({ connectionString: connection(authName) });
-  // Auth owns this pool once constructed, including failure during construction.
-  // Share its one close operation with the partial-construction cleanup below.
-  const endAuthPool = authPool.end.bind(authPool);
-  let authEnding: Promise<void> | undefined;
-  authPool.end = () => (authEnding ??= endAuthPool());
+  let closeAuthPool: (() => Promise<void>) | undefined;
   let appCreated = false;
   let authCreated = false;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
@@ -123,7 +118,7 @@ async function createNativeContentSystemWithOptions(
         }
       };
       if (host) await release(() => host!.stop());
-      await release(() => authPool.end());
+      if (closeAuthPool) await release(closeAuthPool);
       await release(() => pool.end());
       // Only these randomly named databases were created by this invocation.
       // Do not terminate sessions or remove any caller-owned namespace.
@@ -149,6 +144,15 @@ async function createNativeContentSystemWithOptions(
     appCreated = true;
     await createAuthDatabase(source.href, authName);
     authCreated = true;
+    const authPoolOwner = options.authPoolFactory
+      ? await options.authPoolFactory(connection(authName))
+      : (() => {
+          const authPool = new Pool({ connectionString: connection(authName) });
+          return { pool: authPool, close: () => authPool.end() };
+        })();
+    const authPool = authPoolOwner.pool;
+    let authEnding: Promise<void> | undefined;
+    closeAuthPool = () => (authEnding ??= authPoolOwner.close());
 
     const issuer = `https://${namespace.replaceAll('_', '-')}.auth.test`;
     const audience = 'https://content.test';
@@ -163,6 +167,32 @@ async function createNativeContentSystemWithOptions(
       instant = parsed;
     };
     let nativeAuth: AuthService;
+    let access: ReturnType<typeof createAccess>;
+    let actions: ReturnType<typeof actionCatalogue>;
+    const createFreshAccess: ContentSystem['createFreshAccess'] = (observeJwks) => {
+      let fresh: ReturnType<typeof createAccess>;
+      let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
+      fresh = createAccess({
+        actions,
+        clock,
+        realmRoleReader: (client, input) => {
+          realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+          return realmMembership.roleReader(client, input);
+        },
+        auth: {
+          issuer,
+          audience,
+          jwksUrl: `${issuer}/.well-known/jwks.json`,
+          fetch: async (input, init) => {
+            const request = new Request(input, init);
+            const response = await nativeAuth.handler(request);
+            await observeJwks?.(request, response.clone());
+            return response;
+          },
+        },
+      });
+      return fresh;
+    };
     // Kernel resolves Access on a live request, after all routes are mounted.
     // This same instance authenticates fixture credentials on this exact pool.
     const kernel = createKernel({
@@ -179,22 +209,23 @@ async function createNativeContentSystemWithOptions(
       }),
       ratePeer: () => '127.0.0.1',
     });
-    const actions = actionCatalogue(kernel);
-    let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
-    const access = createAccess({
-      actions,
-      clock,
-      realmRoleReader: (client, input) => {
-        realmMembership ??= createRealmMembership({ pool, access, clock });
-        return realmMembership.roleReader(client, input);
-      },
-      auth: {
-        issuer,
-        audience,
-        jwksUrl: `${issuer}/.well-known/jwks.json`,
-        fetch: (input, init) => nativeAuth.handler(new Request(input, init)),
-      },
-    });
+    actions = actionCatalogue(kernel);
+    access = createFreshAccess();
+    const createKernelForPool: ContentSystem['createKernelForPool'] = (targetPool, targetAccess) =>
+      createKernel({
+        receiptKeys: testReceiptKeys(),
+        pool: targetPool,
+        routeKey,
+        tokens: tokenKeys,
+        clock,
+        content: { cursorNow: () => clock().getTime() },
+        access: () => targetAccess,
+        writeRate: createWriteRateLimiter({
+          secret: crypto.randomUUID() + crypto.randomUUID(),
+          overrides: writeRateOverrides,
+        }),
+        ratePeer: () => '127.0.0.1',
+      });
     const proofs = createNativeWorkflowProofPorts({ database: authPool });
     const bindings = createNativeAccountBindings({
       pool,
@@ -495,6 +526,8 @@ async function createNativeContentSystemWithOptions(
       },
       nativeAuth,
       access,
+      createFreshAccess,
+      createKernelForPool,
       actions,
       clock: { setCommandTime: setTime, setCursorVerificationTime: setTime },
       transport: { capture },

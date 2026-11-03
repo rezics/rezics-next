@@ -26,6 +26,7 @@ import {
   createContentSystemWithOrdinaryScopes,
   type ContentCredential,
   type ContentSystem,
+  type ContentSystemOptions,
 } from '../content/support/system.ts';
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
 import { assertSetupResponse } from '../content/support/setup-response.ts';
@@ -236,7 +237,10 @@ export async function restartWorker(): Promise<void> {
   Object.assign(shared.worker, await startWorker(shared.system));
 }
 
-async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<SharedCommunity> {
+async function buildShared(
+  databaseUrl = process.env.DATABASE_URL,
+  authPoolFactory?: ContentSystemOptions['authPoolFactory'],
+): Promise<SharedCommunity> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
   // Durable operations preserve the exact authenticated scope ceiling, which is
   // bounded at 100 tokens. Request this fixture's product scopes through Auth
@@ -246,7 +250,10 @@ async function buildShared(databaseUrl = process.env.DATABASE_URL): Promise<Shar
       action,
     ),
   );
-  const system = await createContentSystemWithOrdinaryScopes({ databaseUrl }, ordinaryScopes);
+  const system = await createContentSystemWithOrdinaryScopes(
+    { databaseUrl, ...(authPoolFactory === undefined ? {} : { authPoolFactory }) },
+    ordinaryScopes,
+  );
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   let work: WorkClient | undefined;
   let observer: SqlObserver | undefined;
@@ -327,10 +334,14 @@ function closeShared(base: SharedCommunity): Promise<void> {
 
 /** A test file builds its system and worker once; each test gets its own driver state over them. */
 export async function createCommunityDriver(
-  options: { databaseUrl?: string; settleTimeoutMs?: number } = {},
+  options: {
+    databaseUrl?: string;
+    settleTimeoutMs?: number;
+    authPoolFactory?: ContentSystemOptions['authPoolFactory'];
+  } = {},
 ): Promise<CommunityDriver> {
   if (shared?.retired) await closeShared(shared);
-  const base = (shared ??= await buildShared(options.databaseUrl));
+  const base = (shared ??= await buildShared(options.databaseUrl, options.authPoolFactory));
   return bindDriver(base, options.settleTimeoutMs ?? 30_000);
 }
 
