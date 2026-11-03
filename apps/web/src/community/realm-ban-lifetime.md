@@ -136,3 +136,5 @@ Existing affected stories remain unchanged:
 - `patterns-community-realm-bans--current`, `--ban-and-unban`, `--removal-pending`, `--unban-confirmation`,
   `--next-page`, `--empty`, `--loading`, `--unavailable`, `--forbidden`, `--closed`, `--invalid-cursor`,
   `--role-removal-required`, `--revoked`, `--ambiguous-retry`, `--saving`
+
+Decision: publish the mounted composed ban contract through the normal native declaration generator before binding Web; derive every composed field from that generated delivery.
