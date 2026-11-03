@@ -104,7 +104,7 @@ const catalogueFields = {
   ),
 };
 const contextSubject = v.object({
-  id: resourceId,
+  id: v.pipe(v.string(), v.minLength(1)),
   labels: textMap,
   aliases: v.exactOptional(v.record(v.string(), v.array(v.string()))),
 });
