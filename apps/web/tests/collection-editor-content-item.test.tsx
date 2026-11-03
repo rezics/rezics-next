@@ -48,7 +48,7 @@ test('Shared Collection items preserve exact occurrence editing and independent 
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://rezics.example/en', width: 700 });
+  const window = new Window({ url: 'https://rezics.example/en', width: 1280 });
   window.document.documentElement.lang = 'en';
   const globals = {
     window,
@@ -210,14 +210,9 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(destinations).toEqual([]);
     await act(async () => user.click(primary));
     expect(destinations).toEqual([href]);
-    const sheet = window.document.createElement('style');
-    sheet.textContent = await editorActionStyles();
-    window.document.head.append(sheet);
-    for (const action of rows[1]!.querySelectorAll<HTMLElement>(
-      '[data-content-item-slot="actions"] [data-slot="button"]',
-    )) {
-      assertActionTarget(window, action);
-    }
+    const actionClassNames = [
+      ...rows[1]!.querySelectorAll<HTMLElement>('[data-content-item-slot="actions"] [data-slot="button"]'),
+    ].map((action) => action.className);
 
     await show(
       <CollectionMemberList
@@ -249,7 +244,23 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(subjects[0]!.querySelector('[data-slot="cover"]')?.getAttribute('data-ratio')).toBe('5:7');
     expect(subjects[1]!.querySelector('h3')?.textContent).toBe(m.library_subject_unavailable());
     expect(subjects[1]!.querySelector('a, button')).toBeNull();
-    assertActionTarget(window, subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!);
+    const probe = new Window({ url: 'https://rezics.example/en', width: 700 });
+    const sheet = probe.document.createElement('style');
+    sheet.textContent = await editorActionStyles();
+    probe.document.head.append(sheet);
+    try {
+      for (const className of [
+        ...actionClassNames,
+        subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!.className,
+      ]) {
+        const button = probe.document.createElement('button');
+        button.className = className;
+        probe.document.body.append(button);
+        assertActionTarget(probe, button);
+      }
+    } finally {
+      await probe.happyDOM.close();
+    }
   } finally {
     await act(async () => root.unmount());
     setLocale(previousLocale, { reload: false });
