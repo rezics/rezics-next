@@ -15,7 +15,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 const fixtureRoot = new URL('../../../specs/fixtures/imports/', import.meta.url);
 const launchDumps = [
   ['bangumi', 'dumps/bangumi-subject.jsonlines'],
-  ['openlibrary', 'open-library/work.json'],
+  ['openlibrary', 'dumps/openlibrary.tsv'],
   ['wikidata', 'dumps/wikidata.json'],
 ] as const;
 
