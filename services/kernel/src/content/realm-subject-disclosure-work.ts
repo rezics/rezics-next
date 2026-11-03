@@ -71,9 +71,10 @@ export function realmSubjectContentPoint<R extends QueryResultRow>(
  * on failure/deadline, so rollback can release the original connection even when
  * no further work admission is possible. COMMIT is separately debited below.
  */
-export async function realmSubjectBegin(client: AccessClient): Promise<void> {
+export async function realmSubjectBegin(client: AccessClient, dispatched: () => void): Promise<void> {
   const work = roots.get(client);
   const dispatch = async () => {
+    dispatched();
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   };
   if (!work) return dispatch();

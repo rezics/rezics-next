@@ -210,8 +210,9 @@ export async function snapshot<T>(
     withConnection(dependencies.pool, async (connection) => {
       const client = deadlineClient(connection, context.deadline);
       bindRealmSubjectReadWork(client, context.work);
+      let began = false;
       try {
-        await realmSubjectBegin(client);
+        await realmSubjectBegin(client, () => { began = true; });
         const partitionNo = partitionOf(route(id));
         const partition = context.work
           ? await realmSubjectPartition(client, partitionNo)
@@ -223,6 +224,8 @@ export async function snapshot<T>(
         await realmSubjectCommit(client);
         return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
       } catch (error) {
+        // Admission failure dispatched no BEGIN and reserved no cleanup slot.
+        if (!began) throw error;
         try {
           await connection.query('ROLLBACK');
         } catch (rollbackError) {
