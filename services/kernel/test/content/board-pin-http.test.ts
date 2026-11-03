@@ -79,12 +79,11 @@ async function createBoard(): Promise<{ board: Board; realmId: string }> {
     visibility: 'protected',
   });
   // A protected board requires its own read grant, independently of Realm membership.
-  await json(author, 'POST', '/v1/grants', {
-    resource: { route: routeOf(board.id), id: board.id },
-    subject: { kind: 'account', id: member().actor.accountId },
-    actions: ['board:read'],
-    valid: '(,)',
-  });
+  await system.database.pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,subject_role,action,valid,transaction_id)
+     VALUES ($1,$2,$3,'','board:read','(,)',$4)`,
+    [routeOf(board.id), board.id, member().actor.accountId, crypto.randomUUID()],
+  );
   await system.database.pool.query(
     `INSERT INTO community.realm_member (route, realm_id, account_id, role, valid, reservation_id, transaction_id)
      VALUES ($1, $2, $3, 'member', tstzrange($4, NULL, '[)'), $5, $6)`,
