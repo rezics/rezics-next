@@ -33,8 +33,9 @@ function CopiesStory({ mode }: { mode: CopiesStoryMode }) {
   return <PageStory visitor="Signed In" path={pagePaths['library-copies']} />;
 }
 
-const ready = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-  await within(canvasElement).findByRole('heading', { level: 1, name: m.library_copy_heading() });
+const ready = async (context: { canvasElement: HTMLElement }) => {
+  await pageReady(context);
+  await within(context.canvasElement).findByRole('heading', { level: 1, name: m.library_copy_heading() });
 };
 
 export const ManyCopies: Story = {
@@ -206,7 +207,7 @@ export const KnownHistoricalLabels: Story = {
   async play() {
     const view = within(document.body);
     await view.findByText('Print at acceptance');
-    await view.findByText('On shelf at acceptance');
+    expect(view.getAllByText('On shelf at acceptance').length).toBeGreaterThan(0);
     expect(view.queryByText('Renamed at current head')).not.toBeInTheDocument();
     await view.findByRole('combobox', { name: m.library_copy_new_status() });
   },
@@ -367,7 +368,7 @@ export const EmptyLaterPage: Story = {
     const canvas = within(canvasElement);
     expect(await canvas.findByRole('status')).toHaveTextContent(m.library_copy_page_empty());
     expect(canvas.queryByText(m.library_copy_empty())).not.toBeInTheDocument();
-    const first = canvas.getByRole('link', { name: m.library_collections_first_page() });
+    const first = await canvas.findByRole('link', { name: m.library_collections_first_page() });
     expect(new URL(first.getAttribute('href')!, window.location.href).searchParams.has('cursor')).toBe(false);
     expect(canvas.queryByRole('link', { name: m.library_copy_more() })).not.toBeInTheDocument();
     expect(canvas.getByRole('button', { name: m.library_copy_add() })).toBeVisible();
@@ -381,10 +382,8 @@ export const FilteredEmptyLaterPage: Story = {
     const canvas = within(canvasElement);
     await canvas.findByText(m.library_copy_page_empty());
     expect(canvas.queryByText(m.library_copy_filtered_empty())).not.toBeInTheDocument();
-    const target = new URL(
-      canvas.getByRole('link', { name: m.library_collections_first_page() }).getAttribute('href')!,
-      window.location.href,
-    );
+    const first = await canvas.findByRole('link', { name: m.library_collections_first_page() });
+    const target = new URL(first.getAttribute('href')!, window.location.href);
     expect(target.searchParams.get('subjectId')).toBe(recording.copies[0]!.subjectId);
     expect(target.searchParams.has('cursor')).toBe(false);
     expect(canvas.getByRole('link', { name: m.library_copy_all() })).toBeVisible();
@@ -398,8 +397,8 @@ export const LongLaterPage: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 2 });
-    expect(canvas.getByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
-    expect(canvas.getByRole('link', { name: m.library_copy_more() })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: m.library_copy_more() })).toBeVisible();
     expect(canvas.getByText(m.library_copy_history_notice())).toBeVisible();
     expect(canvas.queryByText(m.library_copy_page_empty())).not.toBeInTheDocument();
   },
@@ -411,7 +410,7 @@ export const UnavailableLaterPage: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 2, name: m.library_subject_unavailable() });
-    expect(canvas.getByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
+    await expect(await canvas.findByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
     await userEvent.click(canvas.getByText(m.library_copy_history_details()));
     expect(canvas.getByText(m.library_history_unavailable())).toBeVisible();
   },

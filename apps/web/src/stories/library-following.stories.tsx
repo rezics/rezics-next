@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { setLibraryFollowingStoryMode, type LibraryFollowingStoryMode } from '../kernel/fake/library-following-story';
-import { PageStory, libraryFollowingReady, pagePaths, pageReady } from './page';
+import { PageStory, libraryFollowingReady, libraryHeadingReady, pagePaths, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Library/Following',
@@ -17,6 +17,7 @@ function FollowingStory(mode: LibraryFollowingStoryMode = 'recorded') {
 }
 
 async function followRow(canvasElement: HTMLElement, title: string) {
+  await libraryHeadingReady({ canvasElement }, m.library_following_heading);
   const heading = await within(canvasElement).findByRole('heading', { level: 3, name: title });
   const row = heading.closest<HTMLElement>('li[data-slot="list-row"]');
   if (!row) throw new globalThis.Error(`Missing Following row: ${title}`);
@@ -55,7 +56,7 @@ export const UnfollowMenuPhone: Story = {
 export const Empty: Story = {
   render: () => FollowingStory('none'),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_following_heading);
     await expect(await within(context.canvasElement).findByText(m.library_following_empty())).toBeVisible();
   },
 };
@@ -63,7 +64,7 @@ export const Empty: Story = {
 export const InactivePage: Story = {
   render: () => FollowingStory('inactive-page'),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_following_heading);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.library_following_page_empty())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.search_heading() })).toHaveAttribute('href', /\/search$/);
@@ -94,7 +95,7 @@ export const AfterLastUnfollow: Story = {
 export const LongContent: Story = {
   render: () => FollowingStory('many'),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_following_heading);
     await expect(
       await within(context.canvasElement).findByRole('heading', { name: 'Following item 12' }),
     ).toBeVisible();
@@ -105,7 +106,9 @@ export const Unavailable: Story = {
   render: () => FollowingStory('unavailable'),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByRole('main')).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByRole('heading', { level: 1, name: m.error_heading() }),
+    ).toBeVisible();
   },
 };
 
@@ -113,14 +116,16 @@ export const Error: Story = {
   render: () => FollowingStory('error'),
   play: async (context) => {
     await pageReady(context);
-    await expect(within(context.canvasElement).getByRole('main')).toBeVisible();
+    await expect(
+      await within(context.canvasElement).findByRole('heading', { level: 1, name: m.error_heading() }),
+    ).toBeVisible();
   },
 };
 
 export const HiddenTarget: Story = {
   render: () => FollowingStory('hidden'),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_following_heading);
     const canvas = within(context.canvasElement);
     const unavailable = await canvas.findAllByText(m.library_subject_unavailable(), { exact: true });
     await expect(unavailable).toHaveLength(2);
@@ -158,7 +163,7 @@ export const ListRowBehavior: Story = {
 export const RemoveUnavailableTarget: Story = {
   render: () => FollowingStory('hidden'),
   play: async ({ canvasElement, ...context }) => {
-    await pageReady({ canvasElement, ...context });
+    await libraryHeadingReady({ canvasElement, ...context }, m.library_following_heading);
     const canvas = within(canvasElement);
     const section = await canvas.findByRole('region', { name: m.library_following_collections() });
     const heading = await within(section).findByRole('heading', { level: 3, name: m.library_subject_unavailable() });

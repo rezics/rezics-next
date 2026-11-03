@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { PageStory, PatternStory, pagePaths, pageReady } from './page';
+import { PageStory, PatternStory, libraryHeadingReady, pagePaths, pageReady } from './page';
 import { LabelsPageView } from '../library/labels-page';
 import type { LabelsPage } from '../library/labels-read';
 import { getLocale } from '../paraglide/runtime.js';
@@ -27,11 +27,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function labelsReady(context: { canvasElement: HTMLElement }) {
+  await libraryHeadingReady(context, m.library_labels_heading);
+}
+
 async function openAction(
   context: { canvasElement: HTMLElement },
   operation: 'rename' | 'delete',
   name = 'Winter reads',
 ) {
+  await labelsReady(context);
   const view = within(context.canvasElement);
   await userEvent.click(await view.findByRole('button', { name: m.library_label_actions({ name }) }));
   const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
@@ -47,7 +52,7 @@ async function openAction(
 export const SignedIn: Story = {
   name: 'Signed In',
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     const view = within(context.canvasElement);
     const link = await view.findByRole('link', { name: 'Winter reads' });
     await expect(link.closest('li')!.querySelector('input')).toBeNull();
@@ -58,9 +63,10 @@ export const SignedIn: Story = {
 export const SignedOut: Story = {
   name: 'Signed Out',
   play: async (context) => {
-    await pageReady(context);
-    const main = within(context.canvasElement).getByRole('main');
-    await expect(within(main).getAllByText(m.library_sign_in(), { exact: true })).toHaveLength(1);
+    await labelsReady(context);
+    const main = within(within(context.canvasElement).getByRole('main'));
+    await expect(await main.findByText(m.library_sign_in(), { exact: true })).toBeVisible();
+    expect(main.getAllByText(m.library_sign_in(), { exact: true })).toHaveLength(1);
     await expect(within(main).getByRole('link', { name: m.library_sign_in() })).toHaveAttribute(
       'href',
       '/auth/sign-in?return_to=%2Fen%2Flibrary%2Flabels',
@@ -71,7 +77,7 @@ export const SignedOut: Story = {
 export const Empty: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="empty" />,
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     await within(context.canvasElement).findByText(m.library_labels_empty());
   },
 };
@@ -79,7 +85,7 @@ export const NextPage: Story = {
   globals: { viewport: { value: 'phone390', isRotated: false } },
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="next" />,
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     const view = within(context.canvasElement);
     await view.findByRole('link', { name: m.library_label_more() });
     async function target(element: HTMLElement) {
@@ -173,7 +179,6 @@ export const NextPage: Story = {
 export const RenameConflict: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="conflict" />,
   play: async (context) => {
-    await pageReady(context);
     const view = within(context.canvasElement);
     const dialog = await openAction(context, 'rename');
     const rename = dialog.getByRole('button', { name: m.library_label_rename() });
@@ -189,7 +194,6 @@ export const RenameConflict: Story = {
 export const Undo: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="undo" />,
   play: async (context) => {
-    await pageReady(context);
     const view = within(context.canvasElement);
     const confirmation = await openAction(context, 'delete');
     await userEvent.click(confirmation.getByRole('button', { name: m.library_label_delete() }));
@@ -203,7 +207,7 @@ export const LiteralPrefix: Story = {
     <PageStory visitor="Signed In" path={`${pagePaths['library-labels']}?q=Winter`} labelsFixture="catalogue" />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     const view = within(context.canvasElement);
     await expect(await view.findByDisplayValue('Winter')).toBeVisible();
     await expect(await view.findByRole('link', { name: 'Winter reads' })).toBeVisible();
@@ -218,7 +222,7 @@ export const LiteralPrefix: Story = {
 export const SparsePrefix: Story = {
   render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-labels']}?q=%25_`} labelsFixture="next" />,
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     const view = within(context.canvasElement);
     await view.findByText(m.library_subject_label_no_results());
     await expect(await view.findByRole('link', { name: m.library_label_more() })).toHaveAttribute(
@@ -233,7 +237,7 @@ export const EmptyPrefix: Story = {
     <PageStory visitor="Signed In" path={`${pagePaths['library-labels']}?q=No%20match`} labelsFixture="catalogue" />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     await within(context.canvasElement).findByText(m.library_subject_label_no_results());
   },
 };
@@ -249,12 +253,12 @@ export const LaterPagePrefix: Story = {
     />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     const view = within(context.canvasElement);
     await view.findByText(m.library_labels_page_empty());
     await expect(view.queryByText(m.library_labels_empty())).toBeNull();
     await expect(view.queryByText(m.library_subject_label_no_results())).toBeNull();
-    const first = view.getByRole('link', { name: m.library_collections_first_page() });
+    const first = await view.findByRole('link', { name: m.library_collections_first_page() });
     await expect(first).toHaveAttribute(
       'href',
       `/${getLocale()}/library/labels?${new URLSearchParams({ q: 'No match %_ + 読書' })}`,
@@ -328,7 +332,6 @@ export const UnconfirmedChange: Story = {
 export const RetainedUndoAfterStale: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="conflict" />,
   play: async (context) => {
-    await pageReady(context);
     const view = within(context.canvasElement);
     const confirmation = await openAction(context, 'delete');
     await userEvent.click(confirmation.getByRole('button', { name: m.library_label_delete() }));
@@ -361,7 +364,7 @@ export const Unavailable: Story = {
     />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     const view = within(context.canvasElement);
     await view.findAllByText(m.library_labels_unavailable());
     await expect(view.getByRole('alert')).toHaveTextContent(m.library_labels_unavailable());
@@ -384,7 +387,7 @@ export const Preparing: Story = {
     />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await labelsReady(context);
     await within(context.canvasElement).findByText(m.library_labels_preparing());
   },
 };
@@ -512,7 +515,6 @@ export const PhoneCapacity: Story = {
 export const RenameSelected: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="catalogue" />,
   play: async (context) => {
-    await pageReady(context);
     const dialog = await openAction(context, 'rename');
     const input = dialog.getByRole('textbox', { name: m.library_label_name() });
     await expect(input).toHaveValue('Winter reads');
@@ -526,7 +528,6 @@ export const RenameSelected: Story = {
 export const DeleteConfirmation: Story = {
   render: () => <PageStory visitor="Signed In" path={pagePaths['library-labels']} labelsFixture="catalogue" />,
   play: async (context) => {
-    await pageReady(context);
     const dialog = await openAction(context, 'delete');
     await expect(dialog.getByText(m.library_label_delete_confirmation({ name: 'Winter reads' }))).toBeVisible();
     await userEvent.click(dialog.getByRole('button', { name: m.action_cancel() }));

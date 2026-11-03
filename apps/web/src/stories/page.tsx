@@ -475,15 +475,19 @@ export async function searchEmptyReady(context: { canvasElement: HTMLElement }) 
   await expect(view.getByText(m.search_no_results())).toBeVisible();
 }
 
+/** Wait until the current viewer’s Library heading is admitted in the main region. */
+export async function libraryHeadingReady(context: { canvasElement: HTMLElement }, heading: () => string) {
+  await pageReady(context);
+  await viewOf(context).findByRole('heading', { level: 1, name: heading() });
+}
+
 /** A Library page shows its heading and a seeded item, and no error page stands in for it. */
 function libraryReady(heading: () => string, item: () => string | undefined) {
   return async (context: { canvasElement: HTMLElement }) => {
-    await pageReady(context);
-    const view = viewOf(context);
+    await libraryHeadingReady(context, heading);
     const seeded = item();
     if (!seeded) throw new Error('The recorded Library page has no item to show.');
-    await view.findByRole('heading', { level: 1, name: heading() });
-    await view.findAllByText(seeded, { exact: false });
+    await viewOf(context).findAllByText(seeded, { exact: false });
   };
 }
 

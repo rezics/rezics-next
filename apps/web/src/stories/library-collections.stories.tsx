@@ -78,7 +78,8 @@ export const OneCollection: Story = {
   render: () => render('one'),
   play: async (context) => {
     await collectionsReady(context);
-    await expect(within(context.canvasElement).getByRole('heading', { name: 'To read this winter' })).toBeVisible();
+    const main = within(context.canvasElement).getByRole('main');
+    await expect(within(collectionCard(main, 'To read this winter')).getByRole('heading', { level: 2 })).toBeVisible();
   },
 };
 
@@ -87,8 +88,9 @@ export const ManyCollections: Story = {
   render: () => render('many'),
   play: async (context) => {
     await collectionsReady(context);
-    await expect(within(context.canvasElement).getByRole('heading', { name: 'Books I come back to' })).toBeVisible();
-    await expect(within(context.canvasElement).getByRole('heading', { name: 'To read this winter' })).toBeVisible();
+    const main = within(context.canvasElement).getByRole('main');
+    await expect(within(collectionCard(main, 'Books I come back to')).getByRole('heading', { level: 2 })).toBeVisible();
+    await expect(within(collectionCard(main, 'To read this winter')).getByRole('heading', { level: 2 })).toBeVisible();
   },
 };
 
@@ -136,7 +138,9 @@ export const PreviewPending: Story = {
       name: collectionRecording.collection.title,
     });
     const preview = heading.closest<HTMLElement>('[data-collection-preview]')!;
-    await expect(within(preview).getByRole('status')).toHaveTextContent(m.library_collection_preview_preparing());
+    await expect(preview.querySelector('[data-preview-state="preparing"]')).toHaveTextContent(
+      m.library_collection_preview_preparing(),
+    );
     expect(preview.querySelector('[data-slot="cover-card"]')).toBeNull();
     expect(within(preview).queryByText(m.library_collection_empty())).toBeNull();
   },
@@ -157,7 +161,9 @@ export const PreviewUnavailable: Story = {
       name: collectionRecording.collection.title,
     });
     const preview = heading.closest<HTMLElement>('[data-collection-preview]')!;
-    await expect(within(preview).getByRole('status')).toHaveTextContent(m.library_collection_preview_unavailable());
+    await expect(preview.querySelector('[data-preview-state="unavailable"]')).toHaveTextContent(
+      m.library_collection_preview_unavailable(),
+    );
     expect(within(preview).queryByText(m.library_collection_empty())).toBeNull();
   },
 };

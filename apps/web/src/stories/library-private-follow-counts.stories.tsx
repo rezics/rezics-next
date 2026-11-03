@@ -36,6 +36,7 @@ function CountsStory({ mode, path = countsPath }: { mode: PrivateFollowCountsSto
 export const ReadyZero: Story = {
   render: () => <CountsStory mode="zero" />,
   play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('0', { exact: true })).toBeVisible();
     await expect(canvas.getByText(m.library_follow_counts_context_help())).toBeVisible();
@@ -45,6 +46,7 @@ export const ReadyNonzero: Story = { render: () => <CountsStory mode="nonzero" /
 export const ContextualZero: Story = {
   render: () => <CountsStory mode="context" path={contextPath} />,
   play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
     const canvas = within(canvasElement);
     await expect(await canvas.findByText('0', { exact: true })).toBeVisible();
     await expect(canvas.getByText('24', { exact: true })).toBeVisible();
@@ -54,6 +56,7 @@ export const ContextualZero: Story = {
 export const DeniedContext: Story = {
   render: () => <CountsStory mode="denied" path={contextPath} />,
   play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_follow_counts_denied());
     await expect(canvas.queryByText('0', { exact: true })).toBeNull();
@@ -63,6 +66,7 @@ export const DeniedContext: Story = {
 export const Unavailable: Story = {
   render: () => <CountsStory mode="unavailable" />,
   play: async ({ canvasElement }) => {
+    await pageReady({ canvasElement });
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent(m.library_follow_counts_unavailable());
     await userEvent.click(canvas.getByRole('button', { name: m.library_follow_counts_reload() }));

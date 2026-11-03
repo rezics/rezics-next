@@ -5,7 +5,7 @@ import { setLibraryEntriesStoryMode } from '../kernel/fake/library-entries-story
 import { setLibraryNavigationStoryState } from '../kernel/fake/library-pins';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { PageStory, pagePaths, pageReady } from './page';
+import { PageStory, libraryHeadingReady, pagePaths, pageReady } from './page';
 
 const meta = {
   title: 'Pages/Library/Personal Library',
@@ -27,11 +27,10 @@ function render(mode: Parameters<typeof setLibraryEntriesStoryMode>[0], continue
 export const Empty: Story = {
   render: () => render('empty', 0),
   play: async (context) => {
-    await pageReady(context);
-    await expect(
-      await within(within(context.canvasElement).getByRole('main')).findByText(m.library_empty_title()),
-    ).toBeVisible();
-    await expect(within(context.canvasElement).getByRole('link', { name: m.library_browse() })).toHaveAttribute(
+    await libraryHeadingReady(context, m.library_heading);
+    const main = within(within(context.canvasElement).getByRole('main'));
+    await expect(await main.findByText(m.library_empty_title())).toBeVisible();
+    await expect(main.getByRole('link', { name: m.library_browse() })).toHaveAttribute(
       'href',
       `/${getLocale()}/search`,
     );
@@ -41,7 +40,7 @@ export const Empty: Story = {
 export const ContinuePresent: Story = {
   render: () => render('empty', 3),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByRole('heading', { name: m.home_continue_heading() })).toBeVisible();
     const progressLink = (await canvas.findAllByRole('link')).find((link) =>
@@ -54,7 +53,7 @@ export const ContinuePresent: Story = {
 export const ContinueAbsent: Story = {
   render: () => render('empty', 0),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     await within(context.canvasElement).findByText(m.library_empty_title());
     await expect(within(context.canvasElement).queryByRole('heading', { name: m.home_continue_heading() })).toBeNull();
   },
@@ -63,7 +62,7 @@ export const ContinueAbsent: Story = {
 export const LongContent: Story = {
   render: () => render('long'),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const main = within(context.canvasElement).getByRole('main');
     await expect(await within(main).findByRole('heading', { name: 'Library story entry 1' })).toBeVisible();
     await expect(await within(main).findByRole('heading', { name: 'Library story entry 12' })).toBeVisible();
@@ -88,7 +87,7 @@ export const PinsUnavailable: Story = {
     return <PageStory visitor="Signed In" path={pagePaths['library-entries']} />;
   },
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.library_pin_read_failed(), { exact: true })).toBeVisible();
     expect(canvas.getAllByText(m.library_pin_read_failed(), { exact: true })).toHaveLength(1);
@@ -104,7 +103,7 @@ export const EverythingAndLiked: Story = {
     return <PageStory visitor="Signed In" path={pagePaths['library-entries']} />;
   },
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const main = within(context.canvasElement).getByRole('main');
     await expect(await within(main).findByRole('link', { name: m.library_dynamic_everything() })).toHaveAttribute(
       'href',
@@ -125,7 +124,7 @@ export const PinnedCollections: Story = {
     return <PageStory visitor="Signed In" path={pagePaths['library-entries']} />;
   },
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     await expect(
       await within(context.canvasElement).findByText(m.library_pin_pinned_section(), { exact: true }),
     ).toBeVisible();

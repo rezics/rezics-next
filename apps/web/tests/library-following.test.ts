@@ -422,6 +422,38 @@ test('Following management has a genuine discovery destination after the last un
 });
 
 // Authored recovery acceptance is intentionally UNRUN in this source-only attempt.
+test('hidden follow targets stay a successful FULL page and never become a thrown kernel read', async () => {
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: async () =>
+      Response.json({
+        follows: [
+          {
+            targetId: 'hidden-subject',
+            targetType: 'subject',
+            state: 'following',
+            reason: 'explicit',
+            updatedAt: stamp,
+            target: null,
+          },
+          {
+            targetId: 'visible-subject',
+            targetType: 'subject',
+            state: 'following',
+            reason: 'library',
+            updatedAt: stamp,
+            target: { id: 'visible-subject', type: 'schema:Book', label: 'Kokoro', types: ['schema:Book'] },
+          },
+        ],
+        next: null,
+      }),
+  });
+  const page = await loadMineFollowingPage(client, pageRequest('/en/library/following'), sessionEnv(), {});
+  expect(page.signedIn).toBe(true);
+  expect(page.follows).toHaveLength(2);
+  expect(page.follows[0]).toMatchObject({ targetId: 'hidden-subject', target: null, state: 'following' });
+  expect(page.follows[1]?.target).toMatchObject({ id: 'visible-subject', label: 'Kokoro' });
+});
+
 test('a terminal later Following page is one bounded read without reset metadata or a whole-list count', async () => {
   const calls: Request[] = [];
   const client = createKernelClient('https://kernel.example.test', {

@@ -4,7 +4,7 @@ import { userEvent, within, waitFor } from 'storybook/test';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { displayLibraryTitle } from '../library/title';
-import { PageStory, exposureStory, libraryEntriesReady, pageReady, pagePaths } from './page';
+import { PageStory, exposureStory, libraryEntriesReady, libraryHeadingReady, pageReady, pagePaths } from './page';
 import entries from '../kernel/recorded/library-entries.json';
 import { setLibraryEntriesStoryMode, setLibraryTypesStoryState } from '../kernel/fake/library-entries-story';
 import { pickText } from '@rezics/composition';
@@ -48,7 +48,7 @@ export const StateFilterCleared: Story = {
     />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     const status = libraryStateLabel(
       definitions.release as unknown as Release,
@@ -81,7 +81,7 @@ export const FilteredEmpty: Story = {
     );
   },
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const main = within(within(context.canvasElement).getByRole('main'));
     await expect(await main.findByText(m.library_filter_empty_description())).toBeVisible();
     expect(main.queryByText(m.library_empty_title())).toBeNull();
@@ -183,7 +183,7 @@ export const ChosenColumns: Story = {
     <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?layout=table&columns=title,status`} />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     const title = displayLibraryTitle(entries.libraryEntries[0]!.subject.label, getLocale()).text;
     await expect(await canvas.findByRole('link', { name: title })).toBeVisible();
@@ -228,7 +228,7 @@ export const TypeSelected: Story = {
   beforeEach: () => setLibraryEntriesStoryMode('type-filter'),
   render: () => <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?layout=list&size=l`} />,
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     const action = await canvas.findByRole('button', { name: m.library_type_action({ type: m.library_types_all() }) });
     await waitFor(() => expect(action).toBeEnabled());
@@ -251,7 +251,7 @@ export const TypeNoMatch: Story = {
     <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?type=schema%3AMovie&layout=list&size=l`} />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     await expect(await canvas.findByText(m.library_type_empty_title({ type: movieLabel() }))).toBeVisible();
     expect(canvas.queryByText(m.library_empty_title())).toBeNull();
@@ -269,7 +269,7 @@ export const TypePickerUnavailable: Story = {
     <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?type=schema%3AMovie&layout=list&size=l`} />
   ),
   play: async (context) => {
-    await pageReady(context);
+    await libraryHeadingReady(context, m.library_heading);
     const canvas = within(context.canvasElement);
     const action = await canvas.findByRole('button', { name: m.library_type_action({ type: movieLabel() }) });
     await waitFor(() => expect(action).toBeEnabled());
