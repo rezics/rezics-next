@@ -150,14 +150,14 @@ export function createBangumiLabelReview(
       (!current || current.source.subjectId !== r.review.target || current.source.kind !== 'supported')
     )
       throw conflict();
-    const subject =
-      current?.source.kind === 'supported'
-        ? {
-            subjectId: current.source.subjectId,
-            identityEpoch: String(current.anchor.identityEpoch),
-            releaseDigest: current.source.pin.releaseDigest,
-          }
-        : null;
+    const subject = current
+      ? {
+          subjectId: current.source.subjectId,
+          identityEpoch: String(current.anchor.identityEpoch),
+          acceptingType: current.anchor.acceptingType,
+          releaseDigest: current.source.kind === 'supported' ? current.source.pin.releaseDigest : null,
+        }
+      : null;
     const review: BangumiLabelReview = {
       token: randomUUID(),
       rowRevision,
@@ -210,9 +210,9 @@ export function createBangumiLabelReview(
           );
           if (
             !o ||
-            o.source.kind !== 'supported' ||
             o.source.subjectId !== review.subject.subjectId ||
-            o.source.pin.releaseDigest !== review.subject.releaseDigest ||
+            (o.source.kind === 'supported' ? o.source.pin.releaseDigest : null) !== review.subject.releaseDigest ||
+            o.anchor.acceptingType !== review.subject.acceptingType ||
             String(o.anchor.identityEpoch) !== review.subject.identityEpoch
           )
             throw new StaleError();

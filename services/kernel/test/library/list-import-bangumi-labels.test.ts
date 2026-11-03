@@ -128,6 +128,11 @@ test('owner adopts existing/new labels, reopens assignments, preserves state and
   expect((await send(`/${r.id}/rows/0/tags`, undefined, 'other')).status).toBe(404);
   expect((await send(`/${r.id}:applyLabels`, { ordinal: 0, reviewToken: next.token }, 'other')).status).toBe(404);
   expect((await send(`/${r.id}/rows/0/tags`)).headers.get('cache-control')).toBe('private, no-store');
+  const unprofiled = await retained(['independent'], await f.createSubject('unprofiled'));
+  const independent = await review(unprofiled, [{ index: 0, target: { labelId: existing.id } }]);
+  expect(independent.subject.releaseDigest).toBeNull();
+  expect((await apply(unprofiled.id, independent.token)).outcomes[0].status).toBe('assigned');
+  await expect(f.commands.readEntry(f.owner.actor, unprofiled.subject)).rejects.toThrow();
 }, 120000);
 test('changed row/review, deleted/recreated targets and current profile loss require new confirmation', async () => {
   const name = randomUUID(),

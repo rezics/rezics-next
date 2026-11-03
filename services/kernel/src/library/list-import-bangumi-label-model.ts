@@ -1,4 +1,4 @@
-import type { BangumiEvidence, BangumiGuard } from './list-import-bangumi-model.ts';
+import type { BangumiEvidence } from './list-import-bangumi-model.ts';
 import { normalizePersonalLabelName } from './label-store.ts';
 
 /** Selection limits constrain effects without rejecting previously admitted source evidence. */
@@ -18,11 +18,17 @@ export type BangumiLabelItem = {
   duplicateOf: number | null;
   target: { labelId: string; revision: number } | { name: string };
 };
+export type BangumiLabelSubject = {
+  subjectId: string;
+  identityEpoch: string;
+  acceptingType: string;
+  releaseDigest: string | null;
+};
 export type BangumiLabelReview = {
   token: string;
   /** The retained row is immutable; its current Subject review is its revision operand. */
   rowRevision: string;
-  subject: BangumiGuard | null;
+  subject: BangumiLabelSubject | null;
   evidence: BangumiTagEvidence;
   items: BangumiLabelItem[];
 };

@@ -40,8 +40,8 @@ shown but cannot be adopted. Unknown meanings are not inferred as supported.
 
 Select an existing owned live label by opaque ID or explicitly review a new name. A live-name collision refuses
 creation; no text comparison authorizes reuse. Deleted/recreated names have different IDs. Revisions, canonical
-Subject identity epoch, current profile release and the exact retained row/review are checked before fresh native
-effects. A changed target requires new confirmation. Native commands hold the upload lock through effect commit,
+Subject identity epoch, accepting Type, current profile release (or explicit absence) and the exact retained row/review are checked before fresh native
+effects. Readable Subjects without a profile can adopt labels under native policy; profile loss requires a fresh label review. A changed target requires new confirmation. Native commands hold the upload lock through effect commit,
 serializing cancellation, removal and review replacement against admission. No source time backdates audit time.
 
 ## Outcomes and boundaries
