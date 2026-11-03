@@ -46,6 +46,10 @@ original-effect dispatch drained, source-dependency coverage, complete initial p
 convergence or viewer authorization. Publication must capture/recheck its own fixed cuts and upstream obligations.
 Final result hydration still uses the existing current Content/Accounts readers independently of index progress.
 
+The focused lifecycle test drives the installed supervisor through lost-response recovery, restart, duplicate
+wakeups, claim takeover, concealment, disappearance and replacement-generation catch-up. Direct receiver calls
+retain control of the held claimant, dependency failure, empty-page observation and refused retired-target write.
+
 ## Cost: touches, bound and growth
 
 For admitted batch b≤100: one native fixed-cut journal seek returns at most b+1 raw identities; deduplication

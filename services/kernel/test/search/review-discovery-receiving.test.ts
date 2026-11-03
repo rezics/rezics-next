@@ -145,18 +145,15 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     return wakeup;
   }
   const identity = discoveryDocumentId(registry, { owner: 'content', kind: 'review', route: routeOf(id)!, id });
-  async function visible() {
+  async function visible(physicalIndex = index) {
     const response = await native.request<{
       hits: { hits: { _source: { names: string[]; descriptions: string[] } }[] };
-    }>('POST', `/${index}/_search`, { query: { ids: { values: [identity] } } });
+    }>('POST', `/${physicalIndex}/_search`, { query: { ids: { values: [identity] } } });
     return response.body.hits.hits.map((hit) => hit._source);
   }
   let runner: ReturnType<typeof startDiscoveryIndexing> | undefined;
-  const releases: (() => void)[] = [];
-  const pending: Promise<unknown>[] = [];
-  try {
-    const firstWake = await invalidate(opened, 'com.rezics.content.thread.created.v1');
-    runner = startDiscoveryIndexing({
+  async function advance() {
+    runner ??= startDiscoveryIndexing({
       pool: fixture.pool,
       search,
       source,
@@ -167,13 +164,20 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       requiredKinds: ['space'],
       intervalMs: 1_000_000,
     });
-    // Missing Space still refuses activation, while the installed supervisor executes the review receiver.
+    // Missing Space refuses activation while the installed supervisor still receives reviews.
     await expect(runner.refresh()).rejects.toBeInstanceOf(DiscoveryProducerCoverageError);
+    return readReviewDiscoveryReceiving(fixture.pool, target, home);
+  }
+  const releases: (() => void)[] = [];
+  const pending: Promise<unknown>[] = [];
+  try {
+    const firstWake = await invalidate(opened, 'com.rezics.content.thread.created.v1');
+    await advance();
+    // Drain the initial scheduled maintenance before faulting subsequent explicit refreshes.
+    await advance();
     expect(await visible()).toMatchObject([{ names: ['Opening title'], descriptions: ['Opening body'] }]);
     const first = await readReviewDiscoveryReceiving(fixture.pool, target, home);
     expect(first.status).toBe('ready');
-    await runner.stop();
-    runner = undefined;
 
     const edit = await revisePost(
       deps,
@@ -183,10 +187,13 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     );
     const editedWake = await invalidate(edit, 'com.rezics.content.revision.created.v1');
     lose = true;
-    await expect(receiver().step(home)).rejects.toThrow('Lost visible bulk response');
+    await expect(runner!.refresh()).rejects.toThrow('Lost visible bulk response');
     expect(await visible()).toMatchObject([{ names: ['Edited title'] }]);
     expect(await receiver().status(home)).toMatchObject({ acknowledged: first.acknowledged, status: 'unavailable' });
-    await receiver().step(home); // restart, current refresh, identical visible winner
+    await runner!.stop();
+    runner = undefined;
+    await advance(); // supervisor restart, current refresh, identical visible winner
+    await advance(); // drain its initial scheduled maintenance
     expect((await receiver().status(home)).acknowledged).toBeGreaterThan(first.acknowledged);
 
     await fixture.grant(author.accountId, 'post:erase', {
@@ -198,7 +205,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     // Duplicate and older wakeups cannot rewind journal progress or restore old text.
     await requestReviewDiscoveryReceiving(fixture.pool, prefix, firstWake);
     await requestReviewDiscoveryReceiving(fixture.pool, prefix, editedWake);
-    const removed = await receiver().step(home);
+    const removed = await advance();
     expect(await visible()).toEqual([]);
     expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
     const restored = await restorePost(deps, author, opened.value.itemId, request());
@@ -227,7 +234,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     void older.catch(() => {});
     await reached.promise;
     // Concurrent live claim does no refresh or acknowledgement.
-    expect((await receiver().step(home)).acknowledged).toBe(removed.acknowledged);
+    expect((await advance()).acknowledged).toBe(removed.acknowledged);
     await fixture.pool.query(
       "UPDATE search.review_discovery_receiving SET claim_until=clock_timestamp()-interval '1 second' WHERE prefix=$1",
       [prefix],
@@ -239,11 +246,11 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       request(),
     );
     await invalidate(newer, 'com.rezics.content.revision.created.v1');
-    await receiver().step(home); // retained fixed cut, but current refresh is newer
+    await advance(); // retained fixed cut, but current refresh is newer
     release.resolve();
     await expect(older).rejects.toThrow('superseded or expired');
     expect(await visible()).toMatchObject([{ names: ['Newest title'] }]);
-    await receiver().step(home); // next cut includes the newer invalidation
+    await advance(); // next cut includes the newer invalidation
     const complete = await receiver().status(home);
     const empty = await receiver().step(home);
     expect(empty).toMatchObject({
@@ -276,7 +283,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     await invalidate(final, 'com.rezics.content.revision.created.v1');
     await expect(failing.step(home)).rejects.toThrow('Native dependency unavailable');
     expect(await failing.status(home)).toMatchObject({ acknowledged: complete.acknowledged, status: 'unavailable' });
-    await receiver().step(home);
+    await advance();
     const page = await readReviewDiscoveryChanges(fixture.pool, home);
     expect((await receiver().status(home)).acknowledged).toBe(page.through);
     expect((await nativeSource.hydrate(home, [id])).reviews).toMatchObject([{ excerpt: 'Final current body' }]);
@@ -293,8 +300,9 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       [subject, routeOf(subject)],
     );
     await invalidate(conceal, 'com.rezics.content.revision.created.v1');
-    await receiver().step(home);
+    await advance();
     expect(await visible()).toEqual([]);
+    expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
     await fixture.reader.query(
       "UPDATE semantic.subject SET visibility='visible',security_revision=security_revision+1 WHERE subject_id=$1 AND route=$2",
       [subject, routeOf(subject)],
@@ -313,8 +321,9 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       ])
     ).rows[0]!;
     await invalidate(vanished, 'com.rezics.content.revision.created.v1');
-    await receiver().step(home);
+    await advance();
     expect(await visible()).toEqual([]);
+    expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
     await fixture.reader.query(
       'INSERT INTO content.thread SELECT (jsonb_populate_record(NULL::content.thread,$1::jsonb)).*',
       [JSON.stringify(saved)],
@@ -325,8 +334,8 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       { threadId: id, itemId: opened.value.itemId, body: fromPlainText('Returned opening') },
       request(),
     );
-    await invalidate(returned, 'com.rezics.content.revision.created.v1');
-    const restoredFrontier = await receiver().step(home);
+    const returnedWake = await invalidate(returned, 'com.rezics.content.revision.created.v1');
+    const restoredFrontier = await advance();
     expect(await visible()).toMatchObject([{ descriptions: ['Returned opening'] }]);
 
     // A replacement allocation has independent zero coverage and the retired target refuses late work.
@@ -337,6 +346,10 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     )!;
     await createDiscoveryIndex(native, prefix, replacement.generation, replacement.incarnation);
     replacement.uuid = await discoveryIndexUuid(native, discoveryIndexName(prefix, replacement.generation));
+    await fixture.pool.query(
+      "UPDATE search.discovery_generation SET index_uuid=$3,state='populating' WHERE prefix=$1 AND generation=$2",
+      [prefix, replacement.generation, replacement.uuid],
+    );
     expect(await readReviewDiscoveryReceiving(fixture.pool, replacement, home)).toMatchObject({
       acknowledged: 0n,
       status: 'preparing',
@@ -347,6 +360,20 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     );
     await expect(receiver().step(home)).rejects.toThrow('no longer writable');
     expect((await receiver().status(home)).acknowledged).toBe(restoredFrontier.acknowledged);
+    await requestReviewDiscoveryReceiving(fixture.pool, prefix, returnedWake);
+    await advance();
+    const replacementFrontier = await readReviewDiscoveryReceiving(fixture.pool, replacement, home);
+    expect(replacementFrontier).toMatchObject({
+      status: 'ready',
+      acknowledged: restoredFrontier.acknowledged,
+      completedCut: restoredFrontier.completedCut,
+    });
+    expect(await visible(discoveryIndexName(prefix, replacement.generation))).toMatchObject([
+      { names: ['Newest title'], descriptions: ['Returned opening'] },
+    ]);
+    expect((await nativeSource.hydrate(home, [id])).reviews).toMatchObject([
+      { id, title: 'Newest title', excerpt: 'Returned opening' },
+    ]);
   } finally {
     for (const release of releases) release();
     await Promise.allSettled(pending);
