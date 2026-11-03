@@ -378,7 +378,6 @@ export function nativeSourceCustodyFootprint(sql: string, values: readonly unkno
   if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(text)) return footprint(sql, [...values], 0, 0);
   for (const [query, rows, points, metadata, keys = 0] of [
-    [partitionQuery, 16, 1, 1],
     [identityPartitionQuery, 16, 1, 1],
     [accountQuery, 16, 1, 0],
     [sourceQuery, 16, 1, 0],
@@ -407,6 +406,11 @@ export function nativeSourceCustodyFootprint(sql: string, values: readonly unkno
     [nextCapture, 32, 2, 0, 1],
   ] as const) {
     if (sameSQL(query.sql) === text && query.params.length === values.length) {
+      if (query === retireChildren) {
+        const ids = values[query.params.indexOf('hold_ids')];
+        if (!Array.isArray(ids) || ids.length > 80 || ids.some((id) => typeof id !== 'string' || !uuid.test(id)))
+          return undefined;
+      }
       const work = footprint(sql, [...values], rows, points, keys, metadata);
       const projection = query === readQuery ? captureProjectionBytes : undefined;
       if (projection !== undefined) work.bytes += projection - 4096;
@@ -433,7 +437,7 @@ function executor(client: CommandTransaction, work: NativeCollectionWork, deadli
   ): Promise<R[]> => {
     revalidateBoundLibraryIdentityWork(work);
     if (Date.now() >= deadline) throw new Refused('allowance');
-    if (strict && query === partitionQuery) query = identityPartitionQuery;
+    if (query === partitionQuery) query = identityPartitionQuery;
     const args = query.params.map((name) => values[name]);
     const metadata =
       query === partitionQuery || query === finishQuery || query === proofQuery || query === outputQuery ? 1 : 0;
