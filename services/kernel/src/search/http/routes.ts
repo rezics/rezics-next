@@ -498,6 +498,7 @@ export function searchRoutes<App>(
             q: t.String(),
             limit: t.Optional(t.IntegerString()),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
+            filter: t.Optional(t.String()),
           },
           object,
         ),
@@ -506,6 +507,8 @@ export function searchRoutes<App>(
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
+          409: problemSchema('search_restart_required'),
+          422: problemSchema('unsupported_query'),
           503: unavailable,
         },
         detail: {
@@ -517,9 +520,18 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ query, authorize, admission, job }) => {
+      async ({ query, authorize, admission, job, actor, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
         if (query.limit !== undefined && (query.limit < 1 || query.limit > 10))
           throw new ProblemError('invalid_request', { errors: [{ pointer: '/limit', code: 'out_of_range' }] });
+        let filter: unknown;
+        if (query.filter !== undefined) {
+          try {
+            filter = JSON.parse(query.filter);
+          } catch {
+            throw new ProblemError('invalid_request', { errors: [{ pointer: '/filter', code: 'invalid_format' }] });
+          }
+        }
         const check = await authorize({
           ...resource,
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
@@ -527,9 +539,13 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+          const scopeAccess =
+            gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
           let completed: Static<typeof suggestResponse> | undefined;
           await search.suggest(query.q, query.limit, query.languages, {
             deadline: job.deadline,
+            ...(filter === undefined ? {} : { filter }),
+            ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
             async complete(page) {
               completed = await fill(page, authorize, query.languages);
             },

@@ -8,7 +8,7 @@ import { validSuggestionText } from './typeahead';
 import type { SubjectHit } from './results.tsx';
 
 type Suggested = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
-export type SuggestQuery = { q: string; limit: number; languages: string[] };
+export type SuggestQuery = { q: string; limit: number; languages: string[]; filter?: string };
 export const SUGGESTION_LIMIT = 8;
 
 export function validateSuggestQuery(query: SuggestQuery): SuggestQuery {
@@ -20,7 +20,8 @@ export function validateSuggestQuery(query: SuggestQuery): SuggestQuery {
     query.languages.length < 1 ||
     query.languages.length > 8 ||
     new Set(query.languages).size !== query.languages.length ||
-    query.languages.some((language) => language.length > 35 || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language))
+    query.languages.some((language) => language.length > 35 || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language)) ||
+    (query.filter !== undefined && typeof query.filter !== 'string')
   )
     throw problem(400, 'invalid_request', 'Invalid suggestion parameters');
   return query;
@@ -82,10 +83,15 @@ export async function suggestSubjects(
   const locale = requestedLocale ?? new URL(request.url).searchParams.get('locale') ?? requestLocale(request);
   const languages = requestLanguages(locale ?? 'en');
   const rawLimit = new URL(request.url).searchParams.get('limit');
+  const searchParams = new URL(request.url).searchParams;
+  const filters = searchParams.getAll('filter');
+  if (filters.length > 1) throw problem(400, 'invalid_request', 'Use one complete search filter');
+  const languagesParam = searchParams.getAll('language');
   const parameters = validateSuggestQuery({
     q: query,
     limit: rawLimit === null ? SUGGESTION_LIMIT : /^\d+$/.test(rawLimit) ? Number(rawLimit) : NaN,
-    languages,
+    languages: languagesParam.length ? languagesParam : languages,
+    ...(filters.length ? { filter: filters[0] } : {}),
   });
   // The release is cached by digest; a failed read leaves the suggestions without type names.
   const [result, release] = await Promise.all([
@@ -105,7 +111,13 @@ export async function suggestionResponse(
   env: Partial<SessionEnv>,
   read = suggestSubjects,
 ): Promise<Response> {
-  if (request.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET' } });
+  const privateNoStore = (response: Response) => {
+    const headers = new Headers(response.headers);
+    headers.set('cache-control', 'private, no-store');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  };
+  if (request.method !== 'GET')
+    return privateNoStore(new Response(null, { status: 405, headers: { allow: 'GET' } }));
   try {
     const [{ prepareSession, viewerCredential }, { carriesSession }] = await Promise.all([
       import('../session/request.ts'),
@@ -118,7 +130,8 @@ export async function suggestionResponse(
     const query = new URL(request.url).searchParams.get('q') ?? '';
     return Response.json(await read(query, request), { headers: { 'cache-control': 'private, no-store' } });
   } catch (error) {
-    if (isPlatformClosedError(error)) return problemResponse(problem(403, 'platform_closed', 'Not open yet'));
-    return problemResponse(error);
+    if (isPlatformClosedError(error))
+      return privateNoStore(problemResponse(problem(403, 'platform_closed', 'Not open yet')));
+    return privateNoStore(problemResponse(error));
   }
 }

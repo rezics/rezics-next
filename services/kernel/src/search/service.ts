@@ -74,6 +74,7 @@ import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
 import { ownSubjectRequest } from './service-request.ts';
 import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
+import { executeScopedSuggestions } from './scoped-suggestion.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -1108,7 +1109,12 @@ export function createSearchService({
       q: string,
       limit = 8,
       languages?: string[],
-      read?: { deadline: number; complete(page: { subjects: Result[]; as_of: string }): Promise<void> },
+      read?: {
+        deadline: number;
+        filter?: unknown;
+        scope?: LeafOptions;
+        complete(page: { subjects: Result[]; as_of: string }): Promise<void>;
+      },
     ) {
       languages = ownSubjectRequest(languages);
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
@@ -1116,6 +1122,81 @@ export function createSearchService({
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
       const generation = await discoveryGeneration();
+      const parsed = read?.filter === undefined ? undefined : validate({ filter: read.filter }).filter;
+      const current = parsed ? await activeRelease(pool) : undefined;
+      const admitted = parsed ? await admitQuery(undefined, parsed, current?.release, false) : undefined;
+      if (parsed && !admitted) throw indexNotReady();
+      if (admitted && !publicFilters) throw indexNotReady();
+
+      if (admitted && publicFilters) {
+        if (!current) throw indexNotReady();
+        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const bound = await indexRequest(() =>
+          publicFilters().bindSuggestion(
+            {
+              purpose: 'suggest',
+              prefix: q,
+              size: 2 * limit + 1,
+              generation,
+              filterDocument: undefined,
+              text: undefined,
+            },
+            context,
+          ),
+        );
+        try {
+          const prepare = async () => {
+            if (bound.capture.status === 'captured' || bound.capture.status === 'preparing')
+              await preparePublic?.(bound.capture.repair);
+          };
+          if (bound.capture.status !== 'captured') {
+            await prepare();
+            throw indexNotReady();
+          }
+          let scope: ReturnType<typeof createSearchScopeForService> | undefined;
+          let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
+          let scopeWork: ScopeWork | undefined;
+          if (containsOwnerPredicate(admitted)) {
+            if (!read?.scope) throw indexNotReady();
+            scope = createSearchScopeForService(service, read.scope);
+            scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+            preparedScope = await sourceRequest(() =>
+              scope!.prepare(admitted, {
+                releaseDigest: current.digest,
+                allowance: scopeWork!.remaining(),
+              }),
+            );
+            scopeWork.native(scope.work(preparedScope));
+          }
+          return await executeScopedSuggestions({
+            operations: bound.operations,
+            queried: bound.capture.queried,
+            context,
+            limit,
+            generation,
+            filter: admitted,
+            release: current.release,
+            source,
+            ...(scope ? { scope } : {}),
+            ...(preparedScope ? { preparedScope } : {}),
+            ...(scopeWork ? { scopeWork } : {}),
+            readSource: sourceRequest,
+            project: (subject) => project(subject, options.languages),
+            asOf: () => asOf(generation),
+            freshGeneration: () => indexRequest(freshAliasGeneration),
+            releaseIsCurrent: async () => (await activeRelease(pool))?.digest === current.digest,
+            complete: (page) => read?.complete(page) ?? Promise.resolve(),
+            prepare,
+          });
+        } finally {
+          try {
+            if (bound.capture.status === 'captured')
+              await bound.operations.closeObservation(bound.capture.queried, context);
+          } finally {
+            await bound.operations.close();
+          }
+        }
+      }
       if (publicFilters) {
         const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
         const bound = await indexRequest(() =>

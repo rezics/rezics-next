@@ -8,6 +8,8 @@ import type {
   PublicFilterConsumerCapture,
   PublicFilterConsumerContext,
   PublicFilterConsumerOperationsFactory,
+  PublicFilterConsumerQuery,
+  PublicFilterConsumerRefill,
   PublicFilterConsumerStatus,
   PublicFilterConsumerUnavailable,
   PublicFilterQueriedObservation,
@@ -26,6 +28,12 @@ export interface PublicSuggestionOperations {
     context: PublicFilterConsumerContext,
   ): Promise<PublicFilterConsumerCapture>;
   query(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext): Promise<PublicSuggestionQuery>;
+  /** Scoped callers use the shared retained-window iterator; the public Global path keeps its original query. */
+  queryScoped(
+    queried: PublicFilterQueriedObservation,
+    context: PublicFilterConsumerContext,
+    refill?: PublicFilterConsumerRefill,
+  ): Promise<PublicFilterConsumerQuery>;
   readStatus(
     request: Readonly<{ queried: PublicFilterQueriedObservation; execution?: string }>,
     context: PublicFilterConsumerContext,
@@ -247,6 +255,11 @@ export async function createPublicSuggestionOperations(
           add(released.cost);
         }
       });
+    },
+    queryScoped(input, incoming, refill) {
+      const queried = structuredClone(input);
+      const context = { deadline: incoming.deadline };
+      return track(() => operations.query(queried, context, refill));
     },
     readStatus(request, context) {
       return track(() => operations.readStatus(request, context));

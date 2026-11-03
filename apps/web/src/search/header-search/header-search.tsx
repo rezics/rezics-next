@@ -8,6 +8,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -35,7 +36,11 @@ import {
   reduceHeaderSearchState,
   type HeaderSearchState,
 } from './state';
-import { loadGlobalHeaderSuggestions, type HeaderSuggestionLoader } from './suggestions';
+import {
+  loadGlobalHeaderSuggestions,
+  loadScopedHeaderSuggestions,
+  type HeaderSuggestionLoader,
+} from './suggestions';
 import { RezicsMark } from '../../shell/mobile-mark';
 import { RecentPanel, type SearchDiscovery } from '../recent-panel';
 import type { SearchRealmDiscoveryLoader } from '../realm-discovery-section';
@@ -58,6 +63,7 @@ type HeaderSuggestionOwner = {
   locale: string;
   query: string;
   scopeKey: string;
+  fieldsKey: string;
   loader: HeaderSuggestionLoader | undefined;
 };
 
@@ -107,6 +113,7 @@ function sameHeaderSuggestionOwner(a: HeaderSuggestionOwner | null, b: HeaderSug
     a.locale === b.locale &&
     a.query === b.query &&
     a.scopeKey === b.scopeKey &&
+    a.fieldsKey === b.fieldsKey &&
     a.loader === b.loader,
   );
 }
@@ -538,7 +545,7 @@ function HeaderSearchController({
   initialQuery = '',
   fields,
   loadSuggestions = loadGlobalHeaderSuggestions,
-  loadScopedSuggestions,
+  loadScopedSuggestions = loadScopedHeaderSuggestions,
   onNavigate,
   suggestionRatio,
   presentation = 'responsive',
@@ -573,11 +580,17 @@ function HeaderSearchController({
   currentSession.current = sessionKey;
   const sessionMatches = sessionKey !== null && sessionKey === observedSession;
   const loader = requestScope ? loadScopedSuggestions : loadSuggestions;
+  const suggestionFieldsKey = JSON.stringify(headerSearchFields(fields, requestScope, headerSearchAction(locale, requestScope)));
+  const suggestionFields = useMemo(
+    () => JSON.parse(suggestionFieldsKey) as [string, string][],
+    [suggestionFieldsKey],
+  );
   const owner: HeaderSuggestionOwner = {
     sessionKey,
     locale,
     query: requestState.query,
     scopeKey: requestScopeKey,
+    fieldsKey: suggestionFieldsKey,
     loader,
   };
   const renderedOwner = useRef(owner);
@@ -650,7 +663,7 @@ function HeaderSearchController({
     request.current?.();
     request.current = null;
     dispatch({ type: 'invalidate' });
-  }, [owner.sessionKey, owner.locale, owner.query, owner.scopeKey, owner.loader]);
+  }, [owner.sessionKey, owner.locale, owner.query, owner.scopeKey, owner.fieldsKey, owner.loader]);
   useLayoutEffect(() => {
     requestGeneration.current += 1;
     retireRetryEntry();
@@ -692,8 +705,10 @@ function HeaderSearchController({
       generation === requestGeneration.current &&
       sameHeaderSuggestionOwner(renderedOwner.current, owner) &&
       sessionIsCurrent();
+    const contextualLoader: HeaderSuggestionLoader = (query, selectedLocale, signal, selectedScope) =>
+      loader(query, selectedLocale, signal, selectedScope, suggestionFields);
     const cancel = startTypeahead(
-      loader,
+      contextualLoader,
       requestState.query,
       locale,
       requestScope,
@@ -719,10 +734,12 @@ function HeaderSearchController({
   }, [
     requestState.query,
     requestScopeKey,
+    suggestionFieldsKey,
     requestState.expanded,
     locale,
     composing,
     attempt,
+    suggestionFields,
     loader,
     sessionKey,
     sessionMatches,
@@ -918,7 +935,7 @@ function HeaderSearchController({
       canSelectSuggestion={canSelectSuggestion}
       locale={locale}
       queryLimitError={queryLimitError}
-      fields={headerSearchFields(fields, requestState.scope, headerSearchAction(locale, requestState.scope))}
+      fields={suggestionFields}
       region={requestState.scope ? null : region}
       inputRef={input}
       formRef={form}

@@ -9,6 +9,7 @@ import { useSession } from '../../session/query';
 import { recentBucket } from '../recent-history';
 import { useRecentHistory } from '../recent-history-hook';
 import { HeaderSearch } from './header-search';
+import { loadScopedHeaderSuggestions } from './suggestions';
 import type { SearchScope } from './types';
 import { currentHeaderSearchSession, observeHeaderSearchSession } from './session-key';
 
@@ -43,6 +44,7 @@ export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
       keyboardShortcut
       locale={getLocale()}
       history={history}
+      loadScopedSuggestions={loadScopedHeaderSuggestions}
       session={session}
       readSession={readSession}
       observeSession={observeSession}

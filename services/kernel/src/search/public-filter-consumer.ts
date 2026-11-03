@@ -639,6 +639,7 @@ import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-di
 import { discoveryConsumer } from './generations.ts';
 import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
+import { compilePublicSuggestion } from './public-suggestion-input.ts';
 import { type SubjectDocument } from './document.ts';
 import type { DiscoveryConsumerQuery, DiscoveryEngineHit } from './discovery.ts';
 import { compileDiscoveryConsumerCapture } from './discovery.ts';
@@ -1390,8 +1391,49 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
     }
     if ('purpose' in plan) {
       validatePublicSuggestionInput(plan);
-      // The prefix adapter owns prefix execution; this consumer retains its native capture/repair only.
-      throw new ConsumerFailure('dependency_unavailable');
+      const { prefix, generation } = targetParts(q.consumer.physicalTarget);
+      const sort = [{ _score: 'desc' }, { id: 'asc' }];
+      const response = await m.native.request<unknown>(
+        'POST',
+        '/_search',
+        {
+          query: compilePublicSuggestion(plan),
+          pit: { id: q.snapshot.pit },
+          size,
+          sort,
+          profile: true,
+          track_total_hits: false,
+          ...(after === undefined ? {} : { search_after: after }),
+          _source: ['partition', 'security_revision'],
+        },
+        { query: { allow_partial_search_results: false, search_type: 'dfs_query_then_fetch' } },
+      );
+      const body = response.body;
+      if (record(body) && typeof body.pit_id === 'string') await retain(body.pit_id);
+      assertCompleteSearch(body);
+      if (
+        response.status !== 200 ||
+        !record(body) ||
+        !record(body.hits) ||
+        !Array.isArray(body.hits.hits) ||
+        body.hits.hits.length > size
+      )
+        throw new ConsumerFailure('dependency_unavailable');
+      admitHitPayload(body, { sort: 'relevance', size, generation, ...(after === undefined ? {} : { after }) }, prefix);
+      if (typeof body.pit_id !== 'string' || !body.pit_id.length)
+        throw new ConsumerFailure('observation_lost');
+      if (body.hits.hits.some((hit) => !record(hit) || hit._index !== q.consumer.physicalTarget))
+        throw new ConsumerFailure('incarnation_changed');
+      const raw = body.hits.hits.map((hit) => ({
+        id: hit._id as string,
+        index: hit._index as string,
+        partition: (hit._source as { partition: number }).partition,
+        securityRevision: (hit._source as { security_revision: number }).security_revision,
+        matched: Array.isArray(hit.matched_queries) ? [...hit.matched_queries] as string[] : [],
+        sort: [...hit.sort as (string | number | null)[]],
+      }));
+      m.cost.engineIteratorSteps += iteratorSteps(body);
+      return { queried: q, raw, exhausted: raw.length < size, total: undefined };
     }
     if (plan.sort === 'rating') throw new ConsumerFailure('dependency_unavailable');
     const executed = await queryPublicFilterConsumerPit(
@@ -1688,19 +1730,20 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       }
       const joined = await join(q, undefined, m, context);
       const plan = joined.definition.capture;
-      if ('representation' in plan !== mixed || 'purpose' in plan) return m.unavailable('registration_missing');
+      if ('representation' in plan !== mixed || ('purpose' in plan && mixed))
+        return m.unavailable('registration_missing');
       const loaded = await load({ consumer: q.consumer, job: q.snapshot.observation }, m);
       const { work } = loaded;
       if (!work.adopted || !isDeepStrictEqual(work.bootstrap.covered, joined.covered))
         return m.unavailable('observation_lost');
       let previous: RetainedWindow | undefined;
       let previousEncoded: string | null = null;
-      const pageSize = plan.pageSize ?? plan.size;
+      const pageSize = 'purpose' in plan ? plan.size : (plan.pageSize ?? plan.size);
       const allowance = Math.min(600, 6 * pageSize + 3);
       const size = prefix?.size ?? plan.size;
       if (!Number.isInteger(size) || size < 1 || size > Math.min(200, 2 * pageSize + 1))
         throw new TypeError('Invalid retained refill size');
-      let after = plan.after;
+      let after = 'purpose' in plan ? undefined : plan.after;
       let reused: RetainedWindow['raw'] = [];
       if (prefix) {
         if (typeof prefix.execution !== 'string' || !Number.isInteger(prefix.consumed) || prefix.consumed < 0)

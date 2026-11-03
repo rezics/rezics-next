@@ -1274,6 +1274,9 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 
 ### Suggest
 
+The request-only Realm and Collection prefix path uses the same operation and retained native prefix producer; its
+predicate, readiness, caller and finite refill bounds are specified in [scoped suggestions](./scoped-suggestion.md).
+
 - Touches: GET validates 1–64 code points (<= 128 UTF-16 units), limit 1–10 (default 8); `subjects-suggest-v1`
   queries `names.typeahead` and its 2/3-gram fields in one pinned physical-generation template request. Reads <= 20 hits, then the same
   partition-grouped disclosure, projection, generation and freshness paths. Grow N/P with limit, text and selected
