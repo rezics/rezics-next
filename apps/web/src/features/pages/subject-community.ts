@@ -104,10 +104,11 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
     (label !== null && (!isRecord(label) || typeof label.value !== 'string' || typeof label.language !== 'string'))
   )
     return null;
+  const subjectLabel = label === null ? null : (label as { value: string }).value;
 
   if (expected.place === GLOBAL) {
     return value.place.kind === 'global' && value.place.id === GLOBAL
-      ? { subjectId: expected.id, subjectLabel: label === null ? null : label.value, place: { kind: 'global', id: GLOBAL } }
+      ? { subjectId: expected.id, subjectLabel, place: { kind: 'global', id: GLOBAL } }
       : null;
   }
   if (
@@ -120,7 +121,7 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
     return null;
   return {
     subjectId: expected.id,
-    subjectLabel: label === null ? null : label.value,
+    subjectLabel,
     place: { kind: 'realm', id: expected.place, title: value.place.title },
   };
 }

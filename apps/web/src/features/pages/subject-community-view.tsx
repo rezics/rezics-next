@@ -47,6 +47,7 @@ export function SubjectCommunityRegion({
   const threads = region.state === 'ready' ? region.threads : [];
   const empty = region.state === 'ready' && threads.length === 0;
   const next = region.state === 'ready' ? region.next : null;
+  const reactionsAsOf = region.state === 'ready' ? region.reactionsAsOf : null;
   const currentContext = region.state === 'ready' ? region.context : undefined;
   const currentSubject = currentContext?.subjectLabel ?? currentContext?.subjectId;
   const currentPlace = currentContext
@@ -171,7 +172,7 @@ export function SubjectCommunityRegion({
                     subject={subject}
                     locale={locale}
                     reader={reader}
-                    reactionsAsOf={region.reactionsAsOf}
+                    reactionsAsOf={reactionsAsOf}
                   />
                   <ListRowControl
                     data-content-item-slot="actions"
