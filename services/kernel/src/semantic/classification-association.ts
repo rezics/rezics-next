@@ -86,7 +86,12 @@ export async function readCurrentClassificationAssociation(input: {
       requireAccessDeadline(input.deadline);
       const home = await readPartition(client, partitionOf(subjectRoute));
       if (!home || home.writeState === 'moved') throw new AccessUnavailableError('contention');
-      if (!(await subjectRead(client, input.time)) || !(await ballotAction(client, input.time))) return null;
+      const subjectAllowed = await subjectRead(client, input.time);
+      const ballotAllowed = await ballotAction(client, input.time);
+      if (!subjectAllowed || !ballotAllowed) {
+        console.info('classification association access probe', input.action, subjectAllowed, ballotAllowed);
+        return null;
+      }
 
       const visible = await readVisibility.run(client, { route: subjectRoute, subject_id: input.subjectId });
       if (visible?.visibility !== 'visible' || !visible.type) return null;
