@@ -216,68 +216,67 @@ export function quoteSqlPath(path: string): string {
 }
 
 export function parseManifest(value: Record<string, unknown>): SnapshotManifest {
-  const fail = (): never => {
+  function fail(): never {
     throw new StateBackupFailure('Snapshot manifest has the wrong shape.', 'corrupt');
-  };
+  }
   if (value.version !== SNAPSHOT_FORMAT_VERSION || value.format !== SNAPSHOT_FORMAT) fail();
-  if (typeof value.createdAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.createdAt))
-    fail();
+  const createdAt = value.createdAt;
+  if (typeof createdAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt)) fail();
   const sqlite = value.sqliteCompatibility;
   if (!sqlite || typeof sqlite !== 'object' || Array.isArray(sqlite)) fail();
   const sqliteCompatibility = sqlite as Record<string, unknown>;
-  if (
-    typeof sqliteCompatibility.pageSize !== 'number' ||
-    typeof sqliteCompatibility.pageCount !== 'number' ||
-    typeof sqliteCompatibility.userVersion !== 'number'
-  )
-    fail();
+  const pageSize = sqliteCompatibility.pageSize;
+  const pageCount = sqliteCompatibility.pageCount;
+  const userVersion = sqliteCompatibility.userVersion;
+  if (typeof pageSize !== 'number' || typeof pageCount !== 'number' || typeof userVersion !== 'number') fail();
   if (value.schemaCompatibility !== SCHEMA_COMPATIBILITY) fail();
   const content = value.content;
   if (!content || typeof content !== 'object' || Array.isArray(content)) fail();
   const contentRecord = content as Record<string, unknown>;
+  const bytes = contentRecord.bytes;
+  const sha256 = contentRecord.sha256;
   if (
     contentRecord.file !== 'importer-state.sqlite' ||
-    typeof contentRecord.bytes !== 'number' ||
-    !Number.isInteger(contentRecord.bytes) ||
-    contentRecord.bytes < 0 ||
-    typeof contentRecord.sha256 !== 'string' ||
-    !/^[a-f0-9]{64}$/.test(contentRecord.sha256)
+    typeof bytes !== 'number' ||
+    !Number.isInteger(bytes) ||
+    bytes < 0 ||
+    typeof sha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(sha256)
   )
     fail();
-  if (!Array.isArray(value.runs) || value.runs.length > MAX_SUMMARY_SOURCES) fail();
+  const listed = value.runs;
+  if (!Array.isArray(listed) || listed.length > MAX_SUMMARY_SOURCES) fail();
   const runs: RunBaseline[] = [];
-  for (const entry of value.runs) {
+  for (const entry of listed) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail();
     const row = entry as Record<string, unknown>;
-    if (typeof row.source !== 'string' || typeof row.presentCount !== 'number') fail();
-    if (row.activeGeneration !== null && typeof row.activeGeneration !== 'string') fail();
-    if (row.baselineGeneration !== null && typeof row.baselineGeneration !== 'string') fail();
-    if (row.status !== null && typeof row.status !== 'string') fail();
-    if (row.ownerRow !== 'absent' && row.ownerRow !== 'stopped') fail();
+    const source = row.source;
+    const presentCount = row.presentCount;
+    const activeGeneration = row.activeGeneration;
+    const baselineGeneration = row.baselineGeneration;
+    const status = row.status;
+    const ownerRow = row.ownerRow;
+    if (typeof source !== 'string' || typeof presentCount !== 'number') fail();
+    if (activeGeneration !== null && typeof activeGeneration !== 'string') fail();
+    if (baselineGeneration !== null && typeof baselineGeneration !== 'string') fail();
+    if (status !== null && typeof status !== 'string') fail();
+    if (ownerRow !== 'absent' && ownerRow !== 'stopped') fail();
     runs.push({
-      source: row.source,
-      activeGeneration: row.activeGeneration,
-      baselineGeneration: row.baselineGeneration,
-      status: row.status,
-      presentCount: row.presentCount,
-      ownerRow: row.ownerRow,
+      source,
+      activeGeneration,
+      baselineGeneration,
+      status,
+      presentCount,
+      ownerRow,
     });
   }
   return {
     version: SNAPSHOT_FORMAT_VERSION,
     format: SNAPSHOT_FORMAT,
-    createdAt: value.createdAt,
-    sqliteCompatibility: {
-      pageSize: sqliteCompatibility.pageSize,
-      pageCount: sqliteCompatibility.pageCount,
-      userVersion: sqliteCompatibility.userVersion,
-    },
+    createdAt,
+    sqliteCompatibility: { pageSize, pageCount, userVersion },
     schemaCompatibility: SCHEMA_COMPATIBILITY,
-    content: {
-      file: 'importer-state.sqlite',
-      bytes: contentRecord.bytes,
-      sha256: contentRecord.sha256,
-    },
+    content: { file: 'importer-state.sqlite', bytes, sha256 },
     runs,
   };
 }

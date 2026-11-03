@@ -77,7 +77,7 @@ test('CLI backup, validate and restore keep pending bytes and refuse unsafe path
     const fetchBoundary = (async (input: Request | string | URL) => {
       requests.push(String(input instanceof Request ? input.url : input));
       throw new Error('snapshot commands must not use the network');
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     const backup = await runImportCli(['backup', '--state', state, '--output', snapshot, '--json'], {
       fetch: fetchBoundary,
     });
