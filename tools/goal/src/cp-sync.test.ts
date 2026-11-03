@@ -653,6 +653,7 @@ test('cp-sync publishes the real CLI and installs services while retiring a tran
   const goalTree = git(repo, 'rev-parse', 'HEAD:tools/goal');
   git(repo, 'checkout', '--quiet', 'main');
   symlinkSync(join(source, 'node_modules'), join(repo, 'node_modules'));
+  write(repo, '.git/info/exclude', '/node_modules\n');
 
   const systemctl = Bun.which('systemctl');
   const systemdRun = Bun.which('systemd-run');
