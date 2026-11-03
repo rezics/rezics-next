@@ -450,7 +450,7 @@ function GameCorrection({
                           <span className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</span>
                         )}
                         <ol className="space-y-3">
-                                          {(subject.statements[property] ?? []).map((statement) => (
+                          {(subject.statements[property] ?? []).map((statement) => (
                             <GameStatement key={statement.id} statement={statement} read={read} locale={locale} />
                           ))}
                         </ol>

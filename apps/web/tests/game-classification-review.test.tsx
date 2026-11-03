@@ -184,6 +184,25 @@ test('Game classification reuses evidence, reviews the changed set, repairs one 
     expect(commands[2]!.key).toBe(platformCommand.key);
     expect(commands[2]!.statement).toEqual(platformCommand.statement);
     expect(platform.querySelector('fieldset')?.disabled).toBe(true);
+    const genreCandidate = '00000000-0000-4000-8000-00000000c201';
+    await click(within(genre).getByRole('button', { name: m.facts_add_value() }));
+    await act(async () => user.type(within(genre).getByRole('combobox', { name: genreLabel }), 'Another'));
+    await waitFor(() =>
+      expect(within(host.ownerDocument.body).getByRole('option', { name: 'Another platform Concept' })).toBeDefined(),
+    );
+    await act(async () => user.keyboard('{ArrowDown}{Enter}'));
+    propose = async (command) => {
+      commands.push(structuredClone(command));
+      return { ok: true, kind: 'proposed-awaiting-review', candidate: genreCandidate, revision: 2 };
+    };
+    await click(within(host).getByRole('button', { name: m.facts_review() }));
+    await click(submit());
+    expect(commands.at(-1)!.statement.value).toEqual({ type: 'value', content: extraPlatform });
+    expect(commands.at(-1)!.key).not.toBe(platformCommand.key);
+    expect(within(genre).getByText(m.correction_proposed())).toBeDefined();
+    expect(within(genre).getByRole('button', { name: m.correction_review() })).toBeDefined();
+    expect(host.textContent).toContain(m.facts_result_proposed());
+    expect(host.textContent).not.toContain(m.facts_result_selected());
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -193,4 +212,51 @@ test('Game classification reuses evidence, reviews the changed set, repairs one 
       descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
     mock.restore();
   }
+});
+
+test('Game classification rereads the current Game after native selection of the exact returned candidate', async () => {
+  const { bindGameClassificationReview } = await import('../src/features/catalogue/game-classification-review');
+  const { gameId } = await import('../src/kernel/fake/catalogue-game-profile');
+  const candidate = '00000000-0000-4000-8000-00000000c301';
+  let reread = 0;
+  let focused = '';
+  const review = bindGameClassificationReview(
+    (property) => ({
+      read: async () => ({ ok: false as const, reason: 'denied' as const }),
+      confirm: async (command) => {
+        expect(property).toBe('schema:genre');
+        expect(command.candidate).toBe(candidate);
+        return command.operation === 'adopt'
+          ? { ok: true, kind: 'selected', public: null }
+          : { ok: true, kind: 'accepted', public: null };
+      },
+    }),
+    async () => {
+      reread += 1;
+    },
+    () => true,
+    (property) => {
+      focused = property;
+    },
+  );
+  const result = await review('schema:genre').confirm({
+    id: gameId,
+    property: 'schema:genre',
+    candidate,
+    operation: 'adopt',
+    head: 1,
+    key: 'selection-key',
+  });
+  expect(result).toMatchObject({ ok: true, kind: 'selected' });
+  expect(reread).toBe(1);
+  expect(focused).toBe('schema:genre');
+  await review('schema:genre').confirm({
+    id: gameId,
+    property: 'schema:genre',
+    candidate,
+    operation: 'accept',
+    head: null,
+    key: 'accept-key',
+  });
+  expect(reread).toBe(1);
 });

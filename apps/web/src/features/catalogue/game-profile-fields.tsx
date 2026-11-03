@@ -1010,6 +1010,7 @@ function GameClassificationsLive({
           <GameClassificationReuse
             reuse={reuse}
             drafts={drafts}
+            admitted={fields}
             read={context}
             locale={locale}
             onSelected={(selected) =>
@@ -1022,7 +1023,7 @@ function GameClassificationsLive({
             }}
             onApply={() => {
               if (!lifetime.active() || busy || running.current) return;
-              const result = applyGameReuse(drafts, reuse, read.release);
+              const result = applyGameReuse(drafts, reuse, read.release, fields);
               setDrafts(result.drafts);
               setReuse(result.reuse);
               setCopies((items) => [

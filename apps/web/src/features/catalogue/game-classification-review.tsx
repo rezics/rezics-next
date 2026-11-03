@@ -97,10 +97,7 @@ export function GameClassificationReviewControls({
   const pending = drafts.filter((draft) => admitted.includes(draft.property));
   const changed = includedChanges(pending);
   const unsealed = changed.some((draft) => !draft.command);
-  const staleResult = pending.some(
-    (draft) => draft.result && !draft.result.ok && draft.result.reason === 'stale',
-  );
-  const submitDisabled = busy || !changed.length || staleResult || (unsealed && review.status !== 'current');
+  const submitDisabled = busy || !changed.length || (unsealed && review.status !== 'current');
   return (
     <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5">
       {review.status !== 'closed' && (
@@ -145,6 +142,7 @@ export function GameClassificationReviewControls({
 export function GameClassificationReuse({
   reuse,
   drafts,
+  admitted,
   read,
   locale,
   onSelected,
@@ -155,6 +153,7 @@ export function GameClassificationReuse({
 }: {
   reuse: GameReuseSession;
   drafts: FactDraft[];
+  admitted: readonly string[];
   read: FactsCurrent;
   locale: string;
   onSelected: (holders: string[]) => void;
@@ -163,10 +162,15 @@ export function GameClassificationReuse({
   onCancel: () => void;
   onOpen: (holder: string, index: number) => void;
 }) {
+  const shown = drafts.map((row) =>
+    admitted.includes(row.property) || factHolder(row) === reuse.source.holder
+      ? row
+      : { ...row, command: row.command ?? { id: '', key: '', statement: row.statement } },
+  );
   return (
     <ReferenceReusePanel
       source={reuse.source}
-      drafts={drafts}
+      drafts={shown}
       selected={reuse.selected}
       read={read}
       locale={locale}
@@ -213,15 +217,27 @@ export function applyGameReuse(
   drafts: FactDraft[],
   reuse: GameReuseSession,
   release: FactsCurrent['release'],
+  admitted: readonly string[],
 ): {
   drafts: FactDraft[];
   reuse: GameReuseSession;
   copies: GameCopiedGroup[];
 } {
-  const result = applyReuse(drafts, reuse.source, reuse.selected, release);
+  const selected = reuse.selected.filter((holder) => {
+    const draft = drafts.find((row) => factHolder(row) === holder);
+    return !!draft && admitted.includes(draft.property);
+  });
+  const skipped = reuse.selected
+    .filter((holder) => !selected.includes(holder))
+    .map((holder) => ({
+      holder,
+      property: drafts.find((row) => factHolder(row) === holder)?.property ?? holder,
+      reason: 'locked' as const,
+    }));
+  const result = applyReuse(drafts, reuse.source, selected, release);
   return {
     drafts: result.drafts,
-    reuse: { ...reuse, applied: result.applied, refused: result.refused },
+    reuse: { ...reuse, applied: result.applied, refused: [...skipped, ...result.refused] },
     copies: result.applied.map((item) => ({
       holder: item.holder,
       sourceHolder: reuse.source.holder,

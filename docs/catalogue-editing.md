@@ -300,7 +300,8 @@ Game classification drafts keep their prior release definitions privately for re
 fresh proposals and exact replays wait until current admission returns.
 Decision: Game classification correction reviews the whole changed set through the delivered SubjectFacts coordinator
 before sealing. Contributors reuse one complete citation group onto other editable Game classification drafts as an
-independent evidence claim; copying conveys no licence, native acceptance or provider ownership. Each property remains
+independent evidence claim; copying conveys no licence, native acceptance or provider ownership. Withdrawn, in-flight,
+uncertain and succeeded holders stay visible in the reuse panel as ineligible and receive no copy. Each property remains
 an independent native command. A proposal never marks the assertion selected until an explicit native review and
 selection, after which the Game is reread. Jumping back from review invalidates the snapshot until the contributor
 reviews the current drafts again. A removed draft's diagnostic stays on that holder and is not redirected.
