@@ -50,7 +50,6 @@ export function holdsCurrentStatements(
           break;
         }
         if (levels.size === 1 && !['0', '1', '2'].includes(evidence[0]!.value)) {
-          uncertain = true;
           matches = false;
           break;
         }
