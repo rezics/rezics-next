@@ -57,7 +57,13 @@ type SourceStatistic = {
 };
 
 type Input = Omit<SourceStatistic, 'source' | 'observation'> & { expectedObservation?: string | null };
-type ClearInput = Readonly<{ sourceAlias?: string; sourceRecordId: string; count: 0; asOf: string; expectedObservation?: string | null }>;
+type ClearInput = Readonly<{
+  sourceAlias?: string;
+  sourceRecordId: string;
+  count: 0;
+  asOf: string;
+  expectedObservation?: string | null;
+}>;
 type Row = {
   source: SourceProvider;
   sourceAlias: string;
@@ -186,8 +192,11 @@ function validate(source: string, subjectId: string, value: Input, authorization
   if (!value || typeof value !== 'object' || !value.scale || typeof value.scale !== 'object')
     throw new SourceStatisticInvalidError('statistic');
   validateAlias(value);
-  if (value.expectedObservation !== undefined && value.expectedObservation !== null &&
-    (typeof value.expectedObservation !== 'string' || !/^[0-9a-f]{64}$/.test(value.expectedObservation)))
+  if (
+    value.expectedObservation !== undefined &&
+    value.expectedObservation !== null &&
+    (typeof value.expectedObservation !== 'string' || !/^[0-9a-f]{64}$/.test(value.expectedObservation))
+  )
     throw new SourceStatisticInvalidError('expectedObservation');
   if (
     !Number.isSafeInteger(value.scale.min) ||
@@ -225,10 +234,14 @@ function validateClear(
   const route = authorizeWrite(source, subjectId, authorization);
   if (!value || typeof value !== 'object') throw new SourceStatisticInvalidError('clear');
   validateAlias(value);
-  if (value.expectedObservation !== undefined && value.expectedObservation !== null &&
-    (typeof value.expectedObservation !== 'string' || !/^[0-9a-f]{64}$/.test(value.expectedObservation)))
+  if (
+    value.expectedObservation !== undefined &&
+    value.expectedObservation !== null &&
+    (typeof value.expectedObservation !== 'string' || !/^[0-9a-f]{64}$/.test(value.expectedObservation))
+  )
     throw new SourceStatisticInvalidError('expectedObservation');
-  if (!validateSourceRecordId(value.sourceRecordId) || !sourceProvider(source)!.record(value.sourceRecordId)) throw new SourceStatisticInvalidError('sourceRecordId');
+  if (!validateSourceRecordId(value.sourceRecordId) || !sourceProvider(source)!.record(value.sourceRecordId))
+    throw new SourceStatisticInvalidError('sourceRecordId');
   if (value.count !== 0) throw new SourceStatisticInvalidError('count');
   if (!validateAsOf(value.asOf)) throw new SourceStatisticInvalidError('asOf');
   return route;
@@ -318,8 +331,9 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         if (!locked.exists) throw new SourceStatisticNotFoundError();
         const next = admitSourceObservation(binding, locked.current);
         if (next.identical && !('legacy' in (locked.current ?? {}))) {
-          const current = (await sourceStatisticList.run(tx, { route, subject_id: input.subjectId }))
-            .find((row) => row.source === input.source);
+          const current = (await sourceStatisticList.run(tx, { route, subject_id: input.subjectId })).find(
+            (row) => row.source === input.source,
+          );
           if (!current) throw new ProblemError('conflict');
           return noEffect(statistic(current as Row));
         }
@@ -340,7 +354,8 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           licence: input.value.licence,
           attribution: input.value.attribution,
           transaction_id: command.transactionId,
-          observation_digest: input.source === 'bangumi' || input.value.expectedObservation !== undefined ? next.digest : null,
+          observation_digest:
+            input.source === 'bangumi' || input.value.expectedObservation !== undefined ? next.digest : null,
         });
         const row = rows[0];
         if (!row) throw new SourceStatisticNotFoundError();
@@ -395,8 +410,11 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
         const locked = await lockSourceObservation(tx, binding);
         if (!locked.exists) throw new SourceStatisticNotFoundError();
         // An empty refresh for a different tuple has no authority over this slot.
-        if (locked.current && (locked.current.sourceAlias !== effectiveAlias(input.source, input.value) ||
-          locked.current.sourceRecordId !== input.value.sourceRecordId))
+        if (
+          locked.current &&
+          (locked.current.sourceAlias !== effectiveAlias(input.source, input.value) ||
+            locked.current.sourceRecordId !== input.value.sourceRecordId)
+        )
           return noEffect({ removed: false });
         const next = admitSourceObservation(binding, locked.current);
         if (next.identical) return noEffect({ removed: false });
@@ -404,8 +422,11 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           await saveSourceObservation(tx, binding, locked.current, command.transactionId);
         await saveSourceObservation(tx, binding, next, command.transactionId);
         const result = await sourceStatisticClear.run(tx, {
-          route, subject_id: input.subjectId, source: input.source,
-          source_alias: effectiveAlias(input.source, input.value), source_record_id: input.value.sourceRecordId,
+          route,
+          subject_id: input.subjectId,
+          source: input.source,
+          source_alias: effectiveAlias(input.source, input.value),
+          source_record_id: input.value.sourceRecordId,
         });
         return {
           value: { removed: result.removed },
@@ -537,10 +558,15 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
   });
   const commands = () => createSourceStatisticCommands(config());
   const currentSubject = async (actor: Actor, id: string) => {
-    const current = await resolveSubject({
-      pool: dependencies.pool, access: dependencies.access(),
-      ...(dependencies.clock ? { clock: dependencies.clock } : {}),
-    }, actor, id);
+    const current = await resolveSubject(
+      {
+        pool: dependencies.pool,
+        access: dependencies.access(),
+        ...(dependencies.clock ? { clock: dependencies.clock } : {}),
+      },
+      actor,
+      id,
+    );
     return current?.subjectId === id;
   };
 
@@ -684,7 +710,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
           committed = true;
           await readFenceSnapshot(config(), tuple, job.deadline);
-          if (!await currentSubject(actor, params.id)) throw new SourceStatisticNotFoundError();
+          if (!(await currentSubject(actor, params.id))) throw new SourceStatisticNotFoundError();
           set.status = 204;
         } catch (error) {
           if (committed) throw committedDisclosureProblem(error);

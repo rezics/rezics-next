@@ -171,7 +171,9 @@ export const SourceStatisticClearInputSchema = strictContentSchema(
 export const SourceStatisticResponseSchema = t.Object(
   {
     source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
-    observation: t.Optional(t.Object({ kind: t.Literal('unversioned'), digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed)),
+    observation: t.Optional(
+      t.Object({ kind: t.Literal('unversioned'), digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed),
+    ),
     sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
     sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
     scale: sourceScale,
