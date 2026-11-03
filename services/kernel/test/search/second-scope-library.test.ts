@@ -8,6 +8,7 @@ import { routeOf } from '../../src/route/route.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from '../../src/search/cursor.ts';
 import type { SearchService } from '../../src/search/http/routes.ts';
 import { bindSearchScopeCursorRequest } from '../../src/search/service.ts';
+import type { PublicSearchPage } from '../../src/search/service.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -37,17 +38,16 @@ const access: Access = {
   },
 };
 
-let observed:
-  | {
+const observed: {
+  current?: {
       principal: string;
       request: unknown;
       context: Parameters<SearchService['search']>[4];
-    }
-  | undefined;
-const page = { subjects: [], next: null, as_of: asOf } as const;
+  };
+const page: PublicSearchPage = { subjects: [], next: null, as_of: asOf };
 const search: SearchService = {
   async search(principal, request, _time, _active, context) {
-    observed = { principal, request, context };
+    observed.current = { principal, request, context };
     await context?.complete(page);
     return page;
   },
@@ -81,7 +81,7 @@ afterAll(async () => {
 });
 
 test('Library scope requests preserve the verified reader, Access, route key, deadline, text and released conditions', async () => {
-  observed = undefined;
+  observed.current = undefined;
   const body = {
     text: 'Kokoro',
     filter: {
@@ -104,26 +104,30 @@ test('Library scope requests preserve the verified reader, Access, route key, de
   );
 
   expect(response.status).toBe(200);
-  expect(observed?.principal).toBe(`account:${reader.accountId}`);
-  expect(observed?.request).toEqual(body);
-  expect(observed?.context?.scope?.actor).toBe(reader);
-  expect(observed?.context?.scope?.access).toBe(access);
-  expect(observed?.context?.scope?.routeKey).toBe(routeKey);
-  expect(observed?.context?.scope?.deadline).toBeGreaterThan(Date.now());
-  expect(observed?.context?.deadline).toBe(observed?.context?.scope?.deadline);
+  const capture = observed.current;
+  expect(capture).toBeDefined();
+  expect(capture!.principal).toBe(`account:${reader.accountId}`);
+  expect(capture!.request).toEqual(body);
+  expect(capture!.context?.scope?.actor).toBe(reader);
+  expect(capture!.context?.scope?.access).toBe(access);
+  expect(capture!.context?.scope?.routeKey).toBe(routeKey);
+  expect(capture!.context?.scope?.deadline).toBeGreaterThan(Date.now());
+  expect(capture!.context?.deadline).toBe(capture!.context?.scope?.deadline);
 
-  const scope = observed!.context!.scope!;
+  const scope = capture!.context!.scope!;
+  const actor = scope.actor;
+  if (!actor) throw new Error('Search passed an incomplete scope context');
   const collection = '018f0000-0000-7000-8000-00a000000010';
   const concealed = '018f0000-0000-7000-8000-00a000000011';
   grants.set(collection, true);
-  expect(await scope.access.authorize({} as never, scope.actor, 'collection:read', { route: routeOf(collection)!, id: collection })).toBe(
+  expect(await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(collection)!, id: collection })).toBe(
     true,
   );
   grants.set(collection, false);
-  expect(await scope.access.authorize({} as never, scope.actor, 'collection:read', { route: routeOf(collection)!, id: collection })).toBe(
+  expect(await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(collection)!, id: collection })).toBe(
     false,
   );
-  expect(await scope.access.authorize({} as never, scope.actor, 'collection:read', { route: routeOf(concealed)!, id: concealed })).toBe(
+  expect(await scope.access.authorize({} as never, actor, 'collection:read', { route: routeOf(concealed)!, id: concealed })).toBe(
     false,
   );
 });

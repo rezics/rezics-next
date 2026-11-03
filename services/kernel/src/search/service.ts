@@ -164,7 +164,16 @@ export function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis
   };
 }
 
-function scopeCursorAfter(sort: 'id' | 'name' | 'collections', after: readonly (string | number | null)[]) {
+function scopeCursorAfter(sort: 'id', after: readonly (string | number | null)[]): string;
+function scopeCursorAfter(sort: 'name', after: readonly (string | number | null)[]): readonly [string | null, string];
+function scopeCursorAfter(
+  sort: 'collections',
+  after: readonly (string | number | null)[],
+): readonly [number, string | null, string];
+function scopeCursorAfter(
+  sort: 'id' | 'name' | 'collections',
+  after: readonly (string | number | null)[],
+): string | readonly [string | null, string] | readonly [number, string | null, string] {
   if (sort === 'id') {
     if (after.length !== 1 || typeof after[0] !== 'string') throw new ProblemError('search_restart_required');
     return after[0];
@@ -691,7 +700,7 @@ export function createSearchService({
         !hitOptions.descriptions &&
         !hitOptions.properties
       ) {
-        let hits: SearchHit[] = [];
+        const nativeHits: NativeSearchHit[] = [];
         let after: SearchSortValue[] | null = null;
         let exhausted = false;
         if (sort === 'id') {
@@ -707,18 +716,18 @@ export function createSearchService({
           if (page.basis.canonical !== preparedScope.basis.canonical || !page.usage.work)
             throw new ProblemError('search_restart_required');
           scopeWork.native(page.usage.work);
-          hits = [...page.hits];
+          nativeHits.push(...page.hits);
           exhausted = page.exhausted;
           after = page.coveredThrough === null ? null : [page.coveredThrough];
           if (!exhausted && after === null) throw indexNotReady();
-          if (hits.length < limit && !exhausted) throw indexNotReady();
+          if (nativeHits.length < limit && !exhausted) throw indexNotReady();
         } else if (sort === 'name') {
           let orderedAfter: readonly [string | null, string] | null = cursor?.ok
             ? scopeCursorAfter('name', cursor.after)
             : null;
           let covered: readonly [string | null, string] | null = null;
-          while (hits.length < limit) {
-            const quota = Math.min(99, limit - hits.length);
+          while (nativeHits.length < limit) {
+            const quota = Math.min(99, limit - nativeHits.length);
             const page = await sourceRequest(() =>
               scope!.orderedPrefix(preparedScope!, {
                 order: 'name',
@@ -731,23 +740,23 @@ export function createSearchService({
             if (page.basis.canonical !== preparedScope.basis.canonical)
               throw new ProblemError('search_restart_required');
             scopeWork.native(page.usage.work);
-            hits.push(...page.hits.map(({ sort: _sort, ...hit }) => hit));
+            nativeHits.push(...page.hits);
             covered = page.coveredThrough;
             exhausted = page.exhausted;
-            if (hits.length >= limit || exhausted) break;
+            if (nativeHits.length >= limit || exhausted) break;
             if (page.hits.length === 0 || covered === null) throw indexNotReady();
             orderedAfter = covered;
           }
           after = covered === null ? null : [...covered];
           if (!exhausted && after === null) throw indexNotReady();
-          if (hits.length < limit && !exhausted) throw indexNotReady();
+          if (nativeHits.length < limit && !exhausted) throw indexNotReady();
         } else {
           let orderedAfter: readonly [number, string | null, string] | null = cursor?.ok
             ? scopeCursorAfter('collections', cursor.after)
             : null;
           let covered: readonly [number, string | null, string] | null = null;
-          while (hits.length < limit) {
-            const quota = Math.min(99, limit - hits.length);
+          while (nativeHits.length < limit) {
+            const quota = Math.min(99, limit - nativeHits.length);
             const page = await sourceRequest(() =>
               scope!.orderedPrefix(preparedScope!, {
                 order: 'collections',
@@ -760,22 +769,27 @@ export function createSearchService({
             if (page.basis.canonical !== preparedScope.basis.canonical)
               throw new ProblemError('search_restart_required');
             scopeWork.native(page.usage.work);
-            hits.push(...page.hits.map(({ sort: _sort, ...hit }) => hit));
+            nativeHits.push(...page.hits);
             covered = page.coveredThrough;
             exhausted = page.exhausted;
-            if (hits.length >= limit || exhausted) break;
+            if (nativeHits.length >= limit || exhausted) break;
             if (page.hits.length === 0 || covered === null) throw indexNotReady();
             orderedAfter = covered;
           }
           after = covered === null ? null : [...covered];
           if (!exhausted && after === null) throw indexNotReady();
-          if (hits.length < limit && !exhausted) throw indexNotReady();
+          if (nativeHits.length < limit && !exhausted) throw indexNotReady();
         }
-        if (new Set(hits.map((hit) => hit.id)).size !== hits.length) throw indexNotReady();
-        const publicResults = await sourceRequest(() => publicHitFigures(pool, hits));
+        if (new Set(nativeHits.map((hit) => hit.id)).size !== nativeHits.length) throw indexNotReady();
+        const checked = await checkCandidates(nativeHits);
+        if (checked.size !== nativeHits.length) throw new ProblemError('search_restart_required');
+        const shown = nativeHits.map((hit) => checked.get(hit)!);
+        const results = shown.map((subject) => projectHit(subject, hitOptions));
+        const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         const as_of = await asOf(generation!);
         const witnesses = new Map<string, number>();
-        for (const hit of hits.slice(0, 2)) witnesses.set(hit.type, (witnesses.get(hit.type) ?? 0) + 1);
+        for (const subject of shown.slice(0, 2))
+          witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
         const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
         const response: PublicSearchPage = {
           subjects: publicResults,
@@ -796,7 +810,7 @@ export function createSearchService({
           as_of,
         };
         await readContext?.complete(response);
-        const finalValues = await evaluateScope(hits.map((hit) => hit.id));
+        const finalValues = await evaluateScope(shown.map((subject) => subject.id));
         if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
         if ((await indexRequest(freshAliasGeneration)) !== generation)
           throw new ProblemError('search_restart_required');
@@ -808,7 +822,7 @@ export function createSearchService({
       const capturePlan = {
         ...plan,
         generation,
-        ...(preparedScope ? {} : { filterDocument: admitted }),
+        filterDocument: preparedScope ? undefined : admitted,
         text,
         pageSize: limit,
         size: Math.min(200, 2 * limit + 1),
