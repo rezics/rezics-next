@@ -78,10 +78,10 @@ async function createBoard(): Promise<{ board: Board; realmId: string }> {
     title: 'Pinned discussion',
     visibility: 'protected',
   });
-  // A protected board requires its own read grant, independently of Realm membership.
+  // Native board ownership supplies read access but no Realm curation authority.
   await system.database.pool.query(
-    `INSERT INTO access.resource_grant(route,resource_id,subject_id,subject_role,action,valid,transaction_id)
-     VALUES ($1,$2,$3,'','board:read','(,)',$4)`,
+    `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,subject_role,grant_role,valid,transaction_id)
+     VALUES ($1,$2,$3,'','content.board.owner','(,)',$4)`,
     [routeOf(board.id), board.id, member().actor.accountId, crypto.randomUUID()],
   );
   await system.database.pool.query(

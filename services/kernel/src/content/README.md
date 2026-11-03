@@ -171,6 +171,7 @@ through five. These schemas change together with the projection; command authori
 
 Focused outcomes in `test/content/board-pin-http.test.ts` cover capacity races, newest-first ordering, unpin/re-pin,
 initial-only sections, all four ordinary sorts, stale cohorts, sparse continuation and current concealment.
+Decision: the protected-board journey supplies native board ownership for read access; Realm curation authority remains independently required for pin changes.
 
 The `readResource` public-eligibility callbacks declare native work through
 `ResourceEligibilityOptions.work.prepare/verify`. Preparation returns the already captured evidence and performs
