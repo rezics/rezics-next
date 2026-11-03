@@ -78,7 +78,7 @@ try {
     return response.json();
   }
   const captures = [];
-  for (const version of [1, 2, 3, 4]) {
+  for (const version of [1, 4]) {
     const created = await request('POST', 'libraryExports');
     // Retained-format fixtures use the producer's stored-capture path, as in its native compatibility scenarios.
     if (version !== 4) await sql('UPDATE library.library_export SET format_version=$1 WHERE route=$2 AND account_id=$3 AND export_id=$4', [version, route, owner, created.exportId]);
