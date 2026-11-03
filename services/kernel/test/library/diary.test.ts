@@ -78,9 +78,14 @@ test('native owner pages across subjects and separate repeats, then reopens exac
     .sort()
     .reverse();
   const datedId = expected.at(-1)!;
-  await json(await send('PATCH', `/v1/progressSessions/${datedId}/journal`, {
-    revision: 0, startDate: { year: 1999 }, finishDate: { year: 2000, month: 2 }, reflection: 'Private detail only',
-  }));
+  await json(
+    await send('PATCH', `/v1/progressSessions/${datedId}/journal`, {
+      revision: 0,
+      startDate: { year: 1999 },
+      finishDate: { year: 2000, month: 2 },
+      reflection: 'Private detail only',
+    }),
+  );
   const first = await page();
   const second = await page(first.next!);
   const third = await page(second.next!);
@@ -94,24 +99,35 @@ test('native owner pages across subjects and separate repeats, then reopens exac
   expect(new Set(rows.map((item) => item.state))).toEqual(new Set(['active', 'completed', 'abandoned']));
   for (const row of rows) {
     expect(row.recordedStartedAt).toMatch(/\.\d{6}Z$/);
-    expect(row.reportedDates).toEqual(row.id === datedId
-      ? { availability: 'available', revision: 1, startDate: { year: 1999 }, finishDate: { year: 2000, month: 2 } }
-      : { availability: 'available', revision: 0, startDate: null, finishDate: null });
+    expect(row.reportedDates).toEqual(
+      row.id === datedId
+        ? { availability: 'available', revision: 1, startDate: { year: 1999 }, finishDate: { year: 2000, month: 2 } }
+        : { availability: 'available', revision: 0, startDate: null, finishDate: null },
+    );
     expect(row.subject?.label).toBe(row.subjectId === a ? 'First diary subject' : 'Second diary subject');
     expect(row).not.toHaveProperty('startedAt');
     expect(row).not.toHaveProperty('libraryProfilePin');
   }
   expect(JSON.stringify(rows)).not.toContain('Private detail only');
-  await json(await send('PATCH', `/v1/progressSessions/${datedId}/journal`, {
-    revision: 1, startDate: { year: 1998, month: 4, day: 3 }, finishDate: null,
-  }));
+  await json(
+    await send('PATCH', `/v1/progressSessions/${datedId}/journal`, {
+      revision: 1,
+      startDate: { year: 1998, month: 4, day: 3 },
+      finishDate: null,
+    }),
+  );
   const correctedDates = await page(second.next!);
   expect(correctedDates.occurrences.map((row) => row.id)).toEqual([datedId]);
   expect(correctedDates.occurrences[0]!.reportedDates).toEqual({
-    availability: 'available', revision: 2, startDate: { year: 1998, month: 4, day: 3 }, finishDate: null,
+    availability: 'available',
+    revision: 2,
+    startDate: { year: 1998, month: 4, day: 3 },
+    finishDate: null,
   });
   expect((await json(await send('GET', `/v1/progressSessions/${datedId}/journal`))).journal).toMatchObject({
-    revision: 2, startDate: { year: 1998, month: 4, day: 3 }, finishDate: null,
+    revision: 2,
+    startDate: { year: 1998, month: 4, day: 3 },
+    finishDate: null,
   });
   const corrected = await json(
     await send('POST', `/v1/progressSessions/${sessions[2].id}:record`, {

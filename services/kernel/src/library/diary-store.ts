@@ -7,7 +7,14 @@ import type { DiaryOccurrence } from './diary-model.ts';
 type Client = Pick<PoolClient, 'query'>;
 export type DiaryRow = Pick<
   DiaryOccurrence,
-  'id' | 'subjectId' | 'versionSubjectId' | 'state' | 'revision' | 'recordedStartedAt' | 'recordedCompletedAt' | 'reportedDates'
+  | 'id'
+  | 'subjectId'
+  | 'versionSubjectId'
+  | 'state'
+  | 'revision'
+  | 'recordedStartedAt'
+  | 'recordedCompletedAt'
+  | 'reportedDates'
 >;
 export type DiaryKey = { recordedStartedAt: string; id: string };
 export type DiaryNavigation = {

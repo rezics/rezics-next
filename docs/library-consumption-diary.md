@@ -25,7 +25,8 @@ The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, curs
     recordedStartedAt: string;
     recordedCompletedAt: string | null;
     reportedDates: {
-      availability: 'available'; revision: number;
+      availability: 'available';
+      revision: number;
       startDate: { year: number; month?: number; day?: number } | null;
       finishDate: { year: number; month?: number; day?: number } | null;
     };

@@ -70,11 +70,14 @@ const id = t.String({ format: 'uuid' });
 const nullable = t.Union([t.String(), t.Null()]);
 const subject = t.Union([t.Object({ id, label: nullable, language: nullable }, closed), t.Null()]);
 const reportedDate = t.Union([
-  t.Object({
-    year: t.Integer({ minimum: 1, maximum: 9999 }),
-    month: t.Optional(t.Integer({ minimum: 1, maximum: 12 })),
-    day: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
-  }, closed),
+  t.Object(
+    {
+      year: t.Integer({ minimum: 1, maximum: 9999 }),
+      month: t.Optional(t.Integer({ minimum: 1, maximum: 12 })),
+      day: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
+    },
+    closed,
+  ),
   t.Null(),
 ]);
 const diaryPageSchema = t.Unsafe<DiaryPage>(
@@ -90,12 +93,15 @@ const diaryPageSchema = t.Unsafe<DiaryPage>(
             revision: t.Integer({ minimum: 1 }),
             recordedStartedAt: t.String(),
             recordedCompletedAt: nullable,
-            reportedDates: t.Object({
-              availability: t.Literal('available'),
-              revision: t.Integer({ minimum: 0 }),
-              startDate: reportedDate,
-              finishDate: reportedDate,
-            }, closed),
+            reportedDates: t.Object(
+              {
+                availability: t.Literal('available'),
+                revision: t.Integer({ minimum: 0 }),
+                startDate: reportedDate,
+                finishDate: reportedDate,
+              },
+              closed,
+            ),
             subject,
             versionSubject: subject,
           },
