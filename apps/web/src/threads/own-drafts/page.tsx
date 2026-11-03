@@ -99,7 +99,9 @@ function OwnDraftCommandFeedback({
           {m.own_drafts_readback({}, { locale })}
         </Button>
       ) : null}
-      {feedback.state === 'readback' && typeof feedback.readback === 'object' && feedback.readback.state === 'available' ? (
+      {feedback.state === 'readback' &&
+      typeof feedback.readback === 'object' &&
+      feedback.readback.state === 'available' ? (
         <>
           <p role="status">
             {(feedback.readback.visibility === 'published'
@@ -115,7 +117,8 @@ function OwnDraftCommandFeedback({
           ) : null}
         </>
       ) : null}
-      {feedback.state === 'readback' && !(typeof feedback.readback === 'object' && feedback.readback.state === 'available') ? (
+      {feedback.state === 'readback' &&
+      !(typeof feedback.readback === 'object' && feedback.readback.state === 'available') ? (
         <p role="status">{m.own_drafts_readback_no_proof({}, { locale })}</p>
       ) : null}
     </section>
@@ -436,10 +439,7 @@ function BoundOwnDraftsPage({
   const startEditor = (source: 'server' | 'browser') => {
     if (!readySelection || !commands || eraseState?.state === 'uncertain' || eraseState?.state === 'sending') return;
     if (!admittedOwnDraftAction(readySelection.entry, identity.accountId, 'edit')) return;
-    if (
-      source === 'browser' &&
-      (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent')
-    )
+    if (source === 'browser' && (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent'))
       return;
     setEditingSource(source);
   };
@@ -476,9 +476,7 @@ function BoundOwnDraftsPage({
       .catch(() => {
         if (!controller.signal.aborted && current() && identityRef.current === identityKey)
           setCommandFeedback((previous) =>
-            previous?.postId === postId
-              ? { ...previous, state: 'readback', readback: 'unavailable' }
-              : previous,
+            previous?.postId === postId ? { ...previous, state: 'readback', readback: 'unavailable' } : previous,
           );
       });
   };
@@ -522,13 +520,16 @@ function BoundOwnDraftsPage({
     eraseController.current = controller;
     setEraseState({ state: 'sending', intent });
     void commands
-      .erase({
-        postId: intent.postId,
-        threadId: intent.threadId,
-        opening: intent.opening,
-        revisionId: intent.revisionId,
-        idempotencyKey: intent.idempotencyKey,
-      }, controller.signal)
+      .erase(
+        {
+          postId: intent.postId,
+          threadId: intent.threadId,
+          opening: intent.opening,
+          revisionId: intent.revisionId,
+          idempotencyKey: intent.idempotencyKey,
+        },
+        controller.signal,
+      )
       .then((result) => {
         if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
         if (result.ok) {
@@ -549,7 +550,8 @@ function BoundOwnDraftsPage({
           setEraseState({ state: 'uncertain', intent });
       })
       .finally(() => {
-        if (!controller.signal.aborted && current() && identityRef.current === identityKey) erasePending.current = false;
+        if (!controller.signal.aborted && current() && identityRef.current === identityKey)
+          erasePending.current = false;
       });
   };
 

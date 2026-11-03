@@ -57,7 +57,17 @@ function nativePage(
 
 type StoryArgs = {
   locale: OwnDraftLocale;
-  scenario: 'ready' | 'empty' | 'preparing' | 'sparse' | 'concealed' | 'denied' | 'conflict' | 'uncertain' | 'erase-review' | 'long';
+  scenario:
+    | 'ready'
+    | 'empty'
+    | 'preparing'
+    | 'sparse'
+    | 'concealed'
+    | 'denied'
+    | 'conflict'
+    | 'uncertain'
+    | 'erase-review'
+    | 'long';
 };
 
 const longTitles: Record<OwnDraftLocale, string> = {
@@ -237,8 +247,12 @@ export const ConflictDesktopLight: Story = {
   decorators: desktop,
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await userEvent.click((await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!);
-    await userEvent.click(await view.findByRole('button', { name: m.own_drafts_use_server({}, { locale: args.locale }) }));
+    await userEvent.click(
+      (await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!,
+    );
+    await userEvent.click(
+      await view.findByRole('button', { name: m.own_drafts_use_server({}, { locale: args.locale }) }),
+    );
     await userEvent.click(await view.findByRole('button', { name: m.thread_edit_save() }));
     await userEvent.click(await view.findByRole('button', { name: m.thread_edit_review_current() }));
     await expect(view.getByRole('alertdialog')).toHaveTextContent('Current native head after another edit');
@@ -249,8 +263,12 @@ export const UncertainCommandPhoneLight: Story = {
   decorators: phoneLight,
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await userEvent.click((await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!);
-    await userEvent.click(await view.findByRole('button', { name: m.own_drafts_use_server({}, { locale: args.locale }) }));
+    await userEvent.click(
+      (await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!,
+    );
+    await userEvent.click(
+      await view.findByRole('button', { name: m.own_drafts_use_server({}, { locale: args.locale }) }),
+    );
     await userEvent.click(await view.findByRole('button', { name: m.thread_edit_save() }));
     await expect(view.findByRole('button', { name: m.own_drafts_retry_save() })).resolves.toBeVisible();
   },
@@ -260,8 +278,12 @@ export const EraseReviewPhoneDark: Story = {
   decorators: phoneDark,
   play: async ({ canvasElement, args }) => {
     const view = within(canvasElement);
-    await userEvent.click((await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!);
+    await userEvent.click(
+      (await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) }))[0]!,
+    );
     await userEvent.click(await view.findByRole('button', { name: m.own_drafts_erase({}, { locale: args.locale }) }));
-    await expect(view.getByRole('alertdialog')).toHaveTextContent(m.own_drafts_erase_review({}, { locale: args.locale }));
+    await expect(view.getByRole('alertdialog')).toHaveTextContent(
+      m.own_drafts_erase_review({}, { locale: args.locale }),
+    );
   },
 };

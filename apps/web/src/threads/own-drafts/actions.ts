@@ -20,11 +20,19 @@ function publishInput(value: unknown) {
     throw new Error('Invalid own-draft publication');
   const body = value.body as DocumentSnapshot;
   if (body.profile !== 'blocks' || !hasDocumentContent(body)) throw new Error('Invalid own-draft publication');
-  if (!('revisionId' in value) || typeof value.revisionId !== 'string' || !value.revisionId || value.revisionId.length > 128)
+  if (
+    !('revisionId' in value) ||
+    typeof value.revisionId !== 'string' ||
+    !value.revisionId ||
+    value.revisionId.length > 128
+  )
     throw new Error('Invalid own-draft revision');
   if (!('mediaIds' in value) || !Array.isArray(value.mediaIds) || value.mediaIds.length > 32)
     throw new Error('Invalid own-draft media');
-  if (!value.mediaIds.every((id) => typeof id === 'string' && id.length > 0) || new Set(value.mediaIds).size !== value.mediaIds.length)
+  if (
+    !value.mediaIds.every((id) => typeof id === 'string' && id.length > 0) ||
+    new Set(value.mediaIds).size !== value.mediaIds.length
+  )
     throw new Error('Invalid own-draft media');
   return {
     postId: requiredId('postId' in value ? value.postId : undefined),
@@ -93,15 +101,19 @@ export const publishOwnDraft = createServerFn({ method: 'POST' })
   });
 
 export const readOwnDraftPost = createServerFn({ method: 'GET' })
-  .validator((value: unknown) => ({ postId: requiredId(value && typeof value === 'object' && 'postId' in value ? value.postId : undefined) }))
+  .validator((value: unknown) => ({
+    postId: requiredId(value && typeof value === 'object' && 'postId' in value ? value.postId : undefined),
+  }))
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     try {
       const credential = await authorization();
       if (!credential) return 'denied' as const;
-      const result = await kernelClient().posts({ id: data.postId }).get({
-        headers: { authorization: credential },
-      });
+      const result = await kernelClient()
+        .posts({ id: data.postId })
+        .get({
+          headers: { authorization: credential },
+        });
       if (result.error) {
         if (result.status === 404) return 'concealed' as const;
         if (result.status === 401 || result.status === 403) return 'denied' as const;
@@ -114,9 +126,7 @@ export const readOwnDraftPost = createServerFn({ method: 'GET' })
         state: 'available' as const,
         revision,
         visibility:
-          post.visibility === 'draft' || post.visibility === 'published'
-            ? post.visibility
-            : 'other' as const,
+          post.visibility === 'draft' || post.visibility === 'published' ? post.visibility : ('other' as const),
         body: post.body ?? null,
         mediaIds: post.mediaIds,
       };

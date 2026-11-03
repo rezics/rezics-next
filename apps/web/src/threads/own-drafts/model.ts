@@ -74,10 +74,7 @@ export type OwnDraftReadback =
   | 'concealed'
   | 'unavailable';
 export type OwnDraftCommands = Readonly<{
-  write: (
-    input: OwnDraftWriteInput,
-    signal: AbortSignal,
-  ) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
+  write: (input: OwnDraftWriteInput, signal: AbortSignal) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
   erase: (input: OwnDraftEraseInput, signal: AbortSignal) => Promise<{ ok: true } | WriteFailure>;
   readback: (postId: string, signal: AbortSignal) => Promise<OwnDraftReadback>;
 }>;

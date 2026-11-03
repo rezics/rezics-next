@@ -130,7 +130,12 @@ test('publish sends the selected revision and separates acknowledgement from pub
     expect(fixture.host.textContent).toContain(subjectId);
     expect(fixture.host.textContent).toContain('ja');
     await fixture.click('Save changes');
-    expect(writes[0]).toMatchObject({ action: 'save', postId: entry.id, threadId: entry.threadId, revisionId: entry.revisionId });
+    expect(writes[0]).toMatchObject({
+      action: 'save',
+      postId: entry.id,
+      threadId: entry.threadId,
+      revisionId: entry.revisionId,
+    });
     expect(fixture.host.textContent).toContain('The save request was acknowledged');
     await fixture.click('Read current post');
     expect(fixture.host.textContent).toContain('retained draft at revision saved-revision');

@@ -1740,13 +1740,24 @@ function InlinePostEditorContent({
       {ownDraftContext ? (
         <section aria-label={m.own_drafts_edit_context()} className="space-y-1 text-sm text-muted-foreground">
           <h2 className="font-medium text-foreground">{m.own_drafts_edit_context()}</h2>
-          <p>{m.own_drafts_post()}: {ownDraftContext.postId}</p>
-          <p>{m.own_drafts_thread()}: {ownDraftContext.threadId}</p>
-          <p>{m.own_drafts_revision()}: {initialRevisionId}</p>
-          <p>{m.own_drafts_language()}: {ownDraftContext.language ?? m.own_drafts_language_unknown()}</p>
-          <p>{m.own_drafts_licence()}: {ownDraftContext.licence}</p>
           <p>
-            {m.own_drafts_subjects()}: {ownDraftContext.subjectIds.length ? ownDraftContext.subjectIds.join(', ') : m.own_drafts_no_references()}
+            {m.own_drafts_post()}: {ownDraftContext.postId}
+          </p>
+          <p>
+            {m.own_drafts_thread()}: {ownDraftContext.threadId}
+          </p>
+          <p>
+            {m.own_drafts_revision()}: {initialRevisionId}
+          </p>
+          <p>
+            {m.own_drafts_language()}: {ownDraftContext.language ?? m.own_drafts_language_unknown()}
+          </p>
+          <p>
+            {m.own_drafts_licence()}: {ownDraftContext.licence}
+          </p>
+          <p>
+            {m.own_drafts_subjects()}:{' '}
+            {ownDraftContext.subjectIds.length ? ownDraftContext.subjectIds.join(', ') : m.own_drafts_no_references()}
           </p>
         </section>
       ) : null}
@@ -1824,7 +1835,12 @@ function InlinePostEditorContent({
               name="own-draft-action"
               value="save"
               className={authoringActionClassName}
-              disabled={!ready || submitting || pendingUploads > 0 || editIntent.current.unresolved && commandAction !== 'save'}
+              disabled={
+                !ready ||
+                submitting ||
+                pendingUploads > 0 ||
+                (editIntent.current.unresolved && commandAction !== 'save')
+              }
             >
               {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
               {editIntent.current.unresolved ? m.own_drafts_retry_save() : m.thread_edit_save()}
@@ -1836,7 +1852,12 @@ function InlinePostEditorContent({
               name="own-draft-action"
               value="publish"
               className={authoringActionClassName}
-              disabled={!ready || submitting || pendingUploads > 0 || editIntent.current.unresolved && commandAction !== 'publish'}
+              disabled={
+                !ready ||
+                submitting ||
+                pendingUploads > 0 ||
+                (editIntent.current.unresolved && commandAction !== 'publish')
+              }
             >
               {submitting ? <Spinner aria-hidden="true" role="presentation" /> : null}
               {editIntent.current.unresolved ? m.own_drafts_retry_publish() : m.own_drafts_publish()}

@@ -83,7 +83,13 @@ test('mounted inventory bounds selected reads and retires bodies, advice and lat
   let selectedSignal: AbortSignal | undefined;
   const selection = {
     revision: revisionId,
-    post: { id: postId, threadId, parentId: null, mediaIds: row().mediaIds, body: fromPlainText('Private selected bytes', 'blocks') },
+    post: {
+      id: postId,
+      threadId,
+      parentId: null,
+      mediaIds: row().mediaIds,
+      body: fromPlainText('Private selected bytes', 'blocks'),
+    },
   };
   const reader = (size: number): OwnDraftReader => ({
     async list(request) {

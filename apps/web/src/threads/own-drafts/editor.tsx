@@ -41,8 +41,14 @@ export function OwnDraftEditor({
   const body = source === 'browser' ? browserWriting?.payload.body : selection.post.body;
   if (!body) return null;
   const mediaIds = source === 'server' ? entry.mediaIds : [];
-  const submit = (writeAction: 'save' | 'publish') =>
-    async ({ body: next, revisionId, idempotencyKey, mediaIds: nextMedia }: {
+  const submit =
+    (writeAction: 'save' | 'publish') =>
+    async ({
+      body: next,
+      revisionId,
+      idempotencyKey,
+      mediaIds: nextMedia,
+    }: {
       body: DocumentSnapshot;
       revisionId: string;
       idempotencyKey: string;

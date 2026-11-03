@@ -71,7 +71,12 @@ function DraftsRoute() {
           mediaIds: [...input.mediaIds],
         };
         if (input.action === 'publish')
-          return publishOwnDraft({ data, headers: { 'X-CSRF-Token': csrfToken }, signal, fetch: draftFetch(input.body) });
+          return publishOwnDraft({
+            data,
+            headers: { 'X-CSRF-Token': csrfToken },
+            signal,
+            fetch: draftFetch(input.body),
+          });
         return revisePost({ data, headers: { 'X-CSRF-Token': csrfToken }, signal, fetch: draftFetch(input.body) });
       },
       async erase(input, signal) {
