@@ -66,9 +66,7 @@ export async function growthEditionCandidateProjectionFixture() {
         type: 'skos:Concept',
         labels: { en: 'Growth edition candidate source' },
         statements: {
-          'skos:inScheme': [
-            { property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.id } },
-          ],
+          'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme.id } }],
         },
       })
     ).subject as { id: string };
@@ -158,9 +156,17 @@ export async function growthEditionCandidateProjectionFixture() {
       );
       const row = result.rows[0];
       if (!row) throw new Error(`Native edition ${editionId} has no exact committed source slot`);
-      if (row.partition_no !== sourcePartition || row.principal_kind !== 'account' || row.principal_id !== creator.accountId)
+      if (
+        row.partition_no !== sourcePartition ||
+        row.principal_kind !== 'account' ||
+        row.principal_id !== creator.accountId
+      )
         throw new Error(`Native edition ${editionId} has an unexpected original account write basis`);
-      if (row.thread_id !== created.id || row.post_id !== created.firstPost.id || row.revision_id !== created.firstPost.revisionId)
+      if (
+        row.thread_id !== created.id ||
+        row.post_id !== created.firstPost.id ||
+        row.revision_id !== created.firstPost.revisionId
+      )
         throw new Error(`Native edition ${editionId} moved from its fixed source ancestry`);
       if (row.body_sha256 !== created.firstPost.sha256)
         throw new Error(`Native edition ${editionId} changed its fixed source body`);
@@ -345,4 +351,3 @@ export async function growthEditionCandidateProjectionFixture() {
 export type GrowthEditionCandidateProjectionFixture = Awaited<
   ReturnType<typeof growthEditionCandidateProjectionFixture>
 >;
-
