@@ -74,9 +74,14 @@ test('Collection exposure withdrawal retires retained links and inspection witho
   try {
     await h.inspect(spaceId);
     const link = h.host.querySelector<HTMLAnchorElement>('[role="dialog"] a')!;
-    await h.admit(['personal_library']);
+    await h.settle(() => {
+      h.client.setQueriesData(
+        { predicate: ({ queryKey }) => queryKey[0] === 'exposure' && queryKey[1] === 'viewer' },
+        { subject: 'owner', admitted: ['personal_library'] },
+      );
+      expect(link.dispatchEvent(new h.window.MouseEvent('click', { bubbles: true, cancelable: true }))).toBe(false);
+    });
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
-    expect(link.dispatchEvent(new h.window.MouseEvent('click', { bubbles: true, cancelable: true }))).toBe(false);
     await h.inspect(spaceId);
     expect(h.host.querySelector('[role="dialog"] a')).toBeNull();
     expect(h.host.textContent).toContain('Actions for this destination are currently unavailable');
