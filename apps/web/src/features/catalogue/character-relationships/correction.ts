@@ -23,7 +23,10 @@ function slotKeyValue(stream: CharacterAssociationStream, statement: RelationDra
   return key?.value.type === 'value' && typeof key.value.content === 'string' ? key.value.content : undefined;
 }
 
-export function associationSlot(stream: CharacterAssociationStream, statement: RelationDraft): RelationSlot | undefined {
+export function associationSlot(
+  stream: CharacterAssociationStream,
+  statement: RelationDraft,
+): RelationSlot | undefined {
   const external = statement.qualifiers.find((part) => part.property.id === 'schema:sameAs');
   const key = slotKeyValue(stream, statement);
   const slot: RelationSlot = {

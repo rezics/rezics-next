@@ -176,14 +176,18 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
     expect(host.textContent).toContain('+16');
     expect(host.textContent).toContain('+18');
     expect(host.textContent).toContain(m.character_relationships_kind_appearance());
-    const spring = [...host.querySelectorAll('[data-slot=list-row]')].find((row) => row.textContent?.includes('Spring work'))!;
+    const spring = [...host.querySelectorAll('[data-slot=list-row]')].find((row) =>
+      row.textContent?.includes('Spring work'),
+    )!;
     expect(spring.querySelector('[data-appearance-age=true]')?.textContent).toContain('+16');
     expect(spring.textContent).not.toContain('+18');
     const isolate = [...spring.querySelectorAll('button')].find(
       (button) => button.textContent === m.character_relationships_switch(),
     );
     await act(async () => isolate?.click());
-    const autumn = [...host.querySelectorAll('[data-slot=list-row]')].find((row) => row.textContent?.includes('Autumn work'))!;
+    const autumn = [...host.querySelectorAll('[data-slot=list-row]')].find((row) =>
+      row.textContent?.includes('Autumn work'),
+    )!;
     expect(autumn.querySelector('[data-content-item-slot=preview]')?.hasAttribute('hidden')).toBe(true);
 
     await render(
@@ -207,9 +211,9 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
       }),
     );
     expect(host.textContent).toContain(m.character_relationships_vanished());
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.character_relationships_correct())).toBe(
-      true,
-    );
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.character_relationships_correct()),
+    ).toBe(true);
 
     await render(
       h(CharacterRelationshipsView, {
@@ -236,8 +240,8 @@ test('directed relationship, age-by-work, role, spoiler, vanished, unreadable an
     expect(host.textContent).toContain(m.character_relationships_kind_relationship());
     expect(host.textContent).toContain('The companion');
     expect(host.textContent).toContain(m.character_relationships_direction_forward());
-    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.character_relationships_correct())).toBe(
-      true,
-    );
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.character_relationships_correct()),
+    ).toBe(true);
   });
 });

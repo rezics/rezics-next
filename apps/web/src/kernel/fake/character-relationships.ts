@@ -11,7 +11,10 @@ import {
   type RelationStatementInput,
 } from '../../subject/relation-candidates';
 import { characterType } from '../../features/catalogue/character-profile';
-import { appearanceProperty, readCharacterRelationships } from '../../features/catalogue/character-relationships/reading';
+import {
+  appearanceProperty,
+  readCharacterRelationships,
+} from '../../features/catalogue/character-relationships/reading';
 import type { CharacterRelationshipsTransport } from '../../features/catalogue/character-relationships/view';
 import { readTypeDescriptor } from '../../features/catalogue/type-directory-client';
 import recording from '../recorded/subject.json';
@@ -90,11 +93,7 @@ export function characterRelationshipsFixture(
   const extras = scenario === 'relationship' || scenario === 'age';
   const release = withTestVocabulary(bundledRelease, extras);
   const digest = recording.subject.release;
-  const snak = (
-    id: string,
-    value: unknown,
-    datatype: Candidate['statement']['property']['data_type'],
-  ) => ({
+  const snak = (id: string, value: unknown, datatype: Candidate['statement']['property']['data_type']) => ({
     property: { id, data_type: datatype },
     value: { type: 'value' as const, content: value },
   });
@@ -112,8 +111,7 @@ export function characterRelationshipsFixture(
     rezics: { release: digest, revision: 1 },
   });
   const role = (concept: string) => snak('wdt:P3831', concept, 'wikibase-item');
-  const spoiler = (amount: string) =>
-    snak('rezics:spoilerLevel', { amount, unit: '1' }, 'quantity');
+  const spoiler = (amount: string) => snak('rezics:spoilerLevel', { amount, unit: '1' }, 'quantity');
   const age = (amount: string) => snak(ageProperty, { amount, unit: '1' }, 'quantity');
   const first = appearance(statementA, appearanceWorkA, 'Spring work', [
     role('wd:Q95074'),
@@ -142,10 +140,7 @@ export function characterRelationshipsFixture(
       type: characterType,
       context: candidateContext,
       labels: { en: 'The traveler' },
-      statements:
-        scenario === 'relationship'
-          ? { [relationshipProperty]: [structuredClone(relatedStatement)] }
-          : {},
+      statements: scenario === 'relationship' ? { [relationshipProperty]: [structuredClone(relatedStatement)] } : {},
       relationCounts: {},
       sourceRecords: [],
     },
@@ -259,13 +254,17 @@ export function characterRelationshipsFixture(
           descriptionLanguage: null,
           definition,
           properties: Object.fromEntries(
-            [...definition.properties, ...definition.properties.flatMap((id) => release.properties[id]?.qualifiers ?? [])]
+            [
+              ...definition.properties,
+              ...definition.properties.flatMap((id) => release.properties[id]?.qualifiers ?? []),
+            ]
               .filter((id) => release.properties[id])
               .map((id) => [id, release.properties[id]]),
           ),
         });
       }
-      if (request.method === 'GET' && url.pathname === `/v1/subjects/${characterRelationshipsId}`) return json(character);
+      if (request.method === 'GET' && url.pathname === `/v1/subjects/${characterRelationshipsId}`)
+        return json(character);
       if (url.pathname.endsWith('/links')) {
         if (scenario === 'unreadable' && url.searchParams.get('property') === appearanceProperty)
           return json({ code: 'semantic_not_ready' }, 503);

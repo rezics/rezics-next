@@ -72,7 +72,9 @@ function isType(release: Definitions, type: string, target: string, seen = new S
 }
 
 function targetsCharacter(property: PropertyDefinition | undefined, release: Definitions): boolean {
-  return !!property?.targets?.some((target) => isType(release, characterType, target) || isType(release, target, characterType));
+  return !!property?.targets?.some(
+    (target) => isType(release, characterType, target) || isType(release, target, characterType),
+  );
 }
 
 /** Quantity appearance qualifiers that are not spoiler stay on that exact work statement. */
@@ -149,9 +151,7 @@ export function characterAssociationStreams(
       continue;
     const forward = release.types[type]?.properties.includes(id);
     const inverse =
-      relation.inverse &&
-      relation.inverse !== 'none' &&
-      (relation.symmetric || targetsCharacter(property, release));
+      relation.inverse && relation.inverse !== 'none' && (relation.symmetric || targetsCharacter(property, release));
     if (forward) {
       streams.push({
         key: `forward:${id}`,
@@ -203,10 +203,7 @@ export function streamKindGroup(kind: CharacterAssociationKind): 'appearances' |
 }
 
 /** Qualifiers admitted on this holder Type for the selected appearance or credit property. */
-export function admittedQualifiers(
-  descriptor: CurrentTypeDescriptor | undefined,
-  property: string,
-): readonly string[] {
+export function admittedQualifiers(descriptor: CurrentTypeDescriptor | undefined, property: string): readonly string[] {
   return descriptor?.properties[property]?.qualifiers ?? [];
 }
 
@@ -349,7 +346,8 @@ export async function readCharacterRelationships(
     const rows = page ? pageRows(id, page) : [];
     const holderTypes = rows.flatMap((row) => (row.holderType ? [row.holderType] : []));
     const descriptors = workType ? await admitAssociationDescriptors(holderTypes, workType) : {};
-    const token = streamHeaders?.get('rezics-session-token') ?? new Headers(current.headers).get('rezics-session-token');
+    const token =
+      streamHeaders?.get('rezics-session-token') ?? new Headers(current.headers).get('rezics-session-token');
     return {
       ok: true,
       public: current.data,

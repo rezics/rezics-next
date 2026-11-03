@@ -70,7 +70,12 @@ function AssociationStatement({
   stream: CharacterAssociationStream;
   read: Extract<CharacterRelationshipsRead, { ok: true }>;
   locale: string;
-  onCorrect?: (row: CharacterAssociationRow, stream: CharacterAssociationStream, opener: HTMLButtonElement, keyboard: boolean) => void;
+  onCorrect?: (
+    row: CharacterAssociationRow,
+    stream: CharacterAssociationStream,
+    opener: HTMLButtonElement,
+    keyboard: boolean,
+  ) => void;
 }) {
   const o = { locale: locale as never };
   const descriptor = row.holderType ? read.descriptors[row.holderType] : undefined;
@@ -111,9 +116,7 @@ function AssociationStatement({
           </div>
         );
       })}
-      {descriptorFailed && (
-        <p role="status">{m.character_relationships_descriptor_unavailable({}, o)}</p>
-      )}
+      {descriptorFailed && <p role="status">{m.character_relationships_descriptor_unavailable({}, o)}</p>}
       <section className="space-y-2" aria-label={m.sources_citations({}, o)}>
         <h3 className="font-medium">{m.sources_citations({}, o)}</h3>
         {row.statement.references.length ? (
@@ -215,10 +218,7 @@ export function CharacterRelationshipsGroups({
       </ul>
       {read.independentlyUnreadable && (
         <p role="status">
-          {m.character_relationships_endpoint_unreadable(
-            { stream: read.independentlyUnreadable.key },
-            o,
-          )}
+          {m.character_relationships_endpoint_unreadable({ stream: read.independentlyUnreadable.key }, o)}
         </p>
       )}
       {!read.streams.length && (
@@ -371,12 +371,7 @@ export function CharacterRelationshipsGroups({
           </ul>
           <div className="flex flex-wrap gap-2">
             {read.next && onMore && (
-              <Button
-                className={characterRelationshipsActionClass}
-                variant="outline"
-                disabled={busy}
-                onClick={onMore}
-              >
+              <Button className={characterRelationshipsActionClass} variant="outline" disabled={busy} onClick={onMore}>
                 {m.character_relationships_more({}, o)}
               </Button>
             )}
@@ -397,13 +392,7 @@ export function CharacterRelationshipsGroups({
   );
 }
 
-export function CharacterRelationshipsHeading({
-  locale,
-  actions,
-}: {
-  locale: string;
-  actions?: ReactNode;
-}) {
+export function CharacterRelationshipsHeading({ locale, actions }: { locale: string; actions?: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <div className="min-w-0 space-y-2">

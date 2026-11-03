@@ -109,7 +109,10 @@ function CharacterRelationshipsLive({
   const stream = read?.stream;
   const sliceRevision = useRef(0);
   const slice = useCatalogueLifetime(
-    associationReadingKey({ id, stream: stream?.key, cursor: cursor.current, work: selectedWork }, sliceRevision.current),
+    associationReadingKey(
+      { id, stream: stream?.key, cursor: cursor.current, work: selectedWork },
+      sliceRevision.current,
+    ),
     lifetime,
   );
   const currentRead = isCurrentCharacterRelationshipsRead(query.data, query, {
@@ -153,7 +156,11 @@ function CharacterRelationshipsLive({
     running.current = true;
     setBusy(true);
     try {
-      const value = await transport.read(key, next, session.current ?? (query.data?.ok ? query.data.session : undefined));
+      const value = await transport.read(
+        key,
+        next,
+        session.current ?? (query.data?.ok ? query.data.session : undefined),
+      );
       if (!lifetime.active()) return;
       if (!value.ok) {
         outcome = 'failure';
@@ -278,7 +285,10 @@ function CharacterRelationshipsLive({
               onRestart={(event) => void load(stream?.key, undefined, event)}
             />
             <p>
-              <a className={buttonVariants({ variant: 'outline', className: characterRelationshipsActionClass })} href={changes.href}>
+              <a
+                className={buttonVariants({ variant: 'outline', className: characterRelationshipsActionClass })}
+                href={changes.href}
+              >
                 {m.character_relationships_changes({}, o)}
               </a>
             </p>
