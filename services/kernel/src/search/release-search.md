@@ -135,3 +135,13 @@ The native grouping source, HTTP cursor installation, active-release operand con
 eight-locale states and native all-pool growth measurements remain part of the same journey. There is no measured
 grouping seek count or native growth result yet; derive its seeks from real relation indexes, source caps and
 preparation plan before claiming a page bound.
+
+Decision: native name traversal uses one shared canonical-name frontier across occupied homes in all pools;
+every pool's retained cut, including an empty pool, participates in invalidation.
+
+`release-search-name-stream.ts` merges the owner's native name pages in PostgreSQL UTF-8 order with a bounded
+frontier. It reserves every home seek and its internal observations before dispatch, repeats reservations for
+replayed lookahead and empty seeks, and revalidates all pools before returning. A full native window requires
+another seek to prove EOF. These internal candidate keys establish neither matching, grouping nor disclosure.
+Group and child classification, whole-filter hydration, card serialization, final authority reservations and the
+complete native growth measurements still need installation; this traversal supplies no whole-page work bound.
