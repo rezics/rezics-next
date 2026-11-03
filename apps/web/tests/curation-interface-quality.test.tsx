@@ -40,7 +40,7 @@ test('companion editing follows the explicit editor locale alongside its templat
       expect(html).toContain(message({}, { locale: 'ja' }));
       expect(html).not.toContain(message({}, { locale: 'en' }));
     }
-    expect(html).toContain('[&_select]:min-h-11');
+    expect(html).toMatch(/\[(?:&amp;)?_select\]:min-h-11/);
     expect(html).toMatch(/<input\b[^>]*min-h-11/);
   } finally {
     setLocale(previous, { reload: false });
