@@ -10,4 +10,10 @@ The empty case starts with a voter that has no votes and asserts its single `[0]
 
 ## Verification record
 
-Pending the focused test and kernel typecheck. The frozen `growth-segment-job.test.ts` remains unchanged. No product, protocol, account, Access, or shared runtime contract code is changed. Browser, native suite, root, worker, remote, and controller acceptance launches remain deferred by the current launch context.
+Source revision: `c3105007c907b8063a565b2cfa68b47b90806701`.
+
+Authored fixture: four selected voters each receive 100 votes through native vote HTTP; two eligibility voters receive a native Realm membership; Realm transitions use the native HTTP membership command; eligibility transitions use the production suspension and reinstatement commands. Four independent growth checks specify unrelated votes and retained receipts at 256, 1024, and 4096. The test asserts `[100, 0]` terminal pages, an initially empty `[0]` page, registered aggregate completion, a settled checkpoint, and unchanged aggregates after replay. No three-scale observations or test assertions were reached.
+
+`bun run --cwd services/kernel typecheck` at this revision stopped during remote source-artifact publication with `absolute preparation deadline exceeded`. A prior typecheck identified two diagnostics in the authored files; both were fixed in `c3105007c907b8063a565b2cfa68b47b90806701`. The retry did not reach compilation. It also reported diagnostics in untouched kernel files.
+
+`bun run --cwd services/kernel check test/rating/growth-segment-terminal.test.ts` stopped before loading the test with `Schema dump differs from db/library/schema.sql.` The declared source changes do not touch schema files. The test's measurement assertions therefore remain unverified. Browser, native suite, root, worker, remote, and controller acceptance launches remain deferred by the current launch context. The frozen `growth-segment-job.test.ts` remains unchanged; no product, protocol, account, Access, or shared runtime contract code changed.
