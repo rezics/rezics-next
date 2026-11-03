@@ -102,8 +102,8 @@ export async function createRegisteredSuccessionFixture() {
   }
   return {
     pool, driver, realm, person, state, fault, until, worker, restartWorker,
-    async erase(person: Awaited<ReturnType<typeof person>>) {
-      return deletePersona({ pool, auth: deletion.auth }, person.registered);
+    async erase(target: Awaited<ReturnType<typeof person>>) {
+      return deletePersona({ pool, auth: deletion.auth }, target.registered);
     },
     async member(selected: Realm, account: Account) {
       await call(selected.owner.account, `/v1/realms/${selected.id}/members`, { accountId: account.id }, [202, 204]);
@@ -116,10 +116,10 @@ export async function createRegisteredSuccessionFixture() {
       });
       await driver.settle();
     },
-    async suspend(account: Account, suspended: boolean) {
+    async suspend(account: Account, suspended: boolean, settle = true) {
       await call(governance, `/v1/accounts/${account.id}:${suspended ? 'suspend' : 'reinstate'}`,
         { reason: 'Registered succession pending control' }, [200, 201]);
-      await driver.settle();
+      if (settle) await driver.settle();
     },
     close: closeCommunityDrivers,
   };

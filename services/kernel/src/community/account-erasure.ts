@@ -232,9 +232,14 @@ async function persist(
   );
 }
 
-async function phasePage(pool: Pool, accountId: string, progress: Progress): Promise<Page> {
+async function phasePage(context: WorkContext, accountId: string, progress: Progress): Promise<Page> {
+  const { pool, clock } = context;
   if (progress.phase === 'memberships') {
-    return eraseAccountMembershipsPage({ pool }, accountId, stringCursor(progress.cursor, 'membership'));
+    return eraseAccountMembershipsPage(
+      { pool, access: context.getAuthorization().access, clock, deadline: Date.now() + 60_000 },
+      accountId,
+      stringCursor(progress.cursor, 'membership'),
+    );
   }
   if (progress.phase === 'revisions')
     return eraseAccountRevisionsPage({ pool }, accountId, stringCursor(progress.cursor, 'revision'));
@@ -314,7 +319,8 @@ function validateRatingStatus(value: unknown): { done: boolean; hadVotes: boolea
   return { done: value.done, hadVotes: value.hadVotes };
 }
 
-async function step(pool: Pool, accountId: string, expectedStep: number, clock: () => Date): Promise<Continuation> {
+async function step(context: WorkContext, accountId: string, expectedStep: number): Promise<Continuation> {
+  const { pool, clock } = context;
   const progress = await readProgress(pool, accountId);
   if (!progress) return start(pool, accountId);
   if (Number(progress.step) !== expectedStep) return { phase: progress.phase, step: Number(progress.step) };
@@ -337,7 +343,7 @@ async function step(pool: Pool, accountId: string, expectedStep: number, clock: 
       progress.phase === 'records' ||
       progress.phase === 'notices'
     ) {
-      const page = await phasePage(pool, accountId, progress);
+      const page = await phasePage(context, accountId, progress);
       found = page.found > 0;
       const seenPending = progress.phase_pending || page.pending > 0;
       if (progress.phase === 'records') reasonsKeptUntil = later(reasonsKeptUntil, page.reasonsKeptUntil ?? null);
@@ -475,7 +481,7 @@ export function createCommunityAccountErasureEffect(context: Pick<WorkContext, '
 /** Registers bounded community erasure pages and the independent ban-reason expiry workflow. */
 export function registerCommunityAccountErasureWork(context: WorkContext): void {
   const run = DBOS.registerStep(
-    async (accountId: string, expectedStep: number) => step(context.pool, accountId, expectedStep, context.clock),
+    async (accountId: string, expectedStep: number) => step(context, accountId, expectedStep),
     { name: 'community.account-erasure.run', retriesAllowed: true, maxAttempts: 10, intervalSeconds: 1 },
   );
   DBOS.registerWorkflow(

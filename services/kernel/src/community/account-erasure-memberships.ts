@@ -50,11 +50,38 @@ export type MembershipErasureCursor = string;
 
 const beginning = '00000000-0000-0000-0000-000000000000';
 
+/** Accounts must distinguish ordinary membership from an owner at the immutable
+ * root (or durable replay). Neither a locator nor a generic authorization denial
+ * supplies that distinction. Keep the locator if this native port is unavailable.
+ */
+async function qualifiesForSuccession(
+  deps: { pool: Pool; access: Access; clock?: () => Date },
+  input: Readonly<{ realmId: string; accountId: string }>,
+  context: Readonly<{ deadline: number }>,
+): Promise<boolean> {
+  const commands: ReturnType<typeof createRealmOwnershipCommands> & {
+    qualifyErasureSuccession?(
+      input: Readonly<{ resource: { route: number; id: string }; accountId: string }>,
+      context: Readonly<{ deadline: number }>,
+    ): Promise<'owner-or-replay' | 'not-owner'>;
+  } = createRealmOwnershipCommands(deps);
+  if (!commands.qualifyErasureSuccession)
+    throw new Error('Accounts Realm erasure owner qualification is unavailable');
+  const qualification = await commands.qualifyErasureSuccession(
+    { resource: { route: routeOf(input.realmId)!, id: input.realmId }, accountId: input.accountId },
+    context,
+  );
+  if (qualification === 'not-owner') return false;
+  if (qualification === 'owner-or-replay') return true;
+  throw new TypeError('Invalid Accounts Realm erasure owner qualification');
+}
+
 export async function eraseAccountMembershipsPage(
-  { pool }: { pool: Pool },
+  deps: { pool: Pool; access?: Access; clock?: () => Date; deadline?: number },
   accountId: string,
   after: MembershipErasureCursor | null,
 ): Promise<{ next: MembershipErasureCursor | null; found: number; pending: number }> {
+  const { pool, access, clock } = deps;
   const route = routeOf(accountId);
   if (route === null || (after !== null && after !== beginning && routeOf(after) === null))
     throw new TypeError('Invalid account membership erasure key');
@@ -66,8 +93,24 @@ export async function eraseAccountMembershipsPage(
       throw new Error('Membership erasure requires a committed terminal account erasure');
     return (await memberLocatorQuery<{ realm_route: number; realm_id: string }>(client, page, { ...args, after })).rows;
   });
+  const completedKeys: string[] = [];
+  let pendingOwners = 0;
+  // One fixed wall deadline bounds the whole raw page. Command timestamps use
+  // the installed trusted clock; the durable root determines the orphan instant.
+  const deadline = deps.deadline ?? Date.now() + 60_000;
+  if (!Number.isFinite(deadline)) throw new TypeError('Invalid membership erasure deadline');
   for (const key of keys) {
-    await runCommand(pool, { partition: partitionOf(key.realm_route) }, async (tx, command) => {
+    if (!access) throw new Error('Membership erasure requires installed worker Access');
+    const native = { pool, access, clock };
+    const input = { realmId: key.realm_id, accountId };
+    if (await qualifiesForSuccession(native, input, { deadline })) {
+      const result = await eraseAccountRealmOwnership(native, input, { deadline });
+      if (result.value.status === 'pending') {
+        pendingOwners++;
+        continue;
+      }
+    }
+    await runCommand(pool, { partition: partitionOf(key.realm_route), clock, deadline }, async (tx, command) => {
       const realmArgs = {
         route: key.realm_route,
         realm_id: key.realm_id,
@@ -88,17 +131,18 @@ export async function eraseAccountMembershipsPage(
         ],
       };
     });
+    completedKeys.push(key.realm_id);
   }
-  if (keys.length) {
-    await runCommand(pool, { partition: partitionOf(route) }, async (tx) => {
-      await memberLocatorQuery(tx, unlink, { ...args, realm_ids: keys.map((key) => key.realm_id) });
+  if (completedKeys.length) {
+    await runCommand(pool, { partition: partitionOf(route), clock, deadline }, async (tx) => {
+      await memberLocatorQuery(tx, unlink, { ...args, realm_ids: completedKeys });
       return {
         value: null,
         events: [
           {
             type: 'com.rezics.community.member-locators.erased.v1',
             subject: accountId,
-            data: { accountId, realmIds: keys.map((key) => key.realm_id) },
+            data: { accountId, realmIds: completedKeys },
           },
         ],
       };
@@ -114,6 +158,6 @@ export async function eraseAccountMembershipsPage(
   return {
     next: state.first === null ? null : state.first <= last ? beginning : last,
     found: keys.length,
-    pending: state.pending,
+    pending: state.pending + pendingOwners,
   };
 }

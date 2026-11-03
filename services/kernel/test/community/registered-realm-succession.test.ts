@@ -14,9 +14,22 @@ test('registered erasure orphans at the original root and leaves an ordinary mem
   const owned = await f.realm();
   const unrelated = await f.realm();
   await f.member(unrelated, owned.owner.account);
-  const erased = await f.erase(owned.owner);
+  const release = await f.fault(owned, 'unlink');
+  let erased: { at: string };
+  let original: Awaited<ReturnType<typeof f.state>>;
+  try {
+    erased = await f.erase(owned.owner);
+    original = await f.until(() => f.state(owned), (s) => s.decisions[0]?.decision_state === 'orphaned');
+    expect(original.locators).toHaveLength(1);
+    await f.worker.crash();
+  } finally {
+    await release();
+  }
+  await f.restartWorker();
   await f.driver.settle();
   const orphan = await f.state(owned);
+  expect(orphan.decisions).toEqual(original.decisions);
+  expect(orphan.continuity).toEqual(original.continuity);
   expect(orphan.continuity).toEqual({
     ownership_state: 'orphaned', orphaned_at: erased.at,
     claim_eligible_at: orphan.continuity.claim_eligible_at, exact_deadline: true,
@@ -46,9 +59,7 @@ test('pending retains its locator across restart; lost unlink reply replays the 
   const release = await f.fault(selected, 'unlink');
   try {
     await f.restartWorker();
-    // Reinstate through HTTP while the existing erasure continuation is running.
-    // settle() is deliberately deferred until the injected unlink fault is removed.
-    const reinstating = f.suspend(successor.account, false);
+    await f.suspend(successor.account, false, false);
     const applied = await f.until(() => f.state(selected), (s) => s.decisions[0]?.decision_state === 'owned');
     expect(applied.owners).toEqual([{ subject_id: successor.account.id }]);
     expect(applied.locators).toHaveLength(1);
@@ -56,7 +67,6 @@ test('pending retains its locator across restart; lost unlink reply replays the 
     await f.worker.crash();
     await release();
     await f.restartWorker();
-    await reinstating;
     await f.driver.settle();
     const replay = await f.state(selected);
     expect(replay.decisions).toEqual(applied.decisions);

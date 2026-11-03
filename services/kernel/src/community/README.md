@@ -385,12 +385,21 @@ immutable account root before Realm checkout; the body calls `applyErasureSucces
 Content state port before returning in the same writer. The exact native `readAppliedRealmErasureSuccession`
 implementation replaces the provisional reader. Pending results retain the membership producer's owner locator;
 terminal replay returns the original operation without minting a new applied proof or resetting the orphan episode.
-The default Community participant must invoke this segment before retiring that locator. Its membership page
-producer remains unavailable in this checkout: there is no delivered `member_locator` schema or native owner-locator
-reader to bind, so this integration does not invent an enumeration or a second membership engine.
+The delivered `member_locator` schema and native projector feed the default Community membership page.
+The registered participant supplies installed worker Access, its trusted clock and one finite page deadline;
+the page composes this segment before membership cleanup and locator retirement. Pending segments retain their
+locator, skip ordinary membership cleanup and resume through the existing bounded coordinator and cursor wrap.
+Ordinary non-owner memberships require Accounts' exact owner-at-root or durable-replay qualification before
+deciding whether to call the segment. The required constructor port is
+`qualifyErasureSuccession({resource,accountId},{deadline}): Promise<'owner-or-replay'|'not-owner'>`.
+It must read the committed erasure root, release account checkout before Realm checkout, and throw on unavailable
+sources; its result is selection only and never replaces native command authorization. This Accounts port is not
+yet delivered in this checkout. Decision: absent native qualification fails closed and retains the locator;
+an authorization denial is never interpreted as non-ownership.
 `account_erasure_progress` is orchestration only; neither role loss nor a final ACK supplies succession authority.
 The existing Community participant remains the sole coordinator and ACK writer. Native default-path readiness still
-requires the missing membership page producer; the segment and route alone do not establish it.
+requires that Accounts qualification port and executed registered-path acceptance; authored composition alone
+does not establish it. Domain ownership and the Cost budgets below remain unchanged and unmeasured here.
 
 Claim requests are held in the Realm home. A request point touches one native identity/head, one full requester
 key and a bounded receipt/event bundle, without enumerating members, requests or grants. The claim-requested
