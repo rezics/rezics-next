@@ -1,12 +1,5 @@
 import { QueryClientContext, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  createContext,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { createContext, useContext, useLayoutEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { sessionCsrfToken, sessionQuery } from '../../session/query';
 import type { SlowModePort, SlowModeRead } from './contract';
 
@@ -146,6 +139,10 @@ export function useSlowModeRead(boardId: string | undefined): {
   };
 }
 
-export function rememberSlowModeRead(client: ReturnType<typeof useQueryClient>, visit: SlowModeVisit, read: SlowModeRead) {
+export function rememberSlowModeRead(
+  client: ReturnType<typeof useQueryClient>,
+  visit: SlowModeVisit,
+  read: SlowModeRead,
+) {
   client.setQueryData(slowModeQueryKey(visit), read);
 }

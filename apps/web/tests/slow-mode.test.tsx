@@ -9,15 +9,12 @@ import type { SlowModePort, SlowModeRead } from '../src/threads/slow-mode';
 import recorded from '../src/kernel/recorded/thread.json';
 
 test('slow-mode units parse native policy and leave missing board methods unavailable', async () => {
-  const {
-    parseSlowModePolicy,
-    SLOW_MODE_INTERVALS,
-    remainingSeconds,
-    deadlineFromRetryAfter,
-    nativeBoardSlowMode,
-  } = await import('../src/threads/slow-mode');
+  const { parseSlowModePolicy, SLOW_MODE_INTERVALS, remainingSeconds, deadlineFromRetryAfter, nativeBoardSlowMode } =
+    await import('../src/threads/slow-mode');
   expect(SLOW_MODE_INTERVALS).toEqual([0, 30, 60, 300]);
-  expect(parseSlowModePolicy({ intervalSeconds: 30, nextEligibleAt: '2026-11-03T12:00:00.000Z', canChange: true })).toEqual({
+  expect(
+    parseSlowModePolicy({ intervalSeconds: 30, nextEligibleAt: '2026-11-03T12:00:00.000Z', canChange: true }),
+  ).toEqual({
     intervalSeconds: 30,
     nextEligibleAt: '2026-11-03T12:00:00.000Z',
     canChange: true,
@@ -120,11 +117,15 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     history: createMemoryHistory({ initialEntries: ['/en/compose'] }),
   });
   const root = createRoot(host);
-  await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))));
+  await act(async () =>
+    root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
+  );
   const appeared = async (text: string) => {
     for (let attempt = 0; attempt < 25; attempt++) {
       if (host.textContent?.includes(text)) return;
-      await act(async () => { await Promise.resolve(); });
+      await act(async () => {
+        await Promise.resolve();
+      });
     }
     expect(host.textContent).toContain(text);
   };
@@ -137,32 +138,48 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     };
     const reloads = [...host.querySelectorAll('button')].filter((button) => button.textContent === m.slow_mode_retry());
     expect(reloads.length).toBeGreaterThan(0);
-    await act(async () => { await user.click(reloads[0]!); });
+    await act(async () => {
+      await user.click(reloads[0]!);
+    });
     await appeared(m.slow_mode_setting_legend());
-    const thirty = [...host.querySelectorAll('label')].find((label) => label.textContent === m.slow_mode_interval_seconds({ seconds: 30 }));
+    const thirty = [...host.querySelectorAll('label')].find(
+      (label) => label.textContent === m.slow_mode_interval_seconds({ seconds: 30 }),
+    );
     expect(thirty).toBeDefined();
-    await act(async () => { await user.click(thirty!); });
+    await act(async () => {
+      await user.click(thirty!);
+    });
     const save = [...host.querySelectorAll('button')].find((button) => button.textContent === m.slow_mode_apply());
-    await act(async () => { await user.click(save!); });
+    await act(async () => {
+      await user.click(save!);
+    });
     await appeared(m.slow_mode_saved());
     expect(changes).toEqual([{ intervalSeconds: 30, idempotencyKey: changes[0]!.idempotencyKey }]);
-    expect(host.textContent).toContain(m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }));
+    expect(host.textContent).toContain(
+      m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 30 }) }),
+    );
     await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const send = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
-    await act(async () => { await user.click(send!); });
+    await act(async () => {
+      await user.click(send!);
+    });
     expect(submits).toHaveLength(1);
     expect(host.textContent).toContain('A draft that must survive a cooldown refusal.');
     await appeared(m.slow_mode_guidance());
     expect(host.querySelector('#thread-title')).toHaveProperty('value', 'Cooldown draft');
     nextSubmit = { ok: true, value: { id: recorded.thread.id } };
     const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_retry());
-    await act(async () => { await user.click(retry!); });
+    await act(async () => {
+      await user.click(retry!);
+    });
     expect(submits).toHaveLength(2);
     expect(submits[1]!.key).toBe(submits[0]!.key);
     expect(host.textContent).toContain(m.slow_mode_saved());
     client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
     for (let attempt = 0; attempt < 25 && host.textContent?.includes(m.slow_mode_saved()); attempt++)
-      await act(async () => { await Promise.resolve(); });
+      await act(async () => {
+        await Promise.resolve();
+      });
     expect(host.textContent).not.toContain(m.slow_mode_saved());
     expect(documentText(body)).toContain('cooldown');
   } finally {

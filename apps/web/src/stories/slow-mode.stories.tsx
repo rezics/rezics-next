@@ -44,13 +44,7 @@ function policy(
   };
 }
 
-function Host({
-  port,
-  children,
-}: {
-  port: SlowModePort;
-  children: ReactNode;
-}) {
+function Host({ port, children }: { port: SlowModePort; children: ReactNode }) {
   const client = useQueryClient();
   useLayoutEffect(() => {
     client.setQueryData(sessionQuery.queryKey, {

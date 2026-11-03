@@ -25,7 +25,11 @@ function intervalLabel(seconds: SlowModeInterval): string {
   return seconds === 0 ? m.slow_mode_interval_off() : m.slow_mode_interval_seconds({ seconds });
 }
 
-function policyWaitUntil(policy: SlowModePolicy | undefined, refusal: WriteFailure | null, receivedAt: number): number | null {
+function policyWaitUntil(
+  policy: SlowModePolicy | undefined,
+  refusal: WriteFailure | null,
+  receivedAt: number,
+): number | null {
   if (refusal?.reason === 'rate-limited' && refusal.retryAfter !== undefined)
     return deadlineFromRetryAfter(refusal.retryAfter, receivedAt);
   if (!policy) return null;
@@ -47,7 +51,15 @@ function useDisplayNow(waitUntil: number | null): number {
   return now;
 }
 
-function EligibilityCopy({ policy, waitUntil, now }: { policy?: SlowModePolicy; waitUntil: number | null; now: number }) {
+function EligibilityCopy({
+  policy,
+  waitUntil,
+  now,
+}: {
+  policy?: SlowModePolicy;
+  waitUntil: number | null;
+  now: number;
+}) {
   const locale = getLocale();
   if (waitUntil !== null && waitUntil > now) {
     return (
@@ -91,7 +103,11 @@ export function SlowModeEligibility({ boardId, refusal }: { boardId: string; ref
   );
 }
 
-function applyChange(visit: SlowModeVisit, result: SlowModeChange, remember: (read: import('./contract').SlowModeRead) => void) {
+function applyChange(
+  visit: SlowModeVisit,
+  result: SlowModeChange,
+  remember: (read: import('./contract').SlowModeRead) => void,
+) {
   if (result.kind === 'applied') remember({ kind: 'available', policy: result.policy });
 }
 
@@ -161,7 +177,10 @@ function SlowModeSettingForm({
   }
 
   return (
-    <section className="min-w-0 space-y-3 border-t border-border pt-5 [overflow-wrap:anywhere]" data-slot="board-slow-mode-setting">
+    <section
+      className="min-w-0 space-y-3 border-t border-border pt-5 [overflow-wrap:anywhere]"
+      data-slot="board-slow-mode-setting"
+    >
       {preparing ? (
         <p role="status">{m.slow_mode_preparing()}</p>
       ) : read?.kind === 'unavailable' || !read ? (

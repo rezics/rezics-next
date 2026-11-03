@@ -9,10 +9,7 @@ export type SlowModePolicy = {
   exempt: boolean;
 };
 
-export type SlowModeRead =
-  | { kind: 'available'; policy: SlowModePolicy }
-  | { kind: 'denied' }
-  | { kind: 'unavailable' };
+export type SlowModeRead = { kind: 'available'; policy: SlowModePolicy } | { kind: 'denied' } | { kind: 'unavailable' };
 
 export type SlowModeChange =
   | { kind: 'applied'; policy: SlowModePolicy }

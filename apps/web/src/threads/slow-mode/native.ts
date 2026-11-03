@@ -110,5 +110,3 @@ export async function changeBoardSlowModeRequest(
     return { kind: 'unknown' };
   }
 }
-
-

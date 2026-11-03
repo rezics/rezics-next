@@ -3,7 +3,13 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client.ts';
-import { isSlowModeInterval, validBoardId, type SlowModeChange, type SlowModeInterval, type SlowModeRead } from './contract';
+import {
+  isSlowModeInterval,
+  validBoardId,
+  type SlowModeChange,
+  type SlowModeInterval,
+  type SlowModeRead,
+} from './contract';
 import { changeBoardSlowModeRequest, readBoardSlowModeRequest } from './native';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -62,4 +68,3 @@ export const changeBoardSlowMode = createServerFn({ method: 'POST' })
       kernelOriginConfigured(),
     );
   });
-
