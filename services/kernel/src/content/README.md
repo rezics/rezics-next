@@ -195,7 +195,7 @@ replay emit no publication event. Reply index fields retain the existing opening
 
 ## Notifications
 
-Content owns minimal in-app notices for `reply`, `mention`, `thread_watch` and `moderation_decision`, using the names
+Content owns minimal in-app notices for `reply`, `mention`, `thread_watch`, `board_activity` and `moderation_decision`, using the names
 in Accounts' notification catalogue (`src/access/notification-kinds.ts`). Accounts owns the preferences and
 `notificationAllowed`. There is no email delivery in this scope.
 
@@ -2077,15 +2077,16 @@ ready population. The factory and disclosure owners remain the sole owners of th
 
 Decision: board watch PUT sets an explicit `watching` boolean with `expectedRevision`; management requires
 `kind=thread|board`, and an unavailable row retains only its personal removal identity and subscription metadata.
+Private watch methods refuse an operator acting as a different account, even with a cursor from that account.
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
 
-| Consumer | Native method and mounted operation | Result |
-| --- | --- | --- |
-| Web board control | `readBoardWatchState`; `GET /v1/boards/{id}/watch` | `{watching,revision}`, with current board disclosure |
-| Web board control | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key` | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
-| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread|board&limit=&cursor=` | `{items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range |
-| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access |
-| Performance Inbox | Existing `notifications.list` with `board_activity` | Existing post/thread target identifiers and current native post disclosure |
+| Consumer             | Native method and mounted operation                                                            | Result                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Web board control    | `readBoardWatchState`; `GET /v1/boards/{id}/watch`                                             | `{watching,revision}`, with current board disclosure                                          |
+| Web board control    | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key` | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
+| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread                               | board&limit=&cursor=`                                                                         | `{items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range     |
+| Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread                       | board`, `{expectedRevision}`, `Idempotency-Key`                                               | `{removed:true}`, including an already absent own identity, without resource read access |
+| Performance Inbox    | Existing `notifications.list` with `board_activity`                                            | Existing post/thread target identifiers and current native post disclosure                    |
 
 Web board controls and Performance Settings watch management remain unavailable consumer adapters; these methods
 are their Content interfaces. Thread watch GET/PUT/DELETE and reply delivery keep their existing shapes and storage.
@@ -2105,7 +2106,9 @@ first post, thread and publication revision. Delayed first publication counts. H
 and restores do not emit this original publication. A source refusal commits completed work so restoration cannot
 reopen it. Candidate timestamps retain database precision. Range checkouts end before recipient Access. Current
 source/board/thread/Realm/place eligibility precedes the delivered preference/finalization path, which additionally
-locks the live personal edge and suppresses an already sent reply/mention/thread notice from that source. Refusals
+locks the live personal edge and suppresses an already sent reply/mention/thread notice from that source. All optional
+finalizers serialize on the same recipient/source advisory transaction key, and thread finalizers also check for an
+existing board notice; either worker order produces at most one notice. Refusals
 remain final across preference changes. Actor-home and inverse fanout indexes belong to the same original row and
 change atomically, so no asynchronous inverse can recreate an unwatched edge. Erasure includes board tombstones;
 retention includes board source progress.
@@ -2141,7 +2144,7 @@ retention includes board source progress.
 - Bound: fixed work is eight data statements and four transaction controls, one bounded original-envelope range,
   three original source points, three load progress/fence points, two advance/fence points and B recipient rows.
   Per recipient add the exact source query/partition point, `postReadableByAccount`, and the delivered finalizer.
-  Finalization uses BEGIN/COMMIT and at most eight data statements: partition fence, previous decision, terminal
+  Finalization uses BEGIN/COMMIT and at most nine data statements: partition fence, recipient/source advisory lock, previous decision, terminal
   account, account/preferences join, active edge, three-kind notice overlap, decision INSERT and notice INSERT.
   Those statements touch at most eleven original rows; duplicates, unavailable and suppressed recipients retain all
   dispatched work. Native post disclosure expands to four released snapshots (each BEGIN/COMMIT plus partition),

@@ -89,7 +89,10 @@ export async function listNoticeInbox(
   const content = new Map<string, { threadId: string; postId: string }>();
   for (const row of rows) {
     if (
-      (row.kind !== 'reply' && row.kind !== 'mention' && row.kind !== 'thread_watch' && row.kind !== 'board_activity') ||
+      (row.kind !== 'reply' &&
+        row.kind !== 'mention' &&
+        row.kind !== 'thread_watch' &&
+        row.kind !== 'board_activity') ||
       !row.post_id ||
       !row.thread_id
     )
@@ -122,7 +125,10 @@ export async function listNoticeInbox(
     scanned++;
     lastScanned = row;
     if (
-      (row.kind === 'reply' || row.kind === 'mention' || row.kind === 'thread_watch' || row.kind === 'board_activity') &&
+      (row.kind === 'reply' ||
+        row.kind === 'mention' ||
+        row.kind === 'thread_watch' ||
+        row.kind === 'board_activity') &&
       (!row.post_id || !row.thread_id || !readable.has(`${row.thread_id}\u0000${row.post_id}`))
     )
       continue;

@@ -15,6 +15,7 @@ export type WatchKind = 'thread' | 'board';
 /** The acting account owns the range, including when an operator opened the session. */
 export function watchOwner(actor: Actor, accountId?: string) {
   if (actor.kind !== 'account') throw new ProblemError('authentication_required');
+  if (actor.requestedBy !== null && actor.requestedBy !== actor.accountId) throw new ProblemError('not_found');
   if (accountId !== undefined && accountId !== actor.accountId) throw new ProblemError('not_found');
   const route = routeOf(actor.accountId);
   if (route === null) throw new ProblemError('not_found');
@@ -24,13 +25,21 @@ export function watchOwner(actor: Actor, accountId?: string) {
 /** Shared Access validates the actual credential and current account, before cursors or receipts. */
 export async function requireWatchOwner(deps: WatchDependencies, actor: Actor, deadline: number, accountId?: string) {
   const owner = watchOwner(actor, accountId);
-  const check = await accessCheck(deps.access, actor, 'account:read', { route: owner.route, id: owner.id }, {
-    pool: deps.pool,
-    deadline,
-  });
-  await within(deadline, () => withConnection(deps.pool, async (connection) => {
-    if (!(await check(deadlineClient(connection, deadline)))) throw new ProblemError('not_found');
-  }));
+  const check = await accessCheck(
+    deps.access,
+    actor,
+    'account:read',
+    { route: owner.route, id: owner.id },
+    {
+      pool: deps.pool,
+      deadline,
+    },
+  );
+  await within(deadline, () =>
+    withConnection(deps.pool, async (connection) => {
+      if (!(await check(deadlineClient(connection, deadline)))) throw new ProblemError('not_found');
+    }),
+  );
   return owner;
 }
 
@@ -49,6 +58,8 @@ export function watchReceipt(actor: Actor, kind: string, key: string, input: unk
   return {
     kind,
     key,
-    digest: createHash('sha256').update(JSON.stringify([principalCommandIdentity(actor), input])).digest(),
+    digest: createHash('sha256')
+      .update(JSON.stringify([principalCommandIdentity(actor), input]))
+      .digest(),
   };
 }
