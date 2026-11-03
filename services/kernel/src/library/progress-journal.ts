@@ -65,6 +65,7 @@ export function parseProgressSessionJournalPatch(input: unknown): JournalPatchOu
     const reflection = source.reflection;
     if (reflection === null) patch.reflection = null;
     else if (typeof reflection === 'string') {
+      if (!reflection.isWellFormed() || reflection.includes('\u0000')) return { ok: false, field: 'reflection' };
       if (Array.from(reflection).length > MAX_JOURNAL_REFLECTION_CHARACTERS) return { ok: false, field: 'reflection' };
       if (new TextEncoder().encode(reflection).byteLength > MAX_JOURNAL_REFLECTION_BYTES)
         return { ok: false, field: 'reflection' };

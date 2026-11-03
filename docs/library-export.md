@@ -5,10 +5,10 @@ Decision: use a fifteen-minute fenced, replayable page stream with no retained p
 requires a new request identity, including after a completed stream or a failed local download. Installed import
 evidence joins this fence; expiring MAL evidence makes the original capture stale.
 Decision: version 2 appends independent `annotations`, `provenance` and `journals` sections; version 1 retains its
-original coverage, and reviewed V2 annotation/journal-date recovery is owned by the existing archive consumer.
+original coverage, and reviewed V2 annotation/journal date/reflection recovery is owned by the existing archive consumer.
 Decision: version 3 keeps those sections and adds the private occurrence assessment to each journal record. Versions
 1 and 2 keep their original record shapes; a missing legacy assessment is not inferred. The existing archive consumer
-continues to recover V2 annotations and journal dates; version 3 manifests are not yet accepted for recovery.
+continues to recover V2 annotations and journal dates/reflection; version 3 manifests are not yet accepted for recovery.
 
 ## Mounted methods and Web handoff
 
@@ -77,7 +77,7 @@ remain unsupported by that recovery journey.
 | `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded | Same as version 2                                                             |
 | `commerce`               | Excluded; orders and financial evidence use Commerce retention/export policy                                          | Same                                                                                                                      | Same                                                                          |
 | `publication`            | Excluded; stored rules only, no dynamic evaluation or working publication output                                      | Same                                                                                                                      | Same                                                                          |
-| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates; provenance remains unsupported                                | Existing V1/V2 recovery remains; V3 manifests and assessments are unsupported |
+| `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates/reflection; provenance remains unsupported                                | Existing V1/V2 recovery remains; V3 manifests and assessments are unsupported |
 
 Version 2 additions use independent owner-indexed selections. An annotation record preserves the account and Subject,
 the current entry incarnation and profile pin when an entry row exists, `annotationRevision`, note, priority and

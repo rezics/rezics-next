@@ -55,3 +55,8 @@ test('journal patches reject invented date shapes and over-bound reflections', (
     field: 'reflection',
   });
 });
+
+test('native reflection validation refuses malformed Unicode instead of replacing private text', () => {
+  for (const reflection of ['\ud800', '\udfff', '\u0000'])
+    expect(parseProgressSessionJournalPatch({ revision: 0, reflection })).toEqual({ ok: false, field: 'reflection' });
+});
