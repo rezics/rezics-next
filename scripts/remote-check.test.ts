@@ -105,6 +105,18 @@ function seedGit(directory: string) {
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
 }
 
+function repositoryPin(): string {
+  return JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager as string;
+}
+
+function linkRepositoryBun(directory: string) {
+  mkdirSync(join(directory, 'node_modules/.bin'), { recursive: true });
+  const bunPackage = join(directory, 'node_modules/bun');
+  const bunBin = join(directory, 'node_modules/.bin/bun');
+  if (!existsSync(bunPackage)) symlinkSync(join(repository, 'node_modules/bun'), bunPackage);
+  if (!existsSync(bunBin)) symlinkSync(join(repository, 'node_modules/.bin/bun'), bunBin);
+}
+
 test('ledger command phases pair monotonic markers and report malformed or unpaired lines', () => {
   expect(
     parseCommandPhases('migrations\tstart\t1000000000\nmigrations\tend\t3500000000\nbad\ncompile\tstart\t4000000000'),
@@ -1795,7 +1807,7 @@ function workspace(tmpfs = false): string {
   writeFileSync(join(directory, 'src/gone.ts'), 'export {};\n');
   writeFileSync(
     join(directory, 'package.json'),
-    JSON.stringify({ name: 'fixture', private: true, packageManager: 'bun@1.2.3' }) + '\n',
+    JSON.stringify({ name: 'fixture', private: true, packageManager: repositoryPin() }) + '\n',
   );
   git('add', '.');
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
@@ -1804,7 +1816,7 @@ function workspace(tmpfs = false): string {
   writeFileSync(join(directory, 'ignored.txt'), 'x');
   writeFileSync(join(directory, 'node_modules/x/index.js'), 'x');
   writeFileSync(join(directory, '.temp/scratch'), 'x');
-  installPinnedBun(directory);
+  linkRepositoryBun(directory);
   return directory;
 }
 

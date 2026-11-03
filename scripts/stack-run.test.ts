@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -384,26 +385,16 @@ function workspace(): string {
   git('init', '-q');
   mkdirSync(join(directory, 'src'));
   writeFileSync(join(directory, 'src/tracked.ts'), 'export {};\n');
+  const packageManager = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')).packageManager as string;
   writeFileSync(
     join(directory, 'package.json'),
-    JSON.stringify({ name: 'fixture', private: true, packageManager: 'bun@1.2.3' }) + '\n',
+    JSON.stringify({ name: 'fixture', private: true, packageManager }) + '\n',
   );
   git('add', '.');
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'seed');
-  const installed = join(directory, 'node_modules/bun');
-  mkdirSync(join(installed, 'bin'), { recursive: true });
-  writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'bun', version: '1.2.3' }));
-  writeFileSync(
-    join(installed, 'bin/bun.exe'),
-    `#!/bin/sh
-if [ "$1" = --eval ]; then
-  printf '%s\\n' '{"version":"1.2.3","revision":"${'c'.repeat(40)}"}'
-  exit 0
-fi
-exit 1
-`,
-  );
-  chmodSync(join(installed, 'bin/bun.exe'), 0o755);
+  mkdirSync(join(directory, 'node_modules/.bin'), { recursive: true });
+  symlinkSync(join(repository, 'node_modules/bun'), join(directory, 'node_modules/bun'));
+  symlinkSync(join(repository, 'node_modules/.bin/bun'), join(directory, 'node_modules/.bin/bun'));
   return directory;
 }
 
