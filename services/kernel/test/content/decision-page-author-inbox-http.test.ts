@@ -3,7 +3,11 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import source from '../../src/content/decision-page-source.sql';
 import { SESSION_HEADER } from '../../src/http/request.ts';
-import { capturePointEvent, createNativePointFixture, type NativePointFixture } from './moderation-native-point-fixture.ts';
+import {
+  capturePointEvent,
+  createNativePointFixture,
+  type NativePointFixture,
+} from './moderation-native-point-fixture.ts';
 import { observeSql } from './support/sql-observer.ts';
 
 let fixture: NativePointFixture;

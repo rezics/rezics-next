@@ -308,9 +308,9 @@ test('removed targets keep the exact decision while ordinary header context beco
     targetContext: { state: 'unavailable' },
   });
   expect(result.response.headers.get(SESSION_HEADER)).not.toBeNull();
-  expect((await fixture.call('GET', `/v1/posts/${target.postId}`, { bearer: fixture.author.bearer })).response.status).toBe(
-    404,
-  );
+  expect(
+    (await fixture.call('GET', `/v1/posts/${target.postId}`, { bearer: fixture.author.bearer })).response.status,
+  ).toBe(404);
 }, 120_000);
 
 test('an empty exact source and an account switch remain indistinguishable', async () => {

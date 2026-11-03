@@ -29,6 +29,7 @@ estimate:
   files: 9
 inseparable: true
 ---
+
 # Complete connected decision-page proof
 
 Finish the remaining mounted decision-page lifetime cases, including delegated principal and client/session changes
