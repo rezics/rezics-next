@@ -151,13 +151,7 @@ export async function captureCollectionBulkOccurrencesForSubjects(
   const context = commandAccessContext({ pool: deps.pool, deadline }, attempt);
   let collectionAccess: Awaited<ReturnType<typeof accessCheck>>;
   try {
-    collectionAccess = await accessCheck(
-      deps.access,
-      actor,
-      'collection:update',
-      { route, id: collectionId },
-      context,
-    );
+    collectionAccess = await accessCheck(deps.access, actor, 'collection:update', { route, id: collectionId }, context);
   } catch (error) {
     if (error instanceof GrantDeniedError) throw new LibraryNotFoundError();
     throw error;
@@ -174,10 +168,7 @@ export async function captureCollectionBulkOccurrencesForSubjects(
         !collection.curatorAccountId
       )
         throw new LibraryNotFoundError();
-      if (
-        expectedCollectionRevision !== undefined &&
-        collection.revision !== expectedCollectionRevision
-      )
+      if (expectedCollectionRevision !== undefined && collection.revision !== expectedCollectionRevision)
         throw new ProblemError('stale_cursor');
       try {
         if (!(await collectionAccess(tx, attempt.time))) throw new LibraryNotFoundError();

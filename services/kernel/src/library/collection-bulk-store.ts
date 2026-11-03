@@ -152,7 +152,7 @@ export async function collectCollectionBulkTargets(
 export async function previewCollectionBulk(
   tx: CommandTransaction,
   input: CollectionBulkKey & {
-  request: CollectionBulkIntent;
+    request: CollectionBulkIntent;
     targets: readonly CollectionBulkTarget[];
     initiator: DurableInitiatorRecord;
     creationReceipt: ReceiptLocator;

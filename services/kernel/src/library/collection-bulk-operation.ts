@@ -444,7 +444,13 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
             }
             if (executable.action === 'add_to_collection') {
               try {
-                const resolved = await prepareCollectionBulkAddAdmission(deps, owner, executable, attempt.time, context);
+                const resolved = await prepareCollectionBulkAddAdmission(
+                  deps,
+                  owner,
+                  executable,
+                  attempt.time,
+                  context,
+                );
                 return { ...base, resolved };
               } catch (error) {
                 return {
@@ -521,8 +527,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
               }
             : {
                 kind:
-                  prepared.input.action === 'remove_from_collection' &&
-                  prepared.input.selection.kind === 'occurrences'
+                  prepared.input.action === 'remove_from_collection' && prepared.input.selection.kind === 'occurrences'
                     ? 'occurrences'
                     : 'explicit',
               };

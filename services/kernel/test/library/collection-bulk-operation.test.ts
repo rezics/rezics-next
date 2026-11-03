@@ -175,10 +175,13 @@ test('filtered preview exhausts native Members pages before status confirmation'
     clientId: owner.actor.clientId,
     scopes: owner.actor.scopes,
   });
-  await runCollectionBulkPage({ ...dependencies(), readConsent }, {
-    route: operation.route,
-    operationId: operation.id,
-  });
+  await runCollectionBulkPage(
+    { ...dependencies(), readConsent },
+    {
+      route: operation.route,
+      operationId: operation.id,
+    },
+  );
   expect((await f.commands.readEntry(owner.actor, subjectId)).state).toBe('completed');
 
   const destination = (
@@ -210,10 +213,13 @@ test('filtered preview exhausts native Members pages before status confirmation'
   const libraryRemoval = (await libraryRemovalResponse.json()).operation;
   expect(libraryRemoval.counts.targets).toBe(1);
   await f.send(owner.bearer, 'POST', `/v1/libraryOperations/${libraryRemoval.id}:confirm`, {});
-  await runCollectionBulkPage({ ...dependencies(), readConsent }, {
-    route: libraryRemoval.route,
-    operationId: libraryRemoval.id,
-  });
+  await runCollectionBulkPage(
+    { ...dependencies(), readConsent },
+    {
+      route: libraryRemoval.route,
+      operationId: libraryRemoval.id,
+    },
+  );
   expect((await f.send(owner.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
 
   const removalResponse = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
@@ -231,14 +237,24 @@ test('filtered preview exhausts native Members pages before status confirmation'
   );
   expect(occurrences.rows[0]).toEqual({ count: 101, distinctMembers: 101 });
   await f.send(owner.bearer, 'POST', `/v1/libraryOperations/${removal.id}:confirm`, {});
-  expect(await runCollectionBulkPage({ ...dependencies(), readConsent }, {
-    route: removal.route,
-    operationId: removal.id,
-  })).toBe(true);
-  expect(await runCollectionBulkPage({ ...dependencies(), readConsent }, {
-    route: removal.route,
-    operationId: removal.id,
-  })).toBe(false);
+  expect(
+    await runCollectionBulkPage(
+      { ...dependencies(), readConsent },
+      {
+        route: removal.route,
+        operationId: removal.id,
+      },
+    ),
+  ).toBe(true);
+  expect(
+    await runCollectionBulkPage(
+      { ...dependencies(), readConsent },
+      {
+        route: removal.route,
+        operationId: removal.id,
+      },
+    ),
+  ).toBe(false);
   const remaining = await f.pool.query<{ count: number }>(
     `SELECT count(*)::integer AS count FROM library.collection_member
      WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL`,

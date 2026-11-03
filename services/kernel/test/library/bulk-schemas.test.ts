@@ -16,7 +16,9 @@ test('bulk HTTP schemas distinguish subjects occurrences and exact full type pre
   };
   expect(Value.Check(bulkAdmissionSchema, query)).toBe(true);
   expect(Value.Check(bulkAdmissionSchema, { ...query, actor: id })).toBe(false);
-  expect(Value.Check(bulkAdmissionSchema, { ...query, selection: { kind: 'query', sourceId: id, filter: {} } })).toBe(false);
+  expect(Value.Check(bulkAdmissionSchema, { ...query, selection: { kind: 'query', sourceId: id, filter: {} } })).toBe(
+    false,
+  );
   expect(
     Value.Check(bulkAdmissionSchema, {
       action: 'remove_from_collection',
