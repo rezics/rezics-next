@@ -1,6 +1,5 @@
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { channel } from 'node:diagnostics_channel';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -107,10 +106,6 @@ async function createThread(boardId: string, title: string): Promise<Thread> {
 }
 
 beforeAll(async () => {
-  channel('tracing:reylo:query:error').subscribe((message) => {
-    const { query } = message as { query: { sql: string } };
-    console.error('Failed native fixture statement:', query.sql);
-  });
   system = await createNativeContentSystemWithWriteRateOverrides(
     { databaseUrl: process.env.DATABASE_URL! },
     highWriteBudget,
