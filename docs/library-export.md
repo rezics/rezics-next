@@ -9,7 +9,9 @@ original coverage, and reviewed V2 annotation/journal date/reflection recovery i
 Decision: version 3 adds the private occurrence assessment to each journal record. Version 4 appends VNDB and AniList
 upload/evidence sections because installed V3 captures already bind the 17-section vocabulary. Versions
 1, 2 and 3 keep their original record shapes; a missing legacy assessment is not inferred. The existing archive consumer
-continues to recover V2 annotations and journal dates/reflection; version 3 manifests are not yet accepted for recovery.
+continues to recover V2 annotations and journal dates/reflection. Copy/progress archive inspection accepts the exact
+V3 assessment inventory without adopting assessments; Entry/label merge accepts only V1/V2. All installed archive
+consumers refuse V4, whose provider evidence remains inert.
 
 ## Mounted methods and Web handoff
 
@@ -40,8 +42,9 @@ Download uses those exact collected bytes; a local save failure can retry them. 
 
 Web owns `/library/export` as the signed-in Library portability visit. Commerce owns capture, paging, cancellation,
 fences, expiry and artifact semantics. The page binds `KernelClient.libraryExports` when post, status GET, pages GET
-and DELETE are present. The generated client snapshot may lag the kernel source; missing methods render unavailable
-rather than a local engine or successful fixture. Decision: use the create response's original `first` cursor on the
+and DELETE are present. Decision: export adoption remains unavailable until complete generated declarations and
+installed client typing agree on V4 coverage, all 21 sections and the journal assessment contract. Missing methods
+render unavailable rather than a local engine or successful fixture. Decision: use the create response's original `first` cursor on the
 happy path and call status GET only to replay lost bytes or reread a still-valid capture.
 
 Before capture, the page explains supported-native-facts coverage and `fullExport:false` in product language. Entries,

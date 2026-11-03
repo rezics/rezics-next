@@ -576,14 +576,15 @@ New native captures use V4 (`private-library-owner-facts-v4`): the fixed V3 sect
 VNDB and retained AniList parsed source rows preserve provider identifiers, unknown/invalid vocabulary, score scale,
 and date precision under recursive capability redaction. Parent/row mutations, expiry without writes, completed
 request replay, cancellation and terminal fencing remain fail-closed. The received journal assessment seam is retained
-in V4; it adds no writer. V1/V2/V3 decoding remains fixed; the current archive consumer refuses unsupported V4.
+in V4; it adds no writer. V1/V2/V3 decoding remains fixed. Copy/progress inspection accepts the exact V3 assessment
+inventory without assessment adoption; Entry/label merge accepts V1/V2. All installed archive consumers refuse V4.
 The existing Web export interface and canonical archive consumer retain their interface/recovery ownership. Native growth and broader
 integration acceptance remain deferred. See [export contract](../library-export.md#version-4-provider-evidence-and-assessment-seam).
 
 The native export now retains version 3 annotation, accepted provenance and live occurrence-journal records with
 private assessments under the installed private capture and source-fence contract. Version 1 and 2 captures retain
 their original shape; the archive-entry/label merge remains
-version 1 only; native64/512/4096 executed growth evidence remains deferred to integration.
+version 1 and 2 only; native64/512/4096 executed growth evidence remains deferred to integration.
 
 MAL, AniList and VNDB consumption-date adoption is integrated with each provider's existing private import journey. A
 source row targets one owner-supplied progress occurrence; supported calendar precision is retained through review and
