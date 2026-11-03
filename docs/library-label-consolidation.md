@@ -74,8 +74,10 @@ The stored plan binds both parent revisions, assignment incarnation/revision and
 requires new explicit confirmation. Native target assign and addressed source unassign retain their receipts,
 History, events and export fences exactly once. Source removal follows only definite accepted/current target
 assignment, including target acceptance with a lost acknowledgement. Original replay cannot consume a later changed
-source. Cancellation stops new items and returns accepted partial results without promising batch atomicity. The
-source label stays live, and source assignment undo retains its original finite deadline. Owner erasure removes plans;
+source. Cancellation stops new items and returns accepted partial results without promising batch atomicity. It
+resets an item that has not started its target operation; an uncertain target receipt is replayed and the source is
+retained if cancellation arrives before source removal. The source label stays live, and source assignment undo
+retains its original finite deadline. Owner erasure removes plans;
 the native ten-minute expiry worker deletes expired plans and their bounded child items.
 
 Only native reservation semantics admit target assignment: no source-first deletion, extra reclaim, temporary 33rd

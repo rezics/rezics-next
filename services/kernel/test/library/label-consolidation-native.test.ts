@@ -311,6 +311,44 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
   );
   expect(restored.value.assignment).toMatchObject({ id: first.assignmentId, revision: replayedSource.value.revision + 1 });
 
+  const guardedItem = await select(source.id, await f.createSubject('unprofiled')),
+    guardedEvidence = await review(source, target, [guardedItem]),
+    guardedConfirmation = await confirm(source.id, guardedEvidence),
+    guardedId = (await guardedConfirmation.json()).confirmationId,
+    guardedKeys = (
+      await f.pool.query(
+        `SELECT target_request_key FROM library.label_consolidation_item
+         WHERE route=$1 AND account_id=$2 AND consolidation_id=$3 AND item_no=0`,
+        [route, f.owner.actor.accountId, guardedId],
+      )
+    ).rows[0]!;
+  await f.pool.query(
+    `UPDATE library.label_consolidation_item SET status='applying',stage='target_started'
+     WHERE route=$1 AND account_id=$2 AND consolidation_id=$3 AND item_no=0`,
+    [route, f.owner.actor.accountId, guardedId],
+  );
+  const guardedTarget = await assignments().assignLabelForConsolidation(
+    f.owner.actor,
+    target.id,
+    { subjectId: guardedItem.subjectId },
+    target.revision,
+    { labelId: source.id, assignmentId: guardedItem.assignmentId, revision: guardedItem.revision, labelRevision: source.revision },
+    null,
+    guardedKeys.target_request_key,
+  );
+  await assignments().unassignLabel(
+    f.owner.actor,
+    target.id,
+    { subjectId: guardedItem.subjectId, assignmentId: guardedTarget.value.assignment.id, revision: guardedTarget.value.assignment.revision },
+    entryKey(),
+  );
+  const guardedRetry = await f.send('owner', 'POST', `/v1/libraryLabels/${source.id}:retryConsolidation`, {
+    confirmationId: guardedId,
+    item: 0,
+  });
+  expect((await guardedRetry.json()).items[0].status).toBe('target_applied_source_retained');
+  expect((await readAssignments(source.id)).map((row) => row.subjectId)).toContain(guardedItem.subjectId);
+
   await f.pool.query(
     `UPDATE library.label_consolidation SET expires_at=clock_timestamp()-interval '1 second'
      WHERE route=$1 AND account_id=$2 AND consolidation_id=$3`,
