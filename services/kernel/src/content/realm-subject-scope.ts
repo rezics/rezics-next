@@ -102,15 +102,7 @@ export function createRealmSubjectScope(pool: Pool) {
           `INSERT INTO content.realm_subject_scope_event
            (route,scope_kind,scope_id,source_partition,source_epoch,source_position,event_id)
            VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING 1`,
-          [
-            route,
-            change.kind,
-            change.id,
-            change.partition,
-            change.epoch,
-            change.position,
-            change.eventId,
-          ],
+          [route, change.kind, change.id, change.partition, change.epoch, change.position, change.eventId],
         );
         if (inserted.rowCount !== 1) return false;
         await client.query(

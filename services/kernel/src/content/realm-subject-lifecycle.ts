@@ -90,12 +90,13 @@ export type RealmSubjectSweepCursor = Readonly<{
 }>;
 export type RealmSubjectSweepPage = Readonly<{ state: 'more' | 'retry' | 'complete'; next: RealmSubjectSweepCursor }>;
 
-type Source = CandidateVersion & Readonly<{
-  partition: number;
-  eventId: string;
-  eventIndex: number;
-  transactionId: string;
-}>;
+type Source = CandidateVersion &
+  Readonly<{
+    partition: number;
+    eventId: string;
+    eventIndex: number;
+    transactionId: string;
+  }>;
 type ThreadState = Readonly<{
   realm: string | null;
   thread: string;
@@ -201,19 +202,34 @@ async function sourceAnchor(pool: Pool, event: CloudEvent, nativeId: string, dea
 }
 
 function currentThreadEvent(event: CloudEvent): boolean {
-  return [threadCreated, postCreated, postPublished, revisionCreated, postRestored, postErased, takedown, restored].includes(
-    event.type as never,
-  );
+  return [
+    threadCreated,
+    postCreated,
+    postPublished,
+    revisionCreated,
+    postRestored,
+    postErased,
+    takedown,
+    restored,
+  ].includes(event.type as never);
 }
 
-async function threadIdFor(pool: Pool, event: CloudEvent, data: Record<string, unknown>, deadline: number): Promise<string | null> {
-  if ([threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never)) return String(data.threadId);
-  if ((event.type === takedown || event.type === restored) && data.targetKind === 'thread') return String(data.targetId);
-  const post = event.type === postRestored || event.type === postErased
-    ? data.postId
-    : (event.type === takedown || event.type === restored) && data.targetKind === 'post'
-      ? data.targetId
-      : null;
+async function threadIdFor(
+  pool: Pool,
+  event: CloudEvent,
+  data: Record<string, unknown>,
+  deadline: number,
+): Promise<string | null> {
+  if ([threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never))
+    return String(data.threadId);
+  if ((event.type === takedown || event.type === restored) && data.targetKind === 'thread')
+    return String(data.targetId);
+  const post =
+    event.type === postRestored || event.type === postErased
+      ? data.postId
+      : (event.type === takedown || event.type === restored) && data.targetKind === 'post'
+        ? data.targetId
+        : null;
   if (typeof post === 'string') return postThread(pool, post, deadline);
   return null;
 }
@@ -221,7 +237,10 @@ async function threadIdFor(pool: Pool, event: CloudEvent, data: Record<string, u
 async function postThread(pool: Pool, post: string, deadline: number): Promise<string | null> {
   const route = realmSubjectRoute(post);
   const row = await realmSubjectHome(pool, route, deadline, false, async (client) =>
-    client.query<{ thread: string }>(`SELECT thread_id AS thread FROM content.post WHERE route=$1 AND post_id=$2`, [route, post]),
+    client.query<{ thread: string }>(`SELECT thread_id AS thread FROM content.post WHERE route=$1 AND post_id=$2`, [
+      route,
+      post,
+    ]),
   );
   return row.rows[0]?.thread ?? null;
 }
@@ -355,7 +374,14 @@ export function createRealmSubjectLifecycle(input: {
     const change = (kind: RealmSubjectScopeChange['kind'], id: unknown) => {
       if (typeof id !== 'string' || routeOf(id) === null) return Promise.resolve(false);
       return scope.invalidate(
-        { kind, id, eventId: source.eventId, partition: source.partition, epoch: source.epoch, position: source.position },
+        {
+          kind,
+          id,
+          eventId: source.eventId,
+          partition: source.partition,
+          epoch: source.epoch,
+          position: source.position,
+        },
         deadline,
       );
     };
@@ -389,11 +415,16 @@ export function createRealmSubjectLifecycle(input: {
       if (data.itemId !== native.opening) return;
     }
     if ((event.type === postRestored || event.type === postErased) && data.postId !== native.opening) return;
-    if ((event.type === takedown || event.type === restored) && data.targetKind === 'post' && data.targetId !== native.opening)
+    if (
+      (event.type === takedown || event.type === restored) &&
+      data.targetKind === 'post' &&
+      data.targetId !== native.opening
+    )
       return;
-    const previous = event.type === revisionCreated && data.itemId === native.opening && Array.isArray(data.previousSubjectIds)
-      ? (data.previousSubjectIds as string[])
-      : [];
+    const previous =
+      event.type === revisionCreated && data.itemId === native.opening && Array.isArray(data.previousSubjectIds)
+        ? (data.previousSubjectIds as string[])
+        : [];
     const originals = uniqueIds([...native.subjects, ...previous]);
     await candidates.initialize(native.realm, deadline);
     if (!(await candidates.fence(native.realm, thread, source, deadline))) return;
@@ -492,7 +523,9 @@ export function createRealmSubjectLifecycle(input: {
 
   async function sweepCursor(deadline: number): Promise<RealmSubjectSweepCursor> {
     const row = await realmSubjectHome(pool, 0, deadline, true, async (client) => {
-      await client.query(`INSERT INTO content.realm_subject_sweep_state(singleton) VALUES(true) ON CONFLICT DO NOTHING`);
+      await client.query(
+        `INSERT INTO content.realm_subject_sweep_state(singleton) VALUES(true) ON CONFLICT DO NOTHING`,
+      );
       return (
         await client.query<{ generation: string; next_route: number; complete: boolean }>(
           `SELECT generation::text,next_route,complete FROM content.realm_subject_sweep_state WHERE singleton=true`,
@@ -509,11 +542,16 @@ export function createRealmSubjectLifecycle(input: {
     };
   }
 
-  async function sweep(route: number, limit = REALM_SUBJECT_CENSUS_PAGE, deadline = Date.now() + 30_000): Promise<RealmSubjectSweepPage> {
+  async function sweep(
+    route: number,
+    limit = REALM_SUBJECT_CENSUS_PAGE,
+    deadline = Date.now() + 30_000,
+  ): Promise<RealmSubjectSweepPage> {
     if (!Number.isInteger(route) || route < 0 || route >= 65_536 || !Number.isInteger(limit) || limit < 1 || limit > 64)
       throw new RangeError('Invalid Realm Subject census page');
     const before = await sweepCursor(deadline);
-    if (before.complete || before.route !== route) return { state: before.complete ? 'complete' : 'retry', next: before };
+    if (before.complete || before.route !== route)
+      return { state: before.complete ? 'complete' : 'retry', next: before };
     const cut = await census.capture(route, deadline);
     let unknown = false;
     for (let step = 0; step < limit; step++) {
@@ -567,7 +605,9 @@ export function createRealmSubjectLifecycle(input: {
         [REALM_SUBJECT_LIFECYCLE_EFFECT],
       );
       if (pending.rows.length) return null;
-      const identities = await pool.query('SELECT 1 FROM content.realm_subject_identity_work WHERE NOT complete LIMIT 1');
+      const identities = await pool.query(
+        'SELECT 1 FROM content.realm_subject_identity_work WHERE NOT complete LIMIT 1',
+      );
       if (identities.rows.length) return null;
       const ancestor = await scope.observe(realm, context.reader.deadline);
       if (!ancestor) return null;
@@ -586,7 +626,9 @@ export function createRealmSubjectLifecycle(input: {
         [REALM_SUBJECT_LIFECYCLE_EFFECT],
       );
       if (pending.rows.length) return 'unavailable';
-      const identities = await pool.query('SELECT 1 FROM content.realm_subject_identity_work WHERE NOT complete LIMIT 1');
+      const identities = await pool.query(
+        'SELECT 1 FROM content.realm_subject_identity_work WHERE NOT complete LIMIT 1',
+      );
       if (identities.rows.length) return 'unavailable';
       const ancestor = await scope.observe(realm, context.reader.deadline);
       if (!ancestor) return 'unavailable';
