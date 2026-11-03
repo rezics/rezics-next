@@ -1007,7 +1007,7 @@ and platform-closed routes stay distinct and never become planned-route announce
 message, cause, request URL or diagnostic body becomes page content. Existing root error head handling keeps
 noindex, private/no-store, sanitized sharing metadata and native numeric response status.
 
-`PendingPage` reads only explicit route IDs and optional typed `staticData.routeState` (`page`, `feed`, `detail`,
+`PendingPage` reads only a fixed presentation map keyed by explicit route IDs (`page`, `feed`, `detail`,
 `form`). Unregistered routes use generic page loading; no pathname guessing or candidate-specific label is used.
 Skeletons contain at most eight blocks, have no interactive controls or data reads, adapt at phone/desktop widths
 and animate only with `prefers-reduced-motion: no-preference`. Data size never determines their shape.

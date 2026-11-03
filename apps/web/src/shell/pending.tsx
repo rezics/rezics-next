@@ -3,25 +3,20 @@ import { m } from '../paraglide/messages.js';
 
 export type PendingLayout = 'page' | 'feed' | 'detail' | 'form';
 
-declare module '@tanstack/react-router' {
-  interface StaticDataRouteOption {
-    /** Safe presentation metadata only, never a loader title, URL segment or reader payload. */
-    routeState?: PendingLayout;
-  }
-}
-
 /** Explicit rebuilt route IDs. Unknown routes retain neutral page loading. */
 const layouts: Readonly<Record<string, PendingLayout>> = {
   '/': 'feed', '/search': 'feed', '/boards/': 'feed', '/library/': 'feed', '/collections/': 'feed',
+  '/subjects/$id_/$slug': 'detail', '/subjects/$id_/$slug_/$view': 'detail',
+  '/threads/$id_/$slug': 'detail',
   '/subjects/$id': 'detail', '/offers/$id': 'detail', '/threads/$id': 'detail', '/threads/$id/$slug': 'detail',
   '/boards/$id': 'feed', '/collections/$id': 'feed',
   '/catalogue/new': 'form', '/contexts/new': 'form', '/collections/new': 'form', '/boards/$id/new': 'form',
 };
 
-export function pendingLayout(matches: readonly { routeId: string; staticData?: { routeState?: unknown } }[]): PendingLayout {
+export function pendingLayout(matches: readonly { routeId: string }[]): PendingLayout {
   for (let index = matches.length - 1; index >= 0; index--) {
     const match = matches[index]!;
-    const layout = match.staticData?.routeState ?? layouts[match.routeId];
+    const layout = layouts[match.routeId];
     if (layout === 'page' || layout === 'feed' || layout === 'detail' || layout === 'form') return layout;
   }
   return 'page';
@@ -69,7 +64,7 @@ export function RouteLoading({ layout = 'page' }: { layout?: PendingLayout }) {
 }
 
 function RouterPendingPage() {
-  const layout = useRouterState({ select: (state) => pendingLayout(state.pendingMatches ?? state.matches) });
+  const layout = useRouterState({ select: (state) => pendingLayout(state.matches) });
   return <RouteLoading layout={layout} />;
 }
 

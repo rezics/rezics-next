@@ -25,7 +25,7 @@ test('safe route metadata selects bounded, localized and reduced-motion skeleton
       expect(pendingLayout([{ routeId: '/subjects/$id' }])).toBe('detail');
       expect(pendingLayout([{ routeId: '/collections/new' }])).toBe('form');
       expect(pendingLayout([{ routeId: '/unrelated-candidate-looking-path' }])).toBe('page');
-      expect(pendingLayout([{ routeId: '/unknown', staticData: { routeState: privateText } }])).toBe('page');
+      expect(pendingLayout([{ routeId: '/unknown', ...{ staticData: { routeState: privateText } } }])).toBe('page');
       for (const layout of ['page', 'feed', 'detail', 'form'] as const) {
         const html = renderToStaticMarkup(<RouteLoading layout={layout} />);
         expect(html.match(/<h1\b/g)).toHaveLength(1);
@@ -97,7 +97,7 @@ test('original loaders recover once per explicit retry, retire old visits/reader
         <nav aria-label="Shell"><button onClick={() => void router.navigate({ to: '/search' })}>Leave</button></nav>
         <main id="main-content" tabIndex={-1}><Outlet /></main>
       </> });
-      const page = createRoute({ getParentRoute: () => base, path: '/offers/$id', staticData: { routeState: 'detail' },
+      const page = createRoute({ getParentRoute: () => base, path: '/offers/$id',
         loader: async () => {
           reads++;
           if (!hold) throw { ...failure, payload: items };
