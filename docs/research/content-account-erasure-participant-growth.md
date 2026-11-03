@@ -33,7 +33,8 @@ progress, unrelated authored source/locator rows, and retained moderation decisi
 removable locator/progress/expiry pressure resets before the next series. Immutable unrelated post/revision cohorts
 remain as an explicitly reported fixed baseline within each subsequent series; each content series adds its own
 256/1024/4096 source cohort, without deleting or weakening revision identities. Population insertion/counting and lifecycle selection are
-outside the observation. Six native accounts per scale/scenario allow one warm-up, one accepted run and the shared
+outside the observation. Observer status polling uses the administrative connection, while the actual registered
+executor, enqueue/release commands and fixed result assertions remain captured. Six native accounts per scale/scenario allow one warm-up, one accepted run and the shared
 observer's four possible cold-backend discards without SQL resets of selected lifecycle state. The selected neighborhood
 and production page limits remain fixed. Constant rows/statements and logarithmic buffers apply to each selected
 operation, including registered follow-up work, rather than an arbitrary-size account lifecycle. Probe budgets derive
