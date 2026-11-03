@@ -5,6 +5,14 @@ The owner-only `GET /v1/libraryReportedYearSummary?year=...` and typed
 The [reported-year contract](../library-reported-year-summary.md) owns precision, independent bucket grouping,
 installation/currentness and the integrating reader’s clear/cancellation/retry receiving. Focused scenarios are in
 `test/library/reported-year-summary.test.ts`; three-scale and full lifecycle acceptance remain deferred to integration.
+[Selected label consolidation](../library-label-consolidation.md) has a pure supplied-ID native/HTTP review and
+generated client, capped at 16 selected assignments and four items per page. Its focused native file is
+`services/kernel/test/library/label-consolidation-review.test.ts`; the landing command is
+`bun run --cwd services/kernel check test/library/label-consolidation-review.test.ts`.
+Review covers exact identities, conflicts, missing/changed/inaccessible assignments, native reservation capacity,
+deleted-parent reservations and bounded final pages. Immutable confirmation, native movement, original retries,
+cancellation, finite undo, erasure and native64/512/4096 complete-caller growth remain continuation work. Review
+source presence or a focused test result does not establish that complete journey.
 
 Personal consumption statistics now have the mounted owner-only
 `GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.

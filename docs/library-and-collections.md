@@ -20,6 +20,7 @@ does not silently create Library facts; Library presence or Undo never grants or
 The shared owner contracts are [Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
 [filtered lists](filtered-lists.md), [Collection presentation and editor](collection-presentation.md),
 [independent labels](library-labels.md),
+[selected label consolidation](library-label-consolidation.md),
 [profile consumers](library-profile-consumers.md), and [deletion](deletion.md). Indexed evaluation and source-scoped
 concurrent identity currentness below supersede older per-page proof/replay, whole-slot observation and identity-basis protocols in
 those adoption surfaces and earlier research. Their ABI revisions belong to their owners; this adoption creates no
