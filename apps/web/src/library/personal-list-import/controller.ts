@@ -83,9 +83,10 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   let applying = 0;
   let sourceXML: string | null = null;
   let sourceVisible = false;
+  let retired = false;
 
   function live(): boolean {
-    return visit.current() && sender.subject === visit.subject && sender.csrfToken === visit.csrfToken;
+    return !retired && visit.current() && sender.subject === visit.subject && sender.csrfToken === visit.csrfToken;
   }
 
   function selection(): VndbRow[] {
@@ -93,6 +94,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   function snapshot(): VndbJourneySnapshot {
+    if (!live()) clearForReplacement();
     const receipts = [...outcomes.values()].sort((a, b) => a.ordinal - b.ordinal);
     const selected = [...rows.values()].sort((a, b) => a.ordinal - b.ordinal);
     const unattempted = [...rows.values()]
@@ -101,7 +103,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
       .sort((a, b) => a - b);
     return {
       stage,
-      busy: pending > 0,
+      busy: live() && pending > 0,
       notice,
       uploadId,
       total,
@@ -253,6 +255,11 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   function hideSource(): VndbJourneySnapshot {
     sourceVisible = false;
     return snapshot();
+  }
+
+  function retire(): void {
+    retired = true;
+    clearForReplacement();
   }
 
   async function review(
@@ -437,6 +444,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     cancelAdmission,
     discard,
     fileReadFailed,
+    retire,
     live,
   };
 }

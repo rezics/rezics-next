@@ -346,8 +346,11 @@ Decision: A row enters apply selection only after explicit target and released L
 applies only the displayed admitted selection.
 
 VNDB score scale, source state, progress, dates and precision, notes, privacy, release records and unmapped values
-remain private source evidence. Notes do not become public reviews or local ratings, existing facts remain unless
-the person explicitly reviews a native replacement, and cancellation never promises rollback of acknowledged rows.
+remain private source evidence. The installed generated client still publishes only the state import request/result
+shape; Web displays the original score and keeps native score review unavailable until typed score fields and Content
+atomic admission are published. Upload and state choices do not imply public vote consent, and existing votes remain
+unchanged. Notes do not become public reviews or local ratings, existing facts remain unless the person explicitly
+reviews a native replacement, and cancellation never promises rollback of acknowledged rows.
 Native admission enforces the independent 2 MiB XML bound and 12 MiB + 64-byte escaped JSON wire bound; invalid XML
 or XML overflow returns HTTP 400, and wire overflow returns HTTP 413. Browser file size is not the wire size. Native
 support does not include alternate VNDB namespaces or provider-catalogue/MAL imports. Details and field limits live

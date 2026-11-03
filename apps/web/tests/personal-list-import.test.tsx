@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { libraryNavigation } from '../src/library/navigation';
 import { createVndbJourney } from '../src/library/personal-list-import/controller';
 import {
@@ -9,6 +10,7 @@ import {
   type VndbRow,
 } from '../src/library/personal-list-import/contract';
 import { nativeVndbImport } from '../src/library/personal-list-import/native';
+import { VndbEvidence } from '../src/library/personal-list-import/fields';
 import type { VndbVisit } from '../src/library/personal-list-import/visit';
 
 const uploadId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
@@ -99,6 +101,24 @@ test('binds generated libraryImports.vndb and keeps the visit discoverable', () 
   expect(
     libraryNavigation.some((entry) => entry.id === 'library.import-vndb' && entry.href === '/library/import-vndb'),
   ).toBe(true);
+});
+
+test('keeps VNDB score precision visible without implying native vote consent or effects', () => {
+  const scored = row(0);
+  scored.fields.vote = { kind: 'value', raw: '7.3', value: 7.3, scale: { min: 1, max: 10, step: 0.1 } };
+  const html = renderToStaticMarkup(<VndbEvidence row={scored} />);
+  expect(html).toContain('7.3');
+  expect(html).toContain('step 0.1');
+  expect(html).toContain('no exact match on a native half-step scale');
+  expect(html).toContain('separate explicit consent');
+  expect(html).toContain('data-vndb-score-review="unavailable"');
+  expect(html).not.toContain('<input');
+
+  const zero = row(1);
+  zero.fields.vote = { kind: 'invalid', raw: '0' };
+  const zeroHtml = renderToStaticMarkup(<VndbEvidence row={zero} />);
+  expect(zeroHtml).toContain('source score of 0 is invalid');
+  expect(zeroHtml).toContain('native vote of 0 is valid');
 });
 
 test('sends XML to native admission without a browser size guard or local preview effects', async () => {
@@ -240,8 +260,11 @@ test('viewer replacement retires late page reads', async () => {
 
   await journey.preview('<vndb-export version="1.0"/>');
   expect(pages).toBe(1);
+  expect(journey.snapshot().rows.map((item) => item.title)).toEqual(['Novel 1']);
   current.retire();
+  journey.retire();
   await journey.loadPage(0);
   expect(pages).toBe(1);
   expect(journey.live()).toBe(false);
+  expect(journey.snapshot()).toMatchObject({ uploadId: null, rows: [], selection: [], page: null, sourceXML: null });
 });

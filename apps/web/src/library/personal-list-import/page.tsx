@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useOperation } from '../../kernel/exposure';
+import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { createVndbJourney, type VndbJourney, type VndbJourneySnapshot } from './controller';
@@ -40,9 +41,15 @@ function download(xml: string) {
 export function PersonalVndbImportPage({ visit }: { visit?: VndbVisit | null }) {
   const observed = useVndbVisit();
   const current = visit === undefined ? observed : visit;
-  useOperation('library_entry.put');
+  useEffect(() => () => current?.retire(), [current]);
   if (!current) return <VndbSignedOut />;
-  return <VndbImportSession key={`${current.subject}:${current.csrfToken}`} visit={current} />;
+  return <VndbImportAccess visit={current} />;
+}
+
+function VndbImportAccess({ visit }: { visit: VndbVisit }) {
+  const admitted = useOperation('library_entry.put');
+  const identity = [visit.subject, visit.csrfToken, getLocale(), String(admitted)].join(':');
+  return <VndbImportSession key={identity} visit={visit} />;
 }
 
 function VndbImportSession({ visit }: { visit: VndbVisit }) {
@@ -51,7 +58,7 @@ function VndbImportSession({ visit }: { visit: VndbVisit }) {
   const main = useRef<HTMLElement>(null);
   if (!journey.current) journey.current = createVndbJourney({ port, visit });
   const [snap, setSnap] = useState<VndbJourneySnapshot>(() => journey.current!.snapshot());
-  useEffect(() => () => visit.retire(), [visit]);
+  useEffect(() => () => journey.current?.retire(), [visit]);
   useEffect(() => {
     main.current?.querySelector<HTMLElement>(`[data-vndb-stage="${snap.stage}"]`)?.focus({ preventScroll: true });
   }, [snap.stage, snap.page?.rows[0]?.ordinal]);
