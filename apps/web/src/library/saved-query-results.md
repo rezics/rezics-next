@@ -12,12 +12,12 @@ unknown identity.
 
 ## Members status
 
-| Response | Reader |
-| --- | --- |
-| `202 {preparing:true}` with `Retry-After` | Preparing. Retry the same validated URL and opaque cursor, `private, no-store`. At most three automatic retries, then an explicit reload of that same request. Never treated as empty success. |
-| `200 {members, next}` | Ready page. `members: []` and `next: null` is a genuine empty final page. A later empty page is page-local absence with first-page recovery. |
-| `503` Problem, no cursor | Unavailable. Distinct from empty. Retry the same address; missing execution stays unavailable. |
-| `409 stale_cursor` | Restart once at the first page of the same Collection, filter and sort. Surface that restart and keep a first-page link that drops only the members cursor from the admitted `f.`/`r.`/`l.`/type protocol. |
+| Response                                  | Reader                                                                                                                                                                                                     |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `202 {preparing:true}` with `Retry-After` | Preparing. Retry the same validated URL and opaque cursor, `private, no-store`. At most three automatic retries, then an explicit reload of that same request. Never treated as empty success.             |
+| `200 {members, next}`                     | Ready page. `members: []` and `next: null` is a genuine empty final page. A later empty page is page-local absence with first-page recovery.                                                               |
+| `503` Problem, no cursor                  | Unavailable. Distinct from empty. Retry the same address; missing execution stays unavailable.                                                                                                             |
+| `409 stale_cursor`                        | Restart once at the first page of the same Collection, filter and sort. Surface that restart and keep a first-page link that drops only the members cursor from the admitted `f.`/`r.`/`l.`/type protocol. |
 
 Filter and `id` sort stay on the saved rule and the current URL protocol. Changing filters drops the old cursor.
 Commerce owns evaluation, admission, publication and native disclosure. This page binds Collection GET plus the

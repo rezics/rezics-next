@@ -124,10 +124,7 @@ export const Recovery: Story = {
   render: () => (
     <PatternStory path={`/collections/${encodeURIComponent(recovered.id)}`}>
       <main className="mx-auto w-full min-w-0 max-w-4xl p-4">
-        <DynamicCollectionPage
-          page={recovered}
-          search={{ type: 'schema:Book', 'f.schema:keywords': 'concept-b' }}
-        />
+        <DynamicCollectionPage page={recovered} search={{ type: 'schema:Book', 'f.schema:keywords': 'concept-b' }} />
       </main>
     </PatternStory>
   ),

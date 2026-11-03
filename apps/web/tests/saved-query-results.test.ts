@@ -92,9 +92,9 @@ test('ordinary saved identities omit builtinKind and never offer a built-in or p
   expect(isOrdinarySavedQuery({})).toBe(true);
   expect(isOrdinarySavedQuery({ builtinKind: 'everything' })).toBe(false);
   const saved = { id: 'saved', curatorAccountId: 'owner', membershipKind: 'dynamic' as const };
-  expect(renderToStaticMarkup(createElement(RuleEditLink, { collection: saved, viewerId: 'owner', allowed: true }))).toContain(
-    '/collections/saved/rule',
-  );
+  expect(
+    renderToStaticMarkup(createElement(RuleEditLink, { collection: saved, viewerId: 'owner', allowed: true })),
+  ).toContain('/collections/saved/rule');
   expect(
     renderToStaticMarkup(createElement(RuleEditLink, { collection: saved, viewerId: 'reader', allowed: true })),
   ).toBe('');
