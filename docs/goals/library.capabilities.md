@@ -586,7 +586,9 @@ beside the selected Content question and owner-entered units; zero, absence, uns
 remain distinct. Set/clear confirmation is separate, but score outcomes are typed unavailable until Content provides
 an atomic reviewed question/current-vote/counting-identity guard for `createVoteCommands.putVoteOutcome`; no native
 vote or aggregate write is claimed. The focused HTTP test covers source distinctions, consent omission, changed
-selection and preservation of an existing vote. The complete Web324 interface consumes generated delivery.
+selection and preservation of an existing vote. Score declaration generation and Web rendering remain continuation
+work with their existing owners; no completed score UI is claimed. The existing Web324 interface consumes the
+generated state/tag delivery.
 Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
 remains an integration responsibility, and source delivery does not assert its result.
 
