@@ -131,11 +131,11 @@ export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']
 
 /** Board/thread/post queues keep those kinds; subject reports stay on the catalogue reports surface. */
 function publishedReports(reports: readonly ReportRecord[]): Report[] {
-  return reports.flatMap(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) =>
-    target.kind === 'board' || target.kind === 'thread' || target.kind === 'post'
-      ? [{ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }]
-      : [],
-  );
+  return reports.flatMap(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) => {
+    const kind = target.kind;
+    if (kind !== 'board' && kind !== 'thread' && kind !== 'post') return [];
+    return [{ id, target: { kind, id: target.id }, revisionId, reason, evidence, createdAt, outcome, resolvedAt }];
+  });
 }
 
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
