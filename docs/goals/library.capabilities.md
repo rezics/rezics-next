@@ -3,7 +3,7 @@
 The owner-only `GET /v1/libraryReportedYearSummary?year=...` and typed
 `libraryReportedYearSummary.get({query:{year}})` extend the delivered native journal and all-time counters.
 The [reported-year contract](../library-reported-year-summary.md) owns precision, independent bucket grouping,
-installation/currentness and Web318 clear/cancellation/retry receiving. Focused scenarios are in
+installation/currentness and the integrating reader’s clear/cancellation/retry receiving. Focused scenarios are in
 `test/library/reported-year-summary.test.ts`; three-scale and full lifecycle acceptance remain deferred to integration.
 
 Personal consumption statistics now have the mounted owner-only

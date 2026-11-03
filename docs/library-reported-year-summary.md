@@ -87,7 +87,7 @@ work. Reads are private, `no-store`, fixed at thirteen returned buckets, at most
 heads, and 16,384 encoded UTF-8 bytes. Counts never expose raw journal dates, reflections or Subject membership IDs.
 Private inputs/counts do not enter Search, public DTOs, events or error payloads.
 
-Web318 remains the integrating diary/statistics reader. Bind every request to the current account, selected year and
+The existing private diary/statistics reader remains the integrating surface. Bind every request to the current account, selected year and
 abort lifetime. Clear old values when changing either selection, starting a replacement request, losing authority,
 receiving missing coverage, or failing a request. Never relabel a previous year's successful values. Discard a late
 response after cancellation/account/year change. Retry repeats this GET with the current binding. Replace counts,
