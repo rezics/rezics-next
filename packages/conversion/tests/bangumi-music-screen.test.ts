@@ -42,7 +42,16 @@ test('type 6 dispatches movie and series from pinned platform or template', () =
   expect(convertBangumi(input(subject(6, { platform: 'movie' }))).proposals[0]).toMatchObject({
     subject: { type: 'schema:Movie' },
   });
+  expect(convertBangumi(input(subject(6, { platform: 6002 }))).proposals[0]).toMatchObject({
+    subject: { type: 'schema:Movie' },
+  });
+  expect(convertBangumi(input(subject(6, { platform: '电影' }))).proposals[0]).toMatchObject({
+    subject: { type: 'schema:Movie' },
+  });
   expect(convertBangumi(input(subject(6, { platform: '6001' }))).proposals[0]).toMatchObject({
+    subject: { type: 'schema:TVSeries' },
+  });
+  expect(convertBangumi(input(subject(6, { platform: 6003 }))).proposals[0]).toMatchObject({
     subject: { type: 'schema:TVSeries' },
   });
   expect(convertBangumi(input(subject(6, { infobox: '{{Infobox realMovie\n|上映年度=2024\n}}' }))).proposals[0]).toMatchObject({
@@ -90,5 +99,9 @@ test('unparseable 3/6 dates stay reviewable and do not invent precision', () => 
     false,
   );
   expect(output.diagnostics).toContainEqual({ pointer: '/date', code: 'unsupported_date_mapping' });
+  const month = convertBangumi(input(subject(6, { platform: 6002, date: '2024-05' })), bound);
+  expect(month.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:datePublished' && command.statement.value.type === 'value' && (command.statement.value.content as { precision: number }).precision === 10)).toBe(
+    true,
+  );
   expect(() => convertBangumi(input({ id: 81, type: 5, name: 'X' }))).toThrow(ConversionError);
 });

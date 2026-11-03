@@ -52,8 +52,33 @@ const FAMILY_TERMS = new Set([
   'rezics:editionCounterpart',
 ]);
 
-const TV_PLATFORMS = new Set(['1', '2', '3', '6001', 'TV', 'tv']);
-const FILM_PLATFORMS = new Set(['6002', 'Movie', 'movie']);
+// Pinned subject_platforms.yml / platform.go.json ids, type, type_cn and alias.
+const TV_PLATFORMS = new Set([
+  '0',
+  '1',
+  '2',
+  '3',
+  '6001',
+  '6003',
+  '6004',
+  'other',
+  'misc',
+  'jp',
+  'en',
+  'cn',
+  'tv',
+  'TV',
+  'live',
+  'show',
+  '其他',
+  '日剧',
+  '欧美剧',
+  '华语剧',
+  '电视剧',
+  '演出',
+  '综艺',
+]);
+const FILM_PLATFORMS = new Set(['6002', 'movie', 'Movie', '电影']);
 
 let bangumiInventory: BangumiInventory | undefined;
 let vndbInventory: VndbInventory | undefined;
@@ -118,7 +143,8 @@ export function isFamilyRelationTerm(term: string | undefined): boolean {
 
 export function liveActionWorkType(platform: unknown): 'schema:Movie' | 'schema:TVSeries' | undefined {
   if (platform === undefined || platform === null) return undefined;
-  const value = String(platform);
+  const value = String(platform).trim();
+  if (!value) return undefined;
   if (FILM_PLATFORMS.has(value)) return 'schema:Movie';
   if (TV_PLATFORMS.has(value)) return 'schema:TVSeries';
   return undefined;

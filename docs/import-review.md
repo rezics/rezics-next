@@ -17,8 +17,9 @@ command consumes dump records; it does not replace them with live API records or
 Decision: seed each provider under separate `cross_media` source aliases, match franchise titles only, and report
 unmapped source rows as explicit gaps without merging identities by name.
 
-Decision: Bangumi type 3 maps to MusicAlbum and type 6 to Movie or TVSeries by pinned platform codes 6002 (film)
-and 1/2/3/6001 (TV), including `Movie`/`TV` labels; unknown live-action platforms stay exact `/platform` gaps.
+Decision: Bangumi type 3 maps to MusicAlbum and type 6 to Movie or TVSeries by pinned platform ids 0/1/2/3/6001–6004,
+type/type_cn/alias and TV/realMovie templates via `liveActionWorkType`; archive integer platforms stringify; unknown
+live-action platforms stay exact `/platform` gaps.
 
 Extract a [Bangumi Archive](https://github.com/bangumi/Archive) release into a directory containing the original
 `subject.jsonlines`, `subject-relations.jsonlines`, `subject-characters.jsonlines`, `subject-persons.jsonlines`,

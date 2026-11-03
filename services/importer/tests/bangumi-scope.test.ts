@@ -307,7 +307,7 @@ test('a prior ignored identity-only 3/6 baseline refreshes to typed conversion w
         id: 6,
         type: 6,
         name: 'Live film',
-        platform: 'movie',
+        platform: 6002,
       })}\n${JSON.stringify({ id: 1, type: 1, name: 'Book' })}\n`,
     );
     const refreshed = await importer.runDump(registration, named);

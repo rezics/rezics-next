@@ -1,3 +1,5 @@
+import { liveActionWorkType } from './cross-media-entities.ts';
+
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 
 /** Existing 1/2/4 class bindings. Type 2 stays TVSeries even when the platform names a film. */
@@ -6,32 +8,6 @@ export const bangumiLaunchTypes = {
   2: 'schema:TVSeries',
   4: 'schema:VideoGame',
 } as const;
-
-const liveActionMovie = new Set(['6002', 'movie', '电影']);
-const liveActionSeries = new Set([
-  '0',
-  '1',
-  '2',
-  '3',
-  '6001',
-  '6003',
-  '6004',
-  'other',
-  'misc',
-  'jp',
-  'en',
-  'cn',
-  'tv',
-  'live',
-  'show',
-  '其他',
-  '日剧',
-  '欧美剧',
-  '华语剧',
-  '电视剧',
-  '演出',
-  '综艺',
-]);
 
 export function isAdmittedBangumiType(type: unknown): type is 1 | 2 | 3 | 4 | 6 {
   return type === 1 || type === 2 || type === 3 || type === 4 || type === 6;
@@ -50,13 +26,12 @@ export function selectBangumiProfile(input: {
   if (input.type === 1 || input.type === 2 || input.type === 4)
     return { outcome: 'selected', type: bangumiLaunchTypes[input.type] };
   if (input.type === 3) return { outcome: 'selected', type: 'schema:MusicAlbum' };
-  const platform = input.platform?.trim();
-  if (platform && liveActionMovie.has(platform)) return { outcome: 'selected', type: 'schema:Movie' };
-  if (platform && liveActionSeries.has(platform)) return { outcome: 'selected', type: 'schema:TVSeries' };
+  const live = liveActionWorkType(input.platform);
+  if (live) return { outcome: 'selected', type: live };
   const template = infoboxTemplate(input.infobox);
   if (template === 'realMovie') return { outcome: 'selected', type: 'schema:Movie' };
   if (template === 'TV') return { outcome: 'selected', type: 'schema:TVSeries' };
-  if (!platform) return { outcome: 'selected', type: 'schema:TVSeries' };
+  if (!input.platform?.trim()) return { outcome: 'selected', type: 'schema:TVSeries' };
   return { outcome: 'unknown_live_action_platform' };
 }
 

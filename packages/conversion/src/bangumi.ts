@@ -85,6 +85,14 @@ function string(value: unknown, pointer: string, max: number, empty = false): st
     invalid(pointer);
   return value;
 }
+/** Archive dumps store platform ids; the public subject document stores type_cn/type/alias. */
+function platformCode(value: unknown, pointer: string): string {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) invalid(pointer);
+    return String(value);
+  }
+  return string(value, pointer, 500, true);
+}
 function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   const raw = object(input.record, '');
   const get = (key: string) => own(raw, key, `/${key}`);
@@ -135,7 +143,9 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
     for (let i = 0; i < length; i++)
       record.meta_tags.push(string(own(metaTags, String(i), `/meta_tags/${i}`), `/meta_tags/${i}`, 200));
   }
-  for (const key of ['platform', 'infobox', 'date'] as const) {
+  const platform = get('platform');
+  if (platform !== undefined) record.platform = platformCode(platform, '/platform');
+  for (const key of ['infobox', 'date'] as const) {
     const value = get(key);
     if (value !== undefined) record[key] = string(value, `/${key}`, key === 'infobox' ? 65_536 : 500, true);
   }
