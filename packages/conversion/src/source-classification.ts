@@ -38,7 +38,12 @@ export type SourceClassificationProjection =
     }>
   | Readonly<{
       state: 'unavailable';
-      reason: 'unadmitted' | 'unsupported-record' | 'incomplete-input' | 'invalid-observation' | 'association-unavailable';
+      reason:
+        | 'unadmitted'
+        | 'unsupported-record'
+        | 'incomplete-input'
+        | 'invalid-observation'
+        | 'association-unavailable';
     }>;
 
 type ProjectionInput = Readonly<{
@@ -65,7 +70,9 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 }
 
 function boundedText(value: unknown, max: number): value is string {
-  return typeof value === 'string' && value.length > 0 && value.isWellFormed() && Buffer.byteLength(value, 'utf8') <= max;
+  return (
+    typeof value === 'string' && value.length > 0 && value.isWellFormed() && Buffer.byteLength(value, 'utf8') <= max
+  );
 }
 
 function validDate(value: unknown): value is string {
@@ -103,12 +110,24 @@ function projectValue(input: unknown): SourceClassificationValue | null {
   const hasConfidence = Object.hasOwn(value, 'confidence');
   const hasLie = Object.hasOwn(value, 'lie');
   if (!hasConfidence && !hasLie) return null;
-  if (hasConfidence && (typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence <= 0 || value.confidence > 3))
+  if (
+    hasConfidence &&
+    (typeof value.confidence !== 'number' ||
+      !Number.isFinite(value.confidence) ||
+      value.confidence <= 0 ||
+      value.confidence > 3)
+  )
     return null;
   if (hasLie && typeof value.lie !== 'boolean') return null;
-  if (Object.hasOwn(value, 'confidenceCount') && (!hasConfidence || !Number.isSafeInteger(value.confidenceCount) || (value.confidenceCount as number) < 0))
+  if (
+    Object.hasOwn(value, 'confidenceCount') &&
+    (!hasConfidence || !Number.isSafeInteger(value.confidenceCount) || (value.confidenceCount as number) < 0)
+  )
     return null;
-  if (Object.hasOwn(value, 'lieCount') && (!hasLie || !Number.isSafeInteger(value.lieCount) || (value.lieCount as number) < 0))
+  if (
+    Object.hasOwn(value, 'lieCount') &&
+    (!hasLie || !Number.isSafeInteger(value.lieCount) || (value.lieCount as number) < 0)
+  )
     return null;
   return {
     kind: 'observation',
@@ -126,16 +145,27 @@ function projectValue(input: unknown): SourceClassificationValue | null {
 export function projectSourceClassification(input: unknown): SourceClassificationProjection {
   const value = object(input);
   if (!value) return { state: 'unavailable', reason: 'unsupported-record' };
-  const required = ['sourceAlias', 'sourceRecordId', 'sourceRevision', 'converterRevision', 'observedAt', 'coverage', 'attribution', 'licence', 'value'];
-  if (required.some((key) => !Object.hasOwn(value, key)))
-    return { state: 'unavailable', reason: 'incomplete-input' };
+  const required = [
+    'sourceAlias',
+    'sourceRecordId',
+    'sourceRevision',
+    'converterRevision',
+    'observedAt',
+    'coverage',
+    'attribution',
+    'licence',
+    'value',
+  ];
+  if (required.some((key) => !Object.hasOwn(value, key))) return { state: 'unavailable', reason: 'incomplete-input' };
   if (Object.keys(value).some((key) => ![...required, 'sourceDigest'].includes(key)))
     return { state: 'unavailable', reason: 'unsupported-record' };
   if (
-    !boundedText(value.sourceAlias, 32) || !ALIAS.test(value.sourceAlias) ||
+    !boundedText(value.sourceAlias, 32) ||
+    !ALIAS.test(value.sourceAlias) ||
     !boundedText(value.sourceRecordId, 255) ||
     !(value.sourceRevision === null || boundedText(value.sourceRevision, 255)) ||
-    (value.sourceDigest !== undefined && (typeof value.sourceDigest !== 'string' || !DIGEST.test(value.sourceDigest))) ||
+    (value.sourceDigest !== undefined &&
+      (typeof value.sourceDigest !== 'string' || !DIGEST.test(value.sourceDigest))) ||
     (value.sourceRevision === null && typeof value.sourceDigest !== 'string') ||
     !boundedText(value.converterRevision, 128) ||
     !(value.observedAt === null || validDateTime(value.observedAt)) ||
@@ -145,7 +175,14 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
   const coverage = projectCoverage(value.coverage);
   const sourceValue = projectValue(value.value);
   const licence = object(value.licence);
-  if (!coverage || !sourceValue || !licence || !exactKeys(licence, ['id', 'url']) || !boundedText(licence.id, 64) || !boundedText(licence.url, 512))
+  if (
+    !coverage ||
+    !sourceValue ||
+    !licence ||
+    !exactKeys(licence, ['id', 'url']) ||
+    !boundedText(licence.id, 64) ||
+    !boundedText(licence.url, 512)
+  )
     return { state: 'unavailable', reason: 'invalid-observation' };
   let url: URL;
   try {
@@ -153,7 +190,8 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
   } catch {
     return { state: 'unavailable', reason: 'invalid-observation' };
   }
-  if (url.protocol !== 'https:' || url.username || url.password) return { state: 'unavailable', reason: 'invalid-observation' };
+  if (url.protocol !== 'https:' || url.username || url.password)
+    return { state: 'unavailable', reason: 'invalid-observation' };
   const provenance: SourceClassificationProvenance = {
     sourceAlias: value.sourceAlias,
     sourceRecordId: value.sourceRecordId,

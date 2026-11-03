@@ -23,26 +23,39 @@ describe('source classification projection', () => {
     });
 
     expect(lieOnly).toMatchObject({ state: 'available', value: { kind: 'observation', lie: false } });
-    expect(lieOnly.state === 'available' && lieOnly.value.kind === 'observation' && 'lieCount' in lieOnly.value).toBe(false);
-    expect(zeroCount).toMatchObject({ state: 'available', value: { kind: 'observation', confidence: 1.5, confidenceCount: 0 } });
+    expect(lieOnly.state === 'available' && lieOnly.value.kind === 'observation' && 'lieCount' in lieOnly.value).toBe(
+      false,
+    );
+    expect(zeroCount).toMatchObject({
+      state: 'available',
+      value: { kind: 'observation', confidence: 1.5, confidenceCount: 0 },
+    });
   });
 
   test('preserves explicit clear and never turns absent values into clear', () => {
     expect(projectSourceClassification({ ...provenance, value: { kind: 'clear' } })).toMatchObject({
-      state: 'available', value: { kind: 'clear' },
+      state: 'available',
+      value: { kind: 'clear' },
     });
     expect(projectSourceClassification(provenance)).toEqual({ state: 'unavailable', reason: 'incomplete-input' });
     expect(projectSourceClassification({ ...provenance, value: { kind: 'observation', confidence: 0 } })).toEqual({
-      state: 'unavailable', reason: 'invalid-observation',
+      state: 'unavailable',
+      reason: 'invalid-observation',
     });
   });
 
   test('requires truthful provenance for unversioned records and drops unsupported provider fields', () => {
-    expect(projectSourceClassification({ ...provenance, sourceRevision: null, value: { kind: 'observation', lie: true } })).toEqual({
-      state: 'unavailable', reason: 'incomplete-input',
+    expect(
+      projectSourceClassification({ ...provenance, sourceRevision: null, value: { kind: 'observation', lie: true } }),
+    ).toEqual({
+      state: 'unavailable',
+      reason: 'incomplete-input',
     });
-    expect(projectSourceClassification({ ...provenance, tags: ['rating'], value: { kind: 'observation', lie: true } })).toEqual({
-      state: 'unavailable', reason: 'unsupported-record',
+    expect(
+      projectSourceClassification({ ...provenance, tags: ['rating'], value: { kind: 'observation', lie: true } }),
+    ).toEqual({
+      state: 'unavailable',
+      reason: 'unsupported-record',
     });
   });
 });
