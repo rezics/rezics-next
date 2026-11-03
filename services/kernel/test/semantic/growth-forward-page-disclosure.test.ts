@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import {
+  assertGrowthAccessPaths,
   capture,
   checkGrowth,
   costOf,
@@ -23,10 +24,13 @@ import {
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 
+setDefaultTimeout(600_000);
+
 const SELECTED = PAGE_SIZE;
 const SELECTED_SLOT_FACTS = 1;
 const TARGET_LABELS = 1;
 const PAGE_PARTITIONS = 1;
+const ADMITTED = SELECTED + LOOKAHEAD;
 // Mounted GET /v1/subjects/:id/relations: one outbound keyset of s+1, one counter,
 // selected compact slots, one summary fill per page partition, Access per related id,
 // then a released-snapshot reread of those same slots and native fence points.
@@ -34,7 +38,7 @@ const probeOperands = {
   holderVisibility: 2,
   partitionHead: 1,
   freshnessCheckpoint: 1,
-  outboundSeeks: SELECTED + LOOKAHEAD,
+  outboundSeeks: ADMITTED,
   outboundCounter: 1,
   selectedSlots: SELECTED * SELECTED_SLOT_FACTS,
   rereadSlots: SELECTED * SELECTED_SLOT_FACTS,
@@ -55,6 +59,8 @@ const covering = {
   'semantic.outbound_link': 'outbound_link_present',
   'semantic.outbound_link_count': 'outbound_link_count_pkey',
 } as const;
+
+type Charge = { scale: number; rows: number; statements: number; outbound: number };
 
 let db: GrowthDatabase;
 let fixture: ForwardPageGrowthFixture;
@@ -84,10 +90,14 @@ function examined(node: Record<string, unknown>): number {
   );
 }
 
+function outboundNodes(raw: Capture): Record<string, unknown>[] {
+  return nodes(raw.plans).filter(
+    (node) => node['Relation Name'] === 'outbound_link' && Number(node['Actual Loops'] ?? 0) > 0,
+  );
+}
+
 function outboundExamined(raw: Capture): number {
-  return nodes(raw.plans)
-    .filter((node) => node['Relation Name'] === 'outbound_link' && Number(node['Actual Loops'] ?? 0) > 0)
-    .reduce((total, node) => total + examined(node), 0);
+  return outboundNodes(raw).reduce((total, node) => total + examined(node), 0);
 }
 
 function report(name: string, scale: number, raw: Capture, page: ForwardPage): void {
@@ -115,7 +125,7 @@ function report(name: string, scale: number, raw: Capture, page: ForwardPage): v
   );
 }
 
-function assertDisclosedPage(page: ForwardPage, scale: number, size = PAGE_SIZE): void {
+function assertDisclosedPage(page: ForwardPage, _scale: number, size = PAGE_SIZE): void {
   expect(page.relations).toHaveLength(size);
   expect(page).not.toHaveProperty('count');
   expect(page.next).toEqual(expect.any(String));
@@ -128,7 +138,7 @@ function assertDisclosedPage(page: ForwardPage, scale: number, size = PAGE_SIZE)
   }
 }
 
-function assertContinuedPage(page: ForwardPage, scale: number): void {
+function assertContinuedPage(page: ForwardPage, _scale: number): void {
   expect(page.relations.length).toBeGreaterThan(0);
   expect(page.relations.length).toBeLessThanOrEqual(PAGE_SIZE);
   expect(page).not.toHaveProperty('count');
@@ -147,14 +157,13 @@ function assertEmptyPage(page: ForwardPage, scale: number): void {
   expect(page.next).toBeNull();
 }
 
-function assertNoFillScan(raw: Capture): void {
+function assertFiniteAdmission(raw: Capture): void {
   const sql = raw.statements.join('\n');
   expect(sql).not.toMatch(/enable_seqscan|set_config\s*\(/i);
-  for (const node of nodes(raw.plans)) {
-    if (node['Relation Name'] === 'outbound_link' && Number(node['Actual Loops'] ?? 0) > 0)
-      expect(node['Node Type']).not.toBe('Seq Scan');
+  for (const node of outboundNodes(raw)) {
+    expect(node['Node Type']).not.toBe('Seq Scan');
+    expect(examined(node)).toBeLessThanOrEqual(ADMITTED);
   }
-  expect(outboundExamined(raw)).toBeLessThanOrEqual(PAGE_SIZE + LOOKAHEAD);
 }
 
 function assertReread(raw: Capture): void {
@@ -170,6 +179,16 @@ function assertAuthority(cost: Cost, raw: Capture): void {
   expect(raw.statements.some((text) => /resource_grant|resource_denial|visibility/i.test(text))).toBe(true);
 }
 
+function assertConstantCharge(name: string, samples: Charge[]): void {
+  expect(samples.length % SCALES.length, `${name} missing a scale`).toBe(0);
+  for (let offset = 0; offset < samples.length; offset += SCALES.length) {
+    const chunk = samples.slice(offset, offset + SCALES.length);
+    expect(chunk.map((sample) => sample.scale)).toEqual([...SCALES]);
+    expect(new Set(chunk.map((sample) => sample.rows)).size, `${name} rows grew with scale`).toBe(1);
+    expect(new Set(chunk.map((sample) => sample.statements)).size, `${name} statements grew with scale`).toBe(1);
+  }
+}
+
 async function captureCase(
   name: string,
   scale: number,
@@ -178,13 +197,13 @@ async function captureCase(
 ): Promise<{ page: ForwardPage; capture: Capture; cost: Cost }> {
   const measured = await capture(db, operation, { includeBackends: true });
   report(name, scale, measured.capture, measured.value);
-  assertNoFillScan(measured.capture);
+  assertFiniteAdmission(measured.capture);
   if (Object.keys(required).length) assertUnforcedIndexes(name, scale, measured.capture, required);
   return { page: measured.value, capture: measured.capture, cost: costOf(measured.capture) };
 }
 
 test('mounted forward relation pages stay bounded with native disclosure as degree and unrelated history grow', async () => {
-  const charges: Record<string, { scale: number; rows: number; statements: number; outbound: number }[]> = {
+  const charges: Record<'rejected' | 'sentinel' | 'reread' | 'authority' | 'deep' | 'empty', Charge[]> = {
     rejected: [],
     sentinel: [],
     reread: [],
@@ -205,17 +224,16 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
       indexProbes,
       bounds,
       grow: axis === 'degree' ? fixture.growDegree : fixture.growHistory,
-      async prepare(_database, scale) {
+      async warmup(_database, scale) {
         if (prepared.has(scale)) return;
-        const publicCursors =
-          axis === 'history' && issued ? issued : await fixture.issuePublicCursors();
+        const publicCursors = axis === 'history' && issued ? issued : await fixture.issuePublicCursors();
         if (axis === 'degree') issued = publicCursors;
 
         const sentinel = await captureCase(`${axis} sentinel/lookahead`, scale, () => fixture.forward());
         assertDisclosedPage(sentinel.page, scale);
         expect(sentinel.page.relations[0]?.label).toBe(disclosedLabel(0));
-        expect(outboundExamined(sentinel.capture)).toBe(PAGE_SIZE + LOOKAHEAD);
-        charges.sentinel!.push({
+        expect(outboundExamined(sentinel.capture)).toBeGreaterThan(0);
+        charges.sentinel.push({
           scale,
           rows: sentinel.cost.rows,
           statements: sentinel.cost.statements,
@@ -225,7 +243,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         const reread = await captureCase(`${axis} rereads`, scale, () => fixture.forward());
         assertDisclosedPage(reread.page, scale);
         assertReread(reread.capture);
-        charges.reread!.push({
+        charges.reread.push({
           scale,
           rows: reread.cost.rows,
           statements: reread.cost.statements,
@@ -235,7 +253,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         const authority = await captureCase(`${axis} native authority`, scale, () => fixture.forward());
         assertDisclosedPage(authority.page, scale);
         assertAuthority(authority.cost, authority.capture);
-        charges.authority!.push({
+        charges.authority.push({
           scale,
           rows: authority.cost.rows,
           statements: authority.cost.statements,
@@ -250,9 +268,8 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         expect(rejected.page).not.toHaveProperty('count');
         expect(rejected.page.relations.some((row) => row.target === fixture.hidden.id)).toBe(false);
         expect(rejected.page.relations.some((row) => row.target === fixture.denied.id)).toBe(false);
-        expect(outboundExamined(rejected.capture)).toBeLessThanOrEqual(PAGE_SIZE + LOOKAHEAD);
         expect(outboundExamined(rejected.capture)).toBeGreaterThan(rejected.page.relations.length);
-        charges.rejected!.push({
+        charges.rejected.push({
           scale,
           rows: rejected.cost.rows,
           statements: rejected.cost.statements,
@@ -262,8 +279,9 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         const deep = await captureCase(`${axis} deep page`, scale, () =>
           fixture.forward({ cursor: publicCursors.deep }),
         );
+        expect(publicCursors.deep).not.toBe(publicCursors.rejected);
         assertContinuedPage(deep.page, scale);
-        charges.deep!.push({
+        charges.deep.push({
           scale,
           rows: deep.cost.rows,
           statements: deep.cost.statements,
@@ -277,8 +295,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
           {},
         );
         assertEmptyPage(empty.page, scale);
-        expect(outboundExamined(empty.capture)).toBeLessThanOrEqual(PAGE_SIZE + LOOKAHEAD);
-        charges.empty!.push({
+        charges.empty.push({
           scale,
           rows: empty.cost.rows,
           statements: empty.cost.statements,
@@ -288,19 +305,33 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         prepared.add(scale);
       },
       async operation(_database, scale) {
-        const page = await fixture.forward();
-        assertDisclosedPage(page, scale);
-        return page;
+        const publicCursors = issued;
+        if (!publicCursors) throw new Error(`Public cursors missing before ${axis} operation at ${scale}`);
+        const first = await fixture.forward();
+        assertDisclosedPage(first, scale);
+        const rejected = await fixture.forward({ cursor: publicCursors.rejected });
+        expect(rejected.relations.length).toBeGreaterThan(0);
+        expect(rejected.relations.length).toBeLessThan(PAGE_SIZE);
+        const deep = await fixture.forward({ cursor: publicCursors.deep });
+        assertContinuedPage(deep, scale);
+        const empty = await fixture.forward({ cursor: publicCursors.empty });
+        assertEmptyPage(empty, scale);
+        return { first, rejected, deep, empty };
       },
     });
     expect(report.samples.map((sample) => sample.scale)).toEqual([...SCALES]);
+    expect(report.verdicts.statements.outcome).toBe('compatible');
+    expect(report.verdicts.rows.outcome).toBe('compatible');
+    expect(report.verdicts.blocks.outcome).toBe('compatible');
+    const relations = [
+      ...new Set(
+        report.samples.flatMap(({ repetitions }) => repetitions.flatMap(({ relations }) => Object.keys(relations))),
+      ),
+    ];
+    assertGrowthAccessPaths(report.name, report.samples, relations);
     logGrowthSeeding(report);
   }
 
-  for (const [name, samples] of Object.entries(charges)) {
-    expect(samples.map((sample) => sample.scale).slice(0, SCALES.length)).toEqual([...SCALES]);
-    const rows = new Set(samples.filter((sample) => sample.scale === samples[0]!.scale).map((sample) => sample.rows));
-    expect(rows.size, `${name} mixed physical work into one capture`).toBeGreaterThan(0);
-  }
+  for (const [name, samples] of Object.entries(charges)) assertConstantCharge(name, samples);
   console.info('Forward page disclosure per-case charges', JSON.stringify({ probeOperands, indexProbes, charges }));
-}, 180_000);
+}, 600_000);

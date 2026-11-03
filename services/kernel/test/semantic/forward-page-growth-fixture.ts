@@ -367,25 +367,25 @@ export async function forwardPageGrowthFixture(db: GrowthDatabase) {
   async function issuePublicCursors(): Promise<PublicCursors> {
     const degree = matchingDegree;
     if (degree < PAGE_SIZE) throw new Error('Public cursors require a full first page of matching degree');
-    const deepAt = Math.floor(degree / 2);
     const first = await forward();
     if (first.relations.length !== PAGE_SIZE)
       throw new Error(`First page did not deliver ${PAGE_SIZE} at degree ${degree}`);
     if (!first.next) throw new Error(`First page omitted its public continuation at degree ${degree}`);
     const rejected = first.next;
+    const deepAt = Math.max(PAGE_SIZE + 1, Math.floor(degree / 2));
     let cursor: string | undefined = first.next;
     let seen = first.relations.length;
     let deep: string | undefined;
     let empty: string | undefined;
-    for (let step = 0; step < 200 && cursor; step++) {
+    for (let step = 0; step < 512 && cursor; step++) {
       const used = cursor;
       const page = await forward({ cursor: used });
-      if (page.relations.length === 0) {
+      if (page.relations.length === 0 && page.next === null) {
         empty = used;
         break;
       }
       seen += page.relations.length;
-      if (deep === undefined && seen >= deepAt) deep = used;
+      if (deep === undefined && used !== rejected && seen >= deepAt) deep = used;
       cursor = page.next ?? undefined;
     }
     if (!deep) throw new Error(`No public deep cursor at degree ${degree}`);
