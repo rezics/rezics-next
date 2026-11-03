@@ -15,7 +15,7 @@ export function RealmMembersPanel({ realmId }: { realmId: string }) {
   const locale = getLocale();
   const { state, subject, csrfToken } = session;
   const caller = useMemo(
-    () => source.capture({ state, subject, csrfToken }, () => getLocale() === locale),
+    () => source.capture({ state, subject: subject ?? null, csrfToken }, () => getLocale() === locale),
     [source, revision, locale, state, subject, csrfToken],
   );
   const previous = useRef(caller);
