@@ -64,9 +64,9 @@ export const SignedOut: Story = {
   name: 'Signed Out',
   play: async (context) => {
     await labelsReady(context);
-    const main = within(within(context.canvasElement).getByRole('main'));
-    await expect(await main.findByText(m.library_sign_in(), { exact: true })).toBeVisible();
-    expect(main.getAllByText(m.library_sign_in(), { exact: true })).toHaveLength(1);
+    const main = within(context.canvasElement).getByRole('main');
+    await expect(await within(main).findByText(m.library_sign_in(), { exact: true })).toBeVisible();
+    expect(within(main).getAllByText(m.library_sign_in(), { exact: true })).toHaveLength(1);
     await expect(within(main).getByRole('link', { name: m.library_sign_in() })).toHaveAttribute(
       'href',
       '/auth/sign-in?return_to=%2Fen%2Flibrary%2Flabels',
