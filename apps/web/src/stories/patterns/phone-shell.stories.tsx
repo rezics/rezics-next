@@ -488,11 +488,7 @@ export const CreationSheet: Story = {
     if (phone()) {
       await userEvent.click(await within(context.canvasElement).findByRole('button', { name: m.shell_create() }));
       const sheet = within(await within(document.body).findByRole('dialog', { name: m.shell_create() }));
-      const collection = await sheet.findByRole(
-        'link',
-        { name: m.library_collection_new() },
-        { timeout: 5_000 },
-      );
+      const collection = await sheet.findByRole('link', { name: m.library_collection_new() }, { timeout: 5_000 });
       await expect(collection).toHaveAttribute('href', `/${getLocale()}/collections/new`);
     }
   },
