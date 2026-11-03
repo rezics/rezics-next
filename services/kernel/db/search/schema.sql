@@ -1304,14 +1304,14 @@ CREATE TABLE search.review_discovery_receiving (
     claim_until timestamp with time zone,
     stage jsonb,
     CONSTRAINT review_discovery_receiving_acknowledged_check CHECK ((acknowledged >= 0)),
-    CONSTRAINT review_discovery_receiving_check CHECK (((claim IS NULL) = (claim_until IS NULL))),
+    CONSTRAINT review_discovery_receiving_check CHECK ((through >= acknowledged)),
+    CONSTRAINT review_discovery_receiving_check1 CHECK (((claim IS NULL) = (claim_until IS NULL))),
     CONSTRAINT review_discovery_receiving_completed_cut_check CHECK ((completed_cut >= 0)),
     CONSTRAINT review_discovery_receiving_native_position_check CHECK ((native_position >= 0)),
     CONSTRAINT review_discovery_receiving_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT review_discovery_receiving_requested_check CHECK ((requested >= 0)),
     CONSTRAINT review_discovery_receiving_stage_check CHECK ((octet_length((stage)::text) <= 2097152)),
-    CONSTRAINT review_discovery_receiving_status_check CHECK ((status = ANY (ARRAY['preparing'::text, 'ready'::text, 'unavailable'::text]))),
-    CONSTRAINT review_discovery_receiving_through_check CHECK ((through >= acknowledged))
+    CONSTRAINT review_discovery_receiving_status_check CHECK ((status = ANY (ARRAY['preparing'::text, 'ready'::text, 'unavailable'::text])))
 );
 
 
