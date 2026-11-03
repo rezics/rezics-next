@@ -30,8 +30,11 @@ export type {
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
 
-
 type Routes = KernelType['~Routes']['v1'];
+type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['labels']['get']['response'][200];
+
+export type QuestionLabel = QuestionLabelHistoryResponse['labels'][number];
+export type QuestionLabelHistory = QuestionLabelHistoryResponse;
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }
