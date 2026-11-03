@@ -38,11 +38,7 @@ async function body(response: Response, status = 200) {
   return response.json();
 }
 
-async function countedVoteResult(
-  reader: OwnCountedVoteReader,
-  request: OwnCountedVoteRequest,
-  deadline: number,
-) {
+async function countedVoteResult(reader: OwnCountedVoteReader, request: OwnCountedVoteRequest, deadline: number) {
   const prepared = await reader.prepare(request, deadline);
   if (prepared.status !== 'prepared') return prepared;
   const read = await withReadTransaction(
@@ -53,11 +49,7 @@ async function countedVoteResult(
   return reader.finish(request, prepared.preparation, read, deadline);
 }
 
-async function prepareCountedVoteRead(
-  reader: OwnCountedVoteReader,
-  request: OwnCountedVoteRequest,
-  deadline: number,
-) {
+async function prepareCountedVoteRead(reader: OwnCountedVoteReader, request: OwnCountedVoteRequest, deadline: number) {
   const prepared = await reader.prepare(request, deadline);
   if (prepared.status !== 'prepared') return { prepared, read: null };
   const read = await withReadTransaction(
