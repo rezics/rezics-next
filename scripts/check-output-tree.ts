@@ -18,6 +18,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { CHECK_HOST_NAME_PATTERN } from './check-placement.ts';
 import { processIdentity, sameProcess, validateRunnerIdentity, type RunnerIdentity } from './check-custody.ts';
 import { parseArtifactManifest } from './check-artifacts.ts';
 import { recognizeCheckHostRun } from './check-placement.ts';
@@ -65,15 +66,15 @@ export function outputTreeProfile(profile: string): typeof KERNEL_CLIENT_OUTPUT 
 export function hasOutputTreeReturn(paths: readonly string[]): boolean {
   return paths.includes(KERNEL_CLIENT_OUTPUT.transport);
 }
-/** The named transport declaration also owns/excludes precisely its generated destination. */
+/** Retain declarations as compiler inputs; exclude only transport and restoration staging. */
 export function outputTreeInputExclusions(paths: readonly string[]): string[] {
-  return [...paths, ...(hasOutputTreeReturn(paths) ? [KERNEL_CLIENT_OUTPUT.root, STAGING] : [])];
+  return [...paths, ...(hasOutputTreeReturn(paths) ? [STAGING] : [])];
 }
 function fail(message: string): never {
   throw new Error(`check-output-tree: ${message}`);
 }
 function binding(value: OutputTreeBinding): void {
-  if (!['a', 'b'].includes(value.host) || !RUN.test(value.run) || !HASH.test(value.sourceSha256))
+  if (!new RegExp(CHECK_HOST_NAME_PATTERN).test(value.host) || !RUN.test(value.run) || !HASH.test(value.sourceSha256))
     fail('invalid physical source binding');
 }
 function keys(value: unknown, names: string): asserts value is Record<string, unknown> {
@@ -495,7 +496,11 @@ export async function withKernelClientOutput(
   if (source.run !== recognized.runId) fail('prepared source receipt is stale');
   const transport = safeOutputTreePath(root, KERNEL_CLIENT_OUTPUT.transport, true);
   if (existsSync(transport)) rmSync(transport);
-  removeSafeTree(root, KERNEL_CLIENT_OUTPUT.root);
+  // The compiler imports the retained client declarations. The emitter replaces
+  // this entire directory; its marker prevents publishing untouched compiler inputs.
+  const generationMarker = `${KERNEL_CLIENT_OUTPUT.root}/.generation-pending`;
+  if (existsSync(safeOutputTreePath(root, KERNEL_CLIENT_OUTPUT.root)))
+    atomic(root, generationMarker, Buffer.from(source.run));
   const stage = process.env.REZICS_CHECK_ARTIFACTS_DIR;
   const physicalRunId = process.env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
   const artifacts = stage && physicalRunId ? await import('./check-artifacts.ts') : undefined;
@@ -508,6 +513,8 @@ export async function withKernelClientOutput(
   try {
     code = await command();
     if (code !== 0) return code; // failed output can never become a successful tree receipt
+    if (existsSync(safeOutputTreePath(root, generationMarker)))
+      fail('client generation did not replace previous declarations');
     const bytes = encodeOutputTree(root, source);
     atomic(root, KERNEL_CLIENT_OUTPUT.transport, bytes);
     return code;
