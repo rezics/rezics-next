@@ -24,6 +24,9 @@ import type { Operation } from './operation-contract.ts';
 import type { DocumentMediaPage } from './media-presentation.ts';
 import type { OwnDraftEntry } from './own-drafts.ts';
 import { RealmPresentationImageSchema } from './realm-media.ts';
+import { FeedAuthorSchema } from './feed-contract.ts';
+import { FeedParentContextSchema } from './feed-context-schema.ts';
+import type { SubjectThreadCard, SubjectThreadCardEntry } from './subject-threads-cards.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
 type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
@@ -881,9 +884,182 @@ export const SubjectThreadsQuerySchema = t.Object(
   },
   closed,
 );
+const subjectThreadCardAuthor = t.Union([
+  t.Object({ state: t.Literal('current'), identity: FeedAuthorSchema }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+  t.Object({ state: t.Literal('withheld') }, closed),
+]);
+const subjectThreadCardOperation = t.Object(
+  {
+    action: t.String(),
+    operationId: t.String(),
+    state: t.Union([
+      t.Literal('available'),
+      t.Literal('sign_in_required'),
+      t.Literal('denied'),
+      t.Literal('withheld'),
+      t.Literal('unavailable'),
+      t.Literal('not_applicable'),
+    ]),
+  },
+  closed,
+);
+const subjectThreadCardActionReference = t.Object(
+  {
+    type: t.Union([t.Literal('content.thread'), t.Literal('content.post')]),
+    id: ContentIdSchema,
+    sourceRevisionId: t.Optional(ContentIdSchema),
+    state: t.Union([t.Literal('current'), t.Literal('withheld')]),
+    operations: t.Array(subjectThreadCardOperation, { maxItems: 256 }),
+  },
+  closed,
+);
+const subjectThreadCardImage = t.Object(
+  {
+    id: ContentIdSchema,
+    containerId: ContentIdSchema,
+    digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+    width: t.Integer({ minimum: 1 }),
+    height: t.Integer({ minimum: 1 }),
+    variants: t.Array(
+      t.Object(
+        {
+          format: t.Union([t.Literal('avif'), t.Literal('webp')]),
+          width: t.Integer({ minimum: 1, maximum: 2560 }),
+          height: t.Integer({ minimum: 1 }),
+        },
+        closed,
+      ),
+      { minItems: 1, maxItems: 12 },
+    ),
+    placeholder: t.Union([
+      t.Object(
+        { thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) },
+        closed,
+      ),
+      t.Null(),
+    ]),
+    focalPoint: t.Union([
+      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+      t.Null(),
+    ]),
+    credit: t.Union([CoverCreditSchema, t.Null()]),
+  },
+  closed,
+);
+export const SubjectThreadCardSchema = t.Unsafe<SubjectThreadCard>(
+  t.Object(
+    {
+      state: t.Union([t.Literal('current'), t.Literal('erased')]),
+      authors: t.Object({ thread: subjectThreadCardAuthor, openingPost: subjectThreadCardAuthor }, closed),
+      presentation: t.Union([
+        t.Object(
+          { state: t.Literal('current'), language: t.Union([t.String(), t.Null()]), spoiler: t.Boolean() },
+          closed,
+        ),
+        t.Object({ state: t.Literal('withheld') }, closed),
+      ]),
+      media: t.Object(
+        {
+          state: t.Union([
+            t.Literal('none'),
+            t.Literal('available'),
+            t.Literal('unavailable'),
+            t.Literal('withheld'),
+          ]),
+          images: t.Array(subjectThreadCardImage, { maxItems: 32 }),
+        },
+        closed,
+      ),
+      comments: t.Union([
+        t.Object(
+          {
+            state: t.Literal('current'),
+            cohort: t.Literal('public'),
+            count: t.Object(
+              { kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]), value: t.Integer({ minimum: 0 }) },
+              closed,
+            ),
+            lastActivityAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+            source: t.Object(
+              { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[0-9]+$' }) },
+              closed,
+            ),
+          },
+          closed,
+        ),
+        t.Object({ state: t.Union([t.Literal('unavailable'), t.Literal('withheld')]) }, closed),
+      ]),
+      actions: t.Object(
+        {
+          state: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+          retryable: t.Boolean(),
+          references: t.Array(subjectThreadCardActionReference, { maxItems: 2 }),
+        },
+        closed,
+      ),
+      reply: t.Object(
+        {
+          state: t.Union([
+            t.Literal('available'),
+            t.Literal('sign_in_required'),
+            t.Literal('denied'),
+            t.Literal('withheld'),
+            t.Literal('unavailable'),
+          ]),
+        },
+        closed,
+      ),
+      watch: t.Union([
+        t.Object({ state: t.Literal('current'), watching: t.Boolean() }, closed),
+        t.Object({ state: t.Literal('sign_in_required') }, closed),
+        t.Object({ state: t.Literal('unavailable'), retryable: t.Literal(true) }, closed),
+        t.Object({ state: t.Literal('withheld') }, closed),
+      ]),
+      parentContext: t.Optional(FeedParentContextSchema),
+      currentness: t.Object(
+        {
+          source: t.Literal('current'),
+          place: t.Literal('current'),
+          authors: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+          reactions: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+          actions: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+          watch: t.Union([
+            t.Literal('current'),
+            t.Literal('sign_in_required'),
+            t.Literal('unavailable'),
+            t.Literal('not_applicable'),
+          ]),
+          media: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+          comments: t.Union([t.Literal('current'), t.Literal('unavailable'), t.Literal('not_applicable')]),
+        },
+        closed,
+      ),
+    },
+    closed,
+  ),
+);
+const SubjectThreadEntrySchema = t.Unsafe<SubjectThreadCardEntry>(
+  t.Object(
+    {
+      ...metadata,
+      ...references,
+      authorId: ContentIdSchema,
+      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+      title: t.Union([t.String(), t.Null()]),
+      availability,
+      firstPost: PostEntrySchema,
+      reviewContext: t.Optional(FeedReviewContextSchema),
+      ...viewerReaction,
+      ...reactions,
+      card: SubjectThreadCardSchema,
+    },
+    closed,
+  ),
+);
 export const SubjectThreadsResponseSchema = t.Object(
   {
-    threads: t.Array(ThreadViewSchema, { maxItems: 20 }),
+    threads: t.Array(SubjectThreadEntrySchema, { maxItems: 20 }),
     next: t.Union([t.String(), t.Null()]),
     reactionsAsOf: reactionFreshness,
     context: t.Object(

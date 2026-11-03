@@ -8,11 +8,15 @@ import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
-import { ContentNotFoundError, readSubjectThread, type ContentReadDependencies, type ThreadView } from './reads.ts';
+import { ContentNotFoundError, readSubjectThread, type ThreadView } from './reads.ts';
 import page from './page-subject-threads.sql';
 import { prepareSubjectThreadContext, type SubjectThreadContext } from './subject-threads-context.ts';
 import { projectSubjectThreadReactions, type SubjectThreadWithReactions } from './subject-threads-reactions.ts';
-import { prepareFeedContentContext } from './feed-context.ts';
+import {
+  projectSubjectThreadCards,
+  type SubjectThreadCardDependencies,
+  type SubjectThreadCardEntry,
+} from './subject-threads-cards.ts';
 import type { ReactionCountFreshness } from './reads.ts';
 
 export type SubjectThreadKind = 'discussion' | 'review';
@@ -24,13 +28,13 @@ export type SubjectThreadPageInput = {
 };
 export type SubjectThreadPage = {
   context: SubjectThreadContext;
-  entries: readonly SubjectThreadWithReactions[];
+  entries: readonly SubjectThreadCardEntry[];
   reactionsAsOf: ReactionCountFreshness | null;
   nextCursor: string | null;
   anchor: AnchoredPosition;
   anchors: readonly AnchoredPosition[];
 };
-export type SubjectThreadDependencies = ContentReadDependencies & {
+export type SubjectThreadDependencies = SubjectThreadCardDependencies & {
   /** Trusted service configuration, independent of authentication's wall clock. */
   cursorNow?: () => number;
 };
@@ -187,35 +191,19 @@ export async function listSubjectThreads(
 
   const hasMore = scanned < candidates.candidates.length || candidates.candidates.length === limit * SCAN_FACTOR;
   const projected = await projectSubjectThreadReactions(dependencies, subjectId, input.place, entries, context);
-  const composition = await prepareFeedContentContext(
+  const composed = await projectSubjectThreadCards(
     dependencies,
-    projected.entries.map((thread) => ({ key: thread.id, threadId: thread.id, initialThread: thread })),
+    subjectId,
+    input.place,
+    projected.entries,
     context,
-    [],
-    {
-      observeThreads: (threadIds, current) =>
-        Promise.all(
-          threadIds.map(
-            async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, input.place, current),
-          ),
-        ),
-    },
+    projected.reactionsAsOf,
   );
-  const composed = await composition.finish();
-  const composedEntries = projected.entries.flatMap((thread) => {
-    const context = composed.contexts.get(thread.id);
-    if (!context?.thread) return [];
-    const selected = Object.fromEntries(
-      Object.entries(thread).filter(([key]) => key !== 'reactions' && key !== 'viewerReaction'),
-    ) as ThreadView;
-    if (JSON.stringify(selected) !== JSON.stringify(context.thread)) throw new ProblemError('dependency_unavailable');
-    return [{ ...thread, ...(context.reviewContext ? { reviewContext: context.reviewContext } : {}) }];
-  });
   anchors.push(...projected.anchors, ...composed.anchors);
   return {
     context: await pageContext.finish(),
-    entries: composedEntries,
-    reactionsAsOf: projected.reactionsAsOf,
+    entries: composed.entries,
+    reactionsAsOf: composed.reactionsAsOf,
     anchor: candidates.anchor,
     anchors,
     nextCursor:

@@ -185,6 +185,23 @@ test('subject thread pages sort by activity, bind signed cursors, and skip hidde
     kind: 'discussion',
   });
   expect(first.body.threads.map((value: { id: string }) => value.id)).toEqual([newest]);
+  const card = first.body.threads[0].card;
+  expect(card).toMatchObject({
+    state: 'current',
+    presentation: { state: 'current', language: null, spoiler: false },
+    media: { state: 'none', images: [] },
+    parentContext: { kind: 'opening' },
+    currentness: { source: 'current', place: 'current' },
+  });
+  expect(card.authors.thread.state).toMatch(/^(current|unavailable|withheld)$/);
+  expect(card.actions.references).toBeArray();
+  expect(card.reply.state).toMatch(/^(available|sign_in_required|denied|withheld|unavailable)$/);
+  expect(card.watch.state).toMatch(/^(current|sign_in_required|unavailable|withheld)$/);
+  expect(card.comments.state).toMatch(/^(current|unavailable|withheld)$/);
+  if (card.comments.state === 'current') {
+    expect(card.comments.count.kind).toMatch(/^(exact|lower-bound)$/);
+    expect(card.comments.source.position).toMatch(/^\d+$/);
+  }
   expect(first.body.next).toEqual(expect.any(String));
   expect(first.response.headers.get(SESSION_HEADER)).toEqual(expect.any(String));
 

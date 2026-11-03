@@ -1653,63 +1653,36 @@ the count watermark does not represent source or viewer-slot atomicity.
 Decision: reuse Home's reaction assembly for original thread keys, preserve the raw frontier on final concealment,
 and retry changed readable sources before returning hydrated entries.
 
-The shared current-thread card envelope factory/finish remains separate from Home's selected review/parent context
-projector; the installed reading-page composer is a bounded reply page, not either card factory. Author/media
-presentation, contribution/comment disclosure and applicable action advice remain part of the continuation; native
-recorded citations remain unchanged. Derived OpenAPI/client publication and the Web binding review remain with the
-controller and existing Subject interface owner. No rendered Web or complete card acceptance is claimed.
+Subject cards now compose the shared selected-card final observation, Home's original-parent and exact review-context
+projector, current public conversation activity, and bounded authorized media presentations. The installed factory
+is `projectSubjectThreadCards(dependencies, subjectId, placeId, selected, context, reactionsAsOf)` in
+`subject-threads-cards.ts`; it returns card entries, source anchors, and the retained reaction watermark. The
+existing `subject_threads.list` operation and its `threads`, `next`, `context`, and `reactionsAsOf` envelope remain
+stable. Each retained thread adds a closed `card` object with thread/opening-post author identity, presentation,
+media, public comment coverage, mounted action references, reply/watch state, immediate parent context, and
+per-field currentness. Exact stored review citations remain on the entry and are not recomputed from current rating
+state. Erased or withheld sources do not gain author, media, action, comment, or rating disclosure. Missing media
+does not trigger a refill, and unavailable activity never becomes a zero count.
+
+Decision: preserve the Subject page envelope, attach closed card disclosures to each retained thread, and expose
+only mounted selected-card action preconditions; leave creation advice absent because this endpoint has no concrete
+creation target.
+
+Examples include a populated entry with `card.presentation.state: 'current'`, `card.parentContext.kind: 'opening'`,
+`card.media.state: 'none'`, and `card.comments.state: 'unavailable'` when public coverage is not installed; a covered
+empty conversation instead has an exact zero and its source witness. An empty page remains `{threads:[],next:null}`
+with its required context. A concealed subject remains the ordinary 404 without the envelope. Failed final
+observations return `dependency_unavailable` and preserve the input cursor for retry. A retired or cleared recorded
+review citation is withheld by the existing exact citation projector; it cannot be replaced with a current score.
+The controller retains derived OpenAPI/client generation and deferred independent acceptance. The Web owner still
+needs the populated, empty, concealed and unavailable examples plus a phone/desktop consumer review and one real
+action/recovery after installation; no rendered Web completion is claimed here.
 
 ### Cost: listSubjectThreads context
 
-- Touches: one label-disclosure preparation round, then two Subject observations, each sharing one released
-  repeatable-read snapshot between the Semantic reference and current label reader. Each observation prepares
-  ordinary Subject Access outside that snapshot and evaluates it inside; the label reader additionally evaluates
-  its prepared native Subject check. For a Realm selection, two separate ordinary Realm reads include current
-  Realm/Space binding, membership/ban and native Access work. Global needs neither Realm read. Add the existing
-  selection partition/Subject Access snapshot and up to 80 raw candidate ordinary disclosures, stopping at 20
-  outputs. Reaction hydration then repeats at most 20 of those ordinary disclosures. Every disclosure retains source chains, Board/place/Realm checks, citation/history and final authority
-  costs from its native reader. No connection spans the Subject, Realm and candidate phases. Denied preparation
-  stops selection; final failure withholds the whole page. Transaction controls, pool releases and nested Access
-  preparation/executor/fence work remain charged even on empty or denied branches; a retry repeats these phases.
-- Bound: the selection prefix is `(route,subject_id,place_id,kind,last_activity_at DESC,thread_id ASC)`;
-  candidates use exact route/identity source probes, without a second index, refill, totals or reordered output.
-  Context adds one Subject and at most one Realm. Subject reference uses route/id plus the latest redirect seek;
-  current labels include the native current-term view's intermediate rows, language aggregation and ordering.
-  Its examined/history work must not be inferred from one chosen label. Realm title admission is 1024 Unicode
-  code points, at most 4096 UTF-8 bytes or 6144 JSON-escaped bytes before serialization copies; ordinary Realm
-  reads also retain summary/presentation bytes not returned in context. Chosen-label bytes and all-label
-  intermediate rows inherit Semantic admission, rather than a fabricated page byte ceiling. Retained memory
-  includes both initial/final context observations and up to 20 retained native bodies of at most 2 MiB each, their parsed
-  documents and wire serialization, plus native citation/context/identity authority intermediates. The final recheck
-  holds one additional native body and both JSON witness strings transiently. No complete
-  nested byte or examined-work ceiling is claimed for the pending shared card projection.
-- Reaction addition: let O <= 20 be selected outputs and P <= O their represented native partitions. Home invokes
-  one `reaction-count-page.sql` statement per represented partition, using the physical
-  `reaction_total_pkey (route,target_id,kind)` prefix, with at most seven rows per target. It then invokes one
-  `reaction-viewer.sql` statement for an account viewer, using `reaction_pkey (route,actor_account_id,target_id)`
-  with at most one row per target; anonymous and empty pages omit this phase. These statements open and release
-  separate checkouts and add no transaction controls. Up to `7O + O` reaction rows, O requested-key intermediates
-  per batch, deduplication maps and O temporary Home summary objects are retained; none contains document bodies.
-  Binding bytes include UUID target and integer route arrays for counts and one UUID array for viewer targets, plus
-  fixed partition/viewer keys. Counts are safe integers, kind names are the seven native literals, viewer state
-  is one literal or null, and freshness is an epoch plus a decimal position. This bounds reaction wire and
-  intermediate bytes linearly in O, independently of history and total viewers.
-- The added work is `HomeReactions(O,P,viewer) + sum(D(t), selected t)`, where D is the complete ordinary native
-  Subject-thread disclosure including source/body, Board, Realm/Space, citation and Access preparation/execution
-  and fences. This is at most 100 native disclosures including initial raw80, not 100 distinct candidates.
-  Changed-source comparison serializes each initial/final native value once (native body <= 2 MiB, up to six
-  JSON bytes per source byte, plus native metadata/citations); the response serializes each retained body once
-  more. Count maps and projected summaries are O(O); source witness comparison adds O(max body) transient memory
-  to the retained O(O * body) page. Required-context failure still pays preceding hydration and final disclosures.
-  Empty pages do neither reaction SQL nor source rechecks; denied preparation stops before them; sparse, stale
-  and continued pages pay only their selected O, with no refill; retries repeat the whole request. Nested D and
-  current-term/label, authority, byte and all-pool terms still require their complete owner derivation and review
-  before a numerical end-to-end ceiling is adopted with the remaining card producers.
-- Growth check: focused HTTP/context tests cover Global empty/populated/continued identity, readable public and
-  protected Realms, anonymous denial, current Realm revision change/retry and Subject withdrawal. Three-scale
-  selection/history/authority measurement, all-pool runner accounting and full withheld/failed card outcomes
-  remain deferred to integration and the card-composition continuation. Performance must review the current-term,
-  nested Access/citation/history and serialization terms before a complete numerical bound is adopted.
+- Touches: selection performs one released Subject Access snapshot and a bounded `(route,subject_id,place_id,kind,last_activity_at DESC,thread_id ASC)` prefix read. Subject context prepares and finalizes one Semantic reference/current-label observation and, for Realm places, two separate ordinary Realm reads with Realm/Space binding, membership/ban and native Access work. Candidate disclosure reads at most 80 raw keys until it retains 20, then the existing reaction seam invokes Home's count projection once per represented partition and its viewer-slot projection once for an account; it repeats at most 20 ordinary Subject-thread disclosures. Card composition adds the shared selected-card batch and final source/author/reaction/action/watch observations; Home's bounded feed-context factory reads the exact opening post, immediate parent, identity summaries and recorded question/revision/scale/units citation, then rechecks selected thread/post/parent and owner observations. Conversation activity selects and confirms at most 20 keys in one released read-only repeatable-read transaction per represented partition per phase. Media presents only IDs on each available opening post, in chunks of at most 32; each media key performs exact native enumeration and two ordinary source/authority validations, including media Access, container/ancestor/Board, Realm/Space and rights/credit checks. Each phase releases its checkout before opening a foreign home or preparing/evaluating Access; transaction controls, pool releases, nested Access executor/fence work, retries and the actual Subject, Semantic, Realm, Content, account-discovery, activity, reaction and media runner phases remain charged. Empty, denied, withheld and dependency-failure branches pay their reached work and never turn a failed observation into a successful empty result.
+- Bound: raw scanning is at most 80 candidates, output and all per-card context batches are at most 20, each thread body is bounded by the native 2 MiB body admission, each opening post has at most 32 unique media IDs and the page therefore presents at most 640 media IDs through at most 20 chunks. Feed context admits at most 20 exact keys, up to three authors per key, one immediate parent preview capped at 640 bytes per key, and one exact review question per key; action references are limited to each selected thread and available opening post, with the mounted operation catalogue's existing 256-operation ceiling. Reaction rows remain at most seven count rows and one viewer slot per target. The activity batch selects no protected cohort and returns only current coverage or typed unavailable state. Retained memory includes initial/final selected entries, parsed documents, parent excerpts, author and citation intermediates, reaction/activity maps, image metadata and final serialized entries; repeated source comparisons retain bounded native bodies and JSON witnesses. Semantic redirect/history/current-term rows, label aggregation, ordinary Realm summaries, nested Access materialization and database examined history inherit their owners' physical behavior and have no claimed output-derived ceiling. No total serialized-byte or examined-work ceiling is inferred from Page20/raw80 or the per-image caps.
+- Growth check: worker tests pin populated, empty, concealed, unavailable and same-cursor retry behavior on the real Kernel path. Independent native 256/1024/4096 growth, strict physical-prefix evidence, fixed selected-key/home/byte caps while each unrelated and retained-history axis grows, all-pool runner accounting, concurrent authority changes and uncertain-write/replay outcomes remain deferred to the controller's independent acceptance. The Web owner must review phone and desktop consumers and one real action/recovery using populated, empty, concealed, unavailable and revoked examples after the generated client is installed. No source review, generated declaration, or test fixture claims native, generated and rendered completion together.
 
 The route returns a 404 for an unknown or unreadable subject. Index rows are candidates only: each candidate passes
 the current thread, opening post, board, Realm and Access disclosure checks, and the final snapshot confirms that the
