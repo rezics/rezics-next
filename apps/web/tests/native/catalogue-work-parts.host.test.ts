@@ -44,9 +44,9 @@ async function confirm(page: Page, label: string): Promise<void> {
 }
 
 function requests(path: string, method: string) {
-  return fixture.stack.kernelRequests().filter(
-    (request) => request.method === method && request.url.split('?')[0] === path && !request.fixtureRequest,
-  );
+  return fixture.stack
+    .kernelRequests()
+    .filter((request) => request.method === method && request.url.split('?')[0] === path && !request.fixtureRequest);
 }
 
 type PublicSubject = {
@@ -57,7 +57,8 @@ type PublicSubject = {
         value: { type: string; content?: unknown };
         qualifiers: { property: { id: string }; value: { type: string; content?: unknown } }[];
         references: { parts: { property: { id: string }; value: { type: string; content?: unknown } }[] }[];
-      }[]>;
+      }[]
+    >;
   };
 };
 
@@ -80,7 +81,10 @@ describe('native catalogue work-parts correction', () => {
       await playExpect(page.getByText(m.work_parts_slice(), { exact: false })).toBeVisible();
       const accuracy = fixture.memberStream.count.exact ? m.work_parts_exact() : m.work_parts_at_least();
       await playExpect(
-        page.getByRole('status').filter({ hasText: `${accuracy}: ${fixture.memberStream.count.value}` }).first(),
+        page
+          .getByRole('status')
+          .filter({ hasText: `${accuracy}: ${fixture.memberStream.count.value}` })
+          .first(),
       ).toBeVisible();
       const freshness = page.getByText(m.work_parts_pending(), { exact: true });
       if (fixture.memberStream.caughtUp) await playExpect(freshness).not.toBeVisible();
@@ -151,9 +155,10 @@ describe('native catalogue work-parts correction', () => {
       ]);
       expect(proposal.statement.references).toHaveLength(2);
       expect(proposal.statement.references.map((reference) => reference.parts.length)).toEqual([1, 1]);
-      expect(
-        proposal.statement.references.map((reference) => reference.parts[0]?.property.id),
-      ).toEqual(['schema:url', 'schema:url']);
+      expect(proposal.statement.references.map((reference) => reference.parts[0]?.property.id)).toEqual([
+        'schema:url',
+        'schema:url',
+      ]);
       const slotReads = requests(`/v1/subjects/${lastBook.id}/candidates`, 'GET');
       const slotQuery = new URLSearchParams(slotReads.at(-1)?.url.split('?')[1] ?? '');
       expect(slotQuery.get('property')).toBe('wdt:P179');
