@@ -3026,6 +3026,8 @@ test('the workspace upload compresses with zstd and sends only what differs from
 
 test('a fetched staged tree needs only working edits and untracked inputs, with deleted paths removed', () => {
   const directory = workspace();
+  mkdirSync(join(directory, 'src/.temp'), { recursive: true });
+  writeFileSync(join(directory, 'src/.temp/diagnostic.sql'), 'scratch input\n');
   writeFileSync(join(directory, 'src/staged.ts'), 'staged input\n');
   spawnSync('git', ['add', 'src/staged.ts'], { cwd: directory });
   writeFileSync(join(directory, 'src/tracked.ts'), 'working edit\n');
