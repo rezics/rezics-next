@@ -177,9 +177,7 @@ test('Shared Collection items preserve exact occurrence editing and independent 
         })}"]`,
       )!.disabled,
     ).toBe(true);
-    const actionButtons = [
-      ...rows[1]!.querySelectorAll<HTMLElement>('[data-content-item-slot="actions"] [data-slot="button"]'),
-    ];
+    const actionButtons = [...rows[1]!.querySelectorAll<HTMLElement>('[data-content-item-slot="actions"] button')];
     expect(actionButtons).toHaveLength(4);
     const probe = new Window({ url: 'https://rezics.example/en', width: 700 });
     const sheet = probe.document.createElement('style');
@@ -265,7 +263,7 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     subjectProbe.document.head.append(subjectSheet);
     try {
       const button = subjectProbe.document.createElement('button');
-      button.className = subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!.className;
+      button.className = subjects[0]!.querySelector<HTMLElement>('button[aria-haspopup="menu"]')!.className;
       subjectProbe.document.body.append(button);
       assertActionTarget(subjectProbe, button);
     } finally {
