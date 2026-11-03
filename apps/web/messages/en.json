@@ -5069,5 +5069,21 @@
   "library_bulk_add_captured_destination": "Captured destination: {title}",
   "library_saved_queries_heading": "Saved queries",
   "library_saved_queries_empty_page": "No saved queries are on this page.",
-  "library_saved_queries_unavailable": "Saved queries are unavailable."
+  "library_saved_queries_unavailable": "Saved queries are unavailable.",
+  "slow_mode_apply": "Save posting interval",
+  "slow_mode_denied": "You cannot change this board’s posting interval.",
+  "slow_mode_guidance": "This countdown is guidance only and does not post for you.",
+  "slow_mode_interval_label": "Board posting interval: {label}",
+  "slow_mode_interval_off": "Off",
+  "slow_mode_interval_seconds": "{seconds} seconds",
+  "slow_mode_next_at": "Next permitted attempt: {time}",
+  "slow_mode_next_now": "You can try to post now. The board still confirms permission.",
+  "slow_mode_next_unavailable": "When you may post next is unavailable.",
+  "slow_mode_preparing": "Checking when you may post…",
+  "slow_mode_retry": "Try loading the posting interval again",
+  "slow_mode_saved": "Posting interval updated.",
+  "slow_mode_setting_help": "This interval applies to new threads and replies from one account on this board. Edits are not limited. Displayed times are guidance; the board remains authoritative.",
+  "slow_mode_setting_legend": "Board posting interval",
+  "slow_mode_unavailable": "This board’s posting interval is unavailable.",
+  "slow_mode_unknown": "The interval change result is unknown. Retry keeps the original request."
 }

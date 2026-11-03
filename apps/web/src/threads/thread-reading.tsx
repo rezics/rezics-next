@@ -459,6 +459,7 @@ export function ThreadReading({
                 initialKey={composer.current.initialKey}
                 canSubmit={currentPersonal !== undefined}
                 containerId={thread.id}
+                boardId={thread.boardId}
                 parentId={replyTarget.parentId}
                 parents={replyParents}
                 focusRequest={replyTarget.focusRequest}

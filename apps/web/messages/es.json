@@ -5008,5 +5008,21 @@
   "library_bulk_add_captured_destination": "Destino capturado: {title}",
   "library_saved_queries_heading": "Consultas guardadas",
   "library_saved_queries_empty_page": "No hay consultas guardadas en esta página.",
-  "library_saved_queries_unavailable": "Las consultas guardadas no están disponibles."
+  "library_saved_queries_unavailable": "Las consultas guardadas no están disponibles.",
+  "slow_mode_apply": "Guardar intervalo de publicación",
+  "slow_mode_denied": "No puedes cambiar el intervalo de publicación de este tablón.",
+  "slow_mode_guidance": "Esta cuenta atrás es solo una guía y no publica por ti.",
+  "slow_mode_interval_label": "Intervalo de publicación del tablón: {label}",
+  "slow_mode_interval_off": "Desactivado",
+  "slow_mode_interval_seconds": "{seconds} segundos",
+  "slow_mode_next_at": "Próximo intento permitido: {time}",
+  "slow_mode_next_now": "Puedes intentar publicar ahora. El tablón sigue confirmando el permiso.",
+  "slow_mode_next_unavailable": "No está disponible cuándo puedes publicar de nuevo.",
+  "slow_mode_preparing": "Comprobando cuándo puedes publicar…",
+  "slow_mode_retry": "Volver a cargar el intervalo de publicación",
+  "slow_mode_saved": "Intervalo de publicación actualizado.",
+  "slow_mode_setting_help": "Este intervalo se aplica a hilos y respuestas nuevos de una cuenta en este tablón. Las ediciones no están limitadas. Los tiempos mostrados son orientativos; el tablón sigue siendo autoritativo.",
+  "slow_mode_setting_legend": "Intervalo de publicación del tablón",
+  "slow_mode_unavailable": "El intervalo de publicación de este tablón no está disponible.",
+  "slow_mode_unknown": "Se desconoce el resultado del cambio de intervalo. El reintento conserva la solicitud original."
 }

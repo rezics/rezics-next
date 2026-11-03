@@ -69,9 +69,13 @@ independent rather than making shared files or unfinished producer delivery into
   to the mounted visit and never enters public metadata or a public Search index.
 - **Board pins.** Readers recognize pins in the native board order; admitted moderators pin or unpin a currently
   readable thread. The browser does not assemble a second pinned feed or reorder downloaded pages.
-- **Slow mode.** Show the native board posting interval and the caller's next permitted attempt beside writing.
-  An admitted moderator changes that interval. Waiting preserves the draft; a clock reaching the displayed time
-  never proves permission or submits a post automatically.
+- **Slow mode.** Show the native board posting interval (`off`, 30, 60 or 300 seconds) and the caller's next
+  permitted attempt beside new-thread and reply writing. An admitted moderator inspects and changes that interval on
+  the board. Waiting preserves the draft; countdown text is display guidance; Send and Retry stay explicit, so a
+  clock reaching the displayed time never proves permission or submits automatically. Native 429 `Retry-After` is the
+  refusal authority. Content owns policy, eligibility, exemptions and the setting command. Web binds
+  `KernelClient.boards({ id }).slowMode` GET/PUT when generated, and otherwise shows unavailable. Edits, mute/block,
+  penalties and watch stay out of this slice. Details: [board slow mode](../../apps/web/src/threads/slow-mode.md).
 - **Watch.** Start with a signed-in reader's thread watch toggle for in-app thread activity. Watching grants no read
   access; existing preferences and send-time access still govern notices. Board-wide watching is a later extension.
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter

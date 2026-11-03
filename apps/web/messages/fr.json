@@ -5008,5 +5008,21 @@
   "library_bulk_add_captured_destination": "Destination enregistrée : {title}",
   "library_saved_queries_heading": "Requêtes enregistrées",
   "library_saved_queries_empty_page": "Aucune requête enregistrée sur cette page.",
-  "library_saved_queries_unavailable": "Les requêtes enregistrées ne sont pas disponibles."
+  "library_saved_queries_unavailable": "Les requêtes enregistrées ne sont pas disponibles.",
+  "slow_mode_apply": "Enregistrer l’intervalle de publication",
+  "slow_mode_denied": "Vous ne pouvez pas modifier l’intervalle de publication de ce forum.",
+  "slow_mode_guidance": "Ce compte à rebours est indicatif et n’envoie aucun message.",
+  "slow_mode_interval_label": "Intervalle de publication du forum : {label}",
+  "slow_mode_interval_off": "Désactivé",
+  "slow_mode_interval_seconds": "{seconds} secondes",
+  "slow_mode_next_at": "Prochaine tentative autorisée : {time}",
+  "slow_mode_next_now": "Vous pouvez essayer de publier maintenant. Le forum confirme toujours l’autorisation.",
+  "slow_mode_next_unavailable": "Le moment de la prochaine publication autorisée est indisponible.",
+  "slow_mode_preparing": "Vérification du moment où vous pouvez publier…",
+  "slow_mode_retry": "Recharger l’intervalle de publication",
+  "slow_mode_saved": "Intervalle de publication mis à jour.",
+  "slow_mode_setting_help": "Cet intervalle s’applique aux nouveaux sujets et réponses d’un compte sur ce forum. Les modifications ne sont pas limitées. Les horaires affichés sont indicatifs ; le forum reste autoritatif.",
+  "slow_mode_setting_legend": "Intervalle de publication du forum",
+  "slow_mode_unavailable": "L’intervalle de publication de ce forum est indisponible.",
+  "slow_mode_unknown": "Le résultat du changement d’intervalle est inconnu. Un nouvel essai conserve la requête d’origine."
 }

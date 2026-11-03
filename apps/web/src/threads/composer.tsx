@@ -29,6 +29,7 @@ import { ExistingReviewNotice } from './write-prompts';
 import { ReplyIntent, type ReplyCommand } from './reply-context-intent';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from './authoring-departure';
 import { EditConflictRecovery } from './edit-conflict-recovery';
+import { SlowModeEligibility } from './slow-mode';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -997,6 +998,7 @@ function PostComposerContent<T, Context = undefined>({
   return (
     <div className="min-w-0 rounded-xl border border-border/70 bg-card p-5 [container-type:inline-size] [overflow-wrap:anywhere]">
       {replyContext}
+      {boardId ? <SlowModeEligibility boardId={boardId} refusal={failure} /> : null}
       <form id={formId} className="min-w-0 [overflow-wrap:anywhere]" onSubmit={submit}>
         {titleRequired ? (
           <div className="mb-5 min-w-0 space-y-2 [overflow-wrap:anywhere]">

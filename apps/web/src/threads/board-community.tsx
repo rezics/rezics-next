@@ -26,12 +26,14 @@ export function BoardCommunity({
   participation,
   start,
   overflow,
+  postingInterval,
 }: {
   page: CommunityBoardPage;
   sort: BoardSort;
   participation?: ReactNode;
   start?: ReactNode;
   overflow?: ReactNode;
+  postingInterval?: ReactNode;
 }) {
   const aboutHeadingId = useId();
   const rulesHeadingId = useId();
@@ -108,6 +110,7 @@ export function BoardCommunity({
                 <CommunityRules rules={rules} />
               </section>
             ) : null}
+            {postingInterval}
             {avatar?.credit ? <ImageCredit image={avatar} /> : null}
             {banner?.credit ? <ImageCredit image={banner} /> : null}
           </ContentItemFrame>

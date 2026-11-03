@@ -9,6 +9,7 @@ import { boardPageQuery } from '../../threads/thread-queries';
 import { boardSortFromSearch } from '../../threads/board-sort';
 import { BoardCommunity, BoardCommunityMenu, BoardCommunityStatus } from '../../threads/board-community';
 import { BoardParticipation, BoardStartThread } from '../../threads/board-community-actions';
+import { SlowModeSetting } from '../../threads/slow-mode';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import {
   BoardPageCallerHost,
@@ -99,6 +100,7 @@ function BoardPage() {
           }
           start={<BoardStartThread board={currentPage.board} realm={currentPage.realm} returnTo={returnTo} />}
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
+          postingInterval={session === 'signed-in' ? <SlowModeSetting boardId={id} /> : null}
         />
       )}
     </BoardPageCallerHost>

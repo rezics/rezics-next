@@ -5008,5 +5008,21 @@
   "library_bulk_add_captured_destination": "Erfasstes Ziel: {title}",
   "library_saved_queries_heading": "Gespeicherte Abfragen",
   "library_saved_queries_empty_page": "Auf dieser Seite gibt es keine gespeicherten Abfragen.",
-  "library_saved_queries_unavailable": "Gespeicherte Abfragen sind nicht verfügbar."
+  "library_saved_queries_unavailable": "Gespeicherte Abfragen sind nicht verfügbar.",
+  "slow_mode_apply": "Beitragsintervall speichern",
+  "slow_mode_denied": "Du kannst das Beitragsintervall dieses Boards nicht ändern.",
+  "slow_mode_guidance": "Dieser Countdown dient nur der Orientierung und sendet keinen Beitrag.",
+  "slow_mode_interval_label": "Beitragsintervall des Boards: {label}",
+  "slow_mode_interval_off": "Aus",
+  "slow_mode_interval_seconds": "{seconds} Sekunden",
+  "slow_mode_next_at": "Nächster zulässiger Versuch: {time}",
+  "slow_mode_next_now": "Du kannst jetzt versuchen zu posten. Das Board bestätigt die Berechtigung weiterhin.",
+  "slow_mode_next_unavailable": "Der nächste zulässige Zeitpunkt ist nicht verfügbar.",
+  "slow_mode_preparing": "Es wird geprüft, wann du posten darfst…",
+  "slow_mode_retry": "Beitragsintervall erneut laden",
+  "slow_mode_saved": "Beitragsintervall aktualisiert.",
+  "slow_mode_setting_help": "Dieses Intervall gilt für neue Threads und Antworten eines Kontos auf diesem Board. Bearbeitungen sind nicht begrenzt. Angezeigte Zeiten sind Orientierung; das Board bleibt maßgeblich.",
+  "slow_mode_setting_legend": "Beitragsintervall des Boards",
+  "slow_mode_unavailable": "Das Beitragsintervall dieses Boards ist nicht verfügbar.",
+  "slow_mode_unknown": "Das Ergebnis der Intervalländerung ist unbekannt. Ein erneuter Versuch verwendet die ursprüngliche Anfrage."
 }

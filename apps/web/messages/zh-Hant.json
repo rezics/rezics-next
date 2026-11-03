@@ -5008,5 +5008,21 @@
   "library_bulk_add_captured_destination": "已儲存的目標收藏集：{title}",
   "library_saved_queries_heading": "已儲存的查詢",
   "library_saved_queries_empty_page": "此頁面沒有已儲存的查詢。",
-  "library_saved_queries_unavailable": "已儲存的查詢目前無法使用。"
+  "library_saved_queries_unavailable": "已儲存的查詢目前無法使用。",
+  "slow_mode_apply": "儲存發文間隔",
+  "slow_mode_denied": "你不能變更此看板的發文間隔。",
+  "slow_mode_guidance": "倒數僅供參考，不會自動發文。",
+  "slow_mode_interval_label": "看板發文間隔：{label}",
+  "slow_mode_interval_off": "關閉",
+  "slow_mode_interval_seconds": "{seconds} 秒",
+  "slow_mode_next_at": "下次允許嘗試：{time}",
+  "slow_mode_next_now": "你現在可以嘗試發文。看板仍會確認權限。",
+  "slow_mode_next_unavailable": "暫時無法得知下次可發文時間。",
+  "slow_mode_preparing": "正在確認你何時可以發文…",
+  "slow_mode_retry": "重新載入發文間隔",
+  "slow_mode_saved": "發文間隔已更新。",
+  "slow_mode_setting_help": "此間隔適用於同一帳號在此看板上的新討論與回覆。編輯不受限制。顯示的時間僅供參考，看板規則仍為準。",
+  "slow_mode_setting_legend": "看板發文間隔",
+  "slow_mode_unavailable": "無法讀取此看板的發文間隔。",
+  "slow_mode_unknown": "間隔變更結果不明。重試會使用原來的請求。"
 }

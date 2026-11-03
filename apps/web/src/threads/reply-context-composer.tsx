@@ -20,6 +20,7 @@ export function ThreadReplyComposer({
   initialKey: string;
   canSubmit?: boolean;
   containerId: string;
+  boardId?: string;
   focusRequest: number;
   onPendingChange: (pending: boolean) => void;
   onSubmit: (input: ReplyCommand) => Promise<{ ok: true; value: CreatedPost } | WriteFailure>;

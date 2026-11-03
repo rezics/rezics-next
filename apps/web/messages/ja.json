@@ -5008,5 +5008,21 @@
   "library_bulk_add_captured_destination": "保存した追加先：{title}",
   "library_saved_queries_heading": "保存済みクエリ",
   "library_saved_queries_empty_page": "このページに保存済みクエリはありません。",
-  "library_saved_queries_unavailable": "保存済みクエリを利用できません。"
+  "library_saved_queries_unavailable": "保存済みクエリを利用できません。",
+  "slow_mode_apply": "投稿間隔を保存",
+  "slow_mode_denied": "このボードの投稿間隔は変更できません。",
+  "slow_mode_guidance": "このカウントダウンは目安であり、自動では投稿しません。",
+  "slow_mode_interval_label": "ボードの投稿間隔: {label}",
+  "slow_mode_interval_off": "オフ",
+  "slow_mode_interval_seconds": "{seconds}秒",
+  "slow_mode_next_at": "次に投稿できる時刻: {time}",
+  "slow_mode_next_now": "今すぐ投稿を試みられます。許可はボードが確認します。",
+  "slow_mode_next_unavailable": "次に投稿できる時刻は現在わかりません。",
+  "slow_mode_preparing": "投稿できる時刻を確認しています…",
+  "slow_mode_retry": "投稿間隔を再読み込み",
+  "slow_mode_saved": "投稿間隔を更新しました。",
+  "slow_mode_setting_help": "この間隔は、このボードでの同一アカウントによる新規スレッドと返信に適用されます。編集は対象外です。表示時刻は目安であり、ボードの判定が優先されます。",
+  "slow_mode_setting_legend": "ボードの投稿間隔",
+  "slow_mode_unavailable": "このボードの投稿間隔は利用できません。",
+  "slow_mode_unknown": "間隔の変更結果は不明です。再試行は元のリクエストを使います。"
 }

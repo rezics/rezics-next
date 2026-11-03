@@ -5008,5 +5008,21 @@
   "library_bulk_add_captured_destination": "已保存的目标收藏集：{title}",
   "library_saved_queries_heading": "已保存的查询",
   "library_saved_queries_empty_page": "此页面没有已保存的查询。",
-  "library_saved_queries_unavailable": "已保存的查询目前不可用。"
+  "library_saved_queries_unavailable": "已保存的查询目前不可用。",
+  "slow_mode_apply": "保存发帖间隔",
+  "slow_mode_denied": "你不能更改此看板的发帖间隔。",
+  "slow_mode_guidance": "倒计时仅供参考，不会自动发帖。",
+  "slow_mode_interval_label": "看板发帖间隔：{label}",
+  "slow_mode_interval_off": "关闭",
+  "slow_mode_interval_seconds": "{seconds} 秒",
+  "slow_mode_next_at": "下次允许尝试：{time}",
+  "slow_mode_next_now": "你现在可以尝试发帖。看板仍会确认权限。",
+  "slow_mode_next_unavailable": "暂时无法得知下次可发帖时间。",
+  "slow_mode_preparing": "正在确认你何时可以发帖…",
+  "slow_mode_retry": "重新加载发帖间隔",
+  "slow_mode_saved": "发帖间隔已更新。",
+  "slow_mode_setting_help": "此间隔适用于同一账号在此看板上的新主题和回复。编辑不受限制。显示的时间仅供参考，看板规则仍为准。",
+  "slow_mode_setting_legend": "看板发帖间隔",
+  "slow_mode_unavailable": "无法读取此看板的发帖间隔。",
+  "slow_mode_unknown": "间隔更改结果未知。重试会使用原来的请求。"
 }

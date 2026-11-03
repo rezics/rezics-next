@@ -84,3 +84,11 @@ claiming completion.
 Unavailable continuation pages offer a localized “Start from the first page” link that drops the cursor while
 retaining purpose and contribution Subject context through ordinary route navigation. First-page failures keep retry,
 and the recovery action does not imply why a read was unavailable.
+
+## Board slow mode
+
+New-thread and reply composers show the native posting interval and the caller's next permitted attempt. An admitted
+moderator inspects and changes that interval on the board. Waiting keeps the draft; countdown text is display
+guidance and never auto-submits. Decision: Send and Retry stay explicitly usable so the browser clock does not gate
+native permission. The [slow-mode contract](slow-mode.md) records units, eligibility display, private caller
+retirement, native refusal recovery and the remaining `boards({ id }).slowMode` producer binding.
