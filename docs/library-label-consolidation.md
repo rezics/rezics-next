@@ -51,7 +51,8 @@ The existing native assignment readers reopen both labels; review changes neithe
 `POST /v1/libraryLabels/{id}:confirmConsolidation` accepts the complete review evidence across all pages. It checks
 the exact source and target identities/revisions, every selected source and target assignment observation, current
 Subject exposure and current native capacity before storing immutable bindings. A selection digest alone cannot
-confirm a move. The typed client declarations include review, confirmation, apply, retry, cancel and result routes.
+confirm a move. Client declaration regeneration for review, confirmation, apply, retry, cancel and result remains
+pending.
 
 `POST /v1/libraryLabels/{id}:applyConsolidation` advances one selected item. It calls native target assign at the
 confirmed target revision, then native source unassign at the confirmed source revision and assignment identity.
