@@ -46,11 +46,11 @@ async function apply(path: string, confirmations: unknown[]) { return json(path 
 
 test('reopen an admitted state row, adopt existing and normalized new labels, and replay original native identities', async () => {
   const subjectId = await f.createSubject('game'), label = await createLabel('AniList existing');
-  const path = await upload([{ status: 'PLANNING', customLists: { Existing: true, New: true }, notes: 'evidence only', progress: 8 }], { name: 'Existing', isCustomList: true });
+  const path = await upload([{ status: 'PLANNING', customLists: { Existing: true, New: true, AnotherNew: true }, notes: 'evidence only', progress: 8 }], { name: 'Existing', isCustomList: true });
   const stateReview = await json(path + ':review', 'POST', { ordinal: 0, subjectId, fields: ['status'] });
   await json(path + ':apply', 'POST', { confirmations: [{ ordinal: 0, reviewId: stateReview.review.id }] });
   const before = await json('/v1/libraryEntries/' + subjectId);
-  const selection = [existing('customLists:Existing', label.id), proposed('customLists:New', ' E\u0301  Private '), existing('group:name', label.id)];
+  const selection = [existing('customLists:Existing', label.id), proposed('customLists:New', ' E\u0301  Private '), existing('group:name', label.id), proposed('customLists:AnotherNew', 'É Private')];
   const confirmation = await review(path, 0, undefined, selection);
   const response = await f.send('owner', 'GET', path);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
@@ -58,8 +58,9 @@ test('reopen an admitted state row, adopt existing and normalized new labels, an
   const result = await apply(path, [confirmation]);
   expect(result.complete).toBe(true);
   const items = result.outcomes[0].items;
-  expect(items.map((v: { status: string }) => v.status)).toEqual(['applied', 'applied', 'unchanged']);
+  expect(items.map((v: { status: string }) => v.status)).toEqual(['applied', 'applied', 'unchanged', 'unchanged']);
   expect(items[0].assignment).toEqual(items[2].assignment);
+  expect(items[1].assignment).toEqual(items[3].assignment);
   expect((await json('/v1/libraryLabels?q=' + encodeURIComponent('É Private'))).labels[0]).toMatchObject({ id: items[1].label.id, name: 'É Private' });
   const assignments = (await json('/v1/libraryLabelAssignments?subjectId=' + subjectId)).assignments;
   expect(assignments.map((v: { id: string }) => v.id).sort()).toEqual([items[0].assignment.id, items[1].assignment.id].sort());

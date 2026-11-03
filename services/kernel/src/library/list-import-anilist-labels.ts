@@ -165,11 +165,15 @@ export function createAniListLabelAdoption(deps: Dependencies) {
         });
         row = await deps.load(actor, id, confirmation.ordinal);
       };
+      const recoveredLabels = new Map<number, Label>();
       for (let index = 0; index < review.items.length; index++) {
         if (await stopped()) break;
         const item = review.items[index]!, work = row.labelWork?.[index];
-        if (work?.outcome) { result.items.push(work.outcome); continue; }
-        let label: Label | undefined = 'label' in item.target ? item.target.label : row.labelWork?.[item.target.primary]?.label;
+        if (work?.outcome) {
+          if (work.outcome.label) recoveredLabels.set(index, work.outcome.label);
+          result.items.push(work.outcome); continue;
+        }
+        let label: Label | undefined = 'label' in item.target ? item.target.label : row.labelWork?.[item.target.primary]?.label ?? recoveredLabels.get(item.target.primary);
         let accepted: AniListLabelItemOutcome | undefined;
         try {
           // Started effects reach their original native receipt, even after a lost acknowledgement.
@@ -184,6 +188,7 @@ export function createAniListLabelAdoption(deps: Dependencies) {
             if (!work?.createStarted) { await fresh(); await update(index, 'createStart', { reviewId: review.id }, { createStarted: true }); }
             const made = await labels.createLabel(actor, { name: item.target.name }, item.createKey, baseGuard);
             label = made.value.label;
+            recoveredLabels.set(index, label);
             await update(index, 'created', label, { label });
           }
           if (!label) {
