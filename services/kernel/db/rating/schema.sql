@@ -857,8 +857,8 @@ END))),
     CONSTRAINT source_statistic_observation_check2 CHECK ((((payload ->> 'sourceAlias'::text) = source_alias) AND ((payload ->> 'sourceRecordId'::text) = source_record_id) AND ((payload ->> 'asOf'::text) = (as_of)::text))),
     CONSTRAINT source_statistic_observation_digest_check1 CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT source_statistic_observation_local_order_check CHECK (((local_order IS NULL) OR (local_order > 0))),
-    CONSTRAINT source_statistic_observation_payload_version_check CHECK ((payload_version > 0)),
     CONSTRAINT source_statistic_observation_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT source_statistic_observation_payload_version_check CHECK ((payload_version > 0)),
     CONSTRAINT source_statistic_observation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT source_statistic_observation_source_alias_check CHECK (((source_alias ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (source_alias !~ '[^a-z0-9_-]'::text))),
     CONSTRAINT source_statistic_observation_source_check CHECK ((source = ANY (ARRAY['vndb'::text, 'bangumi'::text]))),
@@ -1270,20 +1270,6 @@ CREATE INDEX aggregate_component_population_subject_idx ON rating.aggregate_comp
 
 
 --
--- Name: source_statistic_observation_local_order_idx; Type: INDEX; Schema: rating; Owner: -
---
-
-CREATE UNIQUE INDEX source_statistic_observation_local_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, local_order DESC) WHERE (local_order IS NOT NULL);
-
-
---
--- Name: source_statistic_observation_legacy_order_idx; Type: INDEX; Schema: rating; Owner: -
---
-
-CREATE INDEX source_statistic_observation_legacy_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, digest DESC) WHERE (local_order IS NULL);
-
-
---
 -- Name: aggregate_component_target_population_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -1379,6 +1365,20 @@ CREATE INDEX realm_rank_generation_population_idx ON rating.realm_rank_generatio
 --
 
 CREATE INDEX realm_rank_score_idx ON rating.realm_rank USING btree (partition_no, question_id, population_id, question_identity, prior_generation, score DESC, subject_id DESC);
+
+
+--
+-- Name: source_statistic_observation_legacy_order_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX source_statistic_observation_legacy_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, digest DESC) WHERE (local_order IS NULL);
+
+
+--
+-- Name: source_statistic_observation_local_order_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE UNIQUE INDEX source_statistic_observation_local_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, local_order DESC) WHERE (local_order IS NOT NULL);
 
 
 --

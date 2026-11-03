@@ -1475,14 +1475,11 @@ CREATE FUNCTION library.refresh_owner_member_scope(r integer, a uuid, s uuid, f 
     AS $$
 DECLARE live boolean;
 BEGIN
+  -- The ordinary writer already advances this point. Bootstrap takes the SAME lock before reading facts.
   PERFORM 1 FROM library.fact_source_head WHERE route=r AND account_id=a FOR UPDATE;
   IF f='entry' THEN
     SELECT EXISTS (SELECT 1 FROM library.entry WHERE route=r AND account_id=a AND subject_id=s
-      AND COALESCE(library_profile_pin,'{}'::jsonb)=p) OR
-      (p='{}'::jsonb AND EXISTS (SELECT 1 FROM library.entry_personal_fact x WHERE x.route=r AND x.account_id=a
-        AND x.subject_id=s AND (x.note IS NOT NULL OR x.priority IS NOT NULL OR EXISTS (
-          SELECT 1 FROM library.entry_source_observation o WHERE o.route=x.route AND o.account_id=x.account_id
-            AND o.subject_id=x.subject_id)))) INTO live;
+      AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='session' THEN
     SELECT EXISTS (SELECT 1 FROM library.progress_session WHERE state <> 'retired' AND route=r AND account_id=a AND subject_id=s
       AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
@@ -1490,6 +1487,7 @@ BEGIN
     SELECT EXISTS (SELECT 1 FROM library.copy WHERE route=r AND account_id=a AND subject_id=s
       AND deletion_id IS NULL AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='label' THEN
+    -- Legacy uncertainty is a bounded indexed point, never an unbounded walk over hidden legacy parents.
     SELECT EXISTS (SELECT 1 FROM library.label_assignment x WHERE x.route=r AND x.account_id=a AND x.subject_id=s
       AND x.deleted_at IS NULL AND (x.slot_no IS NULL OR x.assignment_id IS NULL)) OR
     EXISTS (SELECT 1 FROM library.label_assignment x WHERE x.route=r AND x.account_id=a AND x.subject_id=s
@@ -1503,6 +1501,7 @@ BEGIN
     INSERT INTO library.owner_index_pin(route,account_id,pin) VALUES(r,a,p) ON CONFLICT DO NOTHING;
   ELSE
     DELETE FROM library.owner_member_support WHERE route=r AND account_id=a AND subject_id=s AND family=f AND pin=p;
+    -- One released profile has at most 64 states; cascades touch that bounded metadata, never native facts.
     DELETE FROM library.owner_index_pin WHERE route=r AND account_id=a AND pin=p AND NOT EXISTS (
       SELECT 1 FROM library.owner_member_support WHERE route=r AND account_id=a AND pin=p);
     DELETE FROM library.owner_member_index WHERE route=r AND account_id=a AND subject_id=s AND NOT EXISTS (
@@ -3007,6 +3006,82 @@ CREATE TABLE library.entry (
 
 
 --
+-- Name: entry_annotation_review; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry_annotation_review (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    review_id uuid NOT NULL,
+    epoch uuid NOT NULL,
+    state text DEFAULT 'open'::text NOT NULL,
+    item_count smallint NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    purge_after timestamp with time zone NOT NULL,
+    CONSTRAINT entry_annotation_review_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_annotation_review_check1 CHECK ((route = ((get_byte(uuid_send(review_id), 10) * 256) + get_byte(uuid_send(review_id), 11)))),
+    CONSTRAINT entry_annotation_review_check2 CHECK ((route = ((get_byte(uuid_send(epoch), 10) * 256) + get_byte(uuid_send(epoch), 11)))),
+    CONSTRAINT entry_annotation_review_check3 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
+    CONSTRAINT entry_annotation_review_check4 CHECK ((purge_after = (expires_at + '00:15:00'::interval))),
+    CONSTRAINT entry_annotation_review_item_count_check CHECK (((item_count >= 1) AND (item_count <= 16))),
+    CONSTRAINT entry_annotation_review_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT entry_annotation_review_state_check CHECK ((state = ANY (ARRAY['open'::text, 'confirmed'::text, 'cancelled'::text, 'expired'::text])))
+);
+
+
+--
+-- Name: TABLE entry_annotation_review; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.entry_annotation_review IS 'Finite private owner review state for exact selected entry annotation corrections. The owner and epoch bind selection and receipt identities; expiry and terminal erasure remove the bounded composition.';
+
+
+--
+-- Name: entry_annotation_review_item; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry_annotation_review_item (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    review_id uuid NOT NULL,
+    "position" smallint NOT NULL,
+    subject_id uuid NOT NULL,
+    entry_incarnation_id uuid NOT NULL,
+    entry_revision integer NOT NULL,
+    annotation_revision integer,
+    note_op text NOT NULL,
+    note_value text,
+    priority_op text NOT NULL,
+    priority_value smallint,
+    preview_state text NOT NULL,
+    outcome text,
+    request_id uuid NOT NULL,
+    CONSTRAINT entry_annotation_review_item_annotation_revision_check CHECK (((annotation_revision >= 0) AND (annotation_revision <= 2147483646))),
+    CONSTRAINT entry_annotation_review_item_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_annotation_review_item_check1 CHECK ((route = ((get_byte(uuid_send(review_id), 10) * 256) + get_byte(uuid_send(review_id), 11)))),
+    CONSTRAINT entry_annotation_review_item_check2 CHECK ((route = ((get_byte(uuid_send(entry_incarnation_id), 10) * 256) + get_byte(uuid_send(entry_incarnation_id), 11)))),
+    CONSTRAINT entry_annotation_review_item_check3 CHECK ((route = ((get_byte(uuid_send(request_id), 10) * 256) + get_byte(uuid_send(request_id), 11)))),
+    CONSTRAINT entry_annotation_review_item_check4 CHECK ((((note_op = 'set'::text) AND (note_value IS NOT NULL) AND ((octet_length(note_value) >= 1) AND (octet_length(note_value) <= 4096))) OR ((note_op = ANY (ARRAY['preserve'::text, 'clear'::text])) AND (note_value IS NULL)))),
+    CONSTRAINT entry_annotation_review_item_check5 CHECK ((((priority_op = 'set'::text) AND (priority_value IS NOT NULL) AND ((priority_value >= 1) AND (priority_value <= 100))) OR ((priority_op = ANY (ARRAY['preserve'::text, 'clear'::text])) AND (priority_value IS NULL)))),
+    CONSTRAINT entry_annotation_review_item_entry_revision_check CHECK (((entry_revision >= 1) AND (entry_revision <= 2147483646))),
+    CONSTRAINT entry_annotation_review_item_note_op_check CHECK ((note_op = ANY (ARRAY['preserve'::text, 'set'::text, 'clear'::text]))),
+    CONSTRAINT entry_annotation_review_item_outcome_check CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['accepted'::text, 'unchanged'::text, 'stale'::text, 'unavailable'::text, 'not-started'::text])))),
+    CONSTRAINT entry_annotation_review_item_position_check CHECK ((("position" >= 0) AND ("position" <= 15))),
+    CONSTRAINT entry_annotation_review_item_preview_state_check CHECK ((preview_state = ANY (ARRAY['ready'::text, 'stale'::text, 'unavailable'::text]))),
+    CONSTRAINT entry_annotation_review_item_priority_op_check CHECK ((priority_op = ANY (ARRAY['preserve'::text, 'set'::text, 'clear'::text]))),
+    CONSTRAINT entry_annotation_review_item_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: TABLE entry_annotation_review_item; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.entry_annotation_review_item IS 'At most sixteen fixed selected operands per private review. Set note bytes obey the native 4096-byte limit; item writes use the existing annotation command receipt.';
+
+
+--
 -- Name: entry_deleted; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -3072,83 +3147,6 @@ CREATE TABLE library.entry_personal_fact (
     CONSTRAINT entry_personal_fact_revision_check CHECK (((annotation_revision >= 0) AND (annotation_revision <= 2147483646))),
     CONSTRAINT entry_personal_fact_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
-
-
---
--- Name: entry_annotation_review; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.entry_annotation_review (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    review_id uuid NOT NULL,
-    epoch uuid NOT NULL,
-    state text DEFAULT 'open'::text NOT NULL,
-    item_count smallint NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    purge_after timestamp with time zone NOT NULL,
-    CONSTRAINT entry_annotation_review_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT entry_annotation_review_id_route_check CHECK ((route = ((get_byte(uuid_send(review_id), 10) * 256) + get_byte(uuid_send(review_id), 11)))),
-    CONSTRAINT entry_annotation_review_epoch_route_check CHECK ((route = ((get_byte(uuid_send(epoch), 10) * 256) + get_byte(uuid_send(epoch), 11)))),
-    CONSTRAINT entry_annotation_review_state_check CHECK ((state = ANY (ARRAY['open'::text, 'confirmed'::text, 'cancelled'::text, 'expired'::text]))),
-    CONSTRAINT entry_annotation_review_count_check CHECK (((item_count >= 1) AND (item_count <= 16))),
-    CONSTRAINT entry_annotation_review_lifetime_check CHECK (((expires_at = (created_at + '00:15:00'::interval)) AND (purge_after = (expires_at + '00:15:00'::interval)))),
-    CONSTRAINT entry_annotation_review_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT entry_annotation_review_pkey PRIMARY KEY (route, account_id, review_id),
-    CONSTRAINT entry_annotation_review_epoch_key UNIQUE (route, account_id, epoch)
-);
-
-
---
--- Name: entry_annotation_review_item; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.entry_annotation_review_item (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    review_id uuid NOT NULL,
-    position smallint NOT NULL,
-    subject_id uuid NOT NULL,
-    entry_incarnation_id uuid NOT NULL,
-    entry_revision integer NOT NULL,
-    annotation_revision integer,
-    note_op text NOT NULL,
-    note_value text,
-    priority_op text NOT NULL,
-    priority_value smallint,
-    preview_state text NOT NULL,
-    outcome text,
-    request_id uuid NOT NULL,
-    CONSTRAINT entry_annotation_review_item_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
-    CONSTRAINT entry_annotation_review_item_review_route_check CHECK ((route = ((get_byte(uuid_send(review_id), 10) * 256) + get_byte(uuid_send(review_id), 11)))),
-    CONSTRAINT entry_annotation_review_item_incarnation_route_check CHECK ((route = ((get_byte(uuid_send(entry_incarnation_id), 10) * 256) + get_byte(uuid_send(entry_incarnation_id), 11)))),
-    CONSTRAINT entry_annotation_review_item_request_route_check CHECK ((route = ((get_byte(uuid_send(request_id), 10) * 256) + get_byte(uuid_send(request_id), 11)))),
-    CONSTRAINT entry_annotation_review_item_position_check CHECK (((position >= 0) AND (position < 16))),
-    CONSTRAINT entry_annotation_review_item_revision_check CHECK (((entry_revision >= 1) AND (entry_revision <= 2147483646) AND ((annotation_revision IS NULL) OR ((annotation_revision >= 0) AND (annotation_revision <= 2147483646))))),
-    CONSTRAINT entry_annotation_review_item_note_check CHECK ((((note_op = 'set'::text) AND (note_value IS NOT NULL) AND ((octet_length(note_value) >= 1) AND (octet_length(note_value) <= 4096))) OR ((note_op = ANY (ARRAY['preserve'::text, 'clear'::text])) AND (note_value IS NULL)))),
-    CONSTRAINT entry_annotation_review_item_priority_check CHECK ((((priority_op = 'set'::text) AND (priority_value IS NOT NULL) AND ((priority_value >= 1) AND (priority_value <= 100))) OR ((priority_op = ANY (ARRAY['preserve'::text, 'clear'::text])) AND (priority_value IS NULL)))),
-    CONSTRAINT entry_annotation_review_item_preview_check CHECK ((preview_state = ANY (ARRAY['ready'::text, 'stale'::text, 'unavailable'::text]))),
-    CONSTRAINT entry_annotation_review_item_outcome_check CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['accepted'::text, 'unchanged'::text, 'stale'::text, 'unavailable'::text, 'not-started'::text])))),
-    CONSTRAINT entry_annotation_review_item_pkey PRIMARY KEY (route, account_id, review_id, position),
-    CONSTRAINT entry_annotation_review_item_subject_key UNIQUE (route, account_id, review_id, subject_id),
-    CONSTRAINT entry_annotation_review_item_request_key UNIQUE (route, account_id, request_id),
-    CONSTRAINT entry_annotation_review_item_parent_fkey FOREIGN KEY (route, account_id, review_id) REFERENCES library.entry_annotation_review(route, account_id, review_id) ON DELETE CASCADE
-);
-
-
---
--- Name: entry_annotation_review; Type: COMMENT; Schema: library; Owner: -
---
-
-COMMENT ON TABLE library.entry_annotation_review IS 'Finite private owner review state for exact selected entry annotation corrections. The owner and epoch bind selection and receipt identities; expiry and terminal erasure remove the bounded composition.';
-
-
---
--- Name: entry_annotation_review_item; Type: COMMENT; Schema: library; Owner: -
---
-
-COMMENT ON TABLE library.entry_annotation_review_item IS 'At most sixteen fixed selected operands per private review. Set note bytes obey the native 4096-byte limit; item writes use the existing annotation command receipt.';
 
 
 --
@@ -3773,11 +3771,11 @@ CREATE TABLE library.library_export (
     route integer NOT NULL,
     account_id uuid NOT NULL,
     export_id uuid NOT NULL,
-    format_version smallint DEFAULT 1 NOT NULL,
     generation bigint NOT NULL,
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     state text NOT NULL,
+    format_version smallint DEFAULT 1 NOT NULL,
     CONSTRAINT library_export_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT library_export_check1 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
     CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2]))),
@@ -5650,6 +5648,46 @@ ALTER TABLE ONLY library.diary_navigation
 
 
 --
+-- Name: entry_annotation_review_item entry_annotation_review_item_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_annotation_review_item
+    ADD CONSTRAINT entry_annotation_review_item_pkey PRIMARY KEY (route, account_id, review_id, "position");
+
+
+--
+-- Name: entry_annotation_review_item entry_annotation_review_item_route_account_id_request_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_annotation_review_item
+    ADD CONSTRAINT entry_annotation_review_item_route_account_id_request_id_key UNIQUE (route, account_id, request_id);
+
+
+--
+-- Name: entry_annotation_review_item entry_annotation_review_item_route_account_id_review_id_sub_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_annotation_review_item
+    ADD CONSTRAINT entry_annotation_review_item_route_account_id_review_id_sub_key UNIQUE (route, account_id, review_id, subject_id);
+
+
+--
+-- Name: entry_annotation_review entry_annotation_review_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_annotation_review
+    ADD CONSTRAINT entry_annotation_review_pkey PRIMARY KEY (route, account_id, review_id);
+
+
+--
+-- Name: entry_annotation_review entry_annotation_review_route_account_id_epoch_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_annotation_review
+    ADD CONSTRAINT entry_annotation_review_route_account_id_epoch_key UNIQUE (route, account_id, epoch);
+
+
+--
 -- Name: entry_deleted entry_deleted_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6450,19 +6488,19 @@ ALTER TABLE ONLY library.vndb_import
 
 
 --
--- Name: vndb_label_adoption vndb_label_adoption_pkey; Type: CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.vndb_label_adoption
-    ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
-
-
---
 -- Name: vndb_label_adoption_item vndb_label_adoption_item_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.vndb_label_adoption_item
     ADD CONSTRAINT vndb_label_adoption_item_pkey PRIMARY KEY (route, account_id, upload_id, item_no);
+
+
+--
+-- Name: vndb_label_adoption vndb_label_adoption_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption
+    ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
 
 
 --
@@ -6949,6 +6987,27 @@ CREATE INDEX entry_account_updated ON library.entry USING btree (route, account_
 
 
 --
+-- Name: entry_annotation_review_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_annotation_review_due ON library.entry_annotation_review USING btree (route, purge_after, account_id, review_id);
+
+
+--
+-- Name: entry_annotation_review_owner_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_annotation_review_owner_expiry ON library.entry_annotation_review USING btree (route, account_id, expires_at, review_id);
+
+
+--
+-- Name: entry_annotation_review_owner_retention; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_annotation_review_owner_retention ON library.entry_annotation_review USING btree (route, account_id, purge_after, review_id);
+
+
+--
 -- Name: entry_deleted_due; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -7058,20 +7117,6 @@ CREATE INDEX entry_shelf_finished_type ON library.entry USING btree (route, acco
 --
 
 CREATE INDEX entry_source_observation_owner ON library.entry_source_observation USING btree (route, account_id, subject_id, provider, record_id);
-
-
---
--- Name: library_export_annotation_seek; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX library_export_annotation_seek ON library.entry_personal_fact USING btree (route, account_id, subject_id) WHERE (annotation_revision > 0);
-
-
---
--- Name: library_export_journal_seek; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX library_export_journal_seek ON library.progress_session USING btree (route, account_id, session_id) WHERE ((state <> 'retired'::text) AND (journal_revision > 0));
 
 
 --
@@ -7243,27 +7288,6 @@ CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING 
 
 
 --
--- Name: entry_annotation_review_due; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX entry_annotation_review_due ON library.entry_annotation_review USING btree (route, purge_after, account_id, review_id);
-
-
---
--- Name: entry_annotation_review_owner_expiry; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX entry_annotation_review_owner_expiry ON library.entry_annotation_review USING btree (route, account_id, expires_at, review_id);
-
-
---
--- Name: entry_annotation_review_owner_retention; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX entry_annotation_review_owner_retention ON library.entry_annotation_review USING btree (route, account_id, purge_after, review_id);
-
-
---
 -- Name: label_consolidation_expiry_due; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -7299,10 +7323,24 @@ CREATE INDEX library_archive_merge_upload_expiry ON library.library_archive_merg
 
 
 --
+-- Name: library_export_annotation_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_annotation_seek ON library.entry_personal_fact USING btree (route, account_id, subject_id) WHERE (annotation_revision > 0);
+
+
+--
 -- Name: library_export_copy_seek; Type: INDEX; Schema: library; Owner: -
 --
 
 CREATE INDEX library_export_copy_seek ON library.copy USING btree (route, account_id, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: library_export_journal_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_journal_seek ON library.progress_session USING btree (route, account_id, session_id) WHERE ((state <> 'retired'::text) AND (journal_revision > 0));
 
 
 --
@@ -8834,6 +8872,14 @@ ALTER TABLE ONLY library.copy_archive_row
 
 
 --
+-- Name: entry_annotation_review_item entry_annotation_review_item_route_account_id_review_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_annotation_review_item
+    ADD CONSTRAINT entry_annotation_review_item_route_account_id_review_id_fkey FOREIGN KEY (route, account_id, review_id) REFERENCES library.entry_annotation_review(route, account_id, review_id) ON DELETE CASCADE;
+
+
+--
 -- Name: entry_source_observation entry_source_observation_parent_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -9082,19 +9128,19 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 
 --
--- Name: vndb_label_adoption vndb_label_adoption_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.vndb_label_adoption
-    ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
-
-
---
 -- Name: vndb_label_adoption_item vndb_label_adoption_item_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.vndb_label_adoption_item
     ADD CONSTRAINT vndb_label_adoption_item_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_label_adoption(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- Name: vndb_label_adoption vndb_label_adoption_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.vndb_label_adoption
+    ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
 
 
 --

@@ -1375,9 +1375,9 @@ CREATE TABLE search.scope_preparation (
 
 CREATE TABLE search.scope_preparation_concept_frontier (
     partition_no integer DEFAULT 0 NOT NULL,
-    prefix text COLLATE pg_catalog."C" NOT NULL,
-    scope_id text COLLATE pg_catalog."C" NOT NULL,
-    parent text COLLATE pg_catalog."C" NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    scope_id text NOT NULL COLLATE pg_catalog."C",
+    parent text NOT NULL COLLATE pg_catalog."C",
     after_key text COLLATE pg_catalog."C",
     CONSTRAINT scope_preparation_concept_frontier_after_key_check CHECK (((octet_length(after_key) >= 1) AND (octet_length(after_key) <= 1024))),
     CONSTRAINT scope_preparation_concept_frontier_parent_check CHECK (((octet_length(parent) >= 1) AND (octet_length(parent) <= 1024))),
@@ -1391,9 +1391,9 @@ CREATE TABLE search.scope_preparation_concept_frontier (
 
 CREATE TABLE search.scope_preparation_concept_member (
     partition_no integer DEFAULT 0 NOT NULL,
-    prefix text COLLATE pg_catalog."C" NOT NULL,
-    scope_id text COLLATE pg_catalog."C" NOT NULL,
-    concept text COLLATE pg_catalog."C" NOT NULL,
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    scope_id text NOT NULL COLLATE pg_catalog."C",
+    concept text NOT NULL COLLATE pg_catalog."C",
     CONSTRAINT scope_preparation_concept_member_concept_check CHECK (((octet_length(concept) >= 1) AND (octet_length(concept) <= 1024))),
     CONSTRAINT scope_preparation_concept_member_partition_no_check CHECK ((partition_no = 0))
 );
