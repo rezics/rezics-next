@@ -59,6 +59,7 @@ export async function sendFilteredAdd(
     // Native dependency_unavailable explicitly declines preparation; it is not an empty capture.
     const problem = result.error?.value;
     if (
+      operationId === undefined &&
       result.status === 503 &&
       problem &&
       typeof problem === 'object' &&

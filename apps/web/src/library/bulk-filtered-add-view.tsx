@@ -115,7 +115,6 @@ function phaseLabel(phase: string) {
 
 function FilteredAddLifetime({
   source,
-  address,
   disabled = false,
   isCurrent,
   owner,
@@ -126,6 +125,8 @@ function FilteredAddLifetime({
   const latest = useRef({ owner, disabled, isCurrent });
   latest.current = { owner, disabled, isCurrent };
   const journeyRef = useRef<FilteredAddJourney | null>(null);
+  const displayCurrent = useRef<() => boolean>(() => false);
+  const reviewCurrent = useRef<() => boolean>(() => false);
   const [journey, setJourney] = useState<FilteredAddJourney | null>(null);
   const [destination, setDestination] = useState<CollectionDestination | null>(null);
   const [issue, setIssue] = useState<'limit' | 'unsupported' | null>(null);
@@ -160,6 +161,8 @@ function FilteredAddLifetime({
       return;
     }
     const origin = owner;
+    displayCurrent.current = origin.isCurrent;
+    reviewCurrent.current = origin.isCurrent;
     const originCurrent = isCurrent;
     const value = new FilteredAddJourney(
       captured,
@@ -174,7 +177,9 @@ function FilteredAddLifetime({
           if (!readAllowed()) return { state: 'forbidden' };
           const readOrigin = latest.current.owner;
           const result = await filteredAddReader(origin.subject!)(id, cursor);
-          return readOrigin.isCurrent() ? result : { state: 'unavailable' };
+          if (!readOrigin.isCurrent()) return { state: 'unavailable' };
+          if (result.state === 'ready') displayCurrent.current = readOrigin.isCurrent;
+          return result;
         },
       },
       () => {
@@ -188,12 +193,19 @@ function FilteredAddLifetime({
     void value.preview(owner.credential()!);
   }
   const state = journey?.state;
-  const operation = state?.operation;
-  const page = state?.read?.state === 'ready' ? state.read.page : undefined;
+  const operation = displayCurrent.current() ? state?.operation : undefined;
+  const page = displayCurrent.current() && state?.read?.state === 'ready' ? state.read.page : undefined;
   const busy = state?.phase === 'previewing' || state?.phase === 'confirming' || state?.reading;
   const uncertain = state?.phase === 'preview_uncertain' || state?.phase === 'confirmation_uncertain';
-  const notice = state ? stateMessage(state.phase) : issue ? stateMessage(issue) : null;
-  if (!current()) return null;
+  const staleReview = state?.phase === 'previewed' && !reviewCurrent.current();
+  const notice = staleReview
+    ? stateMessage('changed')
+    : state
+      ? stateMessage(state.phase)
+      : issue
+        ? stateMessage(issue)
+        : null;
+  if (!owner.isCurrent() || !(isCurrent?.() ?? true)) return null;
   return (
     <section aria-label={m.library_filtered_add_heading()} className="min-w-0 space-y-3 rounded-xl border p-3">
       <h2 className="font-semibold">{m.library_filtered_add_heading()}</h2>
@@ -256,7 +268,11 @@ function FilteredAddLifetime({
             </>
           ) : null}
           {state?.phase === 'previewed' ? (
-            <Button type="button" disabled={!confirmAllowed() || busy} onClick={() => void journey.confirm()}>
+            <Button
+              type="button"
+              disabled={!confirmAllowed() || busy || staleReview}
+              onClick={() => void journey.confirm()}
+            >
               {m.library_filtered_add_confirm()}
             </Button>
           ) : null}
@@ -270,11 +286,15 @@ function FilteredAddLifetime({
             </Button>
           ) : null}
           {state?.phase === 'confirmation_uncertain' ? (
-            <Button type="button" disabled={!confirmAllowed() || busy} onClick={() => void journey.confirm()}>
+            <Button
+              type="button"
+              disabled={!confirmAllowed() || busy || staleReview}
+              onClick={() => void journey.confirm()}
+            >
               {m.library_filtered_add_retry_confirmation()}
             </Button>
           ) : null}
-          {operation ? (
+          {state?.operation ? (
             <Button
               type="button"
               variant="outline"
