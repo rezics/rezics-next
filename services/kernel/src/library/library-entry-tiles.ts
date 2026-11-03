@@ -53,13 +53,15 @@ export async function readLibraryEntryTiles(
   for (const entry of entries) {
     if (entry.createdAt === null || entry.updatedAt === null || entry.lastActivityAt === null)
       throw new Error('Library entry timestamps are required');
+    const active = sessions.get(entry.subjectId);
+    if (active?.state === 'retired') throw new Error('Retired sessions cannot appear on the Library shelf');
     result.set(entry.subjectId, {
       ...entry,
       createdAt: new Date(entry.createdAt).toISOString(),
       updatedAt: new Date(entry.updatedAt).toISOString(),
       lastActivityAt: new Date(entry.lastActivityAt).toISOString(),
       finishedAt: entry.finishedAt === null ? null : new Date(entry.finishedAt).toISOString(),
-      activeProgressSession: sessions.get(entry.subjectId) ?? null,
+      activeProgressSession: active ? { ...active, state: active.state } : null,
     });
   }
   return result;
