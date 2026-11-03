@@ -1,37 +1,30 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/**",
-    "services/kernel/test/library/**",
-    "services/kernel/src/http/kernel.ts",
-    "packages/client/src/kernel/library/**",
-    "docs/library-import-consumption-dates.md",
-    "docs/goals/library.capabilities.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "estimate": {
-    "lines": 1800,
-    "files": 8
-  },
-  "after": [],
-  "acceptance": [
-    "Implement AniList date review and adoption independently in its installed importer, preserving FuzzyDate precision and admission rules.",
-    "Integrate VNDB only through an installed typed personal-row contract or minimal seam; do not create a provider importer, upload store, matcher or journal engine.",
-    "Regenerate the MAL client route declarations with the admitted compiler database and hand the exact typed review/apply contract to the Web and diary owners.",
-    "Exercise real retained provider records, exact reopened native journal outcomes, stale recovery, retry, cancellation and privacy boundaries.",
-    "Measure review, apply, result navigation, refusal, replay and cleanup at native64/512/4096 populations within each provider's installed caps."
-  ]
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/**',
+      'services/kernel/test/library/**',
+      'services/kernel/src/http/kernel.ts',
+      'packages/client/src/kernel/library/**',
+      'docs/library-import-consumption-dates.md',
+      'docs/goals/library.capabilities.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'estimate': { 'lines': 1800, 'files': 8 },
+  'after': [],
+  'acceptance':
+    [
+      'Implement AniList date review and adoption independently in its installed importer, preserving FuzzyDate precision and admission rules.',
+      'Integrate VNDB only through an installed typed personal-row contract or minimal seam; do not create a provider importer, upload store, matcher or journal engine.',
+      'Regenerate the MAL client route declarations with the admitted compiler database and hand the exact typed review/apply contract to the Web and diary owners.',
+      'Exercise real retained provider records, exact reopened native journal outcomes, stale recovery, retry, cancellation and privacy boundaries.',
+      "Measure review, apply, result navigation, refusal, replay and cleanup at native64/512/4096 populations within each provider's installed caps.",
+    ],
 }
 ---
 

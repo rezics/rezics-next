@@ -227,10 +227,11 @@ export function malImportRoutes(
                 {
                   row,
                   version: t.String({ minLength: 1, maxLength: 1024 }),
-                  fields: t.Array(
-                    t.Union([t.Literal('startDate'), t.Literal('finishDate')]),
-                    { minItems: 1, maxItems: MAL_DATE_LIMITS.fields, uniqueItems: true },
-                  ),
+                  fields: t.Array(t.Union([t.Literal('startDate'), t.Literal('finishDate')]), {
+                    minItems: 1,
+                    maxItems: MAL_DATE_LIMITS.fields,
+                    uniqueItems: true,
+                  }),
                 },
                 closed,
               ),
@@ -247,7 +248,9 @@ export function malImportRoutes(
           set.headers['Cache-Control'] = 'private, no-store';
           if (new Set(body.rows.map((r) => r.row)).size !== body.rows.length) throw new ProblemError('invalid_request');
           return admission.run('normal', job, () =>
-            service().applyDates(actor, params.id, body, job.deadline, request.signal, (value) => session.record(value)),
+            service().applyDates(actor, params.id, body, job.deadline, request.signal, (value) =>
+              session.record(value),
+            ),
           );
         }),
     )

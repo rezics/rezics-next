@@ -168,11 +168,7 @@ function journalDate(value: MalRow['dates'][string]): ProgressSessionJournalDate
 }
 
 function sameJournalDate(left: ProgressSessionJournalDate | null, right: ProgressSessionJournalDate | null) {
-  return (
-    left?.year === right?.year &&
-    left?.month === right?.month &&
-    left?.day === right?.day
-  );
+  return left?.year === right?.year && left?.month === right?.month && left?.day === right?.day;
 }
 
 function profilePinMatches(pin: unknown, source: MalReview['source']) {
@@ -357,7 +353,15 @@ export function createMalImport(deps: Dependencies) {
         );
         if (Number(count.rows[0]!.n) >= MAL_LIMITS.uploads)
           throw new ProblemError('conflict', { detail: 'Delete a retained MAL upload before uploading another' });
-        const doc: Document = { xml, rows, reviews: {}, intents: {}, dateReviews: {}, dateIntents: {}, canceled: false };
+        const doc: Document = {
+          xml,
+          rows,
+          reviews: {},
+          intents: {},
+          dateReviews: {},
+          dateIntents: {},
+          canceled: false,
+        };
         if (Buffer.byteLength(JSON.stringify(doc)) > MAL_LIMITS.evidenceBytes)
           throw new ProblemError('invalid_request', { detail: 'MAL: retained evidence exceeds 12 MiB' });
         await tx.query(
@@ -496,8 +500,15 @@ export function createMalImport(deps: Dependencies) {
       observation.source === null ||
       hash(observation.source) !== hash(imported.source) ||
       hash(observation.binding) !== hash(imported.binding) ||
-      hash(observation.current ? { state: observation.current.state, revision: observation.current.revision, incarnationId: observation.current.incarnationId } : null) !==
-        hash(imported.current)
+      hash(
+        observation.current
+          ? {
+              state: observation.current.state,
+              revision: observation.current.revision,
+              incarnationId: observation.current.incarnationId,
+            }
+          : null,
+      ) !== hash(imported.current)
     )
       throw stale();
     const fact = await journal.inspectSession(actor, input.occurrenceId);
@@ -519,7 +530,8 @@ export function createMalImport(deps: Dependencies) {
       finishDate: dateReviewField(row.dates.finished!, current.finishDate, input.finishAction, profileCurrent),
     };
     const result = await mutate(actor, id, key, 'date-review', input, (doc) => {
-      if (doc.reviews[input.row]?.version !== imported.version || malDigest(doc.rows[input.row]) !== malDigest(row)) throw stale();
+      if (doc.reviews[input.row]?.version !== imported.version || malDigest(doc.rows[input.row]) !== malDigest(row))
+        throw stale();
       const prior = doc.dateIntents[input.row];
       if (prior && (!prior.outcome || ['applied', 'failed'].includes(prior.outcome.status))) throw stale();
       delete doc.dateIntents[input.row];
@@ -928,7 +940,11 @@ export function createMalImport(deps: Dependencies) {
           patch[field] = null;
           return { field, status: 'applied' };
         }
-        if ((decision.status === 'ready' || decision.status === 'conflict') && decision.action === 'adopt' && decision.proposed) {
+        if (
+          (decision.status === 'ready' || decision.status === 'conflict') &&
+          decision.action === 'adopt' &&
+          decision.proposed
+        ) {
           patch[field] = decision.proposed;
           return { field, status: 'applied' };
         }
@@ -937,8 +953,7 @@ export function createMalImport(deps: Dependencies) {
       const hasPatch = Object.hasOwn(patch, 'startDate') || Object.hasOwn(patch, 'finishDate');
       if (!intent) {
         let current = !reviewed.profileCurrent;
-        if (reviewed.profileCurrent)
-          current = await dateReviewCurrent(actor, row, imported, reviewed, deadline);
+        if (reviewed.profileCurrent) current = await dateReviewCurrent(actor, row, imported, reviewed, deadline);
         if (!current) {
           const outcome: MalDateOutcome = {
             row: selected.row,
@@ -961,16 +976,17 @@ export function createMalImport(deps: Dependencies) {
           continue;
         }
         intent = { review: reviewed, fields: selected.fields, key, nativeRequestKey, patch: hasPatch ? patch : null };
-        if (!hasPatch) intent.outcome = {
-          row: selected.row,
-          version: selected.version,
-          status: fieldOutcomes.some((field) => field.status === 'unsupported' || field.status === 'unknown')
-            ? 'unsupported'
-            : 'skipped',
-          fields: fieldOutcomes,
-          receipt: null,
-          reason: fieldOutcomes.some((field) => field.status === 'not-selected') ? 'date-not-selected' : null,
-        };
+        if (!hasPatch)
+          intent.outcome = {
+            row: selected.row,
+            version: selected.version,
+            status: fieldOutcomes.some((field) => field.status === 'unsupported' || field.status === 'unknown')
+              ? 'unsupported'
+              : 'skipped',
+            fields: fieldOutcomes,
+            receipt: null,
+            reason: fieldOutcomes.some((field) => field.status === 'not-selected') ? 'date-not-selected' : null,
+          };
         await mutate(actor, id, `${key}:intent`, 'date-intent', selected, (doc) => {
           if (
             doc.dateReviews[selected.row]?.version !== selected.version ||
@@ -1044,7 +1060,8 @@ export function createMalImport(deps: Dependencies) {
         const staleError =
           error instanceof ProgressConflictError ||
           error instanceof LibraryNotFoundError ||
-          (error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code));
+          (error instanceof ProblemError &&
+            ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code));
         outcome = {
           row: selected.row,
           version: selected.version,
