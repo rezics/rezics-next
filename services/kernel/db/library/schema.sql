@@ -2197,6 +2197,27 @@ CREATE TABLE library.copy (
 
 
 --
+-- Name: diary_navigation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.diary_navigation (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    slot smallint NOT NULL,
+    navigation_id uuid NOT NULL,
+    caller text NOT NULL,
+    epoch integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT diary_navigation_caller_check CHECK ((length(caller) = 64)),
+    CONSTRAINT diary_navigation_epoch_check CHECK ((epoch > 0)),
+    CONSTRAINT diary_navigation_expires_at_check CHECK ((expires_at > created_at)),
+    CONSTRAINT diary_navigation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT diary_navigation_slot_check CHECK (((slot >= 0) AND (slot <= 7)))
+);
+
+
+--
 -- Name: entry; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4172,6 +4193,22 @@ ALTER TABLE library.copy
 
 
 --
+-- Name: diary_navigation diary_navigation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.diary_navigation
+    ADD CONSTRAINT diary_navigation_pkey PRIMARY KEY (route, account_id, slot);
+
+
+--
+-- Name: diary_navigation diary_navigation_route_account_id_navigation_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.diary_navigation
+    ADD CONSTRAINT diary_navigation_route_account_id_navigation_id_key UNIQUE (route, account_id, navigation_id);
+
+
+--
 -- Name: entry_deleted entry_deleted_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5712,6 +5749,13 @@ CREATE INDEX progress_session_account_subject ON library.progress_session USING 
 --
 
 CREATE INDEX progress_session_active ON library.progress_session USING btree (route, account_id, subject_id, last_changed_at DESC, session_id) WHERE (state = 'active'::text);
+
+
+--
+-- Name: progress_session_diary_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_diary_seek ON library.progress_session USING btree (route, account_id, started_at DESC, session_id DESC);
 
 
 --
