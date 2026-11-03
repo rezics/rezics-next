@@ -10,6 +10,7 @@ import { PageHeading } from '../shell/page-heading';
 import { readDiscovery, type DiscoveryState } from './discovery';
 import { DiscoveryResults } from './discovery-results';
 import {
+  type CharacterPersonSearch,
   characterPersonHref,
   characterPersonRequest,
   type CharacterPersonForm as CharacterPersonFormState,
@@ -17,15 +18,21 @@ import {
   type ParsedCharacterPersonSearch,
 } from './character-person';
 
+const characterPersonSearchSchema = v.object({
+  mode: v.picklist(['characters', 'people']),
+  name: v.string(),
+  works: v.array(v.string()),
+  role: v.optional(v.string()),
+  languages: v.array(v.string()),
+  threshold: v.picklist([0, 1, 2]),
+  sort: v.picklist(['name', 'relevance']),
+  cursor: v.optional(v.string()),
+});
+
 const readCharacterPerson = createServerFn({ method: 'GET' })
-  .validator(
-    v.object({
-      locale: v.string(),
-      request: v.unknown(),
-    }),
-  )
+  .validator(v.object({ locale: v.string(), search: characterPersonSearchSchema }))
   .handler(async ({ data }) => {
-    const request = data.request as ReturnType<typeof characterPersonRequest>;
+    const request = characterPersonRequest(data.search as CharacterPersonSearch);
     return readDiscovery(request, async (body) =>
       kernelClient(data.locale).subjects.$search.post(body, { fetch: { signal: getRequest().signal } }),
     );
@@ -41,7 +48,7 @@ export function characterPersonQueryOptions(
     queryKey: ['character-person-search', locale, principal, request],
     queryFn: async ({ signal }): Promise<{ discovery: DiscoveryState; restarted: boolean }> => {
       try {
-        return await readCharacterPerson({ data: { locale, request }, signal });
+        return await readCharacterPerson({ data: { locale, search }, signal });
       } catch (error) {
         if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
         return { discovery: { status: 'unavailable' }, restarted: false };
@@ -170,7 +177,7 @@ export function CharacterPersonSearchPage({
     : query.isFetching || !query.data
       ? { status: 'loading' }
       : query.data.discovery;
-  const restartHref = characterPersonHref(locale, { ...parsed.search, cursor: undefined });
+  const restartHref = characterPersonHref(locale, parsed.search);
   const next = state.status === 'ready' ? state.page.next : null;
   const pageEmpty = state.status === 'ready' && state.page.hits.length === 0 && next !== null;
   return (

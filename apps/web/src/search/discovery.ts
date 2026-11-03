@@ -201,6 +201,7 @@ export type PublicDiscoveryHit = Extract<DiscoveryHit, { summary: { kind: 'colle
 export type DiscoveryRequest = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   representation: 'discovery-v1';
   languages: string[];
+  spoilerThreshold?: 0 | 1 | 2;
   descriptions?: boolean;
   properties?: string[];
   kindPage?: { limit: number; cursor?: string };
