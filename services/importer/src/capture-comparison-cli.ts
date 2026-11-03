@@ -74,7 +74,16 @@ export function parseCaptureComparisonArgs(argv: readonly string[]): ParsedCaptu
   if (!Array.isArray(argv)) throw new UsageFailure('Capture comparison arguments are invalid.');
 
   const values = new Map<string, string>();
-  const valueFlags = new Set(['--state', '--source', '--before', '--after', '--page', '--limit', '--cursor', '--record']);
+  const valueFlags = new Set([
+    '--state',
+    '--source',
+    '--before',
+    '--after',
+    '--page',
+    '--limit',
+    '--cursor',
+    '--record',
+  ]);
   let json = false;
   let counts = false;
   for (let index = 0; index < argv.length; index++) {
@@ -107,11 +116,7 @@ export function parseCaptureComparisonArgs(argv: readonly string[]): ParsedCaptu
     );
   if (Buffer.byteLength(source, 'utf8') > 32 || !/^[a-z][a-z0-9_-]{0,31}$/u.test(source))
     throw new UsageFailure('--source must be an exact configured source identifier.');
-  if (
-    Buffer.byteLength(before, 'utf8') > 32 ||
-    !/^[1-9][0-9]*$/u.test(before) ||
-    !Number.isSafeInteger(Number(before))
-  )
+  if (Buffer.byteLength(before, 'utf8') > 32 || !/^[1-9][0-9]*$/u.test(before) || !Number.isSafeInteger(Number(before)))
     throw new UsageFailure('--before must be a positive stored generation ID.');
   if (Buffer.byteLength(after, 'utf8') > 32 || !/^[1-9][0-9]*$/u.test(after) || !Number.isSafeInteger(Number(after)))
     throw new UsageFailure('--after must be a positive stored generation ID.');
@@ -226,8 +231,12 @@ function renderRecord(record: CaptureRecordDetail): string[] {
       `  Retained projection detail unavailable (${record.projection.reason}); identity still used revision/digest/converter. omittedBytes=${record.projection.omittedBytes}`,
     );
   }
-  lines.push('  Local capture evidence only. Native candidate proposal, acceptance, adoption and current publication are independent outcomes.');
-  lines.push('  Historical subject identity is reported only when the capture itself retained it; a later current binding is not substituted.');
+  lines.push(
+    '  Local capture evidence only. Native candidate proposal, acceptance, adoption and current publication are independent outcomes.',
+  );
+  lines.push(
+    '  Historical subject identity is reported only when the capture itself retained it; a later current binding is not substituted.',
+  );
   return lines;
 }
 
@@ -251,7 +260,9 @@ function renderPage(page: CaptureComparisonPage): string[] {
       ? `More work is available. Next cursor: ${page.nextCursor}`
       : 'End of this comparison page; no next cursor.',
   );
-  lines.push('Each page is one short consistent read. A later page revalidates the same source and generation identities.');
+  lines.push(
+    'Each page is one short consistent read. A later page revalidates the same source and generation identities.',
+  );
   return lines;
 }
 
@@ -274,7 +285,9 @@ export function renderCaptureComparison(document: CaptureComparisonDocument): st
     lines.push(
       `  present before=${counts.presentBefore} after=${counts.presentAfter}; excluded vanished-state rows before=${counts.excludedVanishedBefore} after=${counts.excludedVanishedAfter}`,
     );
-    lines.push(`  count pass scanned ${counts.scannedRows} present-merge steps and visited ${counts.visitedRows} journal rows.`);
+    lines.push(
+      `  count pass scanned ${counts.scannedRows} present-merge steps and visited ${counts.visitedRows} journal rows.`,
+    );
   }
   lines.push(
     `Work this invocation: sqliteReads=${document.work.sqliteReads} visitedRows=${document.work.visitedRows} scannedRows=${document.work.scannedRows} comparisonCalls=${document.work.comparisonCalls} decodedProjectionBytes=${document.work.decodedProjectionBytes} retainedBufferBytes=${document.work.retainedBufferBytes}`,

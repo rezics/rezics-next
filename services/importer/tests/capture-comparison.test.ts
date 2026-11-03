@@ -135,7 +135,10 @@ test('two complete same-source captures compare new changed unchanged vanished a
 
     const second = fixture.store.begin(source, { disappearanceThreshold: 1 });
     if (second === 'busy') throw new Error('second generation');
-    fixture.store.stage(second, staged(source, 'Q1', { revision: 'revision-2', digest: digest('Q1:2'), title: 'changed' }));
+    fixture.store.stage(
+      second,
+      staged(source, 'Q1', { revision: 'revision-2', digest: digest('Q1:2'), title: 'changed' }),
+    );
     fixture.store.stage(second, staged(source, 'Q2'));
     fixture.store.stage(second, staged(source, 'Q3', { converter: 'test@2' }));
     fixture.store.stage(second, staged(source, 'Q6', { digest: digest('Q6:1') }));
@@ -143,7 +146,10 @@ test('two complete same-source captures compare new changed unchanged vanished a
 
     const third = fixture.store.begin(source);
     if (third === 'busy') throw new Error('third generation');
-    fixture.store.stage(third, staged(source, 'Q1', { revision: 'revision-2', digest: digest('Q1:2'), title: 'changed' }));
+    fixture.store.stage(
+      third,
+      staged(source, 'Q1', { revision: 'revision-2', digest: digest('Q1:2'), title: 'changed' }),
+    );
     fixture.store.stage(third, staged(source, 'Q2'));
     fixture.store.stage(third, staged(source, 'Q3', { converter: 'test@2' }));
     fixture.store.stage(third, staged(source, 'Q5'));
@@ -151,7 +157,16 @@ test('two complete same-source captures compare new changed unchanged vanished a
     complete(fixture.store, third, ['Q1', 'Q2', 'Q3', 'Q5', 'Q6']);
 
     const counted = documentOf(
-      await compare(fixture.path, ['--source', source, '--before', first.id, '--after', second.id, '--counts', '--json']),
+      await compare(fixture.path, [
+        '--source',
+        source,
+        '--before',
+        first.id,
+        '--after',
+        second.id,
+        '--counts',
+        '--json',
+      ]),
     );
     expect(counted.counts).toMatchObject({
       state: 'complete',
@@ -211,7 +226,16 @@ test('two complete same-source captures compare new changed unchanged vanished a
     expect(vanished.page?.rows.map((row) => row.recordKey).sort()).toEqual(['Q4', 'Q5']);
 
     const reappeared = documentOf(
-      await compare(fixture.path, ['--source', source, '--before', second.id, '--after', third.id, '--counts', '--json']),
+      await compare(fixture.path, [
+        '--source',
+        source,
+        '--before',
+        second.id,
+        '--after',
+        third.id,
+        '--counts',
+        '--json',
+      ]),
     );
     expect(reappeared.counts).toMatchObject({ new: 1, changed: 0, unchanged: 4, vanished: 0, presentAfter: 5 });
 
@@ -236,7 +260,15 @@ test('two complete same-source captures compare new changed unchanged vanished a
     expect(exact.record?.projection.available).toBe(true);
     expect(exact.work.sqliteReads).toBeLessThan(20);
 
-    const human = await compare(fixture.path, ['--source', source, '--before', first.id, '--after', second.id, '--counts']);
+    const human = await compare(fixture.path, [
+      '--source',
+      source,
+      '--before',
+      first.id,
+      '--after',
+      second.id,
+      '--counts',
+    ]);
     expect(human.code).toBe(0);
     expect(human.stdout).toContain('local journal evidence');
     expect(human.stdout).toContain('nativePublication=independent');
@@ -257,7 +289,16 @@ test('empty complete captures, unavailable states, unsafe paths and corrupt curs
     if (empty === 'busy') throw new Error('empty');
     complete(fixture.store, empty, []);
     const emptyDocument = documentOf(
-      await compare(fixture.path, ['--source', 'wikidata', '--before', empty.id, '--after', empty.id, '--counts', '--json']),
+      await compare(fixture.path, [
+        '--source',
+        'wikidata',
+        '--before',
+        empty.id,
+        '--after',
+        empty.id,
+        '--counts',
+        '--json',
+      ]),
     );
     expect(emptyDocument.counts).toMatchObject({
       state: 'complete',
@@ -335,7 +376,18 @@ test('empty complete captures, unavailable states, unsafe paths and corrupt curs
     expect(JSON.parse(corrupt.stdout).error).toMatch(/malformed|noncanonical/i);
 
     const cancelled = await runImportCli(
-      ['capture-comparison', '--state', fixture.path, '--source', 'wikidata', '--before', empty.id, '--after', empty.id, '--json'],
+      [
+        'capture-comparison',
+        '--state',
+        fixture.path,
+        '--source',
+        'wikidata',
+        '--before',
+        empty.id,
+        '--after',
+        empty.id,
+        '--json',
+      ],
       { signal: AbortSignal.abort() },
     );
     expect(cancelled.code).toBe(130);
@@ -405,7 +457,9 @@ test('cursors revalidate capture identity, retirement invalidates, and live impo
     expect(continued.page?.rows).toHaveLength(3);
     expect(continued.page?.rows[0]?.recordKey).not.toBe(firstPage.page?.rows[0]?.recordKey);
 
-    fixture.database.query('UPDATE run_generations SET status=? WHERE source=? AND id=?').run('retired', source, first.id);
+    fixture.database
+      .query('UPDATE run_generations SET status=? WHERE source=? AND id=?')
+      .run('retired', source, first.id);
     const retired = await compare(fixture.path, [
       '--source',
       source,
@@ -527,7 +581,12 @@ test('count and paged union agree on 32/128/512 rows including sparse changes an
         expect(counted.work.sqliteReads).toBe(queries.length);
         expect(counted.work.comparisonCalls).toBe(counted.counts.presentBefore + counted.counts.vanished);
 
-        const collected = { new: [] as string[], changed: [] as string[], unchanged: [] as string[], vanished: [] as string[] };
+        const collected = {
+          new: [] as string[],
+          changed: [] as string[],
+          unchanged: [] as string[],
+          vanished: [] as string[],
+        };
         for (const kind of ['new', 'changed', 'unchanged', 'vanished'] as const) {
           let cursor: string | undefined;
           let pages = 0;
@@ -556,9 +615,9 @@ test('count and paged union agree on 32/128/512 rows including sparse changes an
         expect(collected.changed.sort()).toEqual([...changed].sort());
         expect(collected.vanished.sort()).toEqual([...vanished].sort());
         expect(collected.unchanged).toHaveLength(unchanged.length);
-        expect(collected.new.length + collected.changed.length + collected.unchanged.length + collected.vanished.length).toBe(
-          counted.counts.new + counted.counts.changed + counted.counts.unchanged + counted.counts.vanished,
-        );
+        expect(
+          collected.new.length + collected.changed.length + collected.unchanged.length + collected.vanished.length,
+        ).toBe(counted.counts.new + counted.counts.changed + counted.counts.unchanged + counted.counts.vanished);
 
         const exact = comparison.compare({ source, before: first.id, after: second.id, record: changed[0]! });
         expect(exact.record?.category).toBe('changed');

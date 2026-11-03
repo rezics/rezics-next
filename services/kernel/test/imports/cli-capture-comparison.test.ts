@@ -10,9 +10,7 @@ test('an operator compares two retained complete CLI captures without extra tran
     expect(before.generation.status).toBe('complete');
     const beforeId = before.generation.id;
 
-    const successor = records.map((row, index) =>
-      index === 0 ? { ...row, name: 'Revised capture catalogue' } : row,
-    );
+    const successor = records.map((row, index) => (index === 0 ? { ...row, name: 'Revised capture catalogue' } : row));
     const secondDump = feed([...successor.slice(0, 4), { id: 930099, type: 2, name: 'New capture catalogue' }]);
     const imported = await f.invoke(secondDump);
     expect(imported.code, JSON.stringify(imported)).toBe(0);

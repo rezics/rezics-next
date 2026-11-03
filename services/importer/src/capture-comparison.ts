@@ -32,12 +32,7 @@ const SOURCE_KINDS = new Set(['bangumi', 'vndb', 'openlibrary', 'wikidata']);
 
 export type CaptureComparisonKind = 'new' | 'changed' | 'unchanged' | 'vanished';
 
-export const CAPTURE_COMPARISON_KINDS: readonly CaptureComparisonKind[] = [
-  'new',
-  'changed',
-  'unchanged',
-  'vanished',
-];
+export const CAPTURE_COMPARISON_KINDS: readonly CaptureComparisonKind[] = ['new', 'changed', 'unchanged', 'vanished'];
 
 export type CaptureComparisonRequest = Readonly<{
   source: string;
@@ -378,7 +373,10 @@ function decodeProjection(raw: unknown, work: Work): DecodedProjection {
   };
 }
 
-function projectionFields(before: unknown, after: unknown): {
+function projectionFields(
+  before: unknown,
+  after: unknown,
+): {
   fields: CaptureProjectionField[];
   truncated: boolean;
   omittedBytes: number;
@@ -398,7 +396,12 @@ function projectionFields(before: unknown, after: unknown): {
       name,
       before: beforeValue?.text ?? null,
       after: afterValue?.text ?? null,
-      equal: hasBefore && hasAfter && beforeValue!.text === afterValue!.text && !beforeValue!.truncated && !afterValue!.truncated,
+      equal:
+        hasBefore &&
+        hasAfter &&
+        beforeValue!.text === afterValue!.text &&
+        !beforeValue!.truncated &&
+        !afterValue!.truncated,
       truncated: Boolean(beforeValue?.truncated || afterValue?.truncated),
       omittedBytes: (beforeValue?.omittedBytes ?? 0) + (afterValue?.omittedBytes ?? 0),
     };
@@ -406,7 +409,11 @@ function projectionFields(before: unknown, after: unknown): {
   return { fields, truncated, omittedBytes };
 }
 
-function publishedProjection(view: DecodedProjection, fields: readonly CaptureProjectionField[], extra: { truncated: boolean; omittedBytes: number }): CaptureProjectionView {
+function publishedProjection(
+  view: DecodedProjection,
+  fields: readonly CaptureProjectionField[],
+  extra: { truncated: boolean; omittedBytes: number },
+): CaptureProjectionView {
   if (!view.available) return view;
   return {
     available: true,
@@ -419,8 +426,14 @@ function publishedProjection(view: DecodedProjection, fields: readonly CapturePr
 }
 
 function compareProjections(beforeJson: string | null, afterJson: string | null, work: Work): CaptureProjectionView {
-  const before = beforeJson === null ? { available: false as const, reason: 'absent' as const, omittedBytes: 0 } : decodeProjection(beforeJson, work);
-  const after = afterJson === null ? { available: false as const, reason: 'absent' as const, omittedBytes: 0 } : decodeProjection(afterJson, work);
+  const before =
+    beforeJson === null
+      ? { available: false as const, reason: 'absent' as const, omittedBytes: 0 }
+      : decodeProjection(beforeJson, work);
+  const after =
+    afterJson === null
+      ? { available: false as const, reason: 'absent' as const, omittedBytes: 0 }
+      : decodeProjection(afterJson, work);
   if (beforeJson !== null && afterJson !== null && (!before.available || !after.available)) {
     return {
       available: false,
@@ -433,7 +446,8 @@ function compareProjections(beforeJson: string | null, afterJson: string | null,
     return {
       available: true,
       format: 'source-record',
-      sourceKind: before.sourceKind === after.sourceKind ? before.sourceKind : `${before.sourceKind}|${after.sourceKind}`,
+      sourceKind:
+        before.sourceKind === after.sourceKind ? before.sourceKind : `${before.sourceKind}|${after.sourceKind}`,
       truncated: compared.truncated || before.truncated || after.truncated,
       omittedBytes: compared.omittedBytes + before.omittedBytes + after.omittedBytes,
       fields: compared.fields,
@@ -456,7 +470,8 @@ function availability(
   retired: unknown,
   retentionState: unknown,
 ): { available: true } | { available: false; reason: CaptureUnavailableReason } {
-  if (retired === 1 || retentionState === 'retired' || status === 'retired') return { available: false, reason: 'retired' };
+  if (retired === 1 || retentionState === 'retired' || status === 'retired')
+    return { available: false, reason: 'retired' };
   if (
     retired === 2 ||
     retentionState === 'partially-retired' ||
@@ -562,7 +577,11 @@ class PresentStream {
       this.visited += 1;
       this.work.visitedRows += 1;
       this.work.observer?.onRowVisit?.(1);
-      if (typeof raw.record_key !== 'string' || utf8Bytes(raw.record_key) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(raw.record_key))
+      if (
+        typeof raw.record_key !== 'string' ||
+        utf8Bytes(raw.record_key) > MAX_RECORD_KEY_BYTES ||
+        !RECORD_KEY.test(raw.record_key)
+      )
         fail('Malformed journal row: comparison contains an invalid source record key.');
       this.fetchKey = raw.record_key;
       if (typeof raw.row_json !== 'string')
@@ -610,9 +629,7 @@ class PresentStream {
 }
 
 function generationColumns(queries: QueryCounter): Set<string> {
-  return new Set(
-    queries.all<{ name: string }>('PRAGMA table_info(run_generations)').map((row) => row.name),
-  );
+  return new Set(queries.all<{ name: string }>('PRAGMA table_info(run_generations)').map((row) => row.name));
 }
 
 function readHeader(queries: QueryCounter, columns: Set<string>, source: string, id: string): CaptureHeader {
@@ -642,7 +659,8 @@ function readHeader(queries: QueryCounter, columns: Set<string>, source: string,
     skipped: row.skipped === null || row.skipped === undefined ? null : integer(row.skipped, 'run_generations.skipped'),
     classified: integer(row.classified, 'run_generations.classified'),
     resolved: integer(row.resolved, 'run_generations.resolved'),
-    expected: row.expected === null || row.expected === undefined ? null : integer(row.expected, 'run_generations.expected'),
+    expected:
+      row.expected === null || row.expected === undefined ? null : integer(row.expected, 'run_generations.expected'),
     presentAccounting: 'stored-supplied',
   };
 }
@@ -670,7 +688,8 @@ function bindCursor(
     fail('Cursor is invalid because retained capture accounting changed.', 2);
   if (
     typeof cursor.beforeKey !== 'string' ||
-    (cursor.beforeKey !== '' && (utf8Bytes(cursor.beforeKey) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(cursor.beforeKey)))
+    (cursor.beforeKey !== '' &&
+      (utf8Bytes(cursor.beforeKey) > MAX_RECORD_KEY_BYTES || !RECORD_KEY.test(cursor.beforeKey)))
   )
     fail('Cursor record ordering key is invalid.', 2);
   if (
@@ -807,9 +826,11 @@ function readEntry(
   work.visitedRows += 1;
   work.observer?.onRowVisit?.(1);
   if (raw.record_key !== key) fail('Malformed journal row: record identity does not match its lookup key.');
-  if (typeof raw.row_json !== 'string') fail(`Malformed journal row: record metadata for ${JSON.stringify(key)} is unsupported.`);
+  if (typeof raw.row_json !== 'string')
+    fail(`Malformed journal row: record metadata for ${JSON.stringify(key)} is unsupported.`);
   const metadata = parseCapturedRecordRow(raw.row_json, source, key);
-  if (typeof raw.projection_json !== 'string') fail(`Malformed journal row: projection for ${JSON.stringify(key)} is unsupported.`);
+  if (typeof raw.projection_json !== 'string')
+    fail(`Malformed journal row: projection for ${JSON.stringify(key)} is unsupported.`);
   if (metadata.state === 'vanished') return { present: null, vanished: true };
   return {
     present: {
@@ -937,10 +958,7 @@ export class CaptureComparison {
     if (signal?.aborted) fail('Capture comparison was cancelled.', 130);
     const work = new Work(this.observer);
     const queries = new QueryCounter(this.store.database, work);
-    const sourceRow = queries.get<{ source: unknown }>(
-      'SELECT source FROM run_sources WHERE source=?',
-      request.source,
-    );
+    const sourceRow = queries.get<{ source: unknown }>('SELECT source FROM run_sources WHERE source=?', request.source);
     if (!sourceRow) fail(`No source state exists for ${JSON.stringify(request.source)}.`, 2);
     if (sourceRow.source !== request.source)
       fail('Malformed journal row: source identity does not match its lookup key.');

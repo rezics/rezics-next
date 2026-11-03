@@ -18,7 +18,18 @@ test('capture-comparison help is self-contained and rejects every import-only op
     ]),
   ).toThrow('Unknown, import-only or repeated capture-comparison flag');
   expect(() =>
-    parseCaptureComparisonArgs(['--state', 'state.sqlite', '--source', 'wikidata', '--before', '1', '--after', '2', '--limit', '20']),
+    parseCaptureComparisonArgs([
+      '--state',
+      'state.sqlite',
+      '--source',
+      'wikidata',
+      '--before',
+      '1',
+      '--after',
+      '2',
+      '--limit',
+      '20',
+    ]),
   ).toThrow('--limit requires --page');
   expect(() =>
     parseCaptureComparisonArgs([
