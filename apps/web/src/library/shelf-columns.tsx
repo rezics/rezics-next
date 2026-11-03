@@ -17,6 +17,8 @@ export function shelfColumnLabel(id: PersonalShelfColumnId): string {
       return m.library_column_type();
     case 'status':
       return m.library_column_status();
+    case 'progress':
+      return m.library_entry_progress();
     case 'added':
       return m.library_sort_created();
     case 'finished':

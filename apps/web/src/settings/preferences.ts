@@ -18,7 +18,59 @@ import { settingsCommandKeyHeader } from './command-headers';
 
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
-export type ReadingPreferences = { spoilerLevel: SpoilerLevel; suitability: Suitability; version: number };
+export const shelfPreferenceLayouts = ['grid', 'list', 'table'] as const;
+export const shelfPreferenceTabs = ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'] as const;
+export const shelfPreferenceSortFields = [
+  'last_activity',
+  'added',
+  'finished',
+  'title',
+  'rating',
+  'release_date',
+  'progress',
+] as const;
+export const shelfPreferenceColumns = [
+  'cover',
+  'title',
+  'creator',
+  'type',
+  'status',
+  'progress',
+  'rating',
+  'added',
+  'started',
+  'finished',
+  'last_activity',
+] as const;
+export type ShelfPreferenceTab = (typeof shelfPreferenceTabs)[number];
+export type ShelfPreferenceSort = {
+  field: (typeof shelfPreferenceSortFields)[number];
+  direction: 'asc' | 'desc';
+};
+export type ShelfPreferences = {
+  layouts?: Record<string, (typeof shelfPreferenceLayouts)[number]>;
+  sorts?: Partial<Record<ShelfPreferenceTab, ShelfPreferenceSort>>;
+  gridSize?: 'small' | 'medium' | 'large';
+  tableColumns?: (typeof shelfPreferenceColumns)[number][];
+};
+export type ShelfPreferencePatch = {
+  layouts?: Record<string, (typeof shelfPreferenceLayouts)[number] | null> | null;
+  sorts?: Partial<
+    Record<
+      ShelfPreferenceTab,
+      { field?: ShelfPreferenceSort['field'] | null; direction?: ShelfPreferenceSort['direction'] | null } | null
+    >
+  > | null;
+  gridSize?: ShelfPreferences['gridSize'] | null;
+  tableColumns?: ShelfPreferences['tableColumns'] | null;
+};
+export type ReadingPreferences = {
+  spoilerLevel: SpoilerLevel;
+  suitability: Suitability;
+  version: number;
+  /** The bounded native shelf projection is present on account reads and absent in older fixtures. */
+  shelf?: ShelfPreferences;
+};
 export type NotificationPreferences = Record<string, boolean>;
 export type NotificationPatch = Record<string, boolean | null> | null;
 export type NativePreferenceFailure = {
@@ -55,6 +107,7 @@ export type PreferenceChange = {
   expectedVersion: number;
   spoilerLevel?: SpoilerLevel;
   suitability?: Suitability;
+  shelf?: ShelfPreferencePatch | null;
   idempotencyKey: string;
 };
 
@@ -177,6 +230,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+const shelfScope = /^(?:all|[A-Za-z][A-Za-z0-9+.-]*:\S+)$/;
+function validShelfPatch(value: unknown): value is ShelfPreferencePatch | null {
+  if (value === null) return true;
+  if (!isRecord(value) || Object.keys(value).some((key) => !['layouts', 'sorts', 'gridSize', 'tableColumns'].includes(key)))
+    return false;
+  if (value.layouts !== undefined && value.layouts !== null) {
+    if (!isRecord(value.layouts) || Object.keys(value.layouts).length > 32) return false;
+    if (
+      Object.entries(value.layouts).some(
+        ([scope, layout]) =>
+          scope.length > 256 || !shelfScope.test(scope) || (layout !== null && !shelfPreferenceLayouts.includes(layout as never)),
+      )
+    )
+      return false;
+  }
+  if (value.sorts !== undefined && value.sorts !== null) {
+    if (!isRecord(value.sorts) || Object.keys(value.sorts).some((tab) => !shelfPreferenceTabs.includes(tab as never)))
+      return false;
+    for (const entry of Object.values(value.sorts)) {
+      if (entry === null) continue;
+      if (!isRecord(entry) || Object.keys(entry).some((key) => !['field', 'direction'].includes(key))) return false;
+      if (
+        (entry.field != null && !shelfPreferenceSortFields.includes(entry.field as never)) ||
+        (entry.direction != null && entry.direction !== 'asc' && entry.direction !== 'desc')
+      )
+        return false;
+    }
+  }
+  if (value.gridSize != null && !['small', 'medium', 'large'].includes(String(value.gridSize))) return false;
+  if (value.tableColumns != null) {
+    if (
+      !Array.isArray(value.tableColumns) ||
+      value.tableColumns.length < 1 ||
+      value.tableColumns.length > shelfPreferenceColumns.length ||
+      new Set(value.tableColumns).size !== value.tableColumns.length ||
+      value.tableColumns.some((column) => !shelfPreferenceColumns.includes(column as never))
+    )
+      return false;
+  }
+  return true;
+}
+
 function failureState(failure: NativePreferenceFailure): 'closed' | 'preparing' | 'unavailable' {
   if (failure.code === 'platform_closed') return 'closed';
   // The account preference endpoint has no adopted preparation response. A 503 is a service failure.
@@ -199,17 +294,65 @@ function statusOf(result: { status?: number; error?: unknown }): number | undefi
 /** The write a request asks for, or `undefined` when it names no setting or carries a value the kernel would refuse. */
 export function parsePreferenceChange(input: unknown): PreferenceChange | undefined {
   if (!isRecord(input)) return undefined;
-  const { expectedVersion, spoilerLevel, suitability, idempotencyKey } = input;
+  const { expectedVersion, spoilerLevel, suitability, shelf, idempotencyKey } = input;
   if (!Number.isSafeInteger(expectedVersion) || (expectedVersion as number) < 0) return undefined;
   if (typeof idempotencyKey !== 'string' || !uuid.test(idempotencyKey)) return undefined;
   if (spoilerLevel !== undefined && spoilerLevel !== 0 && spoilerLevel !== 1 && spoilerLevel !== 2) return undefined;
   if (suitability !== undefined && suitability !== 'blur' && suitability !== 'show') return undefined;
-  if (spoilerLevel === undefined && suitability === undefined) return undefined;
+  if (shelf !== undefined && !validShelfPatch(shelf)) return undefined;
+  if (spoilerLevel === undefined && suitability === undefined && shelf === undefined) return undefined;
   return {
     expectedVersion: expectedVersion as number,
     idempotencyKey,
     ...(spoilerLevel !== undefined ? { spoilerLevel } : {}),
     ...(suitability !== undefined ? { suitability } : {}),
+    ...(shelf !== undefined ? { shelf: shelf as ShelfPreferencePatch | null } : {}),
+  };
+}
+
+function presentShelf(value: unknown): ShelfPreferences | undefined {
+  if (value === undefined) return {};
+  if (!isRecord(value) || Object.keys(value).some((key) => !['layouts', 'sorts', 'gridSize', 'tableColumns'].includes(key)))
+    return undefined;
+  if (value.layouts !== undefined) {
+    if (
+      !isRecord(value.layouts) ||
+      Object.keys(value.layouts).length > 32 ||
+      Object.entries(value.layouts).some(
+        ([scope, layout]) =>
+          scope.length > 256 || !shelfScope.test(scope) || !shelfPreferenceLayouts.includes(layout as never),
+      )
+    )
+      return undefined;
+  }
+  if (value.sorts !== undefined) {
+    if (!isRecord(value.sorts) || Object.keys(value.sorts).some((tab) => !shelfPreferenceTabs.includes(tab as never)))
+      return undefined;
+    for (const entry of Object.values(value.sorts))
+      if (
+        !isRecord(entry) ||
+        Object.keys(entry).some((key) => !['field', 'direction'].includes(key)) ||
+        !shelfPreferenceSortFields.includes(entry.field as never) ||
+        (entry.direction !== 'asc' && entry.direction !== 'desc')
+      )
+        return undefined;
+  }
+  if (value.gridSize !== undefined && !['small', 'medium', 'large'].includes(String(value.gridSize))) return undefined;
+  if (value.tableColumns !== undefined) {
+    if (
+      !Array.isArray(value.tableColumns) ||
+      value.tableColumns.length < 1 ||
+      value.tableColumns.length > shelfPreferenceColumns.length ||
+      new Set(value.tableColumns).size !== value.tableColumns.length ||
+      value.tableColumns.some((column) => !shelfPreferenceColumns.includes(column as never))
+    )
+      return undefined;
+  }
+  return {
+    ...(value.layouts !== undefined ? { layouts: { ...value.layouts } as ShelfPreferences['layouts'] } : {}),
+    ...(value.sorts !== undefined ? { sorts: structuredClone(value.sorts) as ShelfPreferences['sorts'] } : {}),
+    ...(value.gridSize !== undefined ? { gridSize: value.gridSize as ShelfPreferences['gridSize'] } : {}),
+    ...(value.tableColumns !== undefined ? { tableColumns: [...value.tableColumns] as ShelfPreferences['tableColumns'] } : {}),
   };
 }
 
@@ -236,18 +379,21 @@ export function parseNotificationChange(input: unknown): NotificationChange | un
 }
 
 function present(preferences: unknown): ReadingPreferences | undefined {
+  const shelf = isRecord(preferences) ? presentShelf(preferences.shelf) : undefined;
   if (
     !isRecord(preferences) ||
     !Number.isSafeInteger(preferences.version) ||
     (preferences.version as number) < 0 ||
     (preferences.spoilerLevel !== 0 && preferences.spoilerLevel !== 1 && preferences.spoilerLevel !== 2) ||
-    (preferences.suitability !== 'blur' && preferences.suitability !== 'show')
+    (preferences.suitability !== 'blur' && preferences.suitability !== 'show') ||
+    !shelf
   )
     return undefined;
   return {
     spoilerLevel: preferences.spoilerLevel,
     suitability: preferences.suitability,
     version: preferences.version as number,
+    shelf,
   };
 }
 

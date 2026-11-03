@@ -18,19 +18,26 @@ export type ShelfLayout = (typeof shelfLayouts)[number];
 export const shelfSizes = ['s', 'm', 'l'] as const;
 export type ShelfSize = (typeof shelfSizes)[number];
 
-export const shelfColumnIds = ['cover', 'title', 'type', 'status', 'added', 'finished', 'lastActivity'] as const;
+export const shelfColumnIds = ['cover', 'title', 'type', 'status', 'progress', 'added', 'finished', 'lastActivity'] as const;
 export type PersonalShelfColumnId = (typeof shelfColumnIds)[number];
 
-/** A bounded display value. Invalid values and the complete default set use omission; title-only stays explicit. */
+/** A bounded display value. Omission and an explicit complete set remain distinct URL choices. */
 export function shelfColumns(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value.length || value.length > 128) return undefined;
   const fields = value.split(',');
   if (fields.some((field) => !(shelfColumnIds as readonly string[]).includes(field))) return undefined;
   const chosen = shelfColumnIds.filter((field) => field === 'title' || fields.includes(field));
-  return chosen.length === shelfColumnIds.length ? undefined : chosen.join(',');
+  return chosen.join(',');
 }
 
-export type ShelfDisplay = { layout: ShelfLayout; size: ShelfSize; columns?: string };
+export type ShelfDisplay = {
+  layout: ShelfLayout;
+  size: ShelfSize;
+  columns?: string;
+  layoutExplicit: boolean;
+  sizeExplicit: boolean;
+  columnsExplicit: boolean;
+};
 
 export const shelfOrders = ['lastActivity', 'createdAt', 'finishedAt'] as const;
 export const shelfDirections = ['desc', 'asc'] as const;
@@ -141,7 +148,14 @@ export function validateShelfSearch(search: Record<string, unknown>): ShelfSearc
 /** The layout and grid size to draw: the address's, or the default. */
 export function shelfDisplay(search: ShelfSearch): ShelfDisplay {
   const columns = shelfColumns(search.columns);
-  return { layout: search.layout ?? defaultLayout, size: search.size ?? defaultSize, ...(columns ? { columns } : {}) };
+  return {
+    layout: search.layout ?? defaultLayout,
+    size: search.size ?? defaultSize,
+    ...(columns ? { columns } : {}),
+    layoutExplicit: search.layout !== undefined,
+    sizeExplicit: search.size !== undefined,
+    columnsExplicit: search.columns !== undefined,
+  };
 }
 
 /** The address of a shelf view. Defaults stay out of it, and the layout and size are kept unless the caller changes them. */
@@ -156,6 +170,9 @@ export function shelfHref(
     layout?: ShelfLayout;
     size?: ShelfSize;
     columns?: string;
+    layoutExplicit?: boolean;
+    sizeExplicit?: boolean;
+    columnsExplicit?: boolean;
     cursor?: string;
   },
 ): string {
@@ -166,10 +183,10 @@ export function shelfHref(
   if (view.state) params.set('state', view.state);
   if (!view.label && view.orderBy) params.set('orderBy', view.orderBy);
   if (!view.label && view.direction) params.set('direction', view.direction);
-  if (view.layout && view.layout !== defaultLayout) params.set('layout', view.layout);
-  if (view.size && view.size !== defaultSize) params.set('size', view.size);
+  if (view.layout && (view.layout !== defaultLayout || view.layoutExplicit)) params.set('layout', view.layout);
+  if (view.size && (view.size !== defaultSize || view.sizeExplicit)) params.set('size', view.size);
   const columns = shelfColumns(view.columns);
-  if (columns) params.set('columns', columns);
+  if (columns && (view.columnsExplicit || view.columns !== undefined)) params.set('columns', columns);
   if (view.cursor) params.set('cursor', view.cursor);
   const query = params.toString();
   return query ? `/${locale}/library?${query}` : `/${locale}/library`;

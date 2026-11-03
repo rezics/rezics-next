@@ -11,6 +11,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
+import { ShelfPreferencesCard } from './shelf-preferences';
 import { ReadingNavigation, SettingsNavigationProvider } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
@@ -54,7 +55,11 @@ export function accountPreferenceIO(
   confirmed: (version: number) => void,
   transport: PreferenceIO = nativePreferences,
   readCurrent: () => boolean = () => !!credential(),
-): { reading: ReadingIO; notifications: NotificationEditorIO & { confirmed: (version: number) => void } } {
+): {
+  reading: ReadingIO;
+  shelf: ReadingIO;
+  notifications: NotificationEditorIO & { confirmed: (version: number) => void };
+} {
   const read = async () => {
     if (!readCurrent()) throw new Error('Settings viewer unavailable');
     const page = await transport.read();
@@ -64,17 +69,17 @@ export function accountPreferenceIO(
   const notify = (version: number) => {
     if (readCurrent()) confirmed(version);
   };
+  const save: ReadingIO['save'] = async (input) => {
+    const token = credential();
+    if (!token) return { ok: false, reason: 'forbidden' };
+    const result = await transport.saveReading(input, token);
+    if (credential() !== token) throw new Error('Settings viewer changed');
+    return result;
+  };
+  const reading = { read, save };
   return {
-    reading: {
-      read,
-      save: async (input) => {
-        const token = credential();
-        if (!token) return { ok: false, reason: 'forbidden' };
-        const result = await transport.saveReading(input, token);
-        if (credential() !== token) throw new Error('Settings viewer changed');
-        return result;
-      },
-    },
+    reading,
+    shelf: reading,
     notifications: {
       read,
       confirmed: notify,
@@ -257,8 +262,17 @@ function SettingsSections({
       </section>
     ),
     display: (
-      <div id="display" className="scroll-mt-6">
+      <div id="display" className="scroll-mt-6 space-y-6">
         <DisplayPreferences />
+        {'preferences' in page ? (
+          <ShelfPreferencesCard
+            initial={page.preferences.shelf ?? {}}
+            version={version}
+            csrfToken={csrfToken}
+            io={io.shelf}
+            onVersionChange={io.notifications.confirmed}
+          />
+        ) : null}
       </div>
     ),
     notifications:

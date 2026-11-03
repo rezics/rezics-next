@@ -57,6 +57,12 @@ export function DisplayControls({
   const typeSearch = type ? { type } : {};
   const stateSearch = { ...typeSearch, ...(state ? { state } : {}), ...sort, ...(cursor ? { cursor } : {}) };
   const labelSearch = label ? { label } : {};
+  const displaySearch = {
+    layout: display.layout,
+    size: display.size,
+    ...(display.columns !== undefined ? { columns: display.columns } : {}),
+  };
+  const restoreHref = shelfHref(locale, { ...(label ? labelSearch : typeSearch), ...(state ? { state } : {}) });
   if (!hydrated) {
     const selected = (current: boolean) => buttonVariants({ variant: current ? 'secondary' : 'outline', size: 'sm' });
     return (
@@ -65,7 +71,7 @@ export function DisplayControls({
           {shelfLayouts.map((layout) => (
             <a
               key={layout}
-              href={shelfHref(locale, { ...stateSearch, ...display, layout, ...labelSearch })}
+              href={shelfHref(locale, { ...stateSearch, ...display, layout, layoutExplicit: true, ...labelSearch })}
               aria-current={display.layout === layout ? 'page' : undefined}
               className={`${selected(display.layout === layout)}${layout === 'table' ? ' max-sm:hidden' : ''}`}
             >
@@ -78,7 +84,7 @@ export function DisplayControls({
             {shelfSizes.map((size) => (
               <a
                 key={size}
-                href={shelfHref(locale, { ...stateSearch, ...display, size, ...labelSearch })}
+                href={shelfHref(locale, { ...stateSearch, ...display, size, sizeExplicit: true, ...labelSearch })}
                 aria-current={display.size === size ? 'page' : undefined}
                 className={selected(display.size === size)}
               >
@@ -95,6 +101,11 @@ export function DisplayControls({
             {m.library_clear_state()}
           </a>
         ) : null}
+        {!label ? (
+          <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
+            {m.library_shelf_restore_defaults()}
+          </a>
+        ) : null}
       </div>
     );
   }
@@ -109,8 +120,8 @@ export function DisplayControls({
             void navigate({
               to: '/library',
               search: label
-                ? (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, layout })
-                : { ...stateSearch, ...display, layout },
+                ? (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...displaySearch, layout })
+                : { ...stateSearch, ...displaySearch, layout },
             });
         }}
         variant="outline"
@@ -126,7 +137,7 @@ export function DisplayControls({
           <ShelfColumnsControl
             {...(display.columns ? { value: display.columns } : {})}
             disabled={!hydrated}
-            view={{ ...stateSearch, ...display }}
+            view={{ ...stateSearch, ...displaySearch }}
             {...(isCurrent ? { isCurrent } : {})}
           />
         </div>
@@ -141,8 +152,8 @@ export function DisplayControls({
               void navigate({
                 to: '/library',
                 search: label
-                  ? (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...display, size })
-                  : { ...stateSearch, ...display, size },
+                  ? (previous) => ({ ...previous, ...stateSearch, ...labelSearch, ...displaySearch, size })
+                  : { ...stateSearch, ...displaySearch, size },
               });
           }}
           variant="outline"
@@ -160,6 +171,11 @@ export function DisplayControls({
           href={shelfHref(locale, { ...typeSearch, ...filterSort, ...display, ...labelSearch })}
         >
           {m.library_clear_state()}
+        </a>
+      ) : null}
+      {!label ? (
+        <a className={buttonVariants({ variant: 'ghost', size: 'sm' })} href={restoreHref}>
+          {m.library_shelf_restore_defaults()}
         </a>
       ) : null}
     </div>

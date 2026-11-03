@@ -5,10 +5,18 @@ import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { useQueryClient } from '@tanstack/react-query';
 import { env } from 'cloudflare:workers';
+import { useLayoutEffect, useRef } from 'react';
 import { kernelClient } from '../../kernel/client';
 import { readPersonalLibraryCurrent } from '../../library/personal-library-server';
 import { PersonalLibraryCurrent } from '../../library/personal-library-current';
+import { resolveShelfPresentation } from '../../library/shelf-preferences';
+import {
+  readCurrentShelfPreferences,
+  ShelfPreferenceSnapshotOwner,
+} from '../../settings/shelf-preferences-current';
+import { sessionQuery, useSession } from '../../session/query';
 import { CurrentLabelShelf } from '../../library/label-shelf-current';
 import { loadCurrentLabelShelfPage, type CurrentLabelShelfData } from '../../library/label-shelf-read';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
@@ -18,7 +26,7 @@ import {
   shelfPageResetCursor,
 } from '../../library/shelf-address-recovery';
 import type { SessionEnv } from '../../session/client';
-import { shelfAddressIssues, shelfCursor, shelfDisplay, validateShelfSearch } from '../../library/shelf-params';
+import { shelfAddressIssues, shelfCursor, validateShelfSearch } from '../../library/shelf-params';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
@@ -155,9 +163,10 @@ export const Route = createFileRoute('/library/')({
   },
   loader: async ({ deps }) => {
     if (deps.addressIssues.length) return { addressRecovery: deps.addressIssues };
-    if (deps.label)
-      return readLabelShelf({
-        data: {
+    if (deps.label) {
+      const [page, shelfSnapshot] = await Promise.all([
+        readLabelShelf({
+          data: {
           labelId: deps.label,
           cursor: deps.cursor,
           undoLabelId: deps.undoLabelId,
@@ -166,17 +175,31 @@ export const Route = createFileRoute('/library/')({
           undoRevision: deps.undoRevision,
           undoKey: deps.undoKey,
           labelResult: deps.labelResult,
-        },
-      });
-    return readPersonalLibraryCurrent({
+          },
+        }),
+        readCurrentShelfPreferences(),
+      ]);
+      return { ...page, shelfSnapshot };
+    }
+    const requested = {
+      ...(deps.state ? { state: deps.state } : {}),
+      ...(deps.type ? { type: deps.type } : {}),
+      ...(deps.cursor ? { cursor: deps.cursor } : {}),
+      ...(deps.orderBy ? { orderBy: deps.orderBy } : {}),
+      ...(deps.direction ? { direction: deps.direction } : {}),
+    };
+    const shelfSnapshot = await readCurrentShelfPreferences();
+    const resolved = resolveShelfPresentation(requested, shelfSnapshot.shelf ?? undefined);
+    const page = await readPersonalLibraryCurrent({
       data: {
-        orderBy: deps.orderBy,
-        direction: deps.direction,
-        ...(deps.state ? { state: deps.state } : {}),
-        ...(deps.type ? { type: deps.type } : {}),
-        ...(deps.cursor ? { cursor: deps.cursor } : {}),
+        orderBy: resolved.search.orderBy,
+        direction: resolved.search.direction,
+        ...(resolved.search.state ? { state: resolved.search.state } : {}),
+        ...(resolved.search.type ? { type: resolved.search.type } : {}),
+        ...(resolved.search.cursor ? { cursor: resolved.search.cursor } : {}),
       },
     });
+    return { ...page, shelfSnapshot };
   },
   head: ({ match, loaderData }) =>
     pageHead(
@@ -193,16 +216,38 @@ function LibraryRoute() {
   const rawSearch = Route.useSearch();
   const search = validateShelfSearch(rawSearch);
   const data = Route.useLoaderData();
+  const snapshot = 'shelfSnapshot' in data ? data.shelfSnapshot : undefined;
   const locale = getLocale();
+  const viewer = useSession();
+  const queryClient = useQueryClient();
+  const shelfOwner = useRef<ShelfPreferenceSnapshotOwner | null>(null);
+  shelfOwner.current ??= new ShelfPreferenceSnapshotOwner();
+  const owner = shelfOwner.current;
+  useLayoutEffect(() => {
+    const observe = () => {
+      const query = queryClient.getQueryState(sessionQuery.queryKey);
+      if (query?.status === 'error') owner.retire();
+      else if (query?.status === 'success') owner.observe(query.data);
+      else if (query?.status === 'pending') owner.observe({ state: 'unknown', subject: null, csrfToken: null });
+    };
+    observe();
+    return queryClient.getQueryCache().subscribe(({ query, type }) => {
+      if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+      if (type === 'removed') owner.retire();
+      else observe();
+    });
+  }, [owner, queryClient, snapshot?.generation]);
   if ('addressRecovery' in data)
     return <ShelfAddressRecovery locale={locale} search={rawSearch} issues={data.addressRecovery} />;
+  const shelf = owner.resolve(snapshot, viewer);
+  const presentation = resolveShelfPresentation(search, shelf);
   if (!('page' in data))
     return (
       <>
         {search.cursor && shelfPageResetCursor(data) ? (
           <ShelfStaleCursorRecovery locale={locale} search={rawSearch} />
         ) : null}
-        <CurrentLabelShelf initial={data} locale={locale} display={shelfDisplay(search)} read={readLabelShelf} />
+        <CurrentLabelShelf initial={data} locale={locale} display={presentation.display} read={readLabelShelf} />
       </>
     );
   return (
@@ -210,7 +255,7 @@ function LibraryRoute() {
       {search.cursor && shelfPageResetCursor(data) ? (
         <ShelfStaleCursorRecovery locale={locale} search={rawSearch} />
       ) : null}
-      <PersonalLibraryCurrent initial={data} search={search} locale={locale} display={shelfDisplay(search)} />
+      <PersonalLibraryCurrent initial={data} search={presentation.search} locale={locale} display={presentation.display} />
     </>
   );
 }

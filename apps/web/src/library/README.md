@@ -1,3 +1,23 @@
+# Saved Library views
+
+Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
+the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
+otherwise use `all`; Settings edits only `all`. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
+controls. Only `last_activity`, `added` and `finished` map to the currently admitted native Library order operations.
+Title, rating, release-date and progress orders remain saved and are described as unavailable. The table maps the
+currently supplied cover, title, type, status, active progress, added, finished and last-activity fields. Unsupported
+creator, rating and started columns remain in the native preference array and never appear as Library controls.
+
+Changing a view changes its URL only. “Use saved view defaults” removes display and order overrides while keeping
+type, state and label filters. A deliberate Settings save sends only changed shelf parts, so unrelated scopes and
+unsupported saved choices survive. Reset sends `shelf: null`, which clears the complete native shelf preference;
+reading and notification preferences are omitted. A stale version keeps the local draft for review. An uncertain
+save can retry only with its original idempotency key; refreshing reads the current version and does not replace the
+draft. A saved sort that changes the loaded order drops the old cursor. Table progress is the supplied active session
+value, preserving its unit and mode; no row reads or local page sorting are added.
+
+Decision: Settings edits the reversible `all` layout scope; the resolver uses an exact type scope only for absolute-IRI addresses and otherwise falls back to `all`.
+
 # Library selection review
 
 The private shelf selects only the currently supplied rows, in visible selection order, up to the native UI cap of 100. The shared SelectionBar shows the exact count, keeps Review and Clear reachable, and places secondary actions in

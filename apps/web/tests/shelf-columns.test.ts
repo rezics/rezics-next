@@ -98,7 +98,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
   const { createRoot } = await import('react-dom/client');
   const options = libraryStateOptions(definitions.release as never, 'schema:Book', 'en');
   const stamp = '2026-01-01T00:00:00.000Z';
-  const rows = [1, 2].map((n) => ({
+  const row = (n: number) => ({
     subjectId: id(n),
     state: options[0]!.id,
     revision: 2,
@@ -107,6 +107,19 @@ test('a reader chooses personal Library table columns on the actual page and ret
     updatedAt: stamp,
     lastActivityAt: stamp,
     finishedAt: null,
+      ...(n === 1
+        ? {
+            activeProgressSession: {
+              mode: 'cursor_position',
+              unit: 'page',
+              amount: null,
+              total: '99',
+              completedUnitCount: 0,
+              locator: null,
+              position: '12',
+            },
+          }
+        : {}),
     subject:
       n === 2
         ? null
@@ -117,7 +130,8 @@ test('a reader chooses personal Library table columns on the actual page and ret
             label: { value: 'A private library entry', language: 'en' },
             cover: null,
           },
-  }));
+  });
+  let rows = [row(1), row(2)];
   const requests: Request[] = [];
   globalThis.fetch = (async (input, init) => {
     const req = new Request(input, init);
@@ -126,6 +140,19 @@ test('a reader chooses personal Library table columns on the actual page and ret
     if (url.pathname === '/v1/definitions/active') return Response.json({ digest: definitions.digest });
     if (url.pathname.startsWith('/v1/definitions/releases/')) return Response.json(definitions);
     if (url.pathname === '/v1/platform/exposure') return Response.json({ admitted });
+    if (url.pathname === `/v1/accounts/${id(700)}/preferences`)
+      return Response.json({
+        version: 3,
+        spoilerLevel: 0,
+        suitability: 'blur',
+        notifications: { reply: true, mention: true },
+        shelf: {
+          layouts: { all: 'table' },
+          sorts: { all: { field: 'last_activity', direction: 'desc' } },
+          gridSize: 'medium',
+          tableColumns: ['cover', 'title', 'type', 'status', 'progress', 'added', 'finished', 'last_activity'],
+        },
+      });
     if (url.pathname === '/v1/libraryEntries') return Response.json({ libraryEntries: rows, next: 'native-next' });
     if (url.pathname === '/v1/libraryContinue') return Response.json({ subjects: [], next: null });
     if (url.pathname === '/openapi.json') return Response.json({ paths: {} });
@@ -133,6 +160,8 @@ test('a reader chooses personal Library table columns on the actual page and ret
     return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
   }) as typeof fetch;
   const reads = () => requests.filter((req) => new URL(req.url).pathname === '/v1/libraryEntries');
+  const preferenceReads = () =>
+    requests.filter((req) => new URL(req.url).pathname === `/v1/accounts/${id(700)}/preferences` && req.method === 'GET');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: id(700), csrfToken });
   client.setQueryData(exposureQuery.queryKey, admitted);
@@ -199,13 +228,15 @@ test('a reader chooses personal Library table columns on the actual page and ret
   try {
     await render();
     expect(headers()).toEqual(shelfColumnIds.map(shelfColumnLabel)); // malformed means complete current defaults
+    expect(table().textContent).toContain('12 / 99');
     expect(reads()).toHaveLength(1);
+    expect(preferenceReads()).toHaveLength(1);
     const initialQuery = new URL(reads()[0]!.url).search;
     expect(new URLSearchParams(initialQuery).get('cursor')).toBe('native-current');
     expect(new URLSearchParams(initialQuery).has('columns')).toBe(false);
     const initialRequests = requests.length;
     const picker = await openPicker();
-    expect(picker.querySelectorAll('[role="checkbox"]')).toHaveLength(7);
+    expect(picker.querySelectorAll('[role="checkbox"]')).toHaveLength(8);
     const titleLabel = Array.from(picker.querySelectorAll('label')).find(
       (node) => node.textContent === m.library_column_title(),
     )!;
@@ -213,7 +244,7 @@ test('a reader chooses personal Library table columns on the actual page and ret
     expect(titleChoice.getAttribute('aria-checked')).toBe('true');
     expect(titleChoice.hasAttribute('disabled') || titleChoice.getAttribute('aria-disabled') === 'true').toBe(true);
     expect(picker.textContent).toContain(m.library_columns_title_required());
-    for (const column of ['lastActivity', 'cover', 'type', 'added', 'finished']) await toggle(column);
+    for (const column of ['lastActivity', 'cover', 'type', 'progress', 'added', 'finished']) await toggle(column);
     await close();
     expect(search().get('columns')).toBe('title,status');
     expect(search().get('cursor')).toBe('native-current');
@@ -315,6 +346,19 @@ test('a reader chooses personal Library table columns on the actual page and ret
     expect(requests.filter((req) => req.method !== 'GET')).toHaveLength(0);
     expect(requests.filter((req) => /\/v1\/libraryEntries\//.test(req.url))).toHaveLength(0);
     expect(reads().every((req) => !new URL(req.url).searchParams.has('columns'))).toBe(true);
+    for (const size of [1, 20, 100]) {
+      rows = Array.from({ length: size }, (_, index) => row(index + 1));
+      const before = reads().length;
+      const preferencesBefore = preferenceReads().length;
+      await act(async () => root.unmount());
+      router = makeRouter('/library');
+      root = createRoot(host);
+      await render();
+      expect(table().querySelectorAll('tbody tr')).toHaveLength(size);
+      expect(reads()).toHaveLength(before + 1);
+      expect(preferenceReads()).toHaveLength(preferencesBefore + 1);
+      expect(requests.filter((req) => /\/v1\/libraryEntries\//.test(req.url))).toHaveLength(0);
+    }
   } finally {
     await act(async () => root.unmount());
     client.clear();
