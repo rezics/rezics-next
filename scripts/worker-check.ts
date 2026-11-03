@@ -1344,7 +1344,7 @@ export async function runWorkerCheck(
     else {
       try {
         if (performanceHosts(readHosts(remoteHostsFile)).length === 0)
-          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no approved a/b host`;
+          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no performance-approved host`;
       } catch (error) {
         remoteHostFailure = `remote check hosts are invalid: ${error instanceof Error ? error.message : String(error)}`;
       }

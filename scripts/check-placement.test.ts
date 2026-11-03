@@ -7,7 +7,7 @@ import { PassThrough } from 'node:stream';
 import type { spawn } from 'node:child_process';
 import { onCheckHost, stackRun } from './stack-run.ts';
 import { classifyCheck, environmentPrefixIsSafe, performanceHosts } from './check-placement.ts';
-import { RemoteTransportError } from './remote-check.ts';
+import { readHosts, RemoteTransportError } from './remote-check.ts';
 import { runWorkerCheck, workerCheckNeedsStack } from './worker-check.ts';
 
 const repository = resolve(import.meta.dir, '..');
@@ -66,6 +66,7 @@ function fixture(): string {
 function host(name: string) {
   return {
     name,
+    performance: true,
     address: `root@${name}.example`,
     identity: `/keys/${name}`,
     memoryMaxGiB: 16,
@@ -142,7 +143,7 @@ test('discovery, preload, shell, native-stack, browser, server, database, and un
   expect(classifyCheck(['bun', 'test', 'packages/util/test/large.test.ts'], root).placement).toBe('remote');
 });
 
-test('caller markers cannot convert heavy placement to local, and only hosts a and b survive filtering', () => {
+test('caller markers cannot convert heavy placement to local, and only performance-flagged hosts survive filtering', () => {
   const root = fixture();
   const saved = Object.fromEntries(
     ['KERNEL_CHECK_ON_REMOTE', 'REZICS_STACK_REMOTE', 'REZICS_STACK_SLOT', 'REZICS_CHECK_LOCAL_ONLY'].map((key) => [
@@ -157,7 +158,7 @@ test('caller markers cannot convert heavy placement to local, and only hosts a a
   try {
     expect(classifyCheck(['bun', 'test'], root).placement).toBe('remote');
     expect(workerCheckNeedsStack(['bun', 'test'], root)).toBe(true);
-    expect(performanceHosts([host('c'), host('a'), host('b')]).map(({ name }) => name)).toEqual(['a', 'b']);
+    expect(performanceHosts([host('c'), { ...host('unflagged'), performance: false }, host('a'), host('b'), { name: 'missing' }]).map(({ name }) => name)).toEqual(['c', 'a', 'b']);
     expect(onCheckHost(root)).toBe(false);
   } finally {
     for (const [key, value] of Object.entries(saved)) {
@@ -167,7 +168,7 @@ test('caller markers cannot convert heavy placement to local, and only hosts a a
   }
 });
 
-test('worker --local with only host c returns unavailable without executing the command', async () => {
+test('worker --local with unflagged host c fails closed and transport failure never replays locally', async () => {
   const parent = join(repository, '.temp');
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, `worker-placement-${randomUUID()}-`));
@@ -175,6 +176,7 @@ test('worker --local with only host c returns unavailable without executing the 
   const gitInit = Bun.spawnSync(['git', 'init', '--quiet', root], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
   expect(gitInit.exitCode).toBe(0);
   const config = hostsFile(root, ['c']);
+  writeFileSync(config, JSON.stringify({ hosts: [{ ...host('c'), performance: false }] }));
   const sentinel = join(root, 'local-command-ran');
   const saved = Object.fromEntries(
     [
@@ -270,7 +272,7 @@ test('worker --local with only host c returns unavailable without executing the 
   }
 });
 
-test('stack-heavy work never calls its local callback with absent hosts, c-only hosts, local flags, or transport loss', async () => {
+test('stack-heavy work never calls its local callback with absent hosts, unflagged hosts, local flags, or transport loss', async () => {
   const root = fixture();
   const run = { label: 'heavy test', root, cwd: root, command: ['bun', 'test'] };
   let localStarts = 0;
@@ -284,6 +286,12 @@ test('stack-heavy work never calls its local callback with absent hosts, c-only 
   ).toBe(75);
 
   const cOnly = hostsFile(root, ['c']);
+  expect(await stackRun(run, local, { KERNEL_CHECK_REMOTE: cOnly }, async (options) => {
+    expect(options.allowedHosts).toEqual(['c']);
+    expect(options.hosts.map(({ name }) => name)).toEqual(['c']);
+    return 23;
+  })).toBe(23);
+  writeFileSync(cOnly, JSON.stringify({ hosts: [{ ...host('c'), performance: false }] }));
   expect(await stackRun(run, local, { KERNEL_CHECK_REMOTE: cOnly }, async () => 0)).toBe(75);
 
   let selected: string[] = [];
@@ -304,7 +312,7 @@ test('stack-heavy work never calls its local callback with absent hosts, c-only 
     },
   );
   expect(exitCode).toBe(75);
-  expect(selected).toEqual(['a', 'b']);
+  expect(selected).toEqual(['a', 'b', 'c']);
   expect(localStarts).toBe(0);
 });
 
@@ -334,4 +342,12 @@ test('the fixed held-child operation retains ordinary remote placement and grant
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('the hosts reader preserves explicit performance approval and rejects a nonboolean flag', () => {
+  const root = fixture();
+  const file = hostsFile(root, ['c']);
+  expect(performanceHosts(readHosts(file)).map(({ name }) => name)).toEqual(['c']);
+  writeFileSync(file, JSON.stringify({ hosts: [{ ...host('c'), performance: 'true' }] }));
+  expect(() => readHosts(file)).toThrow('bad performance');
 });

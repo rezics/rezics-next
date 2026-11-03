@@ -1176,6 +1176,7 @@ function scenario(hosts: Record<string, HostConfig>): { env: Record<string, stri
     JSON.stringify({
       hosts: Object.keys(hosts).map((name) => ({
         name,
+        performance: true,
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
         memoryMaxGiB: hosts[name]!.memoryMaxGiB ?? 16,
@@ -1240,6 +1241,7 @@ function rewriteHosts(
     JSON.stringify({
       hosts: hosts.map(({ name, slots, fallback }) => ({
         name,
+        performance: true,
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
         memoryMaxGiB: 16,
@@ -2186,6 +2188,7 @@ test('a host with 1.5 processors per slot and 11 slice processors offers 7 slots
       memoryMax: 30 * 2 ** 30,
       memoryHeadroom: 30 * 2 ** 30,
       sliceProcessors: 11,
+      cpuQuotaPercent: 1100,
       processors: 11,
       processorsPerSlot: 1.5,
       slots: 8,
@@ -2207,6 +2210,7 @@ test('a processor-bounded host does not lose slots to its memoryMaxGiB', async (
       memoryMaxGiB: 4,
       memoryHeadroom: 4 * 2 ** 30,
       sliceProcessors: 12,
+      cpuQuotaPercent: 1200,
       slots: 8,
     },
   });
@@ -7853,6 +7857,7 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
     const request = { version: 1 as const, operation: 'release' as const, gate };
     const host = {
       name: 'a',
+      performance: true,
       address: 'root@selected.invalid',
       identity: '/private/key',
       memoryMaxGiB: 16,
@@ -7916,7 +7921,7 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
     expect(script).not.toContain('--eval');
     expect(script).not.toContain(directory);
     await expect(lifecycleControlScript(randomUUID(), request)).rejects.toThrow('placement mismatch');
-    await expect(transportLifecycleControl({ ...host, name: 'foreign' }, run, request)).rejects.toThrow('unapproved');
+    await expect(transportLifecycleControl({ ...host, performance: false }, run, request)).rejects.toThrow('unapproved');
     expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(2);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -8060,4 +8065,37 @@ test('publication cleanup cannot replace a result or a primary failure when its 
       throw new Error('primary transport failure');
     }),
   ).rejects.toThrow('primary transport failure');
+});
+
+test('loopback c admission respects configured slots, memory and slice CPU capacity', async () => {
+  for (const limits of [
+    { sliceProcessors: 48, expected: 10 },
+    { sliceProcessors: 4, expected: 4 },
+    { sliceProcessors: 48, cpuQuotaPercent: 200, expected: 2 },
+  ]) {
+    const { expected, ...slice } = limits;
+    const { env, events } = scenario({ c: {
+      available: 33 * 2 ** 30, memoryMax: 24 * 2 ** 30, slots: 10,
+      memoryMaxGiB: 20, cpuQuotaPercent: 3200, processorsPerSlot: 1, processors: 64, load: 0, ...slice,
+    } });
+    const result = await remote(env, workspace(), ['true'], ['--estimate-ms', '1000']);
+    expect(result.code, result.stderr).toBe(0);
+    const granted = events().find((event) => event.kind === 'slot' && event.granted)!;
+    expect(granted.address).toBe('ops@c.test');
+    expect(granted.script).toContain('# REMOTE_CHECK_SLOT_LIMIT ' + expected);
+  }
+  const { env, events } = scenario({ c: {
+    available: 33 * 2 ** 30, memoryMax: 24 * 2 ** 30, slots: 10,
+    memoryMaxGiB: 20, cpuQuotaPercent: 3200, processorsPerSlot: 1,
+  } });
+  const child = Bun.spawn([process.execPath, '--eval', `
+    import { readHosts, tryRemoteCheck } from ${JSON.stringify(remoteCheck)};
+    const result = await tryRemoteCheck({ hosts: readHosts(process.env.KERNEL_CHECK_REMOTE),
+      workspace: ${JSON.stringify(workspace())}, command: ['true'], memoryGiB: 21 }, new AbortController().signal);
+    console.log(result.status);
+  `], { env, stdout: 'pipe', stderr: 'pipe' });
+  const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+  expect(stdout.trim()).toBe('no-slot');
+  expect(events().some((event) => event.kind === 'slot' && event.granted)).toBe(false);
 });

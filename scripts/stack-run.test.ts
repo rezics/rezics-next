@@ -305,6 +305,7 @@ function scenario(hosts: Record<string, HostConfig>): {
     JSON.stringify({
       hosts: Object.keys(hosts).map((name) => ({
         name,
+        performance: true,
         address: `ops@${name}.test`,
         identity: `/keys/${name}`,
         memoryMaxGiB: 16,
@@ -512,7 +513,7 @@ let settlement;
 let outcome;
 try {
   const code = await remoteCheck({
-    hosts: [{ name: 'a', address: 'ops@a.test', identity: '/keys/a', memoryMaxGiB: 16,
+    hosts: [{ name: 'a', performance: true, address: 'ops@a.test', identity: '/keys/a', memoryMaxGiB: 16,
       cpuQuotaPercent: 800, slots: 2, processorsPerSlot: 4 }],
     workspace: process.env.TEST_WORKSPACE,
     command: ['true'],
@@ -1064,7 +1065,7 @@ test('Kernel tree profile and mixed schema travel through real stack placement a
         expect(options.workspace).toBe(directory);
         expect(options.cwd).toBe('services/kernel');
         expect(options.command).toContain('--emit-client');
-        expect(options.allowedHosts).toEqual(['a', 'b']);
+        expect(options.allowedHosts).toEqual(['a']);
         return 23;
       },
     );

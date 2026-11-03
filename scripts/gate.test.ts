@@ -229,8 +229,8 @@ function scenario(slots = 8): { env: Record<string, string>; events: () => Event
     join(dir, 'hosts.json'),
     JSON.stringify({
       hosts: [
-        { name: 'b', address: 'ops@b.test', identity: '/keys/b', memoryMaxGiB: 48, cpuQuotaPercent: 1600, slots },
-        { name: 'c', address: 'ops@c.test', identity: '/keys/c', memoryMaxGiB: 48, cpuQuotaPercent: 1600, slots },
+        { name: 'b', performance: true, address: 'ops@b.test', identity: '/keys/b', memoryMaxGiB: 48, cpuQuotaPercent: 1600, slots },
+        { name: 'c', performance: false, address: 'ops@c.test', identity: '/keys/c', memoryMaxGiB: 48, cpuQuotaPercent: 1600, slots },
       ],
     }),
   );

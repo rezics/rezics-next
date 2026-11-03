@@ -100,6 +100,7 @@ function candidate(options: { web?: boolean; output?: string; tmpfs?: boolean } 
     JSON.stringify({
       hosts: ['c', 'a', 'b'].map((name) => ({
         name,
+        performance: true,
         address: `root@${name}.example`,
         identity: `/keys/${name}`,
         memoryMaxGiB: 16,
@@ -348,14 +349,14 @@ test('generic driver freezes a separate candidate, preserves environment, cwd, p
       onStarted: (host) => (selectedHost = host),
       receiptWriter: (line) => completed.push(line),
       transport: async (options) => {
-        options.started?.('a');
+        options.started?.('c');
         frozenRoot = options.workspace;
         expect(options.workspace).not.toBe(fixture.root);
         expect(await Bun.file(join(options.workspace, 'src/input.ts')).text()).toBe('export const value = 7;\n');
         expect(existsSync(join(options.workspace, 'reports/result.txt'))).toBe(false);
         expect(options.cwd).toBe('apps/web');
-        expect(options.hosts.map(({ name }) => name)).toEqual(['a', 'b']);
-        expect(options.allowedHosts).toEqual(['a', 'b']);
+        expect(options.hosts.map(({ name }) => name)).toEqual(['c', 'a', 'b']);
+        expect(options.allowedHosts).toEqual(['c', 'a', 'b']);
         expect(options.priority).toBe('critical');
         expect(options.command).toEqual(['env', `LABEL=${overlay.LABEL}`, 'SETTINGS_FILE=settings.json', ...argv]);
         expect(options.prepare).toEqual([
@@ -363,11 +364,11 @@ test('generic driver freezes a separate candidate, preserves environment, cwd, p
           { cwd: '.', command: ['bun', 'run', '--cwd', 'apps/web', 'generate:routes'] },
         ]);
         expect(options.cancellation).toEqual({ file: cancellationFile, id: cancellationId });
-        expect(selectedHost).toBe('a');
+        expect(selectedHost).toBe('c');
         received.push(...options.command);
         mkdirSync(join(options.workspace, 'reports'), { recursive: true });
         writeFileSync(join(options.workspace, 'reports/result.txt'), 'fresh remote output\n');
-        options.completed?.(receipt('a', 0));
+        options.completed?.(receipt('c', 0));
         return 0;
       },
     },
@@ -382,14 +383,14 @@ test('generic driver freezes a separate candidate, preserves environment, cwd, p
   );
   expect(result).toBe(0);
   expect(received.slice(-argv.length)).toEqual(argv);
-  expect(selectedHost).toBe('a');
+  expect(selectedHost).toBe('c');
   expect(completed).toHaveLength(1);
-  expect(JSON.parse(completed[0]!)).toEqual({ nonce: 'trusted-nonce', receipt: receipt('a', 0) });
+  expect(JSON.parse(completed[0]!)).toEqual({ nonce: 'trusted-nonce', receipt: receipt('c', 0) });
   expect(readFileSync(outputPath, 'utf8')).toBe('fresh remote output\n');
   expect(existsSync(frozenRoot)).toBe(false);
 });
 
-test('source mismatch, c-only hosts, forbidden env values, and missing generated inputs fail before transport', async () => {
+test('source mismatch, unflagged hosts, forbidden env values, and missing generated inputs fail before transport', async () => {
   const fixture = candidate();
   let transports = 0;
   const dependencies = { transport: async () => (transports += 1) };
@@ -402,11 +403,11 @@ test('source mismatch, c-only hosts, forbidden env values, and missing generated
     fixture.hosts,
     JSON.stringify({
       hosts: [
-        { name: 'c', address: 'root@c.example', identity: '/keys/c', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 8 },
+        { name: 'c', performance: false, address: 'root@c.example', identity: '/keys/c', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 8 },
       ],
     }),
   );
-  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow('no approved a/b host');
+  await expect(runCheck(argsFor(fixture, ['bun', 'test']), dependencies)).rejects.toThrow('no performance-approved host');
   expect(transports).toBe(0);
 
   writeFileSync(
@@ -414,6 +415,7 @@ test('source mismatch, c-only hosts, forbidden env values, and missing generated
     JSON.stringify({
       hosts: ['a', 'b'].map((name) => ({
         name,
+        performance: true,
         address: `root@${name}.example`,
         identity: `/keys/${name}`,
         memoryMaxGiB: 16,
@@ -979,16 +981,16 @@ test('unknown and failed remote cleanup evidence stay non-green with the exact a
         stateDirectory: fixture.parent,
         onRetainSnapshot: (snapshot) => (retained = snapshot),
         transport: async (options) => {
-          const native = receipt('b', 0, 'physical-run-admitted-b');
-          const physical = { host: 'b', run: native.run };
+          const native = receipt('c', 0, 'physical-run-admitted-c');
+          const physical = { host: 'c', run: native.run };
           await options.allocated?.(physical);
           await options.completed?.(native);
           await options.settled?.(
             remoteSettlement(options, native, {
-              host: scenario.settlementHost ?? 'b',
+              host: scenario.settlementHost ?? 'c',
               cleanup: {
                 schema: 1,
-                host: 'b',
+                host: 'c',
                 run: native.run,
                 status: scenario.status,
                 supervisorStopped: scenario.status === 'verified',
@@ -1008,7 +1010,7 @@ test('unknown and failed remote cleanup evidence stay non-green with the exact a
       const encoded = finals[0];
       if (!encoded) throw new Error('remote cleanup did not produce a retained final settlement');
       const final = JSON.parse(encoded);
-      expect(final.physical).toEqual({ host: 'b', run: 'physical-run-admitted-b' });
+      expect(final.physical).toEqual({ host: 'c', run: 'physical-run-admitted-c' });
       expect(final.native.exitCode).toBe(0);
       expect(final.cleanup.remote).toBe(scenario.expectedRemote);
       expect(final.cleanup.disposition).toBe('unknown');

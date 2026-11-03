@@ -46,7 +46,7 @@ function markerRecord(host: string, overrides: Record<string, unknown> = {}): Re
   };
 }
 
-function producerFixture(host: 'a' | 'b', cwdRealPath = compilerDirectory) {
+function producerFixture(host: 'a' | 'b' | 'c', cwdRealPath = compilerDirectory) {
   const producer = runScript(
     runId,
     runDirectory,
@@ -148,8 +148,8 @@ function setReadText(fixture: ReturnType<typeof producerFixture>, path: string, 
   fixture.reads.set(path, { status: 'ok', kind: 'regular', text, size: Buffer.byteLength(text) });
 }
 
-test('the generated a/b lifetime and systemd handoff admits an inner compiler in the matching physical scope', () => {
-  for (const host of ['a', 'b'] as const) {
+test('the generated a/b/c lifetime and systemd handoff admits an inner compiler in the matching physical scope', () => {
+  for (const host of ['a', 'b', 'c'] as const) {
     const fixture = producerFixture(host);
     expect(recognizeCheckHostRun(compilerDirectory, fixture.reader)).toEqual({
       outcome: 'admitted',
@@ -161,8 +161,8 @@ test('the generated a/b lifetime and systemd handoff admits an inner compiler in
   }
 });
 
-test('an admitted a/b run continues the inner compiler in place without nested host discovery', async () => {
-  for (const host of ['a', 'b'] as const) {
+test('an admitted a/b/c run continues the inner compiler in place without nested host discovery', async () => {
+  for (const host of ['a', 'b', 'c'] as const) {
     const fixture = producerFixture(host);
     let remoteAttempts = 0;
     const result = await runOnCheckHost(
@@ -262,8 +262,8 @@ test('only exact producer markers and live process evidence are admitted', () =>
       reason: 'supervisor-marker-invalid',
     },
     {
-      name: 'a foreign host label',
-      alter: (fixture) => setMarker(fixture, markerRecord('foreign')),
+      name: 'an invalid host label',
+      alter: (fixture) => setMarker(fixture, markerRecord('../foreign')),
       reason: 'supervisor-host-invalid',
     },
     {
@@ -411,4 +411,11 @@ test('pure TypeScript stays local while the database-backed kernel compiler stay
   const repository = import.meta.dir.replace(/\/scripts$/, '');
   expect(classifyCheck(['tsc', '--noEmit', '-p', 'packages/client/tsconfig.json'], repository).placement).toBe('local');
   expect(classifyCheck(['bun', 'run', '--cwd', 'services/kernel', 'typecheck'], repository).placement).toBe('remote');
+});
+
+test('a workstation worker outside a physical run is refused even with a valid c supervisor', () => {
+  const fixture = producerFixture('c');
+  expect(recognizeCheckHostRun('/home/worker/checkout', fixture.reader)).toEqual({
+    outcome: 'refused', reason: 'cwd-outside-runs',
+  });
 });

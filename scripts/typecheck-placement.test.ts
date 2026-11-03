@@ -325,7 +325,7 @@ test('named client output is placed before SQL execution and external projects r
     hosts,
     JSON.stringify({
       hosts: [
-        { name: 'a', address: 'ops@a.invalid', identity: '/key', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
+        { name: 'a', performance: true, address: 'ops@a.invalid', identity: '/key', memoryMaxGiB: 16, cpuQuotaPercent: 800, slots: 2 },
       ],
     }),
   );

@@ -58,7 +58,7 @@ import {
   safeOutputTreePath,
   type OutputTreeBinding,
 } from './check-output-tree.ts';
-import { environmentCommandIsSafe, PERFORMANCE_HOST_NAMES, performanceHosts } from './check-placement.ts';
+import { environmentCommandIsSafe, performanceHosts } from './check-placement.ts';
 import {
   allocateCheckRunPhysical,
   beginCheckRunAllocation,
@@ -137,8 +137,8 @@ export class CheckRunUnavailable extends Error {
   readonly exitCode = REMOTE_TRANSPORT_FAILURE;
 }
 
-function isAdmittedCheckRunHost(host: string): host is 'a' | 'b' {
-  return host === 'a' || host === 'b';
+function isAdmittedCheckRunHost(host: string, hosts: readonly Host[]): boolean {
+  return hosts.some((configured) => configured.performance === true && configured.name === host);
 }
 
 const FORBIDDEN_REMOTE_ENVIRONMENT = new Set([
@@ -1223,7 +1223,7 @@ async function prepareFinalRun(
   if (hostsInside === '' || (!hostsInside.startsWith(`..${sep}`) && hostsInside !== '..' && !isAbsolute(hostsInside)))
     throw new CheckRunUnavailable('--hosts must be outside the candidate workspace');
   const hosts: Host[] = performanceHosts(readHosts(hostsFile));
-  if (hosts.length === 0) throw new CheckRunUnavailable('--hosts contains no approved a/b host');
+  if (hosts.length === 0) throw new CheckRunUnavailable('--hosts contains no performance-approved host');
   const cwd = candidateDirectory(candidateRoot, args.cwd, '--cwd');
   const returns = validateNonOverlappingReturns(
     args.returns.map((path) => workspaceRelative(candidateRoot, path, '--returns')),
@@ -1337,7 +1337,7 @@ async function runCheckLegacy(
   if (hostsInside === '' || (!hostsInside.startsWith(`..${sep}`) && hostsInside !== '..' && !isAbsolute(hostsInside)))
     throw new CheckRunUnavailable('--hosts must be outside the candidate workspace');
   const hosts: Host[] = performanceHosts(readHosts(hostsFile));
-  if (hosts.length === 0) throw new CheckRunUnavailable('--hosts contains no approved a/b host');
+  if (hosts.length === 0) throw new CheckRunUnavailable('--hosts contains no performance-approved host');
   const cwd = candidateDirectory(candidateRoot, args.cwd, '--cwd');
   const returns = validateNonOverlappingReturns(
     args.returns.map((path) => workspaceRelative(candidateRoot, path, '--returns')),
@@ -1406,7 +1406,7 @@ async function runCheckLegacy(
     );
     const remoteOptions: RemoteCheck = {
       hosts,
-      allowedHosts: [...PERFORMANCE_HOST_NAMES],
+      allowedHosts: hosts.map(({ name }) => name),
       hostsFile,
       workspace: snapshot.workspace,
       cwd,
@@ -1423,13 +1423,13 @@ async function runCheckLegacy(
       started: (host) => {
         if (signal.aborted || executionCancellation(cancellation))
           throw new Aborted('check-run: cancelled command cannot start');
-        if (host !== 'a' && host !== 'b')
+        if (!isAdmittedCheckRunHost(host, hosts))
           throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
         dependencies.onStarted?.(host);
       },
       completed: (receipt) => {
         const parsed = parseRemotePhysicalRunReceipt(receipt);
-        if (!parsed || !['a', 'b'].includes(parsed.host))
+        if (!parsed || !isAdmittedCheckRunHost(parsed.host, hosts))
           throw new CheckRunUnavailable('check-run: remote terminal receipt is invalid or names a forbidden host');
         receivedReceipt = parsed;
         if (writeReceipt && receiptNonce) {
@@ -1608,8 +1608,8 @@ async function runCheckWithFinalSettlement(
     : undefined;
   let snapshotBound = false;
   let receivedReceipt: RemotePhysicalRunReceipt | undefined;
-  let allocatedPhysical: { host: 'a' | 'b'; run: string } | undefined;
-  let receivedPhysical: { host: 'a' | 'b'; run: string } | undefined;
+  let allocatedPhysical: { host: string; run: string } | undefined;
+  let receivedPhysical: { host: string; run: string } | undefined;
   let remoteSettlement: RemoteCheckSettlement | undefined;
   let nativeReceiptPromise: Promise<void> | undefined;
   let remoteSettlementPromise: Promise<void> | undefined;
@@ -1753,7 +1753,7 @@ async function runCheckWithFinalSettlement(
 
     const remoteOptions: RemoteCheck = {
       hosts,
-      allowedHosts: [...PERFORMANCE_HOST_NAMES],
+      allowedHosts: hosts.map(({ name }) => name),
       hostsFile,
       workspace: snapshot.workspace,
       cwd,
@@ -1766,7 +1766,7 @@ async function runCheckWithFinalSettlement(
       expectedSourceManifest: sourceManifest,
       maxTransportAttempts: 1,
       allocated: async ({ host, run }) => {
-        if (!isAdmittedCheckRunHost(host))
+        if (!isAdmittedCheckRunHost(host, hosts))
           throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
         const admitted = { host, run };
         await allocateCheckRunPhysical(
@@ -1801,14 +1801,14 @@ async function runCheckWithFinalSettlement(
       },
       started: (host) => {
         if (signal.aborted) throw new Aborted('check-run: cancelled command cannot start');
-        if (!isAdmittedCheckRunHost(host))
+        if (!isAdmittedCheckRunHost(host, hosts))
           throw new CheckRunUnavailable(`check-run: remote transport selected forbidden host ${host}`);
         dependencies.onStarted?.(host);
       },
       completed: (receipt) => {
         nativeReceiptPromise = (async () => {
           const parsed = parseRemotePhysicalRunReceipt(receipt);
-          if (!parsed || !isAdmittedCheckRunHost(parsed.host))
+          if (!parsed || !isAdmittedCheckRunHost(parsed.host, hosts))
             throw new CheckRunUnavailable(
               'check-run: remote native terminal receipt is invalid or names a forbidden host',
             );
@@ -2634,7 +2634,7 @@ export async function reconcileRegisteredCheckRun(
         return unknown('trusted producer closure differs from the retained invocation binding');
       const approvedHosts = performanceHosts(readHosts(selectedHostsFile));
       if (!approvedHosts.some(({ name }) => name === physical.host))
-        return unknown('original physical host is absent from the bound a/b host set');
+        return unknown('original physical host is absent from the bound performance host set');
       if (!existsSync(record.snapshot.workspace) || !existsSync(record.candidateWorkspace))
         return unknown('original frozen workspace or candidate workspace is unavailable');
       const candidateRoot = absoluteDirectory(record.candidateWorkspace, 'retained candidate workspace');
@@ -2658,7 +2658,7 @@ export async function reconcileRegisteredCheckRun(
         workspace: record.snapshot.workspace,
         returns: record.returns,
         expectedSourceSha256: record.binding.sourceSha256,
-        allowedHosts: [...PERFORMANCE_HOST_NAMES],
+        allowedHosts: approvedHosts.map(({ name }) => name),
       });
       const originalTransportIdentity = record.transportChild
         ? await reapRetainedTransportChild(record.transportChild)

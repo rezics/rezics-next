@@ -363,14 +363,15 @@ process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typeche
   expect(readFileSync(join(f.root, 'commands'), 'utf8').trim().split('\n').sort()).toEqual(['bun', 'tsc', 'tsc']);
 });
 
-test('real placement composes only approved a/b, selected argv, native refusal and cancellation without replay', async () => {
+test('real placement composes configured performance hosts, selected argv, native refusal and cancellation without replay', async () => {
   const f = fixture();
   const hosts = join(f.root, 'hosts.json');
   writeFileSync(
     hosts,
     JSON.stringify({
-      hosts: ['a', 'b', 'c'].map((name) => ({
+      hosts: ['a', 'b', 'c', 'unflagged'].map((name) => ({
         name,
+        performance: name !== 'unflagged',
         address: `ops@${name}.test`,
         identity: '/inert/key',
         memoryMaxGiB: 16,
@@ -385,8 +386,8 @@ test('real placement composes only approved a/b, selected argv, native refusal a
         run,
         env,
         async (options) => {
-          expect(options.allowedHosts).toEqual(['a', 'b']);
-          expect(options.hosts.map((h) => h.name)).toEqual(['a', 'b']);
+          expect(options.allowedHosts).toEqual(['a', 'b', 'c']);
+          expect(options.hosts.map((h) => h.name)).toEqual(['a', 'b', 'c']);
           expect(options.workspace).toBe(run.root);
           expect(options.command).toEqual(run.command);
           if (outcome === 'cancelled') throw new Aborted();

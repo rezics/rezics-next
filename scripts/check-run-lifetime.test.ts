@@ -239,7 +239,7 @@ test('Original prepared invocation retains durable input and cleanup custody acr
   expect(originalRecord.final).toEqual(original);
   expect(originalRecord.finalCustody?.reconciliation).toBe('unknown');
 
-  let observedPhysical: { host: 'a' | 'b'; run: string } | undefined;
+  let observedPhysical: { host: string; run: string } | undefined;
   const later = finalFor(fixture, 'settled');
   const reconciled = await reconcileCheckRunInvocation(fixture.registration.invocationId, {
     stateDirectory: fixture.state,

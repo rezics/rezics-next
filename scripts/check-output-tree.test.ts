@@ -56,7 +56,7 @@ async function isolatedArtifactEnvironment(work: () => Promise<void>): Promise<v
     }
   }
 }
-const source = { host: 'a', run: 'official-physical-1', sourceSha256: 'a'.repeat(64) };
+const source = { host: 'c', run: 'official-physical-1', sourceSha256: 'a'.repeat(64) };
 function put(root: string, path: string, value: string | Buffer): void {
   mkdirSync(dirname(join(root, path)), { recursive: true });
   writeFileSync(join(root, path), value);

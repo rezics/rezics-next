@@ -236,7 +236,7 @@ export async function runOnCheckHost(
       return REMOTE_TRANSPORT_FAILURE;
     }
     if (hosts.length === 0) {
-      console.error(`stack-run: ${run.label} unavailable: hosts file ${reason.hostsFile} has no approved a/b host`);
+      console.error(`stack-run: ${run.label} unavailable: hosts file ${reason.hostsFile} has no performance-approved host`);
       return REMOTE_TRANSPORT_FAILURE;
     }
     let outcome: number;
@@ -245,7 +245,7 @@ export async function runOnCheckHost(
         {
           ...(cancellation === undefined ? {} : { cancellation }),
           hosts,
-          allowedHosts: ['a', 'b'],
+          allowedHosts: hosts.map(({ name }) => name),
           hostsFile: reason.hostsFile,
           workspace: run.root,
           cwd: relative(resolve(run.root), resolve(run.cwd)) || '.',
@@ -290,7 +290,7 @@ export async function runOnCheckHost(
   }
 }
 
-/** The one place a stack-heavy run is placed: host a/b or an already-confined remote-check run. */
+/** The one place a stack-heavy run is placed: a performance-approved host or an already-confined check run. */
 export async function stackRun(
   run: StackRun,
   local: (env: Record<string, string>) => Promise<number>,

@@ -92,13 +92,23 @@ scripts, pure compiler and formatter commands, and explicit small unit selection
 has at most 12 explicit test files; each file and its statically imported relative source is at most 256 KiB, within
 64 files total, and has no browser, server, database or native-stack dependency. Discovery, globs, preloads, shell
 commands, full Kernel checks, browser work, database/container work and commands the classifier cannot prove local
-go to a or b. Package-script, `--cwd` and ordinary `env` prefixes use the same classification.
+go to a performance-approved check host. Package-script, `--cwd` and ordinary `env` prefixes use the same classification.
 
-`worker-check` and `stack-run` filter configured hosts to the performance pool `a,b`. Local flags, off markers,
-learned memory weights, local leases, an absent host pool and a transport error cannot put heavy or unknown work on
-host c or replay it locally. A failed or unavailable remote run remains non-green. A command is already on a check
+`worker-check`, `stack-run`, `check-run` and `remote-check` derive the performance pool from hosts explicitly marked
+`"performance": true` in the private hosts file. Missing or false flags exclude a host, including a or b; there is no
+name-based placement allowlist. Host names use lowercase letters, digits and hyphens, with a letter or digit first
+and at most 64 characters. Local flags, off markers, learned memory weights, local leases, an absent host pool and
+a transport error cannot replay heavy or unknown work outside a physical check run. A failed or unavailable remote run remains non-green. A command is already on a check
 host only when its working directory is inside that run's directory, its cgroup names the matching run scope, and
-the run has a valid supervisor marker; environment flags alone do not establish remote custody.
+the run has a valid supervisor marker; environment flags alone do not establish remote custody. This applies equally
+to a, b and the loopback workstation c; ordinary workstation workers and managers are outside check runs. The marker
+validates physical identity, while the configured performance flag authorizes admission.
+
+Provision c with `performance: true`, 10 slots, `memoryMaxGiB: 20`, `cpuQuotaPercent: 3200` and
+`processorsPerSlot: 1`. These admission limits apply in addition to its `rezics-check.slice` limit of 24 GiB and
+4800% CPU; preserve at least 12 GiB of workstation memory for worker admission. Keep addresses and identity paths
+in the private hosts file outside Git. A worker-local private file may be selected explicitly with
+`KERNEL_CHECK_REMOTE`; updating the shared file is an integration operation when the main checkout is read-only.
 
 `scripts/check-run.ts` is the trusted generic driver for caller-owned checks. Its `--hosts`, `--workspace`, `--cwd`,
 `--source-revision` and private `--env-file` arguments are explicit, and the original command is passed after `--`
