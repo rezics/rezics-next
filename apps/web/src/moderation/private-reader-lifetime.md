@@ -6,6 +6,14 @@ for its bounded native reads also supplies the prepared subject and a SHA-256 fi
 The fingerprint has distinct null and token domains. No bearer, raw CSRF, decoded token or expected browser identity
 is transported as provenance. Low-level injected read and presenter APIs remain separate from production admission.
 
+Decision uses one selected composed native read for the receipt, appeal advice and optional current target context.
+It never hydrates a post or thread and never rereads the decision to compose the page. The installed generated client
+currently exposes `viewer` and `targetContext`, but not the complete provenance tuple required by this reader. The
+typed boundary therefore returns unavailable until generated publication supplies `actorId`, session `clientId` and
+`authnEpoch`, and final source partition, epoch and position. `bindDecisionSource` validates that tuple and hashes it
+as an observation fingerprint; the fingerprint grants no authority. A new fingerprint retires the visit and requires
+an explicit fresh read of the same decision ID.
+
 A healthy authenticated initial null-CSRF observation may read when its subject and distinguished null fingerprint
 match that actual origin. This replaces the old initial missing-CSRF denial oracles. Unknown, preparing, anonymous,
 missing origin, mismatched origin, native refusal and platform closure cannot disclose private evidence. Native
@@ -48,14 +56,28 @@ Definitive refusals require fresh reads. Retirement never turns known native suc
 
 Decision appeal composition registers with the shared authoring departure owner, including standalone presenters.
 Nonempty changed statements and immutable sending or uncertain commands require its accessible Stay/Leave decision.
-Stay preserves the exact statement, decision and command key through unavailable refreshes and reads without an appeal.
-Only an admitted appeal receipt acknowledges the submitted snapshot; subsequent unsaved writing remains protected.
-Command and explicit target refresh continuations are independent, so a receipt releases command protection even while
-a target read is pending, and a late read without an appeal cannot roll back that receipt. Confirmed Leave synchronously
-retires the original private reader and fences both continuations before replacement reads. Existing origin, session,
-cache and query admission remain authoritative; standalone injected fixtures acquire no production authority.
+Stay preserves the exact decision ID, statement, idempotency key and captured CSRF request header through uncertain
+retry. Each attempt prepares the native Authorization credential from the same admitted session and the native command
+repeats authorization. Command acknowledgement and its separate current decision readback remain distinct; a read
+never confirms a lost command. Acknowledged writing releases command protection while later edits remain protected.
+An explicit refresh and command readback are independent, and a different native source observation retires reasons,
+context, links, advice, draft, command/readback state and delayed focus. Confirmed Leave synchronously retires the
+original private reader and fences pending callbacks. Existing origin, session, cache and query admission remain
+authoritative; standalone injected fixtures acquire no production authority.
 Decision: confirmed draft discard forgets only local writing and retry recovery, keeps the current reader, and never
 claims to cancel or undo a native request.
+
+### Decision consumer cost
+
+- Touches: one selected composed decision GET plus existing session preparation; one explicit appeal POST and its
+  supported selected decision readback after acknowledgement or conflict.
+- Bound: the exact decision ID only. Web performs no target hydration, queue scan, polling, persistent private draft,
+  or accumulated receipt history. It retains one response, draft, intent and readback for one visit.
+- Growth: the producer schema currently declares no `maxLength` or byte cap for read-side decision statements,
+  appeal resolution statements, or target titles. Appeal submission is capped at 2,000 characters and takedown
+  reason writes at 1,024. Consumer checks vary supplied text/context and unrelated fixture history without enumerating
+  it. These schema limits do not cap nested native work or total response bytes; Content/controller owns physical
+  growth evidence.
 
 Moderator resolution forms share one queue departure decision for nonempty local statements and pending or uncertain
 commands. Stay retains exact input and the frozen outcome, payload and key; Leave retires every original intent and
@@ -73,11 +95,11 @@ boundary and makes no new SSR authority claim. Shared session, query, producer, 
 read-only. Canonical story IDs and standalone presenters remain; SessionRetirement is an honest separate presenter
 fixture, not fabricated production provenance.
 
-All behavioral, native, browser, SSR/hydration, Storybook, growth and original acceptance assertions are authored or
-retained UNRUN for controller integration. Changed-workspace typing alone does not establish those outcomes or Goal
-completion. Historical typing evidence in the Reports lifetime document belongs only to that earlier implementation.
+The frozen Goal acceptance, native, browser, SSR/hydration, Storybook and physical-growth checks remain deferred to
+controller integration. This consumer change does not claim native outcomes, rendered matrix coverage, hydration proof
+or nested-work cost bounds. Historical typing evidence in the Reports lifetime document belongs only to that earlier implementation.
 
 The current source typing receipt on 2026-11-02 is `bun run --cwd apps/web typecheck`, run locally from the assigned
 worktree root in foreground terminal session 53075. Its existing generation and route-generation prerequisites
 completed, followed by `No type errors in 1,546 files [1013.65ms]`, with terminal exit 0. Earlier foreground runs
-also passed before the final ownership fixes. No behavioral assertions or other campaigns were executed.
+also passed before the final ownership fixes. This historical receipt does not cover the current consumer changes.

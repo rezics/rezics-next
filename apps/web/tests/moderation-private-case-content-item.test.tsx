@@ -36,6 +36,7 @@ const currentTarget = {
 };
 const decisionPage: DecisionPage = {
   viewerId: 'author-private-case-1',
+  nativeSourceFingerprint: 'source-private-case-1',
   decision: {
     id: decisionId,
     targetKind: 'post',
@@ -45,8 +46,17 @@ const decisionPage: DecisionPage = {
     decidedAt,
     appealDeadline,
     appeal: null,
+    viewer: { affectedAuthor: true, observedAt: decidedAt, appeal: { state: 'permitted' } },
+    targetContext: {
+      state: 'available',
+      kind: 'thread',
+      threadId: 'thread-private-case-1',
+      postId: targetId,
+      boardId: 'board-private-case-1',
+      threadTitle: currentTarget.text,
+      boardTitle: 'Current board context',
+    },
   },
-  target: currentTarget,
 };
 
 const submittedAt = '2026-10-30T10:00:00.000Z';
@@ -85,7 +95,7 @@ function renderDecision(page: DecisionPage) {
     createElement(DecisionPageView, {
       page,
       now: Date.parse(appealDeadline),
-      onAppeal: async () => ({ state: 'pending', decision: page.decision }),
+      onAppeal: async () => ({ state: 'acknowledged', readback: { state: 'unavailable' } }),
       onRefresh: async () => page,
     }),
   );
@@ -106,7 +116,7 @@ test('private decision cases keep full evidence, named shared frames, independen
     expect(headings).toContain(m.decision_appeal_heading());
     expect(host.querySelector('h3')?.textContent).toBe(m.decision_reasons_heading());
     expect(host.textContent).toContain(decisionReason);
-    expect(host.textContent).toContain(currentTarget.text);
+      expect(host.textContent).toContain(currentTarget.text);
     expect(host.querySelector(`time[datetime="${decidedAt}"]`)).not.toBeNull();
     expect(host.querySelector(`time[datetime="${appealDeadline}"]`)).not.toBeNull();
 
@@ -117,9 +127,14 @@ test('private decision cases keep full evidence, named shared frames, independen
     expect(targetLink?.contains(form)).toBe(false);
     expect(form?.contains(targetLink ?? null)).toBe(false);
 
-    const withheld = parseMarkup(renderDecision({ ...decisionPage, target: null }));
+    const withheld = parseMarkup(
+      renderDecision({
+        ...decisionPage,
+        decision: { ...decisionPage.decision, targetContext: { state: 'concealed' } },
+      }),
+    );
     try {
-      expect(withheld.host.textContent).toContain(m.moderation_target_unavailable());
+      expect(withheld.host.textContent).toContain(m.decision_target_concealed());
       expect(withheld.host.textContent).toContain(decisionReason);
       expect(withheld.host.textContent).not.toContain(targetId);
       expect(withheld.host.querySelector(`a[href*="${targetId}"]`)).toBeNull();
@@ -130,10 +145,11 @@ test('private decision cases keep full evidence, named shared frames, independen
 
     const pendingPage: DecisionPage = {
       ...decisionPage,
-      target: null,
       decision: {
         ...decisionPage.decision,
         appeal: { id: 'appeal-pending-1', outcome: null, statement: null, resolvedAt: null },
+        viewer: { ...decisionPage.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
+        targetContext: { state: 'concealed' },
       },
     };
     const pending = parseMarkup(renderDecision(pendingPage));
@@ -148,10 +164,11 @@ test('private decision cases keep full evidence, named shared frames, independen
     for (const outcome of ['reversed', 'upheld'] as const) {
       const resolvedPage: DecisionPage = {
         ...decisionPage,
-        target: outcome === 'reversed' ? null : currentTarget,
         decision: {
           ...decisionPage.decision,
           appeal: { id: `appeal-${outcome}-1`, outcome, statement: appealReview, resolvedAt },
+          viewer: { ...decisionPage.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
+          targetContext: outcome === 'reversed' ? { state: 'concealed' } : decisionPage.decision.targetContext,
         },
       };
       const resolved = parseMarkup(renderDecision(resolvedPage));
@@ -165,7 +182,7 @@ test('private decision cases keep full evidence, named shared frames, independen
           outcome === 'reversed' ? m.decision_appeal_reversed() : m.decision_appeal_upheld(),
         );
         if (outcome === 'reversed') {
-          expect(resolved.host.textContent).toContain(m.moderation_target_unavailable());
+          expect(resolved.host.textContent).toContain(m.decision_target_concealed());
           expect(resolved.host.textContent).not.toContain(targetId);
         }
       } finally {

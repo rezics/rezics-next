@@ -16,6 +16,14 @@ export function sameDecision(a: ModerationDecision, b: ModerationDecision): bool
   return a.id === b.id && a.targetId === b.targetId && a.targetKind === b.targetKind;
 }
 
+/** A current native source replacement belongs to a new private visit. */
+export function sameDecisionObservation(a: DecisionPage, b: DecisionPage): boolean {
+  if (!sameDecision(a.decision, b.decision)) return false;
+  // Injected presentation fixtures do not claim native provenance. Production reads always bind it.
+  if (!a.nativeSourceFingerprint && !b.nativeSourceFingerprint) return true;
+  return a.nativeSourceFingerprint === b.nativeSourceFingerprint;
+}
+
 export function decisionSessionKey(session: { state: string; subject?: string | null; csrfToken: string | null }) {
   return JSON.stringify([session.state, session.subject ?? null, session.csrfToken]);
 }

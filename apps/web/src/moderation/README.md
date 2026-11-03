@@ -6,6 +6,35 @@ Realm board directory. Reporter status and the author's decision/appeal pages re
 triage (resolution forms, target inspection and bulk actions) stays on the existing board and catalogue review
 pages until a dedicated case-detail outcome owns it.
 
+## Affected-author decision receipt
+
+`/moderation/decisions/{id}` is the affected person's exact private receipt. One selected
+`GET /v1/moderation-decisions/{id}` supplies the retained reason, decision time, deadline, current appeal result,
+closed `viewer.appeal` advice and optional `targetContext`. Available context supplies only the current title and
+native Board or Thread destination. Concealed and unavailable context remain distinct and never hide the independent
+receipt. Web does not read a post or thread separately, infer advice from authorship or readability, scan a queue, or
+poll. The existing appeal command still performs final native authorization.
+
+The installed generated client does not yet expose the complete actor/session/source provenance tuple required to
+bind a private visit. Until generated publication supplies that tuple, the route keeps its typed unavailable state.
+The [private-reader guide](private-reader-lifetime.md) records the lifecycle and cost boundary.
+
+Decision: keep the author receipt on its composed native read; until generated source provenance is installed, fail
+closed at the existing unavailable seam and retire any visit whose supplied provenance changes.
+
+### Cost
+
+- Touches: one selected composed decision read plus existing session preparation; one explicit appeal command and
+  one selected current decision readback after an acknowledgement or conflict.
+- Bound: one decision ID and one visit. There is no target hydration, queue scan, polling, persistent draft, or
+  accumulated receipt history. Statement, optional context, advice, draft, original intent and readback live only for
+  that admitted visit.
+- Growth: Content's current schema declares no `maxLength` or byte cap for retained decision statements, appeal
+  resolution statements, or context titles. Appeal submissions have `maxLength: 2000`; takedown reason writes have
+  `maxLength: 1024`. Web varies supplied text/context and unrelated fixture history while asserting one selected
+  response. This does not bound Content's nested native reads or serialized bytes; Content/controller owns that
+  physical cost evidence.
+
 ## Workbench queue
 
 An authorized signed-in moderator enters `/moderation/workbench`. One navigation entry replaces the previous

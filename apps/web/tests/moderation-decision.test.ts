@@ -2,6 +2,8 @@ import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFile } from 'node:fs/promises';
+import type { ModerationDecision } from '../src/moderation/decision-read';
+import { m } from '../src/paraglide/messages.js';
 import * as localStart from '../.storybook/react-start';
 
 const start = await import('@tanstack/react-start');
@@ -59,12 +61,12 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => currentRequest,
   setResponseHeader: (key: string, value: string) => responseHeaders.set(key, value),
 }));
-const { loadDecisionPage, canAppealDecision } = await import('../src/moderation/decision-read');
+const { loadDecisionPage, decisionReadAdapters } = await import('../src/moderation/decision-read');
 const { submitDecisionAppeal } = await import('../src/moderation/appeal');
 const { DecisionPageView } = await import('../src/moderation/decision-page');
 
 const decidedAt = '2026-01-01T12:00:00.000Z';
-const decision = {
+const decision: ModerationDecision = {
   id: 'decision-1',
   targetKind: 'post' as const,
   targetId: 'post-1',
@@ -73,57 +75,97 @@ const decision = {
   decidedAt,
   appealDeadline: '2026-07-03T12:00:00.000Z',
   appeal: null,
+  viewer: { affectedAuthor: true, observedAt: decidedAt, appeal: { state: 'permitted' as const } },
+  targetContext: { state: 'concealed' as const },
 };
+const decisionWithProvenance = (change: Partial<ModerationDecision> = {}) =>
+  Object.assign(
+    { ...decision, ...change },
+    {
+      provenance: {
+        actorId: 'author-1',
+        session: { clientId: 'client-1', authnEpoch: 7 },
+        source: { partition: 3, epoch: 9, position: '12' },
+      },
+    },
+  );
 
-test('decision page reads its decision and the applicable existing record once each', async () => {
+test('the composed decision reader uses one native response and does not hydrate a target', async () => {
   const calls: string[] = [];
   const page = await loadDecisionPage('decision-1', {
     decision: async (id) => {
       calls.push(`decision:${id}`);
-      return decision;
+      return decisionWithProvenance();
     },
-    post: async (id) => {
-      calls.push(`post:${id}`);
-      return {
-        id,
-        threadId: 'thread-1',
-        createdAt: decidedAt,
-        authorId: 'author-1',
-        text: 'The affected post',
-        href: '/threads/thread-1#post-1',
-      };
+  }, 'author-1');
+
+  expect(page).toMatchObject({ decision, viewerId: 'author-1', nativeSourceFingerprint: expect.any(String) });
+  expect(calls).toEqual(['decision:decision-1']);
+});
+
+test('a composed response without generated provenance stays on the typed unavailable seam', async () => {
+  await expect(loadDecisionPage('decision-1', { decision: async () => decision })).rejects.toThrow(
+    'Decision read unavailable',
+  );
+});
+
+test('native provenance is complete before the decision source can be bound', async () => {
+  for (const provenance of [
+    { actorId: 'author-1' },
+    {
+      actorId: 'another-author',
+      session: { clientId: 'client-1', authnEpoch: 7 },
+      source: { partition: 3, epoch: 9, position: '12' },
     },
-    thread: async (id) => {
-      calls.push(`thread:${id}`);
-      return { id, createdAt: decidedAt, authorId: 'author-1', text: 'The affected thread', href: `/threads/${id}` };
+  ]) {
+    const response = Object.assign({}, decision, { provenance });
+    await expect(loadDecisionPage('decision-1', { decision: async () => response }, 'author-1')).rejects.toThrow(
+      'Decision read unavailable',
+    );
+  }
+});
+
+test('decision reads retain supplied text while staying independent of unrelated fixture history', async () => {
+  const history = new Proxy(Array.from({ length: 1000 }, (_, index) => index), {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) throw new Error('Unrelated history must not be enumerated');
+      return Reflect.get(target, property, receiver);
     },
   });
-
-  expect(page).toMatchObject({ decision, target: { id: 'post-1', text: 'The affected post' } });
-  expect(calls).toEqual(['decision:decision-1', 'post:post-1']);
-  expect(calls).toHaveLength(2);
+  for (const size of [1, 8000]) {
+    const title = 't'.repeat(size);
+    const response = Object.assign(
+      decisionWithProvenance({
+        statement: 'r'.repeat(size),
+        targetContext: {
+          state: 'available' as const,
+          kind: 'thread' as const,
+          threadId: 'thread-1',
+          postId: 'post-1',
+          boardId: 'board-1',
+          threadTitle: title,
+          boardTitle: null,
+        },
+      }),
+      { unrelatedHistory: history },
+    );
+    let calls = 0;
+    const page = await loadDecisionPage('decision-1', {
+      decision: async () => {
+        calls++;
+        return response;
+      },
+    }, 'author-1');
+    expect(page?.decision.statement).toHaveLength(size);
+    expect(calls).toBe(1);
+  }
 });
 
-test('appeal access is inclusive of the deadline and limited to the author without an existing appeal', () => {
-  expect(canAppealDecision(decision, 'author-1', 'author-1', Date.parse(decision.appealDeadline))).toBe(true);
-  expect(canAppealDecision(decision, 'author-1', 'author-1', Date.parse(decision.appealDeadline) + 1)).toBe(false);
-  expect(canAppealDecision(decision, 'author-1', 'someone-else', Date.parse(decidedAt))).toBe(false);
-  expect(
-    canAppealDecision(
-      { ...decision, appeal: { id: 'appeal-1', outcome: null } },
-      'author-1',
-      'author-1',
-      Date.parse(decidedAt),
-    ),
-  ).toBe(false);
-});
-
-test('a successful appeal is followed by the decision read and becomes pending', async () => {
+test('command acknowledgement and the separate current decision readback remain distinct', async () => {
   const calls: string[] = [];
-  const pending = {
-    ...decision,
+  const pending = decisionWithProvenance({
     appeal: { id: 'appeal-1', outcome: null, statement: 'I disagree.', resolvedAt: null },
-  };
+  });
   const result = await submitDecisionAppeal('decision-1', 'I disagree.', {
     appeal: async (id, statement) => {
       calls.push(`appeal:${id}:${statement}`);
@@ -135,13 +177,16 @@ test('a successful appeal is followed by the decision read and becomes pending',
     },
   });
 
-  expect(result).toMatchObject({ state: 'pending', decision: pending });
+  expect(result).toMatchObject({
+    state: 'acknowledged',
+    readback: { state: 'available', decision: pending, nativeSourceFingerprint: expect.any(String) },
+  });
   expect(calls).toEqual(['appeal:decision-1:I disagree.', 'decision:decision-1']);
 });
 
 test('a 422 length error preserves the draft while late and duplicate appeals use the next decision state', async () => {
   const draft = 'x'.repeat(2001);
-  let next = decision;
+  let next = decisionWithProvenance();
   const reader = { decision: async () => next };
   const tooLong = await submitDecisionAppeal('decision-1', draft, {
     appeal: async () => ({ status: 422 }),
@@ -149,13 +194,13 @@ test('a 422 length error preserves the draft while late and duplicate appeals us
   });
   expect(tooLong).toMatchObject({ state: 'invalid', text: draft });
 
-  next = { ...decision, appeal: { id: 'appeal-1', outcome: null, statement: 'Earlier appeal', resolvedAt: null } };
+  next = decisionWithProvenance({ appeal: { id: 'appeal-1', outcome: null, statement: 'Earlier appeal', resolvedAt: null } });
   for (const status of [409, 422]) {
     const refreshed = await submitDecisionAppeal('decision-1', 'My reason', {
       appeal: async () => ({ status }),
       ...reader,
     });
-    expect(refreshed).toMatchObject({ state: 'updated', decision: next });
+    expect(refreshed).toMatchObject({ state: 'conflict', readback: { state: 'available', decision: next } });
   }
 });
 
@@ -169,13 +214,13 @@ test('decision route is signed-in, noindex and private, and refused reads become
 
 test('decision presentation shows reasons, target and times, with appeal UI only for the author before deadline', () => {
   const page = {
-    decision,
+    decision: decisionWithProvenance(),
+    nativeSourceFingerprint: 'presenter-source',
     viewerId: 'author-1',
-    target: { id: 'post-1', authorId: 'author-1', text: 'Affected post', href: '/threads/thread-1#post-1' },
   };
   const open = renderToStaticMarkup(createElement(DecisionPageView, { page, now: Date.parse(decidedAt) }));
   expect(open).toContain(decision.statement);
-  expect(open).toContain('Affected post');
+  expect(open).toContain(m.decision_target_concealed());
   expect(open).toContain('dateTime="' + decidedAt + '"');
   expect(open).toContain('dateTime="' + decision.appealDeadline + '"');
   expect(open).toContain('appeal-statement');
@@ -186,35 +231,39 @@ test('decision presentation shows reasons, target and times, with appeal UI only
   );
   expect(late).not.toContain('appeal-statement');
   const otherReader = renderToStaticMarkup(
-    createElement(DecisionPageView, { page: { ...page, viewerId: 'other' }, now: Date.parse(decidedAt) }),
+    createElement(
+      DecisionPageView,
+      {
+        page: {
+          ...page,
+          decision: {
+            ...page.decision,
+            viewer: { ...page.decision.viewer, appeal: { state: 'unavailable', reason: 'not_affected_author' } },
+          },
+        },
+        now: Date.parse(decidedAt),
+      },
+    ),
   );
   expect(otherReader).not.toContain('appeal-statement');
 });
 
-test('a private decision remains readable when its target is withheld, including after its appeal deadline', async () => {
+test('a private decision remains readable with concealed context, including after its appeal deadline', async () => {
   const calls: string[] = [];
   const page = await loadDecisionPage(decision.id, {
     decision: async (id) => {
       calls.push(`decision:${id}`);
-      return decision;
+      return decisionWithProvenance();
     },
-    post: async (id) => {
-      calls.push(`post:${id}`);
-      return null;
-    },
-    thread: async () => {
-      throw new Error('A post decision must not read a thread');
-    },
-  });
-  expect(calls).toEqual(['decision:decision-1', 'post:post-1']);
-  expect(page?.target).toBeNull();
+  }, 'author-1');
+  expect(calls).toEqual(['decision:decision-1']);
   if (!page) throw new Error('The authorized decision must remain readable');
   for (const now of [Date.parse(decidedAt), Date.parse(decision.appealDeadline) + 1]) {
     const markup = renderToStaticMarkup(
       createElement(DecisionPageView, { page: { ...page, viewerId: 'author-1' }, now }),
     );
     expect(markup).toContain(decision.statement);
-    expect(markup).toContain('data-slot="withheld"');
+    expect(markup).toContain(m.decision_target_concealed());
     expect(markup.includes('appeal-statement')).toBe(now <= Date.parse(decision.appealDeadline));
   }
 });
@@ -233,7 +282,14 @@ test('Moderation decision receipt and author appeal, one main and understandable
         SidebarInset,
         null,
         createElement(DecisionPageView, {
-          page: { decision: { ...decision, appeal }, target: null, viewerId: 'author-1' },
+          page: {
+            decision: decisionWithProvenance({
+              appeal,
+              viewer: { ...decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
+            }),
+            viewerId: 'author-1',
+            nativeSourceFingerprint: 'presenter-source',
+          },
           now: Date.parse(decidedAt),
         }),
       ),
@@ -243,7 +299,7 @@ test('Moderation decision receipt and author appeal, one main and understandable
     expect(markup).toContain('Original decision');
     expect(markup).toContain(decision.statement);
     expect(markup).toContain('Current content availability');
-    expect(markup).toContain('This content is unavailable.');
+    expect(markup).toContain(m.decision_target_concealed());
     expect(markup).toContain(decision.id);
     expect(markup).not.toContain(decision.targetId);
     expect(markup).not.toContain('/threads/');
@@ -259,53 +315,24 @@ test('Moderation decision receipt and author appeal, one main and understandable
   }
 });
 
-test('current target reads hide nonavailable bytes and final decision denial discards the entire private page', async () => {
-  const { fromPlainText } = await import('@rezics/document');
-  const { decisionReadAdapters, loadCurrentDecisionPage } = await import('../src/moderation/decision-read');
-  let record = {
-    id: decision.targetId,
-    threadId: 'thread-1',
-    authorId: 'author-1',
-    availability: 'available',
-    removed: false,
-    body: fromPlainText('Current permitted text'),
-  };
+test('decision adapter uses only the composed exact endpoint and preserves native denial', async () => {
+  let denied = false;
+  const calls: string[] = [];
   const reads = decisionReadAdapters(
     {
-      'moderation-decisions': () => ({ get: async () => ({ data: decision }) }),
-      posts: () => ({ get: async () => ({ data: { post: record } }) }),
-      threads: () => ({
+      'moderation-decisions': ({ id }) => ({
         get: async () => {
-          throw new Error('No unrelated target read');
+          calls.push(`decision:${id}`);
+          return denied ? { data: null, error: { status: 404 }, status: 404 } : { data: decision, error: null, status: 200 };
         },
       }),
     },
     'Bearer author',
   );
-  expect(await reads.post(decision.targetId)).toMatchObject({
-    text: 'Current permitted text',
-    href: '/threads/thread-1#post-1',
-  });
-  for (const availability of ['withheld', 'erased', 'unavailable', 'unknown']) {
-    record = { ...record, availability };
-    expect(await reads.post(decision.targetId)).toBeNull();
-  }
-  record = { ...record, availability: 'available', id: 'another-post' };
-  expect(await reads.post(decision.targetId)).toBeNull();
-  const calls: string[] = [];
-  const result = await loadCurrentDecisionPage(decision.id, {
-    ...reads,
-    decision: async () => {
-      calls.push('decision');
-      return calls.length === 1 ? decision : null;
-    },
-    post: async () => {
-      calls.push('target');
-      return { id: decision.targetId, text: 'Do not disclose after final denial', href: '/threads/thread-1#post-1' };
-    },
-  });
-  expect(result).toBeNull();
-  expect(calls).toEqual(['decision', 'target', 'decision']);
+  expect(await reads.decision(decision.id)).toEqual(decision);
+  denied = true;
+  expect(await reads.decision(decision.id)).toBeNull();
+  expect(calls).toEqual(['decision:decision-1', 'decision:decision-1']);
 });
 
 test('appeal denial, known conflict and uncertain confirmation stay distinct without optimistic native state', async () => {
@@ -331,20 +358,23 @@ test('appeal denial, known conflict and uncertain confirmation stay distinct wit
           throw new Error('Read unavailable');
         },
       }),
-    ).toEqual({ state: 'conflict' });
+    ).toEqual({ state: 'conflict', readback: { state: 'unavailable' } });
   }
-  for (const status of [201, 503]) {
-    expect(
-      await submitDecisionAppeal(decision.id, command.statement, {
-        appeal: async () => ({ status }),
-        decision: async () => decision,
-      }),
-    ).toEqual({ state: 'failed' });
-    expect(intent.keyFor(command)).toBe(originalKey);
-  }
+  expect(
+    await submitDecisionAppeal(decision.id, command.statement, {
+      appeal: async () => ({ status: 201 }),
+      decision: async () => null,
+    }),
+  ).toEqual({ state: 'acknowledged', readback: { state: 'unavailable' } });
+  expect(
+    await submitDecisionAppeal(decision.id, command.statement, {
+      appeal: async () => ({ status: 503 }),
+      decision: async () => decision,
+    }),
+  ).toEqual({ state: 'failed' });
+  expect(intent.keyFor(command)).toBe(originalKey);
 });
 
-// Authored UNRUN: controller integration owns execution of this default route/read/view regression.
 test('The default private Decision page retires statements, appeal drafts and late command or refresh results across viewer and session changes independently of target visibility, and honestly recovers a transient current read', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
@@ -383,11 +413,11 @@ test('The default private Decision page retires statements, appeal drafts and la
   const root = createRoot(host as unknown as HTMLElement);
   const fetchBefore = globalThis.fetch;
   const calls: Request[] = [];
-  const commands: { body: string; key: string | null }[] = [];
+  const commands: { body: string; key: string | null; csrf: string | null }[] = [];
   let mode: 'ready' | 'unavailable' | 'denied' | 'final-denial' | 'platform-closed' = 'ready';
   let decisionReads = 0;
+  let sourcePosition = '12';
   let loseFirstCommand = true;
-  let commandConfirmation = false;
   let gateRead: Promise<void> | null = null;
   let gateCommand: Promise<void> | null = null;
   let releaseRead!: () => void;
@@ -395,12 +425,11 @@ test('The default private Decision page retires statements, appeal drafts and la
   const decisions = new Map(
     [1, 2, 3].map((n) => [
       `decision-${n}`,
-      {
-        ...decision,
+      decisionWithProvenance({
         id: `decision-${n}`,
         targetId: `post-${n}`,
         statement: `PRIVATE original decision ${n}`,
-      },
+      }),
     ]),
   );
   Object.assign(environment, {
@@ -434,7 +463,11 @@ test('The default private Decision page retires statements, appeal drafts and la
       const current = decisions.get(id)!;
       expect(current).toBeDefined();
       if (request.method === 'POST') {
-        commands.push({ body: await request.text(), key: request.headers.get('idempotency-key') });
+        commands.push({
+          body: await request.text(),
+          key: request.headers.get('idempotency-key'),
+          csrf: request.headers.get('X-CSRF-Token'),
+        });
         if (loseFirstCommand) {
           loseFirstCommand = false;
           return Response.json({ code: 'dependency_unavailable', detail: 'NEVER DISCLOSE COMMAND' }, { status: 503 });
@@ -449,12 +482,9 @@ test('The default private Decision page retires statements, appeal drafts and la
             resolvedAt: null,
           },
         });
-        commandConfirmation = true;
         return Response.json({ id: 'appeal-1' }, { status: 201 });
       }
-      // appeal.ts owns the command's confirmation read; page reads always opt out of transport caching.
-      if (!commandConfirmation) expect(request.cache).toBe('no-store');
-      commandConfirmation = false;
+      expect(request.cache).toBe('no-store');
       expect(['Bearer author-1', 'Bearer another-viewer']).toContain(request.headers.get('authorization'));
       const ordinal = ++decisionReads;
       if (gateRead) {
@@ -466,9 +496,16 @@ test('The default private Decision page retires statements, appeal drafts and la
         return Response.json({ code: 'dependency_unavailable', detail: 'NEVER DISCLOSE READ' }, { status: 503 });
       if (mode === 'platform-closed')
         return Response.json({ code: 'platform_closed', detail: 'NEVER DISCLOSE GATE' }, { status: 403 });
-      if (mode === 'denied' || (mode === 'final-denial' && ordinal === 2))
+      if (mode === 'denied' || (mode === 'final-denial' && ordinal === 1))
         return Response.json({ code: 'not_found', detail: 'NEVER DISCLOSE DENIAL' }, { status: 404 });
-      return Response.json(current);
+      return Response.json(
+        Object.assign({}, current, {
+          provenance: {
+            ...current.provenance,
+            source: { ...current.provenance.source, position: sourcePosition },
+          },
+        }),
+      );
     },
     { preconnect: fetchBefore.preconnect },
   );
@@ -514,8 +551,8 @@ test('The default private Decision page retires statements, appeal drafts and la
     page = await load(decision.id);
     // Accepted non-secret prepared provenance replaces the old raw-CSRF serialization oracle.
     expect(page).toMatchObject({
-      target: null,
       viewerId: 'author-1',
+      nativeSourceFingerprint: expect.any(String),
       readerOrigin: {
         subject: 'author-1',
         csrfFingerprint: await privateReaderFingerprint('AAAAAAAAAAAAAAAAAAAAAA'),
@@ -523,14 +560,24 @@ test('The default private Decision page retires statements, appeal drafts and la
     });
     expect(JSON.stringify(page)).not.toContain('AAAAAAAAAAAAAAAAAAAAAA');
     expect(responseHeaders.get('cache-control')).toBe('private, no-store');
-    expect(calls.map((request) => new URL(request.url).pathname)).toEqual([
-      '/v1/moderation-decisions/decision-1',
-      '/v1/posts/post-1',
-      '/v1/moderation-decisions/decision-1',
-    ]);
+    expect(calls.map((request) => new URL(request.url).pathname)).toEqual(['/v1/moderation-decisions/decision-1']);
     await render();
     expect(host.textContent).toContain('PRIVATE original decision 1');
-    expect(host.querySelector('[data-slot="withheld"]')).not.toBeNull();
+    expect(host.textContent).toContain(m.decision_target_concealed());
+
+    sourcePosition = '13';
+    gateRead = new Promise((resolve) => {
+      releaseRead = resolve;
+    });
+    await click(m.decision_refresh());
+    await act(async () => {
+      releaseRead();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    concealed();
+    await click(m.moderation_decision_read_retry());
+    expect(host.textContent).toContain('PRIVATE original decision 1');
+
     await act(async () => user.type(host.querySelector('textarea')!, 'PRIVATE refresh draft'));
     gateRead = new Promise((resolve) => {
       releaseRead = resolve;
@@ -568,6 +615,7 @@ test('The default private Decision page retires statements, appeal drafts and la
     await click(m.decision_retry_same());
     expect(commands).toHaveLength(2);
     expect(commands[1]).toEqual(commands[0]);
+    expect(commands[0]?.csrf).toBe('AAAAAAAAAAAAAAAAAAAAAA');
     // Same author, different browser session: target absence supplies no exemption.
     await session('author-1', 'AQEBAQEBAQEBAQEBAQEBAQ');
     concealed();
@@ -600,7 +648,7 @@ test('The default private Decision page retires statements, appeal drafts and la
     await click(m.decision_refresh());
     concealed();
     expect(host.textContent).toContain(m.moderation_decision_read_closed());
-    expect(decisionReads).toBe(2);
+    expect(decisionReads).toBe(1);
     mode = 'denied';
     const beforeDenial = calls.length;
     await expect(readDecisionPage({ data: { id: decision.id } })).rejects.toMatchObject({ isNotFound: true });

@@ -29,6 +29,7 @@ const { DecisionPageView } = await import('../src/moderation/decision-page');
 const { m } = await import('../src/paraglide/messages.js');
 const page = {
   viewerId: 'author',
+  nativeSourceFingerprint: 'source-one',
   decision: {
     id: 'decision-one',
     targetKind: 'post',
@@ -38,14 +39,24 @@ const page = {
     decidedAt: '2026-10-01T09:30:00.000Z',
     appealDeadline: '2027-04-02T09:30:00.000Z',
     appeal: null,
+    viewer: { affectedAuthor: true, observedAt: '2026-10-01T09:30:00.000Z', appeal: { state: 'permitted' } },
+    targetContext: { state: 'concealed' },
   },
-  target: { id: 'target-one', authorId: 'author', threadId: 'thread-one', text: 'Current target', href: '/thread-one' },
 } satisfies DecisionPage;
 const pending = (source: DecisionPage): DecisionPage => ({
   ...source,
   decision: {
     ...source.decision,
     appeal: { id: `appeal-${source.decision.id}`, outcome: null, statement: 'Exact appeal', resolvedAt: null },
+    viewer: { ...source.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
+  },
+});
+const acknowledged = (source: DecisionPage) => ({
+  state: 'acknowledged' as const,
+  readback: {
+    state: 'available' as const,
+    decision: pending(source).decision,
+    nativeSourceFingerprint: source.nativeSourceFingerprint,
   },
 });
 function deferred<T>() {
@@ -122,7 +133,7 @@ test('a stale completion stays on the caller; an exact keyboard retry focuses it
   await activate(button(m.decision_appeal_submit()));
   current = false;
   await act(async () => {
-    stale.resolve({ state: 'pending', decision: pending(page).decision });
+    stale.resolve(acknowledged(page));
     await stale.promise;
   });
   expect(host!.querySelector('form')).not.toBeNull();
@@ -133,7 +144,7 @@ test('a stale completion stays on the caller; an exact keyboard retry focuses it
   await mount(page, async (command) => {
     commands.push(command);
     if (commands.length === 1) throw new Error('uncertain');
-    return { state: 'pending', decision: pending(page).decision };
+    return acknowledged(page);
   });
   await enterStatement();
   const submit = button(m.decision_appeal_submit());

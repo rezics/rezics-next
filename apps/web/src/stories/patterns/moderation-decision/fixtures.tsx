@@ -1,9 +1,10 @@
 import type { DecisionPage } from '../../../moderation/decision-read';
 
 export const decisionNow = Date.parse('2026-10-31T12:00:00.000Z');
-// Constructed exact native DTOs for interface review, not permission or native acceptance evidence.
+// Response shapes follow Content's populated, concealed and unavailable examples; they are not native evidence.
 export const openDecision: DecisionPage = {
   viewerId: '0192f3a0-6c1e-7b2a-9d4e-000000000090',
+  nativeSourceFingerprint: 'illustrative-source-open',
   decision: {
     id: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
     targetKind: 'post',
@@ -14,19 +15,27 @@ export const openDecision: DecisionPage = {
     decidedAt: '2026-10-01T09:30:00.000Z',
     appealDeadline: '2027-04-02T09:30:00.000Z',
     appeal: null,
+    viewer: {
+      affectedAuthor: true,
+      observedAt: '2026-10-31T12:00:00.000Z',
+      appeal: { state: 'permitted' },
+    },
+    targetContext: { state: 'concealed' },
   },
-  target: null,
 };
 export const pendingDecision: DecisionPage = {
   ...openDecision,
+  nativeSourceFingerprint: 'illustrative-source-pending',
   decision: {
     ...openDecision.decision,
     appeal: { id: '0192f3a0-6c1e-7b2a-9d4e-000000000080', outcome: null, statement: null, resolvedAt: null },
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
   },
 };
 export function resolvedDecision(outcome: 'reversed' | 'upheld'): DecisionPage {
   return {
     ...pendingDecision,
+    nativeSourceFingerprint: `illustrative-source-${outcome}`,
     decision: {
       ...pendingDecision.decision,
       appeal: {
@@ -43,20 +52,57 @@ export function resolvedDecision(outcome: 'reversed' | 'upheld'): DecisionPage {
 }
 export const availableDecision: DecisionPage = {
   ...resolvedDecision('reversed'),
-  target: {
-    id: openDecision.decision.targetId,
-    authorId: openDecision.viewerId!,
-    threadId: '0192f3a0-6c1e-7b2a-9d4e-000000000040',
-    text: 'Community event: practical information',
-    href: '/threads/0192f3a0-6c1e-7b2a-9d4e-000000000040#0192f3a0-6c1e-7b2a-9d4e-000000000050',
+  decision: {
+    ...resolvedDecision('reversed').decision,
+    targetContext: {
+      state: 'available',
+      kind: 'thread',
+      threadId: '0192f3a0-6c1e-7b2a-9d4e-000000000040',
+      postId: '0192f3a0-6c1e-7b2a-9d4e-000000000050',
+      boardId: '0192f3a0-6c1e-7b2a-9d4e-000000000030',
+      threadTitle: 'Current context after reversal',
+      boardTitle: 'Current board',
+    },
   },
 };
 export const expiredDecision: DecisionPage = {
   ...openDecision,
+  nativeSourceFingerprint: 'illustrative-source-expired',
   decision: {
     ...openDecision.decision,
     decidedAt: '2026-04-01T09:30:00.000Z',
     appealDeadline: '2026-10-01T09:30:00.000Z',
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unavailable', reason: 'deadline_passed' } },
+  },
+};
+export const unavailableContextDecision: DecisionPage = {
+  ...openDecision,
+  nativeSourceFingerprint: 'illustrative-source-unavailable-context',
+  decision: { ...openDecision.decision, targetContext: { state: 'unavailable' } },
+};
+export const unavailableAdviceDecision: DecisionPage = {
+  ...openDecision,
+  nativeSourceFingerprint: 'illustrative-source-unavailable-advice',
+  decision: {
+    ...openDecision.decision,
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unavailable', reason: 'command_unavailable' } },
+  },
+};
+export const unsupportedBoardDecision: DecisionPage = {
+  ...openDecision,
+  nativeSourceFingerprint: 'illustrative-source-board',
+  decision: {
+    ...openDecision.decision,
+    targetKind: 'board',
+    targetId: '0192f3a0-6c1e-7b2a-9d4e-000000000030',
+    appealDeadline: null,
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unsupported', reason: 'board' } },
+    targetContext: {
+      state: 'available',
+      kind: 'board',
+      boardId: '0192f3a0-6c1e-7b2a-9d4e-000000000030',
+      boardTitle: 'Current board',
+    },
   },
 };
 export const appealDraft = 'These are the organization’s public event contact details. Please review their context.';

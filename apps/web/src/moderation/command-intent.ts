@@ -14,11 +14,18 @@ export function createModerationIntent() {
 }
 
 /** Local appeal composition; a read without an appeal cannot acknowledge a lost response. */
+export type DecisionAppealIntent = Readonly<{
+  id: string;
+  statement: string;
+  idempotencyKey: string;
+  credentials: Readonly<Record<string, string>>;
+}>;
+
 export function createDecisionAppealIntent() {
   const identity = createModerationIntent();
   let text = '';
   let saved = '';
-  let command: Readonly<{ id: string; statement: string; idempotencyKey: string }> | null = null;
+  let command: DecisionAppealIntent | null = null;
   return {
     get text() {
       return text;
@@ -33,8 +40,13 @@ export function createDecisionAppealIntent() {
       text = next;
       identity.changed();
     },
-    freeze(id: string) {
-      command = Object.freeze({ id, statement: text, idempotencyKey: identity.keyFor({ id, statement: text }) });
+    freeze(id: string, credentials: Readonly<Record<string, string>>) {
+      command = Object.freeze({
+        id,
+        statement: text,
+        idempotencyKey: identity.keyFor({ id, statement: text }),
+        credentials: Object.freeze({ ...credentials }),
+      });
       return command;
     },
     retry() {

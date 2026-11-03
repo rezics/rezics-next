@@ -5,7 +5,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import type { ModerationDecision } from './decision-read';
+import { bindDecisionSource, type ModerationDecision } from './decision-read';
 import { moderationCommandHeaders, validateModerationKey } from './command-intent';
 
 type AppealResult = { status: number; error?: unknown };
@@ -13,30 +13,37 @@ type AppealReads = {
   appeal: (id: string, statement: string) => Promise<AppealResult>;
   decision: (id: string) => Promise<ModerationDecision | null>;
 };
+export type DecisionAppealReadback =
+  | { state: 'available'; decision: ModerationDecision; nativeSourceFingerprint: string }
+  | { state: 'unavailable' };
 export type AppealSubmission =
-  | { state: 'pending'; decision: ModerationDecision }
+  | { state: 'acknowledged'; readback: DecisionAppealReadback }
   | { state: 'invalid'; text: string }
-  | { state: 'updated'; decision: ModerationDecision }
   | { state: 'denied' }
   | { state: 'refused' }
-  | { state: 'conflict' }
+  | { state: 'conflict'; readback: DecisionAppealReadback }
   | { state: 'failed' };
 
-/** Sends once and re-reads current appeal state after success or terminal conflicts. */
+async function currentReadback(id: string, reads: AppealReads): Promise<DecisionAppealReadback> {
+  const decision = await reads.decision(id).catch(() => null);
+  if (!decision || decision.id !== id) return { state: 'unavailable' };
+  const source = await bindDecisionSource(decision).catch(() => ({ state: 'unavailable' as const }));
+  return source.state === 'available'
+    ? { state: 'available', decision, nativeSourceFingerprint: source.fingerprint }
+    : { state: 'unavailable' };
+}
+
+/** The command receipt and the separate current decision readback remain independent results. */
 export async function submitDecisionAppeal(id: string, text: string, reads: AppealReads): Promise<AppealSubmission> {
   const result = await reads.appeal(id, text);
   if (result.status === 201 || result.status === 200) {
-    const decision = await reads.decision(id).catch(() => null);
-    return decision?.id === id && decision.appeal ? { state: 'pending', decision } : { state: 'failed' };
+    return { state: 'acknowledged', readback: await currentReadback(id, reads) };
   }
   if ([401, 403, 404].includes(result.status)) return { state: 'denied' };
   if (result.status === 422 && Array.from(text).length > 2000) return { state: 'invalid', text };
-  if (result.status === 409 || result.status === 422) {
-    const decision = await reads.decision(id).catch(() => null);
-    // A known refusal stays terminal even when the follow-up read is unavailable.
-    return decision?.id === id ? { state: 'updated', decision } : { state: 'conflict' };
-  }
-  return { state: result.status >= 400 && result.status < 500 ? 'refused' : 'failed' };
+  if (result.status === 409 || result.status === 422)
+    return { state: 'conflict', readback: await currentReadback(id, reads) };
+  return { state: 'failed' };
 }
 
 export const appealDecision = createServerFn({ method: 'POST' })
@@ -89,6 +96,7 @@ export async function sendDecisionAppeal(
     decision: async (id) => {
       const response = await (id === data.id ? resource : client['moderation-decisions']({ id })).get({
         headers: { authorization },
+        fetch: { cache: 'no-store' },
       });
       return response.error ? null : response.data;
     },

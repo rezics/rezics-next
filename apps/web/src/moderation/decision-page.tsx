@@ -4,24 +4,24 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Badge } from '@rezics/ui/shadcn/badge';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { Withheld } from '@rezics/ui/withheld';
 import { QueryClientContext } from '@tanstack/react-query';
 import { createPrivateReaderLifetime, type PrivateReaderNavigation } from './private-reader-lifetime';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { csrfHeaders } from '../threads/composer';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
-import { appealDecision, type AppealSubmission } from './appeal';
-import { createDecisionAppealIntent } from './command-intent';
+import { appealDecision, type AppealSubmission, type DecisionAppealReadback } from './appeal';
+import { createDecisionAppealIntent, type DecisionAppealIntent } from './command-intent';
 import { useSession } from '../session/query';
 import {
   decisionReadFailure,
   decisionReadKey,
   prepareDecisionRead,
   sameDecision,
+  sameDecisionObservation,
   type DecisionReadState,
 } from './decision-read-model';
-import { canAppealDecision, canAttemptAppealWithoutTarget, type DecisionPage, readDecisionPage } from './decision-read';
+import { type DecisionPage, readDecisionPage } from './decision-read';
 
 function relativeTime(instant: string, now: number, locale: string) {
   const delta = Date.parse(instant) - now;
@@ -57,11 +57,7 @@ export function DecisionTime({
   );
 }
 
-export type DecisionAppealAction = (input: {
-  id: string;
-  statement: string;
-  idempotencyKey: string;
-}) => Promise<AppealSubmission>;
+export type DecisionAppealAction = (input: DecisionAppealIntent) => Promise<AppealSubmission>;
 export type DecisionPageProps = {
   page: DecisionPage;
   now?: number;
@@ -72,7 +68,8 @@ export type DecisionPageProps = {
   canCommand?: () => boolean;
   accepts?: (page: DecisionPage) => Promise<boolean>;
 };
-const sendAppeal: DecisionAppealAction = (data) => appealDecision({ data, headers: csrfHeaders() });
+const sendAppeal: DecisionAppealAction = ({ credentials, ...data }) =>
+  appealDecision({ data, headers: credentials });
 const refreshDecision = (id: string) => readDecisionPage({ data: { id } });
 type Feedback = 'denied' | 'conflict' | 'uncertain' | 'invalid' | 'refused';
 
@@ -142,51 +139,83 @@ const emptySubscribe = () => () => {};
 const zeroSnapshot = () => 0;
 
 function DecisionSessionPage(props: DecisionPageProps) {
-  return <DecisionBoundPage key={props.page.readGeneration ?? props.page.decision.id} {...props} />;
+  return (
+    <DecisionBoundPage
+      key={`${props.page.readGeneration ?? props.page.decision.id}:${props.page.nativeSourceFingerprint}`}
+      {...props}
+    />
+  );
 }
 
 function DecisionBoundPage(props: DecisionPageProps) {
   // Initialize the existing imperative token from the real session hook; admission uses the exact cache source.
   useSession();
   const client = useContext(QueryClientContext);
-  const [original] = useState(props);
-  const [page, setPage] = useState(props.page);
+  const original = useRef({
+    now: props.now,
+    onAppeal: props.onAppeal,
+    onRefresh: props.onRefresh,
+    navigation: props.navigation,
+    isCurrent: props.isCurrent,
+    canCommand: props.canCommand,
+    accepts: props.accepts,
+  }).current;
+  const originalDecision = useRef({
+    id: props.page.decision.id,
+    targetKind: props.page.decision.targetKind,
+    targetId: props.page.decision.targetId,
+    nativeSourceFingerprint: props.page.nativeSourceFingerprint,
+    viewerId: props.page.viewerId,
+  }).current;
+  const originalLocale = useRef(getLocale()).current;
+  const [page, setPage] = useState<DecisionPage | null>(props.page);
   const departed = useRef(false);
   const [owner, setOwner] = useState(() =>
     client && typeof window !== 'undefined'
-      ? createPrivateReaderLifetime(client, page, decisionReadKey(page.decision.id), props.navigation)
+      ? createPrivateReaderLifetime(client, props.page, decisionReadKey(props.page.decision.id), props.navigation)
       : null,
   );
   const originalClient = useRef(client).current;
+  const [retiredReadState, setRetiredReadState] = useState<DecisionReadState | null>(null);
+  const ownerSnapshot = useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
+  useEffect(() => {
+    if (owner && (!owner.healthy() || !owner.available())) setPage(null);
+  }, [owner, ownerSnapshot]);
   if (
     client !== originalClient ||
     props.navigation !== original.navigation ||
     props.onRefresh !== original.onRefresh ||
     props.onAppeal !== original.onAppeal ||
-    !sameDecision(props.page.decision, original.page.decision)
+    getLocale() !== originalLocale ||
+    props.page.decision.id !== originalDecision.id ||
+    props.page.decision.targetKind !== originalDecision.targetKind ||
+    props.page.decision.targetId !== originalDecision.targetId ||
+    props.page.nativeSourceFingerprint !== originalDecision.nativeSourceFingerprint ||
+    props.page.viewerId !== originalDecision.viewerId
   )
     owner?.retire();
-  useSyncExternalStore(owner?.subscribe ?? emptySubscribe, owner?.snapshot ?? zeroSnapshot, zeroSnapshot);
   if (typeof window !== 'undefined' && !client) return <DecisionReadStatus state="closed" />;
   if (departed.current) return <DecisionReadStatus state="closed" />;
   if (owner && (!owner.healthy() || !owner.available())) {
     return (
       <DecisionFreshRecovery
-        key={page.readGeneration ?? page.decision.id}
-        state={owner.healthy() ? 'unavailable' : 'closed'}
-        original={page}
+        key={page?.readGeneration ?? originalDecision.id}
+        state={retiredReadState ?? (owner.healthy() ? 'unavailable' : 'closed')}
+        original={originalDecision}
         read={original.onRefresh ?? refreshDecision}
         allowed={() => !departed.current && client === originalClient && owner.canRecover()}
         prepare={(id, read) => prepareDecisionRead(client!, id, read)}
         onAdmit={(next) => {
           if (departed.current) return;
           owner.retire();
+          setRetiredReadState(null);
           setOwner(createPrivateReaderLifetime(client!, next, decisionReadKey(next.decision.id), original.navigation));
           setPage(next);
         }}
       />
     );
   }
+  if (!page) return <DecisionReadStatus state="closed" />;
   return (
     <div
       onClickCapture={(event) => {
@@ -195,7 +224,7 @@ function DecisionBoundPage(props: DecisionPageProps) {
       }}
     >
       <DecisionVisit
-        key={page.readGeneration ?? 'presenter'}
+        key={`${page.readGeneration ?? 'presenter'}:${page.nativeSourceFingerprint}`}
         {...original}
         page={page}
         {...(owner
@@ -203,8 +232,15 @@ function DecisionBoundPage(props: DecisionPageProps) {
               isCurrent: owner.isCurrent,
               canCommand: owner.canCommand,
               accepts: owner.accepts,
+              adopt: (next) => setPage({ ...next, readGeneration: page.readGeneration }),
+              replace: (state: DecisionReadState = 'closed') => {
+                setPage(null);
+                setRetiredReadState(state);
+                owner.retire();
+              },
               retire: () => {
                 departed.current = true;
+                setPage(null);
                 owner.retire();
               },
             }
@@ -224,7 +260,7 @@ function DecisionFreshRecovery({
   onAdmit,
 }: {
   state: DecisionReadState;
-  original: DecisionPage;
+  original: Pick<DecisionPage['decision'], 'id' | 'targetKind' | 'targetId'>;
   read: (id: string) => Promise<DecisionPage>;
   prepare: (id: string, read: (id: string) => Promise<DecisionPage>) => Promise<DecisionPage>;
   allowed: () => boolean;
@@ -247,9 +283,14 @@ function DecisionFreshRecovery({
     const current = () => connection.current.active && ticket === connection.current.serial && allowed();
     setState('loading');
     try {
-      const next = await prepare(original.decision.id, read);
+      const next = await prepare(original.id, read);
       if (!current()) return;
-      if (!sameDecision(next.decision, original.decision)) setState('closed');
+      if (
+        next.decision.id !== original.id ||
+        next.decision.targetKind !== original.targetKind ||
+        next.decision.targetId !== original.targetId
+      )
+        setState('closed');
       else onAdmit(next);
     } catch (error) {
       if (current()) setState(decisionReadFailure(error));
@@ -269,8 +310,14 @@ function DecisionVisit({
   isCurrent = () => true,
   canCommand = () => true,
   accepts,
+  adopt,
   retire,
-}: DecisionPageProps & { retire?: () => void }) {
+  replace,
+}: DecisionPageProps & {
+  adopt?: (page: DecisionPage) => void;
+  retire?: () => void;
+  replace?: (state?: DecisionReadState) => void;
+}) {
   const [current, setCurrent] = useState<DecisionPage | null>(page);
   const confirmedAppeal = useRef(page.decision.appeal ? page.decision : null);
   const [readState, setReadState] = useState<DecisionReadState>('unavailable');
@@ -278,6 +325,8 @@ function DecisionVisit({
   const [, redraw] = useState(0);
   const text = composition.text;
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [readback, setReadback] = useState<DecisionAppealReadback | null>(null);
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const busy = sending || refreshing;
@@ -287,6 +336,7 @@ function DecisionVisit({
   const outcomeFocus = useRef<{
     serial: number;
     decision: DecisionPage['decision'];
+    nativeSourceFingerprint: string;
     control: HTMLButtonElement;
   } | null>(null);
   const keyboardActivation = useRef<HTMLButtonElement | null>(null);
@@ -302,6 +352,8 @@ function DecisionVisit({
     lifetime.current.readSerial++;
     clearOutcomeFocus();
     composition.discard();
+    setAcknowledged(false);
+    setReadback(null);
     retire?.();
   }
   function discard() {
@@ -368,13 +420,33 @@ function DecisionVisit({
   }, [composition]);
   const displayed = current ?? page;
   const { decision } = displayed;
-  const target = displayed.target?.id === decision.targetId ? displayed.target : null;
-  const targetKind = decision.targetKind === 'post' ? m.reporter_status_post() : m.reporter_status_thread();
+  const context = decision.targetContext;
+  const targetKind = m.decision_target_fallback({ kind: decision.targetKind });
   const locale = getLocale();
-  // This hint controls presentation only; an unavailable target cannot establish authorship.
-  const allowed = target
-    ? canAppealDecision(decision, target.authorId ?? null, displayed.viewerId, now)
-    : canAttemptAppealWithoutTarget(decision, displayed.viewerId, now);
+  const nativeAdvice = decision.viewer.appeal;
+  const deadlineOpen = decision.appealDeadline !== null && now <= Date.parse(decision.appealDeadline);
+  const allowed =
+    !acknowledged &&
+    !decision.appeal &&
+    nativeAdvice.state === 'permitted' &&
+    deadlineOpen &&
+    canCommand();
+  const adviceMessage =
+    nativeAdvice.state === 'unsupported'
+      ? m.decision_appeal_unsupported()
+      : nativeAdvice.state === 'unavailable'
+        ? nativeAdvice.reason === 'not_affected_author'
+          ? m.decision_author_only()
+          : nativeAdvice.reason === 'already_appealed'
+            ? m.decision_appeal_already()
+            : nativeAdvice.reason === 'deadline_passed'
+              ? m.decision_appeal_expired()
+              : m.decision_appeal_advice_unavailable()
+        : !deadlineOpen
+          ? m.decision_appeal_expired()
+          : !canCommand()
+            ? m.decision_appeal_advice_unavailable()
+            : null;
   const count = Array.from(text).length;
   const locked = Boolean(feedback && feedback !== 'invalid');
   const appeal = decision.appeal;
@@ -396,11 +468,37 @@ function DecisionVisit({
           : feedback === 'invalid'
             ? m.decision_appeal_too_long()
             : m.decision_appeal_refused();
+  const readbackDecision = readback?.state === 'available' ? readback.decision : null;
+  const readbackAppeal = readbackDecision?.appeal ?? null;
+  const readbackStatus = readbackAppeal?.outcome === 'reversed'
+    ? m.decision_appeal_reversed()
+    : readbackAppeal?.outcome === 'upheld'
+      ? m.decision_appeal_upheld()
+      : readbackAppeal
+        ? m.decision_status_pending()
+        : m.decision_status_taken_down();
+  const contextHref =
+    context.state !== 'available'
+      ? null
+      : context.kind === 'board'
+        ? `/boards/${encodeURIComponent(context.boardId)}`
+        : `/threads/${encodeURIComponent(context.threadId)}${context.postId ? `#${encodeURIComponent(context.postId)}` : ''}`;
+  const contextTitle =
+    context.state !== 'available'
+      ? null
+      : context.kind === 'board'
+        ? context.boardTitle
+        : context.threadTitle;
 
   useEffect(() => {
     const pending = outcomeFocus.current;
     if (!pending) return;
-    if (!active() || pending.serial !== lifetime.current.serial || !sameDecision(pending.decision, decision)) {
+    if (
+      !active() ||
+      pending.serial !== lifetime.current.serial ||
+      !sameDecision(pending.decision, decision) ||
+      pending.nativeSourceFingerprint !== displayed.nativeSourceFingerprint
+    ) {
       clearOutcomeFocus();
       return;
     }
@@ -427,31 +525,51 @@ function DecisionVisit({
       return;
     if (retry && (feedback !== 'uncertain' || !composition.unresolved)) return;
     const token = ++lifetime.current.serial;
-    const command = retry ? composition.retry()! : composition.freeze(decision.id);
+    const command = retry
+      ? composition.retry()!
+      : composition.freeze(
+          decision.id,
+          Object.fromEntries(new Headers(csrfHeaders()).entries()),
+        );
     outcomeFocus.current =
       keyboardControl && document.activeElement === keyboardControl && !decision.appeal
-        ? { serial: token, decision, control: keyboardControl }
+        ? { serial: token, decision, nativeSourceFingerprint: page.nativeSourceFingerprint, control: keyboardControl }
         : null;
     pending.current = true;
     setSending(true);
     setFeedback(null);
-    // A previous target snapshot is no longer a current link after a write attempt.
-    setCurrent((value) => (value ? { ...value, target: null } : null));
     try {
       if (!active() || !canCommand()) return;
       const result = await onAppeal(command);
       if (!active() || lifetime.current.serial !== token) return;
-      // A concurrent admitted read may already have confirmed this request.
       if (composition.retry() !== command) return;
-      if (result.state === 'pending' || result.state === 'updated') {
-        if (!sameDecision(result.decision, decision) || (result.state === 'pending' && !result.decision.appeal)) {
-          setFeedback('uncertain');
+      if (result.state === 'acknowledged' || result.state === 'conflict') {
+        setReadback(result.readback);
+        if (
+          result.readback.state === 'available' &&
+          result.readback.nativeSourceFingerprint !== page.nativeSourceFingerprint
+        ) {
+          setCurrent(null);
+          setReadState('closed');
+          setAcknowledged(false);
+          setReadback(null);
+          discard();
+          replace?.('closed');
           return;
         }
-        composition.settle(Boolean(result.decision.appeal));
-        if (result.decision.appeal) confirmedAppeal.current = result.decision;
-        setCurrent((value) => ({ ...(value ?? page), decision: result.decision, target: null }));
-        setFeedback(result.state === 'updated' ? 'conflict' : null);
+        if (result.readback.state === 'available') {
+          const refreshed = { ...page, decision: result.readback.decision };
+          setCurrent(refreshed);
+          adopt?.(refreshed);
+        }
+        if (result.state === 'acknowledged') {
+          composition.settle(true);
+          setAcknowledged(true);
+          setFeedback(null);
+        } else {
+          composition.settle();
+          setFeedback('conflict');
+        }
       } else {
         if (result.state !== 'failed') composition.settle();
         setFeedback(result.state === 'failed' ? 'uncertain' : result.state);
@@ -472,30 +590,29 @@ function DecisionVisit({
     reading.current = true;
     setRefreshing(true);
     if (!current) setReadState('loading');
-    setCurrent((value) => (value ? { ...value, target: null } : null));
+    setReadback(null);
     try {
       const next = await onRefresh(decision.id);
       if (!active() || lifetime.current.readSerial !== token) return;
       if (
-        !sameDecision(next.decision, page.decision) ||
+        !sameDecisionObservation(next, page) ||
         next.viewerId !== page.viewerId ||
         (accepts ? !(await accepts(next)) : next.sessionEpoch !== page.sessionEpoch)
       ) {
         setCurrent(null);
         setReadState('closed');
         confirmedAppeal.current = null;
+        setAcknowledged(false);
+        setReadback(null);
         discard();
+        replace?.('closed');
         return;
       }
       if (!active() || lifetime.current.readSerial !== token) return;
-      // An overlapping target read cannot roll back an acknowledged appeal receipt.
-      if (next.decision.appeal) confirmedAppeal.current = next.decision;
-      setCurrent({ ...next, decision: confirmedAppeal.current ?? next.decision });
-      // A successful read without an appeal cannot settle a lost command response.
-      if (!composition.unresolved || next.decision.appeal) {
-        composition.settle(Boolean(next.decision.appeal));
-        setFeedback(null);
-      }
+      const admitted = { ...next, readGeneration: page.readGeneration };
+      setCurrent(admitted);
+      adopt?.(admitted);
+      if (!composition.unresolved) setFeedback(null);
     } catch (error) {
       if (active() && lifetime.current.readSerial === token) {
         const state = decisionReadFailure(error);
@@ -503,7 +620,10 @@ function DecisionVisit({
         setReadState(state);
         if (state !== 'unavailable') {
           confirmedAppeal.current = null;
+          setAcknowledged(false);
+          setReadback(null);
           discard();
+          replace?.(state);
         }
       }
     } finally {
@@ -596,21 +716,28 @@ function DecisionVisit({
           </ContentItemHeading>
           <ContentItemFrame as="div" className="p-5 sm:p-6">
             <Badge variant="outline">{targetKind}</Badge>
-            {target ? (
+            {context.state === 'available' && contextHref ? (
               <>
                 <p className="text-sm font-medium">{m.decision_target_available()}</p>
                 <a
-                  href={localizeHref(target.href)}
+                  href={localizeHref(contextHref)}
                   className="mt-3 inline-flex min-h-11 max-w-full items-center gap-2 text-sm font-medium underline underline-offset-4"
                 >
                   <span className="line-clamp-3 wrap-anywhere">
-                    {target.text || m.decision_target_fallback({ kind: targetKind })}
+                    {contextTitle || m.decision_target_fallback({ kind: decision.targetKind })}
                   </span>
                   <ArrowUpRight className="size-4 shrink-0" aria-hidden="true" />
                 </a>
+                {context.kind === 'thread' && context.boardTitle ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {m.decision_target_fallback({ kind: 'board' })}: {context.boardTitle}
+                  </p>
+                ) : null}
               </>
             ) : (
-              <Withheld shape="passage" labels={{ withheld: m.moderation_target_unavailable() }} />
+              <p className="text-sm leading-6 text-muted-foreground">
+                {context.state === 'concealed' ? m.decision_target_concealed() : m.decision_target_context_unavailable()}
+              </p>
             )}
             <p className="mt-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
             <Button className="mt-4 min-h-11" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
@@ -625,12 +752,14 @@ function DecisionVisit({
             {m.decision_appeal_heading()}
           </ContentItemHeading>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{m.decision_appeal_explanation()}</p>
-          <dl className="mt-5 border-y border-border py-4 text-sm leading-6 sm:flex sm:gap-6">
-            <dt className="font-medium">{m.decision_deadline_label()}</dt>
-            <dd className="mt-1 text-muted-foreground sm:mt-0">
-              <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
-            </dd>
-          </dl>
+          {decision.appealDeadline ? (
+            <dl className="mt-5 border-y border-border py-4 text-sm leading-6 sm:flex sm:gap-6">
+              <dt className="font-medium">{m.decision_deadline_label()}</dt>
+              <dd className="mt-1 text-muted-foreground sm:mt-0">
+                <DecisionTime instant={decision.appealDeadline} now={now} locale={locale} />
+              </dd>
+            </dl>
+          ) : null}
           {appeal ? (
             <div className="mt-5 space-y-3">
               <p
@@ -701,9 +830,21 @@ function DecisionVisit({
             </form>
           ) : (
             <p className="mt-5 text-sm leading-6 text-muted-foreground">
-              {now > Date.parse(decision.appealDeadline) ? m.decision_appeal_expired() : m.decision_author_only()}
+              {acknowledged ? m.decision_appeal_acknowledged() : adviceMessage ?? m.decision_appeal_advice_unavailable()}
             </p>
           )}
+          {acknowledged && appeal ? (
+            <p className="mt-4 text-sm leading-6 text-muted-foreground" role="status">
+              {m.decision_appeal_acknowledged()}
+            </p>
+          ) : null}
+          {readback?.state === 'unavailable' ? (
+            <p className="mt-4 text-sm leading-6 text-muted-foreground">{m.decision_readback_unavailable()}</p>
+          ) : readbackDecision ? (
+            <p className="mt-4 text-sm leading-6 text-muted-foreground" role="status">
+              {m.decision_current_readback()}: {readbackStatus}
+            </p>
+          ) : null}
           {text && (appeal || !allowed) ? (
             <div className="mt-5 space-y-2 border-t border-border pt-4">
               <p className="text-xs font-medium text-muted-foreground">{m.decision_draft_label()}</p>
@@ -751,7 +892,7 @@ function DecisionVisit({
               <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
               <dd className="select-text break-all font-mono leading-6">{decision.id}</dd>
             </div>
-            {target ? (
+            {context.state === 'available' ? (
               <div className="space-y-1">
                 <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
                 <dd className="select-text break-all font-mono leading-6">{decision.targetId}</dd>
@@ -771,5 +912,5 @@ function DecisionVisit({
 }
 
 function decisionIdentity(page: DecisionPage) {
-  return [page.decision.id, page.decision.targetKind, page.decision.targetId];
+  return [page.decision.id, page.decision.targetKind, page.decision.targetId, page.nativeSourceFingerprint];
 }

@@ -66,6 +66,7 @@ const availableAppealTarget: ModerationTarget = {
 };
 const decisionPage: DecisionPage = {
   viewerId: 'private-author-case-owner',
+  nativeSourceFingerprint: 'source-private-author-case',
   decision: {
     id: decisionId,
     targetKind: 'post',
@@ -75,14 +76,28 @@ const decisionPage: DecisionPage = {
     decidedAt: createdAt,
     appealDeadline: deadline,
     appeal: { id: appealId, outcome: 'reversed', statement: longReview, resolvedAt },
+    viewer: {
+      affectedAuthor: true,
+      observedAt: createdAt,
+      appeal: { state: 'unavailable', reason: 'already_appealed' },
+    },
+    targetContext: { state: 'concealed' },
   },
-  target: null,
 };
 const currentTarget = {
   id: targetId,
   authorId: 'private-author-case-owner',
   text: currentTargetText,
   href: `/threads/current-thread#${targetId}`,
+};
+const currentTargetContext = {
+  state: 'available' as const,
+  kind: 'thread' as const,
+  threadId: 'current-thread',
+  postId: targetId,
+  boardId: 'current-board',
+  threadTitle: currentTargetText,
+  boardTitle: null,
 };
 const privateReport: ReporterStatus = {
   id: longId('report'),
@@ -111,7 +126,7 @@ function renderDecision(page: DecisionPage, callbacks: { reads: number; commands
     now: Date.parse(deadline),
     onAppeal: async () => {
       callbacks.commands++;
-      return { state: 'pending', decision: page.decision };
+      return { state: 'acknowledged', readback: { state: 'unavailable' } };
     },
     onRefresh: async () => {
       callbacks.reads++;
@@ -229,8 +244,11 @@ test('Moderation cases prioritize human outcomes while exact support references 
       renderDecision(
         {
           ...decisionPage,
-          target: null,
-          decision: { ...decisionPage.decision, appeal: { ...decisionPage.decision.appeal!, outcome: 'reversed' } },
+          decision: {
+            ...decisionPage.decision,
+            appeal: { ...decisionPage.decision.appeal!, outcome: 'reversed' },
+            targetContext: { state: 'concealed' },
+          },
         },
         callbacks,
       ),
@@ -267,7 +285,15 @@ test('Moderation cases prioritize human outcomes while exact support references 
 
     const currentDecision = parseMarkup(
       renderDecision(
-        { ...decisionPage, decision: { ...decisionPage.decision, appeal: null }, target: currentTarget },
+        {
+          ...decisionPage,
+          decision: {
+            ...decisionPage.decision,
+            appeal: null,
+            viewer: { ...decisionPage.decision.viewer, appeal: { state: 'permitted' } },
+            targetContext: currentTargetContext,
+          },
+        },
         callbacks,
         width,
       ),
@@ -299,8 +325,12 @@ test('Moderation cases prioritize human outcomes while exact support references 
       renderDecision(
         {
           ...decisionPage,
-          decision: { ...decisionPage.decision, appeal: null },
-          target: { ...currentTarget, text: '' },
+          decision: {
+            ...decisionPage.decision,
+            appeal: null,
+            viewer: { ...decisionPage.decision.viewer, appeal: { state: 'permitted' } },
+            targetContext: { ...currentTargetContext, threadTitle: '' },
+          },
         },
         callbacks,
         width,
@@ -330,7 +360,7 @@ test('Moderation cases prioritize human outcomes while exact support references 
       expect(host.textContent).toContain(m.reporter_status_post());
       expect(host.textContent).toContain(m.moderation_dismissed());
       expect(host.textContent).toContain(longAppealReason);
-      expect(host.textContent).toContain(m.moderation_target_unavailable());
+      expect(host.textContent).toContain(m.decision_target_concealed());
       expect(host.textContent).not.toContain(reporterId);
       expect(host.textContent).not.toContain('PRIVATE target body');
       expect(host.querySelectorAll('a')).toHaveLength(1);

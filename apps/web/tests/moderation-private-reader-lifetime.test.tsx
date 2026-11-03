@@ -162,6 +162,17 @@ const decision = {
   decidedAt: '2026-10-28T10:00:00.000Z',
   appealDeadline: '2027-04-28T10:00:00.000Z',
   appeal: null,
+  viewer: {
+    affectedAuthor: true,
+    observedAt: '2026-10-28T10:00:00.000Z',
+    appeal: { state: 'permitted' as const },
+  },
+  targetContext: { state: 'concealed' as const },
+  provenance: {
+    actorId: id(1),
+    session: { clientId: 'web', authnEpoch: 1 },
+    source: { partition: 1, epoch: 1, position: '1' },
+  },
 };
 let reports = [report];
 let appeals = [appeal];
@@ -1233,7 +1244,7 @@ test('Decision draft, uncertain recovery, shared discard and Stay preserve the e
 });
 
 for (const receipt of [false, true])
-  test(`Decision ${receipt ? 'receipt releases protection during target refresh' : 'sending Leave fences late appeal and target results'}`, async () => {
+  test(`Decision ${receipt ? 'acknowledgement releases protection during current refresh' : 'sending Leave fences late appeal and read results'}`, async () => {
     const command = deferred<import('../src/moderation/appeal').AppealSubmission>();
     const visit = await mountDecisionDeparture(() => command.promise);
     try {
@@ -1245,28 +1256,25 @@ for (const receipt of [false, true])
       await visit.depart();
       expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(m.decision_appeal_leave_pending());
       await visit.decide(m.thread_authoring_stay());
-      const pending = {
-        ...decision,
-        appeal: { id: id(99), outcome: null, statement: 'Submitted statement', resolvedAt: null },
-      };
       if (receipt) {
         await act(async () => {
-          command.resolve({ state: 'pending', decision: pending });
+          command.resolve({ state: 'acknowledged', readback: { state: 'unavailable' } });
           await tick();
         });
         expect(visit.blocked()).toBe(false);
-        expect(host.textContent).toContain(m.decision_appeal_pending());
+        expect(host.textContent).toContain(m.decision_appeal_acknowledged());
+        expect(host.textContent).not.toContain(m.decision_appeal_pending());
         expect(nativeReads).toHaveLength(reads);
         nativeGate.resolve();
         await act(tick);
-        expect(host.textContent).toContain(m.decision_appeal_pending());
+        expect(host.textContent).toContain(m.decision_appeal_acknowledged());
         expect(visit.blocked()).toBe(false);
         responseStatus = 503;
         await click(m.decision_refresh());
         expect(host.querySelector('textarea')).toBeNull();
         responseStatus = 200;
         await click(m.moderation_decision_read_retry());
-        expect(host.textContent).toContain(m.decision_appeal_pending());
+        expect(host.textContent).toContain(m.decision_appeal_acknowledged());
         expect(visit.blocked()).toBe(false);
         return;
       }
@@ -1274,7 +1282,7 @@ for (const receipt of [false, true])
       await visit.decide(m.thread_authoring_leave());
       expect(visit.arrivals()).toBe(1);
       await act(async () => {
-        command.resolve({ state: 'pending', decision: pending });
+        command.resolve({ state: 'failed' });
         nativeGate!.resolve();
         await tick();
       });

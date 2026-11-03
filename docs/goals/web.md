@@ -179,6 +179,16 @@ independent rather than making shared files or unfinished producer delivery into
   Content delivers its private native history reader. It never
   derives history from report or appeal scans.
 
+- **Affected-author decision receipt.** `/moderation/decisions/{id}` reads one composed private native response for
+  the retained reason, decision time, deadline, current appeal result, closed appeal advice and optional current
+  Board/Thread context. Concealed or unavailable context never hides the independently readable receipt. Native
+  `viewer.appeal` controls appeal presentation; local authorship, target readability and the browser clock cannot
+  grant native authority, and submission still reauthorizes. Exact retries retain the original decision ID,
+  statement, idempotency key and captured CSRF header. Acknowledgement and current readback remain separate. Account,
+  CSRF/session, locale, exposure, route and native-source replacement retire the visit. Until generated provenance
+  supplies actor, session and final source identity, the production route remains on its typed unavailable seam.
+  See the [moderation guide](../../apps/web/src/moderation/README.md) for its Touches/Bound/Growth contract.
+
 Consumer seams carry only native disclosed summaries, operation availability, revision/continuation and outcomes
 needed by that slice. Bind the generated owner API when available; otherwise keep the small boundary explicit and
 show unavailable in the installed route. An illustrative success fixture or unavailable seam alone does not complete

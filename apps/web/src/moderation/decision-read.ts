@@ -1,4 +1,3 @@
-import { documentText, parseDocument } from '@rezics/document';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
@@ -11,101 +10,91 @@ import { preparedPrivateReaderOrigin } from './private-reader-origin';
 import type { PrivateReaderRead } from './private-reader-lifetime';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 
-export type ModerationDecision = {
-  id: string;
-  targetKind: 'post' | 'thread';
-  targetId: string;
-  action: 'takedown';
-  statement: string;
-  decidedAt: string;
-  appealDeadline: string;
-  appeal: {
-    id: string;
-    outcome: 'reversed' | 'upheld' | null;
-    statement: string | null;
-    resolvedAt: string | null;
-  } | null;
-};
-export type DecisionTarget = {
-  id: string;
-  authorId?: string;
-  threadId?: string;
-  createdAt?: string;
-  text: string;
-  href: string;
-};
+type DecisionReadCall = ReturnType<ReturnType<KernelClient['moderation-decisions']>['get']>;
+export type ModerationDecision = NonNullable<Awaited<DecisionReadCall>['data']>;
+
 export type DecisionPage = PrivateReaderRead & {
+  /** The exact generated response, including its closed native advice and current context variants. */
   decision: ModerationDecision;
-  target: DecisionTarget | null;
+  /** Hash of the exact native provenance; it is an observation, never browser authority. */
+  nativeSourceFingerprint: string;
   viewerId: string | null;
   /** Legacy injected presenters may carry a local epoch; production never serializes a token. */
   sessionEpoch?: string;
   readGeneration?: string;
 };
 
-type ReadResult = { data?: unknown; error?: unknown; status?: number };
+type ReadResult = Awaited<DecisionReadCall>;
 type DecisionReads = {
   decision: (id: string) => Promise<ModerationDecision | null>;
-  post: (id: string) => Promise<DecisionTarget | null>;
-  thread: (id: string) => Promise<DecisionTarget | null>;
 };
 
-function postText(value: unknown): string {
-  if (!value || typeof value !== 'object') return '';
-  const record = value as Record<string, unknown>;
-  try {
-    return documentText(parseDocument(record.body));
-  } catch {
-    return '';
-  }
+export type DecisionSourceBinding =
+  | { state: 'available'; fingerprint: string }
+  | { state: 'unavailable' };
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Resolves the private decision and exactly one existing target read when the native visibility permits it. */
-export async function loadDecisionPage(id: string, reads: DecisionReads): Promise<DecisionPage | null> {
+/** Keep the installed typed unavailable seam until generated provenance reaches KernelClient. */
+export async function bindDecisionSource(
+  response: ModerationDecision,
+  expectedActorId?: string,
+): Promise<DecisionSourceBinding> {
+  if (!record(response) || !Object.hasOwn(response, 'provenance')) return { state: 'unavailable' };
+  const provenance = response['provenance'];
+  if (
+    !record(provenance) ||
+    typeof provenance['actorId'] !== 'string' ||
+    provenance['actorId'].trim() === '' ||
+    !record(provenance['session']) ||
+    typeof provenance['session']['clientId'] !== 'string' ||
+    provenance['session']['clientId'].trim() === '' ||
+    typeof provenance['session']['authnEpoch'] !== 'number' ||
+    !Number.isSafeInteger(provenance['session']['authnEpoch']) ||
+    !record(provenance['source']) ||
+    typeof provenance['source']['partition'] !== 'number' ||
+    !Number.isSafeInteger(provenance['source']['partition']) ||
+    typeof provenance['source']['epoch'] !== 'number' ||
+    !Number.isSafeInteger(provenance['source']['epoch']) ||
+    typeof provenance['source']['position'] !== 'string' ||
+    !/^(0|[1-9][0-9]*)$/.test(provenance['source']['position'])
+  )
+    return { state: 'unavailable' };
+  if (expectedActorId !== undefined && provenance['actorId'] !== expectedActorId) return { state: 'unavailable' };
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify([
+      provenance['actorId'],
+      provenance['session']['clientId'],
+      provenance['session']['authnEpoch'],
+      provenance['source']['partition'],
+      provenance['source']['epoch'],
+      provenance['source']['position'],
+    ]);
+  } catch {
+    return { state: 'unavailable' };
+  }
+  if (!serialized) return { state: 'unavailable' };
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
+  return {
+    state: 'available',
+    fingerprint: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(''),
+  };
+}
+
+/** A single exact composed read supplies the receipt, appeal advice and optional current context. */
+export async function loadDecisionPage(
+  id: string,
+  reads: DecisionReads,
+  viewerId: string | null = null,
+): Promise<DecisionPage | null> {
   const decision = await reads.decision(id);
   if (!decision || decision.id !== id) return null;
-  const target =
-    decision.targetKind === 'post' ? await reads.post(decision.targetId) : await reads.thread(decision.targetId);
-  return { decision, target, viewerId: null };
-}
-
-/** Keep the private decision gated before and after the independent target read. */
-export async function loadCurrentDecisionPage(id: string, reads: DecisionReads): Promise<DecisionPage | null> {
-  const page = await loadDecisionPage(id, reads);
-  if (!page) return null;
-  const current = await reads.decision(id);
-  if (
-    !current ||
-    current.id !== id ||
-    current.targetKind !== page.decision.targetKind ||
-    current.targetId !== page.decision.targetId
-  )
-    return null;
-  return { ...page, decision: current };
-}
-
-export function canAppealDecision(
-  decision: ModerationDecision,
-  targetAuthorId: string | null,
-  viewerId: string | null,
-  now: number,
-): boolean {
-  return Boolean(
-    viewerId &&
-    targetAuthorId &&
-    viewerId === targetAuthorId &&
-    !decision.appeal &&
-    now <= Date.parse(decision.appealDeadline),
-  );
-}
-
-/** The native appeal write remains authoritative when moderation hides the target read. */
-export function canAttemptAppealWithoutTarget(
-  decision: ModerationDecision,
-  viewerId: string | null,
-  now: number,
-): boolean {
-  return Boolean(viewerId && !decision.appeal && now <= Date.parse(decision.appealDeadline));
+  const source = await bindDecisionSource(decision, viewerId ?? undefined);
+  if (source.state === 'unavailable') throw new Error('Decision read unavailable');
+  return { decision, nativeSourceFingerprint: source.fingerprint, viewerId };
 }
 
 const readOptions = (authorization: string) => ({
@@ -126,10 +115,6 @@ function refused(result: ReadResult): boolean {
   if (isPlatformClosedProblem(status, problem)) throw new PlatformClosedError(403, problem);
   if (status !== undefined && [401, 403, 404].includes(status)) return true;
   throw new Error('Decision read unavailable');
-}
-
-function targetHref(kind: 'post' | 'thread', id: string, threadId?: string) {
-  return kind === 'thread' ? `/threads/${id}` : `/threads/${threadId ?? id}#${id}`;
 }
 
 export const readDecisionPage = createServerFn({ method: 'GET' })
@@ -165,13 +150,13 @@ export async function loadDecisionPageRequest(
   if (!authorization || !readerOrigin) throw notFound();
   let page: DecisionPage | null;
   try {
-    page = await loadCurrentDecisionPage(id, decisionReadAdapters(client(), authorization));
+    page = await loadDecisionPage(id, decisionReadAdapters(client(), authorization), readerOrigin.subject);
   } catch (error) {
     if (isPlatformClosedError(error)) throw new PlatformClosedError(403, null);
     throw new Error('Decision read unavailable');
   }
   if (!page) throw notFound();
-  return { ...page, viewerId: readerOrigin.subject, readerOrigin, readGeneration: crypto.randomUUID() };
+  return { ...page, readerOrigin, readGeneration: crypto.randomUUID() };
 }
 
 export function decisionReadAdapters(client: KernelClient, authorization: string): DecisionReads {
@@ -181,45 +166,6 @@ export function decisionReadAdapters(client: KernelClient, authorization: string
       if (result.error && refused(result)) return null;
       if (!result.data) throw new Error('Decision read unavailable');
       return result.data;
-    },
-    post: async (id) => {
-      // Target failure cannot revoke the independently readable private decision.
-      const result = await client
-        .posts({ id })
-        .get(readOptions(authorization))
-        .catch(() => null);
-      if (!result || result.error) return null;
-      const record = result.data?.post;
-      if (!record) return null;
-      if (record.id !== id || record.availability !== 'available' || ('removed' in record && record.removed === true))
-        return null;
-      if (typeof record.threadId !== 'string') return null;
-      return {
-        id,
-        ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
-        ...(typeof record.threadId === 'string' ? { threadId: record.threadId } : {}),
-        ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
-        text: postText(record),
-        href: targetHref('post', encodeURIComponent(id), encodeURIComponent(record.threadId)),
-      };
-    },
-    thread: async (id) => {
-      const result = await client
-        .threads({ id })
-        .get(readOptions(authorization))
-        .catch(() => null);
-      if (!result || result.error) return null;
-      const record = result.data?.thread;
-      if (!record) return null;
-      if (record.id !== id || record.availability !== 'available' || ('removed' in record && record.removed === true))
-        return null;
-      return {
-        id,
-        ...(typeof record.authorId === 'string' ? { authorId: record.authorId } : {}),
-        ...(typeof record.createdAt === 'string' ? { createdAt: record.createdAt } : {}),
-        text: String(record.title ?? ''),
-        href: targetHref('thread', encodeURIComponent(id)),
-      };
     },
   };
 }
