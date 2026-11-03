@@ -154,7 +154,12 @@ function CollectionContentLifetime({
   canRead,
 }: {
   id: string;
-  search: { cursor?: string; filters?: Record<string, string | string[]>; layout?: 'grid' | 'list' };
+  search: {
+    cursor?: string;
+    filters?: Record<string, string | string[]>;
+    layout?: 'grid' | 'list';
+    returnTo?: string;
+  };
   initialPage?: CollectionPageResult | undefined;
   session: ReturnType<typeof useSession>['state'];
   viewerId: string | null;

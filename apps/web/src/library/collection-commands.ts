@@ -5,6 +5,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { deleteCollection, updateCollection } from './collection-edit';
+import { deleteCollectionRecord, updateCollectionRecord } from './collection-records';
 import {
   asSession,
   fromKernel,
@@ -47,20 +48,20 @@ export function captureCollectionCommand<Data extends object>(
   return Object.freeze({ request, send: () => sender(request) });
 }
 
-type CollectionUpdateData = Parameters<typeof updateCollection>[0]['data'];
-type CollectionDeleteData = Parameters<typeof deleteCollection>[0]['data'];
+type CollectionUpdateData = Parameters<typeof updateCollectionRecord>[3];
+type CollectionDeleteData = Parameters<typeof deleteCollectionRecord>[3];
 
 /** Binds the installed metadata command; it does not create a second route or writer. */
 export function captureCollectionUpdate(data: CollectionUpdateData, csrfToken: string) {
   return captureCollectionCommand(data, csrfToken, (request) =>
-    updateCollection(request as Parameters<typeof updateCollection>[0]),
+    updateCollection({ data: request.data, headers: request.headers }),
   );
 }
 
 /** Binds the installed revisioned delete command; a retry reuses its exact delete operands. */
 export function captureCollectionDelete(data: CollectionDeleteData, csrfToken: string) {
   return captureCollectionCommand(data, csrfToken, (request) =>
-    deleteCollection(request as Parameters<typeof deleteCollection>[0]),
+    deleteCollection({ data: request.data, headers: request.headers }),
   );
 }
 

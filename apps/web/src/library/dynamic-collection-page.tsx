@@ -163,9 +163,9 @@ function DynamicCollectionPageLifetime({
         <SavedQueryManagement
           page={current}
           viewerId={viewerId}
-          queryKey={queryKey}
-          readCurrent={readCurrent}
-          returnTo={returnTo}
+          {...(queryKey === undefined ? {} : { queryKey })}
+          {...(readCurrent === undefined ? {} : { readCurrent })}
+          {...(returnTo === undefined ? {} : { returnTo })}
           onMetadata={(metadata: ManagedSavedQuery) => {
             if (!active.current || metadata.id !== id) return;
             setCurrent((value) =>
@@ -175,10 +175,10 @@ function DynamicCollectionPageLifetime({
                     ...value,
                     title: metadata.title,
                     description: metadata.description ?? null,
-                    revision: metadata.revision,
-                    curatorAccountId: metadata.curatorAccountId,
-                    visibility: metadata.visibility,
-                    viewerActions: metadata.viewerActions,
+                    ...(metadata.revision === undefined ? {} : { revision: metadata.revision }),
+                    ...(metadata.curatorAccountId === undefined ? {} : { curatorAccountId: metadata.curatorAccountId }),
+                    ...(metadata.visibility === undefined ? {} : { visibility: metadata.visibility }),
+                    ...(metadata.viewerActions === undefined ? {} : { viewerActions: metadata.viewerActions }),
                   },
             );
           }}
