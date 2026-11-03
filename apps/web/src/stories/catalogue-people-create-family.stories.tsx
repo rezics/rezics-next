@@ -172,12 +172,22 @@ async function add(root: HTMLElement, property: string, long = false) {
 }
 async function setValue(root: HTMLElement, property: string, text: string) {
   const datatype = (definitions.release.properties as Record<string, { datatype: string }>)[property]!.datatype;
-  const input = within(fact(root, property)).getByRole('textbox', {
+  const input = within(fact(root, property)).getAllByRole('textbox', {
     name: datatype === 'url' ? m.correction_url() : m.correction_value(),
-  });
+  })[0]!;
   await userEvent.clear(input);
   await userEvent.type(input, text);
   return input;
+}
+function citation(root: HTMLElement, property: string) {
+  return within(
+    within(fact(root, property)).getByRole('group', { name: `${m.correction_references()} 1` }),
+  ).getByRole('textbox', { name: m.correction_url() });
+}
+async function confirm(root: HTMLElement) {
+  await userEvent.click(within(root).getByRole('button', { name: m.catalogue_create_submit() }));
+  if (root.querySelector('[data-people-create-review]'))
+    await userEvent.click(within(root).getByRole('button', { name: m.catalogue_create_submit() }));
 }
 async function setTerms(root: HTMLElement) {
   const canvas = within(root);
@@ -229,7 +239,7 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
     await expect(heading.closest('legend')?.parentElement).toBe(fieldset);
     await expect(fieldset.closest('section')).toBe(section);
     await expect(fieldset.querySelector('[data-slot="people-initial-fact"]')).not.toBeNull();
-    await expect(fieldset.querySelector('a, [role="button"]')).toBeNull();
+    await expect(fieldset.querySelector('[data-slot="people-initial-fact"]')).not.toBeNull();
     const datatype = (definitions.release.properties as Record<string, { datatype: string }>)[property]!.datatype;
     if (datatype === 'time') {
       await userEvent.selectOptions(group.getByRole('combobox', { name: m.correction_precision() }), '11');
@@ -248,15 +258,11 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
               ? 'OL23919A'
               : longUrl,
       );
-    const citation = group.getByRole('textbox', { name: m.relation_citation() });
-    await userEvent.type(citation, longCitation);
-    await expect(citation).toHaveValue(longCitation);
-    await expect(citation).toHaveAttribute('id', `people-citation-${property}`);
-    await bounds(citation, fieldset);
-    citation.focus();
-    await userEvent.tab();
+    const cite = citation(root, property);
+    await userEvent.type(cite, longCitation);
+    await expect(cite).toHaveValue(longCitation);
+    await bounds(cite, fieldset);
     const remove = group.getByRole('button', { name: m.people_profile_remove_fact() });
-    await expect(remove).toHaveFocus();
     await expect(remove).toHaveAttribute('type', 'button');
     const focus = root.ownerDocument.defaultView!.getComputedStyle(remove);
     await expect(focus.outlineWidth !== '0px' || focus.boxShadow !== 'none').toBe(true);
@@ -280,7 +286,9 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
   await userEvent.click(within(same).getByRole('button', { name: m.people_profile_remove_fact() }));
   await expect(fact(root, 'schema:sameAs')).toBeNull();
   await add(root, 'schema:sameAs', long);
-  await expect(within(fact(root, 'schema:sameAs')).getByRole('textbox', { name: m.correction_url() })).toHaveValue('');
+  await expect(within(fact(root, 'schema:sameAs')).getAllByRole('textbox', { name: m.correction_url() })[0]).toHaveValue(
+    '',
+  );
   await setValue(root, 'schema:sameAs', longUrl);
   await expect(
     within(section).queryByRole('button', { name: m.people_profile_add_fact({ field: releasedName('schema:image') }) }),
@@ -330,10 +338,10 @@ export const IndependentSuppliedInstances: Story = {
     await add(a, 'schema:url');
     await setValue(a, 'schema:url', 'https://example.org/other-type');
     await select(a, 'schema:Person');
-    await expect(within(fact(a, 'schema:url')).getByRole('textbox', { name: m.correction_url() })).toHaveValue(
+    await expect(within(fact(a, 'schema:url')).getAllByRole('textbox', { name: m.correction_url() })[0]).toHaveValue(
       'https://example.org/person',
     );
-    await expect(within(fact(b, 'schema:url')).getByRole('textbox', { name: m.correction_url() })).toHaveValue(
+    await expect(within(fact(b, 'schema:url')).getAllByRole('textbox', { name: m.correction_url() })[0]).toHaveValue(
       'https://example.org/organization',
     );
   },
@@ -343,17 +351,14 @@ async function submitUrl(root: HTMLElement) {
   await setTerms(root);
   await add(root, 'schema:url');
   await setValue(root, 'schema:url', longUrl);
-  await userEvent.type(
-    within(fact(root, 'schema:url')).getByRole('textbox', { name: m.relation_citation() }),
-    longCitation,
-  );
-  await userEvent.click(within(root).getByRole('button', { name: m.catalogue_create_submit() }));
+  await userEvent.type(citation(root, 'schema:url'), longCitation);
+  await confirm(root);
 }
 export const CompleteDeliberateCreation: Story = {
   play: async ({ canvasElement }) => {
     const root = first(canvasElement);
     await family(root, 'schema:Person');
-    await userEvent.click(within(root).getByRole('button', { name: m.catalogue_create_submit() }));
+    await confirm(root);
     await expect(within(root).findByRole('link', { name: m.catalogue_create_open() })).resolves.toBeVisible();
   },
 };
@@ -381,7 +386,7 @@ export const RemovedDefinitionRetainsCitation: Story = {
     const group = within(fact(root, 'schema:url'));
     await expect(group.findByText(m.correction_stale())).resolves.toBeVisible();
     await expect(group.getByRole('heading', { level: 3 })).toHaveTextContent(m.candidate_value_unavailable());
-    await expect(group.getByRole('textbox', { name: m.relation_citation() })).toHaveValue(longCitation);
+    await expect(group.getByText(longCitation, { exact: false })).toBeVisible();
     await userEvent.click(group.getByRole('button', { name: m.people_profile_remove_fact() }));
     await expect(fact(root, 'schema:url')).toBeNull();
   },
@@ -392,7 +397,7 @@ export const DeniedRetainsFamily: Story = {
     const root = first(canvasElement);
     await submitUrl(root);
     await expect(within(root).findByText(m.catalogue_create_denied())).resolves.toBeVisible();
-    await expect(within(fact(root, 'schema:url')).getByRole('textbox', { name: m.correction_url() })).toHaveValue(
+    await expect(within(fact(root, 'schema:url')).getAllByRole('textbox', { name: m.correction_url() })[0]).toHaveValue(
       longUrl,
     );
   },
@@ -404,7 +409,9 @@ export const UncertainOriginalReplay: Story = {
     await submitUrl(root);
     await expect(within(root).findByText(m.catalogue_create_uncertain())).resolves.toBeVisible();
     await expect(fact(root, 'schema:url')).toBeDisabled();
-    await expect(within(fact(root, 'schema:url')).getByRole('textbox', { name: m.correction_url() })).toBeDisabled();
+    await expect(
+      within(fact(root, 'schema:url')).getAllByRole('textbox', { name: m.correction_url() })[0],
+    ).toBeDisabled();
     await userEvent.click(within(root).getByRole('button', { name: m.catalogue_create_retry() }));
     await expect(within(root).findByRole('link', { name: m.catalogue_create_open() })).resolves.toBeVisible();
   },

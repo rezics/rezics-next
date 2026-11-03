@@ -92,6 +92,8 @@ test('a created person returns to the exact work credit draft and is selected ex
     body: '{"title":"Created identity reader unavailable","status":503}',
   });
   await page.getByRole('button', { name: 'Create subject', exact: true }).click();
+  await page.locator('[data-people-create-review]').waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Create subject', exact: true }).click();
   const createdOutcome = page.locator('section[role="status"]');
   await createdOutcome.getByRole('button', { name: 'Retry', exact: true }).waitFor({ state: 'visible' });
   await fixture.stack.syncKernelRequests();

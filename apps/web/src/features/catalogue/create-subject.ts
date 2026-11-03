@@ -35,7 +35,7 @@ export type CreateFailure = {
 };
 export type CreatedReader =
   | { state: 'ready'; href: string; identity?: { id: string; type: string; label: string } }
-  | { state: 'concealed' | 'unavailable' };
+  | { state: 'concealed' | 'unavailable' | 'stale' | 'denied' };
 export type CreateResult = CreateFailure | { ok: true; id: string; reader: CreatedReader };
 export type CreateTransport = {
   definitions?: (refresh?: boolean) => Promise<CreateDefinitions>;

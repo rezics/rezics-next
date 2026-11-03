@@ -625,13 +625,23 @@ the work's native relation editor selects that identity and contributes its cite
 does not manufacture a credit or creator ownership.
 
 The profile reads the actual active immutable definitions and current subject in parallel. Effective properties
-and datatypes determine support. Initial multilingual terms reuse generic creation; optional initial scalar facts
-reuse its native value controls and validation. Only explicitly entered facts enter `POST /v1/subjects` and are
-selected at creation. The returned ID is read through the ordinary reader. An uncertain request freezes both
-terms and facts with the original key; confirmed creation with an unavailable reader retains its ID and retries
-only that read. Drafts survive Type switches and stale-metadata rejection, including fields no longer admitted.
-An explicit retry keeps Retry focusable with `aria-disabled` while pending, then returns focus to Retry on failure
-or moves it to the profile/form heading on success.
+and datatypes determine support. Initial multilingual terms reuse generic creation. Optional initial facts use
+the shared statement fields: structured value, native value discriminator, admitted qualifiers, grouped ordered
+references and independent copies from the visit-private reference-reuse coordinator. Rank stays the native
+default `normal`; this creator has no rank control. A missing citation is an editable invalid condition under
+actual native rules, never a manufactured URL or a copy of the current work. Editing one part does not rewrite
+sibling groups. Only explicitly entered facts enter `POST /v1/subjects` and are selected at creation. Person and
+Organization keep separate local fact drafts; switching type cannot seal the other type's facts.
+
+Before native creation the contributor reviews the exact People item: type, every language row and alias, and
+every initial assertion with its qualifiers, default rank and grouped references. The review is a local draft,
+not published, selected or accepted. Creating the identity and adding an optional later work credit remain
+independent native operations; creation does not add a credit. A later edit, type switch, definition refresh or
+reference copy requires reviewing the current item again. Unknown delivery retries the sealed item and key;
+acknowledged creation retries only the exact-UUID read. The returned ID is read through the ordinary reader.
+Drafts survive Type switches and stale-metadata rejection, including fields no longer admitted; withdrawn fields
+keep a visible repair or discard path. An explicit retry keeps Retry focusable with `aria-disabled` while
+pending, then returns focus to Retry on failure or moves it to the profile/form heading on success.
 
 Corrections reuse the integrated multi-field editor's selected values, qualifiers, references, independent keys,
 partial results and exact-candidate review. Submission proposes an alternative; acceptance and selection remain

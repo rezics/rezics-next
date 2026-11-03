@@ -149,8 +149,15 @@ function CreateSubjectFormLive({
     href?: string;
     labelLanguage?: (type: string) => string | undefined;
     descriptionLanguage?: (type: string) => string | undefined;
-    fields: (type: string, disabled: boolean, canEdit: () => boolean) => ReactNode;
+    fields: (
+      type: string,
+      disabled: boolean,
+      canEdit: () => boolean,
+      invalidate?: () => void,
+    ) => ReactNode;
     prepare: (item: InitialSubject) => { item: InitialSubject; errors: Violation[] };
+    /** Opt-in whole-item review before sealing. Default callers skip this and submit immediately. */
+    review?: (state: { item: InitialSubject; stale: boolean }) => ReactNode;
   };
   locale: string;
   session: Session;
@@ -205,7 +212,11 @@ function CreateSubjectFormLive({
   }
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created>();
+  const [itemReview, setItemReview] = useState<{ item: InitialSubject; fingerprint: string; stale: boolean }>();
   const confirmed = useRef(false);
+  function invalidateReview() {
+    setItemReview((current) => (current && !current.stale ? { ...current, stale: true } : current));
+  }
   const [profileDirty, setProfileDirty] = useState(false);
   const outcome = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -288,6 +299,7 @@ function CreateSubjectFormLive({
   function update(index: number, field: keyof TermDraft, value: string) {
     setRows((current) => current.map((row, at) => (at === index ? { ...row, [field]: value } : row)));
     setFailure(undefined);
+    invalidateReview();
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -306,6 +318,13 @@ function CreateSubjectFormLive({
       if (draft.errors.length) {
         reject({ ok: false, reason: 'invalid', errors: draft.errors });
         return;
+      }
+      if (profile?.review) {
+        const fingerprint = JSON.stringify(draft.item);
+        if (!itemReview || itemReview.stale || itemReview.fingerprint !== fingerprint) {
+          setItemReview({ item: structuredClone(draft.item), fingerprint, stale: false });
+          return;
+        }
       }
       request.current = { item: structuredClone(draft.item), key: crypto.randomUUID() };
     }
@@ -402,7 +421,11 @@ function CreateSubjectFormLive({
               <p>
                 {created.reader.state === 'concealed'
                   ? m.catalogue_create_concealed({}, options)
-                  : m.catalogue_create_reader_unavailable({}, options)}
+                  : created.reader.state === 'stale'
+                    ? m.catalogue_create_reader_stale({}, options)
+                    : created.reader.state === 'denied'
+                      ? m.catalogue_create_reader_denied({}, options)
+                      : m.catalogue_create_reader_unavailable({}, options)}
               </p>
               <Button type="button" variant="outline" disabled={busy} onClick={() => void openCreated()}>
                 {m.catalogue_create_retry({}, options)}
@@ -530,6 +553,7 @@ function CreateSubjectFormLive({
                       onClick={() => {
                         setRows(rows.filter((_, at) => at !== index));
                         setFailure(undefined);
+                        invalidateReview();
                       }}
                     >
                       {m.catalogue_create_remove_language({}, options)}
@@ -541,7 +565,10 @@ function CreateSubjectFormLive({
                 type="button"
                 variant="outline"
                 disabled={disabled}
-                onClick={() => setRows([...rows, { language: '', label: '', description: '', aliases: '' }])}
+                onClick={() => {
+                  setRows([...rows, { language: '', label: '', description: '', aliases: '' }]);
+                  invalidateReview();
+                }}
               >
                 {m.catalogue_create_add_language({}, options)}
               </Button>
@@ -587,6 +614,7 @@ function CreateSubjectFormLive({
                         setDirectoryType(nextType);
                         setType(nextType?.id ?? '');
                         if (nextType) setFailure(undefined);
+                        invalidateReview();
                       }}
                       onPendingChange={setDirectoryPending}
                       {...(typeAdmission?.offered ? { offered: typeAdmission.offered } : {})}
@@ -608,6 +636,7 @@ function CreateSubjectFormLive({
                         currentEdit.current = null;
                         setType(event.target.value);
                         setFailure(undefined);
+                        invalidateReview();
                       }}
                     >
                       <NativeSelectOption value="">{m.catalogue_create_choose_type({}, options)}</NativeSelectOption>
@@ -662,9 +691,10 @@ function CreateSubjectFormLive({
               </Field>
               {profile && (
                 <CreateSubjectProfileDraft type={type} onDirty={setProfileDirty}>
-                  {profile.fields(type, disabled, edit.active)}
+                  {profile.fields(type, disabled, edit.active, invalidateReview)}
                 </CreateSubjectProfileDraft>
               )}
+              {itemReview && profile?.review?.(itemReview)}
               {failure && (
                 <div
                   ref={outcome}

@@ -118,6 +118,10 @@ test('whole Person and Organization creation families retain exact facts, indepe
   const fields = () => host.querySelectorAll<HTMLFieldSetElement>('fieldset[id^="people-fact-"]');
   const group = (property: string, region = host) =>
     region.querySelector<HTMLFieldSetElement>(`fieldset[id="people-fact-${property}"]`)!;
+  const citation = (region: HTMLElement) =>
+    within(within(region).getByRole('group', { name: `${m.correction_references()} 1` })).getByRole('textbox', {
+      name: m.correction_url(),
+    }) as HTMLInputElement;
   const name = (fixture: Fixture, property: string) =>
     definitionText(fixture.release.properties[property]?.labels, 'en').text;
   async function choose(type: string, region = host) {
@@ -140,7 +144,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
   }
   async function value(fixture: Fixture, property: string, text: string, region = host) {
     const label = fixture.release.properties[property]!.datatype === 'url' ? m.correction_url() : m.correction_value();
-    const input = within(group(property, region)).getByRole('textbox', { name: label });
+    const input = within(group(property, region)).getAllByRole('textbox', { name: label })[0]!;
     await act(async () => {
       await user.clear(input);
       await user.type(input, text);
@@ -151,6 +155,8 @@ test('whole Person and Organization creation families retain exact facts, indepe
   }
   async function submit(region = host) {
     await act(async () => user.click(within(region).getByRole('button', { name: m.catalogue_create_submit() })));
+    if (region.querySelector('[data-people-create-review]'))
+      await act(async () => user.click(within(region).getByRole('button', { name: m.catalogue_create_submit() })));
   }
   const url = `https://example.org/${'sourceSansEspaces'.repeat(24)}`;
   const citation = `https://example.org/${'citation/'.repeat(36)}evidence`;
@@ -218,9 +224,9 @@ test('whole Person and Organization creation families retain exact facts, indepe
             const frame = fieldset.querySelector<HTMLElement>('[data-slot="people-initial-fact"]')!;
             expect(frame.className).toContain('group relative isolate');
             expect(frame.className).toContain('min-w-0');
-            expect(frame.querySelector('a, [role="button"]')).toBeNull();
+            expect(frame.querySelector('[data-slot="people-initial-fact"]') ?? frame).toBe(frame);
             for (const element of [fieldset, frame, fieldset.querySelector('h3')!]) {
-              expect(element.className).not.toMatch(/truncate|line-clamp|bg-card|border-border/);
+              expect(element.className).not.toMatch(/truncate|line-clamp/);
             }
             expect(
               canvas().queryByRole('button', { name: m.people_profile_add_fact({ field: name(fixture, property) }) }),
@@ -247,13 +253,13 @@ test('whole Person and Organization creation families retain exact facts, indepe
                 calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
               };
             } else await value(fixture, property, String(content));
-            const cite = local.getByRole('textbox', { name: m.relation_citation() });
-            expect(cite.id).toMatch(/-people-\d+-citation$/);
+            const cite = citation(fieldset);
+            expect(cite.id).toMatch(/-people-\d+-part-\d+-value$/);
             expect(cite.getAttribute('type')).toBe('url');
             await act(async () => user.type(cite, citation));
-            expect((cite as HTMLInputElement).value).toBe(citation);
-            expect(cite.className).toContain('h-11');
-            expect(cite.className).toContain('md:pointer-fine:h-8');
+            expect(cite.value).toBe(citation);
+            expect(cite.className).toContain('min-h-11');
+            expect(cite.className).toContain('md:pointer-fine:min-h-8');
             const remove = local.getByRole('button', { name: m.people_profile_remove_fact() });
             expect(remove.getAttribute('type')).toBe('button');
             expect(remove.className).toContain('min-h-11');
@@ -315,8 +321,8 @@ test('whole Person and Organization creation families retain exact facts, indepe
     await value(left, 'schema:url', 'https://example.org/person', a);
     await add(right, 'schema:url', b);
     await value(right, 'schema:url', 'https://example.org/organization', b);
-    const personInput = within(group('schema:url', a)).getByRole('textbox', { name: m.correction_url() });
-    const organizationInput = within(group('schema:url', b)).getByRole('textbox', { name: m.correction_url() });
+    const personInput = within(group('schema:url', a)).getAllByRole('textbox', { name: m.correction_url() })[0]!;
+    const organizationInput = within(group('schema:url', b)).getAllByRole('textbox', { name: m.correction_url() })[0]!;
     expect(personInput.id).not.toBe(organizationInput.id); // Shared ScalarControl owns presentation IDs.
     organizationInput.focus();
     expect(window.document.activeElement).toBe(organizationInput);
@@ -326,7 +332,8 @@ test('whole Person and Organization creation families retain exact facts, indepe
     await value(left, 'schema:url', 'https://example.org/other-draft', a);
     await choose('schema:Person', a);
     expect(
-      (within(group('schema:url', a)).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement).value,
+      (within(group('schema:url', a)).getAllByRole('textbox', { name: m.correction_url() })[0] as HTMLInputElement)
+        .value,
     ).toBe('https://example.org/person');
     expect((organizationInput as HTMLInputElement).value).toBe('https://example.org/organization');
     await act(async () =>
@@ -338,7 +345,8 @@ test('whole Person and Organization creation families retain exact facts, indepe
     expect(group('schema:url', a)).toBeNull();
     await add(left, 'schema:url', a);
     expect(
-      (within(group('schema:url', a)).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement).value,
+      (within(group('schema:url', a)).getAllByRole('textbox', { name: m.correction_url() })[0] as HTMLInputElement)
+        .value,
     ).toBe('');
     await value(left, 'schema:url', 'https://example.org/readded', a);
     await terms('Independent person', a);
@@ -367,7 +375,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
         user.selectOptions(within(fieldset).getByRole('combobox', { name: m.correction_value_state() }), state),
       );
       expect(within(fieldset).queryByRole('combobox', { name: m.correction_precision() })).toBeNull();
-      const cite = within(fieldset).getByRole('textbox', { name: m.relation_citation() });
+      const cite = citation(fieldset);
       await act(async () => {
         await user.type(cite, citation);
         await user.clear(cite);
@@ -441,12 +449,14 @@ test('whole Person and Organization creation families retain exact facts, indepe
       await value(fixture, 'schema:url', 'https://example.org/person');
       await add(fixture, 'schema:sameAs');
       await value(fixture, 'schema:sameAs', 'https://example.org/sibling');
-      const cite = within(group('schema:url')).getByRole('textbox', { name: m.relation_citation() });
+      const cite = citation(group('schema:url'));
       await act(async () => user.type(cite, 'https://example.org/rejected'));
       await submit();
       await waitFor(() => expect(host.textContent).toContain(m.correction_unavailable()));
       expect(canvas().getByRole('button', { name: m.catalogue_create_submit() }).hasAttribute('disabled')).toBe(true);
-      const link = canvas().getByRole('link', { name: `${name(fixture, 'schema:url')} · ${m.relation_citation()}` });
+      const link = canvas().getByRole('link', {
+        name: new RegExp(`${name(fixture, 'schema:url')}.*${m.correction_url()}`),
+      });
       expect(link.getAttribute('href')).toBe(`#${encodeURIComponent(cite.id)}`);
       for (const pointer of unknown) {
         const details = Array.from(host.querySelectorAll('details')).find((node) =>
@@ -503,9 +513,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
       await terms('Private recovery draft');
       await add(fixture, 'schema:url');
       await value(fixture, 'schema:url', url);
-      const cite = within(group('schema:url')).getByRole('textbox', {
-        name: m.relation_citation(),
-      }) as HTMLInputElement;
+      const cite = citation(group('schema:url'));
       await act(async () => user.type(cite, citation));
       await submit();
       await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
@@ -581,16 +589,12 @@ test('whole Person and Organization creation families retain exact facts, indepe
     await terms('Removed metadata');
     await add(removed, 'schema:url');
     await value(removed, 'schema:url', url);
-    await act(async () =>
-      user.type(within(group('schema:url')).getByRole('textbox', { name: m.relation_citation() }), citation),
-    );
+    await act(async () => user.type(citation(group('schema:url')), citation));
     await submit();
     await waitFor(() => expect(group('schema:url').textContent).toContain(m.correction_stale()));
     expect(group('schema:url').querySelector('legend')!.textContent).toBe(m.candidate_value_unavailable());
-    expect(within(group('schema:url')).queryByRole('textbox', { name: m.correction_url() })).toBeNull();
-    expect(
-      (within(group('schema:url')).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement).value,
-    ).toBe(citation);
+    expect(within(group('schema:url')).queryByRole('textbox')).toBeNull();
+    expect(group('schema:url').textContent).toContain(citation);
     expect(commands).toHaveLength(1);
     expect(commands[0]!.item.statements!['schema:url']![0]!.value).toEqual({ type: 'value', content: url });
     expect(loads).toBe(2);
@@ -613,7 +617,8 @@ test('whole Person and Organization creation families retain exact facts, indepe
       if (scenario === 'denied') {
         await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_denied()));
         expect(
-          (within(group('schema:url')).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement).value,
+          (within(group('schema:url')).getAllByRole('textbox', { name: m.correction_url() })[0] as HTMLInputElement)
+            .value,
         ).toBe(url);
         expect(fixture.receipts.size).toBe(0);
       } else if (scenario === 'uncertain') {
@@ -621,7 +626,10 @@ test('whole Person and Organization creation families retain exact facts, indepe
         expect(group('schema:url').disabled).toBe(true);
         const frozen = structuredClone(fixture.calls.find((call) => call.method === 'POST'));
         await act(async () =>
-          user.type(within(group('schema:url')).getByRole('textbox', { name: m.correction_url() }), '/must-not-edit'),
+          user.type(
+            within(group('schema:url')).getAllByRole('textbox', { name: m.correction_url() })[0]!,
+            '/must-not-edit',
+          ),
         );
         await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
         await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());

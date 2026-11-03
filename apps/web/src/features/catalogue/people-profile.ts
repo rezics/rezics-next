@@ -6,7 +6,7 @@ import { candidateFailure, type CandidateFailure } from '../../subject/candidate
 import { DefinitionReadError, definitionText, fetchGuideRelease } from './definition-guide';
 import { createSubjectRecord } from './create-subject-request';
 import type { CreateResult, CreatedReader, InitialSubject } from './create-subject';
-import { correctionProperty, type StatementInput } from './statement-editor';
+import { correctionProperty, creationStatement, type StatementInput } from './statement-editor';
 import { peopleBiographyGroups } from './people-biography';
 
 export { peopleAgentType, peopleBiographyGroups, peopleScalarFields } from './people-biography';
@@ -140,12 +140,12 @@ export async function readPeopleProfile(
 
 /** Initial facts are optional, explicit native statements. Terms stay separate from schema:name. */
 export function peopleInitialItem(initial: InitialSubject, facts: Record<string, StatementInput>): PeopleItem {
-  const entries = Object.entries(facts);
+  const entries = Object.entries(facts).map(
+    ([id, fact]) => [id, [structuredClone(creationStatement(fact, { properties: {} } as Release))]] as const,
+  );
   return {
     ...initial,
-    ...(entries.length
-      ? { statements: Object.fromEntries(entries.map(([id, fact]) => [id, [structuredClone(fact)]])) }
-      : {}),
+    ...(entries.length ? { statements: Object.fromEntries(entries) } : {}),
   };
 }
 

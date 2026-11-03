@@ -85,7 +85,17 @@ test('People keyboard addition and removal retain sibling identities and obey cu
     act(async () => {
       await client.invalidateQueries({ queryKey: ['people-profile'] });
     });
-  const submit = () => click(canvas().getByRole('button', { name: m.catalogue_create_submit() }));
+  const submit = async () => {
+    await click(canvas().getByRole('button', { name: m.catalogue_create_submit() }));
+    if (host.querySelector('[data-people-create-review]'))
+      await click(canvas().getByRole('button', { name: m.catalogue_create_submit() }));
+  };
+  const urls = (property: string) =>
+    within(row(property)).getAllByRole('textbox', { name: m.correction_url() }) as HTMLInputElement[];
+  const citation = (property: string) =>
+    within(within(row(property)).getByRole('group', { name: `${m.correction_references()} 1` })).getByRole('textbox', {
+      name: m.correction_url(),
+    }) as HTMLInputElement;
   // Retain the handlers actually delivered to mounted controls, including their captured row.
   const props = (node: HTMLElement) =>
     Reflect.get(
@@ -145,24 +155,15 @@ test('People keyboard addition and removal retain sibling identities and obey cu
         expect(window.document.activeElement).toBe(
           within(row(property)).getByRole('combobox', { name: m.correction_value_state() }),
         );
-        expect(
-          (within(row('schema:sameAs')).getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement)
-            .value,
-        ).toBe('https://example.org/source');
+        expect(citation('schema:sameAs').value).toBe('https://example.org/source');
         expect(label.value).toBe('Person');
       } else {
         await add(property);
         expect(row(property).contains(window.document.activeElement as Node)).toBe(false);
       }
       await act(async () => {
-        await user.type(
-          within(row(property)).getByRole('textbox', { name: m.correction_url() }),
-          `https://example.org/${property}`,
-        );
-        await user.type(
-          within(row(property)).getByRole('textbox', { name: m.relation_citation() }),
-          'https://example.org/source',
-        );
+        await user.type(urls(property)[0]!, `https://example.org/${property}`);
+        await user.type(citation(property), 'https://example.org/source');
       });
     }
     // Movement after an admitted event but before React commits cancels its handoff.
@@ -177,12 +178,12 @@ test('People keyboard addition and removal retain sibling identities and obey cu
     await click(remove('wdt:P3180'));
     await submit();
     const sibling = row('schema:url');
-    const inputs = [...sibling.querySelectorAll<HTMLInputElement>('input')];
+    const inputs = urls('schema:url');
     const snapshot = inputs.map((input) => [input.id, input.value]);
     const correction = () => host.querySelector<HTMLAnchorElement>(`a[href="#${inputs[0]!.id}"]`)!;
     expect(correction()).not.toBeNull();
     const selected = row('schema:sameAs');
-    const selectedInputs = [...selected.querySelectorAll<HTMLInputElement>('input')];
+    const selectedInputs = urls('schema:sameAs');
     const retiredEdits = selectedInputs.map(retain);
     for (const cancel of ['button', 'escape']) {
       await click(remove('schema:sameAs'));
@@ -191,7 +192,7 @@ test('People keyboard addition and removal retain sibling identities and obey cu
       if (cancel === 'button') await click(button);
       else await act(async () => user.keyboard('{Escape}'));
       expect(window.document.activeElement).toBe(remove('schema:sameAs'));
-      expect([...selected.querySelectorAll('input')]).toEqual(selectedInputs);
+      expect(urls('schema:sameAs')).toEqual(selectedInputs);
       expect(selectedInputs.map((input) => input.value)).toEqual([
         'https://example.org/schema:sameAs',
         'https://example.org/source',
@@ -209,7 +210,7 @@ test('People keyboard addition and removal retain sibling identities and obey cu
     expect(row('schema:sameAs')).toBeNull();
     expect(inputs[0]!.getAttribute('aria-invalid')).toBe('true');
     await add('schema:sameAs');
-    const replacement = [...row('schema:sameAs').querySelectorAll<HTMLInputElement>('input')];
+    const replacement = urls('schema:sameAs');
     expect(replacement[0]!.id).not.toBe(selectedInputs[0]!.id);
     await deliverRetired();
     expect(replacement.map((input) => input.value)).toEqual(['', '']);
@@ -226,14 +227,12 @@ test('People keyboard addition and removal retain sibling identities and obey cu
     await act(async () =>
       user.selectOptions(canvas().getByRole('combobox', { name: m.catalogue_create_type() }), 'schema:Person'),
     );
-    expect([...row('schema:sameAs').querySelectorAll<HTMLInputElement>('input')].map((input) => input.value)).toEqual([
+    expect(urls('schema:sameAs').map((input) => input.value)).toEqual([
       'https://current.test/',
       'https://current.test/source',
     ]);
     await act(async () => editCitation!('https://retired-type.test/'));
-    expect(within(row('schema:sameAs')).getByRole('textbox', { name: m.relation_citation() }).value).toBe(
-      'https://current.test/source',
-    );
+    expect(citation('schema:sameAs').value).toBe('https://current.test/source');
     await click(remove('schema:sameAs'));
     await click(remove('schema:sameAs'));
     expect(inputs.map((input) => [input.id, input.value])).toEqual(snapshot);
@@ -273,18 +272,12 @@ test('People keyboard addition and removal retain sibling identities and obey cu
     await refresh();
     await add('schema:url');
     await act(async () => {
-      await user.type(
-        within(row('schema:url')).getByRole('textbox', { name: m.correction_url() }),
-        'https://example.org/restored',
-      );
-      await user.type(
-        within(row('schema:url')).getByRole('textbox', { name: m.relation_citation() }),
-        'https://example.org/source',
-      );
+      await user.type(urls('schema:url')[0]!, 'https://example.org/restored');
+      await user.type(citation('schema:url'), 'https://example.org/source');
     });
     await click(remove('schema:url'));
     const sealed = row('schema:url');
-    const sealedInputs = [...sealed.querySelectorAll<HTMLInputElement>('input')];
+    const sealedInputs = urls('schema:url');
     const lockedEdits = sealedInputs.map(retain);
     const sealedDraft = sealedInputs.map((input) => input.value);
     const staleAdd = props(
