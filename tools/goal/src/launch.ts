@@ -122,8 +122,6 @@ const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`; paths relative to that workspace), and fix failures you caused.";
 const LONG_WAIT =
   'Wait for a long command, even one queued for a test slot, in its open session with one yield of at least 300 seconds (Codex: `write_stdin`, `yield_time_ms: 300000`); never start a duplicate, interrupt it, poll faster, or use sleep loops, `ps` or `pgrep`.';
-const UNCHANGED_ACCEPTANCE_REPORT =
-  'For an unchanged dev claim, report the actual acceptance in the final approaches array: use approach "unchanged-source-acceptance" and a JSON-encoded result with command (the exact argv array, including your chosen focused command for worker-owned acceptance), sourceCommit (the checked HEAD), contractHash (the SHA-256 of the canonical contract bytes) and status ("passed", "failed" or "unavailable"). Report only the observed result; missing, failed or mismatched acceptance stays non-green and must name the unmeasured Done-when clause. Do not make an empty or unrelated commit.';
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
 const UNFINISHED =
   'Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.';
@@ -178,39 +176,27 @@ export function workerCheckProtocol(
     ].join(' ');
   }
   const workerOwnedAcceptance = typeof briefOrContract !== 'string' && briefOrContract.acceptance.workerOwned === true;
-  if (minimalVerification(stateDirectory)) {
-    const unchangedDev =
-      typeof briefOrContract === 'string' || !['main', 'stabilize'].includes(briefOrContract.target ?? 'dev');
+  if (minimalVerification(stateDirectory))
     return [
-      'Verification is minimal. For attempts that change source, do not run acceptance, native or browser checks, a root check, worker-check or remote-check; they run after integration.',
+      'Verification is minimal: do not run acceptance, native or browser checks, a root check, worker-check or remote-check; they run after integration.',
       'Before finishing, type-check each workspace you changed from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several) and fix every error; services/kernel and services/auth may use the compiler database or a check host: do not force `env -u KERNEL_CHECK_REMOTE` or local placement.',
       ...(workerOwnedAcceptance
         ? [
-            'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. For changed-source attempts, broader acceptance remains deferred under this policy.',
+            'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy.',
           ]
         : []),
       LONG_WAIT,
       OWN_TESTS,
-      'For changed-source attempts, then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
-      'For changed-source attempts, this policy overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks.',
-      ...(unchangedDev
-        ? [
-            'Exception: if the requested behaviour already exists on the clean retained dev source and you make no source change (ignoring controller-frozen acceptance files and historical empty commits), run the brief’s acceptance now under the ordinary worker-check protocol below. An unchanged claim has no later integration that can measure its Done-when clause. Keep the exact source commit and contract unchanged through the check and report its actual pass or failure; deferred acceptance is not success for this claim.',
-            workerCheckProtocol(worktree, briefOrContract),
-          ]
-        : []),
+      'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
+      'This policy overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks.',
     ].join(' ');
-  }
   const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
   const placement: AcceptancePlacement =
     typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
   const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance?.command;
-  const once =
-    UNCHANGED_ACCEPTANCE_REPORT +
-    ' ' +
-    (workerOwnedAcceptance
-      ? 'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.'
-      : 'Check slots are scarce: run your acceptance command once after your last relevant edit.');
+  const once = workerOwnedAcceptance
+    ? 'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.'
+    : 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
   const localRunner = join(worktree, 'scripts/worker-check.ts');
   const namedRunner = namedWorkerCheck(contractText);
   const runner = existsSync(localRunner)
@@ -316,7 +302,7 @@ export function workerPrompt(
         ? 'Do not rebase; merge or cherry-pick only what the contract names.'
         : 'Do not rebase or merge.'
     }${devProduct && !research ? " Check the contract's premises against your base first." : ''}`,
-    'If the requested behaviour already exists on the clean retained source, do not make an empty or unrelated commit. For dev, run the brief’s acceptance on that bound source through the ordinary worker-check protocol and report its exact command, source commit, contract hash and actual result; stabilize retains the controller acceptance rerun. Dirty source, changed contract, or failed or unavailable acceptance stays non-green.',
+    'If the requested behaviour already exists on the clean retained source, do not make an empty or unrelated commit. Report success without source changes; the controller runs the exact frozen acceptance on that bound source. Dirty source, changed contract, or failed or unavailable acceptance stays non-green.',
     research
       ? ''
       : `Write missing acceptance tests the contract names${devProduct ? ' or implies' : ''}; never edit a frozen file. If the contract changes a behaviour an existing test asserts, update that test and list it; keep assertions of unchanged behaviour. Write the fewest tests that pin user-visible behaviour and edge cases (as a rule fewer test lines than product lines) and only stories for states the contract names.`,
