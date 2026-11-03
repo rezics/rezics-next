@@ -2148,6 +2148,8 @@
   "subject_community_review": "このボードにレビューを書く",
   "subject_community_discuss": "このボードで話題を始める",
   "subject_community_more": "続きを見る",
+  "subject_community_context_current": "現在のコンテキスト：{subject} · {place}",
+  "subject_community_reactions_none": "まだリアクションはありません。",
   "subject_community_citation_unavailable": "レビューの引用情報を利用できません。",
   "subject_community_viewer_reaction_unavailable": "あなたのリアクション状態を取得できません。",
   "settings_profile_edit_denied": "現在のログインでは、このプロフィールを編集できません。",

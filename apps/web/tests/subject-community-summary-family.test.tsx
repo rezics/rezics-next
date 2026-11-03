@@ -8,6 +8,7 @@ import type {
   CommunityThread,
   SubjectCommunity,
 } from '../src/features/pages/subject-community';
+import { GLOBAL } from '../src/features/pages/subject-ratings';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -121,7 +122,17 @@ test('Subject discussion and review summaries keep native read destinations and 
   const original = structuredClone({ threads, authors });
   const cursor = 'native:/+?=&版%';
   const node = 'reviews /+?=&版%';
-  const ready: CommunityRegion = { state: 'ready', threads, next: cursor };
+  const ready: CommunityRegion = {
+    state: 'ready',
+    threads,
+    next: cursor,
+    context: {
+      subjectId: subject.id,
+      subjectLabel: subject.label,
+      place: { kind: 'global', id: GLOBAL },
+    },
+    reactionsAsOf: { epoch: 1, position: '1' },
+  };
   const fullHref = (kind: CommunityKind) =>
     `/fr/subjects/${subject.id}/lectures/${kind === 'review' ? 'reviews' : 'discussion'}?context=public&cursor=previous&node=old`;
   const expectedTitles = [longTitle, m.threads_untitled({}, options), 'Alpha last'];
@@ -186,6 +197,15 @@ test('Subject discussion and review summaries keep native read destinations and 
         expect(canvas.getAllByRole('list')).toHaveLength(1);
         expect(canvas.getAllByRole('listitem')).toHaveLength(3);
         expect(titleTexts()).toEqual(expectedTitles);
+        const currentContext = host.querySelector<HTMLElement>('[data-slot="community-current-context"]')!;
+        expect(currentContext.dataset.contextSubjectId).toBe(subject.id);
+        expect(currentContext.dataset.contextPlaceKind).toBe('global');
+        expect(currentContext.textContent).toBe(
+          m.subject_community_context_current(
+            { subject: subject.label, place: m.prq_global({}, options) },
+            options,
+          ),
+        );
         expect(slot('choose-board')).toBeNull();
         expect(slot('retry')).toBeNull();
         expect(slot('see-all')?.getAttribute('href')).toBe(paged ? undefined : fullHref(kind));
@@ -245,12 +265,20 @@ test('Subject discussion and review summaries keep native read destinations and 
             m.discussion_provenance_details_rating_units({ units: '0' }, options),
           );
           expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
-          expect(first.querySelector('[data-slot="community-reaction-summary"]')?.textContent).toContain(
-            m.board_feed_reactions({ count: '6' }, options),
-          );
+          const reactions = first.querySelector('[data-slot="community-reaction-summary"]')?.textContent;
+          expect(reactions).toContain(m.reaction_upvote());
+          expect(reactions).toContain('4');
+          expect(reactions).toContain(m.reaction_like());
+          expect(reactions).toContain('2');
+          expect(reactions).not.toContain(m.board_feed_reactions({ count: '6' }, options));
+          await show(kind, paged, { ...ready, reactionsAsOf: null });
+          expect(rows()[0]!.textContent).toContain(m.subject_reactions_unavailable({}, options));
+          expect(rows()[0]!.querySelector('[data-slot="community-reaction-summary"]')).toBeNull();
+          await show(kind, paged);
           expect(rows()[1]!.querySelector('[data-slot="review-citation"]')?.getAttribute('data-state')).toBe(
             'unscored',
           );
+          expect(rows()[1]!.textContent).toContain(m.subject_community_reactions_none());
           expect(rows()[2]!.textContent).toContain(m.subject_community_citation_unavailable({}, options));
         }
         expect(rows()[1]!.querySelector('[data-content-item-slot="preview"]')).toBeNull();
@@ -285,7 +313,7 @@ test('Subject discussion and review summaries keep native read destinations and 
         }
       }
       const originalRows = rows();
-      await show(kind, true, { ...ready, state: 'ready', threads: threads.toReversed(), next: null });
+      await show(kind, true, { ...ready, threads: threads.toReversed(), next: null });
       expect(titleTexts()).toEqual(expectedTitles.toReversed());
       expect(rows()[0]).toBe(originalRows[2]!);
       expect(slot('community-next')).toBeNull();
@@ -295,13 +323,13 @@ test('Subject discussion and review summaries keep native read destinations and 
         id: `native-${20 - index}`,
         title: `Native ${20 - index}`,
       }));
-      await show(kind, true, { state: 'ready', threads: nativePage, next: cursor });
+      await show(kind, true, { ...ready, threads: nativePage, next: cursor });
       expect(titleTexts()).toEqual(nativePage.map((thread) => thread.title));
       expect(rows()).toHaveLength(20);
       expect(new URL(slot('community-next')!.href).searchParams.get('cursor')).toBe(cursor);
 
       // A sparse native page is continuation, including Global pages; it never invites a contribution.
-      await show(kind, true, { state: 'ready', threads: [], next: cursor });
+      await show(kind, true, { ...ready, threads: [], next: cursor });
       expect(host.querySelector('section')?.getAttribute('data-state')).toBe('continuation');
       expect(host.textContent).toContain(m.subject_community_continue({}, options));
       expect(host.textContent).not.toContain(
@@ -314,7 +342,7 @@ test('Subject discussion and review summaries keep native read destinations and 
       expect(new URL(slot('community-next')!.href).searchParams.get('node')).toBe(node);
       expect(host.textContent).not.toContain(m.subject_community_board_unavailable({}, options));
 
-      await show(kind, false, { state: 'ready', threads: [], next: null });
+      await show(kind, false, { ...ready, threads: [], next: null });
       expect(host.querySelector('section')?.getAttribute('data-state')).toBe('empty');
       expect(host.textContent).toContain(
         kind === 'review' ? m.subject_reviews_empty({}, options) : m.subject_threads_empty({}, options),

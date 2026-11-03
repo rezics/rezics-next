@@ -47,6 +47,13 @@ export function SubjectCommunityRegion({
   const threads = region.state === 'ready' ? region.threads : [];
   const empty = region.state === 'ready' && threads.length === 0;
   const next = region.state === 'ready' ? region.next : null;
+  const currentContext = region.state === 'ready' ? region.context : undefined;
+  const currentSubject = currentContext?.subjectLabel ?? currentContext?.subjectId;
+  const currentPlace = currentContext
+    ? currentContext.place.kind === 'global'
+      ? m.prq_global({}, options)
+      : `${m.space_realm_heading({}, options)} · ${currentContext.place.title}`
+    : undefined;
   const state = empty ? (next ? 'continuation' : 'empty') : region.state === 'ready' ? 'populated' : region.state;
   const [path, search = ''] = href.split('?');
   const retryHref = paged ? href : `?${search}`;
@@ -76,6 +83,17 @@ export function SubjectCommunityRegion({
           </a>
         )}
       </div>
+      {currentContext && currentSubject && currentPlace && (
+        <p
+          data-slot="community-current-context"
+          data-context-subject-id={currentContext.subjectId}
+          data-context-place-kind={currentContext.place.kind}
+          data-context-place-id={currentContext.place.id}
+          className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]"
+        >
+          {m.subject_community_context_current({ subject: currentSubject, place: currentPlace }, options)}
+        </p>
+      )}
       {region.state === 'loading' && (
         <p role="status" className="text-sm text-muted-foreground">
           {m.subject_community_loading({}, options)}
@@ -153,6 +171,7 @@ export function SubjectCommunityRegion({
                     subject={subject}
                     locale={locale}
                     reader={reader}
+                    reactionsAsOf={region.reactionsAsOf}
                   />
                   <ListRowControl
                     data-content-item-slot="actions"

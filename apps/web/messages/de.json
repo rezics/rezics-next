@@ -2148,6 +2148,8 @@
   "subject_community_review": "In diesem Forum eine Rezension schreiben",
   "subject_community_discuss": "In diesem Forum eine Diskussion beginnen",
   "subject_community_more": "Weitere Beiträge",
+  "subject_community_context_current": "Aktueller Kontext: {subject} · {place}",
+  "subject_community_reactions_none": "Noch keine Reaktionen.",
   "subject_community_citation_unavailable": "Die Bewertungsreferenz ist nicht verfügbar.",
   "subject_community_viewer_reaction_unavailable": "Dein Reaktionsstatus ist nicht verfügbar.",
   "settings_profile_edit_denied": "Mit deiner aktuellen Anmeldung kannst du dieses Profil nicht bearbeiten.",

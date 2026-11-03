@@ -2182,6 +2182,8 @@
   "subject_community_review": "Write a review on this board",
   "subject_community_discuss": "Start a discussion on this board",
   "subject_community_more": "More posts",
+  "subject_community_context_current": "Current context: {subject} · {place}",
+  "subject_community_reactions_none": "No reactions yet.",
   "subject_community_citation_unavailable": "The review citation is unavailable.",
   "subject_community_viewer_reaction_unavailable": "Your reaction state is unavailable.",
   "settings_profile_edit_denied": "You cannot edit this profile with the current sign-in.",

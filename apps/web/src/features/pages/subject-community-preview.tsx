@@ -2,7 +2,7 @@ import { m } from '../../paraglide/messages.js';
 import type { ReactionKind } from '../../threads/reaction-request';
 import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import type { ThreadSubject } from '../../threads/subjects';
-import type { CommunityKind, CommunityThread } from './subject-community';
+import type { CommunityKind, CommunityReactionFreshness, CommunityThread } from './subject-community';
 
 const reactionLabels: Record<ReactionKind, () => string> = {
   upvote: () => m.reaction_upvote(),
@@ -14,8 +14,16 @@ const reactionLabels: Record<ReactionKind, () => string> = {
   sad: () => m.reaction_sad(),
 };
 
-function ReadOnlyReactionCounts({ thread, locale }: { thread: CommunityThread; locale: string }) {
-  if (thread.reactions === undefined)
+function ReadOnlyReactionCounts({
+  thread,
+  locale,
+  reactionsAsOf,
+}: {
+  thread: CommunityThread;
+  locale: string;
+  reactionsAsOf: CommunityReactionFreshness;
+}) {
+  if (thread.reactions === undefined || reactionsAsOf === null)
     return (
       <p role="status" className="text-sm text-muted-foreground">
         {m.subject_reactions_unavailable()}
@@ -25,19 +33,19 @@ function ReadOnlyReactionCounts({ thread, locale }: { thread: CommunityThread; l
   const entries = (Object.keys(reactionLabels) as ReactionKind[])
     .map((kind) => [kind, thread.reactions?.[kind] ?? 0] as const)
     .filter(([, count]) => count > 0);
-  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  if (!entries.length)
+    return (
+      <p className="text-sm text-muted-foreground">{m.subject_community_reactions_none()}</p>
+    );
   return (
     <div data-slot="community-reaction-summary" className="space-y-1 text-sm text-muted-foreground">
-      <p>{m.board_feed_reactions({ count: format(total) })}</p>
-      {entries.length > 0 ? (
-        <ul aria-label={m.reaction_reactions()} className="flex flex-wrap gap-x-3 gap-y-1">
-          {entries.map(([kind, count]) => (
-            <li key={kind}>
-              {reactionLabels[kind]()} {format(count)}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <ul aria-label={m.reaction_reactions()} className="flex flex-wrap gap-x-3 gap-y-1">
+        {entries.map(([kind, count]) => (
+          <li key={kind}>
+            {reactionLabels[kind]()} {format(count)}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -49,12 +57,14 @@ export function SubjectCommunityPreview({
   subject,
   locale,
   reader,
+  reactionsAsOf,
 }: {
   kind: CommunityKind;
   thread: CommunityThread;
   subject: { id: string; label: string };
   locale: string;
   reader: string | null;
+  reactionsAsOf: CommunityReactionFreshness;
 }) {
   const subjects: ThreadSubject[] = [
     { id: subject.id, types: [], label: subject.label, labels: { [locale]: subject.label }, cover: null },
@@ -77,7 +87,7 @@ export function SubjectCommunityPreview({
           )}
         </div>
       ) : null}
-      <ReadOnlyReactionCounts thread={thread} locale={locale} />
+      <ReadOnlyReactionCounts thread={thread} locale={locale} reactionsAsOf={reactionsAsOf} />
       {reader !== null && thread.viewerReaction === undefined ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.subject_community_viewer_reaction_unavailable()}

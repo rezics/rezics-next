@@ -7,6 +7,12 @@ plain-text excerpts from the existing `subject_threads.list` response.
 Decision: Until Content publishes the extended `subject_threads.list` response, current Subject cards are open-only; any
 recorded citation without its own native scale and original target is shown as unavailable.
 
+Decision: Web requires the response's current Subject/place/kind context to match the exact `planReads` descriptor
+before showing cards; a missing or mismatched context withholds the dependent region.
+
+Decision: Subject community reaction counts require a non-null freshness watermark from the same native page; Web
+does not derive a local total.
+
 The installed `GET /v1/subjects/:id/threads` operation remains public `subject:read`. Content now adds required current
 `context` and `reactionsAsOf` to `SubjectThreadsResponseSchema`, but the generated
 `subjects({ id }).threads.get` declaration still exposes `{ threads: ThreadView[], next }`. It does not yet include
@@ -40,17 +46,21 @@ titles open the admitted thread; Board links remain read destinations. See the [
 ## Cost
 
 - [x] **Touches:** Each full discussion or review view consumes one planned native page at limit 20 or less; the
-      overview keeps its existing five-row preview and one shared author batch. Opening a conversation is deliberate.
+      overview keeps its existing five-row preview and one shared author batch. The page's current Subject/place/kind
+      context and reaction freshness are checked from that same response. Opening a conversation is deliberate.
       Explicit retry repeats its cursor. Current Subject cards issue no per-card hydration, mutation or readback.
       Session preparation belongs to the existing public/private page boundary; projection adds no session request.
       A deliberate conversation open delegates commands and their readback to that conversation's existing owners.
-- [ ] **Bound:** The card projection carries at most 20 rows and excerpts up to 280 UTF-16 code units; the direct
+- [ ] **Bound:** The card projection carries at most 20 rows and excerpts up to 280 UTF-16 code units; the current
+      context adds one Subject label/source and one Global or Realm place. Native Realm title admission is bounded by
+      Content. Reaction counts retain their seven native kinds and are not summed locally. The direct
       helper and native query schema admit nonempty cursors up to 4096 UTF-16 code units. Returned cursors use the same
       bound, without decoding or rewriting. These are character limits, not byte bounds. A local observation key is
       one 36-character UUID per completed read. Content retains at most 20 native bodies of at most 2 MiB each, plus
       parsed documents, metadata and serialization copies; Web also retains the original page response. Media and
       action advice are not projected by this reader. Unbounded titles and unpublished complete card caps prevent a
       complete wire and retained-memory bound.
-- [ ] **Growth:** Projection and indexing are O(N) for N≤20, with no refill, local totals or reordering. The native
+- [ ] **Growth:** Context validation is O(1); projection and indexing are O(N) for N≤20, with no refill, local totals
+      or reordering. The native
       raw80 selection and 256/1024/4096 growth evidence remain Content producer checks; Web fixtures do not establish
       them.

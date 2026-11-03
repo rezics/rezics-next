@@ -9,11 +9,22 @@ import {
 } from '../src/features/pages/subject-community';
 import { loadSubjectPage, pageContext } from '../src/features/pages/subject';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
-import { communityAuthor, communitySubject, communityThread } from '../src/kernel/fake/subject-community';
+import {
+  communityAuthor,
+  communitySubject,
+  communityThread,
+  communityThreadPage,
+} from '../src/kernel/fake/subject-community';
+import { GLOBAL } from '../src/features/pages/subject-ratings';
 
 const review = communityThread('review');
 const discussion = communityThread('discussion');
-const page = (threads: unknown[], next: unknown = null) => ({ threads, next });
+const page = (
+  threads: unknown[],
+  next: unknown = null,
+  kind: 'discussion' | 'review' = 'review',
+  place = GLOBAL,
+) => communityThreadPage(kind, communitySubject, threads, next as string | null, place);
 
 // Each bad row invalidates even the valid row before it.
 const malformed = [
@@ -52,7 +63,9 @@ test('native community windows fail malformed sources locally and retain honest 
       const url = new URL(request.url);
       requests.push(url);
       if (url.pathname.endsWith('/threads'))
-        return Response.json(url.searchParams.get('kind') === 'review' ? response : page([discussion]));
+        return Response.json(
+          url.searchParams.get('kind') === 'review' ? response : page([discussion], null, 'discussion'),
+        );
       return fallback(request);
     }) as typeof fetch,
   });
@@ -70,7 +83,13 @@ test('native community windows fail malformed sources locally and retain honest 
     const reads = { ...loaded.page.reads };
     for (const [key, descriptor] of Object.entries(plan.reads))
       if (descriptor.kind === 'subjectThreads')
-        reads[key] = { status: 200, body: descriptor.threadKind === 'review' ? response : page([discussion]) };
+        reads[key] = {
+          status: 200,
+          body:
+            descriptor.threadKind === 'review'
+              ? response
+              : page([discussion], null, 'discussion', descriptor.place),
+        };
     requests.length = 0;
     const composed = await withComposedCommunity(client, {
       ...loaded,
@@ -89,7 +108,12 @@ test('native community windows fail malformed sources locally and retain honest 
   const expected = Object.values(plan.reads).find((read) => read.kind === 'subjectThreads')!;
   for (const threads of [[], [{ ...review, title: null }]])
     for (const next of [null, 'opaque-native-next'])
-      expect(composedCommunityRegion({ status: 200, body: page(threads, next) }, expected)).toMatchObject({
+      expect(
+        composedCommunityRegion(
+          { status: 200, body: page(threads, next, expected.threadKind, expected.place) },
+          expected,
+        ),
+      ).toMatchObject({
         state: 'ready',
         next,
         threads: threads.map(({ id, title }) => ({ id, title })),
@@ -99,6 +123,48 @@ test('native community windows fail malformed sources locally and retain honest 
   });
   expect(composedCommunityRegion(undefined, expected).state).toBe('unavailable');
   expect(composedCommunityRegion({ status: 200, body: page([]) }).state).toBe('unavailable');
+
+  const exactPage = page([], null, expected.threadKind, expected.place);
+  const wrongSubject = {
+    ...exactPage,
+    context: { ...exactPage.context, subject: { ...exactPage.context.subject, id: discussion.id } },
+  };
+  const wrongKind = {
+    ...exactPage,
+    context: {
+      ...exactPage.context,
+      kind: expected.threadKind === 'review' ? 'discussion' : 'review',
+    },
+  };
+  const { context: _context, ...missingContext } = exactPage;
+  const { reactionsAsOf: _freshness, ...missingFreshness } = exactPage;
+  expect(composedCommunityRegion({ status: 200, body: wrongSubject }, expected).state).toBe('unavailable');
+  expect(composedCommunityRegion({ status: 200, body: wrongKind }, expected).state).toBe('unavailable');
+  expect(composedCommunityRegion({ status: 200, body: missingContext }, expected).state).toBe('unavailable');
+  expect(composedCommunityRegion({ status: 200, body: missingFreshness }, expected).state).toBe('unavailable');
+  expect(
+    composedCommunityRegion(
+      { status: 200, body: { ...exactPage, reactionsAsOf: { epoch: 0, position: '0' } } },
+      expected,
+    ).state,
+  ).toBe('unavailable');
+
+  const realmId = '01a1a000-0000-7000-8000-000000000099';
+  const realmExpected = { ...expected, place: realmId };
+  const realmPage = page([], null, realmExpected.threadKind, realmId);
+  expect(composedCommunityRegion({ status: 200, body: realmPage }, realmExpected)).toMatchObject({
+    state: 'ready',
+    context: { place: { kind: 'realm', id: realmId, title: 'Selected Realm' } },
+  });
+  expect(
+    composedCommunityRegion(
+      {
+        status: 200,
+        body: { ...realmPage, context: { ...realmPage.context, place: { kind: 'global', id: GLOBAL } } },
+      },
+      realmExpected,
+    ).state,
+  ).toBe('unavailable');
 
   const reviewKey = Object.entries(plan.reads).find(
     ([, descriptor]) => descriptor.kind === 'subjectThreads' && descriptor.threadKind === 'review',
@@ -145,7 +211,11 @@ test('native community windows fail malformed sources locally and retain honest 
       const postId = '01a1a000-0000-7000-8000-' + String(index + 200).padStart(12, '0');
       return { ...review, id: threadId, firstPost: { ...review.firstPost, id: postId, threadId } };
     });
-    const projected = composedCommunityRegion({ status: 200, body: page(rows) }, { ...expected, limit: count }, true);
+    const projected = composedCommunityRegion(
+      { status: 200, body: page(rows, null, expected.threadKind, expected.place) },
+      { ...expected, limit: count },
+      true,
+    );
     expect(projected.state).toBe('ready');
     if (projected.state === 'ready') {
       expect(projected.threads).toHaveLength(count);
@@ -157,14 +227,18 @@ test('native community windows fail malformed sources locally and retain honest 
   }
 
   const zeroCounts = composedCommunityRegion(
-    { status: 200, body: page([{ ...review, reactions: {}, viewerReaction: null }]) },
+    { status: 200, body: page([{ ...review, reactions: {}, viewerReaction: null }], null, expected.threadKind, expected.place) },
     expected,
     true,
   );
   expect(zeroCounts).toMatchObject({ state: 'ready', threads: [{ reactions: {}, viewerReaction: null }] });
   const missingViewer = { ...review } as Record<string, unknown>;
   delete missingViewer.viewerReaction;
-  const missingSlot = composedCommunityRegion({ status: 200, body: page([missingViewer]) }, expected, true);
+  const missingSlot = composedCommunityRegion(
+    { status: 200, body: page([missingViewer], null, expected.threadKind, expected.place) },
+    expected,
+    true,
+  );
   expect(missingSlot).toMatchObject({ state: 'ready', threads: [{ reactions: review.reactions }] });
   if (missingSlot.state === 'ready') expect(missingSlot.threads[0]).not.toHaveProperty('viewerReaction');
 });

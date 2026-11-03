@@ -2148,6 +2148,8 @@
   "subject_community_review": "在此版块写评论",
   "subject_community_discuss": "在此版块发起讨论",
   "subject_community_more": "更多帖子",
+  "subject_community_context_current": "当前上下文：{subject} · {place}",
+  "subject_community_reactions_none": "还没有回应。",
   "subject_community_citation_unavailable": "暂时无法获取这条评价的引用信息。",
   "subject_community_viewer_reaction_unavailable": "暂时无法获取你的回应状态。",
   "settings_profile_edit_denied": "当前登录身份无法编辑此资料。",

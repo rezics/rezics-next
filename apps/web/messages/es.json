@@ -2148,6 +2148,8 @@
   "subject_community_review": "Escribir una reseña en este foro",
   "subject_community_discuss": "Iniciar una discusión en este foro",
   "subject_community_more": "Más publicaciones",
+  "subject_community_context_current": "Contexto actual: {subject} · {place}",
+  "subject_community_reactions_none": "Aún no hay reacciones.",
   "subject_community_citation_unavailable": "La cita de la reseña no está disponible.",
   "subject_community_viewer_reaction_unavailable": "No se pudo cargar tu estado de reacción.",
   "settings_profile_edit_denied": "La sesión actual no permite editar este perfil.",

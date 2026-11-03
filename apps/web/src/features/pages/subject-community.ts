@@ -13,6 +13,12 @@ type NativePage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjec
 export type NativeCommunityThread = NativePage['threads'][number];
 export type CommunityVoteCitation = { questionId: string; units: number; revision: number };
 export type CommunityReactionCounts = Partial<Record<ReactionKind, number>>;
+export type CommunityDisplayContext = {
+  subjectId: string;
+  subjectLabel: string | null;
+  place: { kind: 'global'; id: string } | { kind: 'realm'; id: string; title: string };
+};
+export type CommunityReactionFreshness = { epoch: number; position: string } | null;
 export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'authorId' | 'boardId' | 'createdAt'> & {
   summary: string;
   licence: string;
@@ -22,7 +28,13 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
 };
 export type CommunityRegion =
   | { state: 'loading' | 'unavailable' | 'closed' }
-  | { state: 'ready'; threads: CommunityThread[]; next: string | null };
+  | {
+      state: 'ready';
+      threads: CommunityThread[];
+      next: string | null;
+      context: CommunityDisplayContext;
+      reactionsAsOf: CommunityReactionFreshness;
+    };
 export type SubjectCommunity = {
   regions: Partial<Record<CommunityKind, CommunityRegion>>;
   nodes?: Record<string, CommunityRegion>;
@@ -71,6 +83,59 @@ function communityCitation(value: unknown): value is CommunityVoteCitation {
     (value.revision as number) <= 2_147_483_647 &&
     Object.keys(value).every((key) => key === 'questionId' || key === 'units' || key === 'revision')
   );
+}
+
+function communityContext(value: unknown, expected: CommunityRequest): CommunityDisplayContext | null {
+  if (!isRecord(value) || value.kind !== expected.threadKind || !isRecord(value.subject) || !isRecord(value.place))
+    return null;
+  const subject = value.subject;
+  const source = subject.source;
+  const label = subject.label;
+  if (
+    subject.id !== expected.id ||
+    !isRecord(source) ||
+    !Number.isInteger(source.partition) ||
+    (source.partition as number) < 0 ||
+    (source.partition as number) > 4095 ||
+    !Number.isInteger(source.epoch) ||
+    (source.epoch as number) < 1 ||
+    typeof source.position !== 'string' ||
+    !/^[0-9]+$/.test(source.position) ||
+    (label !== null && (!isRecord(label) || typeof label.value !== 'string' || typeof label.language !== 'string'))
+  )
+    return null;
+
+  if (expected.place === GLOBAL) {
+    return value.place.kind === 'global' && value.place.id === GLOBAL
+      ? { subjectId: expected.id, subjectLabel: label === null ? null : label.value, place: { kind: 'global', id: GLOBAL } }
+      : null;
+  }
+  if (
+    value.place.kind !== 'realm' ||
+    value.place.id !== expected.place ||
+    typeof value.place.title !== 'string' ||
+    !nativeId(value.place.spaceId) ||
+    !nativeId(value.place.headRevisionId)
+  )
+    return null;
+  return {
+    subjectId: expected.id,
+    subjectLabel: label === null ? null : label.value,
+    place: { kind: 'realm', id: expected.place, title: value.place.title },
+  };
+}
+
+function communityReactionFreshness(value: unknown): CommunityReactionFreshness | undefined {
+  if (value === null) return null;
+  if (
+    !isRecord(value) ||
+    !Number.isInteger(value.epoch) ||
+    (value.epoch as number) < 1 ||
+    typeof value.position !== 'string' ||
+    !/^[1-9][0-9]*$/.test(value.position)
+  )
+    return undefined;
+  return { epoch: value.epoch as number, position: value.position };
 }
 
 function communityReactionCounts(value: unknown): CommunityReactionCounts | null {
@@ -225,6 +290,11 @@ export function composedCommunityRegion(
     (read.body.next !== null && !validCursor(read.body.next))
   )
     return { state: 'unavailable' };
+  const context = communityContext(read.body.context, expected);
+  const reactionsAsOf = Object.hasOwn(read.body, 'reactionsAsOf')
+    ? communityReactionFreshness(read.body.reactionsAsOf)
+    : undefined;
+  if (!context || reactionsAsOf === undefined) return { state: 'unavailable' };
   try {
     const threads: CommunityThread[] = [];
     const seen = new Set<string>();
@@ -234,7 +304,7 @@ export function composedCommunityRegion(
       seen.add(thread.id);
       threads.push(thread);
     }
-    return { state: 'ready', threads, next: read.body.next };
+    return { state: 'ready', threads, next: read.body.next, context, reactionsAsOf };
   } catch {
     return { state: 'unavailable' };
   }

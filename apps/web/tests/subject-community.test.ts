@@ -10,7 +10,12 @@ import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages } from '../src/features/pages/route-support';
 import { GLOBAL } from '../src/features/pages/subject-ratings';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
-import { communityAuthor, communitySubject, communityThread } from '../src/kernel/fake/subject-community';
+import {
+  communityAuthor,
+  communitySubject,
+  communityThread,
+  communityThreadPage,
+} from '../src/kernel/fake/subject-community';
 import { threadLocation } from '../src/threads/thread-href';
 import { startThreadRequest } from '../src/threads/post-writes';
 import { ExistingReviewNotice } from '../src/threads/write-prompts';
@@ -47,6 +52,8 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
   expect(html).toContain('What does the fox teach the prince?');
   expect(html).toContain('The desert journey leaves room for tenderness and responsibility.');
   expect(html).toContain('Mira Okabe');
+  expect(html).toContain(`data-context-subject-id="${communitySubject.id}"`);
+  expect(html).toContain(`data-context-place-id="${GLOBAL}"`);
   expect(html).toContain(threadLocation('en', communityThread('review')));
   expect(html).toContain(`subject=${communitySubject.id}`);
   expect(html).not.toContain('data-slot="create-thread"');
@@ -123,7 +130,11 @@ test('current hidden, unavailable and closed reads are distinct from empty, and 
     expect(requests).toHaveLength(1);
   }
   for (const next of ['opaque-native-cursor', 'x'.repeat(4096), null]) {
-    const { client } = fixture((request) => (isCommunity(request) ? Response.json({ threads: [], next }) : undefined));
+    const { client } = fixture((request) =>
+      isCommunity(request)
+        ? Response.json(communityThreadPage('discussion', communitySubject, [], next))
+        : undefined,
+    );
     const data = await readSubjectCommunity(client, communitySubject.id, ['discussion'], true);
     const html = renderToStaticMarkup(
       createElement(SubjectCommunityRegion, {
@@ -149,7 +160,7 @@ test('only public available summaries and one author batch leave the reader; cur
   const { client, requests } = fixture((request) =>
     isCommunity(request) && new URL(request.url).searchParams.get('kind') === 'review'
       ? Response.json({
-          threads: [
+          ...communityThreadPage('review', communitySubject, [
             communityThread('review'),
             {
               ...hidden,
@@ -157,8 +168,7 @@ test('only public available summaries and one author batch leave the reader; cur
               availability: 'withheld',
               firstPost: { ...hidden.firstPost, body: fromPlainText('withheld body'), decisionId: 'private-decision' },
             },
-          ],
-          next: 'native-next',
+          ], 'native-next'),
           privateCount: 1000,
         })
       : undefined,
@@ -176,7 +186,11 @@ test('only public available summaries and one author batch leave the reader; cur
     ).toBe('unavailable');
   expect(requests).toHaveLength(0);
   for (const next of ['', 'x'.repeat(4097)]) {
-    const invalid = fixture((request) => (isCommunity(request) ? Response.json({ threads: [], next }) : undefined));
+    const invalid = fixture((request) =>
+      isCommunity(request)
+        ? Response.json(communityThreadPage('review', communitySubject, [], next))
+        : undefined,
+    );
     expect((await readSubjectCommunity(invalid.client, communitySubject.id, ['review'])).regions.review?.state).toBe(
       'unavailable',
     );

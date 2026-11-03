@@ -11,6 +11,7 @@ import {
 import { SubjectCommunityContext, SubjectCommunityRegion } from '../features/pages/subject-community-view';
 import { createStoryRecordedKernelFetch } from '../kernel/fake';
 import { communityCharacter, communitySubject } from '../kernel/fake/subject-community';
+import { GLOBAL } from '../features/pages/subject-ratings';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectViewHref } from '../subject/subject-href';
@@ -43,13 +44,28 @@ function CommunityPattern({
     };
   }, [paged, cursor, locale, subject.id, kind]);
   const loaded = data?.regions[kind] ?? { state: 'loading' };
+  const context =
+    loaded.state === 'ready'
+      ? loaded.context
+      : {
+          subjectId: subject.id,
+          subjectLabel: subject.label,
+          place: { kind: 'global' as const, id: GLOBAL },
+        };
+  const readyRegion: CommunityRegion = {
+    state: 'ready',
+    threads: [],
+    next: null,
+    context,
+    reactionsAsOf: { epoch: 1, position: '1' },
+  };
   const region: CommunityRegion =
     state === 'populated'
       ? loaded
       : state === 'empty'
-        ? { state: 'ready', threads: [], next: null }
+        ? readyRegion
         : state === 'continuation'
-          ? { state: 'ready', threads: [], next: 'community-next' }
+          ? { ...readyRegion, next: 'community-next' }
           : { state };
   const href = subjectViewHref(subject, locale, kind === 'review' ? 'reviews' : 'discussion');
   return (

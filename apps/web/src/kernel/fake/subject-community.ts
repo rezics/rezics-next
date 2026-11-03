@@ -94,6 +94,34 @@ export function communityThread(
   };
 }
 
+export function communityThreadPage(
+  kind: CommunityKind,
+  subject: typeof communitySubject,
+  threads: unknown[],
+  next: string | null,
+  place = GLOBAL,
+) {
+  const context = {
+    subject: {
+      id: subject.id,
+      label: { value: subject.label, language: 'en' },
+      source: { partition: 1, epoch: 1, position: '1' },
+    },
+    place:
+      place === GLOBAL
+        ? { kind: 'global' as const, id: GLOBAL }
+        : {
+            kind: 'realm' as const,
+            id: place,
+            title: 'Selected Realm',
+            spaceId: id('96'),
+            headRevisionId: id('97'),
+          },
+    kind,
+  };
+  return { threads, next, reactionsAsOf: { epoch: 1, position: '1' }, context };
+}
+
 type Board = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['get']>>['data']>['board'];
 export function communityBoard(kind: CommunityKind): Board {
   return {
@@ -120,8 +148,13 @@ const subjectThreads: FakeRoute['story'] = ({ request, match }) => {
   if (cursor !== null && cursor !== 'community-next') return { status: 400 };
   return {
     status: 200,
-    threads: [communityThread(kind, cursor !== null, subject)],
-    next: cursor ? null : 'community-next',
+    ...communityThreadPage(
+      kind,
+      subject,
+      [communityThread(kind, cursor !== null, subject)],
+      cursor ? null : 'community-next',
+      query.get('place') ?? GLOBAL,
+    ),
   };
 };
 const boardRead: FakeRoute['story'] = ({ match }) => {
@@ -159,10 +192,13 @@ const composedPage: FakeRoute['story'] = async ({ request }) => {
           ? { status: 400, body: { code: 'invalid_cursor' } }
           : {
               status: 200,
-              body: {
-                threads: [communityThread(read.threadKind, !!read.cursor)],
-                next: read.cursor ? null : 'community-next',
-              },
+              body: communityThreadPage(
+                read.threadKind,
+                communitySubject,
+                [communityThread(read.threadKind, !!read.cursor)],
+                read.cursor ? null : 'community-next',
+                read.place,
+              ),
             };
     }
   }
