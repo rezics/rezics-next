@@ -31,23 +31,26 @@ function jsonValue(value: unknown): value is VndbJson {
   return Array.isArray(value) ? value.every(jsonValue) : record(value) && Object.values(value).every(jsonValue);
 }
 
-/** Runtime availability follows the same generated composition the adapter invokes below. */
+/** Eden's `libraryImports` is a function; bind `vndb` by property access, not `in`/`typeof object`. */
 export function nativeVndbImport(client: KernelClient): VndbSurface | undefined {
-  const imports = client.libraryImports;
-  if (!imports || typeof imports !== 'object' || !('vndb' in imports)) return undefined;
-  const route = imports.vndb;
+  const route = client.libraryImports?.vndb;
   if (typeof route !== 'function') return undefined;
-  if (
-    typeof route.$preview.post !== 'function' ||
-    typeof route({ uploadId: '00000000-0000-4000-8000-000000000000' }).get !== 'function' ||
-    typeof route({ uploadId: '00000000-0000-4000-8000-000000000000' }).source.get !== 'function' ||
-    typeof route({ uploadId: '00000000-0000-4000-8000-000000000000' }).$review.post !== 'function' ||
-    typeof route({ uploadId: '00000000-0000-4000-8000-000000000000' }).$apply.post !== 'function' ||
-    typeof route({ uploadId: '00000000-0000-4000-8000-000000000000' }).$cancel.post !== 'function' ||
-    typeof route({ uploadId: '00000000-0000-4000-8000-000000000000' }).delete !== 'function'
-  )
+  try {
+    const uploaded = route({ uploadId: '00000000-0000-4000-8000-000000000000' });
+    if (
+      typeof route.$preview?.post !== 'function' ||
+      typeof uploaded.get !== 'function' ||
+      typeof uploaded.source?.get !== 'function' ||
+      typeof uploaded.$review?.post !== 'function' ||
+      typeof uploaded.$apply?.post !== 'function' ||
+      typeof uploaded.$cancel?.post !== 'function' ||
+      typeof uploaded.delete !== 'function'
+    )
+      return undefined;
+    return route;
+  } catch {
     return undefined;
-  return route;
+  }
 }
 
 function failureKind(status: number): VndbFailure['kind'] {

@@ -1,7 +1,8 @@
 # Personal list import
 
-Decision: bind the generated `KernelClient.libraryImports.vndb` methods from the mounted native route. A row enters
-the apply selection only after explicit target and released Library-state review; confirmation applies only the
+Decision: bind the generated `KernelClient.libraryImports.vndb` methods from the mounted native route. Eden's
+`libraryImports` surface is a function, so Web reads `vndb` by property access rather than an object/`in` check. A row
+enters the apply selection only after explicit target and released Library-state review; confirmation applies only the
 displayed admitted selection. Keep the visit unavailable if the generated methods are missing.
 
 Web owns a signed-in visit for a person's own VNDB XML export. Commerce owns private upload admission, matching,

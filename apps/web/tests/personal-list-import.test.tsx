@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
+import { libraryNavigation } from '../src/library/navigation';
 import { createVndbJourney } from '../src/library/personal-list-import/controller';
 import {
   VNDB_XML_BYTES,
@@ -6,6 +8,7 @@ import {
   type VndbPort,
   type VndbRow,
 } from '../src/library/personal-list-import/contract';
+import { nativeVndbImport } from '../src/library/personal-list-import/native';
 import type { VndbVisit } from '../src/library/personal-list-import/visit';
 
 const uploadId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
@@ -77,6 +80,14 @@ function pageValue(rows: VndbRow[]) {
   };
 }
 
+test('binds generated libraryImports.vndb and keeps the visit discoverable', () => {
+  expect(nativeVndbImport(createKernelClient('http://example.invalid'))).toBeDefined();
+  expect(nativeVndbImport({} as never)).toBeUndefined();
+  expect(libraryNavigation.some((entry) => entry.id === 'library.import-vndb' && entry.href === '/library/import-vndb')).toBe(
+    true,
+  );
+});
+
 test('sends XML to native admission without a browser size guard or local preview effects', async () => {
   const xml = 'x'.repeat(VNDB_XML_BYTES + 1);
   const sent: string[] = [];
@@ -86,7 +97,9 @@ test('sends XML to native admission without a browser size guard or local previe
     port: makePort({
       preview: async (command) => {
         sent.push(command.xml);
-        return { kind: 'admission', status: 400 };
+        return command.xml.length > VNDB_XML_BYTES
+          ? { kind: 'admission', status: 400 }
+          : { kind: 'wire-too-large', status: 413 };
       },
       apply: async () => {
         applies += 1;
@@ -100,6 +113,10 @@ test('sends XML to native admission without a browser size guard or local previe
   expect(snap.notice).toEqual({ kind: 'admission', status: 400 });
   expect(snap.uploadId).toBeNull();
   expect(applies).toBe(0);
+
+  const wire = await journey.preview('<vndb-export version="1.0"/>');
+  expect(wire.notice).toEqual({ kind: 'wire-too-large', status: 413 });
+  expect(wire.uploadId).toBeNull();
 });
 
 test('confirms only reviewed rows and retries an unknown apply with the identical command', async () => {
@@ -140,6 +157,7 @@ test('confirms only reviewed rows and retries an unknown apply with the identica
   });
 
   await journey.preview('<vndb-export version="1.0"/>');
+  expect(journey.snapshot().selection).toEqual([]);
   await journey.review({ ordinal: 0, action: 'state', targetId: subject, state: 'reading', replace: false });
   expect(journey.snapshot().selection.map((item) => item.ordinal)).toEqual([0]);
   expect(commands).toHaveLength(0);
@@ -191,4 +209,26 @@ test('keeps acknowledged outcomes and the remaining selection after native cance
   expect(snap.outcomes.map((outcome) => outcome.ordinal)).toEqual([0]);
   expect(snap.selection.map((item) => item.ordinal)).toEqual([1]);
   expect(snap.unattempted).toEqual([1]);
+});
+
+test('viewer replacement retires late page reads', async () => {
+  const current = visit();
+  let pages = 0;
+  const journey = createVndbJourney({
+    visit: current,
+    port: makePort({
+      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+      page: async () => {
+        pages += 1;
+        return { kind: 'page', value: pageValue([row(0)]) };
+      },
+    }),
+  });
+
+  await journey.preview('<vndb-export version="1.0"/>');
+  expect(pages).toBe(1);
+  current.retire();
+  await journey.loadPage(0);
+  expect(pages).toBe(1);
+  expect(journey.live()).toBe(false);
 });

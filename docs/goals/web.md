@@ -299,8 +299,9 @@ producer contract remains the authority for its HTTP methods, caps and expiry.
 ### Personal list import
 
 Web provides a signed-in visit for uploading a person's own VNDB XML export. The route uses the installed generated
-`@rezics/client` methods for the mounted native `libraryImports.vndb` API; native admission owns parsing, bounds,
-preview, review, apply, cancellation and deletion. Web adds no parser, synchronizer or import endpoint. The visit
+`@rezics/client` methods for the mounted native `libraryImports.vndb` API, reading that Eden function surface by
+property access; native admission owns parsing, bounds, preview, review, apply, cancellation and deletion. Web adds no
+parser, synchronizer or import endpoint. VNDB label-apply remains a later native owner surface. The visit
 reads at most eight rows per page, displays native match states and private source evidence, and requires an explicit
 catalogue target and released Library state before a row can enter the confirmed selection. Skip and retain remain
 explicit choices. Confirmation names only the displayed selection, and unknown commands can retry only with their
