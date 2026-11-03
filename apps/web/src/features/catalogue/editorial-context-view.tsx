@@ -2,12 +2,8 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
-import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Tombstone } from '@rezics/ui/tombstone';
-import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { locales } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { EditorialContextNavigation } from './editorial-context-navigation';
 import { useEditorialCommandFocus } from './editorial-command-focus';
@@ -18,13 +14,20 @@ import {
   type EditorialRead,
   type EditorialTransport,
 } from './editorial-context';
+import {
+  capturedMatches,
+  emptyLabelRow,
+  labelsFromDraft,
+  policyFingerprint,
+  policyPreview,
+  type LabelRow,
+  type SettingsPreview,
+  type SettingsRead,
+} from './context-settings';
+import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './context-settings-view';
 
 const actionControlClass =
   'h-auto min-h-8 max-w-full whitespace-normal break-words [overflow-wrap:anywhere] py-1 max-md:min-h-11 max-md:min-w-11 max-md:py-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:py-2';
-const formControlClass =
-  'h-auto min-h-8 min-w-0 max-w-full max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11';
-const languageControlClass =
-  'max-w-full max-md:w-full pointer-coarse:w-full md:pointer-fine:w-fit max-md:[&_select]:h-11 max-md:[&_select]:min-h-11 max-md:[&_select]:min-w-11 pointer-coarse:[&_select]:h-11 pointer-coarse:[&_select]:min-h-11 pointer-coarse:[&_select]:min-w-11 md:pointer-fine:[&_select]:h-8 md:pointer-fine:[&_select]:min-h-8';
 
 /** Private, short-lived reading. A known tombstone exists only after this workspace's native delete response. */
 export const EditorialContextWorkspace = catalogueEditor(EditorialContextWorkspaceLive);
@@ -49,8 +52,12 @@ function EditorialContextWorkspaceLive({
   const fieldId = useId();
   const [currentId, setCurrentId] = useState(id);
   const [reading, setReading] = useState<EditorialRead>();
-  const [name, setName] = useState('');
-  const [language, setLanguage] = useState(locale);
+  const [rows, setRows] = useState<LabelRow[]>(() => [emptyLabelRow(locale)]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [inventory, setInventory] = useState<SettingsRead | undefined>();
+  const [captured, setCaptured] = useState<SettingsRead | undefined>();
+  const [changed, setChanged] = useState(false);
+  const preview = useRef<SettingsPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const commandFocus = useEditorialCommandFocus(lifetime.active, busy);
   const [pending, setPending] = useState<EditorialCommand>();
@@ -62,7 +69,6 @@ function EditorialContextWorkspaceLive({
   const running = useRef(false);
   const session = useRef<string | undefined>(undefined);
   const mounted = useRef(true);
-  const languageNames = new Intl.DisplayNames([locale], { type: 'language' });
   const active = reading?.ok ? reading.context : undefined;
   const action = knownDeleted ? 'restore' : 'delete';
   const eligibleAttempt = (knownDeleted && !restoreBlocked) || active?.kind === 'community';
@@ -114,24 +120,104 @@ function EditorialContextWorkspaceLive({
     };
     // Route/session identity remounts this private workspace. Mutations own subsequent reads.
   }, [id, transport]);
+  useEffect(() => {
+    if (!transport.settings || inventory) return;
+    let cancelled = false;
+    setInventory({ kind: 'loading' });
+    void transport.settings.choices(session.current).then((latest) => {
+      if (!cancelled && mounted.current && lifetime.active()) setInventory(latest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [transport, inventory, lifetime]);
+  useEffect(() => {
+    const digest = active?.settings?.release;
+    if (!transport.settings || !digest) return;
+    let cancelled = false;
+    setCaptured({ kind: 'loading' });
+    void transport.settings.captured(digest, session.current).then((latest) => {
+      if (!cancelled && mounted.current && lifetime.active()) setCaptured(latest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.settings?.release, transport, lifetime]);
 
   function submit(operation: EditorialCommand['operation']) {
     if (!admitted() || pending) return;
     if (operation === 'create') {
-      if (currentId || !name.trim()) return;
-    } else if (!currentId || !eligibleAttempt || operation !== action || confirmation !== action) return;
+      if (currentId || !labelsFromDraft(rows)) return;
+      void confirmCreate();
+      return;
+    }
+    if (!currentId || !eligibleAttempt || operation !== action || confirmation !== action) return;
     let command: EditorialCommand;
     try {
       command = editorialCommand({
         operation,
         key: crypto.randomUUID(),
         ...(session.current ? { session: session.current } : {}),
-        ...(operation === 'create' ? { labels: { [language]: name.trim() } } : { id: currentId }),
+        id: currentId,
       });
     } catch {
       setFailure({ ok: false, reason: 'invalid' });
       return;
     }
+    setPending(command);
+    void execute(command);
+  }
+  async function confirmCreate() {
+    if (!admitted() || pending || currentId) return;
+    const labels = labelsFromDraft(rows);
+    if (!labels) return;
+    let settings = selected ?? undefined;
+    const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
+    if (selected && transport.settings) {
+      const latest = await transport.settings.choices(session.current);
+      if (!lifetime.active() || !mounted.current) return;
+      if (latest.kind === 'ready') {
+        const next = policyPreview(latest.snapshot, selected);
+        const previous = snapshot ? policyPreview(snapshot, selected) : next;
+        setInventory(latest);
+        if (!next.settings) {
+          setFailure({ ok: false, reason: 'invalid' });
+          return;
+        }
+        if (policyFingerprint(previous) !== policyFingerprint(next)) {
+          setChanged(true);
+          return;
+        }
+        settings = next.settings;
+        preview.current = next;
+      } else {
+        setInventory(latest);
+        preview.current = {
+          settings: selected,
+          release: snapshot?.digest ?? '',
+          defaults: snapshot?.contexts[selected]?.defaults ?? {},
+        };
+      }
+    } else {
+      preview.current = snapshot
+        ? policyPreview(snapshot, selected)
+        : { settings: selected, release: '', defaults: {} };
+    }
+    let command: EditorialCommand;
+    try {
+      command = editorialCommand({
+        operation: 'create',
+        key: crypto.randomUUID(),
+        ...(session.current ? { session: session.current } : {}),
+        labels,
+        ...(settings ? { settings } : {}),
+      });
+    } catch {
+      setFailure({ ok: false, reason: 'invalid' });
+      return;
+    }
+    if (!admitted()) return;
+    setChanged(false);
     setPending(command);
     void execute(command);
   }
@@ -165,7 +251,7 @@ function EditorialContextWorkspaceLive({
       setKnownDeleted(result.operation === 'delete');
       setNotice(result.operation);
       setPending(undefined);
-      setName('');
+      setRows([emptyLabelRow(locale)]);
       running.current = false;
       await refresh(result.id);
       if (!lifetime.active()) return;
@@ -190,7 +276,7 @@ function EditorialContextWorkspaceLive({
             ? m.editorial_conflict({}, o)
             : m.editorial_unavailable({}, o);
   const uncertain = pending && failure?.reason === 'unavailable';
-  const draftDirty = name !== '' || language !== locale;
+  const draftDirty = rows.some((row) => row.text !== '' || row.language !== locale) || selected !== null;
   // Protect the sent command, not an ordinary read (including the read after confirmed success).
   const commandUnsettled = !!pending && (busy || !!uncertain);
   return (
@@ -256,51 +342,62 @@ function EditorialContextWorkspaceLive({
             }}
           >
             <p>{m.editorial_empty({}, o)}</p>
-            <Field>
-              <FieldLabel htmlFor={`${fieldId}-language`}>{m.catalogue_create_language({}, o)}</FieldLabel>
-              <NativeSelect
-                id={`${fieldId}-language`}
-                className={languageControlClass}
-                data-editorial-control
-                value={language}
+            <ContextLabelRows
+              locale={locale}
+              rows={rows}
+              disabled={busy || !!pending}
+              languageLabel={m.catalogue_create_language({}, o)}
+              nameLabel={m.catalogue_create_label({}, o)}
+              nameHelp={m.ctxw_label_help({}, o)}
+              control=""
+              onChange={(next) => {
+                if (!admitted() || pending) return;
+                retireControls();
+                setRows(next);
+                setFailure(undefined);
+                setChanged(false);
+              }}
+            />
+            {transport.settings ? (
+              <SettingsPicker
+                locale={locale}
+                inventory={inventory}
+                selected={selected}
                 disabled={busy || !!pending}
-                onChange={(event) => {
-                  if (!admitted() || pending || event.target.value === language) return;
+                control=""
+                onSelect={(id) => {
+                  if (!admitted() || pending) return;
                   retireControls();
-                  setLanguage(event.target.value);
+                  setSelected(id);
+                  setChanged(false);
                 }}
-              >
-                {locales.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {languageNames.of(value) ?? value}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`${fieldId}-name`}>{m.catalogue_create_label({}, o)}</FieldLabel>
-              <Input
-                id={`${fieldId}-name`}
-                className={formControlClass}
-                data-editorial-control
-                value={name}
-                maxLength={250}
-                required
-                disabled={busy || !!pending}
-                onChange={(event) => {
-                  if (!admitted() || pending || (event.target.value === name && !failure)) return;
-                  retireControls();
-                  setName(event.target.value);
-                  setFailure(undefined);
+                onReload={() => {
+                  if (!transport.settings) return;
+                  void transport.settings.choices(session.current).then((latest) => {
+                    if (mounted.current && lifetime.active()) setInventory(latest);
+                  });
                 }}
               />
-            </Field>
+            ) : null}
+            {labelsFromDraft(rows) ? (
+              <SettingsReview
+                locale={locale}
+                labels={labelsFromDraft(rows)!}
+                preview={
+                  inventory?.kind === 'ready'
+                    ? policyPreview(inventory.snapshot, selected)
+                    : { settings: selected, release: '', defaults: {} }
+                }
+                snapshot={inventory?.kind === 'ready' ? inventory.snapshot : null}
+                changed={changed}
+              />
+            ) : null}
             {!pending && (
               <Button
                 type="submit"
                 className={actionControlClass}
                 data-editorial-control
-                disabled={busy || !name.trim()}
+                disabled={busy || !labelsFromDraft(rows)}
               >
                 {m.editorial_create({}, o)}
               </Button>
@@ -308,6 +405,16 @@ function EditorialContextWorkspaceLive({
           </form>
         )}
         {active?.kind === 'global' && <p>{m.editorial_global({}, o)}</p>}
+        {active && (
+          <CapturedSettings
+            locale={locale}
+            captured={{ settings: active.settings, defaults: active.defaults }}
+            snapshot={captured?.kind === 'ready' ? captured.snapshot : null}
+            {...(captured ? { labels: captured.kind === 'ready' ? 'ready' : captured.kind } : {})}
+            {...(preview.current ? { preview: preview.current } : {})}
+            mismatch={!!preview.current && notice === 'create' && !capturedMatches(preview.current, active)}
+          />
+        )}
         {active && (
           <div className="flex flex-wrap gap-3" data-editorial-action-row>
             {reviewHref && (

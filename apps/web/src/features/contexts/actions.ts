@@ -14,6 +14,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../../session/
 import type { SessionEnv } from '../../session/client';
 import { createContextApi } from './api';
 import { contextId, directoryInput, parseAddress, parseCommand, type Failure, type Result } from './model';
+import { readSettingsInventory, settingsDigest } from './settings-api';
 
 async function viewer(): Promise<string | Failure> {
   setResponseHeader('cache-control', 'private, no-store');
@@ -58,6 +59,14 @@ export const changeContextWorkspace = createServerFn({ method: 'POST', strict: f
     return typeof authorization === 'string'
       ? createContextApi(kernelClient(), authorization).submit(data)
       : authorization;
+  });
+export const readContextSettings = createServerFn({ method: 'POST', strict: false })
+  .validator((input: Record<string, unknown>) => settingsDigest(input))
+  .handler(async ({ data }) => {
+    const authorization = await viewer();
+    return typeof authorization === 'string'
+      ? readSettingsInventory(kernelClient(), authorization, data.digest, data.session)
+      : { kind: authorization.kind === 'denied' || authorization.kind === 'signed-out' ? 'denied' : 'unavailable' };
   });
 
 /** The ordinary bounded suggestion reader, admitted for this Context visit's original reader. */

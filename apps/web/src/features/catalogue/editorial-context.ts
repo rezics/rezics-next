@@ -1,11 +1,17 @@
 import type { KernelClient } from '@rezics/client';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
 import type { ReviewContext } from '../../subject/candidates';
+import { settingsId } from '../contexts/settings';
+import type { EditorialSettingsTransport } from './context-settings';
 
 export type EditorialAddress = { id: string; session?: string };
 type Continuity = { session?: string };
 export type EditorialCommand = Continuity & { key: string } & (
-    | { operation: 'create'; labels: NonNullable<Parameters<KernelClient['contexts']['post']>[0]['labels']> }
+    | {
+        operation: 'create';
+        labels: NonNullable<Parameters<KernelClient['contexts']['post']>[0]['labels']>;
+        settings?: string;
+      }
     | { operation: 'delete' | 'restore'; id: string }
   );
 export type EditorialFailure = Continuity & {
@@ -15,10 +21,16 @@ export type EditorialFailure = Continuity & {
 export type EditorialRead = EditorialFailure | (Continuity & { ok: true; context: ReviewContext });
 export type EditorialResult =
   | EditorialFailure
-  | (Continuity & { ok: true; id: string; operation: EditorialCommand['operation'] });
+  | (Continuity & {
+      ok: true;
+      id: string;
+      operation: EditorialCommand['operation'];
+      context?: ReviewContext;
+    });
 export type EditorialTransport = {
   read: (address: EditorialAddress) => Promise<EditorialRead>;
   submit: (command: EditorialCommand) => Promise<EditorialResult>;
+  settings?: EditorialSettingsTransport;
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function record(input: unknown): Record<string, unknown> {
@@ -40,16 +52,22 @@ export function editorialCommand(input: unknown): EditorialCommand {
   if (typeof value.key !== 'string' || !uuid.test(value.key)) throw new Error('Invalid action key');
   const base = { key: value.key, ...continuity(value) };
   if (value.operation === 'create') {
-    if (Object.keys(value).some((key) => !['operation', 'key', 'session', 'labels'].includes(key)))
+    if (Object.keys(value).some((key) => !['operation', 'key', 'session', 'labels', 'settings'].includes(key)))
       throw new Error('Invalid Context creation');
     const labels = record(value.labels);
     if (
       !Object.keys(labels).length ||
       checkSubjectStructure({ labels }).violations.length ||
-      Object.values(labels).some((label) => typeof label !== 'string' || !label.trim())
+      Object.values(labels).some((label) => typeof label !== 'string' || !label.trim()) ||
+      (value.settings !== undefined && !settingsId(value.settings))
     )
       throw new Error('Invalid Context name');
-    return { ...base, operation: 'create', labels: { ...labels } };
+    return Object.freeze({
+      ...base,
+      operation: 'create',
+      labels: Object.freeze({ ...labels }),
+      ...(typeof value.settings === 'string' ? { settings: value.settings } : {}),
+    });
   }
   if (
     (value.operation !== 'delete' && value.operation !== 'restore') ||
@@ -121,12 +139,22 @@ export async function submitEditorialContext(
   };
   try {
     if (command.operation === 'create') {
-      const response = await client.contexts.post({ labels: command.labels }, options);
+      const body = {
+        labels: command.labels,
+        ...(command.settings ? { settings: command.settings } : {}),
+      };
+      const response = await client.contexts.post(body, options);
       if (response.status !== 201 || !response.data)
         return failure(response.status, response.error?.value, response.headers);
       if (!uuid.test(response.data.context.id) || response.data.context.kind !== 'community')
         return { ok: false, reason: 'unavailable' };
-      return { ok: true, operation: 'create', id: response.data.context.id, ...token(response.headers) };
+      return {
+        ok: true,
+        operation: 'create',
+        id: response.data.context.id,
+        context: response.data.context,
+        ...token(response.headers),
+      };
     }
     const endpoint = client.contexts({ id: command.id });
     const response =

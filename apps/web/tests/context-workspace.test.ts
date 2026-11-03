@@ -44,7 +44,7 @@ describe('An editor finds current readable Contexts creates one and follows nati
       id: fixtureId,
       current: {
         kind: 'ready',
-        value: { context: { id: fixtureId, kind: 'community', settings: { id: 'editorial' } } },
+        value: { context: { id: fixtureId, kind: 'community', settings: null, defaults: {} } },
       },
     });
     const create = fixture.calls.findIndex((call) => call.path === '/v1/contexts' && call.method === 'POST');
@@ -136,8 +136,11 @@ describe('An editor finds current readable Contexts creates one and follows nati
     expect(
       admits({ kind: 'ready', value: [{ action: 'context:delete', operations: ['context.restore'] }] }, 'delete'),
     ).toBe(false);
+    expect(
+      parseCommand({ operation: 'create', key: key(), labels: { en: 'Name' }, settings: 'inherit-readers' }),
+    ).toMatchObject({ operation: 'create', settings: 'inherit-readers' });
     for (const body of [
-      { operation: 'create', key: key(), labels: { en: 'Name' }, settings: 'invented' },
+      { operation: 'create', key: key(), labels: { en: 'Name' }, settings: 'Invented' },
       { operation: 'create', key: key(), labels: { en: 'Name' }, defaults: {} },
       { operation: 'create', key: key(), labels: { en: '' } },
       { operation: 'delete', key: key(), id: fixtureId, owner: true },

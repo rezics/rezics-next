@@ -6,6 +6,7 @@ import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { readEditorialWorkspace, changeEditorialWorkspace } from './editorial-context-actions';
+import { readEditorialSettingsChoices } from './context-settings-actions';
 import { EditorialContextWorkspace } from './editorial-context-view';
 import type { EditorialTransport } from './editorial-context';
 
@@ -31,6 +32,18 @@ function EditorialContextSessionLive({
       read: (address) => readEditorialWorkspace({ data: editorRequest(address, editorWork), headers: csrfHeaders() }),
       submit: (command) =>
         changeEditorialWorkspace({ data: editorRequest(command, editorWork), headers: csrfHeaders() }),
+      settings: {
+        choices: (session) =>
+          readEditorialSettingsChoices({
+            data: editorRequest(session ? { session } : {}, editorWork),
+            headers: csrfHeaders(),
+          }),
+        captured: (digest, session) =>
+          readEditorialSettingsChoices({
+            data: editorRequest({ digest, ...(session ? { session } : {}) }, editorWork),
+            headers: csrfHeaders(),
+          }),
+      },
     }),
     [editorWork],
   );

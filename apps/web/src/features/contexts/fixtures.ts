@@ -49,12 +49,19 @@ export function contextFixture(scenario: Scenario = 'directory') {
   const id = scenario === 'global' ? PAGE_GLOBAL_CONTEXT : fixtureId;
   const calls: Call[] = [];
   const writes = new Map<string, unknown>();
+  let createdPolicy:
+    | { settings: ContextDto['settings']; defaults: ContextDto['defaults'] }
+    | undefined;
   const dto = (): ContextDto => ({
     id,
     kind: scenario === 'global' ? 'global' : 'community',
     labels: { ...labels },
-    settings: { id: 'editorial', release: 'released-settings-digest' },
-    defaults: { 'core:description': 'inherit', 'core:rating': 'suppress' },
+    settings: createdPolicy
+      ? createdPolicy.settings
+      : { id: 'editorial', release: 'released-settings-digest' },
+    defaults: createdPolicy
+      ? createdPolicy.defaults
+      : { 'core:description': 'inherit', 'core:rating': 'suppress' },
   });
   const entry = (): ContextDirectoryEntry => ({
     id,
@@ -160,8 +167,15 @@ export function contextFixture(scenario: Scenario = 'directory') {
       if (prior) return response(prior, url.pathname === '/v1/contexts' ? 201 : 200);
       let result: unknown;
       if (url.pathname === '/v1/contexts') {
-        labels = { ...(body as { labels: Record<string, string> }).labels };
+        const posted = body as { labels: Record<string, string>; settings?: string };
+        labels = { ...posted.labels };
         deleted = false;
+        createdPolicy = posted.settings
+          ? {
+              settings: { id: posted.settings, release: 'released-settings-digest' },
+              defaults: { 'core:description': 'inherit', 'core:rating': 'suppress' },
+            }
+          : { settings: null, defaults: {} };
         result = { context: dto() };
       } else {
         deleted = request.method === 'DELETE';

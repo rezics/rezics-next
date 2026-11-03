@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
+import { settingsId } from './settings';
 
 export type ContextDto = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['contexts']>['get']>>['data']
@@ -22,7 +23,7 @@ export type Workspace = {
 export type DirectoryWorkspace = { page: Result<DirectoryPage>; creation: Result<Actions> };
 export type Command = Readonly<
   { key: string; session?: string } & (
-    | { operation: 'create'; labels: Readonly<Record<string, string>> }
+    | { operation: 'create'; labels: Readonly<Record<string, string>>; settings?: string }
     | { operation: 'delete' | 'restore'; id: string }
   )
 >;
@@ -33,6 +34,7 @@ export type MutationResult =
       operation: Command['operation'];
       id: string;
       current: Result<Workspace>;
+      created?: ContextDto;
       session?: string;
     };
 export const contextId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -67,17 +69,20 @@ export function parseCommand(value: unknown): Command {
   const keys = ['key', 'session', 'operation'];
   if (input.operation === 'create') {
     const labels = record(input.labels);
+    const allowed = [...keys, 'labels', 'settings'];
     if (
       !Object.keys(labels).length ||
       checkSubjectStructure({ labels }).violations.length ||
       Object.values(labels).some((label) => typeof label !== 'string' || !label.trim()) ||
-      Object.keys(input).some((key) => ![...keys, 'labels'].includes(key))
+      Object.keys(input).some((key) => !allowed.includes(key)) ||
+      (input.settings !== undefined && !settingsId(input.settings))
     )
       throw new Error('Invalid Context labels');
     return Object.freeze({
       ...base,
       operation: 'create',
       labels: Object.freeze({ ...labels } as Record<string, string>),
+      ...(typeof input.settings === 'string' ? { settings: input.settings } : {}),
     });
   }
   if (

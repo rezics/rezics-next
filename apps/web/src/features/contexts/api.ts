@@ -172,13 +172,19 @@ export function createContextApi(
     try {
       let id: string;
       let session: string | undefined;
+      let created: ContextDto | undefined;
       if (command.operation === 'create') {
-        const response = await client.contexts.post({ labels: { ...command.labels } }, options);
+        const body = {
+          labels: { ...command.labels },
+          ...(command.settings ? { settings: command.settings } : {}),
+        };
+        const response = await client.contexts.post(body, options);
         if (response.status !== 201 || !response.data)
           return { ...failure(response.status, response.error?.value, true), ...continuity(response.headers) };
         id = response.data.context.id;
         if (!contextId.test(id) || response.data.context.kind !== 'community') return { kind: 'unknown' };
         session = continuity(response.headers).session;
+        created = response.data.context;
       } else {
         const endpoint = client.contexts({ id: command.id });
         const response =
@@ -197,7 +203,14 @@ export function createContextApi(
       }
       // A native write response confirms the command, not a cached permission or successful current reading.
       const current = await detail(id, session ?? command.session);
-      return { kind: 'confirmed', id, operation: command.operation, current, ...(session ? { session } : {}) };
+      return {
+        kind: 'confirmed',
+        id,
+        operation: command.operation,
+        current,
+        ...(created ? { created } : {}),
+        ...(session ? { session } : {}),
+      };
     } catch (error) {
       return caught(error, true);
     }

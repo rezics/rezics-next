@@ -64,8 +64,17 @@ export function editorialContextFixture(scenario: EditorialScenario = 'ready', l
     if (receipts.has(key)) return json(receipts.get(key), path === '/v1/contexts' ? 201 : 200);
     let result: unknown;
     if (path === '/v1/contexts') {
-      const labels = (parsed as { labels: Record<string, string> }).labels;
-      context = { ...context, labels };
+      const posted = parsed as { labels: Record<string, string>; settings?: string };
+      context = {
+        ...context,
+        labels: posted.labels,
+        ...(posted.settings
+          ? {
+              settings: { id: posted.settings, release: 'released-settings-digest' },
+              defaults: { 'schema:url': 'suppress' },
+            }
+          : {}),
+      };
       result = { context };
     } else {
       deleted = request.method === 'DELETE';

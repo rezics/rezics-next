@@ -3,9 +3,8 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { pickText } from '@rezics/composition';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { cn } from '@rezics/ui/utils';
-import { Field, FieldLabel, FieldDescription } from '@rezics/ui/shadcn/field';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
-import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@rezics/ui/shadcn/empty';
 import {
   AlertDialog,
@@ -23,7 +22,6 @@ import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from 
 import { Tombstone } from '@rezics/ui/tombstone';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
-import { locales } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
 import { useContextIntent } from './intent';
 import { useContextCurrent } from './lifetime';
@@ -41,14 +39,22 @@ import {
   type Result,
   type Workspace,
 } from './model';
+import {
+  capturedMatches,
+  emptyLabelRow,
+  labelsFromDraft,
+  policyFingerprint,
+  policyPreview,
+  type LabelRow,
+  type SettingsPreview,
+  type SettingsRead,
+} from './settings';
+import { CapturedSettings, ContextLabelRows, SettingsPicker, SettingsReview } from './settings-view';
 
 const width = 'mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]';
 const actionClassName = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere]';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md py-2 underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-// Preserve native list-item display so the disclosure marker and keyboard behavior remain available.
-const summaryClassName =
-  'min-h-11 min-w-11 cursor-pointer content-center py-2 font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const options = (locale: string) => ({ locale: locale as never });
 function failureText(kind: Failure['kind'], locale: string) {
   const o = options(locale);
@@ -366,21 +372,95 @@ export function ContextCreateView({
   actions,
   submit,
   reload,
+  settings,
+  loadSettings,
 }: {
   locale: string;
   actions: Result<Actions> | null;
   submit: (command: Command) => Promise<MutationResult>;
   reload: () => Promise<unknown>;
+  settings?: SettingsRead | null;
+  loadSettings?: (digest?: string) => Promise<SettingsRead | undefined>;
 }) {
   const current = useContextCurrent();
   const o = options(locale);
-  const [label, setLabel] = useState('');
-  const [language, setLanguage] = useState(locale);
-  const field = useId();
+  const [rows, setRows] = useState<LabelRow[]>(() => [emptyLabelRow(locale)]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [inventory, setInventory] = useState<SettingsRead | null | undefined>(settings);
+  const [captured, setCaptured] = useState<SettingsRead | null>(null);
+  const [changed, setChanged] = useState(false);
+  const preview = useRef<SettingsPreview | null>(null);
   const intent = useContextIntent(submit, reload);
   const locked = intent.busy || !!intent.pending;
-  const names = new Intl.DisplayNames([locale], { type: 'language' });
   const created = intent.result?.kind === 'confirmed' ? intent.result : null;
+  const createdContext =
+    created?.created ?? (created?.current.kind === 'ready' ? created.current.value.context : null);
+  const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
+  const review = snapshot
+    ? policyPreview(snapshot, selected)
+    : { settings: selected, release: '', defaults: {} };
+  useEffect(() => {
+    if (settings) setInventory(settings);
+  }, [settings]);
+  useEffect(() => {
+    if (!current() || !loadSettings || inventory) return;
+    let cancelled = false;
+    setInventory({ kind: 'loading' });
+    void loadSettings().then((latest) => {
+      if (!cancelled && current() && latest) setInventory(latest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [current, inventory, loadSettings]);
+  const capturedDigest = createdContext?.settings?.release;
+  useEffect(() => {
+    if (!current() || !loadSettings || !capturedDigest) return;
+    if (snapshot?.digest === capturedDigest) return;
+    let cancelled = false;
+    setCaptured({ kind: 'loading' });
+    void loadSettings(capturedDigest).then((latest) => {
+      if (!cancelled && current() && latest) setCaptured(latest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [capturedDigest, current, loadSettings, snapshot]);
+  async function confirm() {
+    if (!current() || !actions || !admits(actions, 'create') || locked) return;
+    const labels = labelsFromDraft(rows);
+    if (!labels) return;
+    let settingsId = selected ?? undefined;
+    if (selected && loadSettings) {
+      const latest = await loadSettings();
+      if (!current()) return;
+      if (latest?.kind === 'ready') {
+        const next = policyPreview(latest.snapshot, selected);
+        const previous = snapshot ? policyPreview(snapshot, selected) : next;
+        setInventory(latest);
+        if (!next.settings) return;
+        if (policyFingerprint(previous) !== policyFingerprint(next)) {
+          setChanged(true);
+          return;
+        }
+        settingsId = next.settings;
+        preview.current = next;
+      } else {
+        if (latest) setInventory(latest);
+        preview.current = { settings: selected, release: snapshot?.digest ?? '', defaults: snapshot?.contexts[selected]?.defaults ?? {} };
+      }
+    } else {
+      preview.current = review;
+    }
+    setChanged(false);
+    await intent.submit({
+      operation: 'create',
+      labels,
+      key: crypto.randomUUID(),
+      ...(actions.session ? { session: actions.session } : {}),
+      ...(settingsId ? { settings: settingsId } : {}),
+    });
+  }
   return (
     <article className={width}>
       <a className={linkClassName} href={directoryHref(locale)}>
@@ -392,64 +472,98 @@ export function ContextCreateView({
       </header>
       <MutationFeedback intent={intent} locale={locale} />
       {created ? (
-        <a className={cn(buttonVariants(), actionClassName)} href={detailHref(locale, created.id)}>
-          {m.ctxw_open({}, o)}
-        </a>
+        <div className="space-y-5">
+          {createdContext ? (
+            <CapturedSettings
+              locale={locale}
+              captured={{ settings: createdContext.settings, defaults: createdContext.defaults }}
+              snapshot={
+                snapshot && createdContext.settings && snapshot.digest === createdContext.settings.release
+                  ? snapshot
+                  : captured?.kind === 'ready' && captured.snapshot.digest === createdContext.settings?.release
+                    ? captured.snapshot
+                    : null
+              }
+              {...(createdContext.settings
+                ? {
+                    labels:
+                      snapshot?.digest === createdContext.settings.release
+                        ? 'ready'
+                        : captured
+                          ? captured.kind === 'ready'
+                            ? 'ready'
+                            : captured.kind
+                          : undefined,
+                  }
+                : {})}
+              {...(preview.current ? { preview: preview.current } : {})}
+              mismatch={!!preview.current && !capturedMatches(preview.current, createdContext)}
+            />
+          ) : null}
+          <a className={cn(buttonVariants(), actionClassName)} href={detailHref(locale, created.id)}>
+            {m.ctxw_open({}, o)}
+          </a>
+        </div>
       ) : (
         <form
           className="max-w-xl space-y-5"
           aria-busy={intent.busy}
           onSubmit={(event) => {
             event.preventDefault();
-            if (current() && actions && admits(actions, 'create') && !locked)
-              void intent.submit({
-                operation: 'create',
-                labels: { [language]: label.trim() },
-                key: crypto.randomUUID(),
-                ...(actions.session ? { session: actions.session } : {}),
-              });
+            void confirm();
           }}
         >
-          <Field>
-            <FieldLabel htmlFor={`${field}-language`}>{m.ctxw_language({}, o)}</FieldLabel>
-            <NativeSelect
-              id={`${field}-language`}
-              value={language}
+          <ContextLabelRows
+            locale={locale}
+            rows={rows}
+            disabled={locked}
+            invalidId={intent.result?.kind === 'invalid' ? `${rows[0]?.id}-text` : undefined}
+            onChange={(next) => {
+              if (current()) {
+                setRows(next);
+                setChanged(false);
+              }
+            }}
+          />
+          {loadSettings || settings ? (
+            <SettingsPicker
+              locale={locale}
+              inventory={inventory}
+              selected={selected}
               disabled={locked}
-              onChange={(event) => {
-                if (current()) setLanguage(event.target.value);
+              onSelect={(id) => {
+                if (current() && !locked) {
+                  setSelected(id);
+                  setChanged(false);
+                }
               }}
-            >
-              {locales.map((language) => (
-                <NativeSelectOption key={language} value={language}>
-                  {names.of(language) ?? language}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Field>
-          <Field data-invalid={intent.result?.kind === 'invalid'}>
-            <FieldLabel htmlFor={field}>{m.ctxw_label({}, o)}</FieldLabel>
-            <Input
-              id={field}
-              lang={language}
-              value={label}
-              required
-              disabled={locked}
-              aria-invalid={intent.result?.kind === 'invalid'}
-              aria-describedby={`${field}-help`}
-              onChange={(event) => {
-                if (current()) setLabel(event.target.value);
-              }}
+              {...(loadSettings
+                ? {
+                    onReload: () => {
+                      void loadSettings().then((latest) => {
+                        if (current() && latest) setInventory(latest);
+                      });
+                    },
+                  }
+                : {})}
             />
-            <FieldDescription id={`${field}-help`}>{m.ctxw_label_help({}, o)}</FieldDescription>
-          </Field>
+          ) : null}
+          {labelsFromDraft(rows) ? (
+            <SettingsReview
+              locale={locale}
+              labels={labelsFromDraft(rows)!}
+              preview={review}
+              snapshot={snapshot}
+              changed={changed}
+            />
+          ) : null}
           <Permission actions={actions} locale={locale} />
           {actions?.kind === 'ready' && !admits(actions, 'create') ? <p role="status">{m.ctxw_denied({}, o)}</p> : null}
           <div className="flex flex-wrap gap-2">
             <Button
               className={actionClassName}
               type="submit"
-              disabled={locked || !actions || !admits(actions, 'create')}
+              disabled={locked || !actions || !admits(actions, 'create') || !labelsFromDraft(rows)}
             >
               {m.ctxw_create({}, o)}
             </Button>
@@ -467,12 +581,16 @@ export function ContextCreateView({
       )}
       <ContextDeparture
         locale={locale}
-        protect={current() && (!!intent.pending || (!created && (label !== '' || language !== locale)))}
+        protect={
+          current() &&
+          (!!intent.pending ||
+            (!created && (rows.some((row) => row.text !== '' || row.language !== locale) || selected !== null)))
+        }
         unsettled={intent.busy || intent.result?.kind === 'unknown'}
         current={current}
         onLeave={() => {
-          setLabel('');
-          setLanguage(locale);
+          setRows([emptyLabelRow(locale)]);
+          setSelected(null);
           intent.retire();
         }}
       />
@@ -527,6 +645,8 @@ export function ContextDetailView({
   submit,
   reload,
   search,
+  settings,
+  loadSettings,
 }: {
   id: string;
   locale: string;
@@ -534,13 +654,31 @@ export function ContextDetailView({
   submit: (command: Command) => Promise<MutationResult>;
   reload: () => Promise<unknown>;
   search?: EntityPickerSearch;
+  settings?: SettingsRead | null;
+  loadSettings?: (digest?: string) => Promise<SettingsRead | undefined>;
 }) {
   const live = useContextCurrent();
   const o = options(locale);
   const intent = useContextIntent(submit, reload);
   const [confirm, setConfirm] = useState(false);
+  const [captured, setCaptured] = useState<SettingsRead | null | undefined>(settings);
   const visible = !intent.busy && (!intent.pending || intent.reviewed);
   const current = visible && data?.kind === 'ready' ? data.value : null;
+  const digest = current?.context?.settings?.release;
+  useEffect(() => {
+    if (settings) setCaptured(settings);
+  }, [settings]);
+  useEffect(() => {
+    if (!live() || !loadSettings || !digest) return;
+    let cancelled = false;
+    setCaptured({ kind: 'loading' });
+    void loadSettings(digest).then((latest) => {
+      if (!cancelled && live() && latest) setCaptured(latest);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [digest, loadSettings, live]);
   const resource = current?.context ?? current?.lifecycle;
   const operation = current ? lifecycleOperation(current) : null;
   const allowed = !!(operation && current && admits(current.actions, operation));
@@ -599,62 +737,12 @@ export function ContextDetailView({
           ) : null}
           {current.context ? (
             <>
-              <section className="space-y-3">
-                <h2 className="text-xl font-semibold">{m.ctxw_settings({}, o)}</h2>
-                <p className="text-sm text-muted-foreground">{m.ctxw_settings_help({}, o)}</p>
-                {current.context.settings ? (
-                  <div className="space-y-2">
-                    <p className="font-medium">{m.ctx_reader_settings_selected({}, o)}</p>
-                    <details className="min-w-0 rounded-lg border border-border px-3 text-sm">
-                      <summary className={summaryClassName}>{m.ctx_reader_settings_details({}, o)}</summary>
-                      <dl className="space-y-3 pb-3">
-                        <div>
-                          <dt className="text-muted-foreground">{m.ctxw_setting({}, o)}</dt>
-                          <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="auto">
-                            {current.context.settings.id}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">{m.ctxw_release({}, o)}</dt>
-                          <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="auto">
-                            {current.context.settings.release}
-                          </dd>
-                        </div>
-                      </dl>
-                    </details>
-                  </div>
-                ) : (
-                  <p>{m.ctxw_no_settings({}, o)}</p>
-                )}
-                {Object.keys(current.context.defaults).length ? (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold">{m.ctx_reader_defaults({}, o)}</h3>
-                    <dl className="space-y-3">
-                      {Object.entries(current.context.defaults).map(([property, mode], index) => (
-                        <div key={property} className="min-w-0 space-y-1 rounded-lg border border-border p-3">
-                          <dt className="font-medium">{m.ctx_reader_rule({ number: index + 1 }, o)}</dt>
-                          <dd className="space-y-1">
-                            <p>{mode === 'suppress' ? m.ctxw_suppress({}, o) : m.ctxw_inherit({}, o)}</p>
-                            <details className="min-w-0 text-sm">
-                              <summary className={summaryClassName}>
-                                {m.ctx_reader_rule_reference({ number: index + 1 }, o)}
-                              </summary>
-                              <dl className="space-y-1 pb-2">
-                                <dt className="text-muted-foreground">{m.ctx_reader_property_key({}, o)}</dt>
-                                <dd className="select-text font-mono [overflow-wrap:anywhere]" dir="auto">
-                                  {property}
-                                </dd>
-                              </dl>
-                            </details>
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{m.ctx_reader_no_defaults({}, o)}</p>
-                )}
-              </section>
+              <CapturedSettings
+                locale={locale}
+                captured={{ settings: current.context.settings, defaults: current.context.defaults }}
+                snapshot={captured?.kind === 'ready' ? captured.snapshot : null}
+                {...(captured ? { labels: captured.kind === 'ready' ? 'ready' : captured.kind } : {})}
+              />
               <SubjectJourney key={`${id}:${locale}`} id={id} locale={locale} {...(search ? { search } : {})} />
             </>
           ) : null}

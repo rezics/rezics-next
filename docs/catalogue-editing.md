@@ -77,6 +77,27 @@ Concealed, denied and unavailable detail stays explicit. No historical snapshot 
 
 Each value loader result starts a read episode; the browser rereads under its observed current reader before displaying it.
 
+## Browser flow: configured editorial Context
+
+Personal `/{locale}/my/contexts/new` and catalogue `/{locale}/contexts/new` create a named Context through the
+existing native `POST /v1/contexts` body `{labels, settings?}`. No-setting creation remains the explicit default.
+A released policy is chosen from the current active definition only: one owned immutable release snapshot, at most
+256 setting IDs and 64 defaults each, with local filter/paging. The create body sends a settings ID, never a
+release digest. Review shows the exact names, chosen ID, previewed release and each inherit/suppress default with
+its property label or stable ID. A Context interpretation does not replace the global selection, publish a source
+fact, confer moderator grants or turn a suppressed inherited value into a deleted statement.
+
+If the active release changes the selected policy's meaning before dispatch, the preview refreshes and Create must
+be used again. After acknowledgement the workspace shows the returned `{settings.id,settings.release,defaults}`; a
+mismatch with the reviewed preview keeps the actual native Context and never retries POST or rewrites the result.
+Unknown delivery retries the identical labels, settings ID and key. A known create records the returned UUID once
+and later failures retry only that read. Captured historical labels resolve against that Context's immutable
+release; a later activation does not mutate existing defaults. Subject comparison uses the existing context-review
+route and native inherited/suppressed/replaced/unresolved outcomes, including a suppress default's no-value
+result. Candidate accept/adopt remain independent. Decision: live review stays on the create form with one Create
+action; a pre-submit active-release reread requires another Create only when the selected policy's id and defaults
+change.
+
 ## Browser flow: subject contributions
 
 The existing subject header and compact view frame expose one **Contribute** menu. The shared UI Menu supplies

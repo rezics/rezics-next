@@ -9,9 +9,11 @@ import {
   changeContextWorkspace,
   readContextCreation,
   readContextDirectory,
+  readContextSettings,
   readContextTargets,
   readContextWorkspace,
 } from './actions';
+import type { SettingsRead } from './settings';
 import { ContextAdmissions, ContextWork, useContextVisit, type ContextAdmission } from './lifetime';
 import {
   contextQueryKey,
@@ -92,6 +94,23 @@ function VisitSession({ admissions, admission, locale, ...props }: Mode & Admiss
       throw error;
     }
   }
+  const loadSettings = useMemo(
+    () => async (digest?: string) => {
+      visit.assertCurrent();
+      const result = await readContextSettings({
+        data: {
+          ...(digest ? { digest } : {}),
+          ...(visit.session ? { session: visit.session } : {}),
+        },
+        headers: visit.headers,
+        signal: visit.signal,
+      });
+      visit.assertCurrent();
+      if ('session' in result) visit.session = result.session ?? visit.session;
+      return result as SettingsRead;
+    },
+    [visit],
+  );
   const search = useMemo(
     () => async (text: string, signal: AbortSignal) => {
       visit.assertCurrent();
@@ -137,6 +156,7 @@ function VisitSession({ admissions, admission, locale, ...props }: Mode & Admiss
           }
           submit={submit}
           reload={reload}
+          loadSettings={loadSettings}
         />
       ) : (
         <ContextDetailView
@@ -152,6 +172,7 @@ function VisitSession({ admissions, admission, locale, ...props }: Mode & Admiss
           submit={submit}
           reload={reload}
           search={search}
+          loadSettings={loadSettings}
         />
       )}
     </ContextWork.Provider>

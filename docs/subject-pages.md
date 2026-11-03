@@ -787,9 +787,10 @@ the existing BFF. Lifecycle command responses carry identity and state; the life
 `/{locale}/my/contexts` is the signed-in **Editorial Contexts** directory in the existing Web shell. It lists
 current readable Contexts, not Contexts owned by the reader. Search, active/deleted selection and cursor navigation
 consume one bounded native directory page; an unavailable producer renders unavailable rather than scanning a
-catalogue or substituting sample rows. `/{locale}/my/contexts/new` accepts a name and its data language only, through
-the generated native Context creation method. Optional settings/defaults are omitted until a released choice can
-be supplied. The returned Context DTO is not an Item.
+catalogue or substituting sample rows. `/{locale}/my/contexts/new` accepts multilingual names and, optionally, one currently released settings ID through
+the generated native Context creation method. No-setting creation remains the default. A chosen policy is captured
+by native create as `{id,release}` plus the released inherit/suppress defaults; the returned Context DTO is not an
+Item.
 
 Empty directory pages with continuation use page-local copy; exhausted later pages offer restart with the same search and filter, while only an exhausted first page uses directory-empty or no-matches copy.
 
