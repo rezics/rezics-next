@@ -1,11 +1,7 @@
 import { useId, useSyncExternalStore, type ReactNode } from 'react';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
-import {
-  createReportsBulkAction,
-  type ReportsBulkAction,
-  type BulkItem,
-} from '../reports-bulk-action';
+import { createReportsBulkAction, type ReportsBulkAction, type BulkItem } from '../reports-bulk-action';
 import {
   ReportsBulkControls,
   ReportsBulkRefreshFailure,

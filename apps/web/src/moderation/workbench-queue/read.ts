@@ -73,10 +73,7 @@ export type WorkbenchNativeSource = {
     reports: Array<Omit<Report, 'target'> & { target: { kind: 'subject'; id: string } }>;
     next: string | null;
   }>;
-  readTarget?: (
-    kind: 'post' | 'thread',
-    id: string,
-  ) => Promise<ResolvedReportTarget['value']>;
+  readTarget?: (kind: 'post' | 'thread', id: string) => Promise<ResolvedReportTarget['value']>;
 };
 
 class WorkbenchReadFailure extends Error {

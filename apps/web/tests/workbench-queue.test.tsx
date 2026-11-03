@@ -108,12 +108,12 @@ test('workbench is a signed-in route and keeps catalogue off a board scope', () 
   expect(board.board).toBeUndefined();
   expect(workbenchSearch({ board: boardId, queue: 'resolved' }).status).toBe('resolved');
   expect(workbenchSearch({ board: boardId, queue: 'reports' }).status).toBe('pending');
-  expect(workbenchCaseHref({ kind: 'report', id: reportId }, workbenchSearch({ board: boardId, queue: 'reports' }))).toContain(
-    `/moderation/cases/${reportId}`,
-  );
-  expect(workbenchCaseHref({ kind: 'appeal', id: appealId }, workbenchSearch({ board: boardId, queue: 'appeals' }))).toContain(
-    `case=${appealId}`,
-  );
+  expect(
+    workbenchCaseHref({ kind: 'report', id: reportId }, workbenchSearch({ board: boardId, queue: 'reports' })),
+  ).toContain(`/moderation/cases/${reportId}`);
+  expect(
+    workbenchCaseHref({ kind: 'appeal', id: appealId }, workbenchSearch({ board: boardId, queue: 'appeals' })),
+  ).toContain(`case=${appealId}`);
   expect(workbenchCaseHref({ kind: 'report', id: reportId }, workbenchSearch({ scope: 'catalogue' }))).toBe(
     '/moderation/catalogue',
   );

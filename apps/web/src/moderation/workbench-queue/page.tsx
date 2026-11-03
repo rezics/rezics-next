@@ -56,9 +56,7 @@ export function WorkbenchPage({
   const currentRef = useRef(isCurrent);
   currentRef.current = isCurrent;
   const identity = `${view.generation}:${view.readKey}:${search.queue}:${view.state}`;
-  const generation = useRef<{ identity: string; controller: ReturnType<typeof createWorkbenchSelection> } | null>(
-    null,
-  );
+  const generation = useRef<{ identity: string; controller: ReturnType<typeof createWorkbenchSelection> } | null>(null);
   if (!generation.current || generation.current.identity !== identity) {
     generation.current?.controller.retire();
     generation.current = {

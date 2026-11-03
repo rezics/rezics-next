@@ -27,9 +27,8 @@ const { act } = React;
 const { createRoot } = await import('react-dom/client');
 const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
 const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
-const { workbenchLoadedReports, createWorkbenchSelection, WorkbenchSelection } = await import(
-  '../src/moderation/workbench-selection'
-);
+const { workbenchLoadedReports, createWorkbenchSelection, WorkbenchSelection } =
+  await import('../src/moderation/workbench-selection');
 const { WorkbenchView } = await import('../src/moderation/workbench-queue/view');
 const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
 
@@ -89,7 +88,10 @@ test('selection keeps original revision fields and excludes appeals, resolved ca
   expect(page.reports[0]?.revisionId).toBe('revision-r1');
   expect(page.reports[1]?.resolvedAt).toBe('2026-10-02T00:00:00.000Z');
   const loaded = workbenchLoadedReports(page.reports, boardSearch);
-  expect(loaded.map((report) => report.id)).toEqual(['r1', ...Array.from({ length: 18 }, (_, index) => `extra-${index}`)]);
+  expect(loaded.map((report) => report.id)).toEqual([
+    'r1',
+    ...Array.from({ length: 18 }, (_, index) => `extra-${index}`),
+  ]);
   expect(loaded).toHaveLength(19);
   expect(workbenchLoadedReports(page.reports, workbenchSearch({ board: 'board-club', queue: 'appeals' }))).toEqual([]);
   expect(workbenchLoadedReports(page.reports, workbenchSearch({ board: 'board-club', queue: 'resolved' }))).toEqual([]);

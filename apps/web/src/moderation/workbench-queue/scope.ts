@@ -128,10 +128,7 @@ export function workbenchReadKey(search: WorkbenchSearch): string {
 }
 
 /** Stable native case reference with the exact scoped page snapshot that listed it. */
-export function workbenchCaseHref(
-  item: { kind: 'report' | 'appeal'; id: string },
-  search: WorkbenchSearch,
-): string {
+export function workbenchCaseHref(item: { kind: 'report' | 'appeal'; id: string }, search: WorkbenchSearch): string {
   const scope = workbenchScope(search);
   if (scope.kind === 'catalogue') return '/moderation/catalogue';
   if (scope.kind !== 'board') return '/moderation/workbench';

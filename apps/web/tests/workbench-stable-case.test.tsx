@@ -18,9 +18,11 @@ import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-const { workbenchCaseHref: workbenchRowHref, workbenchQueueHref, workbenchSearch } = await import(
-  '../src/moderation/workbench-queue/scope'
-);
+const {
+  workbenchCaseHref: workbenchRowHref,
+  workbenchQueueHref,
+  workbenchSearch,
+} = await import('../src/moderation/workbench-queue/scope');
 const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
 
 const report: Report = {
