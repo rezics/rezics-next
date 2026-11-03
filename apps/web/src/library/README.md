@@ -43,3 +43,18 @@ Ordinary saved dynamic Collections use this same Collection address and Dynamic 
 [saved-query results](saved-query-results.md) for 202 preparing versus empty 200 versus 503, exact URL/cursor retry,
 and the owner-only rule edit boundary. Built-in identities keep the fixed-rule copy; they are not relabelled as saved
 membership.
+
+Decision: saved-filter review opens only on owner request, interprets operands with their accepted release, and keeps exact IDs visible when exact-Collection labels are unavailable.
+
+The review reads the private generated rule GET only after the mounted owner session is current. Its no-store response
+keeps the rule's immutable release separate from current field metadata and shows every stored operand, including
+fields outside the eight-property editor window. A missing current label or field does not remove or reinterpret a
+saved condition. Return closes the review unchanged; clearing a condition opens the existing rule editor, whose
+explicit edits use current native admission and retain an incompatible draft. Public readers never receive the
+predicate.
+
+Current value labels reuse the Collection-scoped count-free Search seam in collection-facet-values.ts. The installed
+generated Search operation still lacks exact Collection scope, so review reports refused or unavailable metadata,
+leaves exact operands inspectable, and offers a deliberate retry. It does not substitute Global values or hydrate
+values one chip at a time. Search retains the missing native Collection-value binding; Commerce retains accepted
+rule execution, admission and native outcome proof.

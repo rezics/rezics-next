@@ -2,6 +2,7 @@ import type { CollectionFilterParams } from './collection-filter-params';
 import { collectionFilterAddress } from './collection-filter-params';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
+import { SavedFilterReviewEntry, useSavedFilterReviewContext } from './saved-filter-review';
 
 /** The requested address and the complete accepted groups remain inspectable before correction. */
 export function CollectionFilterAddressState({
@@ -16,6 +17,7 @@ export function CollectionFilterAddressState({
   search: string;
 }) {
   const issues = params.issues ?? [];
+  const savedReview = useSavedFilterReviewContext();
   const accepted = [
     ...Object.entries(params.selected).flatMap(([property, values]) => values.map((value) => [`f.${property}`, value])),
     ...Object.entries(params.ranges).map(([property, range]) => [
@@ -23,7 +25,7 @@ export function CollectionFilterAddressState({
       `${range.from ?? ''},${range.to ?? ''}`,
     ]),
   ];
-  if (!issues.length && !accepted.length) return null;
+  if (!issues.length && !accepted.length && !savedReview) return null;
   const context = new URLSearchParams(search);
   const original = `/${getLocale()}/collections/${encodeURIComponent(id)}${search}`;
   return (
@@ -79,6 +81,7 @@ export function CollectionFilterAddressState({
         </ul>
         {Object.keys(params.selectedLabels).length ? <p>{m.collection_filter_address_labels()}</p> : null}
       </details>
+      {savedReview ? <SavedFilterReviewEntry /> : null}
     </div>
   );
 }

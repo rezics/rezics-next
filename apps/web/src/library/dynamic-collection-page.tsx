@@ -17,6 +17,7 @@ import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
 import { isOrdinarySavedQuery, RuleEditLink } from './saved-query-results';
 import { SavedQueryManagement } from './saved-query-management';
+import { SavedFilterReviewEntry, SavedFilterReviewScopeBoundary } from './saved-filter-review';
 import type { ManagedSavedQuery } from './saved-query-management/controller';
 import type { QueryKey } from '@tanstack/react-query';
 
@@ -128,6 +129,10 @@ function DynamicCollectionPageLifetime({
   }
   const locale = getLocale();
   const saved = isOrdinarySavedQuery(current);
+  const reviewScope =
+    saved && viewerId && current.curatorAccountId === viewerId
+      ? { id: current.id, title: current.title, ownerId: current.curatorAccountId, viewerId }
+      : null;
   return (
     <div className="w-full min-w-0 space-y-6 text-foreground">
       <LibraryNavigation current={{ collectionId: current.id }} pins={pins} collections={collections} />
@@ -187,16 +192,20 @@ function DynamicCollectionPageLifetime({
         {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
         {saved ? null : <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>}
         {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
-        {current.filterProperties && current.filterParams ? (
-          <CollectionFilters
-            id={current.id}
-            type={current.filterType ?? 'schema:Book'}
-            properties={current.filterProperties}
-            params={current.filterParams}
-            {...(current.filterReleaseKey ? { filterReleaseKey: current.filterReleaseKey } : {})}
-            viewerKey={viewerId ?? 'anonymous'}
-          />
-        ) : null}
+        <SavedFilterReviewScopeBoundary scope={reviewScope}>
+          {current.filterProperties && current.filterParams ? (
+            <CollectionFilters
+              id={current.id}
+              type={current.filterType ?? 'schema:Book'}
+              properties={current.filterProperties}
+              params={current.filterParams}
+              {...(current.filterReleaseKey ? { filterReleaseKey: current.filterReleaseKey } : {})}
+              viewerKey={viewerId ?? 'anonymous'}
+            />
+          ) : (
+            <SavedFilterReviewEntry />
+          )}
+        </SavedFilterReviewScopeBoundary>
         <CollectionFilterFeedback
           id={current.id}
           {...(current.filter === undefined ? {} : { filter: current.filter })}
