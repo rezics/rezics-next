@@ -2,14 +2,19 @@
 
 Query history stores text, up to eight ordered languages and an optional native scope reference. A query repeats
 on `/search` with `q`, repeated `language` and the installed `filter` resource leaf (`realm` or `collection`, with
-one UUID `id`). A scope-only record still browses its resource. No arbitrary predicates, rating order or cursor are
+one UUID `id`), or exactly `{"owner":{"presence":true}}` for Library. A scope-only record still browses its resource. No arbitrary predicates, rating order or cursor are
 saved. Both Recent consumers reconstruct the same canonical destination. Native page admission compares decoded
 meaning; escaping and field order may differ, but duplicate scalar fields, foreign fields and changed operands fail.
 Account storage retains references and query meaning only; scope names and actions require current native reads.
 
-Decision: Library query records remain retained but unavailable until the Search producer exports a Library resource
-operand; `SearchResourceScope` and `parseSearchResourceScope` currently admit only Realm and Collection. A Library
-scope-only record still browses Library. Recent must not invent an operand or turn this missing reader into Global.
+Library uses the existing viewer-self presence predicate; it is not a `SearchResourceScope`. Current native
+Everything metadata reads supply its name and availability for both page reads and history writes. Denied,
+retired or unavailable native metadata retains the reference without an action; no browser label supplies authority.
+
+Producer mismatch: `searchRequiresCurrentReader` currently inspects only `resourceScope` and `ratingPopulation`,
+so an ordinary `owner.presence` filter reaches the installed Search BFF without its session-bound reader.
+Recent encoding and admission preserve the predicate, but successful Library execution requires the Search owner
+to bind that ordinary private filter through its existing reader boundary. This remains unmeasured.
 
 Recent's native schema admits 256 UTF-16 units of text, eight language tags of at most 35 units, 100 account rows and
 20 rows per page. Local history retains 32 entries. Destination evidence is capped at 8192 URL units before decoding;

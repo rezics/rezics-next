@@ -9,11 +9,15 @@ export function recentScopePath(scope: NonNullable<RecentEntry['scope']>): strin
 /** The minimal history meaning uses the installed Search filter operand, never a second scope field. */
 export function recentReplayDestination(entry: RecentEntry): string | undefined {
   if (entry.kind === 'scope') return recentScopePath(entry.scope);
-  if (entry.scope?.kind === 'route') return;
+  const filter = entry.scope
+    ? entry.scope.kind === 'route'
+      ? { owner: { presence: true } }
+      : searchResourceScopeClause(entry.scope)
+    : undefined;
   const fields = [
     `q=${encodeURIComponent(entry.text)}`,
     ...(entry.languages ?? []).map((tag) => `language=${encodeURIComponent(tag)}`),
-    ...(entry.scope ? [`filter=${encodeURIComponent(JSON.stringify(searchResourceScopeClause(entry.scope)))}`] : []),
+    ...(filter ? [`filter=${encodeURIComponent(JSON.stringify(filter))}`] : []),
   ];
   return `/search?${fields.join('&')}`;
 }
@@ -31,7 +35,7 @@ function localURL(href: string): URL | undefined {
 }
 
 function sameScopeFilter(filter: string | null, scope: NonNullable<RecentEntry['scope']>): boolean {
-  if (filter === null || scope.kind === 'route') return false;
+  if (filter === null) return false;
   let document: Record<string, unknown>;
   try {
     document = JSON.parse(filter);
@@ -40,9 +44,11 @@ function sameScopeFilter(filter: string | null, scope: NonNullable<RecentEntry['
   }
   if (!document || typeof document !== 'object' || Array.isArray(document) || Object.keys(document).length !== 1)
     return false;
-  const operand = document[scope.kind];
+  const operand = document[scope.kind === 'route' ? 'owner' : scope.kind];
   if (!operand || typeof operand !== 'object' || Array.isArray(operand) || Object.keys(operand).length !== 1)
     return false;
+  // Library is the exact viewer-self predicate, not a resource leaf or account selector.
+  if (scope.kind === 'route') return (operand as Record<string, unknown>).presence === true;
   const parsed = parseSearchResourceScope(filter);
   return !parsed.invalidInput && parsed.scope?.kind === scope.kind && parsed.scope.id === scope.id.toLowerCase();
 }

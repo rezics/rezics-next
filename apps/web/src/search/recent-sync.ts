@@ -56,6 +56,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Browser labels, links and avatars are never part of a native command. */
 export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
   const ref = entry.scope;
+  if (ref !== undefined && !ref) return;
   const scope =
     ref?.kind === 'Library'
       ? { kind: 'route' as const, route: 'library' as const }

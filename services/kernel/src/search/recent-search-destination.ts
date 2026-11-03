@@ -7,14 +7,15 @@ export function recentSearchDestination(entry: RecentEntry): string | undefined 
     return scope.kind === 'route' ? '/library' : `/${scope.kind === 'realm' ? 'realms' : 'collections'}/${scope.id}`;
   }
   const scope = entry.scope;
-  // The installed Search resource operand currently admits Realm and Collection only.
-  if (scope?.kind === 'route') return;
+  const filter = scope
+    ? scope.kind === 'route'
+      ? { owner: { presence: true } }
+      : { [scope.kind]: { id: scope.id.toLowerCase() } }
+    : undefined;
   const params = [
     `q=${encodeURIComponent(entry.text)}`,
     ...(entry.languages ?? []).map((tag) => `language=${encodeURIComponent(tag)}`),
-    ...(scope
-      ? [`filter=${encodeURIComponent(JSON.stringify({ [scope.kind]: { id: scope.id.toLowerCase() } }))}`]
-      : []),
+    ...(filter ? [`filter=${encodeURIComponent(JSON.stringify(filter))}`] : []),
   ];
   return `/search?${params.join('&')}`;
 }

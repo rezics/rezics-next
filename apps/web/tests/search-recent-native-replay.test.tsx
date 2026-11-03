@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { act, createElement } from 'react';
 import { admitRecentPage } from '../src/search/recent-response';
 import { recentHistoryDestination, recentReplayDestination } from '../src/search/recent-replay';
-import { localRecentEntry } from '../src/search/recent-sync';
+import { localRecentEntry, nativeRecentEntry } from '../src/search/recent-sync';
 import {
   readRecentHistory,
   writeRecentHistory,
@@ -18,8 +18,9 @@ import { RecentPanel } from '../src/search/recent-panel';
 
 const id = '019f0000-0000-7000-8000-734100000002';
 const text = '地図 + maps & /?';
-function row(kind: 'realm' | 'collection', languages?: string[]): RecentItem {
-  const entry = { kind: 'query' as const, text, scope: { kind, id }, ...(languages ? { languages } : {}) };
+function row(kind: 'realm' | 'collection' | 'library', languages?: string[]): RecentItem {
+  const scope = kind === 'library' ? { kind: 'route' as const, route: 'library' as const } : { kind, id };
+  const entry = { kind: 'query' as const, text, scope, ...(languages ? { languages } : {}) };
   return {
     id: crypto.randomUUID(),
     revision: 4,
@@ -37,17 +38,19 @@ function request(href: string) {
     ...(params.has('language') ? { language: params.getAll('language') } : {}),
   });
   expect(state.invalidInput).toBeUndefined();
-  expect(searchRequiresCurrentReader(state)).toBe(true);
+  if (state.resourceScope) expect(searchRequiresCurrentReader(state)).toBe(true);
   return discoveryRequest(state, ['fr']);
 }
 
 test('native admission and local replay preserve exactly the installed Search request and reject changed evidence', () => {
-  for (const kind of ['realm', 'collection'] as const)
+  for (const kind of ['realm', 'collection', 'library'] as const)
     for (const languages of [undefined, [], ['ja', 'en']]) {
       const item = row(kind, languages);
       expect(admitRecentPage(page(item))).toBeDefined();
       const local = localRecentEntry(item);
       expect(recentHistoryDestination({ ...local, scope: null as never })).toBeUndefined();
+      expect(nativeRecentEntry({ ...local, scope: null as never })).toBeUndefined();
+      expect(nativeRecentEntry(local)).toEqual(item.entry);
       expect(rememberRecent([], text, null as never)).toEqual([]);
       const values = new Map<string, string>();
       const storage = {
@@ -56,12 +59,14 @@ test('native admission and local replay preserve exactly the installed Search re
       };
       writeRecentHistory(storage, 'account:reader', [local]);
       expect(recentHistoryDestination(readRecentHistory(storage, 'account:reader')[0]!)).toBeUndefined();
+      writeRecentHistory(storage, 'anonymous', [local]);
+      expect(recentHistoryDestination(readRecentHistory(storage, 'anonymous')[0]!)).toBe(item.display!.href);
       const href = recentHistoryDestination(local)!;
       expect(href).toBe(item.display!.href);
       expect(request(href)).toMatchObject({
         text,
         languages: languages?.length ? languages : ['fr'],
-        filter: { and: [{ [kind]: { id } }] },
+        filter: { and: [kind === 'library' ? { owner: { presence: true } } : { [kind]: { id } }] },
       });
       const equivalent = href.replaceAll('%20', '+').replaceAll('%2F', '%2f');
       expect(admitRecentPage(page({ ...item, display: { ...item.display!, href: equivalent } }))).toBeDefined();
@@ -73,7 +78,7 @@ test('native admission and local replay preserve exactly the installed Search re
         href + '&filter=%7B%7D',
         href.replace('/search?', '/library?'),
         `https://evil.test${href}`,
-        href.replace(encodeURIComponent(id), '019f0000-0000-7000-8000-734100000003'),
+        ...(kind === 'library' ? [] : [href.replace(id, '019f0000-0000-7000-8000-734100000003')]),
         href.replace('q=', 'foreign='),
         href + '#fragment',
         href + '&foreign=%FF',
@@ -81,6 +86,10 @@ test('native admission and local replay preserve exactly the installed Search re
       ];
       url.searchParams.set('filter', JSON.stringify({ and: [{ [kind]: { id } }, { kind: { in: ['account'] } }] }));
       corrupt.push(url.pathname + url.search);
+      for (const owner of [{ presence: false }, { presence: true, accountId: id }]) {
+        url.searchParams.set('filter', JSON.stringify({ owner }));
+        corrupt.push(url.pathname + url.search);
+      }
       for (const href of corrupt) {
         expect(admitRecentPage(page({ ...item, display: { ...item.display!, href } }))).toBeUndefined();
         expect(recentHistoryDestination({ ...local, scope: { ...local.scope!, searchAction: href } })).toBeUndefined();
@@ -117,7 +126,11 @@ test('both mounted Recent interfaces expose the same scoped replay and prevent a
   let current = true;
   const remembered: Parameters<RecentHistory['remember']>[] = [];
   const history: RecentHistory = {
-    entries: [localRecentEntry(row('realm', ['ja', 'en'])), localRecentEntry(row('collection', []))],
+    entries: [
+      localRecentEntry(row('realm', ['ja', 'en'])),
+      localRecentEntry(row('collection', [])),
+      localRecentEntry(row('library')),
+    ],
     owner: () => current,
     persistence: 'memory',
     sync: 'synced',
@@ -141,9 +154,9 @@ test('both mounted Recent interfaces expose the same scoped replay and prevent a
       ),
     );
     const links = [...host.querySelectorAll<HTMLAnchorElement>('a[href*="filter="]')];
-    expect(links).toHaveLength(4);
-    expect(links.slice(0, 2).map((link) => link.getAttribute('href'))).toEqual(
-      links.slice(2).map((link) => link.getAttribute('href')),
+    expect(links).toHaveLength(6);
+    expect(links.slice(0, 3).map((link) => link.getAttribute('href'))).toEqual(
+      links.slice(3).map((link) => link.getAttribute('href')),
     );
     for (const link of links) expect(request(link.href).text).toBe(text);
     host.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });

@@ -24,5 +24,10 @@ test('query destinations use the installed resource leaf while scope-only histor
   }
   const scope = { kind: 'route' as const, route: 'library' as const };
   expect(recentSearchDestination({ kind: 'scope', scope })).toBe('/library');
-  expect(recentSearchDestination({ kind: 'query', text: 'maps', scope })).toBeUndefined();
+  const url = new URL(
+    recentSearchDestination({ kind: 'query', text: '地図 + maps & /?', scope })!,
+    'https://kernel.test',
+  );
+  expect(url.searchParams.get('q')).toBe('地図 + maps & /?');
+  expect(JSON.parse(url.searchParams.get('filter')!)).toEqual({ owner: { presence: true } });
 });

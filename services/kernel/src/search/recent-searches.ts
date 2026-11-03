@@ -111,7 +111,26 @@ export async function recentDisplay(
     const display = await recentDisplay(d, actor, { kind: 'scope', scope: entry.scope }, deadline);
     return display && href ? { ...display, href } : null;
   }
-  if (entry.scope.kind === 'route') return { name: 'Library', href: '/library', avatar: null };
+  if (entry.scope.kind === 'route') {
+    const { createBuiltinRuntime } = await import('../library/builtin-runtime.ts');
+    const { builtinCollectionId } = await import('../library/builtin-identity.ts');
+    try {
+      const collection = await createBuiltinRuntime({ pool: d.pool }).read(
+        actor,
+        builtinCollectionId(actor.accountId, { kind: 'everything' }),
+        'collection:read',
+        deadline,
+      );
+      return collection ? { name: collection.title ?? 'Library', href: '/library', avatar: null } : null;
+    } catch (error) {
+      if (
+        error instanceof ProblemError &&
+        ['not_found', 'dependency_unavailable', 'semantic_not_ready'].includes(error.code)
+      )
+        return null;
+      throw error;
+    }
+  }
   if (entry.scope.kind === 'realm') {
     const { readRealm } = await import('../community/realm.ts');
     const realm = await readRealm(d, actor, entry.scope.id, { deadline });

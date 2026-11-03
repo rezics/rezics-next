@@ -31,16 +31,17 @@ const kernel = createKernel({
   },
 });
 const scopes = 'recent_search:read recent_search:write collection:create collection:read collection:delete';
-async function viewer() {
-  const id = newId(0x7341);
-  await pool.query(
-    `INSERT INTO access.account(route,account_id,kind,state,transaction_id,authn_fenced,minimum_authn_epoch,membership_inverse_complete)
+async function viewer(grants = scopes, accountId?: string) {
+  const id = accountId ?? newId(0x7341);
+  if (!accountId)
+    await pool.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,authn_fenced,minimum_authn_epoch,membership_inverse_complete)
     VALUES ($1,$2,'actor','active',$2,false,1,true)`,
-    [routeOf(id), id],
-  );
+      [routeOf(id), id],
+    );
   const token = await new SignJWT({
     client_id: 'web',
-    scope: scopes,
+    scope: grants,
     authn_epoch: 1,
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
@@ -73,6 +74,25 @@ const use = (client: typeof a.client, entry: RecentEntry, revision: number) =>
 
 const remove = (client: typeof a.client, id: string, expectedRevision: number) =>
   client.recentSearches({ id }).delete(undefined, { query: { expectedRevision }, headers: headers() });
+
+test('Library replay discloses through native Everything authorization on reads and writes', async () => {
+  const { client, id } = await viewer();
+  const scope = { kind: 'route' as const, route: 'library' as const };
+  const entry = { kind: 'query' as const, text: '地図 + maps & /?', languages: ['ja', 'en'], scope };
+  expect((await use(client, entry, 0)).status).toBe(200);
+  const item = (await client.recentSearches.get()).data!.recentSearches[0]!;
+  expect(item.entry).toEqual(entry);
+  expect(item.display?.name).toBe('Library');
+  const url = new URL(item.display!.href, 'https://kernel.test');
+  expect(url.searchParams.get('q')).toBe(entry.text);
+  expect(url.searchParams.getAll('language')).toEqual(entry.languages);
+  expect(JSON.parse(url.searchParams.get('filter')!)).toEqual({ owner: { presence: true } });
+  const denied = await viewer('recent_search:read recent_search:write', id);
+  expect((await use(denied.client, entry, 1)).status).toBe(404);
+  const concealed = (await denied.client.recentSearches.get()).data!.recentSearches[0]!;
+  expect(concealed.entry).toEqual(entry);
+  expect(concealed.display).toBeNull();
+});
 
 test('the typed self-resource isolates accounts, rejects caller account selection and keeps private strings out of outbox/receipts', async () => {
   const text = `private query ${randomUUID()}`;
