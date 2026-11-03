@@ -356,7 +356,7 @@ type DependencyRow = { route: number; id: string; gateKey: string };
 type DependencySet = Readonly<{ byReview: ReadonlyMap<string, readonly number[]>; homes: readonly number[] }>;
 
 async function readDependencies(
-  client: PoolClient,
+  client: Pick<PoolClient, 'query'>,
   partition: number,
   ids: readonly string[],
 ): Promise<DependencySet | null> {
