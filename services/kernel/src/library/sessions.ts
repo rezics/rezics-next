@@ -21,12 +21,18 @@ import {
   changeIntent,
   nextUnitCount,
   parseRecord,
+  parseProgressMeasureCreate,
   parseSessionCreate,
   transition,
   type ProgressAction,
   type ProgressOutcome,
 } from './progress.ts';
-import type { ProgressPresentation, ProgressSession, ProgressSessionUpdate } from './progress-model.ts';
+import type {
+  ProgressMeasurePresentation,
+  ProgressPresentation,
+  ProgressSession,
+  ProgressSessionUpdate,
+} from './progress-model.ts';
 import * as store from './progress-store.ts';
 import { readLibraryProfileSource } from './profile-source.ts';
 import {
@@ -162,6 +168,10 @@ export function createSessionCommands(config: Dependencies) {
         if (!source || (parsed.versionSubjectId !== null && !version)) throw new LibraryNotFoundError();
         if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
         valid(parseSessionCreate(parsed, descriptor(source.profile, parsed)));
+        for (const measure of parsed.additionalMeasures ?? []) {
+          const unit = descriptor(source.profile, { mode: 'scalar_amount', unit: measure.unit });
+          valid(parseProgressMeasureCreate(measure, unit));
+        }
         const route = requireRoute(owner.accountId);
         const write = { client: tx, route, accountId: owner.accountId };
         await enterShelfWrite(write);
@@ -196,6 +206,11 @@ export function createSessionCommands(config: Dependencies) {
     const owner = account(actor, 'progress_session:update');
     const route = sameAccountRoute(owner.accountId, sessionId);
     const { revision, record } = revisionInput(input);
+    const measureId = action === 'record' && Object.hasOwn(record, 'measureId') ? record.measureId : undefined;
+    if (measureId !== undefined && (typeof measureId !== 'string' || measureId.length < 1 || measureId.length > 64))
+      throw new ProgressInvalidError('measureId');
+    const recordValue = { ...record };
+    delete recordValue.measureId;
     if (action !== 'record' && Object.keys(record).length)
       throw new ProgressInvalidError(Object.keys(record).sort()[0]!);
     const clearing = action === 'record' && isProgressClear(record);
@@ -249,6 +264,12 @@ export function createSessionCommands(config: Dependencies) {
         const fact = await store.readSessionFact(tx, route, sessionId);
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
+        if (
+          measureId !== undefined &&
+          (current.mode !== 'scalar_amount' ||
+            (measureId !== current.unit && !current.measures?.some((measure) => measure.unit === measureId)))
+        )
+          throw new ProgressInvalidError('measureId');
         // A concurrent NULL-pin migration cannot let prepared legacy meaning admit a pinned value.
         if (action === 'record' && !clearing && JSON.stringify(fact.pin) !== JSON.stringify(prepared.pin))
           throw new ProgressConflictError();
@@ -257,30 +278,39 @@ export function createSessionCommands(config: Dependencies) {
         const changes: ProgressSessionUpdate = { ...current };
         let intent: unknown;
         if (clearing) {
-          Object.assign(changes, await clearProgressValues(tx, route, current));
-          intent = { clear: true };
+          Object.assign(changes, await clearProgressValues(tx, route, current, measureId));
+          intent = measureId === undefined ? { clear: true } : { measureId, clear: true };
         } else if (action === 'record') {
+          const mode = measureId === undefined ? current.mode : 'scalar_amount';
+          const unit = measureId ?? current.unit;
           const parsed = valid(
             parseRecord(
-              current.mode,
-              record,
-              current,
-              prepared.original ? descriptor(prepared.original, current) : undefined,
+              mode,
+              recordValue,
+              { unit, state: current.state },
+              prepared.original ? descriptor(prepared.original, { mode, unit }) : undefined,
             ),
           );
           if (prepared.original) {
             const source = prepared.source;
             if (!source) throw new LibraryNotFoundError();
             if (source.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
-            const originalUnit = descriptor(prepared.original, current);
-            const currentUnit = descriptor(source.profile, current);
+            const originalUnit = descriptor(prepared.original, { mode, unit });
+            const currentUnit = descriptor(source.profile, { mode, unit });
             if (!compatibleProgressUnits(originalUnit, currentUnit))
               throw new ProblemError('unsupported_library_profile');
-            const admitted = parseRecord(current.mode, record, current, currentUnit);
+            const admitted = parseRecord(mode, recordValue, { unit, state: current.state }, currentUnit);
             if (!admitted.ok) throw new ProblemError('unsupported_library_profile');
           }
-          intent = changeIntent(parsed);
-          if ('amount' in parsed) changes.amount = parsed.amount;
+          intent = changeIntent(parsed, measureId);
+          if ('amount' in parsed) {
+            if (measureId === undefined || measureId === current.unit) changes.amount = parsed.amount;
+            else if (current.measures)
+              changes.measures = current.measures.map((measure) =>
+                measure.unit === measureId ? { ...measure, amount: parsed.amount } : measure,
+              );
+            else throw new ProgressInvalidError('measureId');
+          }
           else if ('locator' in parsed) {
             changes.locator = parsed.locator;
             changes.position = parsed.position;
@@ -344,6 +374,7 @@ export function createSessionCommands(config: Dependencies) {
       session: ProgressSession,
       presentation: ProgressPresentation,
       disclosure: { subject: boolean; versionSubject: boolean },
+      measurePresentations: readonly ProgressMeasurePresentation[],
     ) => Promise<T>,
   ): Promise<T> {
     const owner = account(actor, 'progress_session:read');
@@ -376,7 +407,12 @@ export function createSessionCommands(config: Dependencies) {
         try {
           const before = await observed(at);
           const prepared = await prepareProgressPresentation({ pool, access, actor: owner, at, deadline }, before.fact);
-          const result = await render(before.fact.session, prepared.presentation, prepared.disclosure);
+          const result = await render(
+            before.fact.session,
+            prepared.presentation,
+            prepared.disclosure,
+            prepared.measurePresentations,
+          );
           const finalTime = await time();
           try {
             await prepared.verify(finalTime);

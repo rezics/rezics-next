@@ -17,6 +17,7 @@ import {
   MAX_PROGRESS_UNIT_IDS,
   type ProgressChange,
   type ProgressChangePage,
+  type ProgressScalarMeasure,
   type ProgressSession,
   type ProgressSessionDraft,
   type ProgressSessionPage,
@@ -35,6 +36,7 @@ type SessionResult = Omit<
   unit: string;
   state: string;
   libraryProfilePin?: unknown;
+  additionalMeasures?: unknown;
 };
 type ChangeResult = NonNullable<Awaited<ReturnType<typeof changeAppend.run>>>;
 type UnitResult = Awaited<ReturnType<typeof unitPage.run>>[number];
@@ -62,6 +64,10 @@ function asState(value: string): ProgressState {
 }
 
 function asSession(row: SessionResult): ProgressSession {
+  const additionalMeasures = decodeAdditionalMeasures(row.additionalMeasures);
+  const measures = row.mode === 'scalar_amount' && additionalMeasures.length > 0
+    ? [{ unit: row.unit, total: row.total, amount: row.amount }, ...additionalMeasures]
+    : undefined;
   return {
     id: row.id,
     accountId: row.accountId,
@@ -79,7 +85,31 @@ function asSession(row: SessionResult): ProgressSession {
     startedAt: iso(row.startedAt),
     completedAt: row.completedAt === null ? null : iso(row.completedAt),
     transactionId: row.transactionId,
+    ...(measures === undefined ? {} : { measures }),
   };
+}
+
+function decodeAdditionalMeasures(value: unknown): ProgressScalarMeasure[] {
+  const decoded = typeof value === 'string' ? JSON.parse(value) : value;
+  if (decoded === null || decoded === undefined) return [];
+  if (!Array.isArray(decoded) || decoded.length >= 8) throw new TypeError('Invalid stored progress measures');
+  return decoded.map((entry) => {
+    const measure = entry as Record<string, unknown>;
+    if (
+      typeof measure !== 'object' ||
+      measure === null ||
+      Array.isArray(measure) ||
+      typeof measure.unit !== 'string' ||
+      (measure.amount !== null && typeof measure.amount !== 'string') ||
+      (measure.total !== null && typeof measure.total !== 'string')
+    )
+      throw new TypeError('Invalid stored progress measure');
+    return {
+      unit: measure.unit as string,
+      amount: measure.amount as string | null,
+      total: measure.total as string | null,
+    };
+  });
 }
 
 function asChange(row: ChangeResult): ProgressChange {
@@ -146,6 +176,9 @@ export async function insertSession(
     last_changed_at: context.time,
     transaction_id: context.transactionId,
     library_profile_pin: acceptedPin,
+    additional_measures: JSON.stringify(
+      (session.additionalMeasures ?? []).map((measure) => ({ unit: measure.unit, amount: null, total: measure.total })),
+    ),
   });
   if (!row) throw new Error('Library session insert returned no row');
   return asSession(row);
@@ -189,6 +222,9 @@ export async function updateSession(
     completed_unit_count: changes.completedUnitCount,
     state: changes.state,
     completed_at: changes.completedAt,
+    additional_measures: JSON.stringify(
+      (changes.measures?.slice(1) ?? []).map(({ unit, amount, total }) => ({ unit, amount, total })),
+    ),
     time: context.time,
     transaction_id: context.transactionId,
   });

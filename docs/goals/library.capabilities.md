@@ -147,6 +147,11 @@ mode, including rereads and noncontiguous completed units. Clearing one personal
 their Library presence under the existing authority. Stored subject references and accepted profile meaning remain
 intact.
 
+Scalar sessions also retain each admitted unit independently: an owner can create and read one chapter-and-volume
+session, update or correct either measure under explicit revision control, and replay a write without duplicating its
+history or effects. `services/kernel/test/library/progress-http.test.ts` owns the focused native journey;
+[Independent progress measures](../library-progress-measures.md) defines the exact API contract and limits.
+
 **User job and fixtures:** An owner changes one fact and reads the surviving facts and Everything membership
 immediately. The union includes live state, effective labels, retained sessions/history and holdings; following,
 curated occurrences and published snapshots alone do not create presence. Fixtures must use accepted subject

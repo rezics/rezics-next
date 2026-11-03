@@ -426,6 +426,14 @@ metadata remain in existing terminal retention until real control handoff.
   Source delivery defers integrated native, database, browser and whole-feature/growth acceptance; typing
   alone establishes none of those outcomes.
 
+## Independent scalar progress measures
+
+One owner session can retain chapter, volume or other profile-approved scalar values as separate measures. The
+existing session unit remains primary; each additional unit keeps its own nullable amount and total. The shared
+session revision guards edits and correction retries, and one measure's clear preserves the others. The detailed
+HTTP, profile, history and storage contract is in [Independent progress measures](library-progress-measures.md).
+Dates, repeat totals and canonical episode membership remain separately owned outcomes.
+
 ## Native foreign listing delivery
 
 The [Library owner contract](../services/kernel/src/library/README.md#native-foreign-listing-copies) now implements

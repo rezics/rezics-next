@@ -2,7 +2,12 @@ import type { Release } from '@rezics/definitions';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import type { ProgressInputRules, ProgressPresentation, ProgressSession } from './progress-model.ts';
+import type {
+  ProgressInputRules,
+  ProgressMeasurePresentation,
+  ProgressPresentation,
+  ProgressSession,
+} from './progress-model.ts';
 import {
   compatibleProgressUnits,
   nativeProgressUnit,
@@ -97,6 +102,14 @@ export async function prepareProgressPresentation(deps: LibraryProfileSourceDepe
   }
   return {
     presentation: presentProgressSession(fact, snapshot, source),
+    measurePresentations: (session.measures ?? []).map((measure): ProgressMeasurePresentation => ({
+      unit: measure.unit,
+      presentation: presentProgressSession(
+        { ...fact, session: { ...session, unit: measure.unit, amount: measure.amount, total: measure.total } },
+        snapshot,
+        source,
+      ),
+    })),
     disclosure: { subject: source !== null, versionSubject: version !== null },
     async verify(at: AuthoritativeTime) {
       const current = { ...deps, at };

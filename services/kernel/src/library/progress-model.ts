@@ -30,7 +30,13 @@ export type ProgressSession = Omit<ProgressSessionRow, 'route' | 'mode' | 'unit'
   mode: ProgressMode;
   unit: ProgressUnit;
   state: ProgressState;
+  measures?: ProgressScalarMeasure[];
 };
+
+/** A scalar value keeps its exact profile unit, total and nullable amount. */
+export type ProgressScalarMeasure = { unit: ProgressUnit; total: string | null; amount: string | null };
+export type ProgressMeasureDraft = { unit: ProgressUnit; total: string | null };
+export type ProgressMeasurePresentation = { unit: ProgressUnit; presentation: ProgressPresentation };
 
 export type ProgressSessionDraft = {
   id: string;
@@ -40,6 +46,7 @@ export type ProgressSessionDraft = {
   mode: ProgressMode;
   unit: ProgressUnit;
   total: string | null;
+  additionalMeasures?: readonly ProgressMeasureDraft[];
 };
 
 /** The next mode value and state. Columns that belong to another mode stay null, and the unit count stays 0. */
@@ -50,6 +57,7 @@ export type ProgressSessionUpdate = {
   completedUnitCount: number;
   state: ProgressState;
   completedAt: string | null;
+  measures?: ProgressScalarMeasure[];
 };
 
 export type ProgressSessionPage = {

@@ -15,6 +15,10 @@ shape are not consumer input. This document records consumer rules only. It spec
 consumer slice in the order in [Library and Collections](library-and-collections.md): one generic engine configured
 by definitions data.
 
+Scalar progress measures consume that same released descriptor and pin contract. Every additional unit is validated
+against the active profile at creation and remains under the original session pin; its complete request, response,
+clear and retry semantics are in [Independent progress measures](library-progress-measures.md).
+
 Personal facts remain separate facts owned by one account and subject: zero or one exclusive entry state, independent
 labels, any number of progress sessions, any number of copies/holdings, and ratings. A state does not create a label,
 session, holding, rating, entitlement, or import. A session does not create an entry or a copy. Repeated sessions and
@@ -33,6 +37,11 @@ The consumer contract starts from the actual schema and commands in this checkou
 | `library.progress_change`  | Append-only `(route, session_id, change_no)` JSONB intent with recorded time and transaction ID. It records exact adds/removes or scalar/cursor intent; it is not a materialized structure.                                                                                                                                                                                                                                                          | Leave rows and their digests untouched during pin migration. Do not search or rewrite all session history to discover the pin. The parent session pin governs its history.                                                                        |
 | `library.copy`             | Primary key `(route, copy_id)`, owner and subject columns, non-unique subject, `status` check `ordered`, `owned`, `lent`, `disposed`, nullable location/source/acquired/disposed/note, revision and timestamps. There is no kind, condition, platform, licence, or access field.                                                                                                                                                                     | Keep copy IDs and distinct same-subject rows. Add the agreed kind as data. Historical rows use `legacy-unspecified`; no existing value proves physical media, digital licence, access, or entitlement.                                            |
 | Shelf projections          | `activity_at`, `finished_at`, `progress_head`, `shelf_count`, shelf keyset indexes, and shelf type observation fields are separate from fact values and user revisions. The per-account shelf type value/root/node/reservation tables contain copied type text, digest roots, trie chunks, and staging state.                                                                                                                                        | Profile pins must not replace user activity, completion dates, counters, or their stable fact keys. The copied type dictionary/trie/staging is not the profile registry and must not be revived or expanded for profiles.                         |
+
+The progress session row now also contains a bounded `additional_measures` JSON array for independently admitted
+scalar units. Its items remain governed by that session's exact profile pin and revision; they are not a second
+profile registry or an import-specific store. See [Independent progress measures](library-progress-measures.md) for
+the write/read contract.
 
 The relevant definitions in this checkout are immutable releases validated and published by the existing definitions
 routes. The applied `20261027184414_library_profile_pins.sql` adds nullable pins, shape checks, copy kind and pending

@@ -7,6 +7,7 @@ import { routeOf } from '../route/route.ts';
  * A reread is a new session; nothing here rewrites another one.
  */
 export const MAX_COMPLETED_UNITS = 20_000;
+export const MAX_PROGRESS_MEASURES = 8;
 
 const MAX_UNIT_IDS = 100;
 const MAX_LOCATOR_LENGTH = 256;
@@ -17,7 +18,7 @@ const MAX_DECIMAL_LENGTH = MAX_INTEGER_DIGITS + 1 + MAX_FRACTION_DIGITS;
 const MODES = new Set<string>(['scalar_amount', 'cursor_position', 'completed_units']);
 const UNITS = new Set<string>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
 const STATES = new Set<string>(['active', 'completed', 'abandoned']);
-const CREATE_FIELDS = ['subjectId', 'versionSubjectId', 'mode', 'unit', 'total'];
+const CREATE_FIELDS = ['subjectId', 'versionSubjectId', 'mode', 'unit', 'total', 'additionalMeasures'];
 
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
 export type ProgressUnit = string;
@@ -30,7 +31,10 @@ export type ProgressSessionCreate = {
   mode: ProgressMode;
   unit: ProgressUnit;
   total: string | null;
+  additionalMeasures?: ProgressMeasureCreate[];
 };
+
+export type ProgressMeasureCreate = { unit: ProgressUnit; total: string | null };
 
 export type ScalarRecord = { amount: string };
 export type CursorRecord = { locator: string; position: string };
@@ -43,7 +47,9 @@ export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 /** History payload. Unit ids are the ones given, sorted by code unit, never a filled range. */
 export type ProgressIntent =
   | { clear: true }
+  | { measureId: string; clear: true }
   | { amount: string }
+  | { measureId: string; amount: string }
   | { locator: string; position: string }
   | { add: string[] }
   | { remove: string[] }
@@ -261,10 +267,56 @@ export function parseSessionCreate(
     if (descriptor.totalPolicy === 'required' && total === null) return invalid('total');
     if (descriptor.totalPolicy === 'forbidden' && total !== null) return invalid('total');
   }
+  let additionalMeasures: ProgressMeasureCreate[] | undefined;
+  if (Object.hasOwn(value, 'additionalMeasures')) {
+    if (value.mode !== 'scalar_amount' || !Array.isArray(value.additionalMeasures)) return invalid('additionalMeasures');
+    if (value.additionalMeasures.length < 1 || value.additionalMeasures.length >= MAX_PROGRESS_MEASURES)
+      return invalid('additionalMeasures');
+    const seen = new Set<string>([value.unit]);
+    additionalMeasures = [];
+    for (const inputMeasure of value.additionalMeasures) {
+      const measure = parseProgressMeasureCreate(inputMeasure, descriptor === undefined ? undefined : 'syntax');
+      if (!measure.ok) return invalid(`additionalMeasures.${measure.field}`);
+      if (seen.has(measure.value.unit)) return invalid('additionalMeasures');
+      seen.add(measure.value.unit);
+      additionalMeasures.push(measure.value);
+    }
+    additionalMeasures.sort((left, right) => byCodeUnit(left.unit, right.unit));
+  }
   return {
     ok: true,
-    value: { subjectId: value.subjectId, versionSubjectId, mode: value.mode, unit: value.unit, total },
+    value: {
+      subjectId: value.subjectId,
+      versionSubjectId,
+      mode: value.mode,
+      unit: value.unit,
+      total,
+      ...(additionalMeasures === undefined ? {} : { additionalMeasures }),
+    },
   };
+}
+
+/** Validate an additional independent scalar unit using the same profile decimal and total rules. */
+export function parseProgressMeasureCreate(
+  input: unknown,
+  descriptor?: LibraryProgressUnitDescriptor | 'syntax',
+): ProgressOutcome<ProgressMeasureCreate> {
+  const value = plain(input);
+  if (value === null) return invalid('measure');
+  const foreign = firstUnexpected(value, ['unit', 'total']);
+  if (foreign !== null) return invalid(foreign);
+  if (typeof value.unit !== 'string' || (descriptor === undefined ? !isUnit(value.unit) : !isVocabularyId(value.unit)))
+    return invalid('unit');
+  let total: string | null = null;
+  if (Object.hasOwn(value, 'total') && value.total !== null) {
+    total = numeric(value.total, value.unit === 'percent', descriptor);
+    if (total === null) return invalid('total');
+  }
+  if (descriptor !== undefined && descriptor !== 'syntax') {
+    if (descriptor.totalPolicy === 'required' && total === null) return invalid('total');
+    if (descriptor.totalPolicy === 'forbidden' && total !== null) return invalid('total');
+  }
+  return { ok: true, value: { unit: value.unit, total } };
 }
 
 /**
@@ -301,8 +353,8 @@ function sortedIds(ids: readonly string[]): string[] {
 }
 
 /** The history row for a validated record. Unit ids stay the given ids, in code-unit order. */
-export function changeIntent(record: ProgressRecord): ProgressIntent {
-  if ('amount' in record) return { amount: record.amount };
+export function changeIntent(record: ProgressRecord, measureId?: string): ProgressIntent {
+  if ('amount' in record) return measureId === undefined ? { amount: record.amount } : { measureId, amount: record.amount };
   if ('locator' in record) return { locator: record.locator, position: record.position };
   if ('add' in record && 'remove' in record) return { add: sortedIds(record.add), remove: sortedIds(record.remove) };
   if ('add' in record) return { add: sortedIds(record.add) };

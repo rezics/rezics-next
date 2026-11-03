@@ -43,11 +43,12 @@ async function request(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   body?: unknown,
+  requestKey?: string,
 ) {
   const headers: Record<string, string> = {};
   const account = as === 'owner' ? owner : as === 'other' ? other : as === 'suspended' ? suspended : null;
   if (account) headers.authorization = `Bearer ${credentials.get(account)!}`;
-  if (method !== 'GET') headers['idempotency-key'] = key();
+  if (method !== 'GET') headers['idempotency-key'] = requestKey ?? key();
   if (body !== undefined) headers['content-type'] = 'application/json';
   const response = await app.handle(
     new Request(`https://kernel.test${path}`, {
@@ -351,6 +352,78 @@ test('owners start and record every mode, page units and changes, and publish an
     'progressSessions',
   );
   expect(sessions.map((item) => item.id)).toContain(reread.id);
+});
+
+test('owners keep chapter and volume measures independent in one session with revision and replay protection', async () => {
+  const subjectId = await createSubject();
+  const created = await start(subjectId, 'scalar_amount', 'chapter', {
+    total: '24',
+    additionalMeasures: [{ unit: 'volume', total: '12' }],
+  });
+  expect(created.measures).toEqual([
+    { unit: 'chapter', amount: null, total: '24' },
+    { unit: 'volume', amount: null, total: '12' },
+  ]);
+
+  const presented = await request('owner', 'GET', `/v1/progressSessions/${created.id}?presentation=FULL`);
+  expect(presented.body.progressSession.measures).toHaveLength(2);
+  for (const measure of presented.body.progressSession.measures)
+    expect(measure.presentation).toMatchObject({ meaning: 'known', recording: { state: 'supported' } });
+  expect((await request('other', 'GET', `/v1/progressSessions/${created.id}`)).response.status).toBe(404);
+
+  const chapter = await request(
+    'owner',
+    'POST',
+    `/v1/progressSessions/${created.id}:record`,
+    { revision: 1, measureId: 'chapter', amount: '0' },
+  );
+  expect(chapter.response.status).toBe(200);
+  expect(chapter.body.progressSession.measures).toEqual([
+    { unit: 'chapter', amount: '0', total: '24' },
+    { unit: 'volume', amount: null, total: '12' },
+  ]);
+  const staleVolume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 1,
+    measureId: 'volume',
+    amount: '3.5',
+  });
+  expect(staleVolume.response.status).toBe(409);
+
+  const volume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 2,
+    measureId: 'volume',
+    amount: '3.5',
+  });
+  expect(volume.response.status).toBe(200);
+  const staleCorrection = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 2,
+    measureId: 'chapter',
+    amount: '1',
+  });
+  expect(staleCorrection.response.status).toBe(409);
+  const correctionBody = { revision: 3, measureId: 'chapter', amount: '2.5' };
+  const corrected = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, correctionBody, 'chapter-correction');
+  expect(corrected.response.status).toBe(200);
+  const replay = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, correctionBody, 'chapter-correction');
+  expect(replay.body).toEqual(corrected.body);
+  const clearedVolume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 4,
+    measureId: 'volume',
+    clear: true,
+  });
+  expect(clearedVolume.body.progressSession.measures).toEqual([
+    { unit: 'chapter', amount: '2.5', total: '24' },
+    { unit: 'volume', amount: null, total: '12' },
+  ]);
+  const changes = await progressPage<Record<string, any>>(`/v1/progressSessions/${created.id}/changes`, 'changes');
+  expect(changes.map((change) => change.intent)).toEqual([
+    { measureId: 'chapter', amount: '0' },
+    { measureId: 'volume', amount: '3.5' },
+    { measureId: 'chapter', amount: '2.5' },
+    { measureId: 'volume', clear: true },
+  ]);
+  expect(changes.map((change) => change.revision)).toEqual([2, 3, 4, 5]);
+  expect(volume.body.progressSession.measures[0].amount).toBe('0');
 });
 
 test('hidden private session ids are concealed and suspended writes leave data unchanged', async () => {

@@ -9,7 +9,8 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ProgressIntent, ProgressPresentation, ProgressSession } from './progress-model.ts';
+import type { ProgressIntent, ProgressPresentation, ProgressScalarMeasure, ProgressSession } from './progress-model.ts';
+import { MAX_PROGRESS_MEASURES } from './progress.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
@@ -26,25 +27,6 @@ const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
 const unitInput = libraryVocabularyIdSchema;
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
-export const sessionSchema = t.Object(
-  {
-    id,
-    subjectId: id,
-    versionSubjectId: t.Union([id, t.Null()]),
-    mode,
-    unit: libraryStoredVocabularySchema,
-    total: nullableString,
-    amount: nullableString,
-    locator: nullableString,
-    position: nullableString,
-    completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
-    state,
-    revision,
-    startedAt: t.String(),
-    completedAt: nullableString,
-  },
-  closed,
-);
 export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
   t.Object(
     {
@@ -88,11 +70,46 @@ export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
     closed,
   ),
 );
+export const sessionSchema = t.Object(
+  {
+    id,
+    subjectId: id,
+    versionSubjectId: t.Union([id, t.Null()]),
+    mode,
+    unit: libraryStoredVocabularySchema,
+    total: nullableString,
+    amount: nullableString,
+    locator: nullableString,
+    position: nullableString,
+    completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
+    state,
+    revision,
+    startedAt: t.String(),
+    completedAt: nullableString,
+    measures: t.Optional(
+      t.Array(
+        t.Object(
+          {
+            unit: libraryStoredVocabularySchema,
+            amount: nullableString,
+            total: nullableString,
+            presentation: t.Optional(progressPresentationSchema),
+          },
+          closed,
+        ),
+        { minItems: 2, maxItems: MAX_PROGRESS_MEASURES },
+      ),
+    ),
+  },
+  closed,
+);
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
 const changeIntent = t.Union([
   t.Object({ clear: t.Literal(true) }, closed),
+  t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
   t.Object({ amount: t.String() }, closed),
+  t.Object({ measureId: libraryStoredVocabularySchema, amount: t.String() }, closed),
   t.Object({ locator: t.String(), position: t.String() }, closed),
   t.Object({ add: t.Array(t.String()), remove: t.Optional(t.Array(t.String())) }, closed),
   t.Object({ remove: t.Array(t.String()) }, closed),
@@ -156,6 +173,7 @@ const pageQuery = {
 const recordBody = t.Object(
   {
     revision,
+    measureId: t.Optional(unitInput),
     clear: t.Optional(t.Literal(true)),
     amount: t.Optional(t.String()),
     locator: t.Optional(t.String()),
@@ -177,7 +195,7 @@ function detail(operationId: string, action: string, anonymous = false) {
   };
 }
 
-function sessionView(session: ProgressSession) {
+function sessionView(session: ProgressSession, presentations?: ReadonlyMap<string, ProgressPresentation>) {
   const {
     id,
     subjectId,
@@ -194,6 +212,10 @@ function sessionView(session: ProgressSession) {
     startedAt,
     completedAt,
   } = session;
+  const measures = session.measures?.map((measure: ProgressScalarMeasure) => ({
+    ...measure,
+    ...(presentations?.has(measure.unit) ? { presentation: presentations.get(measure.unit)! } : {}),
+  }));
   return {
     id,
     subjectId,
@@ -209,6 +231,7 @@ function sessionView(session: ProgressSession) {
     revision,
     startedAt,
     completedAt,
+    ...(measures === undefined ? {} : { measures }),
   };
 }
 
@@ -265,6 +288,12 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             mode,
             unit: unitInput,
             total: t.Optional(nullableString),
+            additionalMeasures: t.Optional(
+              t.Array(
+                t.Object({ unit: unitInput, total: t.Optional(nullableString) }, closed),
+                { minItems: 1, maxItems: MAX_PROGRESS_MEASURES - 1 },
+              ),
+            ),
           },
           closed,
         ),
@@ -347,8 +376,11 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
               return sessionCommands().readPresentedSession(
                 actor,
                 params.sessionId,
-                async (session, presentation, disclosure) => {
-                  const value = { ...sessionView(session), presentation };
+                async (session, presentation, disclosure, measurePresentations) => {
+                  const value = {
+                    ...sessionView(session, new Map(measurePresentations.map((measure) => [measure.unit, measure.presentation]))),
+                    presentation,
+                  };
                   if (query.view !== 'FULL') return { progressSession: value };
                   const summary = async (id: string | null, disclosed: boolean) => {
                     if (!id || !disclosed) return null;

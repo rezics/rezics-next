@@ -1986,6 +1986,31 @@ bounded by the native 20000-key cap, with no history scan; this adds one indexed
 - Growth check: the native journey above measures all actual statements at 64/512/4096 background rows, with
   constant rows/statements and logarithmic indexed blocks. Existing legacy growth fixtures are not profile proof.
 
+### Independent scalar measures
+
+`POST /v1/progressSessions` retains its existing `mode`, `unit` and optional `total` primary fields and accepts up to
+seven `additionalMeasures` only for `scalar_amount`. Each extra unit is admitted by the same subject's current
+released profile, pinned with the session's accepting release/type, and checked for native structure `none` and
+identity `none`. No unit conversion or alternate profile store is involved.
+
+`GET /v1/progressSessions/:sessionId` projects the primary value and, for multi-measure sessions, a `measures` array
+with separate `unit`, nullable decimal-string `amount` and `total` fields. The row's bounded `additional_measures`
+JSON array is limited to seven entries; the primary continues to use the existing scalar columns. `presentation=FULL`
+uses the accepted release for each label and current profile for each recording hint. It retains unknown/unavailable
+meaning when required release evidence cannot be read.
+
+The existing `:record` operation accepts `{revision,measureId,amount}` for an addressed unit. The same parent row CAS
+serializes all measure edits; every accepted write appends one change intent and replays through the original command
+receipt. `{revision,measureId,clear:true}` clears only that amount and retains its total and sibling values. The
+existing `{revision,clear:true}` clears every recorded value and retains all totals and lifecycle facts. Unknown
+measure IDs are invalid input; unsupported active profile meanings return `unsupported_library_profile`; stale parent
+revisions return `conflict`.
+
+Because every measure remains on its existing private session row, owner authorization, keyset pages, source-fence
+triggers, profile migration ownership and terminal deletion remain on the current session path. The eight-value cap
+bounds each returned projection. `test/library/progress-http.test.ts` covers create/read, independent correction,
+clear, private isolation, stale revision and replay. No separate measure-store growth result is claimed.
+
 ### Session complete
 
 - Touches: One subject point read, head ensure, typed session lock, reread and CAS, then head touch and existing
