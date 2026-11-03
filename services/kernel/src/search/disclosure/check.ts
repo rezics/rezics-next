@@ -260,7 +260,7 @@ export async function checkHits(
         // Reanchor the complete inverse window, including changes between separate native batches
         // and the gap between the original candidate read and the seam's first read.
         const retired = new Set<string>();
-        if (pending.length) {
+        if (pagePoints.length) {
           for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
             const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
             const read = await lifetime.start(async () => {
