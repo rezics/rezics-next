@@ -109,13 +109,14 @@ export function createVndbLabelAdoption(config: Config) {
     let expiresAt = Infinity;
     for (const selected of choice.rows) {
       const retained = await source.retainedRow(actor, id, selected.ordinal);
-      if (retained.state !== 'active' || retained.decision?.reviewId !== selected.reviewId) throw stale();
+      const decision = retained.decision;
+      if (retained.state !== 'active' || !decision || decision.reviewId !== selected.reviewId) throw stale();
       expiresAt = Math.min(expiresAt, retained.expires_at.getTime());
       const subjectId = retained.target?.targetId ?? null;
       if (subjectId && subjects.has(subjectId)) throw invalid();
       if (subjectId) subjects.add(subjectId);
       const eligible = retained.row.kind === 'vn' && retained.row.identifier?.provider === 'vndb' && subjectId &&
-        retained.decision.targetId === subjectId && retained.decision.guard?.source === retained.target?.source &&
+        decision.targetId === subjectId && decision.guard?.source === retained.target?.source &&
         !['ambiguous', 'unavailable', 'unsupported'].includes(retained.matching.status) &&
         (retained.matching.status !== 'matched' || retained.matching.candidates[0] === subjectId);
       const slots = subjectId ? await pool.query<{ count: number }>(
