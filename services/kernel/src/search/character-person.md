@@ -25,11 +25,6 @@ unproven source evidence stays unknown under NOT. The caller supplies the runtim
 observation for the complete window; individual native probes also observe the runtime release.
 This seam does not yet admit inverse syntax through the universal API.
 
-Native relation disclosure now admits historical parsed rows against the runtime release's
-source type, facet and qualifier declarations. A changed datatype cannot reuse its historical
-interpretation. The runtime release digest and activation head are checked again after tuple
-and original/terminal subject disclosure. This guard applies to sampled and overflow evidence.
-
 Candidate index facts are hints. Current checks forward the complete qualifier conjunction to
 the Semantic relation source, including when the selected relation sample overflows. Qualified
 relation leaves under NOT also require current native evidence; absence from a sample cannot

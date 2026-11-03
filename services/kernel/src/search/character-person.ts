@@ -1,16 +1,8 @@
-import {
-  createFilterConstruction,
-  FilterError,
-  parseFilter,
-  relationFacetProperty,
-  type FilterQualifier,
-  type FilterRelease,
-} from '@rezics/filter';
+import { FilterError, parseFilter, type FilterQualifier, type FilterRelease } from '@rezics/filter';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   subjectPartition,
-  type IndexedStatement,
   type RelationFacetMatch,
   type RelationFacetProbe,
   type SubjectSource,
@@ -37,36 +29,6 @@ export async function withCurrentRelationRelease<T>(
   const result = await work(before.release);
   const after = await observe();
   return after?.digest === before.digest && after.head === before.head ? result : unavailable;
-}
-
-/** Historical parsing supplies data; only the runtime release can admit its current meaning. */
-export function currentRelationAdmission(
-  release: FilterRelease,
-): (type: string, statement: IndexedStatement) => boolean {
-  const construction = createFilterConstruction(release);
-  return (type, statement) => {
-    if (!relationFacetProperty(release, statement.property)) return false;
-    try {
-      construction.admitFilter({
-        and: [
-          { type: { in: [type] } },
-          {
-            statement: {
-              property: statement.property,
-              in: [statement.value],
-              ...(statement.qualifiers?.length
-                ? { qualifiers: statement.qualifiers.map(({ property, value }) => ({ property, in: [value] })) }
-                : {}),
-            },
-          },
-        ],
-      });
-      return true;
-    } catch (error) {
-      if (!(error instanceof FilterError)) throw error;
-      return false;
-    }
-  };
 }
 
 /**

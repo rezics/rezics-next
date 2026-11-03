@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import {
-  currentRelationAdmission,
   matchInverseRelationFacets,
   withCurrentRelationRelease,
   type CurrentRelationRelease,
@@ -42,30 +41,6 @@ const candidate = (): IndexedSubject => ({
   statements: [],
 });
 const active = (): CurrentRelationRelease => ({ digest: 'release-a', head: 1, release });
-
-test('runtime release replaces historical relation and same-statement qualifier admission', () => {
-  const statement = credit(id(3), id(4));
-  expect(currentRelationAdmission(release)('schema:Movie', statement)).toBe(true);
-  expect(currentRelationAdmission(release)('schema:Person', statement)).toBe(false);
-  for (const change of [
-    (next: FilterRelease) => {
-      next.types['schema:Movie']!.facets = [];
-    },
-    (next: FilterRelease) => {
-      next.properties[property]!.qualifiers = [role];
-    },
-    (next: FilterRelease) => {
-      next.properties[character]!.datatype = 'quantity';
-    },
-    (next: FilterRelease) => {
-      delete next.properties[property]!.relation;
-    },
-  ]) {
-    const next = structuredClone(release);
-    change(next);
-    expect(currentRelationAdmission(next)('schema:Movie', statement)).toBe(false);
-  }
-});
 
 test('release loss, replacement and returning to the same digest retire foreign disclosure', async () => {
   for (const replacement of [null, { ...active(), digest: 'release-b' }, { ...active(), head: 3 }]) {
