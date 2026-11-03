@@ -1933,7 +1933,8 @@ def artifact_bytes(entry):
     # Unknown legacy sizes stay unknown. Publication never accounts for any other artifact.
     try:
         with (entry / '.cache-bytes').open() as record:
-            value = record.read(64).strip()
+            value = record.read(65)
+        value = value.strip() if len(value) <= 64 else ''
         return int(value) if re.fullmatch(r'[0-9]{1,30}', value) else None
     except (OSError, UnicodeError):
         return None
@@ -1956,7 +1957,7 @@ def directory_entries(namespace, cookie):
     class Dirent(ctypes.Structure):
         _fields_ = [('ino', ctypes.c_ulong), ('off', ctypes.c_long), ('length', ctypes.c_ushort),
                     ('kind', ctypes.c_ubyte), ('name', ctypes.c_char * 256)]
-    libc = ctypes.CDLL(None)
+    libc = ctypes.CDLL(None, use_errno=True)
     libc.opendir.argtypes = [ctypes.c_char_p]
     libc.opendir.restype = ctypes.c_void_p
     libc.readdir.argtypes = [ctypes.c_void_p]
@@ -1967,13 +1968,20 @@ def directory_entries(namespace, cookie):
     libc.closedir.argtypes = [ctypes.c_void_p]
     stream = libc.opendir(os.fsencode(namespace))
     if not stream:
+        error = ctypes.get_errno()
+        if error != errno.ENOENT:
+            raise OSError(error, os.strerror(error))
         yield None, 0
         return
     try:
         libc.seekdir(stream, cookie)
         while True:
+            ctypes.set_errno(0)
             item = libc.readdir(stream)
             if not item:
+                error = ctypes.get_errno()
+                if error:
+                    raise OSError(error, os.strerror(error))
                 yield None, 0
                 return
             yield os.fsdecode(item.contents.name), libc.telldir(stream)
@@ -1999,7 +2007,7 @@ def clean_garbage(cache, deadline):
             path = garbage / relative
             if '..' in Path(relative).parts or Path(relative).is_absolute() or path.resolve() != path or not path.is_dir():
                 path = garbage
-        except OSError:
+        except (OSError, UnicodeError):
             path = garbage
         for _ in range(128):
             if time.monotonic() >= deadline:
@@ -2090,7 +2098,7 @@ def evict_artifacts(cache):
                         state['unknown'] -= size is None
                     except (BlockingIOError, FileNotFoundError):
                         continue
-            print('remote-check: dependency artifacts measured bytes=' + str(state['bytes']) +
+            print('remote-check: dependency artifacts attached measured bytes=' + str(state['bytes']) +
                   ' unknown=' + str(state['unknown']) + ' bound=' + str(bound), file=sys.stderr, flush=True)
             state = fresh
         temporary = state_file.with_suffix('.pending')

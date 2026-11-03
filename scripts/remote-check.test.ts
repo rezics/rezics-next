@@ -7018,6 +7018,7 @@ test('maintenance resumes bounded legacy batches, preserves entry locks and neve
     utimesSync(entry, 1, 1);
   }
   writeFileSync(join(entries[1]!, '.cache-bytes'), Buffer.from([255]));
+  writeFileSync(join(entries[2]!, '.cache-bytes'), '0' + ' '.repeat(64) + 'invalid');
   const holder = Bun.spawn(['flock', entries[0] + '.lock', 'sh', '-c', 'echo LOCKED; cat'], {
     stdin: 'pipe',
     stdout: 'pipe',
@@ -7153,6 +7154,7 @@ os.unlink = timed_unlink
     expect(existsSync(garbage)).toBe(false);
     const deep = join(cache, '.garbage', 'deep');
     mkdirSync(join(deep, ...Array(160).fill('child')), { recursive: true });
+    writeFileSync(join(cache, '.garbage-cursor'), Buffer.from([255]));
     for (let tick = 0; tick < 4 && existsSync(deep); tick++) sweepArtifacts(fixture.directory);
     expect(existsSync(deep)).toBe(false);
   } finally {

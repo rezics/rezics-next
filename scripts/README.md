@@ -499,7 +499,8 @@ Admission retries races against other callers. The default probe interval is fiv
    three-second runtime limit and one-second stop timeout. Controller deployment must restart this timer to update it.
    Each sweep admits two seconds of monotonic work, at most 128 namespace records, eight detachments and 128 deletion
    steps. Directory cookies persist scan progress; completed passes restart to reconcile concurrent mutations.
-   Accounting reports measured bytes and unknown entry counts separately. Decision: unmeasured or malformed legacy
+   Accounting reports attached measured bytes and unknown entry counts separately; detached garbage is excluded
+   from those totals and still consumes disk space until deletion. Decision: unmeasured or malformed legacy
    entries are conservatively eligible for incremental eviction, without recursively measuring them.
    Hits/publications refresh directory mtime. Maintenance takes global and per-key locks nonblockingly, revalidates
    inode and last-use snapshots, then atomically detaches eligible entries into `.garbage` under the per-key lock.
