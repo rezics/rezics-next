@@ -28,7 +28,9 @@ export type ThreadWatchProps = {
 };
 
 function validState(value: ThreadWatchState | undefined): value is ThreadWatchState {
-  return !!value && typeof value.watching === 'boolean' && typeof value.revision === 'string' && value.revision.length > 0;
+  return (
+    !!value && typeof value.watching === 'boolean' && typeof value.revision === 'string' && value.revision.length > 0
+  );
 }
 
 export function ThreadWatch({
@@ -175,7 +177,9 @@ export function ThreadWatch({
       {sessionKnown && session !== 'signed-in' ? (
         <SignInPrompt returnTo={returnTo} label={m.thread_watch_anonymous()} />
       ) : null}
-      {sessionKnown && session === 'signed-in' && !admitted ? <p role="status">{m.thread_watch_access_lost()}</p> : null}
+      {sessionKnown && session === 'signed-in' && !admitted ? (
+        <p role="status">{m.thread_watch_access_lost()}</p>
+      ) : null}
       {ready && view.phase === 'checking' ? <p role="status">{m.thread_watch_checking()}</p> : null}
       {ready && view.phase === 'sending' ? <p role="status">{m.thread_watch_checking()}</p> : null}
       {ready && view.phase === 'confirmed' ? (

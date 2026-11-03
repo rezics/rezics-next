@@ -3,11 +3,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { useMemo } from 'react';
 import { m } from '../paraglide/messages.js';
 import { ThreadWatch } from '../threads/thread-watch';
-import type {
-  ThreadWatchCommand,
-  ThreadWatchNative,
-  ThreadWatchReadRequest,
-} from '../threads/thread-watch-native';
+import type { ThreadWatchCommand, ThreadWatchNative, ThreadWatchReadRequest } from '../threads/thread-watch-native';
 
 type Example = 'not-watching' | 'watching' | 'unknown' | 'access-lost' | 'anonymous';
 type Trace = { reads: ThreadWatchReadRequest[]; commands: ThreadWatchCommand[] };
