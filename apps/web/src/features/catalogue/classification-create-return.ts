@@ -67,7 +67,8 @@ export function classificationMissingConceptAdmitted(release: Release, property:
   const targets = classificationMissingConceptTargets(release, property);
   if (!targets.length) return false;
   return Object.keys(release.types).some(
-    (id) => conceptTypeAdmitted(release, id) && classificationTargetAdmitted(id, release.types[id]?.bases ?? [], targets),
+    (id) =>
+      conceptTypeAdmitted(release, id) && classificationTargetAdmitted(id, release.types[id]?.bases ?? [], targets),
   );
 }
 
@@ -247,7 +248,8 @@ export function snapshotClassificationDrafts(drafts: readonly FactDraft[]): Clas
   for (const draft of drafts) {
     const holder = factHolder(draft);
     if (!uuid.test(holder) || factLocked(draft) || draft.command) return undefined;
-    if (!validStatement(draft.statement) || (draft.baseline !== null && !validStatement(draft.baseline))) return undefined;
+    if (!validStatement(draft.statement) || (draft.baseline !== null && !validStatement(draft.baseline)))
+      return undefined;
     snapshots.push({
       holder,
       property: draft.property,
@@ -410,6 +412,9 @@ export function currentEditorReturnPath(): string {
   return search ? `${window.location.pathname}?${search}` : window.location.pathname;
 }
 
-export function classificationConceptTypeAdmitted(release: Pick<Release, 'types' | 'properties'>, type: string): boolean {
+export function classificationConceptTypeAdmitted(
+  release: Pick<Release, 'types' | 'properties'>,
+  type: string,
+): boolean {
   return typeExtends(release, type, 'skos:Concept') || typeExtends(release, type, 'skos:ConceptScheme');
 }

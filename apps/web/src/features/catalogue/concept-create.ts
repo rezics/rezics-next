@@ -157,15 +157,15 @@ export function conceptTargetAdmitted(release: Release, property: string, type: 
   return targets.some((target) => type === target || typeExtends(release, type, target));
 }
 
-export function conceptCreateEmptyFact(property: string, release: Release, key = crypto.randomUUID()): ConceptCreateFact {
+export function conceptCreateEmptyFact(
+  property: string,
+  release: Release,
+  key = crypto.randomUUID(),
+): ConceptCreateFact {
   return { key, statement: emptyCreationStatement(property, release) };
 }
 
-export function canAddConceptFact(
-  facts: readonly ConceptCreateFact[],
-  property: string,
-  release: Release,
-): boolean {
+export function canAddConceptFact(facts: readonly ConceptCreateFact[], property: string, release: Release): boolean {
   if (facts.length >= factLimit) return false;
   const definition = release.properties[property];
   if (!definition || !conceptPropertySupported(definition)) return false;
@@ -173,10 +173,7 @@ export function canAddConceptFact(
   return definition.multivalued || current === 0;
 }
 
-export function conceptCreatePreparedFacts(
-  facts: readonly ConceptCreateFact[],
-  release: Release,
-): ConceptCreateFact[] {
+export function conceptCreatePreparedFacts(facts: readonly ConceptCreateFact[], release: Release): ConceptCreateFact[] {
   return facts.flatMap((row) => {
     const statement = creationStatement(row.statement, release);
     return hasEnteredStatement(statement) ? [{ key: row.key, statement }] : [];

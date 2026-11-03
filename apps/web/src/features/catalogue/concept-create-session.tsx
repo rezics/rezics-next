@@ -311,7 +311,8 @@ function ConceptCreateSessionLive({
                 return next;
               });
             },
-            canEditType: (type: string) => reading.ok && activeTypeIds.has(type) && conceptGrain(reading.release, type) !== undefined,
+            canEditType: (type: string) =>
+              reading.ok && activeTypeIds.has(type) && conceptGrain(reading.release, type) !== undefined,
             canCreateType: (type: string) => reading.ok && activeTypeIds.has(type),
             labelLanguage: (type: string) => pickText(release.types[type]?.labels ?? {}, locale).lang ?? undefined,
             descriptionLanguage: (type: string) =>
@@ -369,7 +370,19 @@ function ConceptCreateSessionLive({
             },
           }
         : undefined,
-    [activeTypeIds, factsByType, fields, locale, metadata, metadataRevision, o, reading, release, retainedTypes, search],
+    [
+      activeTypeIds,
+      factsByType,
+      fields,
+      locale,
+      metadata,
+      metadataRevision,
+      o,
+      reading,
+      release,
+      retainedTypes,
+      search,
+    ],
   );
 
   const returnedIdentity = handoff?.phase === 'ready' ? handoff.identity : undefined;
@@ -388,7 +401,13 @@ function ConceptCreateSessionLive({
         ) : (
           <div role="alert" className="space-y-3">
             <p>{m.concept_create_unavailable({}, o)}</p>
-            <Button type="button" variant="outline" className={formClass} disabled={pending} onClick={() => void refreshMetadata()}>
+            <Button
+              type="button"
+              variant="outline"
+              className={formClass}
+              disabled={pending}
+              onClick={() => void refreshMetadata()}
+            >
               {m.catalogue_create_retry({}, o)}
             </Button>
           </div>
@@ -412,16 +431,14 @@ function ConceptCreateSessionLive({
     <div className="space-y-6">
       {token && !handoff && <p role="alert">{m.classification_create_handoff_invalid({}, o)}</p>}
       {handoff && (
-        <section aria-labelledby={titleId} className="mx-auto max-w-3xl space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+        <section
+          aria-labelledby={titleId}
+          className="mx-auto max-w-3xl space-y-3 rounded-xl border border-border bg-muted/30 p-4"
+        >
           <h2 id={titleId} className="text-lg font-semibold">
             {m.classification_create_source({}, o)}
           </h2>
-          <p>
-            {m.classification_create_context(
-              { relation: handoff.propertyLabel, source: handoff.sourceLabel },
-              o,
-            )}
-          </p>
+          <p>{m.classification_create_context({ relation: handoff.propertyLabel, source: handoff.sourceLabel }, o)}</p>
           <p className="text-sm text-muted-foreground">{m.classification_create_distinct({}, o)}</p>
         </section>
       )}
@@ -453,7 +470,8 @@ function ConceptCreateSessionLive({
               typeAdmission: {
                 offered: activeTypes,
                 unavailable: handoff.targets.filter(
-                  (target) => !activeTypes.some((entry) => classificationTargetAdmitted(entry.id, entry.bases ?? [], [target])),
+                  (target) =>
+                    !activeTypes.some((entry) => classificationTargetAdmitted(entry.id, entry.bases ?? [], [target])),
                 ),
                 admitType: (type: CreateType) => {
                   const admitted = classificationTargetAdmitted(type.id, type.bases ?? [], handoff.targets);

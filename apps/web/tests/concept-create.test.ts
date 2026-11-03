@@ -73,11 +73,7 @@ test('concept creation admits released Concept and Scheme grains and their emitt
 });
 
 test('prepared Concept facts keep scheme, broader, focus and closeMatch distinct without inferred edges', () => {
-  const facts = [
-    fact('skos:inScheme', schemeId),
-    fact('skos:broader', target),
-    fact('foaf:focus', focusId),
-  ];
+  const facts = [fact('skos:inScheme', schemeId), fact('skos:broader', target), fact('foaf:focus', focusId)];
   const prepared = conceptCreateDraft(
     bundledRelease,
     { type: concept, labels: { en: 'Night', ja: '夜' }, descriptions: { en: 'A time of day' } },

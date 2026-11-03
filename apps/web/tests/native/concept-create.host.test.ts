@@ -34,8 +34,7 @@ test('native Concept create posts once, retries only readback, and returns the e
       calls.push({ method: request.method, path, key: request.headers.get('idempotency-key') });
       const json = (body: unknown, status = 200) =>
         new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-      if (request.method === 'GET' && path === '/v1/definitions/active')
-        return json({ digest: definitions.digest });
+      if (request.method === 'GET' && path === '/v1/definitions/active') return json({ digest: definitions.digest });
       if (request.method === 'GET' && path === `/v1/definitions/releases/${definitions.digest}`)
         return json({ digest: definitions.digest, release: definitions.release });
       if (request.method === 'POST' && path === '/v1/subjects') {
@@ -70,7 +69,11 @@ test('native Concept create posts once, retries only readback, and returns the e
   });
   const request = new Request('https://site.invalid/api', {
     method: 'POST',
-    headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}`, origin: 'https://site.invalid', 'X-CSRF-Token': 'A'.repeat(22) },
+    headers: {
+      cookie: `__Host-rezics_session=${'a'.repeat(43)}`,
+      origin: 'https://site.invalid',
+      'X-CSRF-Token': 'A'.repeat(22),
+    },
   });
   const env = { AUTH_ISSUER: 'https://auth.invalid' } as Partial<SessionEnv>;
   const key = crypto.randomUUID();
@@ -82,7 +85,7 @@ test('native Concept create posts once, retries only readback, and returns the e
     id: createdId,
     reader: { state: 'ready' },
   });
-  expect(calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects').map((call) => call.key)).toEqual(
-    [key, key],
-  );
+  expect(
+    calls.filter((call) => call.method === 'POST' && call.path === '/v1/subjects').map((call) => call.key),
+  ).toEqual([key, key]);
 });

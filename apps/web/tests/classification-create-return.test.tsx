@@ -7,11 +7,7 @@ import type { CandidateTransport } from '../src/subject/candidate-review';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 async function mounted(
-  run: (page: {
-    host: HTMLElement;
-    render: (node: ReactNode) => Promise<void>;
-    assigned: string[];
-  }) => Promise<void>,
+  run: (page: { host: HTMLElement; render: (node: ReactNode) => Promise<void>; assigned: string[] }) => Promise<void>,
 ) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
@@ -138,17 +134,15 @@ test('a missing classification concept returns to the exact unsent holder and re
     expect(claimClassificationReturn(crypto.randomUUID(), characterProfileId, 'reader-classification')).toBeUndefined();
     await render(editor(token!));
     expect(host.textContent).toContain(identity.id);
-    expect(
-      host.textContent,
-    ).toContain(m.classification_create_created_identity({ label: identity.label, type: identity.type }));
+    expect(host.textContent).toContain(
+      m.classification_create_created_identity({ label: identity.label, type: identity.type }),
+    );
     expect(host.querySelector<HTMLInputElement>('[role="combobox"]')?.value ?? '').toBe('');
     await act(async () => button(host, m.classification_create_choose()).click());
-    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')?.value ?? '').toBe(
-      m.subject_value_unlabelled(),
-    );
-    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.classification_create_choose())).toBe(
-      false,
-    );
+    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')?.value ?? '').toBe(m.subject_value_unlabelled());
+    expect(
+      [...host.querySelectorAll('button')].some((node) => node.textContent === m.classification_create_choose()),
+    ).toBe(false);
     expect(commands).toEqual([]);
   });
 });
@@ -160,10 +154,8 @@ test('independent classification callers keep create-missing off and a cancelled
     const { m } = await import('../src/paraglide/messages.js');
     const { characterProfileFixture, characterProfileId } =
       await import('../src/kernel/fake/catalogue-character-profile');
-    const {
-      beginClassificationDraftReturn,
-      readClassificationCreateHandoff,
-    } = await import('../src/features/catalogue/classification-create-return');
+    const { beginClassificationDraftReturn, readClassificationCreateHandoff } =
+      await import('../src/features/catalogue/classification-create-return');
     const fixture = characterProfileFixture();
     const read: FactsCurrent = {
       ok: true,
@@ -190,9 +182,9 @@ test('independent classification callers keep create-missing off and a cancelled
       ),
     );
     await act(async () => button(host, m.facts_edit_field()).click());
-    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.classification_create_missing())).toBe(
-      false,
-    );
+    expect(
+      [...host.querySelectorAll('button')].some((node) => node.textContent === m.classification_create_missing()),
+    ).toBe(false);
     await render(
       h(
         CatalogueCurrentReading,

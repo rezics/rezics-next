@@ -154,9 +154,7 @@ export function ConceptCreateReview({
       <div className="min-w-0 space-y-2">
         <h3 className="font-semibold">{m.concept_create_review_type({}, o)}</h3>
         <p lang={typeLabel.lang ?? undefined}>{typeLabel.text || item.type}</p>
-        <p>
-          {grain === 'scheme' ? m.concept_create_grain_scheme({}, o) : m.concept_create_grain_concept({}, o)}
-        </p>
+        <p>{grain === 'scheme' ? m.concept_create_grain_scheme({}, o) : m.concept_create_grain_concept({}, o)}</p>
         {typeMeaning.text && (
           <p lang={typeMeaning.lang ?? undefined} className="text-sm text-muted-foreground">
             {typeMeaning.text}
