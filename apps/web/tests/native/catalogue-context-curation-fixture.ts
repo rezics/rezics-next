@@ -6,7 +6,9 @@ import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
 const citation = {
-  parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/context-curation' } }],
+  parts: [
+    { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.test/context-curation' } },
+  ],
 };
 
 export type CatalogueContextSubject = {
@@ -40,7 +42,13 @@ function headers(): HeadersInit {
   return { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) };
 }
 
-async function grant(stack: NativeWebStack, accountId: string, resourceId: string, actions: string[], persona = 'governor') {
+async function grant(
+  stack: NativeWebStack,
+  accountId: string,
+  resourceId: string,
+  actions: string[],
+  persona = 'governor',
+) {
   const route = resourceId === GLOBAL_CONTEXT ? 0 : routeOf(resourceId);
   if (route === null) throw new Error(`Cannot grant on unroutable ${resourceId}`);
   await json(
@@ -64,21 +72,13 @@ async function grant(stack: NativeWebStack, accountId: string, resourceId: strin
 
 async function write<T>(stack: NativeWebStack, persona: string, path: string, body: unknown, status = 201): Promise<T> {
   return json(
-    await stack.kernel(
-      path,
-      { method: 'POST', headers: headers(), body: JSON.stringify(body) },
-      persona,
-    ),
+    await stack.kernel(path, { method: 'POST', headers: headers(), body: JSON.stringify(body) }, persona),
     `POST ${path}`,
     status,
   );
 }
 
-async function createSubject(
-  stack: NativeWebStack,
-  label: string,
-  authorId: string,
-): Promise<CatalogueContextSubject> {
+async function createSubject(stack: NativeWebStack, label: string, authorId: string): Promise<CatalogueContextSubject> {
   const created = await write<{ subject: { id: string } }>(stack, 'editor', '/v1/subjects', {
     type: 'schema:Book',
     labels: { en: label },
@@ -93,13 +93,18 @@ async function createSubject(
       ],
     },
   });
-  const proposed = await write<{ candidate: string }>(stack, 'editor', `/v1/subjects/${created.subject.id}/candidates`, {
-    statement: {
-      property: { id: 'schema:inLanguage' },
-      value: { type: 'value', content: 'en' },
-      references: [citation],
+  const proposed = await write<{ candidate: string }>(
+    stack,
+    'editor',
+    `/v1/subjects/${created.subject.id}/candidates`,
+    {
+      statement: {
+        property: { id: 'schema:inLanguage' },
+        value: { type: 'value', content: 'en' },
+        references: [citation],
+      },
     },
-  });
+  );
   const contextLabel = `${label} readers`;
   const context = await write<{ context: { id: string } }>(stack, 'alice', '/v1/contexts', {
     labels: { en: contextLabel },

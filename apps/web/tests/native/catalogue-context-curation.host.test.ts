@@ -42,7 +42,10 @@ async function kernelJson<T>(path: string, persona?: string): Promise<T> {
 
 async function liveRequests(after: number): Promise<NativeKernelRequest[]> {
   await fixture!.stack.refreshKernelRequests();
-  return fixture!.stack.kernelRequests().slice(after).filter((request) => !request.fixtureRequest);
+  return fixture!.stack
+    .kernelRequests()
+    .slice(after)
+    .filter((request) => !request.fixtureRequest);
 }
 
 async function openReview(page: Page, subject: CatalogueContextSubject, search: string): Promise<void> {
@@ -65,9 +68,14 @@ async function confirmNamed(page: Page, name: string): Promise<void> {
 async function applyMode(page: Page, mode: 'replace' | 'inherit' | 'suppress'): Promise<void> {
   await page.getByLabel('Selection mode').selectOption(mode);
   await confirmNamed(page, 'Apply to this Context');
-  await page.getByText('Context selection saved. Reload to review the current reading. This does not publish the whole Context.', {
-    exact: true,
-  }).waitFor({ state: 'visible' });
+  await page
+    .getByText(
+      'Context selection saved. Reload to review the current reading. This does not publish the whole Context.',
+      {
+        exact: true,
+      },
+    )
+    .waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Reload current values', exact: true }).click();
   await page.locator('[data-context-comparison]').waitFor({ state: 'visible', timeout: 60_000 });
 }
@@ -82,14 +90,18 @@ test('community Context review compares Global independently and replace inherit
   const page = await alice.context.newPage();
   const before = stack.kernelRequests().length;
   await openReview(page, journey, `context=${journey.contextId}&property=schema:inLanguage`);
-  await page.getByText('This slot inherits Global values, subject to this Context’s decisions.', { exact: true }).waitFor();
+  await page
+    .getByText('This slot inherits Global values, subject to this Context’s decisions.', { exact: true })
+    .waitFor();
   await page.getByText('Current public Global values', { exact: true }).waitFor();
   await page.getByText('Community Context', { exact: true }).waitFor();
   await page.locator('[data-context-comparison]').getByText('ja', { exact: true }).first().waitFor();
 
   await page.getByRole('button', { name: 'Review suggestion', exact: true }).click();
   await confirmNamed(page, 'Accept suggestion');
-  await page.getByText('Suggestion accepted in this Context. Selection remains a separate decision.', { exact: true }).waitFor();
+  await page
+    .getByText('Suggestion accepted in this Context. Selection remains a separate decision.', { exact: true })
+    .waitFor();
   const accepted = (await liveRequests(before)).filter(
     (request) => request.method === 'POST' && request.url.includes(':accept'),
   );
@@ -104,7 +116,9 @@ test('community Context review compares Global independently and replace inherit
   await page.getByText('This slot uses its own replacement selection.', { exact: true }).waitFor();
 
   await applyMode(page, 'inherit');
-  await page.getByText('This slot inherits Global values, subject to this Context’s decisions.', { exact: true }).waitFor();
+  await page
+    .getByText('This slot inherits Global values, subject to this Context’s decisions.', { exact: true })
+    .waitFor();
   await applyMode(page, 'suppress');
   await page.getByText('This slot suppresses inherited values.', { exact: true }).waitFor();
 
@@ -120,9 +134,14 @@ test('community Context review compares Global independently and replace inherit
 
   const slotStart = stack.kernelRequests().length;
   await openReview(page, journey, `context=${journey.contextId}&property=schema:author&target=${journey.authorId}`);
-  await page.getByText('Relation resolution describes the whole field. These values show only the addressed slot’s disclosed preview.', {
-    exact: true,
-  }).waitFor();
+  await page
+    .getByText(
+      'Relation resolution describes the whole field. These values show only the addressed slot’s disclosed preview.',
+      {
+        exact: true,
+      },
+    )
+    .waitFor();
   const candidateReads = (await liveRequests(slotStart)).filter(
     (request) => request.method === 'GET' && request.url.includes('/candidates'),
   );
@@ -165,9 +184,14 @@ test('stale comparison keeps draft and mode; uncertain confirmation preserves th
     }),
   });
   await confirmNamed(page, 'Apply to this Context');
-  await page.getByText('The comparison changed. Your selection draft is preserved. Reload, compare again, then explicitly confirm a new request.', {
-    exact: true,
-  }).waitFor();
+  await page
+    .getByText(
+      'The comparison changed. Your selection draft is preserved. Reload, compare again, then explicitly confirm a new request.',
+      {
+        exact: true,
+      },
+    )
+    .waitFor();
   expect(await page.getByLabel('Selection mode').inputValue()).toBe('suppress');
   await page.getByRole('button', { name: 'Reload current values', exact: true }).click();
   await page.locator('[data-candidate-draft]').waitFor({ state: 'visible' });
@@ -191,9 +215,14 @@ test('stale comparison keeps draft and mode; uncertain confirmation preserves th
   await confirmNamed(page, 'Apply to this Context');
   await page.getByRole('button', { name: 'Retry confirmation', exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Retry confirmation', exact: true }).click();
-  await page.getByText('Context selection saved. Reload to review the current reading. This does not publish the whole Context.', {
-    exact: true,
-  }).waitFor();
+  await page
+    .getByText(
+      'Context selection saved. Reload to review the current reading. This does not publish the whole Context.',
+      {
+        exact: true,
+      },
+    )
+    .waitFor();
   const retries = (await liveRequests(uncertainStart)).filter(
     (request) => request.method === 'POST' && request.url === adoptPath,
   );
