@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import type { Pool } from 'pg';
 import { createAuthorItemEffect } from '../../src/content/author-item-index.ts';
+import { repairOwnDraftPage } from '../../src/content/own-drafts-index.ts';
 import { readBatch } from '../../src/events/log.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { postPublicationFixture } from './support/post-publication-fixture.ts';
+import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.ts';
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof postPublicationFixture>>;
@@ -12,11 +15,11 @@ afterAll(async () => { await f?.close(); });
 
 // The same registered effect consumes real committed envelopes after releasing
 // the source log checkout, as in production. No locator is fixture-seeded.
-async function deliver(id: string) {
+async function deliver(id: string, pool: Pool = f.pool) {
   const events: Parameters<ReturnType<typeof createAuthorItemEffect>['run']>[0][] = [];
-  const effect = createAuthorItemEffect(f.pool);
+  const effect = createAuthorItemEffect(pool);
   for (;;) {
-    const page = await readBatch(f.pool, {
+    const page = await readBatch(pool, {
       partition: partitionOf(routeOf(id)!), consumer: `drafts_${id.replaceAll('-', '')}`,
       apply: async (envelopes) => {
         for (const envelope of envelopes)
@@ -27,6 +30,7 @@ async function deliver(id: string) {
     if (page.envelopes < 64) break;
   }
   for (const event of events) await effect.run(event);
+  return events;
 }
 
 const home = () => `/v1/accounts/${f.author.actor.accountId}/drafts`;
@@ -35,7 +39,7 @@ test('acknowledged native draft returns privately, resumes exact bytes, conflict
   const post = thread.firstPost;
   await deliver(post.id);
   const second = await f.system.auth.issue({
-    accountId: f.author.actor.accountId, clientId: f.system.auth.ordinaryClient.clientId,
+    accountId: f.author.actor.accountId, clientId: f.system.auth.ordinaryClient.id,
     scopes: f.system.auth.ordinaryScopes,
   });
   const response = await f.system.kernel.handle(new Request(`https://content.test${home()}`, {
@@ -85,4 +89,54 @@ test('private inventory denies anonymous and unrelated actors and never widens p
   expect(page.value.next).toBeString();
   expect((await f.call('GET', `${home()}?limit=2&cursor=${page.value.next}`)).status).toBe(400);
   expect((await f.call('GET', `${home()}?limit=1&cursor=${page.value.next}`, undefined, { other: true })).status).toBe(404);
+});
+
+test('pending locators are preparing, bounded repair returns the draft, and late creation cannot resurrect an erase', async () => {
+  const thread = await f.thread('draft');
+  const before = await f.call('GET', home());
+  expect(before.status).toBe(200);
+  expect(before.value.state).toBe('preparing');
+  let complete = false;
+  for (let page = 0; page < 20 && !complete; page++) {
+    const repaired = await repairOwnDraftPage(f.pool);
+    expect(repaired.examined).toBeLessThanOrEqual(20);
+    complete = repaired.complete;
+  }
+  expect(complete).toBe(true);
+  const repaired = await f.call('GET', home());
+  expect(repaired.value.state).toBe('ready');
+  expect(repaired.value.drafts.some((item: any) => item.id === thread.firstPost.id)).toBe(true);
+  const events = await deliver(thread.firstPost.id);
+  const erased = await f.system.kernel.handle(new Request(`https://content.test/v1/posts/${thread.firstPost.id}`, {
+    method: 'DELETE', headers: { authorization: `Bearer ${f.author.bearer}`,
+      'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+  }));
+  expect(erased.status).toBe(204);
+  await deliver(thread.firstPost.id);
+  const effect = createAuthorItemEffect(f.pool);
+  for (const event of events) await effect.run(event);
+  expect((await f.call('GET', home())).value.drafts.some((item: any) => item.id === thread.firstPost.id)).toBe(false);
+});
+
+test('native review draft retains original Subject, root language, licence and canonical bytes on return', async () => {
+  const r = await createReviewLifecycleFixture();
+  try {
+    const body = fromPlainText('Review retained through another session');
+    body.doc.attrs = { ...body.doc.attrs, lang: 'zh-Hant' };
+    const created = await r.call('POST', '/v1/threads', { bearer: r.author.bearer,
+      body: { kind: 'review', title: 'Private review', body, licence: 'CC-BY-4.0',
+        boardId: r.boardId, subjectIds: [r.subjectId], visibility: 'draft' } });
+    expect(created.response.status, created.text).toBe(201);
+    const thread = created.value.thread;
+    await deliver(thread.firstPost.id, r.system.database.pool);
+    const path = `/v1/accounts/${r.author.accountId}/drafts`;
+    const page = await r.call('GET', path, { bearer: r.author.bearer });
+    expect(page.response.status, page.text).toBe(200);
+    expect(page.value.drafts).toMatchObject([{ kind: 'review', language: 'zh-Hant', licence: 'CC-BY-4.0',
+      subjectIds: [r.subjectId], revisionId: thread.firstPost.revisionId }]);
+    const selected = await r.call('GET', `${path}/${thread.firstPost.id}?threadId=${thread.id}`, { bearer: r.author.bearer });
+    expect(selected.response.status, selected.text).toBe(200);
+    expect(selected.value.post.body).toEqual(thread.firstPost.body);
+    expect(selected.value.post.sha256).toBe(thread.firstPost.sha256);
+  } finally { await r.close(); }
 });

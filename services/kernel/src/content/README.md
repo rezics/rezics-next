@@ -2161,3 +2161,123 @@ ready population. The factory and disclosure owners remain the sole owners of th
   generation changes only once for a repeated event key.
 - **Growth check:** `test/content/realm-subject-lifecycle.test.ts` observes a board-set reduction invalidate the same
   Realm cut containing discussion and review witnesses.
+
+
+## Private acknowledged drafts
+
+`listOwnDrafts(deps: ContentReadDependencies, accountId, context: ReadContext, input?: OwnDraftInput)`
+returns `OwnDraftPage`. `resumeOwnDraft(deps, accountId, threadId, postId, context)` returns the ordinary
+anchored native post. `OwnDraftEntry`, `OwnDraftActions` and `OwnDraftInput` are exported from
+`own-drafts.ts`; `OwnDraftQuerySchema`, `OwnDraftEntrySchema` and `OwnDraftResponseSchema` are exported
+from `schemas.ts`. These are installed in the Kernel route type as `own_drafts.list` and
+`own_drafts.resume`, not a new document or producer port.
+
+`GET /v1/accounts/:accountId/drafts?limit=20&cursor=...` returns
+`{state, viewer: {accountId, authnEpoch}, drafts, next}`. Each entry identifies the exact native thread,
+opening post and current selected post/revision, discussion/review kind and opening/reply document kind,
+bounded title, board title/Realm identity, save time, root document language, licence, Subject/media references,
+and actual resume/edit/publish/erase paths. Lists read no document bodies. Public author lists still omit drafts.
+The acting account must equal the selected account home, including organizations; native account Access retains
+current session, scopes, standing and acting-organization consent. No arbitrary editor may list another account.
+
+Decision: private draft pages use creation order, report preparing while source locators are pending, conceal
+unreadable Subject context, and reserve document bytes for exact selection. Reply entries omit the thread title
+rather than reintroducing retained opening text after deletion. The owning author-item locator has a dedicated
+partial draft prefix, so published items, erased history and unrelated author items do not consume its raw budget.
+The mixed-direction complete key is creation time descending, post identity ascending; two disjoint seeks share
+a single raw budget of at most 20. Withheld or stale rows consume slots without refill. A sparse or empty page
+may have `next`; clients follow it until null. A page failure returns the ordinary problem, never an empty list
+or a cursor beyond the failed frontier. The opaque encrypted cursor binds home, limit, actual actor, client,
+delegating principal, scopes, authentication epoch and home partition epoch.
+
+`state: preparing` means locator coverage is incomplete. The page may already contain usable acknowledged
+entries; an empty preparing page must not be rendered as no saved drafts. The source post's pending marker is
+written with each revision and cleared only after receiving locator commit for the exact head. A partial
+source-author pending prefix prevents delayed delivery from producing a false complete empty page even after
+the historical census completes. Missing progress is unavailable. The default Content supervisor registers
+`content.ownDrafts.repair` on maintenance every minute, with at most sixteen raw-20 source pages per invocation.
+Repair checkpoints advance only after every receiving locator and source acknowledgement completes. Source
+failures leave the same frontier retryable; account retirement uses the existing fence and late authored cleanup.
+Repair reads native source primary keys and opens each source/author home separately. It does not retain bodies.
+
+`GET /v1/accounts/:accountId/drafts/:id?threadId=...` returns `{post}` and an ETag containing its revision.
+It checks private account, native ancestry/board/Realm/Space and original Subject authority before the ordinary
+native body read, and repeats account and Subject admission before returning bytes. Concealed/unknown selections
+both return 404. There is no new retained-private-data exception. Bodies, SHA, node languages, media claims and
+Subject references remain native. Root language in the locator is accepted only when its exact revision matches.
+Nested language marks remain in the selected document. Both routes use `private, no-store`.
+
+Resume/edit/publish/erase are navigation and current permission hints; commands independently authorize every
+attempt before receipts. Save uses `POST /v1/posts/:id/revisions`, `If-Match: "revisionId"` and the native
+idempotency key. To publish, deliberately submit `visibility: published` through that same command. A 412 leaves
+the acknowledged server head available for explicit reload/recovery; it never overwrites the other device.
+An uncertain write retries the exact body, key and If-Match. Own erase uses the existing DELETE post command.
+Current source disclosure suppresses publication/erasure immediately, and locator delivery removes draft
+membership without a second store or automatic publication.
+
+Examples: a populated ready page has native entries and action paths; a complete empty page is
+`{state:"ready",viewer,drafts:[],next:null}`. A withheld raw page may be empty with an opaque `next`.
+An unavailable page is the ordinary 503 problem and retains the client's selection; exact retry repeats its
+unconsumed cursor. Preparing is `{state:"preparing",viewer,drafts:[],next:null}` until coverage is repaired.
+Web retains the page/composer consumer and its phone/desktop recovery review; this API does not install a page.
+
+### Cost: listOwnDrafts
+
+- Touches: three native account snapshots around one prepared account Access check; one actor-home selection
+  snapshot with a partition point, two disjoint draft-index seeks, one progress point and one pending-prefix
+  probe. For each of L raw candidates, two ordinary metadata disclosures, one two-action Access snapshot and
+  original-Subject identity preparation plus three identity observations. Each metadata disclosure uses two
+  source snapshots, two board observations and one final board recheck; its ordinary resource checks retain
+  native account, ancestry, Realm/Space and ban work. All source/board/Subject/account checkouts release before
+  another home opens.
+- Bound: L <= 20, native ancestry H <= 33, Subjects S <= 128 and media IDs <= 32 per item. A metadata source
+  chain is one thread, H post/head/decision probes and one revision probe; two chains are observed per disclosure,
+  and each prepared thread/post eligibility rechecks its own exact row. Include the existing Access producers'
+  permission, account, membership, Realm/Space and ban bounds for each invocation; these are not zero-cost
+  callbacks. Each Subject observation uses its original partition and label/reference points and current Access,
+  with no redirect substitution. Body bytes are zero throughout list disclosure. Response strings are capped at
+  512 title characters, 256 root-language bytes, native SPDX/128 Subject/32 media limits and a 4096-byte cursor.
+  Work is O(L * (H + S)) bounded native probes plus nested authority; no author-history residual scan.
+- Growth check: native outcome coverage is `test/content/own-drafts-http.test.ts`. Independent 256/1024/4096
+  published/draft/erased/revision populations, strict physical-prefix plans, all participating pools and complete
+  nested Access counters remain required before claiming the numerical examined-work ceiling. Raw and selected
+  byte caps stay fixed; output count alone is not work evidence. Performance review of composed terms is requested.
+
+### Cost: resumeOwnDraft
+
+- Touches: initial/final account snapshots, one metadata disclosure, original-Subject identity preparation and
+  three identity observations, then the actual native post disclosure and its final body serialization. The
+  ordinary read repeats source signatures, ancestry, board/Realm/Space, account and resource Access checks.
+- Bound: one selected identity, H <= 33, S <= 128, one current revision with at most 2 MiB canonical bytes.
+  Metadata disclosure reads no bytes; the selected native read loads only that exact current revision. Include
+  both disclosures' nested authorization and the native body JSON parse/response serialization. Denied private
+  homes stop before source selection; concealed source/Subjects stop before body loading; stale heads return 404.
+  The shared native reader may perform rating-question citation disclosure after body selection.
+- Growth check: focused coverage pins exact bytes/revision, account isolation and concurrency recovery.
+  Independent historical growth and serialization/pool accounting remain required; no scale pass is claimed.
+
+### Cost: repairOwnDraftPage
+
+- Touches: one progress primary-key read and one native post ordered-prefix seek; at most 20 independently
+  anchored current post/thread/revision reads, 20 receiving author commands and 20 source acknowledgement
+  commands, then one conditional progress command. Fenced authors additionally use the existing late-erasure
+  item registration, authored cleanup and resolution. No receiving command holds its source connection.
+- Bound: raw keys <= 20 and at most sixteen pages per scheduled invocation. Each source uses exact post,
+  thread and current revision keys; only draft source projection parses up to 2 MiB canonical bytes to extract
+  root language. Native commands include receipt, partition, event and account-erasure fence work. An erased
+  source creates no draft membership. Failed pages do not advance progress; receipts protect completed receiving
+  work on retry. Maintenance never enumerates revision history or author history to fill a list page.
+- Growth check: native pending/repair outcome coverage is included below. Separate three-scale repair,
+  late-erasure cleanup and uncertain receiving/source retry measurement remain required with native seeding.
+
+### Cost: readOwnDraftSource and acknowledgeOwnDraftLocator
+
+- Touches: source projection opens one repeatable-read home, partition point and exact post/thread/head join;
+  acknowledgement opens a separate source command with one guarded post update and a registered event.
+- Bound: at most three source records and one current document <= 2 MiB, independent of revision history;
+  one source command per delivered native state. The update requires the observed revision, so it cannot
+  acknowledge a concurrent save. Live author-item delivery includes these terms in addition to its receiving
+  locator command, fence, receipt and event work. Exact receipt replay still precedes no required authority:
+  these are internal projection commands, never person-write substitutes.
+- Growth check: the focused native journey exercises real source delivery and exact retry. Independently grow
+  published history and revisions for projection/acknowledgement costs before adopting a physical-work ceiling.

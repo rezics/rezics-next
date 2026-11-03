@@ -74,7 +74,7 @@ function cursorCipherKey(ring: KeyRing, kid: number): Buffer {
   return createHmac('sha256', key).update('content.author-item.cursor.encryption.v1').digest();
 }
 
-function encodeKey(ring: KeyRing, scope: CursorBinding, key: Key, epoch: number, now: number): string {
+export function encodeAuthorItemKey(ring: KeyRing, scope: CursorBinding, key: Key, epoch: number, now: number): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', cursorCipherKey(ring, ring.current), iv);
   const encrypted = Buffer.concat([cipher.update(JSON.stringify(key), 'utf8'), cipher.final()]);
@@ -82,7 +82,7 @@ function encodeKey(ring: KeyRing, scope: CursorBinding, key: Key, epoch: number,
   return encodeCursor(ring, scope, { epoch, after: [ring.current, payload] }, now);
 }
 
-function decodeKey(ring: KeyRing, scope: CursorBinding, token: string, epoch: number, now: number): Key {
+export function decodeAuthorItemKey(ring: KeyRing, scope: CursorBinding, token: string, epoch: number, now: number): Key {
   try {
     const decoded = decodeCursor(ring, scope, token, now);
     if (!decoded.ok || decoded.epoch !== epoch || decoded.after.length !== 2) throw new Error();
@@ -137,7 +137,7 @@ async function candidates(
         if (partition.writeState === 'moved')
           throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
         const after =
-          input.cursor === undefined ? null : decodeKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
+          input.cursor === undefined ? null : decodeAuthorItemKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
         const views = (await readPublicViews(client, [accountId])).get(accountId);
         const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
         const self = context.actor.kind === 'account' && context.actor.accountId === accountId;
@@ -263,7 +263,7 @@ async function listAuthorItems(
   return {
     entries,
     anchors,
-    nextCursor: hasMore && last ? encodeKey(dependencies.tokens, scope, last, page.anchor.epoch, now) : null,
+    nextCursor: hasMore && last ? encodeAuthorItemKey(dependencies.tokens, scope, last, page.anchor.epoch, now) : null,
   };
 }
 

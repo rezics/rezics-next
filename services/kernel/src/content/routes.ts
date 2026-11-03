@@ -3,6 +3,7 @@ import { readEditionSourceIdentity } from './edition-reads.ts';
 import { locateThreadPost } from './post-location.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
+import { listOwnDrafts, resumeOwnDraft } from './own-drafts.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
 import { BoardPinLimitError, setBoardThreadPin } from './board-pin.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
@@ -109,6 +110,8 @@ import {
   AuthorThreadsResponseSchema,
   AuthorPostsQuerySchema,
   AuthorPostsResponseSchema,
+  OwnDraftQuerySchema,
+  OwnDraftResponseSchema,
 } from './schemas.ts';
 import { BoardSlowModeError, BoardSlowModeInputError, readBoardSlowMode, setBoardSlowMode } from './board-slow.ts';
 
@@ -231,6 +234,8 @@ const authorThreadsQuery = strictContentSchema(AuthorThreadsQuerySchema);
 const authorThreadsResponse = strictContentSchema(AuthorThreadsResponseSchema);
 const authorPostsQuery = strictContentSchema(AuthorPostsQuerySchema);
 const authorPostsResponse = strictContentSchema(AuthorPostsResponseSchema);
+const ownDraftQuery = strictContentSchema(OwnDraftQuerySchema);
+const ownDraftResponse = strictContentSchema(OwnDraftResponseSchema);
 const postPageResponse = strictContentSchema(PostPageResponseSchema);
 const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
 
@@ -1162,6 +1167,49 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             return result.value;
           }),
         );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/drafts',
+      {
+        params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
+        query: ownDraftQuery,
+        response: { 200: withHeaders(ownDraftResponse, sessionHeader), ...readFailures },
+        detail: { operationId: 'own_drafts.list', 'x-exposure': 'public',
+          'x-action': 'account:read', security: writeSecurity },
+      },
+      async ({ params: { accountId }, query, actor, admission, job, session, set }) => {
+        existingId(accountId);
+        return contentOperation(() => admission.run('normal', job, async () => {
+          const page = await listOwnDrafts(dependencies, accountId, { actor, deadline: job.deadline }, {
+            ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+            ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+          });
+          for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+          set.headers['cache-control'] = 'private, no-store';
+          return { drafts: [...page.entries], next: page.nextCursor, state: page.state, viewer: page.viewer };
+        }));
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/drafts/:id',
+      {
+        params: t.Object({ accountId: t.String(), id: t.String() }, { additionalProperties: false }),
+        query: t.Object({ threadId: t.String() }, { additionalProperties: false }),
+        response: { 200: withHeaders(postResponse, { ...sessionHeader, etag: t.String() }), ...readFailures },
+        detail: { operationId: 'own_drafts.resume', 'x-exposure': 'public',
+          'x-action': 'account:read', security: writeSecurity },
+      },
+      async ({ params: { accountId, id }, query, actor, admission, job, session, set }) => {
+        existingId(accountId); existingId(id); existingId(query.threadId);
+        return contentOperation(() => admission.run('normal', job, async () => {
+          const post = await resumeOwnDraft(dependencies, accountId, query.threadId, id, { actor, deadline: job.deadline });
+          session.record(sessionComponent(post.anchor));
+          if (!post.value || !('revisionId' in post.value)) throw new ProblemError('not_found');
+          set.headers.etag = JSON.stringify(post.value.revisionId);
+          set.headers['cache-control'] = 'private, no-store';
+          return { post: post.value };
+        }));
       },
     )
     .get(

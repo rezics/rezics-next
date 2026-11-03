@@ -1,6 +1,6 @@
 WITH input AS NOT MATERIALIZED (SELECT :visibility::text AS visibility)
 UPDATE content.post p
-SET head_revision_id = :revision_id::uuid,
+SET draft_locator_pending=true, head_revision_id = :revision_id::uuid,
     visibility = input.visibility,
     security_revision = p.security_revision + CASE WHEN p.visibility <> input.visibility THEN 1 ELSE 0 END
 FROM input

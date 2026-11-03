@@ -16,12 +16,14 @@ import upsert from './author-item-upsert.sql';
 import remove from './author-item-delete.sql';
 import readAuthor from './author-item-read-author.sql';
 import readRestored from './author-item-read-restored.sql';
+import { acknowledgeOwnDraftLocator, readOwnDraftSource } from './own-drafts-index.ts';
 
 const threadCreated = 'com.rezics.content.thread.created.v1';
 const postCreated = 'com.rezics.content.post.created.v1';
 const postErased = 'com.rezics.content.post.erased.v1';
 const postRestored = 'com.rezics.content.post.restored.v1';
-const sourceTypes = [threadCreated, postCreated, postErased, postRestored] as const;
+const sourceTypes = [threadCreated, postCreated, postErased, postRestored,
+  'com.rezics.content.revision.created.v1', 'com.rezics.content.post.published.v1'] as const;
 const projectorId = '00000000-0000-4000-8000-000000000001';
 const maxPosition = 9_223_372_036_854_775_807n;
 class UnchangedAuthorItem extends Error {}
@@ -76,9 +78,10 @@ export function createAuthorItemEffect(pool: Pool): Effect {
     async run(event) {
       const change = parse(event);
       const { creation, epoch, position } = change;
+      const draft = await readOwnDraftSource(pool, change.id);
       const restored =
         event.type === postRestored
-          ? await withConnection(pool, async (client) => {
+          ? draft ?? await withConnection(pool, async (client) => {
               const anchor = await readPartition(client, partitionOf(change.sourceRoute));
               if (!anchor || anchor.writeState === 'moved') throw new Error('Content partition is unavailable');
               return readRestored.run(client, { route: change.sourceRoute, post_id: change.id });
@@ -145,9 +148,13 @@ export function createAuthorItemEffect(pool: Pool): Effect {
                 item_id: itemId,
                 thread_id: restored?.thread_id ?? creation?.threadId,
                 thread_kind: restored?.kind ?? creation?.kind,
-                created_at: restored?.created_at ?? creation?.activityAt,
+                created_at: itemKind === 'post' ? draft?.created_at ?? restored?.created_at ?? creation?.activityAt
+                  : creation?.activityAt,
                 source_epoch: epoch,
                 source_position: position.toString(),
+                draft_state: itemKind === 'post' ? draft?.draft_state ?? 'other' : 'other',
+                draft_revision_id: itemKind === 'post' ? draft?.draft_revision_id ?? null : null,
+                draft_language: itemKind === 'post' ? draft?.draft_language ?? null : null,
               };
               const statement = creation || restored ? upsert : remove;
               const result = await tx.query(
@@ -186,6 +193,7 @@ export function createAuthorItemEffect(pool: Pool): Effect {
       } catch (error) {
         if (!(error instanceof UnchangedAuthorItem)) throw error;
       }
+      if (draft) await acknowledgeOwnDraftLocator(pool, change.id, draft);
     },
   };
 }
