@@ -85,11 +85,12 @@ export function projectConflictDocument(body: DocumentSnapshot): ConflictProject
     const characters: string[] = [];
     let concealed = false;
     let space = false;
-    const stack: DocumentNode[] = [block];
+    const stack: { node: DocumentNode; concealed: boolean }[] = [{ node: block, concealed: false }];
     while (stack.length) {
-      const node = stack.pop()!;
+      const entry = stack.pop()!;
+      const node = entry.node;
       nodes++;
-      const hidden = node.marks?.some((mark) => mark.type === 'spoiler') ?? false;
+      const hidden = entry.concealed || (node.marks?.some((mark) => mark.type === 'spoiler') ?? false);
       concealed ||= hidden;
       // No spoiler text, image alt, component payload or guessed mention identity in the index.
       if (!hidden && node.type === 'text' && typeof node.text === 'string') {
@@ -105,7 +106,8 @@ export function projectConflictDocument(body: DocumentSnapshot): ConflictProject
         }
       }
       const children = node.content ?? [];
-      for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]!);
+      for (let index = children.length - 1; index >= 0; index--)
+        stack.push({ node: children[index]!, concealed: hidden });
     }
     sections.push({ offset, kind, label: characters.join(''), concealed });
   }
@@ -127,7 +129,9 @@ export class ConflictInspection {
     availability: CurrentPost['availability'];
     licence: string | undefined;
     mediaIds: Extract<CurrentPost, { availability: 'available' }>['mediaIds'] | undefined;
-    presentation: ConflictPresentation | undefined;
+    presentation: boolean;
+    authority: object | undefined;
+    signal: AbortSignal | undefined;
     draft: ConflictDraftReading | undefined;
     draftProjection: ConflictProjection | undefined;
     currentProjection: ConflictProjection | undefined;
@@ -146,7 +150,9 @@ export class ConflictInspection {
       availability: current.availability,
       licence: 'licence' in current ? current.licence : undefined,
       mediaIds: 'mediaIds' in current ? current.mediaIds : undefined,
-      presentation,
+      presentation: presentation !== undefined,
+      authority: presentation?.authority,
+      signal: presentation?.signal,
       draft: presentation ? { body: presentation.body, revision: presentation.revision } : undefined,
       draftProjection: presentation ? projectConflictDocument(presentation.body) : undefined,
       currentProjection:
@@ -161,13 +167,13 @@ export class ConflictInspection {
     if (this.reason) return this.reason;
     const retained = this.retained;
     if (!retained) return 'retired';
-    if (!!presentation !== !!retained.presentation) return this.invalidate('retired');
+    if (!!presentation !== retained.presentation) return this.invalidate('retired');
     if (
       retained.presentation &&
       (!presentation ||
-        presentation.authority !== retained.presentation.authority ||
-        presentation.signal !== retained.presentation.signal ||
-        retained.presentation.signal.aborted)
+        presentation.authority !== retained.authority ||
+        presentation.signal !== retained.signal ||
+        retained.signal?.aborted)
     )
       return this.invalidate('retired');
     if (

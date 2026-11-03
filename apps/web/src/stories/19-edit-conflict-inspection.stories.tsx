@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { EditConflictRecovery } from '../threads/edit-conflict-recovery';
 import { InlinePostEditor } from '../threads/composer';
 import type { CurrentPost, EditFailure } from '../threads/actions';
 import { sessionQuery } from '../session/query';
@@ -102,6 +103,80 @@ function ConflictExample({ scenario = 'available', blocks = 10 }: { scenario?: S
         />
       </main>
     </QueryClientProvider>
+  );
+}
+
+function ChangedInspectionExample({
+  retired = false,
+  currentChanged = false,
+}: {
+  retired?: boolean;
+  currentChanged?: boolean;
+}) {
+  const origin = useRef<HTMLTextAreaElement>(null);
+  const [controller] = useState(() => new AbortController());
+  const [authority] = useState(() => ({}));
+  const [draft] = useState(() => fromPlainText('Prepared retained writing before an external change.', 'blocks'));
+  const [revision, setRevision] = useState(0);
+  const latestRevision = useRef(0);
+  const [result, setResult] = useState(
+    () =>
+      ({
+        id: id(3),
+        threadId: id(2),
+        revisionId: id(4),
+        securityRevision: 'prepared-security',
+        body: fromPlainText('Prepared current document before its reader changes.', 'blocks'),
+        availability: 'available',
+        licence: 'CC-BY-4.0',
+        mediaIds: [],
+      }) as unknown as CurrentPost,
+  );
+  const [expired, setExpired] = useState(false);
+  return (
+    <main className="mx-auto min-w-0 max-w-3xl space-y-4 p-4">
+      <p>Prepared external-change fixture; the controller changes this reading without a native request.</p>
+      <textarea
+        ref={origin}
+        aria-label={m.thread_reply_body_label()}
+        defaultValue="Prepared retained writing"
+        className="min-h-32 w-full rounded-xl border p-3"
+      />
+      <EditConflictRecovery
+        current={result}
+        presentation={{
+          body: draft,
+          revision,
+          authority,
+          signal: controller.signal,
+          inspectable: !expired,
+          read: () => (expired ? null : { body: draft, revision: latestRevision.current }),
+        }}
+        onReplace={() => {
+          throw new Error('An invalidated fixture cannot replace writing');
+        }}
+        returningFocus={() => origin.current}
+      />
+      <button
+        type="button"
+        data-prepared-change=""
+        className="min-h-11 rounded-xl border p-3"
+        onClick={() => {
+          if (retired) {
+            setExpired(true);
+            controller.abort();
+          } else if (currentChanged) {
+            setResult({ ...result, revisionId: id(30) } as CurrentPost);
+          } else {
+            latestRevision.current++;
+            setRevision(latestRevision.current);
+          }
+        }}
+      >
+        Apply prepared external change
+      </button>
+      {expired ? <p role="alert">{m.thread_authoring_session_changed()}</p> : null}
+    </main>
   );
 }
 
@@ -221,5 +296,39 @@ export const UnknownDelivery: Story = {
     await userEvent.click(await view.findByRole('button', { name: m.thread_edit_save() }));
     await view.findByText(m.thread_edit_unavailable());
     await expect(view.queryByRole('button', { name: m.thread_edit_review_current() })).toBeNull();
+  },
+};
+
+const changeDuringReview =
+  (message: () => string): NonNullable<Story['play']> =>
+  async ({ canvasElement }) => {
+    await userEvent.click(await within(canvasElement).findByRole('button', { name: m.thread_edit_review_current() }));
+    await screen.findByRole('alertdialog');
+    // Invoke the prepared external controller; modal keyboard/pointer interaction remains inside the visit.
+    canvasElement.querySelector<HTMLButtonElement>('[data-prepared-change]')!.click();
+    const dialog = await screen.findByRole('alertdialog');
+    await within(dialog).findByText(message());
+    await expect(within(dialog).getByRole('button', { name: m.thread_edit_replace_current() })).toBeDisabled();
+    await expect(dialog.querySelector('[data-slot="document-body"]')).toBeNull();
+  };
+export const DraftChangedDuringInspection: Story = {
+  render: () => <ChangedInspectionExample />,
+  globals: { viewport: { value: 'phone390' } },
+  play: changeDuringReview(() => m.thread_inspect_draft_changed()),
+};
+export const CurrentReadingChanged: Story = {
+  render: () => <ChangedInspectionExample currentChanged />,
+  globals: { theme: 'dark', viewport: { value: 'desktop1280' } },
+  play: changeDuringReview(() => m.thread_inspect_current_changed()),
+};
+export const RetiredReading: Story = {
+  render: () => <ChangedInspectionExample retired />,
+  play: async ({ canvasElement }) => {
+    await userEvent.click(await within(canvasElement).findByRole('button', { name: m.thread_edit_review_current() }));
+    await screen.findByRole('alertdialog');
+    canvasElement.querySelector<HTMLButtonElement>('[data-prepared-change]')!.click();
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await within(canvasElement).findByText(m.thread_authoring_session_changed());
+    await expect(document.querySelector('[data-conflict-reading]')).toBeNull();
   },
 };

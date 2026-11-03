@@ -478,3 +478,40 @@ test('real editor preserves exact command retry and media, replaces locally, and
     host.remove();
   }
 }, 30_000);
+
+test('late return callbacks cannot consume a newer inspection return or act after retirement', async () => {
+  const { createRoot } = await import('react-dom/client');
+  const { useConflictReturn } = await import('../src/threads/edit-conflict-return');
+  const host = document.createElement('div');
+  document.body.append(host);
+  const origin = document.createElement('textarea');
+  host.append(origin);
+  const trigger = document.createElement('button');
+  host.append(trigger);
+  const mount = document.createElement('div');
+  host.append(mount);
+  const root = createRoot(mount);
+  let admitted = true;
+  let controls: ReturnType<typeof useConflictReturn>;
+  function ReturnHarness() {
+    controls = useConflictReturn({ returningFocus: () => origin, admitted: () => admitted });
+    return null;
+  }
+  try {
+    await act(async () => root.render(<ReturnHarness />));
+    origin.focus();
+    const first = controls!.capture(trigger);
+    const next = controls!.capture(trigger);
+    expect(controls!.resolve(first)).toBe(false);
+    expect(controls!.resolve(next)).toBe(origin);
+    const retired = controls!.capture(trigger);
+    admitted = false;
+    expect(controls!.resolve(retired)).toBe(false);
+    const unmounted = controls!.capture(trigger);
+    await act(async () => root.unmount());
+    expect(controls!.resolve(unmounted)).toBe(false);
+  } finally {
+    if (mount.hasChildNodes()) await act(async () => root.unmount());
+    host.remove();
+  }
+});

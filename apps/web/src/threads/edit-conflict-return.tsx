@@ -7,6 +7,7 @@ type TextSelection = {
   direction: 'forward' | 'backward' | 'none';
 };
 type ReturnVisit = {
+  ticket: number;
   origin: HTMLElement | null;
   trigger: HTMLElement;
   range: Range | null;
@@ -24,6 +25,7 @@ export function useConflictReturn({
   admitted: () => boolean;
 }) {
   const visit = useRef<ReturnVisit | null>(null);
+  const sequence = useRef(0);
   const popup = useRef<HTMLDivElement | null>(null);
   const latest = useRef({ returningFocus, admitted });
   latest.current = { returningFocus, admitted };
@@ -66,7 +68,9 @@ export function useConflictReturn({
             direction: element.selectionDirection ?? 'none',
           };
       }
+      const ticket = ++sequence.current;
       visit.current = {
+        ticket,
         origin,
         trigger,
         range: range && origin?.contains(range.commonAncestorContainer) ? range.cloneRange() : null,
@@ -74,6 +78,7 @@ export function useConflictReturn({
         replaced: false,
         abandoned: false,
       };
+      return ticket;
     },
     replacing() {
       if (!visit.current) return;
@@ -84,8 +89,9 @@ export function useConflictReturn({
     retire() {
       visit.current = null;
     },
-    resolve(): HTMLElement | false {
+    resolve(ticket: number): HTMLElement | false {
       const plan = visit.current;
+      if (plan?.ticket !== ticket) return false;
       visit.current = null;
       if (!plan || plan.abandoned || !latest.current.admitted()) return false;
       const active = document.activeElement;

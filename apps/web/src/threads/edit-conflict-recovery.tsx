@@ -40,6 +40,7 @@ export function EditConflictRecovery({
   /** Opt in to paired inspection; callers without a draft port retain single-reader behavior. */
   presentation?: ConflictPresentation;
 }) {
+  const [focusTicket, setFocusTicket] = useState(0);
   const [eventInvalidation, setEventInvalidation] = useState<ConflictInvalidation | null>(null);
   const [reviewing, setReviewing] = useState<ConflictInspection | null>(null);
   const keepButton = useRef<HTMLButtonElement>(null);
@@ -117,7 +118,12 @@ export function EditConflictRecovery({
 
   return (
     <AlertDialog
-      open={current !== undefined && reviewing !== null && invalidation !== 'retired'}
+      open={
+        current !== undefined &&
+        reviewing !== null &&
+        invalidation !== 'retired' &&
+        (presentation !== undefined || reviewing.current === current)
+      }
       onOpenChange={(open) => {
         if (!open) close();
       }}
@@ -133,7 +139,7 @@ export function EditConflictRecovery({
             returnOwner.current = presentation
               ? { authority: presentation.authority, signal: presentation.signal }
               : null;
-            focus.capture(event.currentTarget);
+            setFocusTicket(focus.capture(event.currentTarget));
             const visit = new ConflictInspection(current, presentation);
             setEventInvalidation(null);
             setReviewing(visit);
@@ -141,6 +147,11 @@ export function EditConflictRecovery({
         >
           {m.thread_edit_review_current()}
         </Button>
+      ) : null}
+      {invalidation === 'retired' && reviewing && current ? (
+        <p role="status" className="min-w-0 text-sm [overflow-wrap:anywhere]">
+          {m.thread_inspect_current_changed()}
+        </p>
       ) : null}
       <AlertDialogContent
         ref={focus.popup}
@@ -150,7 +161,7 @@ export function EditConflictRecovery({
             : 'min-w-0 max-w-lg grid-cols-[minmax(0,1fr)] text-start sm:max-w-xl'
         }
         initialFocus={keepButton}
-        finalFocus={() => focus.resolve()}
+        finalFocus={() => focus.resolve(focusTicket)}
       >
         <AlertDialogHeader className="min-w-0 place-items-stretch text-start sm:group-data-[size=default]/alert-dialog-content:text-start">
           <AlertDialogTitle>{presentation ? m.thread_inspect_title() : m.thread_edit_current_title()}</AlertDialogTitle>
