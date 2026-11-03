@@ -177,7 +177,8 @@ function counts(): TestCounts {
 function parseSummaryLine(line: string, result: TestCounts): void {
   const clean = line.replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, '');
   const failureLocation = clean.match(/(tests\/[A-Za-z0-9_.-]+\.test\.tsx?):(\d+):\d+/u);
-  if (failureLocation) result.failureLocation = `${failureLocation[1]}:${failureLocation[2]}`;
+  if (failureLocation && !result.failureLocation)
+    result.failureLocation = `${failureLocation[1]}:${failureLocation[2]}`;
   for (const [key, pattern] of [
     ['pass', /\b(\d+)\s+pass(?:ed)?\b/iu],
     ['fail', /\b(\d+)\s+fail(?:ed)?\b/iu],
