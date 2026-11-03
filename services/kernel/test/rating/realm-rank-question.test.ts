@@ -40,10 +40,13 @@ test('selected questions keep their scale, private prior, threshold and continua
     expect((await page()).candidates).toEqual([]);
     const boundary = fixture.subjectIds[10]!;
     for (const [questionIndex, questionId] of questionIds.entries()) {
-      for (const [subjectIndex, subjectId] of fixture.subjectIds.entries())
+      for (const [subjectIndex, subjectId] of fixture.subjectIds.entries()) {
         for (const voter of subjectId === boundary ? fixture.realmMembers.slice(0, 4) : fixture.realmMembers)
           await write(questionId, subjectId, voter,
             questionIndex === 0 ? (subjectIndex === 0 ? 4 : 0) : (subjectIndex === 1 ? 20 : 2));
+        // Finish the first 50 counted Realm votes before adding below-threshold targets.
+        if (subjectIndex === 9) await fixture.drain();
+      }
       // These Global votes must never supply the selected Realm's prior.
       for (const voter of fixture.globalVoters) await write(questionId, fixture.subjectIds[0]!, voter,
         questionIndex === 0 ? 0 : 20);
