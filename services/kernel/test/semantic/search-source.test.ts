@@ -148,7 +148,11 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         descriptions: [{ language: 'en', value: 'A satirical novel' }],
         statements: expect.arrayContaining([
           { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
-          { property: 'schema:datePublished', value: '+1905-01-01T00:00:00Z', facet: { kind: 'time', year: 1905 } },
+          {
+            property: 'schema:datePublished',
+            value: '+1905-01-01T00:00:00Z',
+            facet: { kind: 'time', year: 1905, month: 1, day: 1 },
+          },
         ]),
       },
     ],
@@ -235,6 +239,10 @@ test('every command that appends a revision names the subject in a subject event
   ]);
   const read = (await source.read(subjectPartition(subject.id), [subject.id])).subjects[0]!;
   expect(read.statements).toEqual([
-    { property: 'schema:birthDate', value: '+1892-03-01T00:00:00Z', facet: { kind: 'time', year: 1892 } },
+    {
+      property: 'schema:birthDate',
+      value: '+1892-03-01T00:00:00Z',
+      facet: { kind: 'time', year: 1892, month: 3, day: 1 },
+    },
   ]);
 });

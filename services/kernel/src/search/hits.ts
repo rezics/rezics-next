@@ -1,4 +1,4 @@
-import type { FilterRelease } from '@rezics/filter';
+import type { CalendarDate, FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { chooseLabel } from '../semantic/language.ts';
 import { codeFacet, discloseFacetValues } from './facets.ts';
@@ -7,7 +7,7 @@ import type { IndexedSubject, SubjectSource } from './source.ts';
 export type HitOptions = { descriptions: boolean; languages?: readonly string[]; properties?: readonly string[] };
 export type Fact =
   | { kind: 'item'; id: string; labels: Record<string, string> }
-  | { kind: 'time'; year: number }
+  | ({ kind: 'time' } & CalendarDate)
   | { kind: 'quantity'; amount: number; unit: string }
   | { kind: 'code'; value: string };
 export type SearchHit = {
@@ -142,7 +142,12 @@ export function pendingFacts(
       facet.kind === 'item'
         ? { kind: 'item', id: value }
         : facet.kind === 'time'
-          ? { kind: 'time', year: facet.year }
+          ? {
+              kind: 'time',
+              year: facet.year,
+              ...(facet.month === undefined ? {} : { month: facet.month }),
+              ...(facet.day === undefined ? {} : { day: facet.day }),
+            }
           : facet.kind === 'quantity'
             ? { kind: 'quantity', amount: facet.amount, unit: facet.unit }
             : { kind: 'code', value };

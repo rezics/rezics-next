@@ -44,7 +44,15 @@ export const FactSchema = t.Union([
     { kind: t.Literal('item'), id: t.String({ format: 'uuid' }), labels: t.Record(t.String(), t.String()) },
     object,
   ),
-  t.Object({ kind: t.Literal('time'), year: t.Integer() }, object),
+  t.Object(
+    {
+      kind: t.Literal('time'),
+      year: t.Integer(),
+      month: t.Optional(t.Integer({ minimum: 1, maximum: 12 })),
+      day: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
+    },
+    object,
+  ),
   t.Object({ kind: t.Literal('quantity'), amount: t.Number(), unit: t.String() }, object),
   t.Object({ kind: t.Literal('code'), value: t.String() }, object),
 ]);

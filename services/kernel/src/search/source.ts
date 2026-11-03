@@ -1,4 +1,5 @@
 import { partitionOf, routeOf } from '../route/route.ts';
+import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
 
 export type LanguageValue = { language: string; value: string };
@@ -18,14 +19,14 @@ export type RelationFacetMatch = boolean | 'not_proven';
 
 /**
  * Filterable form of a statement value.
- * `year` is the astronomical year of a time value.
+ * Time keeps its astronomical year and only the month/day represented by native precision.
  * `amount` is the decimal amount of a quantity.
  * A code value is the statement `value`.
  */
 export type FacetValue =
   | { kind: 'item' }
   | { kind: 'code' }
-  | { kind: 'time'; year: number }
+  | ({ kind: 'time' } & CalendarDate)
   | { kind: 'quantity'; amount: number; unit: string };
 
 /** One adopted statement value. The semantic source fills `facet` and `qualifiers`. */

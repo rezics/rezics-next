@@ -1,5 +1,6 @@
 /** Private Source selection and bounded native IO; not a matcher or permission resolver. */
 import type { IndexedStatement } from '../search/source.ts';
+import { readNativeCalendarDate } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { ACCESS_WORK_AXES, AccessWorkAccounting, EMPTY_ACCESS_WORK, type AccessWork } from '../access/work.ts';
@@ -486,13 +487,6 @@ function valueText(body: unknown, definition: Release['properties'][string] | un
   }
 }
 
-function timeYear(time: string): number | null {
-  const match = /^([+-])(\d+)-/.exec(time);
-  if (!match) return null;
-  const year = Number(`${match[1]}${match[2]}`);
-  return Number.isSafeInteger(year) ? year : null;
-}
-
 export function indexedStatement(row: SourceStatementRow, release: Release): IndexedStatement | null {
   return normalizeSourceStatement(row.property, row.body, release.properties);
 }
@@ -511,8 +505,8 @@ export function normalizeSourceStatement(
   if (definition?.datatype === 'wikibase-item') statement.facet = { kind: 'item' };
   else if (definition?.datatype === 'time') {
     const content = sourceObject(body.value) && sourceObject(body.value.content) ? body.value.content : undefined;
-    const year = content && typeof content.time === 'string' ? timeYear(content.time) : null;
-    if (year !== null) statement.facet = { kind: 'time', year };
+    const date = readNativeCalendarDate(content);
+    if (date) statement.facet = { kind: 'time', ...date };
   } else if (definition?.datatype === 'quantity') {
     const content = sourceObject(body.value) && sourceObject(body.value.content) ? body.value.content : undefined;
     const amount = content && typeof content.amount === 'string' ? Number(content.amount) : NaN;

@@ -30,7 +30,7 @@ function statement(value: unknown): boolean {
   return (
     facet.kind === 'item' ||
     facet.kind === 'code' ||
-    (facet.kind === 'time' && Number.isSafeInteger(facet.year)) ||
+    (facet.kind === 'time' && isCalendarDate(facet)) ||
     (facet.kind === 'quantity' &&
       typeof facet.amount === 'number' &&
       Number.isFinite(facet.amount) &&
@@ -97,3 +97,4 @@ export function validateRequestSourceSnapshot(
     throw new SearchUnavailableError('Invalid current Source observation', { cause });
   }
 }
+import { isCalendarDate } from '@rezics/filter';

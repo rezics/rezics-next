@@ -307,7 +307,7 @@ export function validateIndexObservation(
       if (
         !record(facet) ||
         !['item', 'code', 'time', 'quantity'].includes(facet.kind) ||
-        (facet.kind === 'time' && !Number.isSafeInteger(facet.year)) ||
+        (facet.kind === 'time' && !isCalendarDate(facet)) ||
         (facet.kind === 'quantity' && (!Number.isFinite(facet.amount) || typeof facet.unit !== 'string'))
       )
         throw new TypeError('Source snapshot contains invalid facet state');
@@ -322,3 +322,4 @@ export function validateIndexObservation(
   }
   return subjects;
 }
+import { isCalendarDate } from '@rezics/filter';
