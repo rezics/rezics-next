@@ -154,10 +154,6 @@ async function reset(database: GrowthDatabase): Promise<void> {
     [[idleConsumer, absentConsumer, controlConsumer], `${baseOthers}%`, `${allOthers}%`, `${anchorOthers}%`],
   );
   await database.admin.query('DELETE FROM core.outbox WHERE type = $1', [eventType]);
-  await database.admin.query(
-    'UPDATE core.partition p SET position = COALESCE((SELECT max(o.position) FROM core.outbox o WHERE o.partition_no = p.partition_no), 0) WHERE p.partition_no = ANY($1)',
-    [controlPartitions],
-  );
 }
 
 async function assertControlPending(growthDb: GrowthDatabase): Promise<void> {
@@ -262,7 +258,7 @@ test('Idle Search reconcile stays within its finite-domain bound as unrelated ch
         expect(item.error).toBeNull();
         expect(item.statement).toMatch(/FROM\s+core\.partition/i);
         expect(item.statement).toMatch(/LEFT\s+JOIN\s+core\.consumer_checkpoint/i);
-        expect(item.statement).toMatch(/COALESCE\s*\(\s*checkpoint\.position\s*,\s*0\s*\)/i);
+        expect(item.statement).toMatch(/COALESCE\s*\(\s*checkpoint\.position\s*,\s*\?\s*\)/i);
       }
     }
     console.info(
