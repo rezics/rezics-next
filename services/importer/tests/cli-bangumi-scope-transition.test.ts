@@ -37,7 +37,7 @@ test('ordinary Bangumi registration converts named 3/6 records and keeps identit
       date: '2024-04-01',
       platform: type === 6 ? 'movie' : '0',
     });
-    expect(named.outcome).toBe('converted');
+    expect('outcome' in named && named.outcome).toBe('converted');
     expect(named.proposals.some((proposal) => proposal.op === 'create')).toBe(false);
     expect(named.proposals.length).toBeGreaterThan(0);
     expect(named.digest).not.toBe(ignored.digest);

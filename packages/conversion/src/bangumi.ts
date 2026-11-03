@@ -35,7 +35,7 @@ export const converter_revision = 'bangumi@5';
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
-  type: number;
+  type: 1 | 2 | 3 | 4 | 6;
   name: string;
   name_cn?: string;
   summary?: string;
