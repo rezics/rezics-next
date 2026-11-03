@@ -17,6 +17,7 @@ export const SOURCE_PROVIDERS = {
 } as const;
 export type SourceProvider = keyof typeof SOURCE_PROVIDERS;
 export const SOURCE_PROVIDER_IDS = Object.freeze(Object.keys(SOURCE_PROVIDERS) as SourceProvider[]);
+export const SOURCE_OBSERVATION_PAYLOAD_VERSION = 1 as const;
 export function sourceProvider(value: string) {
   return Object.hasOwn(SOURCE_PROVIDERS, value) ? SOURCE_PROVIDERS[value as SourceProvider] : null;
 }

@@ -825,7 +825,9 @@ CREATE TABLE rating.source_statistic_head (
     route integer NOT NULL,
     subject_id uuid NOT NULL,
     source text NOT NULL,
-    digest text NOT NULL
+    digest text NOT NULL,
+    last_order bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT source_statistic_head_last_order_check CHECK ((last_order >= 0))
 );
 
 
@@ -843,6 +845,8 @@ CREATE TABLE rating.source_statistic_observation (
     as_of date NOT NULL,
     payload jsonb NOT NULL,
     transaction_id uuid NOT NULL,
+    payload_version smallint DEFAULT 1 NOT NULL,
+    local_order bigint,
     CONSTRAINT source_observation_bytes_check CHECK ((octet_length((payload)::text) <= 32768)),
     CONSTRAINT source_statistic_observation_check CHECK (((source = 'vndb'::text) OR ((source_record_id ~ '^[1-9][0-9]{0,15}$'::text) AND
 CASE
@@ -852,6 +856,8 @@ END))),
     CONSTRAINT source_statistic_observation_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT source_statistic_observation_check2 CHECK ((((payload ->> 'sourceAlias'::text) = source_alias) AND ((payload ->> 'sourceRecordId'::text) = source_record_id) AND ((payload ->> 'asOf'::text) = (as_of)::text))),
     CONSTRAINT source_statistic_observation_digest_check1 CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_statistic_observation_local_order_check CHECK (((local_order IS NULL) OR (local_order > 0))),
+    CONSTRAINT source_statistic_observation_payload_version_check CHECK ((payload_version > 0)),
     CONSTRAINT source_statistic_observation_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
     CONSTRAINT source_statistic_observation_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT source_statistic_observation_source_alias_check CHECK (((source_alias ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (source_alias !~ '[^a-z0-9_-]'::text))),
@@ -1261,6 +1267,13 @@ ALTER TABLE ONLY rating.voter_state
 --
 
 CREATE INDEX aggregate_component_population_subject_idx ON rating.aggregate_component USING btree (question_id, population_id, target_id, route, shard) WHERE (count > 0);
+
+
+--
+-- Name: source_statistic_observation_local_order_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE UNIQUE INDEX source_statistic_observation_local_order_idx ON rating.source_statistic_observation USING btree (route, subject_id, source, local_order DESC) WHERE (local_order IS NOT NULL);
 
 
 --

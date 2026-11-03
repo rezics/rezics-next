@@ -1,6 +1,11 @@
 import type { CommandTransaction } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import { sourceObservation, type SourceObservation } from './source-provider.ts';
+import { validSourceFigures, type SourceFigures } from './source-figures.ts';
+import {
+  SOURCE_OBSERVATION_PAYLOAD_VERSION,
+  sourceObservation,
+  type SourceObservation,
+} from './source-provider.ts';
 import lock from './source-provider-lock.sql';
 import head from './source-provider-head.sql';
 import observe from './source-provider-observe.sql';
@@ -13,7 +18,11 @@ export type ObservationHead = {
   sourceRecordId: string;
   asOf: string;
   payload: unknown;
+  payloadVersion: number;
+  nativeOrder: string | null;
+  lastOrder: string;
 };
+export type ObservationOrder = Readonly<{ localOrder: string | null; lastOrder: string }>;
 
 /** The head is one indexed subject/provider lookup, never a history selection or source-home join. */
 export async function lockSourceObservation(tx: CommandTransaction, input: ObservationBinding) {
@@ -25,9 +34,13 @@ export async function lockSourceObservation(tx: CommandTransaction, input: Obser
   // never fabricate an observation time or a provider revision during migration.
   const legacy = (await list.run(tx, key)).find((row) => row.source === input.source);
   if (!legacy) return { exists: true, current: null } as const;
+  const figures = legacy.figures == null ? undefined : legacy.figures;
+  if (figures !== undefined && !validSourceFigures(input.source, figures, Number(legacy.count)))
+    throw new ProblemError('partition_unavailable');
   const value = {
     sourceAlias: legacy.sourceAlias as string,
     sourceRecordId: legacy.sourceRecordId as string,
+    ...(figures === undefined ? {} : { figures: figures as SourceFigures }),
     scale: { min: Number(legacy.scaleMin), max: Number(legacy.scaleMax) },
     mean: Number(legacy.mean),
     count: Number(legacy.count),
@@ -42,6 +55,9 @@ export async function lockSourceObservation(tx: CommandTransaction, input: Obser
       sourceAlias: value.sourceAlias,
       sourceRecordId: value.sourceRecordId,
       asOf: value.asOf,
+      payloadVersion: SOURCE_OBSERVATION_PAYLOAD_VERSION,
+      nativeOrder: null,
+      lastOrder: '0',
       legacy: true,
     },
   };
@@ -71,6 +87,7 @@ export async function saveSourceObservation(
   input: ObservationBinding,
   next: { digest: string; payload: unknown },
   transactionId: string,
+  order: ObservationOrder,
 ) {
   const payload = next.payload as SourceObservation;
   await observe.run(tx, {
@@ -83,5 +100,8 @@ export async function saveSourceObservation(
     as_of: payload.asOf,
     payload: JSON.stringify(next.payload),
     transaction_id: transactionId,
+    payload_version: SOURCE_OBSERVATION_PAYLOAD_VERSION,
+    local_order: order.localOrder,
+    last_order: order.lastOrder,
   });
 }

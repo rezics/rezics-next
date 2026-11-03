@@ -206,6 +206,100 @@ test('the importer writes and refreshes a labelled statistic without creating na
   expect(counts.rows).toEqual([{ statistics: 1, votes: 0 }]);
 });
 
+test('the importer resolves an inspected native head by exact digest and keyset order', async () => {
+  const subjectId = await createTarget();
+  const writePath = `/v1/subjects/${subjectId}/source-statistics/vndb`;
+  const inspectPath = `${writePath}/observations`;
+  const first = {
+    sourceRecordId: 'v17',
+    scale: { min: 0, max: 10 },
+    mean: 8,
+    count: 120,
+    asOf: '2026-10-01',
+    licence: 'CC BY 4.0',
+    attribution: 'VNDB users',
+  };
+  const firstDigest = sourceObservation(subjectId, 'vndb', first).digest;
+  await json(await request('PUT', writePath, first, 'importer'));
+  const initial = await json(await request('GET', inspectPath, undefined, 'importer'));
+  expect(initial.head).toMatchObject({
+    digest: firstDigest,
+    state: 'published',
+    observation: {
+      digest: firstDigest,
+      payloadVersion: 1,
+      nativeOrder: '1',
+      provenance: { kind: 'unversioned', digest: firstDigest },
+      payload: { sourceAlias: 'vndb', sourceRecordId: 'v17', mean: 8 },
+    },
+  });
+  expect(initial.resolution).toEqual({
+    put: { expectedObservation: firstDigest },
+    clear: { expectedObservation: firstDigest },
+  });
+  const exact = await json(await request('GET', `${inspectPath}?digest=${firstDigest}`, undefined, 'importer'));
+  expect(exact.head.digest).toBe(firstDigest);
+  expect(exact.selectedObservation.payload).toEqual(sourceObservation(subjectId, 'vndb', first).payload);
+  await problem(await request('GET', inspectPath, undefined, 'owner'), 403);
+
+  const rebound = {
+    ...first,
+    sourceAlias: 'community-feed',
+    sourceRecordId: 'v18',
+    mean: 8.4,
+  };
+  await problem(await request('PUT', writePath, rebound, 'importer'), 409);
+  await json(
+    await request(
+      'PUT',
+      writePath,
+      { ...rebound, expectedObservation: firstDigest },
+      'importer',
+    ),
+  );
+  const reboundDigest = sourceObservation(subjectId, 'vndb', rebound).digest;
+  const history = await json(await request('GET', `${inspectPath}?history=true`, undefined, 'importer'));
+  expect(history.head).toMatchObject({ digest: reboundDigest, state: 'published' });
+  expect(history.history.items.map((item: { nativeOrder: string | null }) => item.nativeOrder)).toEqual(['2']);
+  expect(typeof history.history.nextCursor).toBe('string');
+  const previous = await json(
+    await request(
+      'GET',
+      `${inspectPath}?cursor=${encodeURIComponent(history.history.nextCursor)}`,
+      undefined,
+      'importer',
+    ),
+  );
+  expect(previous.history.items.map((item: { nativeOrder: string | null }) => item.nativeOrder)).toEqual(['1']);
+  expect(previous.history.nextCursor).toBeNull();
+
+  const clear = {
+    sourceAlias: 'community-feed',
+    sourceRecordId: 'v18',
+    count: 0,
+    asOf: '2026-10-20',
+    expectedObservation: reboundDigest,
+  };
+  expect((await request('POST', `${writePath}:clear`, clear, 'importer')).status).toBe(204);
+  const tombstone = await json(await request('GET', inspectPath, undefined, 'importer'));
+  expect(tombstone.head).toMatchObject({ digest: sourceObservation(subjectId, 'vndb', clear).digest, state: 'cleared' });
+  expect(tombstone.head.observation.nativeOrder).toBe('3');
+  expect(tombstone.head.observation.payload).toMatchObject({ count: 0, asOf: '2026-10-20' });
+  await problem(
+    await request(
+      'PUT',
+      writePath,
+      { ...rebound, asOf: '2026-10-19', expectedObservation: tombstone.head.digest },
+      'importer',
+    ),
+    409,
+  );
+  expect(await json(await request('GET', `/v1/subjects/${subjectId}/source-statistics`))).toEqual([]);
+  const afterStale = await json(await request('GET', inspectPath, undefined, 'importer'));
+  expect(afterStale.head.digest).toBe(tombstone.head.digest);
+  expect(afterStale.head.state).toBe('cleared');
+});
+
 test('a caller without the Global Context grant cannot write a source statistic', async () => {
   const subjectId = await createTarget();
   const response = await request(

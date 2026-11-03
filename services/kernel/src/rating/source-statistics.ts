@@ -35,6 +35,10 @@ import {
 import { SOURCE_PROVIDER_IDS, sourceProvider, type SourceProvider } from './source-provider.ts';
 import { admitSourceObservation, lockSourceObservation, saveSourceObservation } from './source-provider-observation.ts';
 import {
+  createSourceObservationReadCommands,
+  SourceObservationReadResponseSchema,
+} from './source-observation-read.ts';
+import {
   SourceStatisticClearInputSchema,
   SourceStatisticInputSchema,
   SourceStatisticListResponseSchema,
@@ -358,9 +362,17 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           if (!current) throw new ProblemError('conflict');
           return noEffect(statistic(current as Row));
         }
+        const lastOrder = locked.current?.lastOrder ?? '0';
+        const nextOrder = (BigInt(lastOrder) + 1n).toString();
         if (locked.current && 'legacy' in locked.current)
-          await saveSourceObservation(tx, binding, locked.current, command.transactionId);
-        await saveSourceObservation(tx, binding, next, command.transactionId);
+          await saveSourceObservation(tx, binding, locked.current, command.transactionId, {
+            localOrder: null,
+            lastOrder,
+          });
+        await saveSourceObservation(tx, binding, next, command.transactionId, {
+          localOrder: nextOrder,
+          lastOrder,
+        });
         const rows = await sourceStatisticUpsert.run(tx, {
           route,
           subject_id: input.subjectId,
@@ -440,9 +452,17 @@ export function createSourceStatisticCommands(config: CommandDependencies) {
           return noEffect({ removed: false });
         const next = admitSourceObservation(binding, locked.current);
         if (next.identical) return noEffect({ removed: false });
+        const lastOrder = locked.current?.lastOrder ?? '0';
+        const nextOrder = (BigInt(lastOrder) + 1n).toString();
         if (locked.current && 'legacy' in locked.current)
-          await saveSourceObservation(tx, binding, locked.current, command.transactionId);
-        await saveSourceObservation(tx, binding, next, command.transactionId);
+          await saveSourceObservation(tx, binding, locked.current, command.transactionId, {
+            localOrder: null,
+            lastOrder,
+          });
+        await saveSourceObservation(tx, binding, next, command.transactionId, {
+          localOrder: nextOrder,
+          lastOrder,
+        });
         const result = await sourceStatisticClear.run(tx, {
           route,
           subject_id: input.subjectId,
@@ -582,6 +602,7 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
   });
   const commands = () => createSourceStatisticCommands(config());
+  const observationReads = () => createSourceObservationReadCommands(config());
   const currentSubject = async (actor: Actor, id: string) => {
     const current = await resolveSubject(
       {
@@ -741,6 +762,45 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           if (committed) throw committedDisclosureProblem(error);
           return sourceStatisticProblem(error);
         }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/source-statistics/:source/observations',
+      {
+        params: t.Object({ id, source }, closed),
+        query: t.Object(
+          {
+            digest: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })),
+            cursor: t.Optional(t.String({ minLength: 1, maxLength: 512 })),
+            history: t.Optional(t.Literal('true')),
+          },
+          closed,
+        ),
+        response: { 200: SourceObservationReadResponseSchema, ...failures },
+        detail: detail('rating.source_observations_get', SOURCE_STATISTIC_WRITE_ACTION),
+      },
+      async ({ actor, params, query, authorizeCommand, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        await authorizeCommand(root, () => new GrantDeniedError());
+        if (query.digest !== undefined && (query.cursor !== undefined || query.history !== undefined))
+          throw new ProblemError('invalid_request');
+        return admission.run('normal', job, async () => {
+          try {
+            if (!(await currentSubject(actor, params.id))) throw new SourceStatisticNotFoundError();
+            const result = await observationReads().inspect({
+              subjectId: params.id,
+              source: params.source,
+              ...(query.digest === undefined ? {} : { digest: query.digest }),
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              ...(query.history === undefined ? {} : { history: true }),
+              deadline: job.deadline,
+            });
+            if (!(await currentSubject(actor, params.id))) throw new SourceStatisticNotFoundError();
+            return result;
+          } catch (error) {
+            return sourceStatisticProblem(error);
+          }
+        });
       },
     );
 }

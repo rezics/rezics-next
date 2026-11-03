@@ -1,4 +1,7 @@
-SELECT head.digest, observation.source_alias AS "sourceAlias",
+SELECT head.digest, head.last_order::text AS "lastOrder",
+       observation.local_order::text AS "nativeOrder",
+       observation.payload_version AS "payloadVersion",
+       observation.source_alias AS "sourceAlias",
        observation.source_record_id AS "sourceRecordId", observation.as_of::text AS "asOf",
        observation.payload
 FROM rating.source_statistic_head AS head
