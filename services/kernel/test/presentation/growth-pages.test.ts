@@ -10,6 +10,7 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -83,6 +84,7 @@ let kernel: ReturnType<typeof createKernel>;
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  configureTestReceiptKeys(db.pool);
   await bootstrapRelease(db.pool, bundledRelease);
   await bootstrapProfile(db.pool, profile);
   const target = subjectTarget(routeKey, actor.accountId, `page-anchor-${randomUUID()}`);
@@ -98,6 +100,7 @@ beforeAll(async () => {
   });
   kernel = createKernel({
     pool: db.pool,
+    receiptKeys: testReceiptKeys(),
     requestDeadlineMs: 30_000,
     routeKey,
     access: {

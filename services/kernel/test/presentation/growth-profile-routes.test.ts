@@ -5,6 +5,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { newId } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -164,6 +165,7 @@ beforeAll(async () => {
   );
   kernel = createKernel({
     pool: database.pool,
+    receiptKeys: testReceiptKeys(),
     requestDeadlineMs: 30_000,
     routeKey,
     writeRate: {
