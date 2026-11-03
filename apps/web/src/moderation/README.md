@@ -10,21 +10,22 @@ pages until a dedicated case-detail outcome owns it.
 
 `/moderation/decisions/{id}` is the affected person's exact private receipt. Content's response contract composes the
 retained reason, decision time, deadline, current appeal result, closed `viewer.appeal` advice, optional `targetContext`
-and final source provenance in `GET /v1/moderation-decisions/{id}`. The installed generated Web type still exposes only
-the existing receipt fields. Web selects that exact endpoint once and never hydrates a post or thread, but keeps the
-production route unavailable because generated provenance is missing; appeal advice and context therefore remain
-unrendered until publication. When generated, available context supplies only the current title and native Board or
-Thread destination, while concealed and unavailable context stay distinct without hiding the independent receipt.
-Web never infers advice from authorship or readability, scans a queue, or polls. The existing appeal command still
-performs final native authorization.
+and final source provenance in `GET /v1/moderation-decisions/{id}`. The installed generated response supplies
+closed advice and context. The final source observation is the producer's opaque `rezics-session-token` response
+header, hashed before crossing the server boundary. Missing native source observation keeps the read unavailable.
+Web selects that exact endpoint once and never hydrates a post or thread. Available context supplies only current
+native Board and Thread destinations through the existing localized route helpers. Concealed and unavailable
+context remain distinct without hiding the independent receipt or native operational reasons. Only native permitted
+advice together with current browser command admission presents the form. Authorship, readability and browser time
+never create appeal authority; the appeal command repeats native authorization.
 
-The installed generated client does not yet expose `viewer.appeal`, `targetContext`, or the complete actor/session/source
-provenance tuple required to bind a private visit. Until generated publication supplies those fields, the route keeps
-its typed unavailable state and the presenter cannot offer appeal or target context. The [private-reader
-guide](private-reader-lifetime.md) records the lifecycle and cost boundary.
+Decision: bind the final opaque native session header as the decision source observation, independently of the prepared
+reader origin; never decode it or invent an actor/session/source response DTO.
 
-Decision: keep the author receipt on its composed native read; until generated source provenance is installed, fail
-closed at the existing unavailable seam and retire any visit whose supplied provenance changes.
+The [private-reader guide](private-reader-lifetime.md) records retirement across account, session/CSRF, locale,
+exposure, route and native source replacement. Explicit recovery admits a fresh visit. An uncertain command retains
+its exact decision, statement, key and credentials for explicit retry; acknowledgement and current readback remain
+independent. Original intent, drafts and late callbacks retire with the visit.
 
 ### Cost
 

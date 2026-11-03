@@ -159,6 +159,8 @@ const decision = {
   targetId: id(12),
   action: 'takedown' as const,
   statement: 'PRIVATE current decision statement',
+  viewer: { affectedAuthor: true, observedAt: '2026-11-04T00:00:00.000Z', appeal: { state: 'permitted' as const } },
+  targetContext: { state: 'concealed' as const },
   decidedAt: '2026-10-28T10:00:00.000Z',
   appealDeadline: '2027-04-28T10:00:00.000Z',
   appeal: null,
@@ -212,7 +214,9 @@ const fetchNative: typeof fetch = Object.assign(
           },
           { status },
         );
-      return Response.json(body);
+      return Response.json(body, {
+        headers: path.startsWith('/v1/moderation-decisions/') ? { 'rezics-session-token': 'opaque-final-source' } : {},
+      });
     }
     return Response.json({ code: 'not_found', detail: 'PRIVATE target withheld' }, { status: 404 });
   },
@@ -537,9 +541,7 @@ for (const kind of kinds) {
     credentialGate = undefined;
     await paint(kind, await load(kind));
     expect(host.textContent).toContain(evidence(kind));
-    expect(nativeReads.length - count).toBe(
-      kind === 'reports' ? 3 : kind === 'appeals' ? 2 : kind === 'decision' ? 3 : 1,
-    );
+    expect(nativeReads.length - count).toBe(kind === 'reports' ? 3 : kind === 'appeals' ? 2 : 1);
   });
 
   test(`${kind}: matching distinguished null admits reads and sends zero native commands`, async () => {
@@ -1098,7 +1100,7 @@ for (const kind of ['appeals', 'reporter'] as const) {
   });
 }
 
-test('Decision visit reads one composed endpoint and keeps ungenerated context and advice closed', async () => {
+test('Decision visit reads one composed endpoint with independent concealed context and native permitted advice', async () => {
   const page = await load('decision');
   const decisionReads = nativeReads.filter((request) =>
     new URL(request.url).pathname.startsWith('/v1/moderation-decisions/'),
@@ -1107,10 +1109,9 @@ test('Decision visit reads one composed endpoint and keeps ungenerated context a
   expect(new URL(decisionReads[0]!.url).pathname).toBe(`/v1/moderation-decisions/${decision.id}`);
   await paint('decision', page);
   expect(host.textContent).toContain(decision.statement);
-  expect(host.textContent).toContain(m.decision_target_context_unavailable());
-  expect(host.textContent).toContain(m.decision_appeal_advice_unavailable());
-  expect(host.querySelector('form')).toBeNull();
-  expect(host.querySelector('textarea')).toBeNull();
+  expect(host.textContent).toContain(m.decision_target_concealed());
+  expect(host.querySelector('form')).not.toBeNull();
+  expect(host.querySelector('textarea')).not.toBeNull();
   expect(host.querySelector(`a[href*="${decision.targetId}"]`)).toBeNull();
   expect(nativeWrites).toHaveLength(0);
 });

@@ -3,17 +3,14 @@
 The route and these stories share `DecisionPageView`. The selected generated `KernelClient` call reads one exact
 `GET /v1/moderation-decisions/{id}` response; Web does not hydrate a post or thread, reread the decision to compose a
 page, scan a queue, or poll. Content's source contract composes appeal advice, current target context and final native
-provenance into that response, but the installed generated type currently exposes only the existing receipt fields.
-Because the actor/session/source tuple is missing, the production route stays at its typed unavailable seam. The
-presenter keeps target context and appeal unavailable and offers no appeal form until generated publication supplies
-the closed variants and provenance. Existing pending, upheld and reversed receipt results remain independently
-readable by the installed type.
+source observation into that read: the generated body carries the closed advice/context variants and the response
+session header carries the opaque final source anchor. The reader hashes that header before browser transfer.
 
-The fixtures and stories cover only installed generated fields. They are interface examples, not native response
-recordings or proof of source disclosure, permission, or successful appeal. Stories for available, concealed and
-unavailable native context; permitted, unavailable and unsupported native advice; exact retry/readback; and visit
-replacement remain owed with generated publication. Native advice must control appeal presentation; target authorship,
-readability and the local clock cannot create authority. The existing appeal command still reauthorizes natively.
+Fixtures use the available, concealed and unavailable envelopes from Content's Web consumer handoff, with illustrative
+receipt IDs. The same connected presenter displays permitted, unavailable and unsupported advice, current restored
+context and independent pending/upheld/reversed receipts. These examples do not prove native authorization or nested
+physical cost. The existing command remains the final native authority. Keyboard submit, exact retry, native
+navigation/return and replacement during an outstanding operation share the route presenter.
 
 The private reader binds the prepared server origin, current browser session and exposure to one exact decision ID and
 native source observation. Account, credential/CSRF epoch, locale, exposure, route, source replacement and late

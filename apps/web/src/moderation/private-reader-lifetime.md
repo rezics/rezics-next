@@ -7,13 +7,13 @@ The fingerprint has distinct null and token domains. No bearer, raw CSRF, decode
 is transported as provenance. Low-level injected read and presenter APIs remain separate from production admission.
 
 Decision selects one exact composed native read and never hydrates a post or thread or rereads the decision to compose
-the page. Content's source contract adds `viewer.appeal`, `targetContext` and final provenance, but the installed
-generated client exposes none of those fields. The typed reader therefore stays unavailable until generated
-publication supplies the closed advice/context variants and `actorId`, session `clientId` and `authnEpoch`, plus final
-source partition, epoch and position. `bindDecisionSource` validates that tuple and hashes it as an observation
-fingerprint; the fingerprint grants no authority. A new fingerprint retires the visit and requires an explicit fresh
-read of the same decision ID. The current presenter cannot show native advice or target context and does not admit an
-appeal form.
+the page. The installed generated client exposes closed `viewer.appeal` and `targetContext` variants. The producer's
+final source observation is its opaque session response header. `bindDecisionSource` hashes that header without
+decoding it or sending it to the browser; missing observation withholds the production read. Prepared subject/CSRF
+origin and current browser admission remain independent requirements. Older injected tests may provide an explicit
+source tuple; production does not construct one. A changed source fingerprint retires the entire visit and requires
+an explicit fresh read of the same decision ID. Current context and the retained receipt render independently, and
+native permitted advice plus current browser command admission controls the appeal form.
 
 A healthy authenticated initial null-CSRF observation may read when its subject and distinguished null fingerprint
 match that actual origin. This replaces the old initial missing-CSRF denial oracles. Unknown, preparing, anonymous,

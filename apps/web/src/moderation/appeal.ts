@@ -5,13 +5,14 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { bindDecisionSource, type ModerationDecision } from './decision-read';
+import { bindDecisionSource, decisionReadAdapters, type ModerationDecision } from './decision-read';
 import { moderationCommandHeaders, validateModerationKey } from './command-intent';
 
 type AppealResult = { status: number; error?: unknown };
 type AppealReads = {
   appeal: (id: string, statement: string) => Promise<AppealResult>;
   decision: (id: string) => Promise<ModerationDecision | null>;
+  source?: () => string | null;
 };
 export type DecisionAppealReadback =
   | { state: 'available'; decision: ModerationDecision; nativeSourceFingerprint: string }
@@ -27,7 +28,9 @@ export type AppealSubmission =
 async function currentReadback(id: string, reads: AppealReads): Promise<DecisionAppealReadback> {
   const decision = await reads.decision(id).catch(() => null);
   if (!decision || decision.id !== id) return { state: 'unavailable' };
-  const source = await bindDecisionSource(decision).catch(() => ({ state: 'unavailable' as const }));
+  const source = await bindDecisionSource(decision, undefined, reads.source?.()).catch(() => ({
+    state: 'unavailable' as const,
+  }));
   return source.state === 'available'
     ? { state: 'available', decision, nativeSourceFingerprint: source.fingerprint }
     : { state: 'unavailable' };
@@ -78,8 +81,8 @@ export async function sendDecisionAppeal(
   data: { id: string; statement: string; idempotencyKey: string },
   authorization: string,
 ): Promise<AppealSubmission> {
-  const resource = client['moderation-decisions']({ id: data.id });
   return submitDecisionAppeal(data.id, data.statement, {
+    ...decisionReadAdapters(client, authorization),
     appeal: async (id, statement) => {
       const response = await client['moderation-decisions']({ id }).$appeal.post(
         {
@@ -92,13 +95,6 @@ export async function sendDecisionAppeal(
           ? Number(response.error.status)
           : undefined;
       return { status: response.status ?? errorStatus ?? 500, error: response.error };
-    },
-    decision: async (id) => {
-      const response = await (id === data.id ? resource : client['moderation-decisions']({ id })).get({
-        headers: { authorization },
-        fetch: { cache: 'no-store' },
-      });
-      return response.error ? null : response.data;
     },
   });
 }

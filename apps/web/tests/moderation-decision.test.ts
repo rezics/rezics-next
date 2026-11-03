@@ -75,6 +75,12 @@ const decision: ModerationDecision = {
   decidedAt,
   appealDeadline: '2026-07-03T12:00:00.000Z',
   appeal: null,
+  viewer: {
+    affectedAuthor: true,
+    observedAt: decidedAt,
+    appeal: { state: 'unavailable', reason: 'command_unavailable' },
+  },
+  targetContext: { state: 'unavailable' },
 };
 const decisionWithProvenance = (change: Partial<ModerationDecision> = {}) =>
   Object.assign(
@@ -140,6 +146,15 @@ test('decision reads retain supplied text while staying independent of unrelated
   for (const size of [1, 8000]) {
     const response = Object.assign(decisionWithProvenance({ statement: 'r'.repeat(size) }), {
       unrelatedHistory: history,
+      targetContext: {
+        state: 'available' as const,
+        kind: 'thread' as const,
+        threadId: 'current-thread',
+        postId: decision.targetId,
+        boardId: 'current-board',
+        threadTitle: 't'.repeat(size),
+        boardTitle: 'b'.repeat(size),
+      },
     });
     let calls = 0;
     const page = await loadDecisionPage(
@@ -153,6 +168,7 @@ test('decision reads retain supplied text while staying independent of unrelated
       'author-1',
     );
     expect(page?.decision.statement).toHaveLength(size);
+    expect(page?.decision.targetContext).toMatchObject({ threadTitle: 't'.repeat(size), boardTitle: 'b'.repeat(size) });
     expect(calls).toBe(1);
   }
 });
@@ -210,7 +226,7 @@ test('decision route is signed-in, noindex and private, and refused reads become
   expect(read).toMatch(/notFound\(/);
 });
 
-test('decision presentation shows the receipt while generated appeal advice and target context are unavailable', () => {
+test('decision presentation retains the receipt when native advice and current context are unavailable', () => {
   const page = {
     decision: decisionWithProvenance(),
     nativeSourceFingerprint: 'presenter-source',
@@ -242,7 +258,7 @@ test('decision presentation shows the receipt while generated appeal advice and 
   expect(otherReader).not.toContain('appeal-statement');
 });
 
-test('a private decision remains readable without generated context, including after its appeal deadline', async () => {
+test('a private decision remains readable with unavailable context, including after its appeal deadline', async () => {
   const calls: string[] = [];
   const page = await loadDecisionPage(
     decision.id,
@@ -372,7 +388,7 @@ test('appeal denial, known conflict and uncertain confirmation stay distinct wit
   expect(intent.keyFor(command)).toBe(originalKey);
 });
 
-test('the default decision presenter keeps native composition unavailable until generated fields arrive', () => {
+test('the default decision presenter respects native unavailable advice and context', () => {
   const page = { decision, nativeSourceFingerprint: 'presenter-source', viewerId: 'author-1' };
   const markup = renderToStaticMarkup(createElement(DecisionPageView, { page, now: Date.parse(decidedAt) }));
   expect(markup).toContain(decision.statement);

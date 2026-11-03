@@ -22,6 +22,7 @@ import {
   type DecisionReadState,
 } from './decision-read-model';
 import { type DecisionPage, readDecisionPage } from './decision-read';
+import { threadLocation } from '../threads/thread-href';
 
 function relativeTime(instant: string, now: number, locale: string) {
   const delta = Date.parse(instant) - now;
@@ -434,9 +435,21 @@ function DecisionVisit({
   const { decision } = displayed;
   const targetKind = m.decision_target_fallback({ kind: decision.targetKind });
   const locale = getLocale();
-  // The installed generated response has no native advice field yet, so it cannot admit the form.
-  const allowed = false;
-  const adviceMessage = m.decision_appeal_advice_unavailable();
+  const advice = decision.viewer?.appeal;
+  const context = decision.targetContext;
+  const allowed = advice?.state === 'permitted' && canCommand() && !acknowledged;
+  const adviceMessage =
+    advice?.state === 'unsupported'
+      ? m.decision_appeal_unsupported()
+      : advice?.state === 'unavailable'
+        ? advice.reason === 'deadline_passed'
+          ? m.decision_appeal_expired()
+          : advice.reason === 'already_appealed'
+            ? m.decision_appeal_already()
+            : advice.reason === 'not_affected_author'
+              ? m.decision_author_only()
+              : m.decision_appeal_advice_unavailable()
+        : m.decision_appeal_advice_unavailable();
   const count = Array.from(text).length;
   const locked = Boolean(feedback && feedback !== 'invalid');
   const appeal = decision.appeal;
@@ -698,7 +711,36 @@ function DecisionVisit({
           </ContentItemHeading>
           <ContentItemFrame as="div" className="p-5 sm:p-6">
             <Badge variant="outline">{targetKind}</Badge>
-            <p className="text-sm leading-6 text-muted-foreground">{m.decision_target_context_unavailable()}</p>
+            {context?.state === 'available' ? (
+              <div className="mt-3 min-w-0 space-y-2 wrap-anywhere text-sm">
+                <p className="text-muted-foreground">{m.decision_target_available()}</p>
+                {context.kind === 'thread' ? (
+                  <a
+                    className="flex min-h-11 items-center underline underline-offset-4"
+                    href={threadLocation(
+                      locale,
+                      { id: context.threadId, title: context.threadTitle },
+                      undefined,
+                      context.postId ?? undefined,
+                    )}
+                  >
+                    {context.threadTitle || m.threads_untitled()}
+                  </a>
+                ) : null}
+                <a
+                  className="flex min-h-11 items-center underline underline-offset-4"
+                  href={localizeHref(`/boards/${encodeURIComponent(context.boardId)}`)}
+                >
+                  {context.boardTitle || m.threads_untitled()}
+                </a>
+              </div>
+            ) : (
+              <p className="text-sm leading-6 text-muted-foreground">
+                {context?.state === 'concealed'
+                  ? m.decision_target_concealed()
+                  : m.decision_target_context_unavailable()}
+              </p>
+            )}
             <p className="mt-3 text-xs leading-6 text-muted-foreground">{m.decision_target_independent()}</p>
             <Button className="mt-4 min-h-11" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
               {refreshing ? m.decision_refreshing() : m.decision_refresh()}

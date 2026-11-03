@@ -1,7 +1,7 @@
 import type { DecisionPage } from '../../../moderation/decision-read';
 
 export const decisionNow = Date.parse('2026-10-31T12:00:00.000Z');
-// These stories exercise only fields installed in the generated client; they are not native evidence.
+// Closed envelope variants follow Content’s Web consumer handoff examples; receipt IDs remain illustrative.
 export const openDecision: DecisionPage = {
   viewerId: '0192f3a0-6c1e-7b2a-9d4e-000000000090',
   nativeSourceFingerprint: 'illustrative-source-open',
@@ -15,6 +15,8 @@ export const openDecision: DecisionPage = {
     decidedAt: '2026-10-01T09:30:00.000Z',
     appealDeadline: '2027-04-02T09:30:00.000Z',
     appeal: null,
+    viewer: { affectedAuthor: true, observedAt: '2026-11-04T00:00:00.000Z', appeal: { state: 'permitted' } },
+    targetContext: { state: 'concealed' },
   },
 };
 export const pendingDecision: DecisionPage = {
@@ -22,6 +24,7 @@ export const pendingDecision: DecisionPage = {
   nativeSourceFingerprint: 'illustrative-source-pending',
   decision: {
     ...openDecision.decision,
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unavailable', reason: 'already_appealed' } },
     appeal: { id: '0192f3a0-6c1e-7b2a-9d4e-000000000080', outcome: null, statement: null, resolvedAt: null },
   },
 };
@@ -31,6 +34,18 @@ export function resolvedDecision(outcome: 'reversed' | 'upheld'): DecisionPage {
     nativeSourceFingerprint: `illustrative-source-${outcome}`,
     decision: {
       ...pendingDecision.decision,
+      targetContext:
+        outcome === 'reversed'
+          ? {
+              state: 'available',
+              kind: 'thread',
+              threadId: 'original-thread',
+              postId: openDecision.decision.targetId,
+              boardId: 'current-board',
+              threadTitle: 'Current context after reversal',
+              boardTitle: 'Current board',
+            }
+          : { state: 'concealed' },
       appeal: {
         ...pendingDecision.decision.appeal!,
         outcome,
@@ -48,6 +63,7 @@ export const expiredDecision: DecisionPage = {
   nativeSourceFingerprint: 'illustrative-source-expired',
   decision: {
     ...openDecision.decision,
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unavailable', reason: 'deadline_passed' } },
     decidedAt: '2026-04-01T09:30:00.000Z',
     appealDeadline: '2026-10-01T09:30:00.000Z',
   },
@@ -55,9 +71,25 @@ export const expiredDecision: DecisionPage = {
 export const unavailableContextDecision: DecisionPage = {
   ...openDecision,
   nativeSourceFingerprint: 'illustrative-source-unavailable-context',
+  decision: { ...openDecision.decision, targetContext: { state: 'unavailable' } },
 };
 export const unavailableAdviceDecision: DecisionPage = {
   ...openDecision,
   nativeSourceFingerprint: 'illustrative-source-unavailable-advice',
+  decision: {
+    ...openDecision.decision,
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unavailable', reason: 'command_unavailable' } },
+  },
 };
 export const appealDraft = 'These are the organization’s public event contact details. Please review their context.';
+
+export const unsupportedDecision: DecisionPage = {
+  ...openDecision,
+  decision: {
+    ...openDecision.decision,
+    targetKind: 'board',
+    appealDeadline: null,
+    viewer: { ...openDecision.decision.viewer, appeal: { state: 'unsupported', reason: 'board' } },
+    targetContext: { state: 'available', kind: 'board', boardId: 'current-board', boardTitle: 'Current board' },
+  },
+};

@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import { SESSION_HEADER, type KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { notFound } from '@tanstack/react-router';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -14,7 +14,7 @@ type DecisionReadCall = ReturnType<ReturnType<KernelClient['moderation-decisions
 export type ModerationDecision = NonNullable<Awaited<DecisionReadCall>['data']>;
 
 export type DecisionPage = PrivateReaderRead & {
-  /** The exact installed generated response; native advice and context remain absent until publication. */
+  /** The exact installed composed response, including native advice and current context. */
   decision: ModerationDecision;
   /** Hash of the exact native provenance; it is an observation, never browser authority. */
   nativeSourceFingerprint: string;
@@ -27,6 +27,7 @@ export type DecisionPage = PrivateReaderRead & {
 type ReadResult = Awaited<DecisionReadCall>;
 type DecisionReads = {
   decision: (id: string) => Promise<ModerationDecision | null>;
+  source?: () => string | null;
 };
 
 export type DecisionSourceBinding = { state: 'available'; fingerprint: string } | { state: 'unavailable' };
@@ -35,11 +36,23 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Keep the installed typed unavailable seam until generated provenance reaches KernelClient. */
+/** The producer returns its final source observation in the opaque session header. */
 export async function bindDecisionSource(
   response: ModerationDecision,
   expectedActorId?: string,
+  nativeSession?: string | null,
 ): Promise<DecisionSourceBinding> {
+  if (nativeSession) {
+    const digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(JSON.stringify(['decision-source', nativeSession])),
+    );
+    return {
+      state: 'available',
+      fingerprint: Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(''),
+    };
+  }
+  // Older injected readers supply an explicit observation; production never constructs this tuple.
   if (!record(response) || !Object.hasOwn(response, 'provenance')) return { state: 'unavailable' };
   const descriptor = Object.getOwnPropertyDescriptor(response, 'provenance');
   if (!descriptor || !('value' in descriptor)) return { state: 'unavailable' };
@@ -92,7 +105,7 @@ export async function loadDecisionPage(
 ): Promise<DecisionPage | null> {
   const decision = await reads.decision(id);
   if (!decision || decision.id !== id) return null;
-  const source = await bindDecisionSource(decision, viewerId ?? undefined);
+  const source = await bindDecisionSource(decision, viewerId ?? undefined, reads.source?.());
   if (source.state === 'unavailable') throw new Error('Decision read unavailable');
   return { decision, nativeSourceFingerprint: source.fingerprint, viewerId };
 }
@@ -160,11 +173,15 @@ export async function loadDecisionPageRequest(
 }
 
 export function decisionReadAdapters(client: KernelClient, authorization: string): DecisionReads {
+  let source: string | null = null;
   return {
+    source: () => source,
     decision: async (id) => {
+      source = null;
       const result = await client['moderation-decisions']({ id }).get(readOptions(authorization));
       if (result.error && refused(result)) return null;
       if (!result.data) throw new Error('Decision read unavailable');
+      source = result.headers?.get(SESSION_HEADER) ?? null;
       return result.data;
     },
   };

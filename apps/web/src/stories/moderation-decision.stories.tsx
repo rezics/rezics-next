@@ -63,6 +63,12 @@ export const Upheld: Story = { ...pattern.Upheld };
 export const Expired: Story = { ...pattern.Expired };
 export const ContextUnavailable: Story = { ...pattern.ContextUnavailable };
 export const AdviceUnavailable: Story = { ...pattern.AdviceUnavailable };
+export const UnsupportedBoard: Story = { ...pattern.UnsupportedBoard };
+export const ConcealedContext: Story = { ...pattern.ConcealedContext };
+export const KeyboardSubmit: Story = { ...pattern.KeyboardSubmit };
+export const LostAcknowledgementRetry: Story = { ...pattern.LostAcknowledgementRetry };
+export const ReplacementDuringCommand: Story = { ...pattern.ReplacementDuringCommand };
+export const KeyboardContextReturn: Story = { ...pattern.KeyboardContextReturn };
 export const Loading: Story = { ...pattern.Loading };
 export const ReadUnavailable: Story = { ...pattern.ReadUnavailable };
 export const ReadClosed: Story = { ...pattern.ReadClosed };
@@ -75,7 +81,7 @@ export const IllustrativeLongReferences: Story = {
   play: async ({ canvasElement }) => {
     const view = within(canvasElement);
     await expect(view.getByRole('heading', { level: 1, name: m.decision_heading() })).toBeVisible();
-    await expect(view.getByText(m.decision_target_context_unavailable())).toBeVisible();
+    await expect(view.getByText(m.decision_target_concealed())).toBeVisible();
     await expect(view.queryByRole('link', { name: /affected by this decision/i })).toBeNull();
     await expect(view.getByText(longDecisionReason)).toBeVisible();
     await expect(view.getByText(m.decision_appeal_pending())).toBeVisible();
