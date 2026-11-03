@@ -96,6 +96,8 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
     });
     const fullBearer = await issue(scopes);
     const readerBearer = await issue(['subject:read']);
+    // Kernel constructs its shared Access instance on the first mounted request.
+    await app.handle(new Request(`http://kernel.test/v1/subjects/${accountId}/source-statistics`));
 
     await database.admin.query(
       `INSERT INTO access.resource_role_grant
