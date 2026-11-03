@@ -54,7 +54,14 @@ export function ratingQuestionView(row: {
     label: row.presentationLabel ?? row.label,
     grain,
     scale: { min: row.minimumUnits, max: row.maximumUnits, displayStep: row.stepUnits },
-    ...(row.realmId == null ? {} : { realmId: row.realmId, meaning: row.meaning!, canonicalLabel: row.label, labelRevision: row.labelRevision ?? 1 }),
+    ...(row.realmId == null
+      ? {}
+      : {
+          realmId: row.realmId,
+          meaning: row.meaning!,
+          canonicalLabel: row.label,
+          labelRevision: row.labelRevision ?? 1,
+        }),
   };
 }
 
