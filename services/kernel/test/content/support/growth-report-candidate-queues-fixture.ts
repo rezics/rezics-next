@@ -55,7 +55,6 @@ export async function createGrowthReportCandidateQueuesFixture() {
   let routedConnect: typeof nativePool.connect | undefined;
   let activeTrace: QueueTrace | undefined;
   let finalRevocation: (() => Promise<void>) | undefined;
-  let boardPermission: Awaited<ReturnType<typeof grant>> | undefined;
   let boardPermissionActive = false;
   const reports = new Map<string, QueueReport>();
   const envelopes = new Map<string, Envelope>();
@@ -122,6 +121,8 @@ export async function createGrowthReportCandidateQueuesFixture() {
       return { ...input, valid: response.grant.valid };
     }
 
+    let boardPermission: Awaited<ReturnType<typeof grant>> | undefined;
+
     async function revokeBoardPermission(): Promise<void> {
       if (!boardPermission || !boardPermissionActive) return;
       const currentConnect = nativePool.connect;
@@ -165,7 +166,9 @@ export async function createGrowthReportCandidateQueuesFixture() {
         consumer,
         partition,
         envelopes: 1,
-        apply: async (batch) => found.push(...batch),
+        apply: async (batch) => {
+          found.push(...batch);
+        },
       });
       if (read.status !== 'read' || found.length !== 1 || !found[0]!.events.some((event) => event.subject === reportId))
         throw new Error(`The committed report.created event for ${reportId} was not readable`);
