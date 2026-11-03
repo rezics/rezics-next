@@ -75,6 +75,10 @@ export function compileFilter(
     if ('owner' in node) throw new Error('Catalogue filters do not support owner predicates');
     if ('saved' in node) throw new Error('Compile only admitted filters');
     const { property, qualifiers } = node.statement;
+    // A concept leaf needs a complete retained descendant closure and a current native witness.
+    // Until both are installed, refusing the query is safer than compiling only its root value.
+    if ('in' in node.statement && node.statement.concept)
+      throw new SearchUnavailableError('Concept membership preparation is unavailable');
     const condition: { values: string[] } | { range: FilterRange } =
       'in' in node.statement ? { values: [...node.statement.in] } : { range: node.statement.range };
     leaves.push({ name, facet: 'statement', property, ...condition, ...(qualifiers ? { qualifiers } : {}), negated });
