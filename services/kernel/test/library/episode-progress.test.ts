@@ -63,11 +63,11 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   const retryKey = entryKey();
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${owner.bearer}` },
-    fetch: async (input, init) => {
+    fetch: Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init), url = new URL(request.url);
       return native.sendWithHeaders(owner.bearer, request.method, url.pathname + url.search,
         request.method === 'GET' ? undefined : await request.json(), request.headers);
-    },
+    }, { preconnect: fetch.preconnect }),
   });
   const wire = client.progressSessions({ sessionId: first.id });
   const written = await wire.$recordEpisodes.post(body, { headers: { 'idempotency-key': JSON.stringify(retryKey) } });
@@ -84,7 +84,7 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   expect(viaClient.status).toBe(200);
   const shown = viaClient.data!;
   expect(shown.episodes).toEqual(ids.map((id, index) => ({ episodeSubjectId: id,
-    completed: index !== 1, membership: 'member', ordinal: ['1', '2', '3', '1'][index] })));
+    completed: index !== 1, membership: 'member', ordinal: ['1', '2', '3', '1'][index]! })));
   expect((await inspect(reread.id, ids)).episodes.every((row: { completed: boolean }) => row.completed === false)).toBe(true);
   const manual = (await send('GET', path)).progressSession;
   expect(manual).toMatchObject({ amount: null, completedUnitCount: 0, revision: 2 });

@@ -3155,6 +3155,18 @@ CREATE TABLE library.progress_change (
 
 
 --
+-- Name: progress_episode; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.progress_episode (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    episode_subject_id uuid NOT NULL,
+    added_at timestamp with time zone NOT NULL
+);
+
+
+--
 -- Name: progress_head; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -3166,18 +3178,6 @@ CREATE TABLE library.progress_head (
     last_completed_at timestamp with time zone,
     CONSTRAINT progress_head_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT progress_head_route_check CHECK (((route >= 0) AND (route <= 65535)))
-);
-
-
---
--- Name: progress_episode; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.progress_episode (
-    route integer NOT NULL,
-    session_id uuid NOT NULL,
-    episode_subject_id uuid NOT NULL,
-    added_at timestamp with time zone NOT NULL
 );
 
 
@@ -4578,6 +4578,14 @@ ALTER TABLE ONLY library.progress_change
 
 
 --
+-- Name: progress_episode progress_episode_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.progress_episode
+    ADD CONSTRAINT progress_episode_pkey PRIMARY KEY (route, session_id, episode_subject_id);
+
+
+--
 -- Name: progress_head progress_head_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -4596,14 +4604,6 @@ ALTER TABLE library.progress_session
 --
 -- Name: progress_session progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
-
---
--- Name: progress_episode progress_episode_pkey; Type: CONSTRAINT; Schema: library; Owner: -
---
-
-ALTER TABLE ONLY library.progress_episode
-    ADD CONSTRAINT progress_episode_pkey PRIMARY KEY (route, session_id, episode_subject_id);
-
 
 ALTER TABLE ONLY library.progress_session
     ADD CONSTRAINT progress_session_pkey PRIMARY KEY (route, session_id);
@@ -6852,16 +6852,16 @@ ALTER TABLE ONLY library.progress_change
 
 
 --
--- Name: progress_unit progress_unit_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
---
-
---
 -- Name: progress_episode progress_episode_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
 --
 
 ALTER TABLE ONLY library.progress_episode
     ADD CONSTRAINT progress_episode_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
 
+
+--
+-- Name: progress_unit progress_unit_route_session_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
 
 ALTER TABLE ONLY library.progress_unit
     ADD CONSTRAINT progress_unit_route_session_id_fkey FOREIGN KEY (route, session_id) REFERENCES library.progress_session(route, session_id);
