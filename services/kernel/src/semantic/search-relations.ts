@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { conceptStatementRequest, conceptStatementQualifiers,
-  type ConceptStatementReader, type ConceptStatementRead } from '../search/concept-browse-statements.ts';
+import {
+  conceptStatementRequest,
+  conceptStatementQualifiers,
+  type ConceptStatementReader,
+  type ConceptStatementRead,
+} from '../search/concept-browse-statements.ts';
 import readConcepts from './search-source-concepts.sql';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
@@ -315,20 +319,38 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         const runtime = await activeRelease(client);
         if (!runtime) return null;
         const subjects = await readSubjects.run(client, {
-          partition_no: partition, routes: [route], subject_ids: [request.subject],
+          partition_no: partition,
+          routes: [route],
+          subject_ids: [request.subject],
         });
         const subject = subjects[0];
-        if (!subject || subject.visibility !== 'visible' || subject.redirect ||
-            !subject.selection_ready || subject.current_revision === null) return null;
+        if (
+          !subject ||
+          subject.visibility !== 'visible' ||
+          subject.redirect ||
+          !subject.selection_ready ||
+          subject.current_revision === null
+        )
+          return null;
         try {
-          createFilterConstruction(runtime.release).admitFilter({ and: [
-            { type: { in: [subject.type] } },
-            { statement: { property: request.selection.property, in: [request.selection.concept],
-              concept: { scheme: request.selection.scheme,
-                ...(request.selection.includeChildren === undefined ? {} :
-                  { includeChildren: request.selection.includeChildren }) },
-              qualifiers: conceptStatementQualifiers(request) } },
-          ] });
+          createFilterConstruction(runtime.release).admitFilter({
+            and: [
+              { type: { in: [subject.type] } },
+              {
+                statement: {
+                  property: request.selection.property,
+                  in: [request.selection.concept],
+                  concept: {
+                    scheme: request.selection.scheme,
+                    ...(request.selection.includeChildren === undefined
+                      ? {}
+                      : { includeChildren: request.selection.includeChildren }),
+                  },
+                  qualifiers: conceptStatementQualifiers(request),
+                },
+              },
+            ],
+          });
         } catch (error) {
           if (error instanceof FilterError) return null;
           throw error;
@@ -336,16 +358,24 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         if (!relationFacetProperty(runtime.release, request.selection.property)) return null;
         // The observation binds resumption to the original native subject and release, not to
         // the page size or the returned rows. It supplies no absence or disclosure certificate.
-        const observation = createHash('sha256').update(JSON.stringify([
-          runtime.digest, runtime.head, subject,
-        ])).digest('hex');
+        const observation = createHash('sha256')
+          .update(JSON.stringify([runtime.digest, runtime.head, subject]))
+          .digest('hex');
         if (cursor && cursor.observation !== observation) return { changed: true } as const;
-        const rows = await readConcepts.run(client, {
+        const rows = (await readConcepts.run(client, {
           partition_no: partition,
-          requests: [{ route, subject_id: request.subject, property: request.selection.property,
-            after_slot: cursor?.slot ?? ZERO, after_candidate: cursor?.candidate ?? ZERO }],
-          property_limit: limit, input_limit: limit,
-        }) as SelectedStatement[];
+          requests: [
+            {
+              route,
+              subject_id: request.subject,
+              property: request.selection.property,
+              after_slot: cursor?.slot ?? ZERO,
+              after_candidate: cursor?.candidate ?? ZERO,
+            },
+          ],
+          property_limit: limit,
+          input_limit: limit,
+        })) as SelectedStatement[];
         const releases = new Map<string, Release | null>();
         for (const digest of new Set(rows.map((row) => row.release)))
           releases.set(digest, await readRelease(client, digest));
@@ -372,13 +402,22 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       async revalidate() {
         const final = await snapshot();
         if (!final) return 'changed';
-        if (final.changed || final.observation !== first.observation ||
-            !isDeepStrictEqual(first.rows, final.rows)) return 'changed';
+        if (final.changed || final.observation !== first.observation || !isDeepStrictEqual(first.rows, final.rows))
+          return 'changed';
         const currentIdentities = new Map<string, string>();
-        const current = await disclosed(final.rows, final.releases,
-          new Map([[request.subject, final.subject]]), final.runtime, currentIdentities);
-        if (!isDeepStrictEqual(identities, currentIdentities) || !isDeepStrictEqual(statements, current) ||
-            !(await runtimeIsCurrent(final.runtime))) return 'changed';
+        const current = await disclosed(
+          final.rows,
+          final.releases,
+          new Map([[request.subject, final.subject]]),
+          final.runtime,
+          currentIdentities,
+        );
+        if (
+          !isDeepStrictEqual(identities, currentIdentities) ||
+          !isDeepStrictEqual(statements, current) ||
+          !(await runtimeIsCurrent(final.runtime))
+        )
+          return 'changed';
         return 'current';
       },
     };

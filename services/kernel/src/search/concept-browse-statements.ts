@@ -1,7 +1,11 @@
 import { parseFilter, type FilterQualifier, type SpoilerThreshold } from '@rezics/filter';
 import { holdsCurrentStatements } from './current-leaf.ts';
-import { matchCurrentConceptStatements, type ConceptBrowseSource, type ConceptBrowseState,
-  type ConceptBrowseStore } from './concept-browse.ts';
+import {
+  matchCurrentConceptStatements,
+  type ConceptBrowseSource,
+  type ConceptBrowseState,
+  type ConceptBrowseStore,
+} from './concept-browse.ts';
 import type { IndexedStatement, RelationFacetMatch } from './source.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 
@@ -46,29 +50,50 @@ export const CONCEPT_STATEMENT_PAGE_SIZE = 64;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** Own and structurally admit inputs before any native or retained await. */
 export function conceptStatementRequest(
-  partition: number, input: ConceptStatementRequest, after: ConceptStatementCursor | null, limit: number,
+  partition: number,
+  input: ConceptStatementRequest,
+  after: ConceptStatementCursor | null,
+  limit: number,
 ): ConceptStatementRequest {
   const route = routeOf(input?.subject);
-  if (!Number.isInteger(partition) || partition < 0 || partition >= 4096 || route === null ||
-      partitionOf(route) !== partition || !Number.isSafeInteger(limit) || limit < 1 ||
-      limit > CONCEPT_STATEMENT_PAGE_SIZE ||
-      (input.spoilerThreshold !== undefined && ![0, 1, 2].includes(input.spoilerThreshold)) ||
-      (after !== null && (!uuid.test(after.slot) || !uuid.test(after.candidate) ||
-        !/^[0-9a-f]{64}$/.test(after.observation))))
+  if (
+    !Number.isInteger(partition) ||
+    partition < 0 ||
+    partition >= 4096 ||
+    route === null ||
+    partitionOf(route) !== partition ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > CONCEPT_STATEMENT_PAGE_SIZE ||
+    (input.spoilerThreshold !== undefined && ![0, 1, 2].includes(input.spoilerThreshold)) ||
+    (after !== null &&
+      (!uuid.test(after.slot) || !uuid.test(after.candidate) || !/^[0-9a-f]{64}$/.test(after.observation)))
+  )
     throw new TypeError('Invalid concept statement request');
-  const filter = parseFilter({ statement: {
-    property: input.selection.property, in: [input.selection.concept],
-    concept: { scheme: input.selection.scheme, ...(input.selection.includeChildren === undefined ? {} :
-      { includeChildren: input.selection.includeChildren }) },
-    ...(input.qualifiers ? { qualifiers: input.qualifiers } : {}),
-  } });
+  const filter = parseFilter({
+    statement: {
+      property: input.selection.property,
+      in: [input.selection.concept],
+      concept: {
+        scheme: input.selection.scheme,
+        ...(input.selection.includeChildren === undefined ? {} : { includeChildren: input.selection.includeChildren }),
+      },
+      ...(input.qualifiers ? { qualifiers: input.qualifiers } : {}),
+    },
+  });
   if (!('statement' in filter) || !('in' in filter.statement)) throw new TypeError('Invalid concept statement request');
   return Object.freeze({
     subject: input.subject,
     selection: Object.freeze({ ...input.selection }),
-    ...(filter.statement.qualifiers ? { qualifiers: Object.freeze(filter.statement.qualifiers.map(
-      (q) => Object.freeze({ property: q.property, in: Object.freeze([...q.in]) }),
-    )) } : {}),
+    ...(filter.statement.qualifiers
+      ? {
+          qualifiers: Object.freeze(
+            filter.statement.qualifiers.map((q) =>
+              Object.freeze({ property: q.property, in: Object.freeze([...q.in]) }),
+            ),
+          ),
+        }
+      : {}),
     ...(input.spoilerThreshold === undefined ? {} : { spoilerThreshold: input.spoilerThreshold }),
   });
 }
@@ -76,9 +101,14 @@ export function conceptStatementRequest(
 export function conceptStatementQualifiers(request: ConceptStatementRequest): readonly FilterQualifier[] {
   return [
     ...(request.qualifiers ?? []),
-    ...(request.spoilerThreshold === undefined ? [] : [{
-      property: 'rezics:spoilerLevel', in: ['0', '1', '2'].slice(0, request.spoilerThreshold + 1),
-    }]),
+    ...(request.spoilerThreshold === undefined
+      ? []
+      : [
+          {
+            property: 'rezics:spoilerLevel',
+            in: ['0', '1', '2'].slice(0, request.spoilerThreshold + 1),
+          },
+        ]),
   ];
 }
 
@@ -94,11 +124,13 @@ export async function matchNativeConceptStatements(
   input: ConceptStatementRequest,
   after: ConceptStatementCursor | null = null,
   limit = CONCEPT_STATEMENT_PAGE_SIZE,
-): Promise<Readonly<{
-  status: 'current' | 'preparing' | 'unavailable' | 'restart';
-  match: RelationFacetMatch;
-  page?: ConceptStatementWindow;
-}>> {
+): Promise<
+  Readonly<{
+    status: 'current' | 'preparing' | 'unavailable' | 'restart';
+    match: RelationFacetMatch;
+    page?: ConceptStatementWindow;
+  }>
+> {
   const request = conceptStatementRequest(partition, input, after, limit);
   const retained: ConceptBrowseState = structuredClone(state);
   const cursor = after === null ? null : { ...after };
@@ -110,8 +142,13 @@ export async function matchNativeConceptStatements(
   if (read.status === 'changed') return restart();
   if (read.status !== 'current') return { status: read.status, match: 'not_proven' };
   const page = structuredClone(read.page);
-  if (!Number.isSafeInteger(page.examined) || page.examined < page.statements.length ||
-      page.examined > limit || page.complete !== false || (!page.terminal && page.after === null))
+  if (
+    !Number.isSafeInteger(page.examined) ||
+    page.examined < page.statements.length ||
+    page.examined > limit ||
+    page.complete !== false ||
+    (!page.terminal && page.after === null)
+  )
     return restart();
   const qualifiers = conceptStatementQualifiers(request);
   const match = await matchCurrentConceptStatements(source, store, retained, {
@@ -120,7 +157,10 @@ export async function matchNativeConceptStatements(
       property: statement.property,
       concept: statement.value,
       witness: holdsCurrentStatements([statement], {
-        facet: 'statement', property: request.selection.property, values: [statement.value], qualifiers,
+        facet: 'statement',
+        property: request.selection.property,
+        values: [statement.value],
+        qualifiers,
       }),
     })),
     complete: false,
