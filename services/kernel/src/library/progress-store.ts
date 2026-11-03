@@ -177,9 +177,11 @@ export async function insertSession(
     last_changed_at: context.time,
     transaction_id: context.transactionId,
     library_profile_pin: acceptedPin,
-    additional_measures: JSON.stringify(
-      (session.additionalMeasures ?? []).map((measure) => ({ unit: measure.unit, amount: null, total: measure.total })),
-    ),
+    additional_measures: (session.additionalMeasures ?? []).map((measure) => ({
+      unit: measure.unit,
+      amount: null,
+      total: measure.total,
+    })),
   });
   if (!row) throw new Error('Library session insert returned no row');
   return asSession(row);
@@ -223,9 +225,7 @@ export async function updateSession(
     completed_unit_count: changes.completedUnitCount,
     state: changes.state,
     completed_at: changes.completedAt,
-    additional_measures: JSON.stringify(
-      (changes.measures?.slice(1) ?? []).map(({ unit, amount, total }) => ({ unit, amount, total })),
-    ),
+    additional_measures: (changes.measures?.slice(1) ?? []).map(({ unit, amount, total }) => ({ unit, amount, total })),
     time: context.time,
     transaction_id: context.transactionId,
   });
