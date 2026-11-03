@@ -1055,7 +1055,9 @@ other view. Sections a type does not support are left out; the rest keep this or
 5. **Characters.** Main characters first, then supporting, each with portrait, name, role and cast.
 6. **Credits.** Principal staff by role, in credit order.
 7. **Ratings.** The score distribution, count and population, the reader's Realm scores, and a link to Reviews.
-8. **Reviews and discussion.** Public Global reviews and discussions in Content’s native last-activity order, with summaries, bylines, canonical thread links and bounded continuation. Realm reviews remain closed until their population binding is delivered; existing Realm discussions retain native Context authority.
+8. **Reviews and discussion.** Public Global reviews and discussions in Content’s native order, with summaries, bylines, canonical thread links and bounded continuation. Current Subject cards remain open-only until Content supplies target-bound action advice. A recorded citation without its own native scale and original target is unavailable; it is never replaced by the reader’s current vote. Realm reviews remain closed until their population binding is delivered; existing Realm discussions retain native Context authority.
+
+The installed `subject_threads.list` response is still `{ threads: ThreadView[], next }`; its existing producer is Content’s `listSubjectThreads` in `services/kernel/src/content/subject-threads.ts` and `SubjectThreadsResponseSchema` in `services/kernel/src/content/schemas.ts`. The generated Web client does not yet carry current page/place context, target-bound actions, complete recorded-citation provenance, authoritative activity or freshness. Until Content publishes that response head and examples, Web keeps reply, creation and reaction controls unavailable, distinguishes null citation from incomplete citation context, and retries only the same supplied cursor.
 9. **Lists.** Public collections and reading orders that include the subject.
 10. **Sources.** Cover credits, source records for the facts shown with each source's licence and attribution,
     external identifiers, and a link to Details.

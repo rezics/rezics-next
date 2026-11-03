@@ -20,10 +20,9 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
   reactions?: CommunityReactionCounts;
   viewerReaction?: ReactionKind | null;
 };
-export type CommunityRegion = (
+export type CommunityRegion =
   | { state: 'loading' | 'unavailable' | 'closed' }
-  | { state: 'ready'; threads: CommunityThread[]; next: string | null }
-) & { contributionScope?: 'global' | 'realm' };
+  | { state: 'ready'; threads: CommunityThread[]; next: string | null };
 export type SubjectCommunity = {
   regions: Partial<Record<CommunityKind, CommunityRegion>>;
   nodes?: Record<string, CommunityRegion>;
@@ -163,7 +162,6 @@ export async function readSubjectCommunity(
           { kind: 'subjectThreads', id: subjectId, place: GLOBAL, threadKind: kind, limit },
           typeof requestedReader === 'string',
         );
-        if (region.state === 'ready') region.contributionScope = 'global';
         return [kind, region];
       } catch (error) {
         return [kind, { state: isPlatformClosedError(error) ? 'closed' : 'unavailable' }];
@@ -250,14 +248,6 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
     const descriptor = plan.reads[key];
     if (descriptor?.kind !== 'subjectThreads') continue;
     const region = composedCommunityRegion(reads[key], descriptor, reader !== null);
-    // An omitted Context is the native ordinary Global page. A Realm selector, including a native
-    // publication fallback, must never turn into an invitation to a Global destination.
-    const population = loaded.page.context?.population;
-    if (!loaded.page.requestedRealm && descriptor.id === loaded.page.subject) {
-      if ((!loaded.page.context || population?.kind === 'global') && descriptor.place === GLOBAL)
-        region.contributionScope = 'global';
-      else if (population?.kind === 'realm' && descriptor.place === population.id) region.contributionScope = 'realm';
-    }
     nodes[node] = region;
     regions[descriptor.threadKind] ??= region;
   }

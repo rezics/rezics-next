@@ -733,6 +733,14 @@ Requires the typed kernel client and real owner APIs, exposure discovery, BFF se
 presentation profiles and composition slots. Use typed fakes only as interim implementation aids; recorded fixtures
 must be refreshed with their producer changes. A fake alone cannot prove authorization or native API behavior.
 
+Subject discussion and review pages currently consume `subject_threads.list` as `ThreadView[]` plus a cursor. Content
+owns the existing producer in `services/kernel/src/content/subject-threads.ts`; Web’s continuation depends on its
+generated response head adding current Subject/place context, target-bound actions, full historical citation
+scale/question revision/original target, and authoritative activity/freshness. Until then, Subject cards remain
+open-only, non-null citations without scale/target are unavailable, and retry retains the exact supplied cursor.
+No admitted Content producer UUID, updated generated response head or populated/withheld/failed examples are
+published for this extension.
+
 ## Acceptance
 
 Run focused interface and integration suites through the owning app/package check runners. Connect native

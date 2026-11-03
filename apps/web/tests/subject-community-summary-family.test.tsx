@@ -15,7 +15,7 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 // UNRUN under MINIMAL: mounted presentation regression; no native or visual proof is claimed.
-test('Subject discussion and review summaries share semantic rows with exact independent destinations, native order and truthful continuation controls', async () => {
+test('Subject discussion and review summaries keep native read destinations and order while withholding non-admitted actions', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
@@ -71,7 +71,7 @@ test('Subject discussion and review summaries share semantic rows with exact ind
       licence: 'MIT',
       voteCitation: {
         questionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58e5',
-        units: 14,
+        units: 0,
         revision: 2,
       },
       reactions: { upvote: 4, like: 2 },
@@ -121,7 +121,7 @@ test('Subject discussion and review summaries share semantic rows with exact ind
   const original = structuredClone({ threads, authors });
   const cursor = 'native:/+?=&版%';
   const node = 'reviews /+?=&版%';
-  const ready: CommunityRegion = { state: 'ready', threads, next: cursor, contributionScope: 'global' };
+  const ready: CommunityRegion = { state: 'ready', threads, next: cursor };
   const fullHref = (kind: CommunityKind) =>
     `/fr/subjects/${subject.id}/lectures/${kind === 'review' ? 'reviews' : 'discussion'}?context=public&cursor=previous&node=old`;
   const expectedTitles = [longTitle, m.threads_untitled({}, options), 'Alpha last'];
@@ -213,22 +213,19 @@ test('Subject discussion and review summaries share semantic rows with exact ind
           expect(primary.classList.contains('focus-visible:outline-2')).toBe(true);
           expect(row.querySelector('a a, a button, li, h2, img, button')).toBeNull();
           const board = item.getByRole('link', { name: m.subject_community_board({}, options), exact: true });
-          const contribute = item.getByRole('link', {
-            name:
-              kind === 'review' ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options),
-            exact: true,
-          });
           expect(board.getAttribute('href')).toBe(boardHrefs[index]!);
-          const contribution = new URL(contribute.getAttribute('href')!, window.location.origin);
-          expect(contribution.pathname).toBe(`${boardHrefs[index]}/new`);
-          expect([...contribution.searchParams]).toEqual([
-            ['subject', subject.id],
-            ['subjectTitle', subject.label],
-          ]);
-          expect(contribute.getAttribute('data-slot')).toBe('create-thread');
-          expect(primary.contains(board) || primary.contains(contribute)).toBe(false);
+          expect(
+            item.queryByRole('link', {
+              name:
+                kind === 'review' ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options),
+              exact: true,
+            }),
+          ).toBeNull();
+          expect(primary.contains(board)).toBe(false);
           const actions = board.closest('[data-content-item-slot="actions"]')!;
-          expect(actions.contains(contribute)).toBe(true);
+          expect(row.querySelector('[data-slot="create-thread"]')).toBeNull();
+          expect(row.querySelector('[data-slot="reaction-chip"]')).toBeNull();
+          expect(item.queryByRole('link', { name: m.feed_action_reply({}, options) })).toBeNull();
           expect(actions.classList.contains('z-10')).toBe(true);
           expect(actions.className).toContain('[&_a]:min-h-11');
           expect(actions.className).toContain('[&_a]:min-w-11');
@@ -242,13 +239,12 @@ test('Subject discussion and review summaries share semantic rows with exact ind
         expect(preview.className).not.toMatch(/truncate|line-clamp|text-left|text-right/);
         if (kind === 'review') {
           const citation = first.querySelector<HTMLElement>('[data-slot="review-citation"]')!;
-          expect(citation.dataset.state).toBe('cited');
-          expect(citation.textContent).toContain(m.thread_provenance_rating({}, options));
-          expect(citation.textContent).toContain(
-            m.discussion_provenance_details_rating_units({ units: '14' }, options),
+          expect(citation.dataset.state).toBe('unavailable');
+          expect(citation.textContent).toContain(m.subject_community_citation_unavailable({}, options));
+          expect(citation.textContent).not.toContain(
+            m.discussion_provenance_details_rating_units({ units: '0' }, options),
           );
           expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
-          expect(citation.querySelector('details')?.textContent).toContain('01a17a3b-0884-721b-91ef-d7ffd7bb58e5');
           expect(first.querySelector('[data-slot="community-reaction-summary"]')?.textContent).toContain(
             m.board_feed_reactions({ count: '6' }, options),
           );
@@ -305,7 +301,7 @@ test('Subject discussion and review summaries share semantic rows with exact ind
       expect(new URL(slot('community-next')!.href).searchParams.get('cursor')).toBe(cursor);
 
       // A sparse native page is continuation, including Global pages; it never invites a contribution.
-      await show(kind, true, { state: 'ready', threads: [], next: cursor, contributionScope: 'global' });
+      await show(kind, true, { state: 'ready', threads: [], next: cursor });
       expect(host.querySelector('section')?.getAttribute('data-state')).toBe('continuation');
       expect(host.textContent).toContain(m.subject_community_continue({}, options));
       expect(host.textContent).not.toContain(
@@ -318,38 +314,14 @@ test('Subject discussion and review summaries share semantic rows with exact ind
       expect(new URL(slot('community-next')!.href).searchParams.get('node')).toBe(node);
       expect(host.textContent).not.toContain(m.subject_community_board_unavailable({}, options));
 
-      for (const contributionScope of ['global', 'realm', undefined] as const) {
-        await show(kind, false, {
-          state: 'ready',
-          threads: [],
-          next: null,
-          ...(contributionScope ? { contributionScope } : {}),
-        });
-        expect(host.querySelector('section')?.getAttribute('data-state')).toBe('empty');
-        expect(host.textContent).toContain(
-          kind === 'review' ? m.subject_reviews_empty({}, options) : m.subject_threads_empty({}, options),
-        );
-        expect(slot('community-next')).toBeNull();
-        if (contributionScope === 'global') {
-          const choose = within(host).getByRole('link', {
-            name:
-              kind === 'review'
-                ? m.subject_choose_review_board({}, options)
-                : m.subject_choose_discussion_board({}, options),
-          });
-          expect(choose.getAttribute('data-slot')).toBe('choose-board');
-          const url = new URL(choose.getAttribute('href')!, window.location.origin);
-          expect(url.pathname).toBe('/fr/boards');
-          expect([...url.searchParams]).toEqual([
-            ['purpose', kind === 'review' ? 'reviews' : 'discussion'],
-            ['subject', subject.id],
-            ['subjectTitle', subject.label],
-          ]);
-        } else {
-          expect(slot('choose-board')).toBeNull();
-          expect(host.textContent).toContain(m.subject_community_board_unavailable({}, options));
-        }
-      }
+      await show(kind, false, { state: 'ready', threads: [], next: null });
+      expect(host.querySelector('section')?.getAttribute('data-state')).toBe('empty');
+      expect(host.textContent).toContain(
+        kind === 'review' ? m.subject_reviews_empty({}, options) : m.subject_threads_empty({}, options),
+      );
+      expect(slot('community-next')).toBeNull();
+      expect(slot('choose-board')).toBeNull();
+      expect(host.textContent).toContain(m.subject_community_board_unavailable({}, options));
       for (const state of ['loading', 'closed', 'unavailable'] as const) {
         for (const paged of [false, true]) {
           await show(kind, paged, { state });

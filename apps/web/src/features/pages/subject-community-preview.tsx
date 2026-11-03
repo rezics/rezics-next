@@ -42,21 +42,19 @@ function ReadOnlyReactionCounts({ thread, locale }: { thread: CommunityThread; l
   );
 }
 
-/** Retains only the cited first-post rating and current page Subject context. No current vote is read here. */
+/** Keeps read-only counts; incomplete citation provenance stays unavailable instead of borrowing current context. */
 export function SubjectCommunityPreview({
   kind,
   thread,
   subject,
   locale,
   reader,
-  interactionReady,
 }: {
   kind: CommunityKind;
   thread: CommunityThread;
   subject: { id: string; label: string };
   locale: string;
   reader: string | null;
-  interactionReady: boolean;
 }) {
   const subjects: ThreadSubject[] = [
     { id: subject.id, types: [], label: subject.label, labels: { [locale]: subject.label }, cover: null },
@@ -67,10 +65,10 @@ export function SubjectCommunityPreview({
         <div
           data-slot="review-citation"
           data-state={
-            thread.voteCitation === undefined ? 'unavailable' : thread.voteCitation === null ? 'unscored' : 'cited'
+            thread.voteCitation === null ? 'unscored' : 'unavailable'
           }
         >
-          {thread.voteCitation === undefined ? (
+          {thread.voteCitation !== null ? (
             <p role="status" className="text-sm text-muted-foreground">
               {m.subject_community_citation_unavailable()}
             </p>
@@ -84,8 +82,8 @@ export function SubjectCommunityPreview({
           )}
         </div>
       ) : null}
-      {!interactionReady ? <ReadOnlyReactionCounts thread={thread} locale={locale} /> : null}
-      {!interactionReady && reader !== null && thread.viewerReaction === undefined ? (
+      <ReadOnlyReactionCounts thread={thread} locale={locale} />
+      {reader !== null && thread.viewerReaction === undefined ? (
         <p role="status" className="text-sm text-muted-foreground">
           {m.subject_community_viewer_reaction_unavailable()}
         </p>

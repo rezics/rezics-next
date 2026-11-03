@@ -4,11 +4,8 @@ import { ListRowControl } from '@rezics/ui/list-row';
 import { m } from '../../paraglide/messages.js';
 import { Byline } from '../../threads/byline';
 import { threadLocation } from '../../threads/thread-href';
-import { reviewThreadHref } from '../../threads/review-policy';
 import type { ThreadReactionsProps } from '../../threads/thread-reactions';
-import { boardContribution, boardDirectoryHref, boardDirectoryRequest } from '../../threads/board-directory';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
-import { SubjectCommunityInteractions } from './subject-community-interactions';
 import { SubjectCommunityPreview } from './subject-community-preview';
 import { linkClass, linkColor } from './shared';
 import { StreamHeading } from './view-heading';
@@ -30,7 +27,6 @@ export function SubjectCommunityRegion({
   href,
   paged = false,
   node,
-  preparedTransport,
 }: {
   id: string;
   kind: CommunityKind;
@@ -51,11 +47,6 @@ export function SubjectCommunityRegion({
   const threads = region.state === 'ready' ? region.threads : [];
   const empty = region.state === 'ready' && threads.length === 0;
   const next = region.state === 'ready' ? region.next : null;
-  const contribution = boardContribution({ subject: subject.id, subjectTitle: subject.label });
-  const chooseBoard =
-    empty && next === null && region.contributionScope === 'global' && contribution
-      ? boardDirectoryHref(boardDirectoryRequest({ purpose: review ? 'reviews' : 'discussion' }), locale, contribution)
-      : undefined;
   const state = empty ? (next ? 'continuation' : 'empty') : region.state === 'ready' ? 'populated' : region.state;
   const [path, search = ''] = href.split('?');
   const retryHref = paged ? href : `?${search}`;
@@ -114,11 +105,7 @@ export function SubjectCommunityRegion({
                 ? m.subject_reviews_empty({}, options)
                 : m.subject_threads_empty({}, options)}
           </p>
-          {chooseBoard ? (
-            <a data-slot="choose-board" className={actionClass} href={chooseBoard}>
-              {review ? m.subject_choose_review_board({}, options) : m.subject_choose_discussion_board({}, options)}
-            </a>
-          ) : !next ? (
+          {!next ? (
             <p>{m.subject_community_board_unavailable({}, options)}</p>
           ) : null}
         </div>
@@ -128,8 +115,6 @@ export function SubjectCommunityRegion({
           {threads.map((thread) => {
             const threadHref = threadLocation(locale, thread);
             const reader = community?.reader ?? null;
-            const interactionReady =
-              reader !== null && thread.reactions !== undefined && thread.viewerReaction !== undefined;
             return (
               <li key={thread.id} className="min-w-0">
                 <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
@@ -170,7 +155,6 @@ export function SubjectCommunityRegion({
                     subject={subject}
                     locale={locale}
                     reader={reader}
-                    interactionReady={interactionReady}
                   />
                   <ListRowControl
                     data-content-item-slot="actions"
@@ -182,25 +166,6 @@ export function SubjectCommunityRegion({
                     >
                       {m.subject_community_board({}, options)}
                     </a>
-                    <a
-                      data-slot="create-thread"
-                      className={actionClass}
-                      href={reviewThreadHref(locale, thread.boardId, subject.id, subject.label)}
-                    >
-                      {review ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options)}
-                    </a>
-                    {community ? (
-                      <SubjectCommunityInteractions
-                        thread={thread}
-                        subject={subject}
-                        locale={locale}
-                        href={threadHref}
-                        contextId={community.contextId ?? null}
-                        reader={reader}
-                        source={community.sourceKey ?? community.now}
-                        preparedTransport={preparedTransport}
-                      />
-                    ) : null}
                   </ListRowControl>
                 </ContentItemFrame>
               </li>
