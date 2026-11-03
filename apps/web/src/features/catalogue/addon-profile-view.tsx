@@ -19,7 +19,7 @@ import { RelationEditorNavigation } from './relation-editor-navigation';
 import { EditorFailure } from './statement-editor-view';
 import { AddonProfileCreate } from './addon-profile-create';
 import { DefinitionMeaning } from './definition-meaning';
-import { CharacterClassification } from './character-profile-classification';
+import { AddonClassifications } from './addon-classification-review-view';
 import {
   addonBase,
   addonFacts,
@@ -272,21 +272,15 @@ function AddonProfileLive({
                 transport={facts(read.public.subject.id)}
                 review={(property, token) => review(read.public!.subject.id, property, token)}
               />
-              {read.release.types[addonType]!.properties.filter(
-                (property) =>
-                  read.release.properties[property]?.relation?.group === 'classification' &&
-                  read.release.properties[property]?.datatype === 'wikibase-item',
-              ).map((property) => (
-                <CharacterClassification
-                  key={property}
-                  property={property}
-                  read={{ ok: true, release: read.release, public: read.public!, source: null }}
-                  locale={locale}
-                  search={search}
-                  transport={facts(read.public!.subject.id)}
-                  review={(field, token) => review(read.public!.subject.id, field, token)}
-                />
-              ))}
+              <AddonClassifications
+                read={{ ok: true, release: read.release, public: read.public, source: null }}
+                locale={locale}
+                search={search}
+                transport={facts(read.public.subject.id)}
+                review={(field, token) => review(read.public.subject.id, field, token)}
+                visible={!!query.data?.ok && session === 'signed-in'}
+                revision={`${id}:${session}`}
+              />
               <section className="space-y-3">
                 <h2 className="text-xl font-semibold">{m.addon_base_workspace_title({}, o)}</h2>
                 <p className="text-sm text-muted-foreground">{m.addon_base_workspace_intro({}, o)}</p>

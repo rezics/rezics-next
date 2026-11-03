@@ -267,7 +267,7 @@
   "classification_retained_locked": "성공했거나 잠긴 제안은 유지되며 이 변경 집합 검토에서 빠집니다.",
   "classification_removed_holder": "이 진단은 제거된 홀더에 속합니다. 다른 초안을 열 수 없습니다.",
   "classification_read_current": "현재 선택 읽기",
-  "classification_read_failed": "현재 캐릭터를 읽을 수 없습니다. 비공개 초안은 유지됩니다. 새 제안은 현재 읽기가 허용될 때까지 기다립니다.",
+  "classification_read_failed": "현재 대상을 읽을 수 없습니다. 비공개 초안은 유지됩니다. 새 제안은 현재 읽기가 허용될 때까지 기다립니다.",
   "classification_baseline_absent": "이 초안의 기준이 된 선택된 주장이 없습니다.",
   "classification_baseline_withdrawn": "이전에 선택된 주장이 현재 읽기에 더 이상 없습니다.",
   "classification_copy_retired": "이 홀더는 현재 공개 정의에서 더 이상 허용되지 않습니다.",
@@ -6318,5 +6318,10 @@
   "home_card_by": "작성자",
   "home_card_organization": "조직",
   "home_card_automated": "자동화 계정",
-  "home_card_credit_via": "제공"
+  "home_card_credit_via": "제공",
+  "addon_classification_title": "추가 콘텐츠 분류",
+  "addon_classification_intro": "보내기 전에 이 추가 콘텐츠에서 바뀐 분류를 모두 검토합니다. 각 필드는 독립된 네이티브 제안입니다. 인용을 복사해도 본편 작품의 사실, 소속, 라이선스는 이어받지 않습니다.",
+  "addon_classification_independent": "본편 작품 제안, 제안된 소속, 현재 선택된 본편은 이 분류 초안과 분리되어 있습니다.",
+  "addon_classification_copy_note": "복사한 인용은 이 추가 콘텐츠의 새로운 근거 주장입니다. 라이선스 부여, 대상 허용, 후보 채택이 되지 않습니다.",
+  "addon_classification_read_failed": "현재 추가 콘텐츠를 읽을 수 없습니다. 비공개 분류 초안은 유지됩니다. 새 제안은 현재 읽기가 허용될 때까지 기다립니다."
 }

@@ -267,7 +267,7 @@
   "classification_retained_locked": "成功済みおよびロックされた提案は保持され、この変更一式の確認からは除外されます。",
   "classification_removed_holder": "この診断は削除されたホルダーに属します。別の下書きを開けません。",
   "classification_read_current": "現在の選択を読み取る",
-  "classification_read_failed": "現在のキャラクターを読めませんでした。非公開の下書きは残します。新しい提案は現在の読取りが認められるまで待ちます。",
+  "classification_read_failed": "現在の対象を読めませんでした。非公開の下書きは残します。新しい提案は現在の読取りが認められるまで待ちます。",
   "classification_baseline_absent": "この下書きの基準となる選択中の主張はありませんでした。",
   "classification_baseline_withdrawn": "以前選択されていた主張は現在の読取りにありません。",
   "classification_copy_retired": "このホルダーは現在の公開定義では認められません。",
@@ -6318,5 +6318,10 @@
   "home_card_by": "投稿者",
   "home_card_organization": "組織",
   "home_card_automated": "自動アカウント",
-  "home_card_credit_via": "提供"
+  "home_card_credit_via": "提供",
+  "addon_classification_title": "追加コンテンツの分類",
+  "addon_classification_intro": "送信前に、この追加コンテンツで変わった分類をすべて確認します。各欄は独立したネイティブ提案です。出典のコピーは本編作品の事実、所属、許諾を引き継ぎません。",
+  "addon_classification_independent": "本編作品の提案、提案中の所属、現在選択中の本編は、これらの分類下書きとは別です。",
+  "addon_classification_copy_note": "コピーした出典は、この追加コンテンツ上の新しい根拠です。許諾、対象の許可、候補の採択にはなりません。",
+  "addon_classification_read_failed": "現在の追加コンテンツを読めませんでした。非公開の分類下書きは残します。新しい提案は現在の読取りが認められるまで待ちます。"
 }

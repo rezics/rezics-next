@@ -267,7 +267,7 @@
   "classification_retained_locked": "Las propuestas correctas y bloqueadas se conservan y no entran en esta revisión del conjunto cambiado.",
   "classification_removed_holder": "Este diagnóstico pertenece a un titular eliminado. No puede abrir otro borrador.",
   "classification_read_current": "Leer la selección actual",
-  "classification_read_failed": "No se pudo leer el personaje actual. Los borradores privados se conservan. Las propuestas nuevas esperan una lectura actual admitida.",
+  "classification_read_failed": "No se pudo leer el sujeto actual. Los borradores privados se conservan. Las propuestas nuevas esperan una lectura actual admitida.",
   "classification_baseline_absent": "Este borrador no partía de una afirmación seleccionada.",
   "classification_baseline_withdrawn": "La afirmación seleccionada anteriormente ya no está en la lectura actual.",
   "classification_copy_retired": "Este titular ya no lo admite la publicación actual.",
@@ -6318,5 +6318,10 @@
   "home_card_by": "Por",
   "home_card_organization": "Organización",
   "home_card_automated": "Cuenta automatizada",
-  "home_card_credit_via": "vía"
+  "home_card_credit_via": "vía",
+  "addon_classification_title": "Clasificaciones del complemento",
+  "addon_classification_intro": "Revisa cada clasificación cambiada de este complemento antes de enviarla. Cada campo es una propuesta nativa independiente. Copiar una cita no copia los hechos, la pertenencia ni la licencia de la obra base.",
+  "addon_classification_independent": "La sugerencia de obra base, la pertenencia propuesta y la obra base actualmente seleccionada permanecen aparte de estos borradores de clasificación.",
+  "addon_classification_copy_note": "Una cita copiada es una nueva reivindicación de evidencia en este complemento. No otorga licencia, no admite un destino ni acepta un candidato.",
+  "addon_classification_read_failed": "No se pudo leer el complemento actual. Los borradores privados de clasificación se conservan. Las propuestas nuevas esperan una lectura actual admitida."
 }

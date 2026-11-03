@@ -267,7 +267,7 @@
   "classification_retained_locked": "Erfolgreiche und gesperrte Vorschläge bleiben erhalten und fehlen in dieser Änderungsprüfung.",
   "classification_removed_holder": "Diese Meldung gehört zu einem entfernten Eintrag. Sie kann keinen anderen Entwurf öffnen.",
   "classification_read_current": "Aktuelle Auswahl lesen",
-  "classification_read_failed": "Die aktuelle Figur konnte nicht gelesen werden. Private Entwürfe bleiben. Neue Vorschläge warten auf eine zugelassene aktuelle Lesung.",
+  "classification_read_failed": "Das aktuelle Subjekt konnte nicht gelesen werden. Private Entwürfe bleiben. Neue Vorschläge warten auf eine zugelassene aktuelle Lesung.",
   "classification_baseline_absent": "Für diesen Entwurf gab es keine ausgewählte Ausgangsbehauptung.",
   "classification_baseline_withdrawn": "Die zuvor ausgewählte Behauptung ist in der aktuellen Lesung nicht mehr vorhanden.",
   "classification_copy_retired": "Dieser Eintrag wird von der aktuellen Veröffentlichung nicht mehr zugelassen.",
@@ -6318,5 +6318,10 @@
   "home_card_by": "Von",
   "home_card_organization": "Organisation",
   "home_card_automated": "Automatisiertes Konto",
-  "home_card_credit_via": "über"
+  "home_card_credit_via": "über",
+  "addon_classification_title": "Add-on-Klassifikationen",
+  "addon_classification_intro": "Prüfe jede geänderte Klassifikation dieses Add-ons, bevor du sie sendest. Jedes Feld ist ein unabhängiger nativer Vorschlag. Eine kopierte Quellenangabe übernimmt weder Fakten, Mitgliedschaft noch Lizenz des Grundwerks.",
+  "addon_classification_independent": "Grundwerk-Vorschlag, vorgeschlagene Mitgliedschaft und aktuell ausgewähltes Grundwerk bleiben von diesen Klassifikationsentwürfen getrennt.",
+  "addon_classification_copy_note": "Eine kopierte Quellenangabe ist ein neuer Beleganspruch auf diesem Add-on. Sie gewährt keine Lizenz, lässt kein Ziel zu und akzeptiert keinen Kandidaten.",
+  "addon_classification_read_failed": "Das aktuelle Add-on konnte nicht gelesen werden. Private Klassifikationsentwürfe bleiben. Neue Vorschläge warten auf eine zugelassene aktuelle Lesung."
 }

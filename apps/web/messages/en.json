@@ -277,7 +277,7 @@
   "classification_retained_locked": "Successful and locked proposals are kept and omitted from this changed-set review.",
   "classification_removed_holder": "This diagnostic belongs to a holder that was removed. It cannot open a different draft.",
   "classification_read_current": "Read current selection",
-  "classification_read_failed": "The current Character could not be read. Private drafts are kept. New proposals wait until the current reading is admitted.",
+  "classification_read_failed": "The current subject could not be read. Private drafts are kept. New proposals wait until the current reading is admitted.",
   "classification_baseline_absent": "No selected assertion was the baseline for this draft.",
   "classification_baseline_withdrawn": "The previously selected assertion is no longer in the current reading.",
   "classification_copy_retired": "This holder is no longer admitted by the current release.",
@@ -6368,5 +6368,10 @@
   "home_card_by": "By",
   "home_card_organization": "Organization",
   "home_card_automated": "Automated account",
-  "home_card_credit_via": "via"
+  "home_card_credit_via": "via",
+  "addon_classification_title": "Add-on classifications",
+  "addon_classification_intro": "Review every changed classification on this add-on before sending. Each field is an independent native proposal. Copying a citation does not copy the base work’s facts, membership or licence.",
+  "addon_classification_independent": "Base-work suggestion, proposed membership and current selected base stay separate from these classification drafts.",
+  "addon_classification_copy_note": "A copied citation is a new evidence claim on this add-on. It does not grant a licence, admit a target or accept a candidate.",
+  "addon_classification_read_failed": "The current add-on could not be read. Private classification drafts are kept. New proposals wait until the current reading is admitted."
 }

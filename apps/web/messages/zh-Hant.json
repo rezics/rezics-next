@@ -267,7 +267,7 @@
   "classification_retained_locked": "已成功或已鎖定的提案會保留，且不會出現在這次變更集審閱中。",
   "classification_removed_holder": "此診斷屬於已移除的持有項，不能開啟另一個草稿。",
   "classification_read_current": "讀取目前選定",
-  "classification_read_failed": "無法讀取目前角色。私人草稿會保留。新提案會等到目前讀取被允許。",
+  "classification_read_failed": "無法讀取目前對象。私人草稿會保留。新提案會等到目前讀取被允許。",
   "classification_baseline_absent": "此草稿沒有作為基準的選定主張。",
   "classification_baseline_withdrawn": "先前選定的主張已不在目前讀取中。",
   "classification_copy_retired": "目前發布定義不再允許此持有項。",
@@ -6318,5 +6318,10 @@
   "home_card_by": "作者",
   "home_card_organization": "組織",
   "home_card_automated": "自動化帳號",
-  "home_card_credit_via": "透過"
+  "home_card_credit_via": "透過",
+  "addon_classification_title": "追加內容分類",
+  "addon_classification_intro": "送出前請審閱此追加內容上每一項已變更的分類。每個欄位都是獨立的原生提案。複製引文不會繼承本體作品的事實、從屬關係或授權。",
+  "addon_classification_independent": "本體作品建議、擬議從屬關係與目前選定的本體，都與這些分類草稿分開。",
+  "addon_classification_copy_note": "複製的引文是此追加內容上的新證據主張。它不授予授權、不承認目標，也不接受候選。",
+  "addon_classification_read_failed": "無法讀取目前追加內容。私人分類草稿會保留。新提案會等到目前讀取被允許。"
 }

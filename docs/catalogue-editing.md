@@ -174,6 +174,9 @@ allow deliberate independent copies of complete citation groups, and propose eac
 holder leaves its siblings and their outcomes intact. Candidate acceptance and selection remain explicit native
 decisions. After selection, the exact current subject read updates both the classification values and the Screen
 profile reader through its existing observe path; a proposal alone does not change current values.
+Decision: Character classification changed-set review and evidence reuse are opt-in on this Character caller so Album,
+Manga, Screen and StoryArc writers that share the field control keep immediate per-field confirmation. The add-on
+classification caller binds the same coordinator.
 
 Appearances and credits are statements on the selected existing work. The existing relation editor retains separate
 emitted properties, the native `wdt:P453` character qualifier and exact target/key slots, credited names, roles,
@@ -253,9 +256,19 @@ its own filtered view of the existing relation editor. Values, qualifiers, rank,
 acceptance and adoption use the ordinary native candidate lifecycle. The suggested work cannot choose a target,
 replace a selected holder or imply adoption. A proposal or acceptance alone never establishes current selection; the
 same add-on is reread after selection. Correction also reuses the multi-field workspace, classification controls,
-authored and terms destinations, other relation fields and native candidate review. Platform claims use field-wide
-classification review; credits retain emitted character-key slots. Unchanged values are excluded, each field reports
-its own result, and no platform compatibility is inferred. Current denial, unavailability and metadata changes retain
+authored and terms destinations, other relation fields and native candidate review. Add-on classification correction
+binds the delivered Character classification coordinator: contributors review the exact changed set, copy one complete
+citation group onto other editable classification holders, then propose each included field independently. Copying a
+citation or selecting a classification cannot inherit the base work's facts or change its chosen relation. Base-work
+suggestion, proposed membership and current selected base remain distinct. Native candidate review and selection remain
+a later, deliberate step; a successful proposal is not a selected classification. After explicit native selection the
+add-on is reread. Credits retain emitted character-key slots. Unchanged values are excluded, each field reports
+its own result, and no platform compatibility is inferred.
+Decision: Add-on classification correction reviews the whole changed set through the delivered opt-in classification
+coordinator before sealing. A copied citation is a new evidence claim on this add-on; it confers no licence, target
+admission or candidate acceptance. Classification current-reading admission follows add-on subject identity and session,
+independent of base-work relation editor remounts. Correction drafts use the shared statementInput rank; the public
+selected statement keeps its actual rank. Current denial, unavailability and metadata changes retain
 drafts; uncertain writes retain their sealed body and key. Ordinary forms send citations as statement references,
 never ingestion Source metadata. Existing BFF, native disclosure, rights and source-or-consent rules remain
 authoritative; unavailable terms production stays unavailable.
@@ -399,6 +412,7 @@ normal Web captures and native integration acceptance remain pending. There is n
 ## Browser flow: cited fact correction review and evidence reuse
 
 Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character classification corrections on the Character caller use that same review and reuse coordinator on their per-field holders. The Game classification caller binds the same coordinator. StoryArc classification correction on an existing disclosed `wd:Q2620972` opts into the same Character classification coordinator. Album, Manga and add-on classification writers that duplicate their own submit keep immediate confirmation. Screen classification correction already binds that coordinator. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path. Decision: after native selection the Character caller rereads that Character through the existing facts read, and the explicit Read current selection control remains for a failed or differing current result.
+Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character classification corrections on the Character caller use that same review and reuse coordinator on their per-field holders. The Game classification caller binds the same coordinator. The add-on classification caller binds that same opt-in coordinator on admitted add-on classification holders. Album, Manga, Screen and StoryArc classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path. Decision: after native selection the Character caller rereads that Character through the existing facts read, and the explicit Read current selection control remains for a failed or differing current result. After native selection the add-on caller rereads that add-on the same way.
 
 Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
 

@@ -267,7 +267,7 @@
   "classification_retained_locked": "Les propositions réussies et verrouillées sont conservées et omises de cette revue des changements.",
   "classification_removed_holder": "Ce diagnostic appartient à un titulaire retiré. Il ne peut pas ouvrir un autre brouillon.",
   "classification_read_current": "Lire la sélection actuelle",
-  "classification_read_failed": "Le personnage actuel n’a pas pu être lu. Les brouillons privés sont conservés. Les nouvelles propositions attendent une lecture actuelle admise.",
+  "classification_read_failed": "Le sujet actuel n’a pas pu être lu. Les brouillons privés sont conservés. Les nouvelles propositions attendent une lecture actuelle admise.",
   "classification_baseline_absent": "Aucune assertion sélectionnée n’était la base de ce brouillon.",
   "classification_baseline_withdrawn": "L’assertion précédemment sélectionnée n’est plus dans la lecture actuelle.",
   "classification_copy_retired": "Ce titulaire n’est plus admis par la publication actuelle.",
@@ -6318,5 +6318,10 @@
   "home_card_by": "Par",
   "home_card_organization": "Organisation",
   "home_card_automated": "Compte automatisé",
-  "home_card_credit_via": "via"
+  "home_card_credit_via": "via",
+  "addon_classification_title": "Classifications de l’extension",
+  "addon_classification_intro": "Relisez chaque classification modifiée de cette extension avant l’envoi. Chaque champ est une proposition native indépendante. Copier une citation ne copie ni les faits, ni l’appartenance, ni la licence de l’œuvre de base.",
+  "addon_classification_independent": "La suggestion d’œuvre de base, l’appartenance proposée et l’œuvre de base actuellement sélectionnée restent distinctes de ces brouillons de classification.",
+  "addon_classification_copy_note": "Une citation copiée est une nouvelle revendication de preuve sur cette extension. Elle n’accorde aucune licence, n’admet aucune cible et n’accepte aucun candidat.",
+  "addon_classification_read_failed": "L’extension actuelle n’a pas pu être lue. Les brouillons privés de classification sont conservés. Les nouvelles propositions attendent une lecture actuelle admise."
 }
