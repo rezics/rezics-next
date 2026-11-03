@@ -144,6 +144,9 @@ export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 
+/** Native Board opening, derived from the mounted response rather than a parallel DTO. */
+export type BoardPageResponse = Routes['boards'][':id']['page']['get']['response'][200];
+
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
 export type KernelClientOptions = {
