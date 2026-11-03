@@ -54,6 +54,7 @@ export async function loadIndependentMeasureVisit(
   if (!authorization) return { state: 'signed-out', work: work() };
   try {
     const session = await readNativeIndependentSession(observed, sessionId, authorization);
+    if (calls.length === 0) calls.push('progressSessions.get');
     const measures = measuresFromNative(session).slice();
     const retained = {
       id: session.id,
