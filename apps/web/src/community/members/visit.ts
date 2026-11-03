@@ -141,7 +141,7 @@ export class RealmMembersVisit {
       if (index) this.rows = index;
       else read = { kind: 'unavailable' };
     }
-    this.value = { read, address, selection: null };
+    this.value = { read, address: read.kind === 'denied' ? { realmId: this.realmId, cursor: null } : address, selection: null };
     this.emit();
   }
 
@@ -190,7 +190,7 @@ export class RealmMembersVisit {
         pageOperation !== this.pageOperation) return;
     if (read.kind === 'denied') {
       this.rows.clear();
-      this.value = { ...this.value, read: { kind: 'denied' }, selection: null };
+      this.value = { read: { kind: 'denied' }, address: { realmId: this.realmId, cursor: null }, selection: null };
     } else if (read.kind === 'ready' &&
       (read.authority !== address.authority || read.realmId !== address.realmId ||
        read.identity.accountId !== address.accountId || read.episode !== address.episode)) {
