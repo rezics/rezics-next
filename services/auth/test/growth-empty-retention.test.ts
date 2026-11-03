@@ -10,7 +10,7 @@ import {
 } from '../src/retention.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../../kernel/test/support/growth.ts';
 
-const scales = [256, 1024, 4096] as const;
+const scales = [256, 1024, 4096];
 const fixture = testDatabase();
 const now = new Date();
 const cutoff = now.getTime() - 30 * 86400000;
