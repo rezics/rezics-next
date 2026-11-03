@@ -15,10 +15,7 @@ import {
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { Value } from 'typebox/value';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
-import {
-  CLASSIFICATION_AGGREGATE_CHANGED,
-  CLASSIFICATION_BALLOT_CHANGED,
-} from '../../src/rating/events.ts';
+import { CLASSIFICATION_AGGREGATE_CHANGED, CLASSIFICATION_BALLOT_CHANGED } from '../../src/rating/events.ts';
 import { classificationAggregateView } from '../../src/rating/classification-ballot.ts';
 
 const accounts = {
@@ -52,7 +49,13 @@ beforeAll(async () => {
   database.pool.options.max = 1;
   await bootstrapRelease(database.pool, bundledRelease);
   realAccess = await createRealAccess(database.admin, accounts, actions);
-  app = createKernel({ pool: database.pool, access: realAccess.access, tokens, routeKey, writeRate: realAccess.writeRate });
+  app = createKernel({
+    pool: database.pool,
+    access: realAccess.access,
+    tokens,
+    routeKey,
+    writeRate: realAccess.writeRate,
+  });
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'voter0', 'subject:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
 });
@@ -117,10 +120,16 @@ async function setBallot(
   idempotencyKey = randomUUID(),
 ) {
   return responseJson(
-    await request(persona, 'PUT', `/v1/subjects/${subjectId}/classification-associations/${associationId}/assessment`, {
-      assessment,
-      falsePositive,
-    }, idempotencyKey),
+    await request(
+      persona,
+      'PUT',
+      `/v1/subjects/${subjectId}/classification-associations/${associationId}/assessment`,
+      {
+        assessment,
+        falsePositive,
+      },
+      idempotencyKey,
+    ),
   );
 }
 
@@ -174,9 +183,16 @@ test('classification ballot updates subtract the retained choice and count false
     oppose: 0,
     falsePositive: 1,
   });
-  expect(classificationBallotCountDelta({ ...support, falsePositive: true }, {
-    assessment: 'oppose', falsePositive: true, eligible: true,
-  })).toEqual({ support: -1, oppose: 1, falsePositive: 0 });
+  expect(
+    classificationBallotCountDelta(
+      { ...support, falsePositive: true },
+      {
+        assessment: 'oppose',
+        falsePositive: true,
+        eligible: true,
+      },
+    ),
+  ).toEqual({ support: -1, oppose: 1, falsePositive: 0 });
   expect(classificationBallotCountDelta(support, { assessment: null, falsePositive: false, eligible: true })).toEqual({
     support: -1,
     oppose: 0,
@@ -199,25 +215,50 @@ test('the actor envelope and slot revision reject duplicate or late change-clear
 });
 
 test('small samples disclose no numeric fields and published fractions use support plus oppose only', () => {
-  expect(classificationAggregateView('association', {
-    supportCount: 2, opposeCount: 2, falsePositiveCount: 1, generation: '5', asOf: '2026-11-03T00:00:00.000Z',
-  })).toEqual({ associationId: 'association', state: 'suppressed', pending: 'unknown' });
-  expect(classificationAggregateView('association', {
-    supportCount: 2, opposeCount: 3, falsePositiveCount: 4, generation: '6', asOf: '2026-11-03T00:00:00.000Z',
-  })).toEqual({
-    associationId: 'association', state: 'published', supportCount: 2, opposeCount: 3,
-    falsePositiveCount: 4, supportFraction: 0.4, asOf: '2026-11-03T00:00:00.000Z', generation: '6', pending: 'unknown',
+  expect(
+    classificationAggregateView('association', {
+      supportCount: 2,
+      opposeCount: 2,
+      falsePositiveCount: 1,
+      generation: '5',
+      asOf: '2026-11-03T00:00:00.000Z',
+    }),
+  ).toEqual({ associationId: 'association', state: 'suppressed', pending: 'unknown' });
+  expect(
+    classificationAggregateView('association', {
+      supportCount: 2,
+      opposeCount: 3,
+      falsePositiveCount: 4,
+      generation: '6',
+      asOf: '2026-11-03T00:00:00.000Z',
+    }),
+  ).toEqual({
+    associationId: 'association',
+    state: 'published',
+    supportCount: 2,
+    opposeCount: 3,
+    falsePositiveCount: 4,
+    supportFraction: 0.4,
+    asOf: '2026-11-03T00:00:00.000Z',
+    generation: '6',
+    pending: 'unknown',
   });
 });
 
 test('classification ballot and aggregate events have registered schemas separate from native ratings', () => {
-  expect(Value.Check(EVENT_TYPES[CLASSIFICATION_BALLOT_CHANGED]!, {
-    actorId: '00000000-0000-8000-8000-000000000001',
-    subjectId: '00000000-0000-8000-8000-000000000002',
-    associationId: '00000000-0000-8000-8000-000000000003',
-    bindingHash: 'a'.repeat(64), assessment: 'support', falsePositive: false,
-    revision: '1', eligibilityGeneration: '1', eligible: true,
-  })).toBe(true);
+  expect(
+    Value.Check(EVENT_TYPES[CLASSIFICATION_BALLOT_CHANGED]!, {
+      actorId: '00000000-0000-8000-8000-000000000001',
+      subjectId: '00000000-0000-8000-8000-000000000002',
+      associationId: '00000000-0000-8000-8000-000000000003',
+      bindingHash: 'a'.repeat(64),
+      assessment: 'support',
+      falsePositive: false,
+      revision: '1',
+      eligibilityGeneration: '1',
+      eligible: true,
+    }),
+  ).toBe(true);
   expect(EVENT_TYPES[CLASSIFICATION_AGGREGATE_CHANGED]).toBeDefined();
 });
 
@@ -242,11 +283,23 @@ test('mounted classification ballots stay private and converge through the durab
     state: 'suppressed',
     pending: 'unknown',
   });
-  expect((await request('moderator', 'POST', `/v1/subjects/${moderatedSubject.id}:hide`, {
-    reason: 'Hide this association subject for the privacy check.',
-  })).status).toBe(200);
-  const moderatedPublic = await request('voter5', 'GET', ballotPath(moderatedSubject.id, moderatedAssociationId, 'aggregate'));
-  const moderatedOwn = await request('voter5', 'GET', ballotPath(moderatedSubject.id, moderatedAssociationId, 'assessment'));
+  expect(
+    (
+      await request('moderator', 'POST', `/v1/subjects/${moderatedSubject.id}:hide`, {
+        reason: 'Hide this association subject for the privacy check.',
+      })
+    ).status,
+  ).toBe(200);
+  const moderatedPublic = await request(
+    'voter5',
+    'GET',
+    ballotPath(moderatedSubject.id, moderatedAssociationId, 'aggregate'),
+  );
+  const moderatedOwn = await request(
+    'voter5',
+    'GET',
+    ballotPath(moderatedSubject.id, moderatedAssociationId, 'assessment'),
+  );
   expect(moderatedPublic.status).toBe(404);
   expect(moderatedOwn.status).toBe(404);
 
@@ -356,12 +409,10 @@ test('mounted classification ballots stay private and converge through the durab
     state: 'suppressed',
     pending: 'unknown',
   });
-  const suspendedWrite = await request(
-    'voter1',
-    'PUT',
-    ballotPath(subject.id, associationId, 'assessment'),
-    { assessment: 'oppose', falsePositive: false },
-  );
+  const suspendedWrite = await request('voter1', 'PUT', ballotPath(subject.id, associationId, 'assessment'), {
+    assessment: 'oppose',
+    falsePositive: false,
+  });
   expect([401, 403]).toContain(suspendedWrite.status);
   await suspendAccount(database.admin, accounts.voter2);
   await driveWorker(partitions);
@@ -371,11 +422,7 @@ test('mounted classification ballots stay private and converge through the durab
   }).then(async (response) => expect(response.status).toBe(200));
   const hiddenAggregate = await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'));
   const hiddenOwn = await request('voter0', 'GET', ballotPath(subject.id, associationId, 'assessment'));
-  const unknown = await request(
-    'voter0',
-    'GET',
-    ballotPath(subject.id, newId(routeOf(subject.id)!), 'aggregate'),
-  );
+  const unknown = await request('voter0', 'GET', ballotPath(subject.id, newId(routeOf(subject.id)!), 'aggregate'));
   expect(hiddenAggregate.status).toBe(404);
   expect(hiddenOwn.status).toBe(404);
   expect(unknown.status).toBe(404);
