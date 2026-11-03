@@ -11,6 +11,8 @@ duplicate or irrelevant rows can advance without being mistaken for an empty clo
 Decision: each worker step owns an immutable copy of its admitted allowance before asynchronous reads, so caller
 mutation cannot enlarge its page, edge or working-set budget.
 
+Decision: the worker's 64-key page size bounds one dispatch only; larger closures continue through retained frontier and membership rows and are never lowered to a 64-value filter list.
+
 `startConceptBrowse` copies and freezes the exact property/concept/scheme selection and the release, graph,
 scheme, membership, principal and request binding before retaining the root. The state contains only this
 bounded definition and a revision-fenced storage locator. It contains neither discovered keys nor frontier arrays.

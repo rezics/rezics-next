@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   advanceConceptBrowse,
   CONCEPT_BROWSE_LIMITS,
+  CONCEPT_BROWSE_WORKER_LIMITS,
   currentConceptMembership,
   currentConceptMemberships,
   matchCurrentConceptStatements,
@@ -148,12 +149,17 @@ function sourceFor(graph: Readonly<Record<string, readonly (string | null)[]>>) 
     },
   };
 }
-async function finish(source: ConceptBrowseSource, store: ConceptBrowseStore, state: ConceptBrowseState) {
+async function finish(
+  source: ConceptBrowseSource,
+  store: ConceptBrowseStore,
+  state: ConceptBrowseState,
+  allowance = limits,
+) {
   for (let steps = 0; steps < 10000; steps++) {
-    const result = await advanceConceptBrowse(source, store, state, limits);
+    const result = await advanceConceptBrowse(source, store, state, allowance);
     if (result.status !== 'preparing') return result;
-    expect(result.pages).toBeLessThanOrEqual(limits.pages);
-    expect(result.edges).toBeLessThanOrEqual(limits.edges);
+    expect(result.pages).toBeLessThanOrEqual(allowance.pages);
+    expect(result.edges).toBeLessThanOrEqual(allowance.edges);
     state = result.state;
   }
   throw new Error('Traversal did not finish');
@@ -285,12 +291,12 @@ test('retirement during final observation prevents negative membership', async (
   expect(await currentConceptMembership(expiring, store, result.state, 'missing')).toBe('not_proven');
 });
 
-test('large retained closures do not grow step state or truncate at the filter in limit', async () => {
+test('worker page allowance retains closures larger than one page without truncation', async () => {
   const children = Array.from({ length: 130 }, (_, i) => `child-${i}`);
   const { source } = sourceFor({ root: children });
   const retained = retention();
   const state = (await startConceptBrowse(selection, binding, retained.store))!;
-  const result = await finish(source, retained.store, state);
+  const result = await finish(source, retained.store, state, CONCEPT_BROWSE_WORKER_LIMITS);
   expect(result.status).toBe('complete');
   expect(retained.members.size).toBe(131);
   if (result.status !== 'complete') throw new Error('Expected completion');

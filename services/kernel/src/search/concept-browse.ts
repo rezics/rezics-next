@@ -87,6 +87,8 @@ export const CONCEPT_BROWSE_LIMITS = Object.freeze({
   pageSize: 256,
   keyBytes: 1024,
 });
+/** Fixed per-dispatch worker allowance. Closure size is retained across dispatches. */
+export const CONCEPT_BROWSE_WORKER_LIMITS = Object.freeze({ pages: 4, edges: 256, pageSize: 64 });
 export type ConceptBrowseLimits = Readonly<{
   pages: number;
   edges: number;
