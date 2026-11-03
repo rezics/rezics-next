@@ -7,6 +7,12 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { projectBatch, type CloudEvent } from '../../src/events/log.ts';
 import { initializeSpaceDiscoveryDependencies } from '../../src/community/space-discovery-dependencies.ts';
 import {
+  publishSpaceDiscoveryTupleWitness,
+  readSpaceDiscoveryTupleWitnesses,
+  registerSpaceDiscoveryTupleProducer,
+  repairSpaceDiscoveryTupleWitness,
+} from '../../src/community/space-discovery-source-fences.ts';
+import {
   drainSpaceDiscoveryFrontier,
   openSpaceDiscoveryFrontier,
   readSpaceDiscoveryFrontier,
@@ -101,6 +107,80 @@ function crashBeforeAcknowledgement(pool: Pool): Pool {
     },
   });
 }
+
+test('a complete empty tuple witness is explicit; imported tuple fences retire its current Space witness', async () => {
+  const { space } = await call('POST', '/v1/spaces', { title: 'Tuple witness Space' });
+  const source = spaceDiscoverySource({ pool: system.database.pool, access: system.access });
+  await registerSpaceDiscoveryTupleProducer(system.database.pool, {
+    generation: 'space-source-test-generation',
+    cut: 'space-source-test-cut',
+  });
+  const empty = await publishSpaceDiscoveryTupleWitness(system.database.pool, {
+    spaceId: space.spaceId,
+    spaceRevision: space.headRevisionId,
+    realmId: null,
+    realmRevision: null,
+    producerEpoch: '1',
+    sourcePosition: '1',
+    tuples: [],
+  });
+  expect(empty.state).toBe('ready');
+  expect(empty.tuples).toEqual([]);
+  expect(await source.dependencies()).toMatchObject({
+    state: 'ready',
+    generation: expect.any(String),
+    cut: expect.any(String),
+    capabilities: { 'source-fence': 'connected' },
+  });
+
+  const tuple = {
+    route: tupleRoute(system.routeKey, 'example', 'tuple-witness-source'),
+    source: 'example',
+    external_id: 'tuple-witness-source',
+    field_group: 'cover' as const,
+  };
+  const changed = await publishSpaceDiscoveryTupleWitness(system.database.pool, {
+    spaceId: space.spaceId,
+    spaceRevision: space.headRevisionId,
+    realmId: null,
+    realmRevision: null,
+    producerEpoch: '1',
+    sourcePosition: '2',
+    tuples: [tuple],
+  });
+  expect(changed.state).toBe('preparing');
+  const home = partitionOf(routeOf(space.spaceId)!);
+  while (await repairSpaceDiscoveryTupleWitness(system.database.pool, home, space.spaceId, 1)) {
+    /* Resume exact tuple-home work in bounded pages. */
+  }
+  expect(await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).toMatchObject([
+    { state: 'ready', tuples: [tuple] },
+  ]);
+
+  const governance = await contentGovernanceCredential(system);
+  await takedownSourceFence(
+    { pool: system.database.pool, access: system.access, routeKey: system.routeKey },
+    governance.actor,
+    { source: tuple.source, external_id: tuple.external_id, field_group: tuple.field_group, reason: 'Private evidence' },
+    { idempotencyKey: crypto.randomUUID(), requestId: crypto.randomUUID(), deadline: Date.now() + 30_000 },
+  );
+  const tupleHome = partitionOf(tuple.route);
+  const fence = (await events(tupleHome)).find((event) => event.type === 'com.rezics.content.source_fence.taken_down.v1')!;
+  await createSpaceDiscoveryEffect(system.database.pool).run(fence);
+  const invalidation = (await events(tupleHome)).find(
+    (event) =>
+      event.type === SPACE_DISCOVERY_INVALIDATED &&
+      (event.data as SpaceDiscoveryInvalidation).origin.eventId === fence.id,
+  )!;
+  const frontier = (await openSpaceDiscoveryFrontier(system.database.pool, invalidation))!;
+  expect(await drainSpaceDiscoveryFrontier(system.database.pool, frontier, 1)).toBe('settled');
+  expect(
+    (await events(home)).some((event) => event.type === SPACE_DISCOVERY_INVALIDATED && event.subject === space.spaceId),
+  ).toBe(true);
+  expect(await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).toMatchObject([
+    { state: 'unavailable', tuples: [] },
+  ]);
+}, 120_000);
 
 test('shared native Context changes drain sparse retained identities, survive restart and converge with live edits and removal', async () => {
   const pool = system.database.pool;
