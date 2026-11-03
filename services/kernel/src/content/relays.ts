@@ -197,8 +197,8 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
 export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
   const realmSubject = createRealmSubjectLifecycle({
     pool,
-    enqueueIdentity: (work) =>
-      client.enqueue(
+    enqueueIdentity: async (work) => {
+      await client.enqueue(
         {
           applicationName: WORK_APPLICATION,
           workflowName: REALM_SUBJECT_IDENTITY_WORKFLOW,
@@ -207,7 +207,8 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
           workflowIDReusePolicy: 'return-existing',
         },
         work,
-      ),
+      );
+    },
   });
   return [
     createBoardEffect(pool),

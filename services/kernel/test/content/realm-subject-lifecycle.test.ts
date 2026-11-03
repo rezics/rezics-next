@@ -186,12 +186,12 @@ test.serial(workerTest, async () => {
     expect(await replacementCandidate()).toMatchObject({ active: true, revision_id: revised.revisionId });
     expect(await discussionCandidate()).toMatchObject({ active: false, revision_id: revised.revisionId });
 
-    const targets = [
+    const restoreTargets: Array<{ kind: 'post' | 'thread'; id: string }> = [
       { kind: 'post' as const, id: discussion.itemId },
       { kind: 'thread' as const, id: discussion.threadId },
-      { kind: 'board' as const, id: discussionBoard.value.boardId },
     ];
-    for (const target of targets) {
+    const boardTarget = { kind: 'board' as const, id: discussionBoard.value.boardId };
+    for (const target of [...restoreTargets, boardTarget]) {
       await world.checked('POST', '/v1/grants', {
         resource: { route: routeOf(target.id)!, id: target.id },
         subject: { kind: 'account', id: world.owner.accountId },
@@ -199,7 +199,7 @@ test.serial(workerTest, async () => {
         valid: '(,)',
       });
     }
-    for (const target of targets.slice(0, 2)) {
+    for (const target of restoreTargets) {
       await takedown(dependencies, actor, { target, reason: 'Lifecycle verification' }, request());
       await until(async () => ((await replacementCandidate())?.active === false ? true : null));
       await runCommand(
