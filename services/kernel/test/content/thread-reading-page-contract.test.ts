@@ -3,9 +3,12 @@ import { fromPlainText } from '@rezics/document';
 import { Compile } from 'typebox/compile';
 import type { Actor } from '../../src/request/access.ts';
 import {
+  READING_CARD_REFERENCE_LIMIT,
   ReadingPageQuerySchema,
   ReadingPageResponseSchema,
+  normalizeSelectedReadingCardReferences,
   readingPageOperationState,
+  readingPageReactionCoverageState,
   readingPageRawLimit,
 } from '../../src/content/reading-page.ts';
 
@@ -110,6 +113,40 @@ test('reading-page cursor, reply and withheld-entry bounds are closed', () => {
     decisionId: id('6'),
   } as (typeof withheld.replies.items)[number];
   expect(page.Check(withheld)).toBe(false);
+  const unavailableReactions = response(0);
+  unavailableReactions.currentness.reactions = 'unavailable';
+  expect(page.Check(unavailableReactions)).toBe(true);
+});
+
+test('selected reading-card references keep exact keys and close raw and reaction coverage bounds', () => {
+  const selected = Array.from({ length: READING_CARD_REFERENCE_LIMIT }, (_, index) => ({
+    type: 'content.thread' as const,
+    id: id(String(index + 100)),
+    placeId: boardId,
+    sourceRevisionId: id(String(index + 200)),
+    subjectId: id('300'),
+  }));
+  expect(normalizeSelectedReadingCardReferences([])).toEqual([]);
+  expect(normalizeSelectedReadingCardReferences(selected)).toEqual(selected);
+  expect(normalizeSelectedReadingCardReferences([selected[0]!, selected[0]!])).toEqual([selected[0]!]);
+  const postReference = {
+    type: 'content.post' as const,
+    id: id('401'),
+    threadId: threadId,
+    placeId: boardId,
+    threadRevisionId: id('402'),
+    sourceRevisionId: id('403'),
+  };
+  expect(normalizeSelectedReadingCardReferences([postReference])).toEqual([postReference]);
+  expect(() => normalizeSelectedReadingCardReferences([...selected, selected[0]!])).toThrow();
+  expect(() =>
+    normalizeSelectedReadingCardReferences([
+      selected[0]!,
+      { ...selected[0]!, placeId: id('301') },
+    ]),
+  ).toThrow();
+  expect(readingPageReactionCoverageState(['thread', 'opening'], new Set(['thread']))).toBe('unavailable');
+  expect(readingPageReactionCoverageState(['thread', 'opening'], new Set(['thread', 'opening']))).toBe('current');
 });
 
 test('mounted guest authentication stays distinct from denial and dependency failure', () => {

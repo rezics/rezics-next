@@ -3299,6 +3299,10 @@ thread-watch reader. The current board slow-mode summary is included as context;
 mounted parent-thread action, and the command remains authoritative for admission. Author review citation remains the
 existing disclosed `readThread` value; no extra vote or provenance reader is introduced.
 
+The page uses native reaction-total coverage. If any live target lacks a current total row, `currentness.reactions`
+is `unavailable` and the page omits both totals and viewer selections for that component; an empty object or `null`
+does not stand in for an unknown reaction.
+
 Action projection receives the production Kernel's complete mounted resource and binding catalogues. Parent-post
 creation is evaluated on `content.thread`, matching the command anchor. Guest sign-in state comes from the mounted
 route's security declaration; resource permission comes only from `readViewerActions`. Missing catalogue/security
@@ -3329,3 +3333,57 @@ commands remain authoritative if a source changes after this response.
 
 Decision: The envelope includes the existing board slow-mode summary as advisory context; only the mounted parent-thread
 action represents reply eligibility, and the command remains final for admission.
+
+The same producer exports `createContentReadingCardBatch(dependencies, selected, actor, deadline)` and the exact
+types `SelectedReadingCardReference`, `ContentReadingCardBatch`, `SelectedReadingCardBatchResult`, and
+`SelectedReadingCardReaction`. A selected
+thread key retains its original thread ID, place ID, opening revision ID (or `null` for an erased placeholder), and
+optional Subject ID. A selected post key retains its post ID, parent thread ID, place ID and current revision ID
+(or `null` for an erased placeholder), plus the exact opening revision of its parent thread. The raw batch is capped at 20 before native reads; exact duplicate keys
+collapse in input order and a conflicting duplicate is invalid. `finish()` performs the final source checks after
+the consumer has assembled its own context.
+
+Subject supplies its selected Subject ID and place; Home supplies its selected thread or post keys and keeps its own
+review-target and parent context. The batch returns identity summaries, thread/opening/post reactions, mounted action
+states, parent-thread reply state, current watch state and final source anchors. It invokes native readers directly,
+uses the production Kernel's resource and binding catalogue, batches Accounts and reaction reads, and never invokes a
+full reading page for each card. Conversation activity keeps contribution coverage. No Search publication is needed.
+
+Missing or concealed initial/final sources return only the selected key with `state: "withheld"`; erased native
+placeholders return `state: "erased"` without body, author, reaction or post controls. A readable source or place
+that changes during hydration fails with `dependency_unavailable` so the caller can retry its same selection. Missing
+reaction-total coverage makes the reaction component unavailable and carries no counts or viewer selection. Missing
+action, Accounts or watch dependencies keep their component unavailable; no role or ownership inference fills it in.
+The final thread, post, place and watch reads retain independent native observations and anchors, not a cross-home
+snapshot. Existing write commands reauthorize every action.
+
+Decision: The shared batch accepts at most 20 deduplicated exact thread/post references; Subject references retain
+their Subject key, Home retains its own parent/review context, concealment withholds an entry, and readable changes
+fail closed for retry.
+
+### Cost: selected current-thread cards
+
+- Let R<=20 be raw selected references, H<=R distinct parent threads, P<=R selected posts, B<=H represented places,
+  A<=3R distinct authors and X<=3R live reaction targets. A thread group reads its opening once; a selected post
+  reads its exact current ancestry. One initial and one final pass use the existing `readThread` or
+  `readSubjectThread`, `readPost`, and `readBoard` readers. Each exact source reader retains its own initial/final
+  native disclosure and Access work. A post disclosure can inspect up to 33 ancestry rows, so the two external
+  passes can inspect up to 132 ancestry rows per selected post, or 2640 at P=20, before the reader's other parent,
+  place, Realm, membership and Access work. No page candidates are scanned and no earlier card is repeated.
+- Initial source processing is sequential and retains only exact source witnesses, original IDs, revisions,
+  security revisions, anchors and small hydration targets after each native reader returns. At most H opening bodies
+  and P selected-post bodies are read per external pass, each admitted by `MAX_DOCUMENT_BYTES`; each exact reader
+  also performs its own native recheck, so body reads and parsed-document allocations must include both internal
+  observations. The final pass repeats those bounds. The output does not copy source bodies or protected history.
+- Accounts receives one deduplicated batch of A<=3R authors and retains its account, handle-claim, avatar, optional
+  Subject and final-account checks across their native homes. Reactions cover X<=3R thread/opening/post targets:
+  own slots use one viewer-home batch and counts use one target seek per represented content partition, at most 60
+  partitions and seven kind rows per target. Missing target coverage is unknown, not zero. Mounted actions receive
+  at most 3R<=60 exact resource references in one `readViewerActions` preparation; operation bytes are measured from
+  the mounted bindings before hydration. Authenticated watch uses at most two existing point reads per selected
+  parent thread, each retaining its native thread and account authority work. Optional identity, action or watch
+  failures return explicit unavailable state and no stale positive controls.
+- The JSON envelope is preflighted against the mounted catalogue before source reads and bounded to 8 MiB after
+  hydration. It reserves 32 KiB per author and 16 KiB per reaction target; source bodies and every nested native
+  query remain charged even though they are not serialized in this projection. Cross-home observations are
+  independent. A later command remains the final authority check.
