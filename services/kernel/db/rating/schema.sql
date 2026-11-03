@@ -534,6 +534,30 @@ CREATE TABLE rating.question_label_revision (
 
 
 --
+-- Name: question_lifecycle; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.question_lifecycle (
+    question_id uuid NOT NULL,
+    revision integer NOT NULL,
+    state text NOT NULL,
+    CONSTRAINT question_lifecycle_revision_check CHECK (((revision >= 2) AND (revision <= 2147483647))),
+    CONSTRAINT question_lifecycle_state_check CHECK ((state = ANY (ARRAY['active'::text, 'retired'::text])))
+);
+
+
+--
+-- Name: question_lifecycle_generation; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.question_lifecycle_generation (
+    realm_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    CONSTRAINT question_lifecycle_generation_generation_check CHECK ((generation > 0))
+);
+
+
+--
 -- Name: realm_rank; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -866,6 +890,22 @@ ALTER TABLE ONLY rating.question_label_revision
 
 
 --
+-- Name: question_lifecycle_generation question_lifecycle_generation_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_lifecycle_generation
+    ADD CONSTRAINT question_lifecycle_generation_pkey PRIMARY KEY (realm_id);
+
+
+--
+-- Name: question_lifecycle question_lifecycle_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_lifecycle
+    ADD CONSTRAINT question_lifecycle_pkey PRIMARY KEY (question_id);
+
+
+--
 -- Name: question question_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -1155,6 +1195,14 @@ ALTER TABLE ONLY rating.question_label_head
 
 ALTER TABLE ONLY rating.question_label_revision
     ADD CONSTRAINT question_label_revision_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id) ON DELETE CASCADE;
+
+
+--
+-- Name: question_lifecycle question_lifecycle_question_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.question_lifecycle
+    ADD CONSTRAINT question_lifecycle_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id) ON DELETE CASCADE;
 
 
 --

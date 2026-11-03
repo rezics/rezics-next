@@ -275,9 +275,8 @@ Decision: `owner_id` remains the creating account; separate `realm_id` records R
 immutable opinion being asked (1–2,000 Unicode code points); `label` is its distinct nonblank display name
 (1–200 code points). Text is retained exactly, including intentional whitespace, and rejects NUL. Grain is
 `work`, `release`, `episode` or `character`. A changed meaning, grain or scale requires a new identity.
-Creation wording stays immutable; the separate caption command below corrects presentation. This slice exposes
-no retirement or Global authoring command. Native Realm lifecycle and grants keep
-their existing owners.
+Creation wording stays immutable; the separate caption command below corrects presentation. Creation exposes
+no retirement or Global authoring command. Native Realm grants keep their existing owner.
 
 The creator must be a current authenticated account with ordinary native `realm:manage` authority on that
 selected active Realm. Membership and role names are not substitute authorizations. `resourceAuthorization`
@@ -288,7 +287,7 @@ that Realm's route. `owner_id` records the creator, rather than a Realm ID or pe
 digest binds principal, operation and the complete definition; changed inputs with the same key conflict.
 
 Success, including an authorized exact replay, returns HTTP `201` with
-`{ id, realmId, meaning, revision: 1, label, canonicalLabel: label, labelRevision: 1, grain, scale }` and ordinary session progress. Meaning, provenance,
+`{ id, realmId, meaning, revision: 1, lifecycle: { state: "active", revision: 1 }, label, canonicalLabel: label, labelRevision: 1, grain, scale }` and ordinary session progress. Meaning, provenance,
 revision and scale persist together. A database trigger rejects changes to authored definitions. Existing
 legacy definitions retain their previous representation and the seeded standard question remains unchanged.
 
@@ -301,11 +300,12 @@ ranked population readiness; custom-question ranking continues to admit only the
 its owner adopts a compatible publication contract.
 
 `GET /v1/rating-questions/{id}` refreshes the exact selected definition. Legacy definitions keep their exact wire
-shape; Realm definitions add `realmId`, `meaning`, `canonicalLabel` and `labelRevision`; `label` is the current caption. `GET /v1/rating-questions?realm={realmId}&limit=1..20`
+shape; Realm definitions add `realmId`, `meaning`, `canonicalLabel`, `labelRevision` and lifecycle state; `label` is the current caption. `GET /v1/rating-questions?realm={realmId}&limit=1..20`
 uses the existing `{ ratingQuestions, next }` capability with explicit native Realm selection. It does not merge
 or infer Realm choices from Global pages. Its opaque continuation binds the exact selection, limit and every
-verified viewer/credential authority field, with sorted distinct scopes, the existing 15-minute expiry and
-4,096-character cap. Default Global tokens retain their previous binding. Tokens cannot cross viewers or
+verified viewer/credential authority field, with sorted distinct scopes, the Realm lifecycle generation, the
+existing 15-minute expiry and 4,096-character cap. Default Global tokens retain their previous selection and
+viewer binding. Tokens cannot cross viewers or
 selections. Unknown, duplicate or invalid query parameters fail rather than changing the selection.
 
 Each selected Realm page performs two native Realm readability observations, one before metadata and one before
@@ -326,7 +326,7 @@ its existing scope contract. Aggregate and population HTTP handlers select curre
 reading numeric results. Low-level aggregate functions remain trusted computation ports, not disclosure ports.
 
 `readVisibleRatingQuestion` and `ratingQuestionView` in `question-directory.ts` provide exact current provenance,
-meaning, revision, grain and scale for native consumers, including the rank owner. Review-context selections use
+meaning, revision, grain, scale and Realm lifecycle observation for native consumers, including the rank owner. Review-context selections use
 that authority boundary on initial and continuation observations. Content point and board-page disclosure hides
 an unreadable custom question's citation while retaining the ordinarily readable post; unavailable authority
 propagates. Standard citations retain their existing behavior. Content's `reads.ts` and
@@ -416,6 +416,99 @@ selection tokens. Latest captions come from a head point join, without history s
 adds the three mounted paths to the exhaustive typed native route contract. No existing behavior assertion is
 removed. `library/collection-reads.ts` removes an identical duplicate import already present on the base, solely
 to unblock the required workspace type-check; library behavior is unchanged. `db/rating/schema.sql` records the additive migration snapshot.
+
+### Realm question lifecycle
+
+Lifecycle belongs to the same authored question but has its own revision. When no lifecycle head exists, a Realm
+question is active at lifecycle revision 1. Captions remain on their separate revision head; retirement and
+restoration never edit the canonical creation label, measurement revision, meaning, grain, scale or caption.
+Global and standard questions have no lifecycle command.
+
+`POST /v1/rating-questions/{questionId}/$retire` and `POST /v1/rating-questions/{questionId}/$restore` accept
+`{ expectedLifecycleRevision }` and `Idempotency-Key`. Both require current native `realm:manage` on the question's
+actual Realm before receipt lookup on every attempt. Standard, unknown and concealed questions do not acquire a
+synthetic manager. A revision or state conflict returns `409` without changing state or emitting an event. An exact
+replay is admitted only while its resulting lifecycle revision remains current; a replay after a later transition
+conflicts. Manage revocation denies receipt replay.
+
+Each successful transition writes one lifecycle head, advances one per-Realm lifecycle generation and emits the
+registered `com.rezics.rating.question.lifecycle-changed.v1` event containing the question, Realm, state, lifecycle
+revision and generation. It does not delete votes, enumerate voters or Subjects, or advance figure generations.
+
+An authorized `GET /v1/rating-questions/{questionId}` may return a retired Realm question with
+`lifecycle: { state: "retired", revision }`; its current Realm readability check still runs, so this historical
+metadata is not admission to cast, rank or select. Unknown and concealed questions remain indistinguishable.
+Explicit Realm directories omit retired questions but consume their raw keys for bounded progress. Their cursors
+carry the lifecycle generation and fail with `400` after any retirement or restoration in that Realm, including an
+empty page. Default Global directory behavior remains unchanged.
+
+Retirement refuses new vote casts and changes with `409`. A voter with current ordinary vote authority and current
+question disclosure can still read their own stored vote and withdraw it through the existing account-owned
+command; no private figures or other voters' rows are exposed. Restoration admits new commands at its new active
+revision. Preserved votes retain their original question meaning and eligibility.
+
+The native Realm rank source requires an active lifecycle observation for the selected question and rechecks its
+exact lifecycle revision before returning. Its cursor is bound to that revision. A retired question produces the
+typed `RealmRankQuestionUnavailableError` reason `retired`; missing or stale native prior/source observations
+produce `unavailable`; when a pending source has no candidate rows, the page stays unavailable. Existing candidate
+rows retain their source `updating` marker. Restoration
+reuses existing figures only while the frozen measurement identity and current native prior generation remain
+active; otherwise the source stays unavailable until the existing publication producer establishes current
+figures. `com.rezics.rating.realm_rank.changed.v1` carries the exact lifecycle revision observed when its figure
+was published. The event carries both state and revision. Search owns event handling, selection controls and user
+messaging.
+
+#### Retire Cost
+
+- **Touches:** One question-home read, current Realm manager preparation, one command receipt, one locked question,
+  one lifecycle-head upsert, one Realm-generation upsert and one lifecycle event.
+- **Bound:** Constant statements and rows per attempt; no vote or Subject scan. Index and receipt lookup blocks grow
+  logarithmically with retained history.
+- **Growth check:** `test/rating/question-lifecycle.test.ts` checks one transition and exact replay/revocation behavior;
+  physical growth measurement belongs to the dev verifier.
+
+#### Restore Cost
+
+- **Touches:** The same bounded question, manager, receipt, lifecycle and generation rows as retirement, plus one
+  registered event. No figure or voter rows are rewritten.
+- **Bound:** Constant statements and rows per attempt; retained lifecycle and receipt indexes grow logarithmically.
+- **Growth check:** `test/rating/question-lifecycle.test.ts` checks the active revision and preserved meaning after
+  restoration; physical growth measurement belongs to the dev verifier.
+
+#### Historical point read Cost
+
+- **Touches:** One question primary-key seek joined to its lifecycle and caption heads, then current Realm
+  readability under the existing Access path.
+- **Bound:** One metadata row regardless of vote history; joined heads are unique by question.
+- **Growth check:** The focused lifecycle test compares the returned retired revision with the unchanged authored
+  definition; physical growth measurement belongs to the dev verifier.
+
+#### Selectable directory Cost
+
+- **Touches:** One Realm lifecycle-generation point read and one `(realm_id, id)` keyset seek joined to at most one
+  lifecycle head per raw question; current Realm readability is checked before and after the snapshot.
+- **Bound:** At most 21 raw rows, 20 returned active questions and two Realm generation reads. Retired rows consume
+  key progress but never fill the returned page; no count or history scan is added.
+- **Growth check:** `test/rating/growth-question-directory.test.ts` owns physical directory growth; the lifecycle
+  outcome test checks omission, raw-key continuation invalidation and restored selection.
+
+#### Own vote read and withdrawal Cost
+
+- **Touches:** Existing current-question disclosure plus one account and one vote point read; withdrawal uses the
+  existing account command, one vote row and its existing bounded event fanout.
+- **Bound:** Constant rows per operation independent of the number of retained votes. A lifecycle head is joined by
+  question primary key.
+- **Growth check:** `test/rating/growth-own-votes.test.ts` owns own-vote read growth; the lifecycle test checks retained
+  private read and withdrawal while retired.
+
+#### Protected Realm rank read Cost
+
+- **Touches:** Existing Realm and subject observations, prior/generation points and one ordered rank seek; the exact
+  lifecycle revision is included in the question read and checked again before serialization.
+- **Bound:** Existing `realm_rank_score_idx` limit still bounds candidates; lifecycle state adds no scan, index or
+  figure-generation work.
+- **Growth check:** `test/rating/growth-realm-rank-source.test.ts` owns rank growth; the lifecycle test checks the
+  retired reason even with no current prior rows.
 
 ## Protected Realm rank source
 

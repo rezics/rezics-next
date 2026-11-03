@@ -12,6 +12,7 @@ import { globalReadEligibility } from '../semantic/eligibility.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import directory from './question-directory.sql';
 import realmDirectory from './question-directory-realm.sql';
+import lifecycleGenerationRead from './question-lifecycle-generation-read.sql';
 import questionRead from './question-read.sql';
 import type { QuestionGrain } from './question-authoring.ts';
 
@@ -28,6 +29,7 @@ export type RatingQuestionView = {
   meaning?: string;
   canonicalLabel?: string;
   labelRevision?: number;
+  lifecycle?: { state: 'active' | 'retired'; revision: number };
 };
 
 /** Keep the legacy wire shape exact. Realm definitions add explicit provenance and
@@ -44,10 +46,15 @@ export function ratingQuestionView(row: {
   meaning?: string | null;
   presentationLabel?: string | null;
   labelRevision?: number | null;
+  lifecycleState?: string | null;
+  lifecycleRevision?: number | null;
 }): RatingQuestionView {
   const grain = row.grain;
   if (grain !== 'work' && grain !== 'release' && grain !== 'episode' && grain !== 'character')
     throw new Error('Unknown rating question grain');
+  const lifecycleState = row.lifecycleState ?? 'active';
+  if (lifecycleState !== 'active' && lifecycleState !== 'retired')
+    throw new Error('Unknown rating question lifecycle state');
   return {
     id: row.id,
     revision: row.revision,
@@ -61,6 +68,10 @@ export function ratingQuestionView(row: {
           meaning: row.meaning!,
           canonicalLabel: row.label,
           labelRevision: row.labelRevision ?? 1,
+          lifecycle: {
+            state: lifecycleState,
+            revision: row.lifecycleRevision ?? 1,
+          },
         }),
   };
 }
@@ -139,8 +150,11 @@ export async function readRatingQuestionDirectory(
       ? await directory.run(client, parameters)
       : await realmDirectory.run(client, { ...parameters, realm_id: input.realmId });
   const consumed = rows.slice(0, input.limit);
+  const ratingQuestions = consumed
+    .map(ratingQuestionView)
+    .filter((question) => input.realmId === undefined || question.lifecycle?.state !== 'retired');
   return {
-    ratingQuestions: consumed.map(ratingQuestionView),
+    ratingQuestions,
     after: consumed.at(-1)?.id ?? null,
     hasMore: rows.length > input.limit,
   };
@@ -152,7 +166,7 @@ export async function readRatingQuestionDirectory(
 export async function readSelectedQuestionDirectory(
   deps: Dependencies,
   actor: Actor,
-  input: { after: string | null; limit: number; realmId?: string },
+  input: { after: string | null; limit: number; realmId?: string; lifecycleGeneration?: string },
   deadline: number,
 ) {
   const authorize = () =>
@@ -163,10 +177,27 @@ export async function readSelectedQuestionDirectory(
   const page = await withReadTransaction(deps.pool, async (client) => {
     const bounded = deadlineClient(client, deadline);
     // A selected Realm and every question it creates share one native home.
-    await partitionReadClient(bounded, partitionOf(input.realmId === undefined ? 0 : routeOf(input.realmId)!));
-    return readRatingQuestionDirectory(bounded, input);
+    const partition = partitionOf(input.realmId === undefined ? 0 : routeOf(input.realmId)!);
+    await partitionReadClient(bounded, partition);
+    const lifecycleGeneration =
+      input.realmId === undefined
+        ? '0'
+        : ((await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId }))?.generation ?? '0');
+    if (input.lifecycleGeneration !== undefined && input.lifecycleGeneration !== lifecycleGeneration)
+      throw new ProblemError('invalid_cursor');
+    return { ...(await readRatingQuestionDirectory(bounded, input)), lifecycleGeneration };
   });
-  if (input.realmId !== undefined) await authorize();
+  if (input.realmId !== undefined) {
+    const latest = await withReadTransaction(deps.pool, async (client) => {
+      const bounded = deadlineClient(client, deadline);
+      await partitionReadClient(bounded, partitionOf(routeOf(input.realmId!)!));
+      return (
+        (await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId! }))?.generation ?? '0'
+      );
+    });
+    if (latest !== page.lifecycleGeneration) throw new ProblemError('invalid_cursor');
+    await authorize();
+  }
   return page;
 }
 

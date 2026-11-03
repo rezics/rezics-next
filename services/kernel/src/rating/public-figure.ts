@@ -94,6 +94,8 @@ type PublicFigureRow = {
   revision: string;
   asOf: string | null;
   position: string;
+  lifecycleState: 'active' | 'retired' | null;
+  lifecycleRevision: number | null;
 };
 
 class NoPendingFigures extends Error {}
@@ -471,20 +473,30 @@ async function drainFigurePage(
       const figures = rows.map(figureFromRow);
       return {
         value: figures.length,
-        events: figures.map((figure) =>
-          figure.questionId === STANDARD_QUESTION_ID
-            ? { type: FIGURE_CHANGED, subject: figure.subjectId, data: figure }
-            : {
-                type: 'com.rezics.rating.realm_rank.changed.v1',
-                subject: figure.subjectId,
-                data: {
-                  questionId: figure.questionId,
-                  populationId: figure.populationId,
-                  subjectId: figure.subjectId,
-                  revision: figure.revision,
-                },
-              },
-        ),
+        events: figures.map((figure, index) => {
+          if (figure.questionId === STANDARD_QUESTION_ID)
+            return { type: FIGURE_CHANGED, subject: figure.subjectId, data: figure };
+          const lifecycleState = rows[index]?.lifecycleState;
+          const lifecycleRevision = rows[index]?.lifecycleRevision;
+          if (
+            (lifecycleState !== 'active' && lifecycleState !== 'retired') ||
+            lifecycleRevision === null ||
+            lifecycleRevision === undefined
+          )
+            throw new Error('Realm rank publication has no lifecycle observation');
+          return {
+            type: 'com.rezics.rating.realm_rank.changed.v1',
+            subject: figure.subjectId,
+            data: {
+              questionId: figure.questionId,
+              populationId: figure.populationId,
+              subjectId: figure.subjectId,
+              revision: figure.revision,
+              lifecycleState,
+              lifecycleRevision,
+            },
+          };
+        }),
       };
     });
     return outcome.value;

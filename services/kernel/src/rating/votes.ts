@@ -41,6 +41,8 @@ export type RatingQuestion = RatingQuestionScale & {
   revision: number;
   label: string;
   grain: 'work' | 'release' | 'episode' | 'character';
+  lifecycleState: 'active' | 'retired';
+  lifecycleRevision: number;
 };
 
 export type Vote = {
@@ -70,6 +72,14 @@ export class RatingQuestionNotFoundError extends Error {
   }
 }
 
+export class RatingQuestionRetiredError extends Error {
+  readonly reason = 'retired' as const;
+  constructor() {
+    super('Rating question is retired');
+    this.name = 'RatingQuestionRetiredError';
+  }
+}
+
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type QuestionRow = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
@@ -89,6 +99,8 @@ function voteAccount(actor: Actor): AccountActor {
 function asQuestion(row: QuestionRow): RatingQuestion {
   if (row.grain !== 'work' && row.grain !== 'release' && row.grain !== 'episode' && row.grain !== 'character')
     throw new Error(`Unknown rating grain: ${row.grain}`);
+  if (row.lifecycleState !== 'active' && row.lifecycleState !== 'retired')
+    throw new Error(`Unknown rating question lifecycle state: ${row.lifecycleState}`);
   return {
     ...row,
     grain: row.grain,
@@ -96,6 +108,8 @@ function asQuestion(row: QuestionRow): RatingQuestion {
     minimumUnits: Number(row.minimumUnits),
     maximumUnits: Number(row.maximumUnits),
     stepUnits: Number(row.stepUnits),
+    lifecycleState: row.lifecycleState,
+    lifecycleRevision: Number(row.lifecycleRevision),
   };
 }
 
@@ -191,6 +205,7 @@ export function createVoteCommands(config: Dependencies) {
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
     const question = await findQuestion(config, actor, input.questionId);
+    if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
     validateUnits(question, input.units);
     const resolved = await resolveSubject(
       { pool, access, ...(clock === undefined ? {} : { clock }) },
@@ -218,6 +233,8 @@ export function createVoteCommands(config: Dependencies) {
               false,
             );
             if (!current) throw new RatingQuestionNotFoundError();
+            if (input.units !== null && current.lifecycleState === 'retired')
+              throw new RatingQuestionRetiredError();
           },
         },
         async (tx, command) => {

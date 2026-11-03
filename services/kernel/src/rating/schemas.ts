@@ -17,6 +17,11 @@ export const RatingVoteResponseSchema = t.Object(
   closed,
 );
 
+const RatingQuestionLifecycleSchema = t.Object(
+  { state: t.Union([t.Literal('active'), t.Literal('retired')]), revision },
+  closed,
+);
+
 export const RatingQuestionResponseSchema = t.Object(
   {
     id,
@@ -27,6 +32,7 @@ export const RatingQuestionResponseSchema = t.Object(
     meaning: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
     label: t.String({ minLength: 1, maxLength: 200 }),
     grain,
+    lifecycle: t.Optional(RatingQuestionLifecycleSchema),
     scale: t.Object(
       {
         min: t.Integer(),
@@ -36,6 +42,15 @@ export const RatingQuestionResponseSchema = t.Object(
       closed,
     ),
   },
+  closed,
+);
+
+export const RatingQuestionLifecycleInputSchema = strictContentSchema(
+  t.Object({ expectedLifecycleRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }) }, closed),
+);
+
+export const RatingQuestionLifecycleResultSchema = t.Object(
+  { questionId: id, lifecycle: RatingQuestionLifecycleSchema },
   closed,
 );
 

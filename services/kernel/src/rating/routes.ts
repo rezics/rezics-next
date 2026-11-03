@@ -22,8 +22,21 @@ import { LibraryNotFoundError } from '../library/command-support.ts';
 import { createRealmRatingQuestion, QuestionDefinitionInvalidError } from './question-authoring.ts';
 import { ratingQuestionView, readVisibleRatingQuestion, readSelectedQuestionDirectory } from './question-directory.ts';
 import { updateQuestionLabel, readQuestionLabel, readQuestionLabelHistory } from './question-label.ts';
+import {
+  QuestionLifecycleConflictError,
+  QuestionLifecycleNotFoundError,
+  retireRealmRatingQuestion,
+  restoreRealmRatingQuestion,
+} from './question-lifecycle.ts';
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
-import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
+import {
+  createVoteCommands,
+  RatingQuestionNotFoundError,
+  RatingQuestionRetiredError,
+  VoteInvalidError,
+  VOTE_SCOPE,
+  type Vote,
+} from './votes.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
 import {
   RatingAggregateResponseSchema,
@@ -34,6 +47,8 @@ import {
   RatingQuestionLabelSchema,
   RatingQuestionLabelHistoryQuerySchema,
   RatingQuestionLabelHistorySchema,
+  RatingQuestionLifecycleInputSchema,
+  RatingQuestionLifecycleResultSchema,
   RatingQuestionDirectoryQuerySchema,
   RatingQuestionDirectoryResponseSchema,
   RatingQuestionResponseSchema,
@@ -118,8 +133,14 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
     return await run();
   } catch (error) {
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
-    if (error instanceof LibraryNotFoundError || error instanceof RatingQuestionNotFoundError)
+    if (
+      error instanceof LibraryNotFoundError ||
+      error instanceof RatingQuestionNotFoundError ||
+      error instanceof QuestionLifecycleNotFoundError
+    )
       throw new ProblemError('not_found');
+    if (error instanceof RatingQuestionRetiredError || error instanceof QuestionLifecycleConflictError)
+      throw new ProblemError('conflict');
     if (error instanceof VoteInvalidError || error instanceof QuestionDefinitionInvalidError)
       throw new ProblemError('invalid_request', {
         errors: [{ pointer: `/${error.field}`, code: 'out_of_range' }],
@@ -417,6 +438,80 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         return outcome.value;
       },
     )
+    .post(
+      '/v1/rating-questions/:questionId/$retire',
+      {
+        params: t.Object({ questionId: id }, closed),
+        headers,
+        body: RatingQuestionLifecycleInputSchema,
+        response: {
+          200: withHeaders(RatingQuestionLifecycleResultSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures,
+        },
+        detail: {
+          operationId: 'rating.question_retire',
+          'x-action': 'realm:manage',
+          'x-exposure': 'public',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
+          security: bearer,
+        },
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        requireRoutableIds(params.questionId);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const outcome = await admission.run('normal', job, () =>
+          command(() =>
+            retireRealmRatingQuestion(
+              config(),
+              actor,
+              { questionId: params.questionId, expectedRevision: body.expectedLifecycleRevision },
+              { idempotencyKey: key, deadline: job.deadline },
+            ),
+          ),
+        );
+        session.record({ partition: outcome.partition, epoch: outcome.epoch, position: outcome.position });
+        return outcome.value;
+      },
+    )
+    .post(
+      '/v1/rating-questions/:questionId/$restore',
+      {
+        params: t.Object({ questionId: id }, closed),
+        headers,
+        body: RatingQuestionLifecycleInputSchema,
+        response: {
+          200: withHeaders(RatingQuestionLifecycleResultSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures,
+        },
+        detail: {
+          operationId: 'rating.question_restore',
+          'x-action': 'realm:manage',
+          'x-exposure': 'public',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
+          security: bearer,
+        },
+      },
+      async ({ actor, params, body, headers, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        requireRoutableIds(params.questionId);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const outcome = await admission.run('normal', job, () =>
+          command(() =>
+            restoreRealmRatingQuestion(
+              config(),
+              actor,
+              { questionId: params.questionId, expectedRevision: body.expectedLifecycleRevision },
+              { idempotencyKey: key, deadline: job.deadline },
+            ),
+          ),
+        );
+        session.record({ partition: outcome.partition, epoch: outcome.epoch, position: outcome.position });
+        return outcome.value;
+      },
+    )
     .get(
       '/v1/rating-questions/:questionId/labels',
       {
@@ -503,6 +598,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             },
           };
           let after: string | null = null;
+          let lifecycleGeneration: string | undefined;
           if (query.cursor !== undefined) {
             const decoded = decodeCursor(
               dependencies.tokens,
@@ -512,18 +608,26 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             );
             if (
               !decoded.ok ||
-              decoded.epoch !== 1 ||
-              decoded.after.length !== 1 ||
+              decoded.epoch !== 2 ||
+              decoded.after.length !== 2 ||
               typeof decoded.after[0] !== 'string' ||
-              !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(decoded.after[0])
+              !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(decoded.after[0]) ||
+              typeof decoded.after[1] !== 'string' ||
+              !/^(0|[1-9][0-9]{0,18})$/.test(decoded.after[1])
             )
               throw new ProblemError('invalid_cursor');
             after = decoded.after[0];
+            lifecycleGeneration = decoded.after[1];
           }
           const page = await readSelectedQuestionDirectory(
             config(),
             actor,
-            { after, limit, ...(query.realm === undefined ? {} : { realmId: query.realm }) },
+            {
+              after,
+              limit,
+              ...(query.realm === undefined ? {} : { realmId: query.realm }),
+              ...(lifecycleGeneration === undefined ? {} : { lifecycleGeneration }),
+            },
             job.deadline,
           );
           return {
@@ -533,7 +637,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 ? encodeCursor(
                     dependencies.tokens,
                     binding,
-                    { epoch: 1, after: [page.after] },
+                    { epoch: 2, after: [page.after, page.lifecycleGeneration] },
                     (dependencies.clock?.() ?? new Date()).getTime(),
                   )
                 : null,

@@ -356,6 +356,8 @@ const typed = [
   'PUT /v1/subjects/:id/reaction',
   'DELETE /v1/subjects/:id/reaction',
   'POST /v1/realms/:realmId/rating-questions',
+  'POST /v1/rating-questions/:questionId/$retire',
+  'POST /v1/rating-questions/:questionId/$restore',
   'PUT /v1/rating-questions/:questionId/label',
   'GET /v1/rating-questions/:questionId/labels',
   'GET /v1/rating-questions/:questionId/labels/:labelRevision',
@@ -411,6 +413,23 @@ test('semantic editorial listings document their default page size', () => {
   expect(paths['/v1/subjects/{id}/relations']!.get!.parameters).toContainEqual(
     expect.objectContaining({ name: 'limit', in: 'query', schema: expect.objectContaining({ default: 25 }) }),
   );
+});
+
+test('question lifecycle commands publish their native Realm management authority', () => {
+  const paths = openApiDocument(
+    createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }),
+  ).paths;
+  for (const operationId of ['rating.question_retire', 'rating.question_restore'] as const) {
+    const operation = Object.values(paths)
+      .map((item) => item.post)
+      .find((item) => item?.operationId === operationId);
+    expect(operation).toMatchObject({
+      operationId,
+      'x-action': 'realm:manage',
+      'x-exposure': 'public',
+      'x-resource-types': ['community.realm'],
+    });
+  }
 });
 
 test('mounted action catalogues contain only their declared actions and never infer account management', () => {

@@ -58,6 +58,13 @@ type Row = Omit<RealmRankCandidate, 'count' | 'mean' | 'score' | 'asOf'> & {
 };
 type Position = { generation: string; prior: string; epoch: number; score: string; subject: string; at: number };
 
+export class RealmRankQuestionUnavailableError extends Error {
+  constructor(readonly reason: 'unavailable' | 'retired') {
+    super(reason === 'retired' ? 'Rating question is retired' : 'Rating question is unavailable');
+    this.name = 'RealmRankQuestionUnavailableError';
+  }
+}
+
 // Signed AND encrypted: a consumed candidate may have become unreadable. Its key must stay private.
 function encryptionKey(tokens: KeyRing, kid: number): Buffer {
   const key = tokens.keys.get(kid);
@@ -165,17 +172,20 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       await authorizeRealm();
       const readQuestion = async () => {
         const question = await readVisibleRatingQuestion(deps, actor, input.questionId, deadline);
-        if (!question) throw new ProblemError('not_found');
+        if (!question || question.realmId !== input.realmId) throw new RealmRankQuestionUnavailableError('unavailable');
+        if (question.lifecycleState === 'retired') throw new RealmRankQuestionUnavailableError('retired');
         if (!realmRankQuestionEligible(question)) throw new ProblemError('invalid_request');
         return question;
       };
       const question = await readQuestion();
       const identity = ratingQuestionIdentity(question);
+      const lifecycleRevision = question.lifecycleRevision;
       const authority = actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
       const scope = `rating.realm-rank.v1\0${JSON.stringify({
         realm: input.realmId,
         question: input.questionId,
         identity,
+        lifecycleRevision,
         partition: input.partition,
         sort: input.sort,
         limit: input.limit,
@@ -202,7 +212,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         const current = await generation(client, input);
         if (after && (after.generation !== current || after.epoch !== epoch || after.prior !== prior.generation))
           throw new ProblemError('invalid_cursor');
-        if (!prior.active || prior.identity !== identity) return { generation: current, epoch, rows: [] as Row[] };
+        if (!prior.active || prior.identity !== identity) throw new RealmRankQuestionUnavailableError('unavailable');
         // Separate first/continuation statements retain a strict composite B-tree seek without an OR filter.
         const parameters: unknown[] = [
           input.partition,
@@ -229,6 +239,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
         );
         return { generation: current, epoch, rows: result.rows };
       });
+      if (prior.updating && observed.rows.length === 0) throw new RealmRankQuestionUnavailableError('unavailable');
       const candidates: RealmRankCandidate[] = [];
       for (const row of observed.rows) {
         const route = routeOf(row.subjectId)!;
@@ -266,13 +277,20 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       }
       await authorizeRealm();
       const latestQuestion = await readQuestion();
-      if (ratingQuestionIdentity(latestQuestion) !== identity) throw new ProblemError('invalid_cursor');
+      if (
+        ratingQuestionIdentity(latestQuestion) !== identity ||
+        latestQuestion.lifecycleRevision !== lifecycleRevision
+      )
+        throw new ProblemError('invalid_cursor');
       const latest = await readPrior();
       await observe(deps.pool, input.partition, deadline, async (client, epoch) => {
         if (
           epoch !== observed.epoch ||
           (await generation(client, input)) !== observed.generation ||
-          latest.generation !== prior.generation
+          latest.generation !== prior.generation ||
+          latest.active !== prior.active ||
+          latest.identity !== prior.identity ||
+          latest.updating !== prior.updating
         )
           throw new ProblemError('invalid_cursor');
       });

@@ -122,6 +122,7 @@ export async function createRealmRatingQuestion(
           realmId: body.realmId,
           meaning: body.meaning,
           revision: 1,
+          lifecycle: { state: 'active', revision: 1 },
           label: body.label,
           canonicalLabel: body.label,
           labelRevision: 1,

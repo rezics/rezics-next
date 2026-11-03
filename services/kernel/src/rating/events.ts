@@ -75,12 +75,24 @@ export const RATING_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.rating.question.lifecycle-changed.v1': Type.Object(
+    {
+      questionId: Type.String({ pattern: UUID }),
+      realmId: Type.String({ pattern: UUID }),
+      state: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
+      revision: Type.Integer({ minimum: 2, maximum: 2_147_483_647 }),
+      generation: serial,
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.realm_rank.changed.v1': Type.Object(
     {
       questionId: Type.String({ pattern: UUID }),
       populationId: Type.String({ pattern: UUID }),
       subjectId: Type.String({ pattern: UUID }),
       revision: serial,
+      lifecycleState: Type.Union([Type.Literal('active'), Type.Literal('retired')]),
+      lifecycleRevision: Type.Integer({ minimum: 1, maximum: 2_147_483_647 }),
     },
     { additionalProperties: false },
   ),

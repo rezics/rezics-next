@@ -82,5 +82,10 @@ WITH input AS (
             figure.c::text AS "C", figure.prior_epoch AS "priorEpoch", figure.revision::text AS revision,
             figure.as_of::text AS "asOf", figure.position::text AS position
 )
-SELECT * FROM updated
-ORDER BY "subjectId", "populationId";
+SELECT updated.*,
+       CASE WHEN question.realm_id IS NULL THEN NULL ELSE COALESCE(lifecycle.state, 'active') END AS "lifecycleState",
+       CASE WHEN question.realm_id IS NULL THEN NULL ELSE COALESCE(lifecycle.revision, 1) END AS "lifecycleRevision"
+FROM updated
+JOIN rating.question AS question ON question.id = updated."questionId"::uuid
+LEFT JOIN rating.question_lifecycle AS lifecycle ON lifecycle.question_id = question.id
+ORDER BY updated."subjectId", updated."populationId";
