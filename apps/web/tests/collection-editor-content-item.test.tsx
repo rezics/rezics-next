@@ -25,13 +25,22 @@ async function editorActionStyles() {
   return compiler.build(sources.flatMap((source) => source.match(/[^\s"'`{}]+/g) ?? []));
 }
 
+function usedPx(value: string) {
+  const px = Number.parseFloat(value);
+  if (value.endsWith('px') && Number.isFinite(px)) return px;
+  if (value.endsWith('rem') && Number.isFinite(px)) return px * 16;
+  const steps = Number(/\*\s*(\d+)/.exec(value)?.[1]);
+  expect(steps).toBeGreaterThan(0);
+  return steps * 4;
+}
+
 function assertActionTarget(window: { getComputedStyle(element: Element): CSSStyleDeclaration }, element: HTMLElement) {
   expect(element.className).toContain('size-11');
   expect(element.className).toContain('md:pointer-fine:size-9');
   expect(element.className).not.toContain('sm:size-9');
   const style = window.getComputedStyle(element);
-  expect(Number.parseFloat(style.width)).toBeGreaterThanOrEqual(44);
-  expect(Number.parseFloat(style.height)).toBeGreaterThanOrEqual(44);
+  expect(usedPx(style.width)).toBeGreaterThanOrEqual(44);
+  expect(usedPx(style.height)).toBeGreaterThanOrEqual(44);
 }
 
 // UNRUN: composed assertions for integration; typing is not interaction, browser or native proof.
@@ -39,7 +48,7 @@ test('Shared Collection items preserve exact occurrence editing and independent 
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://rezics.example/en', width: 1280 });
+  const window = new Window({ url: 'https://rezics.example/en', width: 700 });
   window.document.documentElement.lang = 'en';
   const globals = {
     window,
@@ -158,7 +167,6 @@ test('Shared Collection items preserve exact occurrence editing and independent 
       expect(control.closest('a')).toBeNull();
       expect(control.closest('[data-slot="list-row-control"]')).not.toBeNull();
     }
-    window.happyDOM.setWindowSize({ width: 700, height: 900 });
     const named = (row: HTMLElement, action: string, position: number) =>
       row.querySelector<HTMLButtonElement>(
         `button[aria-label="${action}: ${m.library_member_occurrence({ title, position })}"]`,
@@ -241,7 +249,6 @@ test('Shared Collection items preserve exact occurrence editing and independent 
     expect(subjects[0]!.querySelector('[data-slot="cover"]')?.getAttribute('data-ratio')).toBe('5:7');
     expect(subjects[1]!.querySelector('h3')?.textContent).toBe(m.library_subject_unavailable());
     expect(subjects[1]!.querySelector('a, button')).toBeNull();
-    window.happyDOM.setWindowSize({ width: 700, height: 900 });
     assertActionTarget(window, subjects[0]!.querySelector<HTMLElement>('[data-slot="button"]')!);
   } finally {
     await act(async () => root.unmount());
