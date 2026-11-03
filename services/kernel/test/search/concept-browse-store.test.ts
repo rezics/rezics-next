@@ -34,6 +34,20 @@ async function fixture() {
   };
 }
 
+test('root seeding owns the definition before awaiting storage', async () => {
+  const id = randomBytes(32).toString('hex');
+  const store = createConceptBrowseStore(pool, `concept-${randomUUID().slice(0, 8)}-`, id, {
+    expiresAt: Date.now() + 60000,
+  });
+  const mutable = { ...selection };
+  const creating = store.create(mutable, binding);
+  mutable.concept = 'changed';
+  const retained = await creating;
+  expect(await store.read({ version: 2, selection, binding, retained })).toEqual({
+    status: 'building', next: { parent: 'root', after: null },
+  });
+});
+
 test('complete closure above 64 survives interruption, cycles and replay without reenqueuing visited vertices', async () => {
   const f = await fixture();
   const children = Array.from({ length: 140 }, (_, n) => `child-${String(n).padStart(3, '0')}`);

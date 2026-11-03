@@ -51,9 +51,10 @@ Unseen edges and terminal empty seeks remain native source work, even when no me
 
 The existing maintenance tick retires at most eight expired plans through the concept expiry index,
 then locks at most eight uncleaned retired prefixes through the retirement index. Each prefix deletes
-at most 128 frontier and 128 membership rows by its full primary-key prefix. Indexed empty seeks then
-mark cleanup complete; no cascade scans a closure. A tick uses at most 28 SQL statements including
-transaction controls and at most 2048 derived-row deletions. Retired tombstones leave the cleanup index
+at most 128 frontier and 128 membership rows by its full primary-key prefix. Each bounded key read feeds
+full-key point deletes, avoiding a range/ANY deletion scan; working memory holds at most 128 keys.
+Indexed empty seeks then mark cleanup complete; no cascade scans a closure. A tick uses at most 2077
+SQL statements including rollback controls and at most 2048 derived-row deletions. Retired tombstones leave the cleanup index
 and preserve the existing plan identity. Complete membership reads still check live plan expiry before
 returning either true or false, including while cleanup is pending.
 

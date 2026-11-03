@@ -73,6 +73,7 @@ export function createConceptBrowseStore(pool: Pool, prefix: string, scopeId: st
         expiresAt <= now()
       )
         throw new TypeError('Invalid concept scope definition');
+      const root = selection.concept;
       const retained = definition(selection, binding);
       // BEGIN, plan insert, two root inserts, existing-plan point read, COMMIT/ROLLBACK.
       charge(6, 4, 32768);
@@ -88,12 +89,12 @@ export function createConceptBrowseStore(pool: Pool, prefix: string, scopeId: st
           await client.query(
             `INSERT INTO search.scope_preparation_concept_member (partition_no,prefix,scope_id,concept)
             VALUES (0,$1,$2,$3)`,
-            [prefix, scopeId, selection.concept],
+            [prefix, scopeId, root],
           );
           await client.query(
             `INSERT INTO search.scope_preparation_concept_frontier (partition_no,prefix,scope_id,parent)
             VALUES (0,$1,$2,$3)`,
-            [prefix, scopeId, selection.concept],
+            [prefix, scopeId, root],
           );
           return locator(scopeId, inserted.rows[0]!.revision);
         }
@@ -261,14 +262,20 @@ export async function cleanupConceptBrowses(pool: Pool, prefix: string, now = Da
           ['scope_preparation_concept_frontier', 'parent'],
           ['scope_preparation_concept_member', 'concept'],
         ] as const) {
-          const result = await client.query(
-            `DELETE FROM search.${table} WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND ${key} IN (
-              SELECT ${key} FROM search.${table} WHERE partition_no=0 AND prefix=$1 AND scope_id=$2
-              ORDER BY ${key} LIMIT 128
-            )`,
+          const keys = await client.query<{ key: string }>(
+            `SELECT ${key} AS key FROM search.${table}
+            WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 ORDER BY ${key} LIMIT 128 FOR UPDATE`,
             [prefix, scope_id],
           );
-          removed += result.rowCount ?? 0;
+          // Full-key point deletes avoid an IN/ANY plan that could scan the whole closure
+          // despite a bounded subquery. The returned working set is at most 128 keys.
+          for (const row of keys.rows) {
+            const result = await client.query(
+              `DELETE FROM search.${table} WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND ${key}=$3`,
+              [prefix, scope_id, row.key],
+            );
+            removed += result.rowCount ?? 0;
+          }
         }
         await client.query(
           `UPDATE search.scope_preparation SET frontier='{"kind":"concept","cleaned":true}'
