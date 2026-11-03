@@ -10,6 +10,7 @@ import { profileSources, profileTypes } from './native-conformance-profiles.ts';
 import { json, publish, setGate, unavailable, write } from './native-conformance.ts';
 import { createNativeShelvesGrowthFixture } from './native-shelves-growth-fixture.ts';
 import { costOf } from '../../support/growth.ts';
+import { createNativeShelvesTypeFixture } from './native-shelves-type-fixture.ts';
 
 const timestamp = (column: string) => `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
@@ -19,6 +20,7 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
     const sources = profileSources('profile-v1');
     await publish(world, await compileCatalogue(sources));
     const database = world.native.reader;
+    const types = createNativeShelvesTypeFixture(world);
     const accounts = Object.values(world.accounts).map((account) => account.id);
     const growth = createNativeShelvesGrowthFixture(world, {
       type: profileTypes.book,
@@ -60,9 +62,7 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
       async pauseTypeWork(input) {
         return unavailable(`production shelf ${input.workflow} ${input.boundary} observation latch`);
       },
-      async changeSubjectType() {
-        return unavailable('semantic primary-type revision command binding');
-      },
+      changeSubjectType: types.changeSubjectType,
       async mergeSubjects(input) {
         const result = await json<{ survivor: string; redirected: string }>(
           await write(world, 'steward', 'POST', '/v1/subjects:merge', { subjects: [input.into, input.from] }),
@@ -70,9 +70,7 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
         if (result.survivor !== input.into || result.redirected !== input.from)
           throw new Error('Native semantic merge did not select the requested survivor');
       },
-      async redeliver() {
-        return unavailable('production subject.revised event redelivery binding');
-      },
+      redeliver: types.redeliver,
       setGate: (gate, open) => setGate(world, gate, open),
       request: world.native.request,
       async inspect(): Promise<ShelvesInspection> {
