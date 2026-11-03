@@ -168,3 +168,31 @@ test('the same proxy rewrites a custom method and retains viewer headers', async
   expect(sent[0]!.headers.get(SESSION_HEADER)).toBe('viewer');
   expect(sent[0]!.headers.get('idempotency-key')).toBe('"merge"');
 });
+
+test('selected label consolidation exposes all six typed routes', async () => {
+  const { sent, fetch } = kernel(Array.from({ length: 6 }, () => () => json(200, {})));
+  const label = createKernelClient(ORIGIN, { fetch }).libraryLabels({ id: ID });
+  const selected = { subjectId: ID, assignmentId: ID, revision: 1 };
+  const options = { headers: { 'idempotency-key': '"consolidate"' } };
+  await label.$reviewConsolidation.post({ targetLabelId: ID, items: [selected] });
+  await label.$confirmConsolidation.post(
+    {
+      selection: 'a'.repeat(64),
+      sourceLabel: { id: ID, revision: 1, name: 'Source' },
+      targetLabel: { id: ID, revision: 1, name: 'Target' },
+      items: [{ selected, source: { id: ID, revision: 1, effective: true }, target: null, outcome: 'movable' }],
+    },
+    options,
+  );
+  await label.$applyConsolidation.post({ confirmationId: ID }, options);
+  await label.$retryConsolidation.post({ confirmationId: ID, item: 0 }, options);
+  await label.$cancelConsolidation.post({ confirmationId: ID }, options);
+  await label.consolidations({ confirmationId: ID }).get();
+  expect(sent.map(({ url, method }) => [url, method])).toEqual([
+    ...['review', 'confirm', 'apply', 'retry', 'cancel'].map((action) => [
+      `${ORIGIN}/v1/libraryLabels/${ID}:${action}Consolidation`,
+      'POST',
+    ]),
+    [`${ORIGIN}/v1/libraryLabels/${ID}/consolidations/${ID}`, 'GET'],
+  ]);
+});
