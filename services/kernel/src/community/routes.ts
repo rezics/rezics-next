@@ -2464,7 +2464,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-resource-types': ['community.realm'],
-          security: readSecurity,
+          security: writeSecurity,
         },
       },
       async ({ params: { realmId }, query, actor, admission, job, authorize }) => {
