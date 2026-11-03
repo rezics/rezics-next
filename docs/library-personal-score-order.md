@@ -22,8 +22,8 @@ The default public personal-score read currently returns `503 dependency_unavail
 identity fence is not installed. No empty page, inferred currentness or viewer-facts response substitutes for it.
 The internal native page/index producer is implemented; this does not claim a usable public score journey yet.
 Web A05/A06 retain their existing interface owner and must show this unavailable state until native composition
-binds `KernelDependencies.shelves.scoreCurrentness`. The actual client is emitted by the existing kernel declaration
-producer, including the new query literal, entry score, question descriptor and preparation route.
+binds `KernelDependencies.shelves.scoreCurrentness`. The existing kernel declaration producer now describes the new query literal, entry score, question descriptor and preparation route. Declaration/snapshot emission remains deferred because the unchanged base
+`community/member-page-select.sql` fails the compiler with duplicate Reylo parameters.
 
 ## Stable keysets and currentness
 
@@ -84,7 +84,8 @@ vote writer, reservation, repair worker or GET receipt is added.
 
 Entry deletion cascades its index row atomically. Terminal Library fact purge therefore removes score placements;
 the appended `shelf_score_head` owned-erasure phase removes the one owner installation/version row after private
-facts. Numeric checkpoints of existing phases remain unchanged. Account fencing and question lifecycle facts are
+facts. Vote deletion only touches an existing head; terminal vote cleanup cannot recreate a deleted head.
+Numeric checkpoints of existing phases remain unchanged. Account fencing and question lifecycle facts are
 checked by the existing readers and currentness producer; stored scores confer no account or Subject permission.
 
 ## Derived cost and remaining proof
@@ -98,7 +99,7 @@ existing bounded summary/disclosure calls. No cost claim omits that producer or 
 
 Installation has ceil(S/100) nonempty pages plus at most one exhaustion page: each reads <=101 keys, performs <=100
 vote lookups O(log V) and index upserts (one PK and eight ordering indexes), and writes one checkpoint/receipt.
-An Entry or vote effect pays O(log H) head work, <=2 exact source probes and <=2 placement upserts with nine index
+An Entry or vote effect pays O(log H) head work (plus an exact account-state probe before creating a vote head), <=2 exact source probes and <=2 placement upserts with nine index
 updates each; delete additionally pays the existing FK check/cascade. Merge cost is linear in actual changed native
 vote rows, not all unrelated shelves. Hot owners serialize; waiting, native retries, command authorization/receipt,
 existing shelf gate and outbox/cleanup costs are part of the existing caller budgets, not a blanket reservation.
