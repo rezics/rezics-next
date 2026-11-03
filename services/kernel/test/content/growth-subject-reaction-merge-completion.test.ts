@@ -351,8 +351,12 @@ async function assertSurvivorState(item: MergeCase): Promise<void> {
       ORDER BY actor_account_id,target_id`,
     [item.middle ? [item.source, item.middle, item.final] : [item.source, item.final]],
   );
-  const expected = actors
-    .map((actor, index) => ({ actor_account_id: actor.accountId, target_id: item.final, kind: index < survivorCollisions ? 'love' : 'like' }))
+  const expected: Array<{ actor_account_id: string; target_id: string; kind: 'like' | 'love' }> = actors
+    .map((actor, index) => ({
+      actor_account_id: actor.accountId,
+      target_id: item.final,
+      kind: index < survivorCollisions ? 'love' : 'like',
+    }))
     .sort((left, right) => left.actor_account_id.localeCompare(right.actor_account_id));
   expect(queried.rows).toEqual(expected);
   const [sourceCounts, finalCounts, middleCounts] = await Promise.all([
@@ -549,7 +553,7 @@ async function runCostSeries(scenario: Scenario, axis: Axis, route: number): Pro
   });
   assertCostReport(name, report.samples, pressureRelation(axis));
   for (const sample of report.samples)
-    expect(sample.seeding.rowsWritten).toBe(seededRows.get(sample.scale));
+    expect(sample.seeding.rowsWritten).toBe(seededRows.get(sample.scale)!);
   expect(evidence.map(({ scale }) => scale)).toEqual([...scales]);
   for (const item of evidence) {
     expect(item.pageReads).toBe(scenario === 'checkpoint-replay' ? 3 : 2);
