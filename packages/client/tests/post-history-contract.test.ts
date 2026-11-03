@@ -26,14 +26,22 @@ test('post history and exact revision reads keep their compatible route addresse
                     revisionId,
                     state: 'available',
                     citation: { questionId, units: 0, revision: 1 },
-                    question: { id: questionId, revision: 1, label: 'Rating', grain: 'work', scale: { min: 0, max: 20, displayStep: 1 } },
+                    question: {
+                      id: questionId,
+                      revision: 1,
+                      label: 'Rating',
+                      grain: 'work',
+                      scale: { min: 0, max: 20, displayStep: 1 },
+                    },
                   },
                 ],
               },
               actions: {
                 state: 'current',
                 retryable: false,
-                references: [{ type: 'content.post', id: postId, sourceRevisionId: revisionId, state: 'withheld', operations: [] }],
+                references: [
+                  { type: 'content.post', id: postId, sourceRevisionId: revisionId, state: 'withheld', operations: [] },
+                ],
               },
             },
           })
@@ -78,7 +86,10 @@ test('post history and exact revision reads keep their compatible route addresse
       .revisions({ revisionId })
       .get({ query: { editionIdentity: 'true' } });
     // @ts-expect-error Only the edition identity compatibility value is supported.
-    await client.posts({ id: postId }).revisions({ revisionId }).get({ query: { editionIdentity: 'false' } });
+    await client
+      .posts({ id: postId })
+      .revisions({ revisionId })
+      .get({ query: { editionIdentity: 'false' } });
   };
   expect(typeof typed).toBe('function');
 });
