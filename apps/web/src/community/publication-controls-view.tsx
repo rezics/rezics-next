@@ -33,6 +33,7 @@ import type { PublishedSubject } from './space';
 import { sessionQuery, useSession } from '../session/query';
 import { useAuthoringDeparture } from '../threads/authoring-departure';
 import type { ShelfContinuationResult } from './space-queries';
+import { useSpacePageLifetime } from './space-page-lifetime';
 
 export type { PublicationSend, PublicationTarget } from './publication-subject-picker';
 
@@ -106,6 +107,12 @@ export function usePublicationControls(
   sourceIdentity?: object,
 ) {
   const locale = getLocale();
+  const pageLifetime = useSpacePageLifetime();
+  const pageRevision = useSyncExternalStore(
+    pageLifetime?.subscribe ?? noSessionSubscribe,
+    pageLifetime?.snapshot ?? noSessionRevision,
+    pageLifetime?.snapshot ?? noSessionRevision,
+  );
   const queryClient = useContext(QueryClientContext) ?? null;
   const session = useSession();
   const source = queryClient ? publicationSessionSource(queryClient) : null;
@@ -146,6 +153,8 @@ export function usePublicationControls(
     dataUpdateCount,
     dataUpdatedAt,
     cacheIdentity,
+    pageLifetime?.scopeKey ?? null,
+    pageRevision,
   ]);
   const transportIdentity = useMemo(() => ({}), [send, prepare, sourceIdentity]);
   const currentTransport = useRef(transportIdentity);
@@ -161,6 +170,7 @@ export function usePublicationControls(
         ready &&
         currentIdentity.current === identity &&
         currentTransport.current === transportIdentity &&
+        (!pageLifetime || (pageLifetime.admitted() && pageLifetime.snapshot() === pageRevision)) &&
         getLocale() === locale &&
         !!queryClient &&
         !!source &&
@@ -179,7 +189,14 @@ export function usePublicationControls(
       enabled,
       {
         current,
-        ...(source ? { watch: source.subscribe } : {}),
+        watch: (listener) => {
+          const stopSession = source?.subscribe(listener);
+          const stopPage = pageLifetime?.subscribe(listener);
+          return () => {
+            stopSession?.();
+            stopPage?.();
+          };
+        },
         startDisconnected: true,
       },
       async (input) => {
