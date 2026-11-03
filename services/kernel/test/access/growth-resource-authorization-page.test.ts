@@ -17,7 +17,7 @@ afterAll(async () => {
   await db?.close();
 });
 
-for (const series of ['page size', 'unrelated population'] as const) {
+for (const series of ['page size', 'unrelated population', 'grants', 'unrelated groups', 'history'] as const) {
   test(`page authorization keeps its statement count fixed as ${series} grows`, async () => {
     let f: ActorFixture;
     let access: Access;
@@ -54,6 +54,13 @@ for (const series of ['page size', 'unrelated population'] as const) {
             },
           };
         }
+        const grows = (dimension: typeof series) =>
+          !previous || series === 'unrelated population' || series === dimension;
+        if (!previous && series === 'history')
+          await database.admin.query(
+            "UPDATE access.organization_member SET valid='[2000-01-01,)' WHERE organization_id=$1",
+            [f.organizationId],
+          );
         const size = series === 'page size' ? scale : 8;
         const added = Array.from({ length: size - ids.length }, () => newId(f.resource.route));
         ids.push(...added);
@@ -64,64 +71,120 @@ for (const series of ['page size', 'unrelated population'] as const) {
         // Both actor and delegation principal need the same independently verified group.
         await database.admin.query(
           `INSERT INTO access.resource_grant(route,resource_id,subject_id,subject_role,action,valid,transaction_id)
-          SELECT $1,id,$3,'owner','subject:read','(,)',$4 FROM unnest($2::uuid[]) id`,
-          [f.resource.route, added, f.organizationId, f.transactionId],
+          SELECT $1,id,$3,'owner','subject:read',$5::tstzrange,$4 FROM unnest($2::uuid[]) id`,
+          [f.resource.route, added, f.organizationId, f.transactionId, series === 'history' ? '[2000-01-01,)' : '(,)'],
         );
-        if (previous === 0 || series === 'unrelated population') {
+        if (
+          previous === 0 ||
+          series === 'unrelated population' ||
+          series === 'grants' ||
+          series === 'unrelated groups'
+        ) {
           const noise = Array.from(
             {
-              length: (previous === 0 ? 4096 : 0) + (series === 'unrelated population' ? (scale - previous) * 256 : 0),
+              length:
+                (previous === 0 ? 4096 : 0) +
+                (series !== 'page size' && series !== 'history' ? (scale - previous) * 256 : 0),
             },
             () => newId(f.resource.route),
           );
-          await database.admin.query(
-            `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
-            SELECT $1,id,'actor','active',$3 FROM unnest($2::uuid[]) id`,
-            [f.resource.route, noise, f.transactionId],
-          );
-          await database.admin.query(
-            'INSERT INTO public.authorization_page_growth SELECT $1,id FROM unnest($2::uuid[]) id',
-            [f.resource.route, noise],
-          );
-          await database.admin.query(
-            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+          if (grows('unrelated groups')) {
+            await database.admin.query(
+              `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+            SELECT $1,id,$4,'active',$3 FROM unnest($2::uuid[]) id`,
+              [f.resource.route, noise, f.transactionId, series === 'unrelated groups' ? 'organization' : 'actor'],
+            );
+            if (series === 'unrelated groups')
+              await database.admin.query(
+                `INSERT INTO access.organization_member
+                (route,organization_id,member_account_id,role,valid,transaction_id)
+                SELECT $1,id,$3,'owner','(,)',$4 FROM unnest($2::uuid[]) id`,
+                [f.resource.route, noise, f.actorId, f.transactionId],
+              );
+          }
+          if (!previous || series === 'unrelated population')
+            await database.admin.query(
+              'INSERT INTO public.authorization_page_growth SELECT $1,id FROM unnest($2::uuid[]) id',
+              [f.resource.route, noise],
+            );
+          if (grows('grants')) {
+            await database.admin.query(
+              `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
             SELECT $1::integer,id,id,'subject:read','(,)'::tstzrange,$3::uuid FROM unnest($2::uuid[]) id
             UNION ALL SELECT $1::integer,$4::uuid,id,'subject:read','(,)'::tstzrange,$3::uuid FROM unnest($2::uuid[]) id`,
-            [f.resource.route, noise, f.transactionId, ids[0]],
-          );
-          await database.admin.query(
-            `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+              [f.resource.route, noise, f.transactionId, ids[0]],
+            );
+            await database.admin.query(
+              `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
             SELECT $1,$4,id,'fixture.reader','(,)',$3 FROM unnest($2::uuid[]) id`,
-            [f.resource.route, noise, f.transactionId, ids[0]],
-          );
-          await database.admin.query(
-            `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+              [f.resource.route, noise, f.transactionId, ids[0]],
+            );
+            await database.admin.query(
+              `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
             SELECT $1,$4,id,'subject:read','resource','(,)',$3 FROM unnest($2::uuid[]) id`,
-            [f.resource.route, noise, f.transactionId, ids[0]],
-          );
-          await database.admin.query(
-            `INSERT INTO access.membership_inverse
+              [f.resource.route, noise, f.transactionId, ids[0]],
+            );
+          }
+          if (grows('unrelated groups')) {
+            await database.admin.query(
+              `INSERT INTO access.membership_inverse
             (route,account_id,kind,group_id,reservation_id,transaction_id)
             SELECT $1,id,'organization',$3,id,$4 FROM unnest($2::uuid[]) id`,
-            [f.resource.route, noise, f.organizationId, f.transactionId],
-          );
+              [f.resource.route, noise, f.organizationId, f.transactionId],
+            );
+            await database.admin.query(
+              `INSERT INTO access.organization_member
+            (route,organization_id,member_account_id,role,valid,transaction_id)
+            SELECT $1,$3,id,'owner','(,)',$4 FROM unnest($2::uuid[]) id`,
+              [routeOf(f.organizationId), noise, f.organizationId, f.transactionId],
+            );
+            await database.admin.query(
+              `INSERT INTO access.principal_assignment
+            (route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
+            SELECT $1,$3,id,$4,'(,)',$5 FROM unnest($2::uuid[]) id`,
+              [routeOf(f.principalId), noise, f.principalId, f.actorId, f.transactionId],
+            );
+            await database.admin.query(
+              `INSERT INTO core.receipt
+            (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+            SELECT $1,'account',$2,'test.page.noise',id::text,$3,1,1,$4,'{}'::jsonb FROM unnest($5::uuid[]) id`,
+              [partitionOf(f.resource.route), f.actorId, Buffer.alloc(32), f.transactionId, noise],
+            );
+          }
+        }
+        if (series === 'history') {
+          for (const table of ['resource_grant', 'resource_role_grant', 'resource_denial']) {
+            const extra =
+              table === 'resource_denial' ? 'action,reason' : table === 'resource_role_grant' ? 'grant_role' : 'action';
+            const values =
+              table === 'resource_denial'
+                ? "'subject:read','resource'"
+                : table === 'resource_role_grant'
+                  ? "'fixture.reader'"
+                  : "'subject:read'";
+            await database.admin.query(
+              `INSERT INTO access.${table}
+              (route,resource_id,subject_id,subject_role,${extra},valid,transaction_id)
+              SELECT $1,$2,$3,'owner',${values},tstzrange('1900-01-01'::timestamptz+n*interval '1 minute',
+                '1900-01-01'::timestamptz+(n+1)*interval '1 minute','[)'),$4
+              FROM generate_series($5::integer,$6::integer-1) n`,
+              [f.resource.route, ids[0], f.organizationId, f.transactionId, previous * 256, scale * 256],
+            );
+          }
           await database.admin.query(
             `INSERT INTO access.organization_member
             (route,organization_id,member_account_id,role,valid,transaction_id)
-            SELECT $1,$3,id,'owner','(,)',$4 FROM unnest($2::uuid[]) id`,
-            [routeOf(f.organizationId), noise, f.organizationId, f.transactionId],
-          );
-          await database.admin.query(
-            `INSERT INTO access.principal_assignment
-            (route,principal_id,request_id,assigned_actor_id,valid,transaction_id)
-            SELECT $1,$3,id,$4,'(,)',$5 FROM unnest($2::uuid[]) id`,
-            [routeOf(f.principalId), noise, f.principalId, f.actorId, f.transactionId],
-          );
-          await database.admin.query(
-            `INSERT INTO core.receipt
-            (partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
-            SELECT $1,'account',$2,'test.page.noise',id::text,$3,1,1,$4,'{}'::jsonb FROM unnest($5::uuid[]) id`,
-            [partitionOf(f.resource.route), f.actorId, Buffer.alloc(32), f.transactionId, noise],
+            SELECT $1,$2,member,'owner',tstzrange('1900-01-01'::timestamptz+n*interval '1 minute',
+              '1900-01-01'::timestamptz+(n+1)*interval '1 minute','[)'),$4
+            FROM unnest($3::uuid[]) member CROSS JOIN generate_series($5::integer,$6::integer-1) n`,
+            [
+              routeOf(f.organizationId),
+              f.organizationId,
+              [f.actorId, f.principalId],
+              f.transactionId,
+              previous * 256,
+              scale * 256,
+            ],
           );
         }
       },
@@ -162,7 +225,14 @@ for (const series of ['page size', 'unrelated population'] as const) {
               digest: Buffer.alloc(32),
             },
           },
-          async () => ({ value: 'executed', events: [{ type: 'com.rezics.test.resource-authorized.v1', data: {} }] }),
+          async (tx) => {
+            const target = await tx.query(
+              'SELECT id FROM public.authorization_page_growth WHERE route=$1 AND id=ANY($2::uuid[])',
+              [page.route, page.ids],
+            );
+            expect(target.rowCount).toBe(page.ids.length);
+            return { value: 'executed', events: [{ type: 'com.rezics.test.resource-authorized.v1', data: {} }] };
+          },
         );
         expect(result.value).toBe('executed');
       },
