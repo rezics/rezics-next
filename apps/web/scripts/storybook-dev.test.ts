@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { storybookLaunchPlan } from './storybook-dev.ts';
+import { scripts } from '../package.json';
 
 const roots = { web: '/work/apps/web', ui: '/work/packages/ui' };
 
@@ -21,7 +22,7 @@ test('runs the UI catalogue from its own workspace', () => {
   });
 });
 
-test('preserves finite Web Vite execution and rejects standalone Web dev', () => {
+test('preserves finite Web Vite execution and rejects its entry outside test runtime', () => {
   expect(storybookLaunchPlan(['--web', '--port', '5000'], { REZICS_TEST_RUNTIME: '1' }, roots)).toEqual({
     kind: 'vite',
     command: 'vite',
@@ -31,6 +32,20 @@ test('preserves finite Web Vite execution and rejects standalone Web dev', () =>
   expect(() => storybookLaunchPlan(['--web'], {}, roots)).toThrow('finite test commands');
 });
 
+test('starts the ordinary local app without test runtime or check admission', () => {
+  expect(scripts.dev).toBe('bun scripts/storybook-dev.ts --app');
+  expect(storybookLaunchPlan(['--app'], {}, roots)).toEqual({
+    kind: 'app',
+    command: 'vite',
+    cwd: roots.web,
+    args: ['--config', 'vite.config.ts', '--port', '3000', '--strictPort', '--host', '127.0.0.1'],
+  });
+  const finite = storybookLaunchPlan(['--app', '--port', '5000'], { REZICS_TEST_RUNTIME: '1' }, roots);
+  expect(finite.kind).toBe('vite');
+  expect(finite.args).toContain('5000');
+});
+
 test('refuses a non-loopback bind address', () => {
   expect(() => storybookLaunchPlan(['--host', '0.0.0.0'], {}, roots)).toThrow('loopback address');
+  expect(() => storybookLaunchPlan(['--app', '--host=0.0.0.0'], {}, roots)).toThrow('loopback address');
 });

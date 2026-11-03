@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun scripts/storybook-dev.ts --web",
+    "dev": "bun scripts/storybook-dev.ts --app",
     "storybook": "bun scripts/storybook-dev.ts --port 6006",
     "storybook:build": "bun scripts/storybook-build.ts",
     "storybook:deploy": "bun scripts/storybook-deploy.ts",

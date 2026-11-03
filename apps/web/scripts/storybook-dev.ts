@@ -7,7 +7,7 @@ const repoRoot = resolve(webRoot, '../..');
 const uiRoot = resolve(repoRoot, 'packages/ui');
 
 type LaunchPlan =
-  | { kind: 'vite'; command: string; cwd: string; args: string[] }
+  | { kind: 'vite' | 'app'; command: string; cwd: string; args: string[] }
   | { kind: 'storybook'; command: string; cwd: string; args: string[] };
 
 function isLoopbackHost(host: string): boolean {
@@ -40,10 +40,28 @@ export function storybookLaunchPlan(
   env: Record<string, string | undefined> = process.env,
   roots: { web: string; ui: string } = { web: webRoot, ui: uiRoot },
 ): LaunchPlan {
+  if (args[0] === '--app') {
+    const forwarded = args.slice(1);
+    const hosts = storybookHosts(forwarded);
+    for (const host of hosts) {
+      if (!isLoopbackHost(host)) {
+        throw new Error(`Local Web may bind only to a loopback address; received "${host}".`);
+      }
+    }
+    if (hosts.length === 0) forwarded.push('--host', '127.0.0.1');
+    return {
+      // Existing finite test callers of `bun run dev` still require check custody.
+      kind: env.REZICS_TEST_RUNTIME === '1' ? 'vite' : 'app',
+      command: 'vite',
+      cwd: roots.web,
+      args: ['--config', 'vite.config.ts', '--port', '3000', '--strictPort', ...forwarded],
+    };
+  }
+
   if (args[0] === '--web') {
     if (env.REZICS_TEST_RUNTIME !== '1') {
       throw new Error(
-        'Standalone Web dev is unavailable: this entry point only starts Vite for finite test commands; use Storybook for local interface development.',
+        'This entry point only starts Vite for finite test commands; use bun run dev for the local app or bun run storybook for interface development.',
       );
     }
     return {

@@ -116,11 +116,14 @@ artifact/input identity remains a Performance interface gap. Do not invent an in
 
 ## Interactive access
 
-Storybook `dev` on ports 6006/6007 is explicitly unavailable. The finite remote CLI does not provide a supported
-access/tunnel API or durable long-running interactive custody. No environment marker enables a local listener.
-Web `dev` is also unavailable for standalone interactive use. Its original Vite command is admitted only as a
-finite check's test-runtime child inside an actual remote run; test-runtime environment alone is insufficient.
-Those finite fixtures retain their existing independent server/browser cleanup and no tunnel API is implied.
+Decision: ordinary Web `dev` starts the product app on loopback, separately from the local Storybook interface catalogue.
+Local startup does not enter finite check routing, publication or capture. The supported preparation and command
+are documented in [the Web README](../../apps/web/README.md#local-public-app).
+
+The finite remote CLI does not provide interactive access, a tunnel API or durable long-running interactive custody
+for Web or Storybook. Web `dev` callers with `REZICS_TEST_RUNTIME=1` still require an actual remote run before Vite
+starts; the `--web` launcher remains finite-only, and test-runtime environment alone is insufficient. Those finite
+fixtures retain their existing independent server/browser cleanup.
 
 ## Receiving obligations and remaining coverage
 

@@ -1,4 +1,31 @@
-Local interface development uses Storybook: run `bun run storybook` from `apps/web`. `bun run dev` invokes the finite-check Web Vite entry point and is rejected outside its prepared test runtime; it does not start the standalone site. Run `bun run check` to generate, type-check, test, and build.
+## Local public app
+
+Decision: `bun run dev` starts the product app on loopback; `bun run storybook` remains the separate interface catalogue.
+
+Use the Bun version pinned by the root `packageManager` and installed dependencies (`bun install --frozen-lockfile`
+from the repository root when preparing a fresh checkout). With dependencies already installed, select the installed
+runtime before starting, so child commands also use it:
+
+```sh
+export PATH="$PWD/node_modules/.bin:$PATH"
+bun run --cwd apps/web dev
+```
+
+Run this from the repository root. Vite logs its ready endpoint at `http://127.0.0.1:3000/`; requesting `/` follows
+the normal locale routing to the public shell. Stop this owned server with Ctrl-C. To use another loopback port,
+pass `--port 3001`; an occupied port fails instead of silently changing the endpoint. Localization is generated
+automatically during startup, and TanStack generates routes. Producer-owned client declarations in
+`packages/client/src/kernel/` must be prepared with `bun run --cwd services/kernel client` if absent or stale;
+this is generation, not native service startup.
+
+The public shell needs no invented credentials or copied test keys. Configure real services and registered website
+credentials only for the journeys that need them, as described below. Auth and Kernel availability remain separate
+prerequisites; a ready shell does not establish sign-in, native authorization or checkout. This command does not
+start producers, publish Storybook, capture pages or register checks. Finite test callers retain their existing
+check admission, including callers of `dev` with `REZICS_TEST_RUNTIME=1`; the `--web` launcher remains finite-only.
+
+From `apps/web`, use `bun run storybook` for interface development and `bun run check` to generate, type-check, test,
+and build through the supported check route.
 
 ## Prepared remote Web checks
 
