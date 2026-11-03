@@ -17,6 +17,10 @@ declare Gregorian calendar and precision 9, 10 or 11 with the corresponding zero
 malformed or unsafe-integer years retain their raw statement text but have no filterable date projection.
 Missing values and unknown snaks do not acquire a date.
 
+Decision: Search result metadata and list facts display exactly the recorded Gregorian components in the reader's
+locale, retaining signed astronomical years; malformed dates have no display projection. Client fact declarations
+preserve optional month/day. Year-only consumers may still request a year, but result cards do not discard precision.
+
 The Semantic source and current Search hit facts preserve this shape. The HTTP fact schema admits month/day
 without changing the existing year-only shape. Facts use the normal current disclosure path; this adds no new
 source query, owner permission, resource lookup or enumeration. Distinct dates in one year remain distinct facts.

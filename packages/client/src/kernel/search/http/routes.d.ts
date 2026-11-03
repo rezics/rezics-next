@@ -12,6 +12,8 @@ export declare const FactSchema: import("typebox").TUnion<[import("typebox").TOb
 }>, import("typebox").TObject<{
     kind: import("typebox").TLiteral<"time">;
     year: import("typebox").TInteger;
+    month: import("typebox").TOptional<import("typebox").TInteger>;
+    day: import("typebox").TOptional<import("typebox").TInteger>;
 }>, import("typebox").TObject<{
     kind: import("typebox").TLiteral<"quantity">;
     amount: import("typebox").TNumber;
@@ -395,6 +397,8 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                 } | {
                                     kind: "time";
                                     year: number;
+                                    month?: number;
+                                    day?: number;
                                 } | {
                                     kind: "quantity";
                                     amount: number;

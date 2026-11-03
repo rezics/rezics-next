@@ -1,4 +1,4 @@
-import type { FilterRelease } from '@rezics/filter';
+import type { CalendarDate, FilterRelease } from '@rezics/filter';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 export type HitOptions = {
     descriptions: boolean;
@@ -9,10 +9,9 @@ export type Fact = {
     kind: 'item';
     id: string;
     labels: Record<string, string>;
-} | {
+} | ({
     kind: 'time';
-    year: number;
-} | {
+} & CalendarDate) | {
     kind: 'quantity';
     amount: number;
     unit: string;

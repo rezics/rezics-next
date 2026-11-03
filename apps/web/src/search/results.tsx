@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import type { CalendarDate } from '@rezics/filter';
 import { pickText } from '@rezics/composition';
 import {
   Cover,
@@ -22,6 +23,7 @@ import { listKeyFacts } from '../media/type-presentation';
 import { m } from '../paraglide/messages.js';
 import { subjectHref } from '../subject/subject-href';
 import { pickResultAliases } from './result-aliases';
+import { hitCalendarDate, releaseDateText } from './release-search-date';
 
 type NativeHit = Extract<
   NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>,
@@ -51,11 +53,7 @@ export function localizedLabel(labels: Record<string, string>, locale: string): 
 }
 
 export function hitYear(facts: SubjectHit['facts'], properties?: readonly string[]): number | undefined {
-  for (const property of (properties ?? Object.keys(facts ?? {})).slice(0, 4)) {
-    const found = facts?.[property]?.slice(0, 3).find((value) => value.kind === 'time' && Number.isInteger(value.year));
-    if (found?.kind === 'time') return found.year;
-  }
-  return undefined;
+  return hitCalendarDate(facts, properties)?.year;
 }
 
 export function yearText(year: number, locale: string): string {
@@ -65,21 +63,25 @@ export function yearText(year: number, locale: string): string {
 export function SubjectMeta({
   type,
   year,
+  date,
   locale,
   className,
 }: {
   type: { text: string; lang?: string | undefined };
   year: number | undefined;
+  date?: CalendarDate;
   locale: string;
   className?: string;
 }) {
-  if (!type.text && year === undefined) return null;
+  const recordedDate = date ?? (year === undefined ? undefined : { year });
+  const dateText = recordedDate && releaseDateText(recordedDate, locale);
+  if (!type.text && !dateText) return null;
   return (
     <span className={className}>
       <MetaLine
         items={[
           type.text ? <span lang={type.lang}>{type.text}</span> : null,
-          year !== undefined ? <span data-slot="year">{yearText(year, locale)}</span> : null,
+          dateText ? <span data-slot={recordedDate?.month === undefined ? 'year' : 'date'}>{dateText}</span> : null,
         ]}
       />
     </span>
@@ -112,7 +114,7 @@ export function ResultRow({
   const subjectLink = subjectHref({ id: hit.id, label: title }, locale);
   const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
   const description = localizedLabel(hit.descriptions ?? {}, locale);
-  const year = hitYear(hit.facts, yearProperties);
+  const date = hitCalendarDate(hit.facts, yearProperties);
   const subject = coverSubject(hit.id, title, hit.summary, hit.type);
   const releasedPresentation =
     parseListPresentation(hit.listPresentation) ?? parseListPresentation(listPresentationFor?.(subject.types));
@@ -171,12 +173,12 @@ export function ResultRow({
               <span className="line-clamp-2 sm:line-clamp-1">{title}</span>
             </ContentItemTitleLink>
           </ContentItemHeading>
-          {typeName.text || year !== undefined || aliases?.length || facts.length > 0 ? (
+          {typeName.text || date !== undefined || aliases?.length || facts.length > 0 ? (
             <ListRowControl
               data-content-item-slot="metadata"
               className="mt-2 flex min-w-0 flex-col gap-1 text-sm text-muted-foreground"
             >
-              <SubjectMeta type={typeName} year={year} locale={locale} />
+              <SubjectMeta type={typeName} year={date?.year} date={date} locale={locale} />
               {aliases?.length ? (
                 <p data-slot="search-result-aliases" lang={aliasLanguage} dir="auto" className="line-clamp-2">
                   {aliases.join(' · ')}

@@ -1,6 +1,7 @@
 import { parseListPresentation, type ListPresentation } from '@rezics/ui/cover';
 import { pickText } from '@rezics/composition';
 import type { Fact } from '../search/results';
+import { releaseDateText } from '../search/release-search-date';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -53,8 +54,9 @@ export function listKeyFacts(
       if (value.kind === 'item') {
         const label = pickText(value.labels, locale);
         formatted = { text: label.text, ...(label.lang ? { lang: label.lang } : {}) };
-      } else if (value.kind === 'time' && Number.isInteger(value.year)) {
-        formatted = { text: new Intl.NumberFormat(locale, { useGrouping: false }).format(value.year) };
+      } else if (value.kind === 'time') {
+        const text = releaseDateText(value, locale);
+        if (text) formatted = { text };
       } else if (value.kind === 'quantity' && Number.isFinite(value.amount)) {
         formatted = {
           text: `${new Intl.NumberFormat(locale).format(value.amount)}${value.unit ? ` ${value.unit}` : ''}`,

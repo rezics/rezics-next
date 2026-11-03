@@ -15,7 +15,7 @@ export type RelationFacetProbe = {
 export type RelationFacetMatch = boolean | 'not_proven';
 /**
  * Filterable form of a statement value.
- * `year` is the astronomical year of a time value.
+ * Time keeps its astronomical year and only the month/day represented by native precision.
  * `amount` is the decimal amount of a quantity.
  * A code value is the statement `value`.
  */
@@ -26,6 +26,8 @@ export type FacetValue = {
 } | {
     kind: 'time';
     year: number;
+    month?: number;
+    day?: number;
 } | {
     kind: 'quantity';
     amount: number;
