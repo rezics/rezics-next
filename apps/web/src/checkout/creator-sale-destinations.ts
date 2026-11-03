@@ -10,8 +10,6 @@ export function creatorSaleDestinations(sale: Pick<CreatorSale, 'offerId' | 'tar
       ? localizeHref(`/offers/${encodeURIComponent(sale.offerId)}`, { locale: locale as never })
       : null,
     // A captured offer title is not the current work title or a work-kind discriminator.
-    work: UUID.test(sale.targetSubjectId)
-      ? subjectHref({ id: sale.targetSubjectId, label: '' }, locale).href
-      : null,
+    work: UUID.test(sale.targetSubjectId) ? subjectHref({ id: sale.targetSubjectId, label: '' }, locale).href : null,
   };
 }

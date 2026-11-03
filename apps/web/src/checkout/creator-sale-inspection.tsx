@@ -50,8 +50,7 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
   const copyReference = async () => {
     if (!live.current.isCurrent()) return;
     const attempt = ++live.current.attempt;
-    const current = () =>
-      live.current.mounted && live.current.isCurrent() && live.current.attempt === attempt;
+    const current = () => live.current.mounted && live.current.isCurrent() && live.current.attempt === attempt;
     setCopy('pending');
     try {
       if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard unavailable');
@@ -81,13 +80,17 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
         <p className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]">{sale.title}</p>
       </div>
       <section className="space-y-3" aria-labelledby="creator-sale-terms">
-        <h3 id="creator-sale-terms" className="font-medium">{m.creator_sale_terms()}</h3>
+        <h3 id="creator-sale-terms" className="font-medium">
+          {m.creator_sale_terms()}
+        </h3>
         <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Fact label={m.creator_sale_unit_price()}>
             <span className="font-serif text-xl tabular-nums">{amount ?? m.statements_amount_unavailable()}</span>
           </Fact>
           <Fact label={m.creator_sale_currency()}>{sale.currency.toUpperCase()}</Fact>
-          <Fact label={m.creator_sale_raw_amount()}><span className="font-mono">{String(sale.unitAmountMinor)}</span></Fact>
+          <Fact label={m.creator_sale_raw_amount()}>
+            <span className="font-mono">{String(sale.unitAmountMinor)}</span>
+          </Fact>
           <Fact label={m.creator_sale_tax()}>
             {sale.taxBehavior === 'exclusive' ? m.commerce_before_tax() : m.commerce_tax_unknown()}
           </Fact>
@@ -99,27 +102,44 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
         </p>
       </section>
       <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-settlement">
-        <h3 id="creator-sale-settlement" className="font-medium">{m.creator_sale_settlement()}</h3>
+        <h3 id="creator-sale-settlement" className="font-medium">
+          {m.creator_sale_settlement()}
+        </h3>
         <p>{creatorSaleSettlementLabel(sale.settlement)}</p>
         <p className="text-sm text-muted-foreground">{settlementMeaning(sale.settlement)}</p>
         <p className="text-sm text-muted-foreground">{m.creator_sale_statements_hint()}</p>
       </section>
       <section className="space-y-3 border-t pt-4" aria-labelledby="creator-sale-identities">
-        <h3 id="creator-sale-identities" className="font-medium">{m.creator_sale_identities()}</h3>
+        <h3 id="creator-sale-identities" className="font-medium">
+          {m.creator_sale_identities()}
+        </h3>
         <dl className="space-y-4">
           <Fact label={m.order_ordered_at()}>
             <time dateTime={sale.createdAt}>
               {new Intl.DateTimeFormat(locale, {
-                dateStyle: 'full', timeStyle: 'long', timeZone: 'UTC',
+                dateStyle: 'full',
+                timeStyle: 'long',
+                timeZone: 'UTC',
               }).format(new Date(sale.createdAt))}
             </time>
             <span className="block font-mono text-sm">{sale.createdAt}</span>
           </Fact>
-          <Fact label={m.creator_sales_reference()}><span className="font-mono">{sale.orderId}</span></Fact>
-          <Fact label={m.creator_sale_offer_reference()}><span className="font-mono">{sale.offerId}</span></Fact>
-          <Fact label={m.creator_sale_work_reference()}><span className="font-mono">{sale.targetSubjectId}</span></Fact>
+          <Fact label={m.creator_sales_reference()}>
+            <span className="font-mono">{sale.orderId}</span>
+          </Fact>
+          <Fact label={m.creator_sale_offer_reference()}>
+            <span className="font-mono">{sale.offerId}</span>
+          </Fact>
+          <Fact label={m.creator_sale_work_reference()}>
+            <span className="font-mono">{sale.targetSubjectId}</span>
+          </Fact>
         </dl>
-        <Button variant="outline" className="min-h-11 whitespace-normal" disabled={copy === 'pending'} onClick={copyReference}>
+        <Button
+          variant="outline"
+          className="min-h-11 whitespace-normal"
+          disabled={copy === 'pending'}
+          onClick={copyReference}
+        >
           {copy === 'pending' ? m.creator_sale_copying() : m.creator_sale_copy()}
         </Button>
         <p role="status" className="text-sm">
@@ -130,17 +150,35 @@ export function CreatorSaleInspection({ sale, locale, close, isCurrent }: Props)
       <nav aria-label={m.creator_sale_destinations()} className="space-y-3 border-t pt-4">
         <p className="text-sm text-muted-foreground">{m.creator_sale_destination_hint()}</p>
         <div className="flex flex-wrap gap-3">
-          {([
-            [destinations.offer, m.creator_sale_open_offer()],
-            [destinations.work, m.creator_sale_open_work()],
-          ] as const).map(([href, label]) => href ? (
-            <Button key={label} variant="outline" className="min-h-11 whitespace-normal" nativeButton={false}
-              render={<a href={href} onClick={(event) => { if (!isCurrent()) event.preventDefault(); }} />}>
-              {label}
-            </Button>
-          ) : (
-            <p key={label} className="text-sm">{label}: {m.creator_sale_destination_unavailable()}</p>
-          ))}
+          {(
+            [
+              [destinations.offer, m.creator_sale_open_offer()],
+              [destinations.work, m.creator_sale_open_work()],
+            ] as const
+          ).map(([href, label]) =>
+            href ? (
+              <Button
+                key={label}
+                variant="outline"
+                className="min-h-11 whitespace-normal"
+                nativeButton={false}
+                render={
+                  <a
+                    href={href}
+                    onClick={(event) => {
+                      if (!isCurrent()) event.preventDefault();
+                    }}
+                  />
+                }
+              >
+                {label}
+              </Button>
+            ) : (
+              <p key={label} className="text-sm">
+                {label}: {m.creator_sale_destination_unavailable()}
+              </p>
+            ),
+          )}
         </div>
       </nav>
       <CreatorSaleReturn close={close} />

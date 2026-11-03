@@ -23,6 +23,7 @@ export function useCreatorSaleReading(
     () => ({ source: {}, index: prepareCreatorSaleReading(page) }),
     [page, locale, cursor, owner],
   );
+  const opener = useRef<HTMLElement | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const live = useRef<{ source: object; selection: Selection | null; isCurrent: () => boolean }>({
     source: reading.source,
@@ -30,12 +31,11 @@ export function useCreatorSaleReading(
     isCurrent,
   });
   const selected = selection?.source === reading.source ? selection : null;
+  if (live.current.source !== reading.source) opener.current = null;
   live.current = { source: reading.source, selection: selected, isCurrent };
   if (selection && !selected) setSelection(null);
-  const opener = useRef<HTMLElement | null>(null);
   const sourceIsCurrent = () => live.current.source === reading.source && live.current.isCurrent();
-  const selectionIsCurrent = () =>
-    sourceIsCurrent() && !!selected && live.current.selection?.lease === selected.lease;
+  const selectionIsCurrent = () => sourceIsCurrent() && !!selected && live.current.selection?.lease === selected.lease;
   const close = () => {
     if (!selectionIsCurrent()) return;
     live.current.selection = null;
@@ -44,7 +44,7 @@ export function useCreatorSaleReading(
     opener.current = null;
   };
   return {
-    sale: selected ? reading.index.get(selected.id) ?? null : null,
+    sale: selected ? (reading.index.get(selected.id) ?? null) : null,
     select(id: string, element: HTMLElement) {
       if (!sourceIsCurrent() || !reading.index.has(id)) return;
       const next = { source: reading.source, id, lease: {} };

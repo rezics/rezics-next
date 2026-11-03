@@ -14,10 +14,21 @@ test('ordinary localized offer and Subject readers receive only validated destin
       expect(href).not.toContain('#');
       expect(href).not.toContain('/orders/');
     }
-    expect(creatorSaleDestinations({ ...creatorSaleFixture, title: 'Unrelated title' } as typeof creatorSaleFixture, locale)).toEqual(result);
+    expect(
+      creatorSaleDestinations({ ...creatorSaleFixture, title: 'Unrelated title' } as typeof creatorSaleFixture, locale),
+    ).toEqual(result);
   }
-  for (const invalid of ['', '../orders/private', 'https://evil.test', 'a?returnTo=/orders/private', 'x'.repeat(4096)]) {
-    expect(creatorSaleDestinations({ offerId: invalid, targetSubjectId: invalid }, 'en')).toEqual({ offer: null, work: null });
+  for (const invalid of [
+    '',
+    '../orders/private',
+    'https://evil.test',
+    'a?returnTo=/orders/private',
+    'x'.repeat(4096),
+  ]) {
+    expect(creatorSaleDestinations({ offerId: invalid, targetSubjectId: invalid }, 'en')).toEqual({
+      offer: null,
+      work: null,
+    });
     expect(creatorSaleDestinations({ ...creatorSaleFixture, offerId: invalid }, 'en').work).not.toBeNull();
   }
 });

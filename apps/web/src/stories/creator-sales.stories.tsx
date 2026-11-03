@@ -165,14 +165,16 @@ export const OtherCreatorSameRoute: Story = { render: () => render('other-creato
 export const OtherCreatorDenied: Story = { render: () => render('denied') };
 function ReplacementReading() {
   const [page, replace] = useState(() => creatorSalesStoryPage('history'));
-  return <PatternStory visitor="Signed In" path="/creator/sales">
-    <AppShell>
-      <button className="min-h-11 rounded border px-4" onClick={() => replace(creatorSalesStoryPage('history'))}>
-        {m.statements_refresh()}
-      </button>
-      <CreatorSalesPage page={page} locale={getLocale()} />
-    </AppShell>
-  </PatternStory>;
+  return (
+    <PatternStory visitor="Signed In" path="/creator/sales">
+      <AppShell>
+        <button className="min-h-11 rounded border px-4" onClick={() => replace(creatorSalesStoryPage('history'))}>
+          {m.statements_refresh()}
+        </button>
+        <CreatorSalesPage page={page} locale={getLocale()} />
+      </AppShell>
+    </PatternStory>
+  );
 }
 
 export const Currentness: Story = {

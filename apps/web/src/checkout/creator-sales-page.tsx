@@ -106,7 +106,12 @@ export function CreatorSalesPage({
               {page.sales.map((sale) => (
                 <ListRow key={sale.orderId} data-settlement={sale.settlement} className="min-w-0 space-y-3 p-3">
                   <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                    <h2 id={`sale-title-${sale.orderId}`} className="line-clamp-3 min-w-0 break-words font-medium [overflow-wrap:anywhere]">{sale.title}</h2>
+                    <h2
+                      id={`sale-title-${sale.orderId}`}
+                      className="line-clamp-3 min-w-0 break-words font-medium [overflow-wrap:anywhere]"
+                    >
+                      {sale.title}
+                    </h2>
                     <p className="shrink-0 font-serif text-lg tabular-nums">
                       {formatMinorAmount(locale, sale.currency, sale.unitAmountMinor, sale.moneyUnit) ??
                         m.statements_amount_unavailable()}{' '}
@@ -122,19 +127,24 @@ export function CreatorSalesPage({
                     <dt className="text-muted-foreground">{m.order_ordered_at()}</dt>
                     <dd>
                       <time dateTime={sale.createdAt}>
-                        {new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC' }).format(
-                          new Date(sale.createdAt),
-                        )}
+                        {new Intl.DateTimeFormat(locale, {
+                          dateStyle: 'medium',
+                          timeStyle: 'medium',
+                          timeZone: 'UTC',
+                        }).format(new Date(sale.createdAt))}
                       </time>
                     </dd>
                     <dt className="text-muted-foreground">{m.creator_sales_reference()}</dt>
                     <dd className="min-w-0 truncate font-mono">{sale.orderId}</dd>
                   </dl>
-                  <Button variant="outline" className="min-h-11 whitespace-normal"
+                  <Button
+                    variant="outline"
+                    className="min-h-11 whitespace-normal"
                     aria-describedby={`sale-title-${sale.orderId}`}
                     aria-expanded={reading.selectedId === sale.orderId}
                     aria-controls={reading.selectedId === sale.orderId ? 'creator-sale-inspection' : undefined}
-                    onClick={(event) => reading.select(sale.orderId, event.currentTarget)}>
+                    onClick={(event) => reading.select(sale.orderId, event.currentTarget)}
+                  >
                     {m.creator_sale_inspect()}
                   </Button>
                 </ListRow>
@@ -142,8 +152,13 @@ export function CreatorSalesPage({
             </ul>
           )}
           {reading.sale && (
-            <CreatorSaleInspection key={reading.selectedId} sale={reading.sale} locale={locale}
-              close={reading.close} isCurrent={reading.isCurrent} />
+            <CreatorSaleInspection
+              key={reading.selectedId}
+              sale={reading.sale}
+              locale={locale}
+              close={reading.close}
+              isCurrent={reading.isCurrent}
+            />
           )}
           <nav aria-label={m.creator_sales_pagination()} className="flex flex-wrap gap-3">
             {cursor && (

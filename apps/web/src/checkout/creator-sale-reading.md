@@ -28,8 +28,8 @@ Decision: every replacement observation retires selection; browser return uses t
 fresh admitted owner reading rather than restoring a private inspection snapshot.
 
 Locale, requested cursor, account, exposure or read replacement retires inspection and all pending clipboard
-results synchronously. Even an equal-ID response is a fresh observation. Current Query data disables structural
-sharing for this purpose. Stale handlers cannot reopen a replaced source, navigate its destinations or publish copy
+results synchronously. Even an equal-ID response is a fresh observation. The current Query observation count and disabled structural
+sharing distinguish replacement responses, including equal results. Stale handlers cannot reopen a replaced source, navigate its destinations or publish copy
 feedback. Authorization remains exclusively with the existing origin; preparation, loading and refusal cannot
 retain an old reading. A native partial projection may contain supplied rows and its preparing notice; that
 projection state does not imply authorization preparation or completeness.

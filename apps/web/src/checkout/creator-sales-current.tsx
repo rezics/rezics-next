@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../kernel/query';
 import { useCreatorCurrentOrigin } from './creator-current-origin';
 import {
@@ -67,6 +67,7 @@ export function CreatorSalesCurrent(props: Props) {
       subject={subject}
       origin={current.origin}
       hydrated={current.hydrated}
+      revision={admittedLoader.version}
       seed={current.seed || (admittedLoader.version > 0 && admittedLoader.origin === current.origin.id)}
     />
   );
@@ -80,12 +81,16 @@ function CurrentSalesRead({
   origin,
   hydrated,
   seed,
+  revision,
 }: Props & {
   subject: string;
   origin: Origin;
   hydrated: boolean;
   seed: boolean;
+  revision: number;
 }) {
+  const client = useQueryClient();
+  const queryKey = ['creator-sales-current', subject, locale, cursor ?? null, origin.id, revision];
   const [initialData] = useState<CreatorSalesCurrentRead | undefined>(() => {
     const retained = origin.workspace.read;
     const value = retained ?? (seed ? initial : undefined);
@@ -93,7 +98,8 @@ function CurrentSalesRead({
   });
   const query = useQuery<CreatorSalesCurrentRead | null>({
     ...personalRead,
-    queryKey: ['creator-sales-current', subject, locale, cursor ?? null, origin.id],
+    queryKey,
+    notifyOnChangeProps: 'all',
     enabled: hydrated && origin.isCurrent() && personalRead.enabled,
     queryFn: async () => {
       if (!origin.isCurrent()) return null;
@@ -120,11 +126,22 @@ function CurrentSalesRead({
     refetchOnReconnect: false,
   });
   const value = query.data;
+  const observation = client.getQueryState(queryKey)?.dataUpdateCount;
+  // Count successful observations, including responses equal to their predecessor.
+  const source = useMemo(() => ({}), [value, observation]);
   if (hydrated && !origin.isCurrent())
     return (
       <CreatorSalesPage page={{ kind: 'loading' }} locale={locale} {...(cursor === undefined ? {} : { cursor })} />
     );
   if (origin.isCurrent()) origin.workspace.read = value;
   const page: CreatorSalesData = value?.page ?? { kind: 'loading' };
-  return <CreatorSalesPage page={page} source={value ?? undefined} isCurrent={origin.isCurrent} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
+  return (
+    <CreatorSalesPage
+      page={page}
+      source={source}
+      isCurrent={origin.isCurrent}
+      locale={locale}
+      {...(cursor === undefined ? {} : { cursor })}
+    />
+  );
 }
