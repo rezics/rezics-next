@@ -132,8 +132,10 @@ export function createVndbLabelAdoption(config: Config) {
         used.add(index);
         const identity = digest(m.target);
         // Two source names may deliberately map to one target; one unique Subject/target effect suffices.
-        if (targets.has(identity)) continue;
-        targets.add(identity);
+        if (m.admission === 'ready') {
+          if (targets.has(identity)) continue;
+          targets.add(identity);
+        }
         const status = m.admission === 'ready' ? eligible ? 'ready' : 'stale' : m.admission;
         let result: VndbLabelResult | null = status === 'ready' ? null : {
           reason: m.reason ?? 'source-review-unavailable', retryable: false, label: m.label, assignment: null,
@@ -250,7 +252,8 @@ export function createVndbLabelAdoption(config: Config) {
     await authorized(actor);
     if (!selected.length || selected.length > limits.page || new Set(selected).size !== selected.length ||
         selected.some(n => !Number.isInteger(n) || n < 0 || n >= limits.items)) throw invalid();
-    const account = owner(actor), deadline = Date.now() + limits.applyMs, outcomes = [];
+    const account = owner(actor), deadline = Date.now() + limits.applyMs;
+    const outcomes: ReturnType<typeof publicItem>[] = [];
     const initial = await readPlan(pool, account, id);
     if (initial.preview_id !== previewId) throw stale();
     if (initial.state === 'cancelled') return { uploadId: id, previewId, outcomes, stopped: 'cancelled' as const };
