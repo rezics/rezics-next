@@ -6377,5 +6377,21 @@
   "thread_draft_copy": "复制文字",
   "thread_draft_close": "关闭导出",
   "thread_draft_copied": "已复制文字",
-  "thread_draft_retry": "重试浏览器保存"
+  "thread_draft_retry": "重试浏览器保存",
+  "home_empty_discovery_title": "从这里开始发现",
+  "home_empty_following_title": "关注的来源暂无近期动态",
+  "home_empty_end_title": "已到达本次动态浏览的结尾",
+  "home_empty_end_body": "本次浏览没有返回更多条目。重新开始可用相同选项查看最新动态。",
+  "home_empty_filtered_title": "暂时没有符合所选条件的内容",
+  "home_empty_filtered_body": "检查已选的筛选条件，或搜索其他内容。移除一项条件会保留其他选项。",
+  "home_empty_sparse_title": "下一页可能还有内容",
+  "home_empty_partial_title": "部分来源暂不可用",
+  "home_empty_partial_body": "仍在准备或不可用的来源不代表没有内容。可以重试以重新检查。",
+  "home_empty_loading_body": "正在等待动态。请求完成后，结果会显示在这里。",
+  "home_empty_request_title": "无法使用这个请求",
+  "home_empty_denied_title": "无法访问此动态",
+  "home_empty_closed_title": "此动态已关闭",
+  "home_empty_cursor_title": "重新开始浏览动态",
+  "home_empty_deadline_title": "读取动态超时",
+  "home_empty_unavailable_body": "无法读取动态，并不代表没有更新。准备好后可以重试。"
 }

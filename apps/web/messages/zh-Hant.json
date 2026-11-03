@@ -6377,5 +6377,21 @@
   "thread_draft_copy": "複製文字",
   "thread_draft_close": "關閉匯出",
   "thread_draft_copied": "已複製文字",
-  "thread_draft_retry": "重試瀏覽器儲存"
+  "thread_draft_retry": "重試瀏覽器儲存",
+  "home_empty_discovery_title": "從這裡開始探索",
+  "home_empty_following_title": "追蹤的來源暫無近期動態",
+  "home_empty_end_title": "已到達這次動態瀏覽的結尾",
+  "home_empty_end_body": "這次瀏覽沒有傳回更多項目。重新開始可用相同選項查看最新動態。",
+  "home_empty_filtered_title": "暫時沒有符合所選條件的內容",
+  "home_empty_filtered_body": "檢查已選的篩選條件，或搜尋其他內容。移除一項條件會保留其他選項。",
+  "home_empty_sparse_title": "下一頁可能還有內容",
+  "home_empty_partial_title": "部分來源暫時無法使用",
+  "home_empty_partial_body": "仍在準備或無法使用的來源不代表沒有內容。可以重試以重新檢查。",
+  "home_empty_loading_body": "正在等待動態。請求完成後，結果會顯示在這裡。",
+  "home_empty_request_title": "無法使用這個請求",
+  "home_empty_denied_title": "無法存取這份動態",
+  "home_empty_closed_title": "這份動態已關閉",
+  "home_empty_cursor_title": "重新開始瀏覽動態",
+  "home_empty_deadline_title": "讀取動態逾時",
+  "home_empty_unavailable_body": "無法讀取動態，並不代表沒有更新。準備好後可以重試。"
 }

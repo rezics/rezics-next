@@ -6377,5 +6377,21 @@
   "thread_draft_copy": "テキストをコピー",
   "thread_draft_close": "書き出しを閉じる",
   "thread_draft_copied": "コピーしました",
-  "thread_draft_retry": "ブラウザーへの保存を再試行"
+  "thread_draft_retry": "ブラウザーへの保存を再試行",
+  "home_empty_discovery_title": "ここから新しい発見を",
+  "home_empty_following_title": "フォロー先の最近の更新はありません",
+  "home_empty_end_title": "今回のフィードの最後に到達しました",
+  "home_empty_end_body": "今回の表示範囲には、これ以上の項目はありません。同じ条件で最新の更新を確認するには、最初からやり直してください。",
+  "home_empty_filtered_title": "選択した条件に合う項目はまだありません",
+  "home_empty_filtered_body": "選択中のフィルターを確認するか、別の内容を検索してください。フィルターを一つ外しても、他の選択は保持されます。",
+  "home_empty_sparse_title": "次のページに項目があるかもしれません",
+  "home_empty_partial_title": "一部のソースはまだ利用できません",
+  "home_empty_partial_body": "準備中または利用できないソースは、項目がないとは判断されていません。再試行して確認できます。",
+  "home_empty_loading_body": "フィードを待っています。リクエストが完了すると、ここに結果が表示されます。",
+  "home_empty_request_title": "このリクエストは利用できません",
+  "home_empty_denied_title": "このフィードにはアクセスできません",
+  "home_empty_closed_title": "このフィードは閉じています",
+  "home_empty_cursor_title": "フィードを最初から読み直す",
+  "home_empty_deadline_title": "フィードの読み込みがタイムアウトしました",
+  "home_empty_unavailable_body": "フィードを読み込めませんでした。更新がないという意味ではありません。準備ができたら再試行してください。"
 }

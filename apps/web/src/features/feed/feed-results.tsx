@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from 'react';
 import { ContentItem, type ContentItemHeadingLevel, type ContentItemProps } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
+import { FeedEmptyState, feedAvailability, type FeedEmptyContext, type FeedEmptyExplanation, type FeedEmptyKind } from './feed-empty-state';
 
 export type FeedItemPresentation = Omit<ContentItemProps, 'headingLevel'> & {
   'data-feed-id'?: string;
@@ -38,6 +39,8 @@ export type FeedResultsMessages = {
   retry: ReactNode;
   restart: ReactNode;
   failure: Readonly<Record<FeedResultsFailureState, ReactNode>>;
+  /** Optional explained presentation; existing callers retain their supplied wording. */
+  explanations?: Partial<Record<FeedEmptyKind, FeedEmptyExplanation>>;
 };
 
 export type FeedResultsProps<T> = {
@@ -58,6 +61,10 @@ export type FeedResultsProps<T> = {
   emptyActions?: ReactNode | undefined;
   /** The owner sets this only when its own selector explains the current blocked result. */
   suppressResultMessage?: boolean | undefined;
+  /** Existing owner gates (for example localized sign-in); never inferred from error codes. */
+  failureActions?: Partial<Record<FeedResultsFailureState, ReactNode>> | undefined;
+  emptyContext?: FeedEmptyContext | undefined;
+  emptyHeadingLevel?: 1 | 2 | 3 | 4 | 5 | 6 | undefined;
   className?: string | undefined;
   listClassName?: string | undefined;
 };
@@ -78,37 +85,55 @@ export function FeedResults<T>({
   nextControl,
   emptyActions,
   suppressResultMessage = false,
+  failureActions,
+  emptyContext,
+  emptyHeadingLevel = 2,
   className = 'space-y-4',
   listClassName = 'list-none',
 }: FeedResultsProps<T>) {
   const ItemList = listAs;
-  const availability = result.state === 'ready' ? result.availability : undefined;
-  const sourceState = availability?.sources
-    ? Object.entries(availability.sources)
-        .filter(([, state]) => state !== 'not_requested')
-        .map(([source, state]) => `${source}:${state}`)
-        .join(' ')
-    : undefined;
-  const hasPartialSource = Object.values(availability?.sources ?? {}).some(
-    (state) => state === 'preparing' || state === 'unavailable',
-  );
-  const partial = availability !== undefined && (availability.state !== 'complete' || hasPartialSource);
+  const availability = result.state === 'ready' ? feedAvailability(result.availability) : undefined;
+  const partial = availability?.partial === true;
   const noItems = result.state === 'ready' && result.items.length === 0;
+  const readyKind: FeedEmptyKind = result.state !== 'ready' ? 'loading'
+    : partial ? result.availability.state === 'unavailable' ? 'unavailable' : 'partial'
+    : busy ? 'loading' : result.hasNext ? 'sparse' : 'empty';
+  const retryControl = onRetry ? (
+    <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRetry}>
+      {messages.retry}
+    </Button>
+  ) : null;
+  const readyActions = (
+    <>
+      {partial ? retryControl : null}
+      {nextControl}
+      {noItems && emptyActions && readyKind !== 'loading' ? (
+        <div data-feed-slot="empty-actions" className="flex min-w-0 flex-wrap justify-center gap-2">
+          {emptyActions}
+        </div>
+      ) : null}
+    </>
+  );
+  const problemActions = result.state === 'ready' || result.state === 'loading' ? undefined
+    : failureActions?.[result.state] ?? (result.state === 'cursor' ? onRestart ? (
+      <Button type="button" className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
+        {messages.restart}
+      </Button>
+    ) : null : result.state === 'auth' || result.state === 'closed' || result.state === 'denied'
+      ? null : retryControl);
 
   return (
     <section
       ref={boundaryRef}
       tabIndex={boundaryRef ? -1 : undefined}
       aria-label={regionLabel}
-      aria-busy={busy}
+      aria-busy={busy || result.state === 'loading'}
       className={className}
       data-feed-result-state={result.state}
-      data-feed-source-state={sourceState}
+      data-feed-source-state={availability?.sources}
     >
-      {busy && !suppressResultMessage ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {messages.loading}
-        </p>
+      {busy && result.state === 'ready' && !noItems && !partial && !suppressResultMessage ? (
+        <p role="status" className="text-sm text-muted-foreground">{messages.loading}</p>
       ) : null}
       {result.state === 'ready' ? (
         <>
@@ -117,38 +142,30 @@ export function FeedResults<T>({
               <ContentItem key={getItemKey(item)} {...itemPresentation(item)} headingLevel={itemHeadingLevel} />
             ))}
           </ItemList>
-          {partial ? (
-            <p role="status" className="text-sm text-muted-foreground">
-              {messages.partial}
-            </p>
-          ) : null}
-          {noItems && !partial ? <p role="status">{result.hasNext ? messages.sparse : messages.empty}</p> : null}
-          {noItems && emptyActions ? <div data-feed-slot="empty-actions">{emptyActions}</div> : null}
-          <div className="flex flex-wrap items-center gap-2">
-            {partial && onRetry ? (
-              <Button variant="outline" disabled={busy} onClick={onRetry}>
-                {messages.retry}
-              </Button>
-            ) : null}
-            {nextControl}
-          </div>
+          {noItems ? (
+            <FeedEmptyState
+              kind={readyKind}
+              messages={messages}
+              actions={readyActions}
+              headingLevel={emptyHeadingLevel}
+              context={emptyContext}
+            />
+          ) : (
+            <>
+              {partial ? (
+                <p role="status" className="text-sm text-muted-foreground">{messages.partial}</p>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">{readyActions}</div>
+            </>
+          )}
         </>
       ) : suppressResultMessage ? null : (
-        <div
-          role={result.state === 'loading' ? 'status' : 'alert'}
-          className="space-y-3 rounded-lg border border-border p-5"
-        >
-          <p>{result.state === 'loading' ? messages.loading : messages.failure[result.state]}</p>
-          {result.state === 'cursor' && onRestart ? (
-            <Button variant="outline" disabled={busy} onClick={onRestart}>
-              {messages.restart}
-            </Button>
-          ) : result.state !== 'loading' && result.state !== 'cursor' && onRetry ? (
-            <Button variant="outline" disabled={busy} onClick={onRetry}>
-              {messages.retry}
-            </Button>
-          ) : null}
-        </div>
+        <FeedEmptyState
+          kind={result.state}
+          messages={messages}
+          actions={problemActions}
+          headingLevel={emptyHeadingLevel}
+        />
       )}
     </section>
   );

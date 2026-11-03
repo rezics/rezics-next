@@ -1,8 +1,8 @@
 # Feed results
 
 `FeedResults<T>` is the shared ordered list, availability, empty-state and recovery region. It renders one named
-`section` and an `ol` or `ul` of `ContentItem` rows. It does not add a page landmark or heading; the caller keeps its
-page heading and section hierarchy.
+`section` and an `ol` or `ul` of `ContentItem` rows. It does not add a page landmark. The caller keeps its page
+heading and selects `emptyHeadingLevel` (default 2) for the explained recovery frame.
 
 The caller projects its existing owner result to `FeedResultsResult<T>`:
 
@@ -20,6 +20,49 @@ Router `Link`, or anchor, so its original cursor, scope, sort, disabled state, a
 with the owner. `emptyActions` is rendered only for a ready page with no returned items. A selector may set
 `suppressResultMessage` only when it explains the current blocked result; ready rows, partial availability, and
 unrelated failures remain visible.
+
+## Empty feed and recovery
+
+`FeedEmptyState` composes the optional shared `@rezics/ui/empty-state` frame with a decorative state icon,
+semantic heading, concise explanation and separate recovery controls. Existing callers can keep their flat
+`messages`; `messages.explanations` adds localized titles and descriptions without changing item/action ports.
+The explanation alone is live, so controls are not repeatedly announced. Ordinary empty, sparse, partial,
+loading, auth and closed states use status; a failed request, denied access, expired cursor, timeout or fully
+unavailable result uses alert. No frame moves focus. Home retains its current-visit explicit Next focus owner;
+background refresh never moves focus.
+
+- A complete terminal empty result explains discovery, Following, an admitted filter, or the end of a continued
+  window. Only the last case offers Start again. A sparse page offers its original cursor-bound Next control
+  and never claims that the entire feed is empty.
+- Preparing or unavailable sources take precedence over empty/sparse wording. A wholly unavailable result is
+  explained as unreadable, not empty. With actual rows, only the source explanation is announced beneath the
+  unchanged list; the rows, item actions, Next control and explicit retry remain intact.
+- While a complete empty result is refreshing, loading replaces empty wording. Existing rows remain visible
+  during refresh. Caller `emptyActions` survive sparse and partial pages and appear only without rows.
+- Auth uses the owner's localized sign-in link. Closed and denied results keep their gates without retry.
+  Cursor failure keeps Start again; other retryable failures keep the original callback. An owner's
+  `failureActions` slot can supply its existing gate. Private error codes and source payloads are never copy.
+
+Decision: filtered empty recovery opens the existing filter controls rather than introducing a bulk clear;
+the existing per-filter removal retains the other selections and its URL/history/reader retirement owner.
+Home Search and sign-in destinations remain localized. No new Follow destination is invented: Following
+can navigate through its existing Discover control. Source availability remains native authority.
+
+`feedAvailability` makes one O(S) pass over the fixed supplied statuses; rendering remains O(N). No state
+mount, transition, refresh explanation or recovery link introduces a read, source probe or automatic refill.
+An explicit retry invokes the original bounded owner operation once. Home consumers retain their installed
+request keys, cancellation, source/session retirement and unknown-write semantics.
+
+Board326 can optionally import `EmptyState` and pass its own heading, explanation and controls. Its board
+page-empty/end/pin meanings and existing continuation remain with that owner. Library, Search, Inbox and
+moderator compositions remain independent.
+
+`14-feed-empty-recovery` stories are visibly prepared presentation scenarios, not native acceptance. They
+cover complete discovery/Following/filter/end, sparse continuation, partial rows and no rows, initial loading,
+auth/closed/denied, cursor/deadline/request and unavailability at 390 and 1280, light/dark, long text and keyboard.
+The focused tests cover all fixed source combinations with 0/10/20 rows, explicit callbacks, localized gates,
+source explanation, retained row actions and focus during refresh. Existing Home lifetime tests retain
+ownership of native request and session retirement.
 
 Home's native `FeedItem` projection is `homeFeedItemPresentation(item, locale)`. It retains the installed title,
 canonical destination, cover/avatar, language, preview, source and occurrence attributes, Continue progress, and

@@ -6427,5 +6427,21 @@
   "thread_draft_copy": "Copy text",
   "thread_draft_close": "Close export",
   "thread_draft_copied": "Text copied",
-  "thread_draft_retry": "Retry browser save"
+  "thread_draft_retry": "Retry browser save",
+  "home_empty_discovery_title": "Your next discovery starts here",
+  "home_empty_following_title": "No recent updates from your follows",
+  "home_empty_end_title": "You have reached the end of this feed window",
+  "home_empty_end_body": "No more items were returned in this window. Start again to check for updates with the same selection.",
+  "home_empty_filtered_title": "Nothing matches this selection yet",
+  "home_empty_filtered_body": "Review the selected filters or search for something else. Removing one filter keeps your other selections.",
+  "home_empty_sparse_title": "There may be more on the next page",
+  "home_empty_partial_title": "Some sources are still unavailable",
+  "home_empty_partial_body": "Sources that are still preparing or unavailable have not been counted as empty. Try again to check them.",
+  "home_empty_loading_body": "Waiting for this feed. Results will appear here when the request finishes.",
+  "home_empty_request_title": "This request could not be used",
+  "home_empty_denied_title": "This feed is not accessible",
+  "home_empty_closed_title": "This feed is closed",
+  "home_empty_cursor_title": "Start a fresh feed window",
+  "home_empty_deadline_title": "This feed took too long",
+  "home_empty_unavailable_body": "The feed could not be read. This does not mean there are no updates. Try again when you are ready."
 }

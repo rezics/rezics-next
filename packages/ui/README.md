@@ -311,6 +311,22 @@ number never sit on separate lines. Where a unit is meaningful the number may be
 `CoverCard` builds this row when given `progress={{ value, label }}`; `value` is a fraction from 0 to 1, or `null`
 when only the position label is known.
 
+## Empty-state frame
+
+Import `EmptyState` from `@rezics/ui/empty-state` for an explained page or compact empty/recovery state.
+It composes the existing shadcn `Empty` family, with a decorative `icon`, semantic `title` heading
+(`headingLevel`, default 2), optional `description` and independent `actions`. `density="page"` provides
+feed-page spacing; `compact` fits a pending result. Both wrap long strings and action rows on a 390px phone
+and reserve at least 44px height for action links and buttons. Callers supply keyboard focus styles and
+localized destinations; the frame never navigates, fetches or focuses.
+
+The default has no live role. Supply `role="status"` for an ordinary explained state or `role="alert"` for
+a failure that needs immediate attention. Only the title/description are live and atomic, not the icon or
+controls. `tone="attention"` uses a neutral unavailable surface without implying a destructive action.
+The owning page selects the state and heading level; the frame does not infer emptiness from missing data.
+Home uses this port now. Board can optionally adopt it while retaining its page-empty/end/pin contract.
+`ShelfEmpty` and other independent owners keep their current compositions and recovery meanings.
+
 ## Shelves
 
 A person's library follows what mature shelf apps share ([research](../../docs/research/library-shelves.md)). Work on

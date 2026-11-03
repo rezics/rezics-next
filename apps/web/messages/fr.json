@@ -6377,5 +6377,21 @@
   "thread_draft_copy": "Copier le texte",
   "thread_draft_close": "Fermer l’export",
   "thread_draft_copied": "Texte copié",
-  "thread_draft_retry": "Réessayer l’enregistrement local"
+  "thread_draft_retry": "Réessayer l’enregistrement local",
+  "home_empty_discovery_title": "Votre prochaine découverte commence ici",
+  "home_empty_following_title": "Aucune nouveauté récente de vos abonnements",
+  "home_empty_end_title": "Vous avez atteint la fin de cette fenêtre du fil",
+  "home_empty_end_body": "Aucun autre élément n’a été renvoyé dans cette fenêtre. Recommencez pour vérifier les nouveautés avec la même sélection.",
+  "home_empty_filtered_title": "Aucun élément ne correspond encore à cette sélection",
+  "home_empty_filtered_body": "Vérifiez les filtres sélectionnés ou recherchez autre chose. Retirer un filtre conserve vos autres choix.",
+  "home_empty_sparse_title": "La page suivante peut contenir d’autres éléments",
+  "home_empty_partial_title": "Certaines sources sont encore indisponibles",
+  "home_empty_partial_body": "Les sources en préparation ou indisponibles ne sont pas considérées comme vides. Réessayez pour les vérifier.",
+  "home_empty_loading_body": "Le fil est en cours de chargement. Les résultats s’afficheront ici à la fin de la requête.",
+  "home_empty_request_title": "Cette requête n’a pas pu être utilisée",
+  "home_empty_denied_title": "Ce fil n’est pas accessible",
+  "home_empty_closed_title": "Ce fil est fermé",
+  "home_empty_cursor_title": "Recommencer la lecture du fil",
+  "home_empty_deadline_title": "Le chargement du fil a pris trop de temps",
+  "home_empty_unavailable_body": "Le fil n’a pas pu être lu. Cela ne signifie pas qu’il n’y a aucune nouveauté. Réessayez lorsque vous le souhaitez."
 }

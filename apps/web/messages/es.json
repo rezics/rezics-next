@@ -6377,5 +6377,21 @@
   "thread_draft_copy": "Copiar texto",
   "thread_draft_close": "Cerrar exportación",
   "thread_draft_copied": "Texto copiado",
-  "thread_draft_retry": "Reintentar guardado local"
+  "thread_draft_retry": "Reintentar guardado local",
+  "home_empty_discovery_title": "Tu próximo descubrimiento empieza aquí",
+  "home_empty_following_title": "No hay novedades recientes de tus fuentes",
+  "home_empty_end_title": "Has llegado al final de esta ventana del canal",
+  "home_empty_end_body": "No se devolvieron más elementos en esta ventana. Empieza de nuevo para buscar novedades con la misma selección.",
+  "home_empty_filtered_title": "Aún no hay elementos para esta selección",
+  "home_empty_filtered_body": "Revisa los filtros seleccionados o busca otra cosa. Al quitar un filtro se conservan las demás opciones.",
+  "home_empty_sparse_title": "Puede haber más en la página siguiente",
+  "home_empty_partial_title": "Algunas fuentes siguen sin estar disponibles",
+  "home_empty_partial_body": "Las fuentes en preparación o no disponibles no se consideran vacías. Vuelve a intentarlo para comprobarlas.",
+  "home_empty_loading_body": "Esperando el canal. Los resultados aparecerán aquí cuando termine la solicitud.",
+  "home_empty_request_title": "No se pudo usar esta solicitud",
+  "home_empty_denied_title": "No tienes acceso a este canal",
+  "home_empty_closed_title": "Este canal está cerrado",
+  "home_empty_cursor_title": "Empieza una nueva ventana del canal",
+  "home_empty_deadline_title": "El canal tardó demasiado en responder",
+  "home_empty_unavailable_body": "No se pudo leer el canal. Eso no significa que no haya novedades. Vuelve a intentarlo cuando quieras."
 }

@@ -6377,5 +6377,21 @@
   "thread_draft_copy": "Text kopieren",
   "thread_draft_close": "Export schließen",
   "thread_draft_copied": "Text kopiert",
-  "thread_draft_retry": "Browserspeicherung erneut versuchen"
+  "thread_draft_retry": "Browserspeicherung erneut versuchen",
+  "home_empty_discovery_title": "Hier beginnt deine nächste Entdeckung",
+  "home_empty_following_title": "Keine neuen Beiträge aus deinen abonnierten Quellen",
+  "home_empty_end_title": "Du hast das Ende dieses Feed-Ausschnitts erreicht",
+  "home_empty_end_body": "In diesem Ausschnitt wurden keine weiteren Einträge zurückgegeben. Starte erneut, um mit derselben Auswahl nach Neuigkeiten zu sehen.",
+  "home_empty_filtered_title": "Noch keine Einträge für diese Auswahl",
+  "home_empty_filtered_body": "Prüfe die gewählten Filter oder suche nach etwas anderem. Wenn du einen Filter entfernst, bleiben die anderen Einstellungen erhalten.",
+  "home_empty_sparse_title": "Auf der nächsten Seite kann es weitergehen",
+  "home_empty_partial_title": "Einige Quellen sind noch nicht verfügbar",
+  "home_empty_partial_body": "Quellen, die noch vorbereitet werden oder nicht verfügbar sind, gelten nicht als leer. Versuche es erneut, um sie zu prüfen.",
+  "home_empty_loading_body": "Der Feed wird geladen. Sobald die Anfrage abgeschlossen ist, erscheinen hier die Ergebnisse.",
+  "home_empty_request_title": "Diese Anfrage konnte nicht verwendet werden",
+  "home_empty_denied_title": "Du hast keinen Zugriff auf diesen Feed",
+  "home_empty_closed_title": "Dieser Feed ist geschlossen",
+  "home_empty_cursor_title": "Einen neuen Feed-Ausschnitt starten",
+  "home_empty_deadline_title": "Das Laden des Feeds hat zu lange gedauert",
+  "home_empty_unavailable_body": "Der Feed konnte nicht gelesen werden. Das bedeutet nicht, dass es keine Neuigkeiten gibt. Versuche es erneut, wenn du bereit bist."
 }

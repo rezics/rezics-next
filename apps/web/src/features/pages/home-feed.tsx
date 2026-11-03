@@ -3,6 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { FeedResults, type FeedResultsResult } from '../feed/feed-results';
+import { homeFeedRecoveryMessages, type FeedEmptyContext } from '../feed/feed-empty-state';
 import { homeFeedItemPresentation } from '../feed/home-feed-item';
 import { HomeFeedActions } from '../feed/action-bar';
 import type { VerificationConfig } from '../../report/turnstile';
@@ -95,6 +96,15 @@ export function HomeFeed({
     boundary.current?.scrollIntoView?.({ block: 'start' });
   }, [busy, result, requestKey]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterPanel = useRef<HTMLDivElement>(null);
+  const focusFilters = useRef(false);
+  const focusFirstFilter = () =>
+    filterPanel.current?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], select:not(:disabled)')?.focus();
+  useEffect(() => {
+    if (!filtersOpen || !focusFilters.current) return;
+    focusFilters.current = false;
+    focusFirstFilter();
+  }, [filtersOpen]);
   const page = result.state === 'ready' ? result.page : undefined;
   const [actionSource, setActionSource] = useState({ result, key: 0 });
   if (actionSource.result !== result) setActionSource({ result, key: actionSource.key + 1 });
@@ -116,23 +126,10 @@ export function HomeFeed({
       : result.state === 'loading'
         ? { state: 'loading', code: result.code }
         : { state: result.state, code: result.code };
-  const resultMessages = {
-    loading: m.home_feed_loading({}, options),
-    partial: m.home_presentation_partial({}, options),
-    empty: stream === 'following' ? m.home_feed_following_empty({}, options) : m.home_feed_empty({}, options),
-    sparse: m.home_feed_sparse({}, options),
-    retry: m.library_follow_retry({}, options),
-    restart: m.home_feed_restart({}, options),
-    failure: {
-      request: m.home_feed_request({}, options),
-      auth: m.home_feed_auth({}, options),
-      denied: m.home_feed_denied({}, options),
-      closed: m.home_feed_closed({}, options),
-      cursor: m.home_feed_cursor({}, options),
-      deadline: m.home_feed_deadline({}, options),
-      unavailable: m.home_feed_unavailable({}, options),
-    },
-  };
+  const emptyContext: FeedEmptyContext = input?.cursor ? 'continuation'
+    : activeFilters.length || input?.kind || input?.spaceId || input?.ratingQuestionId ? 'filtered'
+    : stream === 'following' ? 'following' : 'discovery';
+  const resultMessages = homeFeedRecoveryMessages(locale, emptyContext);
   return (
     <main
       className="mx-auto w-full max-w-3xl space-y-4 text-foreground"
@@ -195,7 +192,7 @@ export function HomeFeed({
           ) : null}
         </div>
       </div>
-      <div id={filterId} hidden={!filtersOpen} className={filtersOpen ? 'grid gap-3' : 'hidden'}>
+      <div ref={filterPanel} id={filterId} hidden={!filtersOpen} className={filtersOpen ? 'grid gap-3' : 'hidden'}>
         {kindControl}
         {spaceControl}
         {questionControl}
@@ -214,6 +211,17 @@ export function HomeFeed({
         result={results}
         busy={busy}
         messages={resultMessages}
+        emptyContext={emptyContext}
+        failureActions={{
+          auth: (
+            <a
+              href={`/${locale}/auth/sign-in?return_to=${encodeURIComponent(`/${locale}/`)}`}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              {m.account_sign_in({}, options)}
+            </a>
+          ),
+        }}
         getItemKey={(item) => item.id}
         itemPresentation={(item) => {
           const presentation = homeFeedItemPresentation(item, locale);
@@ -240,6 +248,7 @@ export function HomeFeed({
           page?.next && onNext ? (
             <Button
               variant="outline"
+              className="min-h-11"
               disabled={busy || !page.next}
               onClick={() => {
                 if (busy || advancing.current || !page.next) return;
@@ -253,11 +262,36 @@ export function HomeFeed({
         }
         emptyActions={
           <>
-            <a href={`/${locale}/search`} className="inline-block text-sm text-primary underline underline-offset-4">
+            {emptyContext === 'continuation' && !page?.next && onRestart ? (
+              <Button className="min-h-11" variant="outline" disabled={busy} onClick={onRestart}>
+                {m.home_feed_restart({}, options)}
+              </Button>
+            ) : null}
+            {emptyContext === 'filtered' ? (
+              <Button
+                className="min-h-11"
+                variant="outline"
+                aria-controls={filterId}
+                aria-expanded={filtersOpen}
+                onClick={() => {
+                  if (filtersOpen) focusFirstFilter();
+                  else {
+                    focusFilters.current = true;
+                    setFiltersOpen(true);
+                  }
+                }}
+              >
+                {m.search_filters({}, options)}
+              </Button>
+            ) : null}
+            <a
+              href={`/${locale}/search`}
+              className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 py-2 text-sm text-primary underline underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
               {m.search_heading({}, options)}
             </a>
-            {stream === 'following' ? (
-              <Button variant="outline" disabled={busy} onClick={() => onSelect?.('home')}>
+            {stream === 'following' && onSelect ? (
+              <Button className="min-h-11" variant="outline" disabled={busy} onClick={() => onSelect('home')}>
                 {m.home_feed_discovery({}, options)}
               </Button>
             ) : null}
