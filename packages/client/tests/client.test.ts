@@ -149,6 +149,29 @@ test('the derived subjects group keeps native counts and routes contributed by o
     const path: string = client['~path'];
     await subjects({ id: ID }).reaction.get();
     await subjects({ id: ID }).ratings({ questionId: ID }).vote.get();
+    const label = client.libraryLabels({ id: ID });
+    const options = { headers: { 'idempotency-key': '"consolidate"' } };
+    const selected = { subjectId: ID, assignmentId: ID, revision: 1 };
+    const evidence = {
+      selection: 'a'.repeat(64),
+      sourceLabel: { id: ID, revision: 1, name: 'Source' },
+      targetLabel: { id: ID, revision: 1, name: 'Target' },
+      items: [{ selected, source: { id: ID, revision: 1, effective: true }, target: null, outcome: 'movable' as const }],
+    };
+    await label.$reviewConsolidation.post({ targetLabelId: ID, items: [selected] });
+    await label.$confirmConsolidation.post(evidence, options);
+    await label.$applyConsolidation.post({ confirmationId: ID }, options);
+    await label.$retryConsolidation.post({ confirmationId: ID, item: 0 }, options);
+    await label.$cancelConsolidation.post({ confirmationId: ID }, options);
+    await label.consolidations({ confirmationId: ID }).get();
+    // @ts-expect-error confirmation requires an idempotency key
+    await label.$confirmConsolidation.post(evidence);
+    // @ts-expect-error apply requires an idempotency key
+    await label.$applyConsolidation.post({ confirmationId: ID });
+    // @ts-expect-error retry requires an idempotency key
+    await label.$retryConsolidation.post({ confirmationId: ID, item: 0 });
+    // @ts-expect-error cancellation requires an idempotency key
+    await label.$cancelConsolidation.post({ confirmationId: ID });
     // @ts-expect-error a subject parameter is required
     subjects({});
     // @ts-expect-error omitted public aggregates are optional
