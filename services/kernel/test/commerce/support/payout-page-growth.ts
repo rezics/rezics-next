@@ -7,7 +7,7 @@ import type { CheckoutSnapshot, Order, StripeTransaction } from '../../../src/co
 import { readOrder } from '../../../src/commerce/store.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
-import { capture, openGrowthDatabase, seed, type Capture, type GrowthDatabase } from '../../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, seed, type Capture, type GrowthDatabase } from '../../support/growth.ts';
 import { nativeFixture } from '../../access/native-account-bindings-fixture.ts';
 import { createPersonas, type Persona } from '../../support/personas.ts';
 import { testKernel } from '../../support/test-kernel.ts';
@@ -75,7 +75,7 @@ function snapshot(order: Order, transactions: StripeTransaction[]): CheckoutSnap
   };
 }
 
-/** Exhausted-empty is an authorized native identity with the production owner role and no statements. */
+/** Exhausted-empty is an authorized owner with no rows: a public next cursor exists only when another page remains. */
 export async function payoutPageGrowthFixture() {
   const db = await openGrowthDatabase();
   db.pool.options.max = 1;
@@ -358,13 +358,7 @@ export async function payoutPageGrowthFixture() {
     empty,
     selectedStatementId,
     emptyLineStatementId: emptyLine.id,
-    async grow(
-      database: GrowthDatabase,
-      axis: PayoutPageAxis,
-      scale: number,
-      previous: number,
-      job: PayoutPageJob,
-    ) {
+    async grow(database: GrowthDatabase, axis: PayoutPageAxis, scale: number, previous: number) {
       if (axis === 'unrelated creators') {
         await seed(
           database,
@@ -425,7 +419,6 @@ export async function payoutPageGrowthFixture() {
         );
         lines += scale - previous;
       }
-      if (job !== 'deep') return;
       if (axis === 'selected statement lines') {
         deepLines = await walk(lines, async (cursor) => {
           const page = await listLines(creator, selectedStatementId, cursor);
@@ -446,7 +439,7 @@ export async function payoutPageGrowthFixture() {
     },
     operate,
     async evidence(job: PayoutPageJob, axis: PayoutPageAxis) {
-      const measured = await capture(db, () => operate(job, axis));
+      const measured = await capture(db, () => operate(job, axis), { includeBackends: true });
       assertPayoutPageEvidence(measured.capture, job, axis === 'selected statement lines' ? 'lines' : 'statements');
     },
     async close() {
@@ -461,12 +454,16 @@ export type PayoutPageFixture = Awaited<ReturnType<typeof payoutPageGrowthFixtur
 export function assertPayoutPageEvidence(raw: Capture, job: PayoutPageJob, surface: 'statements' | 'lines') {
   const sql = raw.statements;
   expect(sql.some((text) => /access\.resource_role_grant|access\.resource_grant/i.test(text))).toBe(true);
+  const relation = surface === 'lines' ? 'commerce.royalty_line' : 'commerce.payout_statement';
   const page =
     surface === 'lines'
       ? sql.filter((text) => /FROM commerce\.royalty_line/i.test(text))
       : sql.filter((text) => /FROM commerce\.payout_statement/i.test(text));
+  const cost = costOf(raw);
+  expect(cost.relations[relation]?.sequentialScans ?? 0).toBe(0);
   if (job === 'denied') {
     expect(page).toHaveLength(0);
+    expect(cost.relations[relation]?.rows ?? 0).toBe(0);
     return;
   }
   expect(page.length).toBeGreaterThan(0);
@@ -485,12 +482,19 @@ export function assertPayoutPageEvidence(raw: Capture, job: PayoutPageJob, surfa
   const indexName = surface === 'lines' ? 'royalty_line_statement_page' : 'payout_statement_creator_page';
   const keysets = plans.filter((node) => node['Index Name'] === indexName);
   expect(keysets.length).toBeGreaterThan(0);
+  const examined = job === 'exhausted-empty' ? 0 : PAGE + 1;
   for (const plan of keysets) {
-    expect(String(plan['Index Cond'] ?? '')).toContain('route =');
-    const removed = Number(plan['Rows Removed by Filter'] ?? 0) + Number(plan['Rows Removed by Index Recheck'] ?? 0);
-    expect(removed).toBeGreaterThanOrEqual(0);
-    const actual = Number(plan['Actual Rows'] ?? 0);
-    if (job === 'exhausted-empty') expect(actual).toBeLessThanOrEqual(1);
-    else expect(actual).toBe(PAGE + 1);
+    const cond = String(plan['Index Cond'] ?? '');
+    expect(cond).toContain('route =');
+    if (surface === 'lines') {
+      expect(cond).toContain('statement_id =');
+      expect(cond).toContain('balance_transaction_id >');
+    } else {
+      expect(cond).toContain('creator_account_id =');
+      expect(cond).toContain('statement_id <');
+    }
+    expect(Number(plan['Rows Removed by Filter'] ?? 0) + Number(plan['Rows Removed by Index Recheck'] ?? 0)).toBe(0);
+    expect(Number(plan['Actual Rows'] ?? 0)).toBe(examined);
   }
+  expect(cost.relations[relation]?.rows ?? 0).toBe(examined);
 }
