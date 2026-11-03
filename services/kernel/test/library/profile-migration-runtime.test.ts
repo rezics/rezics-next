@@ -13,7 +13,7 @@ import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { observeRetentionQueries } from './entry-retention-worker-runtime.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
-import type { StoredProfileReceipt } from './support/profile-historical-native-fixture.ts';
+import { createProfileReceiptObservations, type StoredProfileReceipt } from './support/profile-historical-native-fixture.ts';
 
 // Historical fixture only: the same old native command boundary used by
 // profile-copy-compatibility.test.ts. No new production endpoint or NULL-pin default.
@@ -271,6 +271,10 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
         ['subjectId', 'incarnationId', 'state', 'revision', 'createdAt', 'updatedAt'].map((key) => [key, accepted.entry[key]]),
       ),
     });
+    const transport = createProfileReceiptObservations(f.pool);
+    const header = JSON.stringify(observed[original]!.requestKey);
+    transport.observe(accountId, observed[original]!.requestKey, replay, undefined, header);
+    expect(transport.bind(stored[original]!).requestKey).toBe(header);
     const originalKeys = new Set(stored.map((row) => row.storageKey));
     const originalReceipts = (state: typeof seeded) => state.receipts.filter(({ row }) => originalKeys.has(row.idempotency_key as string));
     expect(originalReceipts(await snapshot(f, accountId))).toEqual(originalReceipts(seeded));

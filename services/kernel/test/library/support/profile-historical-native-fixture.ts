@@ -20,11 +20,11 @@ export type StoredProfileReceipt = Omit<ProfileReceiptRow, 'requestKey' | 'statu
  * Only successful responses can describe a committed receipt; denied/conflicting replays cannot replace it.
  */
 export function createProfileReceiptObservations(pool: Pool) {
-  const observations = new Map<string, Map<string, Set<number>>>();
+  const observations = new Map<string, Map<string, { requestKey: string; statuses: Set<number> }>>();
   const originals = new Map<string, { requestKey: string; status: number }>();
   const identity = (accountId: string, kind: string, key: string) => JSON.stringify([accountId, kind, key]);
   return {
-    observe(accountId: string, requestKey: string, response: Response, committed?: ReturnType<typeof currentCommandReceipt>) {
+    observe(accountId: string, requestKey: string, response: Response, committed?: ReturnType<typeof currentCommandReceipt>, transportKey = requestKey) {
       if (!response.ok) return;
       if (committed) {
         if (committed.principal.kind !== 'account' || committed.principal.id !== accountId || committed.key !== requestKey)
@@ -33,9 +33,9 @@ export function createProfileReceiptObservations(pool: Pool) {
       }
       let account = observations.get(accountId);
       if (!account) observations.set(accountId, (account = new Map()));
-      let statuses = account.get(requestKey);
-      if (!statuses) account.set(requestKey, (statuses = new Set()));
-      statuses.add(response.status);
+      let observation = account.get(requestKey);
+      if (!observation) account.set(requestKey, (observation = { requestKey: transportKey, statuses: new Set() }));
+      observation.statuses.add(response.status);
     },
     bind(row: StoredProfileReceipt): ProfileReceiptRow {
       const original = originals.get(identity(row.accountId, row.commandKind, row.storageKey));
@@ -43,9 +43,9 @@ export function createProfileReceiptObservations(pool: Pool) {
       const matches = [...(observations.get(row.accountId) ?? [])].filter(([key]) =>
         nativeReceiptKeyCandidates(pool, row.commandKind, row.accountId, key).includes(row.storageKey),
       );
-      if (matches.length !== 1 || matches[0]![1].size !== 1)
+      if (matches.length !== 1 || matches[0]![1].statuses.size !== 1)
         throw new Error('Native Library dependency_unavailable: unobserved or ambiguous original receipt HTTP identity');
-      const [requestKey, statuses] = matches[0]!;
+      const { requestKey, statuses } = matches[0]![1];
       return {
         accountId: row.accountId,
         requestKey,

@@ -47,14 +47,15 @@ export async function createLibraryProfilesDriver(): Promise<LibraryProfilesDriv
     world.native.request = async (persona, input) => {
       const response = await request(persona, input);
       const key = new Headers(input.headers).get('idempotency-key');
-      if (persona === 'owner' && key !== null) receipts.observe(args[1] as string, idempotencyKeyOf(key), response);
+      if (persona === 'owner' && key !== null)
+        receipts.observe(world.accounts.owner.id, idempotencyKeyOf(key), response, undefined, key);
       return response;
     };
     const historical = createProfileHistoricalNativeFixture({
       pool: world.native.pool,
       actor: await world.native.accountActor('owner'),
       clock: () => new Date(world.now()),
-      createSubject: async () => (await world.native.subject(profileTypes.game)).id,
+      createSubject: async () => (await world.native.subject('schema:Book')).id,
       send: (method, path, body, key) =>
         world.native.request('owner', { method, path, body, headers: { 'Idempotency-Key': JSON.stringify(key) } }),
       receipts,

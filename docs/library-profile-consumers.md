@@ -438,6 +438,8 @@ actual bearer through its installed Access. The helper reuses the old `ownAccoun
 it neither provisions a substitute owner nor supplies a production legacy-write endpoint/default.
 `seed(rows?)` defaults to five entry states, eighteen mode/unit pairs and four copy statuses, with sparse
 units and exact decimal/date values; explicit counts select exact fresh-fixture relation sizes.
+Before profile fixture activation, historical setup provisions bundled Book subjects without treating their
+current type as historical accepting evidence; native keys retain caller text and HTTP keys retain their original header form.
 The entry fixture's `historical(identity)` reuses this helper for retained entry/copy runtime cases.
 
 Historical receipt HTTP status is observed by replaying each committed original command through its installed
