@@ -5,27 +5,34 @@ import publishOpeningThread from '../../src/content/publish-opening-thread.sql';
 import fence from '../../src/command/fence.sql';
 import { publicationType } from './support/post-publication-fixture.ts';
 import { observeSql, type SqlExecution } from './support/sql-observer.ts';
+import { assertGrowthAccessPaths, capture, checkGrowth, type GrowthReport } from '../support/growth.ts';
 import {
-  assertGrowthAccessPaths, capture, checkGrowth, type GrowthReport,
-} from '../support/growth.ts';
-import {
-  growthPostFirstPublicationFixture, publicationScales, publicationBody,
-  type PublicationKind, type PublicationTarget,
+  growthPostFirstPublicationFixture,
+  publicationScales,
+  publicationBody,
+  type PublicationKind,
+  type PublicationTarget,
 } from './support/growth-post-first-publication-fixture.ts';
 
 setDefaultTimeout(1_800_000);
 type Fixture = Awaited<ReturnType<typeof growthPostFirstPublicationFixture>>;
 
 function writes(records: readonly SqlExecution[]) {
-  return records.filter(r => [insertRevision.sql, updateHead.sql, publishOpeningThread.sql, fence.sql].includes(r.statement));
+  return records.filter((r) =>
+    [insertRevision.sql, updateHead.sql, publishOpeningThread.sql, fence.sql].includes(r.statement),
+  );
 }
 
 /** Bind the measured writes to this exact source and native command envelope,
  * so a cheap HTTP response or event-only observation cannot satisfy growth. */
-function publicationBindings(records: readonly SqlExecution[], target: PublicationTarget, revisionId: string,
-  state: { security_revision: string; thread_security_revision: string }) {
+function publicationBindings(
+  records: readonly SqlExecution[],
+  target: PublicationTarget,
+  revisionId: string,
+  state: { security_revision: string; thread_security_revision: string },
+) {
   const one = (sql: string) => {
-    const matches = records.filter(r => r.statement === sql);
+    const matches = records.filter((r) => r.statement === sql);
     expect(matches).toHaveLength(1);
     return matches[0]!;
   };
@@ -42,8 +49,10 @@ function publicationBindings(records: readonly SqlExecution[], target: Publicati
     const thread = one(publishOpeningThread.sql);
     expect(thread.parameters[publishOpeningThread.params.indexOf('thread_id')]).toBe(target.threadId);
     expect(thread.parameters[publishOpeningThread.params.indexOf('post_id')]).toBe(target.post.id);
-    expect(thread.parameters[publishOpeningThread.params.indexOf('security_revision')]).toBe(state.thread_security_revision);
-  } else expect(records.filter(r => r.statement === publishOpeningThread.sql)).toHaveLength(0);
+    expect(thread.parameters[publishOpeningThread.params.indexOf('security_revision')]).toBe(
+      state.thread_security_revision,
+    );
+  } else expect(records.filter((r) => r.statement === publishOpeningThread.sql)).toHaveLength(0);
   const commit = one(fence.sql);
   const json = (name: 'events' | 'basis' | 'receipt') => {
     const value = commit.parameters[fence.params.indexOf(name)];
@@ -55,13 +64,18 @@ function publicationBindings(records: readonly SqlExecution[], target: Publicati
   ]);
   expect(json('events')).toHaveLength(2);
   expect(json('basis')).toMatchObject({ principal: { kind: 'account' }, clientId: expect.any(String) });
-  expect(json('receipt')).toMatchObject({ kind: 'content.post.revise', response: {
-    threadId: target.threadId, itemId: target.post.id, revisionId,
-  } });
+  expect(json('receipt')).toMatchObject({
+    kind: 'content.post.revise',
+    response: {
+      threadId: target.threadId,
+      itemId: target.post.id,
+      revisionId,
+    },
+  });
 }
 
 function growthEvidence(report: GrowthReport, kind: PublicationKind) {
-  expect(report.samples.map(s => s.scale)).toEqual([...publicationScales]);
+  expect(report.samples.map((s) => s.scale)).toEqual([...publicationScales]);
   const relations = new Set<string>();
   for (const sample of report.samples) {
     expect(sample.repetitions.length).toBeGreaterThan(0);
@@ -71,9 +85,10 @@ function growthEvidence(report: GrowthReport, kind: PublicationKind) {
       expect(cost.blocks).toBeGreaterThan(0);
       expect(cost.plans).toBeGreaterThan(0);
       expect(cost.blocks).toBe(cost.sharedHit + cost.sharedRead);
-      Object.keys(cost.relations).forEach(r => relations.add(r));
+      Object.keys(cost.relations).forEach((r) => relations.add(r));
       const statements = sample.statementRepetitions[i]!;
-      const count = (pattern: RegExp) => statements.filter(s => pattern.test(s.statement)).reduce((n, s) => n + s.count, 0);
+      const count = (pattern: RegExp) =>
+        statements.filter((s) => pattern.test(s.statement)).reduce((n, s) => n + s.count, 0);
       // This is the new producer's write envelope, not the old published-edit
       // budget: one revision, one post CAS, one fence, plus the opening update.
       expect(count(/insert into content\.revision/i)).toBe(1);
@@ -137,7 +152,11 @@ for (const kind of ['opening', 'reply'] as const) {
         await verifyCompleted();
         growthEvidence(report, kind);
       } finally {
-        try { await observer.close(); } finally { await f.close(); }
+        try {
+          await observer.close();
+        } finally {
+          await f.close();
+        }
       }
     });
   }
@@ -181,9 +200,9 @@ test('native first publication pins its revision across replay, silent edits, st
 
       const rival = await f.draft(kind);
       const competition = await capture(f.db, () => Promise.all([f.revise(rival.post), f.revise(rival.post)]));
-      const winners = competition.value.filter(r => r.status === 200);
+      const winners = competition.value.filter((r) => r.status === 200);
       expect(winners).toHaveLength(1);
-      expect([404, 412]).toContain(competition.value.find(r => r.status !== 200)!.status);
+      expect([404, 412]).toContain(competition.value.find((r) => r.status !== 200)!.status);
       expect((await f.publications(rival.post.id))[0]!.data.revisionId).toBe(winners[0]!.value.post.revisionId);
       expect(await f.publications(rival.post.id)).toHaveLength(1);
     }
@@ -207,7 +226,11 @@ test('native first publication pins its revision across replay, silent edits, st
     expect(control.value.status).toBe(200);
     await f.assertPublished(allowed, control.value.value.post.revisionId, controlBefore);
   } finally {
-    try { await observer.close(); } finally { await f.close(); }
+    try {
+      await observer.close();
+    } finally {
+      await f.close();
+    }
   }
 });
 
@@ -218,16 +241,20 @@ test('a supported event-fence failure rolls back opening and thread security, re
     const target = await f.draft('opening');
     const before = await f.snapshot(target);
     const key = crypto.randomUUID();
-    observer.armFault({ match: { statement: fence.sql }, boundary: 'after', error: new Error('publication event fence fault') });
+    observer.armFault({
+      match: { statement: fence.sql },
+      boundary: 'after',
+      error: new Error('publication event fence fault'),
+    });
     const start = observer.records.length;
     const failed = await capture(f.db, () => f.revise(target.post, { visibility: 'published' }, { key }));
     expect(failed.value.status).toBe(500);
     const records = observer.records.slice(start);
-    expect(records.some(r => r.statement === insertRevision.sql)).toBe(true);
-    expect(records.some(r => r.statement === updateHead.sql)).toBe(true);
-    expect(records.some(r => r.statement === publishOpeningThread.sql)).toBe(true);
-    expect(records.some(r => r.statement === fence.sql)).toBe(true);
-    expect(records.some(r => /^ROLLBACK\s*;?$/i.test(r.statement))).toBe(true);
+    expect(records.some((r) => r.statement === insertRevision.sql)).toBe(true);
+    expect(records.some((r) => r.statement === updateHead.sql)).toBe(true);
+    expect(records.some((r) => r.statement === publishOpeningThread.sql)).toBe(true);
+    expect(records.some((r) => r.statement === fence.sql)).toBe(true);
+    expect(records.some((r) => /^ROLLBACK\s*;?$/i.test(r.statement))).toBe(true);
     expect(await f.snapshot(target)).toEqual(before);
     expect((await f.call('GET', `/v1/threads/${target.threadId}`, undefined, { anonymous: true })).status).toBe(404);
     const retried = await capture(f.db, () => f.revise(target.post, { visibility: 'published' }, { key }));
@@ -235,6 +262,10 @@ test('a supported event-fence failure rolls back opening and thread security, re
     await f.assertPublished(target, retried.value.value.post.revisionId, before);
     expect((await f.call('GET', `/v1/threads/${target.threadId}`, undefined, { anonymous: true })).status).toBe(200);
   } finally {
-    try { await observer.close(); } finally { await f.close(); }
+    try {
+      await observer.close();
+    } finally {
+      await f.close();
+    }
   }
 });

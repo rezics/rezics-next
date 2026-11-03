@@ -47,11 +47,11 @@ Each of six checks starts an isolated native fixture, so one axis cannot supply 
 Scales are exactly 256, 1024 and 4096, with the shared harness's default repetitions and warmups.
 The classifier uses constant rows/statements and logarithmic blocks with unchanged shared budgets and planner settings.
 
-| Axis | Population | Fixed selection |
-| --- | --- | --- |
-| Unrelated threads/posts | Routed bulk rows copy the shape of a real native opening, with independent IDs in the selected home partition; one thread/post/revision per ordinal | Selected draft history, containers, body and ancestry |
-| Selected retained revisions | Each fresh selected draft receives exactly N immutable retained revision rows, copied from its own current native revision; its native head and visibility are asserted unchanged | Unrelated population and command history; no synthetic receipts or events |
-| Native command history | N disjoint, expired native `POST /v1/grants` commands on a real unrelated post in the selected home, for another real account; transaction joins pin grants to their actual native receipt/outbox/write-basis envelopes | Thread/post populations and selected revision history; no current grant or selected visibility changes |
+| Axis                        | Population                                                                                                                                                                                                              | Fixed selection                                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Unrelated threads/posts     | Routed bulk rows copy the shape of a real native opening, with independent IDs in the selected home partition; one thread/post/revision per ordinal                                                                     | Selected draft history, containers, body and ancestry                                                  |
+| Selected retained revisions | Each fresh selected draft receives exactly N immutable retained revision rows, copied from its own current native revision; its native head and visibility are asserted unchanged                                       | Unrelated population and command history; no synthetic receipts or events                              |
+| Native command history      | N disjoint, expired native `POST /v1/grants` commands on a real unrelated post in the selected home, for another real account; transaction joins pin grants to their actual native receipt/outbox/write-basis envelopes | Thread/post populations and selected revision history; no current grant or selected visibility changes |
 
 Opening drafts are routed into the fixture's home by selecting their real creation idempotency keys before
 issuing the command. Replies use a fixed native chain: selected draft plus 32 parents, including the opening.
@@ -80,13 +80,13 @@ for logarithmic blocks. No command step enumerates selected revision history, ho
 The concrete additional write envelope comes from the current producer and executor, rather than the old
 published-edit budget:
 
-| Work in one successful first publication | Exact SQL work |
-| --- | --- |
-| Revision insertion | One `insert-revision.sql`, bound to the selected post and newly returned revision |
-| Head/visibility CAS | One `update-head.sql`, bound to that new revision, exact old head and draft -> published; author, availability and security revision predicates remain native |
-| Opening thread publication | One `publish-opening-thread.sql` for openings, zero for replies; the UPDATE acquires the thread row lock and checks opening identity, author, draft state and security revision |
-| Native fence | One fence statement: one partition-position update, two outbox rows, one receipt and one editorial write basis in the same transaction |
-| Exact event | Revision-created plus the closed `com.rezics.content.post.published.v1`, pinned to the transaction's returned revision |
+| Work in one successful first publication | Exact SQL work                                                                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision insertion                       | One `insert-revision.sql`, bound to the selected post and newly returned revision                                                                                               |
+| Head/visibility CAS                      | One `update-head.sql`, bound to that new revision, exact old head and draft -> published; author, availability and security revision predicates remain native                   |
+| Opening thread publication               | One `publish-opening-thread.sql` for openings, zero for replies; the UPDATE acquires the thread row lock and checks opening identity, author, draft state and security revision |
+| Native fence                             | One fence statement: one partition-position update, two outbox rows, one receipt and one editorial write basis in the same transaction                                          |
+| Exact event                              | Revision-created plus the closed `com.rezics.content.post.published.v1`, pinned to the transaction's returned revision                                                          |
 
 The tests bind actual statement parameters, not only response status. Per accepted growth repetition, statement
 attribution must include revision insertion, post CAS, optional opening update, native fence, receipt, basis,
