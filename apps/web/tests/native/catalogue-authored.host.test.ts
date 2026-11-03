@@ -144,9 +144,7 @@ test('a contributor submits, retries, reviews and selects an original abstract t
     const pendingBody = (await pending.json()) as {
       subject: { statements: Record<string, { id: string }[]> };
     };
-    expect(pendingBody.subject.statements[property]?.map((statement) => statement.id)).toEqual([
-      initialStatementId,
-    ]);
+    expect(pendingBody.subject.statements[property]?.map((statement) => statement.id)).toEqual([initialStatementId]);
 
     const candidatesResponse = await stack.kernel(
       `/v1/subjects/${subjectId}/candidates?property=${encodeURIComponent(property)}&context=${globalContext}&limit=20`,
@@ -215,9 +213,7 @@ test('a contributor submits, retries, reviews and selects an original abstract t
     const acceptedBody = (await afterAcceptance.json()) as {
       subject: { statements: Record<string, { id: string }[]> };
     };
-    expect(acceptedBody.subject.statements[property]?.map((statement) => statement.id)).toEqual([
-      initialStatementId,
-    ]);
+    expect(acceptedBody.subject.statements[property]?.map((statement) => statement.id)).toEqual([initialStatementId]);
 
     await review.getByRole('button', { name: m.candidate_reload() }).click();
     const oldChoice = review.locator('[data-candidate-choice]').filter({ hasText: currentText });
