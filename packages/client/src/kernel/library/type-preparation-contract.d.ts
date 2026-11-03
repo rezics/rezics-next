@@ -108,6 +108,12 @@ export interface TypePreparationSourceObservation {
     readonly type: string | null;
 }
 /** Concrete source adapter/keys/producer/runner are wired only at final composition. */
+export type TypePreparationSourceObserved = (observation: {
+    accountId: string;
+    subjectId: string;
+    sourceId: string;
+    stamp: Readonly<ShelfSourceStamp>;
+}) => Promise<void>;
 export interface TypePreparationDependencies {
     readonly pool: Pool;
     readonly access: Access;
@@ -117,6 +123,8 @@ export interface TypePreparationDependencies {
     /** Bound observePreparationIdentity; no readItemTypes/full observer/full equality on this path. */
     readonly observeIdentity: (subjectId: string) => Promise<Omit<TypePreparationSourceObservation, 'type'>>;
     readonly clock?: KernelClock;
+    /** Runs after both initial source checkouts have been released, before the owner command. */
+    readonly typeSourceObserved?: TypePreparationSourceObserved;
 }
 export type TypePreparationContinuationDependencies = Pick<TypePreparationDependencies, 'pool' | 'keys' | 'observeIdentity' | 'clock'>;
 export { createTypePreparationPorts, createTypePreparationContinuation } from './shelf-type-keys.ts';

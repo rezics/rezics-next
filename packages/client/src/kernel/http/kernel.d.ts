@@ -62,6 +62,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     shelves?: ShelfNativeReadBindings;
     /** Per-kernel private Type dictionary digest; defaults to SHA-256. */
     shelfTypeDigest?: ShelfTypeDigest;
+    /** Optional entry preparation observation, after release of the source snapshots. */
+    typeSourceObserved?: import('../library/type-preparation-contract.ts').TypePreparationSourceObserved;
     discovery?: import('../search/discovery-service.ts').DiscoverySearch;
     /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
     reports?: {

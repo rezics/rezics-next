@@ -13,6 +13,7 @@ type Dependencies = {
     clock?: KernelClock;
     shelves?: () => ShelfReads;
     shelfTypeDigest?: ShelfTypeDigest;
+    typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
 };
 /** Private account-owned library transport. Domain commands retain authorization and receipts. */
 export declare function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
