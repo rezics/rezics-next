@@ -1330,8 +1330,7 @@ export async function runWorkerCheck(
     writeSync(descriptor, line);
   }
   if (localOnly && needsStack) {
-    const line =
-      'worker-check: --local cannot place a heavy or unknown check on this host; routing to a performance-approved check host\n';
+    const line = 'worker-check: --local cannot place a heavy or unknown check on this host; routing to a or b\n';
     process.stderr.write(line);
     writeSync(descriptor, line);
   }
@@ -1345,7 +1344,7 @@ export async function runWorkerCheck(
     else {
       try {
         if (performanceHosts(readHosts(remoteHostsFile)).length === 0)
-          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no performance-approved host`;
+          remoteHostFailure = `remote check hosts ${remoteHostsFile} contain no approved a/b host`;
       } catch (error) {
         remoteHostFailure = `remote check hosts are invalid: ${error instanceof Error ? error.message : String(error)}`;
       }

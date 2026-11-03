@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type { Settings, Task } from './types.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
-import { defaultPolicy } from './policy.ts';
 import { runBoundedInstallProcess } from './install-process.ts';
 import type { WorkerStore } from './store.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
@@ -24,6 +23,10 @@ import { firstFailure, gateEnvironment } from './merge.ts';
 const ref = (branch: string) => `refs/heads/${branch}`;
 const verifiedBranch = 'dev-verified';
 const skippedKinds = new Set(['specification', 'research', 'verification']);
+const MAX_FINDING_ASSERTIONS = 64;
+const MAX_EXISTING_PROBES = 8;
+const FINDING_LIMIT = 2000;
+const RUN_LIMIT = 5000;
 /** `cwd` is the repository-relative workspace a check runs from; command paths are relative to it. */
 export type DevVerifierCheck = { command: string[]; closure: string[]; taskId?: string; cwd?: string };
 type Check = DevVerifierCheck;
@@ -220,23 +223,20 @@ function assertionLines(output: string): string[] {
     ),
   ];
 }
-function stableAssertions(output: string, policy = defaultPolicy.verifier): string[] {
-  return assertionLines(output).slice(0, policy.findingAssertions);
+function stableAssertions(output: string): string[] {
+  return assertionLines(output).slice(0, MAX_FINDING_ASSERTIONS);
 }
-function tooManyAssertions(output: string, policy = defaultPolicy.verifier): boolean {
-  return assertionLines(output).length > policy.findingAssertions;
+function tooManyAssertions(output: string): boolean {
+  return assertionLines(output).length > MAX_FINDING_ASSERTIONS;
 }
-export function classifyRun(
-  result: Pick<DevVerifierEvidence, 'passed' | 'timedOut' | 'output'>,
-  policy = defaultPolicy.verifier,
-): DevVerifierResult {
+export function classifyRun(result: Pick<DevVerifierEvidence, 'passed' | 'timedOut' | 'output'>): DevVerifierResult {
   if (result.passed) return 'pass';
   if (
     infraFailure(result.output, result.timedOut) ||
     unavailableFailure(result.output) ||
     truncatedOutput(result.output) ||
-    tooManyAssertions(result.output, policy) ||
-    !stableAssertions(result.output, policy).length
+    tooManyAssertions(result.output) ||
+    !stableAssertions(result.output).length
   )
     return 'infrastructure';
   return 'fail';
@@ -388,15 +388,10 @@ function checkInput(settings: Settings, commit: string, check: Check): string | 
     toolchain: toolchainIdentity(settings, commit),
   });
 }
-function installDependencies(
-  tree: string,
-  stateDirectory: string,
-  fallbackRoot: string,
-  policy = defaultPolicy,
-): boolean {
+function installDependencies(tree: string, stateDirectory: string, fallbackRoot: string): boolean {
   if (!existsSync(join(tree, 'package.json')) || !existsSync(join(tree, 'bun.lock'))) return true;
   const installLog = join(stateDirectory, `dev-verify-install-${randomUUID()}.log`);
-  for (let attempt = 0; attempt < policy.verifier.installAttempts; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const executable = repositoryBun(tree, fallbackRoot, true);
       appendFileSync(installLog, `$ ${executable} install --frozen-lockfile (attempt ${attempt + 1})\n`);
@@ -406,7 +401,6 @@ function installDependencies(
         cwd: tree,
         step: 'bun install --frozen-lockfile',
         purpose: 'preparation',
-        policy,
       });
       appendFileSync(installLog, `${result.stdout}${result.stderr}`);
       return true;
@@ -435,7 +429,7 @@ export type DevVerifierOptions = {
  * Checks the verifier runs at once. It verifies after integration at ordinary priority, so it takes a share of the
  * check hosts, never all of them: on 2026-10-30 one run started 48 checks together and workers waited an hour.
  */
-export const VERIFY_CONCURRENCY = defaultPolicy.verifier.concurrency;
+export const VERIFY_CONCURRENCY = 3;
 async function mapBounded<T, R>(items: readonly T[], limit: number, run: (item: T, index: number) => Promise<R>) {
   const results = new Array<R>(items.length);
   let next = 0;
@@ -462,7 +456,7 @@ function cachedRun(store: DevVerifierOptions['store'], key: string): DevVerifier
     return undefined;
   }
 }
-function saveRun(store: DevVerifierOptions['store'], run: DevVerifierRun, policy = defaultPolicy.verifier): void {
+function saveRun(store: DevVerifierOptions['store'], run: DevVerifierRun): void {
   try {
     if (store.saveDevVerifierRun) {
       store.saveDevVerifierRun(run);
@@ -474,7 +468,7 @@ function saveRun(store: DevVerifierOptions['store'], run: DevVerifierRun, policy
       .run(run.key, run.createdAt, JSON.stringify(run));
     store.db
       .query(
-        `DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET ${policy.runRows})`,
+        `DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET ${RUN_LIMIT})`,
       )
       .run();
   } catch {
@@ -515,7 +509,7 @@ function installDependenciesCached(
     const previousLogs = new Set(
       readdirSync(stateDirectory).filter((name) => name.startsWith(logPrefix) && name.endsWith(logSuffix)),
     );
-    const passed = installDependencies(tree, stateDirectory, options.settings.mainCheckout, options.settings.policy);
+    const passed = installDependencies(tree, stateDirectory, options.settings.mainCheckout);
     const logName = readdirSync(stateDirectory).find(
       (name) => name.startsWith(logPrefix) && name.endsWith(logSuffix) && !previousLogs.has(name),
     );
@@ -539,19 +533,15 @@ function installDependenciesCached(
       result: result.passed ? 'pass' : 'infrastructure',
     },
   };
-  if (result.passed) saveRun(options.store, run, options.settings.policy?.verifier);
+  if (result.passed) saveRun(options.store, run);
   return result;
 }
-function knownExisting(
-  store: DevVerifierOptions['store'],
-  signature: string,
-  policy = defaultPolicy.verifier,
-): boolean {
+function knownExisting(store: DevVerifierOptions['store'], signature: string): boolean {
   try {
     if (store.devVerifierHasKnownExisting) return store.devVerifierHasKnownExisting(signature);
     if (store.devVerifierFindings)
       return store
-        .devVerifierFindings(policy.findingRows)
+        .devVerifierFindings(FINDING_LIMIT)
         .some((item) => item.signature === signature && item.status === 'existing');
     return Boolean(
       store.db
@@ -562,11 +552,7 @@ function knownExisting(
     return false;
   }
 }
-function saveFinding(
-  store: DevVerifierOptions['store'],
-  finding: DevVerifierFinding,
-  policy = defaultPolicy.verifier,
-): void {
+function saveFinding(store: DevVerifierOptions['store'], finding: DevVerifierFinding): void {
   try {
     if (store.saveDevVerifierFinding) {
       store.saveDevVerifierFinding(finding);
@@ -587,7 +573,7 @@ function saveFinding(
       );
     store.db
       .query(
-        `DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET ${policy.findingRows})`,
+        `DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET ${FINDING_LIMIT})`,
       )
       .run();
   } catch {
@@ -632,13 +618,7 @@ function makeFinding(
   };
 }
 
-function evidence(
-  commit: string,
-  check: Check,
-  result: GateOutcome,
-  logPath: string,
-  policy = defaultPolicy.verifier,
-): DevVerifierEvidence {
+function evidence(commit: string, check: Check, result: GateOutcome, logPath: string): DevVerifierEvidence {
   return {
     commit,
     command: [...check.command],
@@ -646,7 +626,7 @@ function evidence(
     timedOut: result.timedOut,
     output: result.output,
     logPath,
-    result: classifyRun(result, policy),
+    result: classifyRun(result),
     ...(check.cwd ? { cwd: check.cwd } : {}),
   };
 }
@@ -682,13 +662,10 @@ function reusableCheckResult(
   selection: string,
 ): DevVerifierEvidence | undefined {
   const cached = cachedRun(store, runCacheKey(settings, commit, check, selection));
-  if (cached && classifyRun(cached, settings.policy?.verifier) !== 'infrastructure')
-    return forCheckAtCommit(cached, commit, check);
+  if (cached && classifyRun(cached) !== 'infrastructure') return forCheckAtCommit(cached, commit, check);
   const input = checkInput(settings, commit, check);
   const failed = input ? cachedRun(store, input) : undefined;
-  return failed && classifyRun(failed, settings.policy?.verifier) === 'fail'
-    ? forCheckAtCommit(failed, commit, check)
-    : undefined;
+  return failed && classifyRun(failed) === 'fail' ? forCheckAtCommit(failed, commit, check) : undefined;
 }
 
 function runCacheKey(settings: Settings, commit: string, check: IndexedCheck, selection: string): string {
@@ -705,16 +682,13 @@ async function executeCheck(
   input?: string,
 ): Promise<DevVerifierEvidence> {
   const cached = cachedRun(options.store, key);
-  if (cached && classifyRun(cached, options.settings.policy?.verifier) !== 'infrastructure')
-    return forCheckAtCommit(cached, commit, check);
+  if (cached && classifyRun(cached) !== 'infrastructure') return forCheckAtCommit(cached, commit, check);
   const inputFailure = input ? cachedRun(options.store, input) : undefined;
-  if (inputFailure && classifyRun(inputFailure, options.settings.policy?.verifier) === 'fail')
-    return forCheckAtCommit(inputFailure, commit, check);
-  const policy = options.settings.policy ?? defaultPolicy;
+  if (inputFailure && classifyRun(inputFailure) === 'fail') return forCheckAtCommit(inputFailure, commit, check);
   const attempts: string[] = [];
   let final: GateOutcome = { passed: false, output: '', timedOut: false };
   let finalLog = '';
-  for (let attempt = 0; attempt < policy.verifier.checkAttempts; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     finalLog = join(options.settings.stateDirectory, `dev-verify-${randomUUID()}.log`);
     try {
       final = await run(
@@ -729,12 +703,10 @@ async function executeCheck(
     if (final.passed || !infraFailure(final.output, final.timedOut)) break;
   }
   const fullOutput = attempts.length > 1 ? attempts.join('\n') : final.output;
-  const result = evidence(commit, check, { ...final, output: fullOutput }, finalLog, options.settings.policy?.verifier);
+  const result = evidence(commit, check, { ...final, output: fullOutput }, finalLog);
   const createdAt = new Date().toISOString();
-  if (classifyRun(result, options.settings.policy?.verifier) !== 'infrastructure')
-    saveRun(options.store, { key, createdAt, evidence: result }, options.settings.policy?.verifier);
-  if (input && classifyRun(result, options.settings.policy?.verifier) === 'fail')
-    saveRun(options.store, { key: input, createdAt, evidence: result }, options.settings.policy?.verifier);
+  if (classifyRun(result) !== 'infrastructure') saveRun(options.store, { key, createdAt, evidence: result });
+  if (input && classifyRun(result) === 'fail') saveRun(options.store, { key: input, createdAt, evidence: result });
   return result;
 }
 
@@ -773,8 +745,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
       git(settings.mainCheckout, 'worktree', 'add', '--detach', headTree, target);
       headSetup = installDependenciesCached(options, target, headTree);
     }
-    const runner =
-      options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).verifier.standaloneGateTimeoutMs);
+    const runner = options.runGate ?? gateRunner(2 * 60 * 60_000);
     const headJobs: { check: IndexedCheck; cwd: string }[] = [];
     for (const check of checks) {
       if (!headMissing.includes(check)) {
@@ -785,25 +756,21 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
           results[check.index]!.headReason = `Head dependency setup failed: ${headSetup.output}`;
       }
     }
-    const headResults = await mapBounded(
-      headJobs,
-      (options.settings.policy ?? defaultPolicy).verifier.concurrency,
-      async (job) => {
-        const key = runCacheKey(settings, target, job.check, selection);
-        return {
-          check: job.check,
-          result: await executeCheck(
-            options,
-            runner,
-            job.check,
-            target,
-            job.cwd,
-            key,
-            checkInput(settings, target, job.check),
-          ),
-        };
-      },
-    );
+    const headResults = await mapBounded(headJobs, VERIFY_CONCURRENCY, async (job) => {
+      const key = runCacheKey(settings, target, job.check, selection);
+      return {
+        check: job.check,
+        result: await executeCheck(
+          options,
+          runner,
+          job.check,
+          target,
+          job.cwd,
+          key,
+          checkInput(settings, target, job.check),
+        ),
+      };
+    });
     for (const item of headResults) results[item.check.index]!.head = item.result;
 
     // A baseline run is needed only for a stable product failure at the head. A recovered infrastructure retry,
@@ -816,8 +783,8 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
           !infraFailure(result.output, result.timedOut) &&
           !unavailableFailure(result.output) &&
           !truncatedOutput(result.output) &&
-          !tooManyAssertions(result.output, settings.policy?.verifier) &&
-          stableAssertions(result.output, settings.policy?.verifier).length > 0
+          !tooManyAssertions(result.output) &&
+          stableAssertions(result.output).length > 0
         );
       })
       .map(({ check }) => check);
@@ -842,25 +809,21 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
       else if (baseSetup && !baseSetup.passed)
         results[check.index]!.baselineReason = `Baseline dependency setup failed: ${baseSetup.output}`;
     }
-    const baselineResults = await mapBounded(
-      baseJobs,
-      (options.settings.policy ?? defaultPolicy).verifier.concurrency,
-      async (job) => {
-        const key = runCacheKey(settings, base, job.check, selection);
-        return {
-          check: job.check,
-          result: await executeCheck(
-            options,
-            runner,
-            job.check,
-            base,
-            job.cwd,
-            key,
-            checkInput(settings, base, job.check),
-          ),
-        };
-      },
-    );
+    const baselineResults = await mapBounded(baseJobs, VERIFY_CONCURRENCY, async (job) => {
+      const key = runCacheKey(settings, base, job.check, selection);
+      return {
+        check: job.check,
+        result: await executeCheck(
+          options,
+          runner,
+          job.check,
+          base,
+          job.cwd,
+          key,
+          checkInput(settings, base, job.check),
+        ),
+      };
+    });
     for (const item of baselineResults) results[item.check.index]!.baseline = item.result;
 
     const findings: DevVerifierFinding[] = [];
@@ -873,10 +836,8 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
       }
       if (!headResult && !result.headReason) continue;
       const baseResult = result.baseline;
-      let baseAssertions =
-        baseResult && !baseResult.passed ? stableAssertions(baseResult.output, settings.policy?.verifier) : [];
-      const headAssertions =
-        headResult && !headResult.passed ? stableAssertions(headResult.output, settings.policy?.verifier) : [];
+      let baseAssertions = baseResult && !baseResult.passed ? stableAssertions(baseResult.output) : [];
+      const headAssertions = headResult && !headResult.passed ? stableAssertions(headResult.output) : [];
       const headUnknown =
         !headResult ||
         !!result.headReason ||
@@ -884,7 +845,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
         infraFailure(headResult.output, headResult.timedOut) ||
         unavailableFailure(headResult.output) ||
         truncatedOutput(headResult.output) ||
-        tooManyAssertions(headResult.output, settings.policy?.verifier) ||
+        tooManyAssertions(headResult.output) ||
         !headAssertions.length;
       const baselineUnknown =
         !baseResult ||
@@ -893,7 +854,7 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
         infraFailure(baseResult.output, baseResult.timedOut) ||
         unavailableFailure(baseResult.output) ||
         truncatedOutput(baseResult.output) ||
-        tooManyAssertions(baseResult.output, settings.policy?.verifier) ||
+        tooManyAssertions(baseResult.output) ||
         (!baseResult.passed && !baseAssertions.length);
       const headEv = headResult;
       const baseEv = baseResult;
@@ -917,9 +878,9 @@ async function compareRange(options: DevVerifierOptions, base: string, target: s
           baseEv,
           headEv,
           message,
-          headEv ? classifyRun(headEv, settings.policy?.verifier) : 'infrastructure',
+          headEv ? classifyRun(headEv) : 'infrastructure',
         );
-        saveFinding(store, finding, settings.policy?.verifier);
+        saveFinding(store, finding);
         findings.push(finding);
         continue;
       }
@@ -1000,7 +961,7 @@ async function probeAt(
     if (!commandPresentAt(settings, commit, check)) return null;
     const result = await executeCheck(
       options,
-      options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).verifier.standaloneGateTimeoutMs),
+      options.runGate ?? gateRunner(2 * 60 * 60_000),
       check,
       commit,
       tree,
@@ -1011,7 +972,7 @@ async function probeAt(
       infraFailure(result.output, result.timedOut) ||
       unavailableFailure(result.output) ||
       truncatedOutput(result.output) ||
-      tooManyAssertions(result.output, settings.policy?.verifier)
+      tooManyAssertions(result.output)
     )
       return null;
     return result;
@@ -1020,21 +981,17 @@ async function probeAt(
   }
 }
 
-function containsAssertion(
-  result: DevVerifierEvidence | null,
-  assertion: string,
-  policy = defaultPolicy.verifier,
-): boolean | null {
+function containsAssertion(result: DevVerifierEvidence | null, assertion: string): boolean | null {
   if (!result) return null;
   if (
     result.timedOut ||
     infraFailure(result.output, result.timedOut) ||
     unavailableFailure(result.output) ||
     truncatedOutput(result.output) ||
-    tooManyAssertions(result.output, policy)
+    tooManyAssertions(result.output)
   )
     return null;
-  return !result.passed && stableAssertions(result.output, policy).includes(assertion);
+  return !result.passed && stableAssertions(result.output).includes(assertion);
 }
 
 async function proveExistingOrReintroduced(
@@ -1044,26 +1001,20 @@ async function proveExistingOrReintroduced(
   suspects: readonly Suspect[],
   selection: string,
 ): Promise<ExistingProbe> {
-  if (knownExisting(options.store, findingSignature(check, assertion), options.settings.policy?.verifier))
-    return { status: 'existing' };
+  if (knownExisting(options.store, findingSignature(check, assertion))) return { status: 'existing' };
   if (suspects.length < 2) return { status: 'existing' };
-  const probeLimit = (options.settings.policy ?? defaultPolicy).verifier.existingProbes;
   const sampleIndexes = Array.from({ length: suspects.length - 1 }, (_, index) => index);
   const selected =
-    sampleIndexes.length <= probeLimit
+    sampleIndexes.length <= MAX_EXISTING_PROBES
       ? sampleIndexes
-      : Array.from({ length: probeLimit }, (_, index) =>
-          Math.floor((index * (sampleIndexes.length - 1)) / Math.max(1, probeLimit - 1)),
+      : Array.from({ length: MAX_EXISTING_PROBES }, (_, index) =>
+          Math.floor((index * (sampleIndexes.length - 1)) / (MAX_EXISTING_PROBES - 1)),
         );
   const unique = [...new Set(selected)];
-  const probes = await mapBounded(
-    unique,
-    (options.settings.policy ?? defaultPolicy).verifier.concurrency,
-    async (index) => {
-      const evidence = await probeAt(options, check, suspects[index]!.commit, selection);
-      return { index, contains: containsAssertion(evidence, assertion, options.settings.policy?.verifier) };
-    },
-  );
+  const probes = await mapBounded(unique, VERIFY_CONCURRENCY, async (index) => {
+    const evidence = await probeAt(options, check, suspects[index]!.commit, selection);
+    return { index, contains: containsAssertion(evidence, assertion) };
+  });
   const clean = probes.filter((item) => item.contains === false).map((item) => item.index);
   if (!clean.length) {
     if (probes.some((item) => item.contains === null) || unique.length < sampleIndexes.length)
@@ -1089,13 +1040,13 @@ async function locateNewFailure(
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
     const outcome = await probeAt(options, check, suspects[middle]!.commit, selection);
-    const contains = containsAssertion(outcome, assertion, options.settings.policy?.verifier);
+    const contains = containsAssertion(outcome, assertion);
     if (contains === null) return null;
     if (contains) high = middle;
     else low = middle + 1;
   }
   const evidence = await probeAt(options, check, suspects[low]!.commit, selection);
-  const contains = containsAssertion(evidence, assertion, options.settings.policy?.verifier);
+  const contains = containsAssertion(evidence, assertion);
   return contains === null ? null : contains ? suspects[low]!.task : undefined;
 }
 
@@ -1116,12 +1067,8 @@ function groupNewFindings(findings: readonly DevVerifierFinding[], checks: reado
   return [...groups.values()].map((group) => ({ ...group, targets: [...new Set(group.targets)] }));
 }
 
-function saveComparisonFindings(
-  store: DevVerifierOptions['store'],
-  comparison: Comparison,
-  policy = defaultPolicy.verifier,
-): void {
-  for (const finding of comparison.findings) saveFinding(store, finding, policy);
+function saveComparisonFindings(store: DevVerifierOptions['store'], comparison: Comparison): void {
+  for (const finding of comparison.findings) saveFinding(store, finding);
 }
 
 function advanceVerified(
@@ -1152,7 +1099,7 @@ function updateFindingOwner(
   for (const finding of findings) {
     finding.reason = reason;
     if (task) finding.taskId = task.id;
-    saveFinding(options.store, finding, options.settings.policy?.verifier);
+    saveFinding(options.store, finding);
   }
 }
 
@@ -1179,7 +1126,7 @@ async function revertCulprits(
     const reverted = spawnSync('git', ['revert', '--no-commit', ...selectedCommits], {
       cwd: tree,
       encoding: 'utf8',
-      maxBuffer: (settings.policy ?? defaultPolicy).verifier.gitBufferBytes,
+      maxBuffer: 32 * 1024 * 1024,
     });
     if (reverted.status !== 0)
       throw new Error(`Could not revert verifier culprit changes: ${reverted.stderr || reverted.stdout}`);
@@ -1187,7 +1134,7 @@ async function revertCulprits(
     const committed = spawnSync('git', ['commit', '-m', `revert: ${labels} after dev verification`], {
       cwd: tree,
       encoding: 'utf8',
-      maxBuffer: (settings.policy ?? defaultPolicy).verifier.gitBufferBytes,
+      maxBuffer: 32 * 1024 * 1024,
     });
     if (committed.status !== 0) throw new Error(`Could not commit verifier revert: ${committed.stderr}`);
     const revertHead = git(tree, 'rev-parse', 'HEAD');
@@ -1208,7 +1155,7 @@ async function revertCulprits(
         taskId: task.id,
         kind: 'instruction',
         evidencePath: first.head?.logPath ?? '',
-        summary: `Landing ${task.id} was reverted from dev after ${first.check.command.join(' ')} failed. Log: ${first.head?.logPath ?? '(no log)'}\n${output.slice(-(settings.policy ?? defaultPolicy).verifier.diagnosticCharacters)}`,
+        summary: `Landing ${task.id} was reverted from dev after ${first.check.command.join(' ')} failed. Log: ${first.head?.logPath ?? '(no log)'}\n${output.slice(-6000)}`,
       });
     }
     return revertHead;
@@ -1277,7 +1224,7 @@ async function reconcile(
         'The bounded prefix comparison could not establish whether this matching assertion was pre-existing.';
     }
   }
-  saveComparisonFindings(options.store, comparison, options.settings.policy?.verifier);
+  saveComparisonFindings(options.store, comparison);
   return { comparison, unknown: unknown || proof.some((item) => item.status === 'unknown'), groups };
 }
 
@@ -1285,7 +1232,7 @@ async function reconcile(
 export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   const { settings, store } = options,
     checkout = settings.mainCheckout;
-  const lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'), settings.policy?.leases);
+  const lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'));
   try {
     const dev = head(checkout, settings.integrationBranch);
     let verified: string;
@@ -1329,7 +1276,7 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
           const baseHasAssertion =
             finding.baseline !== null &&
             !finding.baseline.passed &&
-            stableAssertions(finding.baseline.output, settings.policy?.verifier).includes(assertion);
+            stableAssertions(finding.baseline.output).includes(assertion);
           let cleanIndex: number | undefined;
           if (baseHasAssertion) {
             const proof = await proveExistingOrReintroduced(

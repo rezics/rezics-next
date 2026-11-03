@@ -868,84 +868,9 @@ async function reinstall(
 // ---------------------------------------------------------------------------------------------------------------
 // Commands
 
-export type ResidentHealth = { liveWorkers: number; passedGates: number; landings: number };
-export type ResidentControl = {
-  observe(checkout: string): Promise<ResidentHealth>;
-  restart(checkout: string): Promise<void>;
-};
-
-/** A complete ten-minute window on each side of publication; sample worker width once per minute. */
-export async function observeResident(
-  checkout: string,
-  pause: (milliseconds: number) => Promise<unknown> = (milliseconds) => Bun.sleep(milliseconds),
-): Promise<ResidentHealth> {
-  const file = join(checkout, '.temp/goal/goal.sqlite');
-  const db = new Database(file, { readonly: true });
-  const start = new Date().toISOString();
-  let workers = 0;
-  try {
-    const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
-    for (let minute = 0; minute < 10; minute++) {
-      const rows = db
-        .query(`SELECT a.body FROM worker_attempts a JOIN worker_tasks t ON t.id = a.task_id
-        AND t.current_attempt = a.attempt WHERE json_extract(a.body, '$.state') = 'running'`)
-        .all() as { body: string }[];
-      for (const row of rows) {
-        const identity = JSON.parse(row.body).process;
-        if (!identity || identity.boot !== boot) continue;
-        try {
-          const stat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
-          const fields = stat
-            .slice(stat.lastIndexOf(')') + 2)
-            .trim()
-            .split(/\s+/);
-          if (fields[0] !== 'Z' && fields[19] === identity.start && Number(fields[2]) === identity.group) workers++;
-        } catch (error) {
-          if (!['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
-        }
-      }
-      await pause(MINUTE);
-    }
-    const events = db
-      .query(`SELECT body FROM worker_events WHERE kind = 'gate-outcome' AND at >= ? AND at < ?`)
-      .all(start, new Date().toISOString()) as { body: string }[];
-    const passed = events.map((row) => JSON.parse(row.body)).filter((outcome) => outcome.passed);
-    return {
-      liveWorkers: workers / 10,
-      passedGates: passed.length,
-      landings: passed.filter((outcome) => outcome.stage === 'merge' && outcome.mergedCommit).length,
-    };
-  } finally {
-    db.close();
-  }
-}
-
-export async function restartResident(checkout: string): Promise<void> {
-  const envFile = join(checkout, '.temp/goal/goal.env');
-  if (!existsSync(envFile)) throw new Refusal(`Goal service is not installed (${envFile}); run goal service install.`);
-  const child = Bun.spawn(['systemctl', '--user', 'restart', 'rezics-goal-host.service'], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [code, out, err] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  if (code !== 0) throw new Refusal((err || out).trim() || `systemctl restart: exit ${code}`);
-}
-
-export function residentRegression(before: ResidentHealth, after: ResidentHealth): boolean {
-  return (
-    after.liveWorkers < before.liveWorkers || after.passedGates < before.passedGates || after.landings < before.landings
-  );
-}
-const residentControl: ResidentControl = { observe: observeResident, restart: restartResident };
-
 export type Options = {
   dryRun?: boolean;
   rollback?: boolean;
-  resident?: ResidentControl;
   includes?: string[];
   keepWorktree?: boolean;
   /** Also run the suite, gated on no failures beyond unmodified main's. */
@@ -1079,10 +1004,7 @@ export async function sync(options: Options = {}): Promise<number> {
     const removed = run(checkout, ['worktree', 'remove', '--force', '--force', path]);
     if (removed.status !== 0) print(`cp-sync: could not remove ${path}: ${redact(removed.stderr.trim())}`);
   };
-  let cleaned = false;
   const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
     if (activeChild) killGroup(activeChild.pid, 'SIGKILL');
     for (const path of [...created]) removeWorktree(path);
     release();
@@ -1183,9 +1105,6 @@ export async function sync(options: Options = {}): Promise<number> {
       return ready ? 0 : 1;
     }
 
-    const resident = options.resident ?? residentControl;
-    print('cp-sync: observing resident workers and gate outcomes for ten minutes before publication.');
-    const before = await resident.observe(checkout);
     const published = publish(checkout, 'sync', main, commit, paths, source, print);
     const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
     const pair = (update: RefUpdate | undefined) =>
@@ -1216,20 +1135,6 @@ export async function sync(options: Options = {}): Promise<number> {
       });
     if (!(await reinstall(checkout, main, commit, paths, logs, print))) {
       print('cp-sync: the main checkout install failed; fix it, or run cp-sync --rollback.');
-      return 1;
-    }
-    try {
-      await resident.restart(checkout);
-      print('cp-sync: observing resident workers and gate outcomes for ten minutes after publication.');
-      const after = await resident.observe(checkout);
-      print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
-      if (residentRegression(before, after))
-        throw new Refusal('Resident workers, successful gate outcomes or landings dropped.');
-    } catch (error) {
-      print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);
-      // Release this sync's lock before invoking the ordinary forward-only rollback transaction.
-      cleanup();
-      await rollback({ ...options, resident });
       return 1;
     }
     print(
@@ -1298,7 +1203,6 @@ export async function rollback(options: Options = {}): Promise<number> {
     const logs = join(state, 'cp-sync', `${stamp(now)}-rollback`);
     mkdirSync(logs, { recursive: true });
     if (!(await reinstall(checkout, current, commit, paths, logs, print))) return 1;
-    await (options.resident ?? residentControl).restart(checkout);
     print(`cp-sync: ${MAIN} runs the ${CONTROL_PLANE} of ${short(target.main.previous)} again.`);
     return 0;
   } finally {

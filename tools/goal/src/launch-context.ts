@@ -1,4 +1,3 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -47,11 +46,12 @@ export type LaunchContext = {
   };
 };
 
-// SHA-1 and SHA-256 object widths are Git protocol, independent of text limits.
 const OBJECT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/i;
-type ContextPolicy = ControlPolicy['launchContext'];
+const MAX_DEPENDENCIES = 48;
+const MAX_TEXT = 512;
+const MAX_RENDERED_BYTES = 12_000;
 
-function bounded(value: unknown, max: number): string | null {
+function bounded(value: unknown, max = MAX_TEXT): string | null {
   if (typeof value !== 'string') return null;
   return value.replace(/[\r\n\0]/g, ' ').slice(0, max);
 }
@@ -61,48 +61,44 @@ function briefHash(markdown: string): string {
 }
 
 type GitValue = { value?: string; reason?: string };
-function gitValue(cwd: string, args: string[], policy: ContextPolicy): GitValue {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.gitBufferBytes });
+function gitValue(cwd: string, args: string[]): GitValue {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 });
   if (result.status !== 0) {
     const reason = result.error?.message ?? result.stderr?.trim() ?? `git exited ${result.status}`;
-    return { reason: bounded(reason, policy.diagnosticCharacters) ?? 'git command failed' };
+    return { reason: bounded(reason, 300) ?? 'git command failed' };
   }
   return { value: result.stdout.trim() };
 }
 
-function isCommit(cwd: string, value: string | null, policy: ContextPolicy): boolean {
+function isCommit(cwd: string, value: string | null): boolean {
   if (!value || !OBJECT_ID.test(value)) return false;
   const result = spawnSync('git', ['cat-file', '-e', `${value}^{commit}`], {
     cwd,
     encoding: 'utf8',
-    maxBuffer: policy.probeBufferBytes,
+    maxBuffer: 16 * 1024,
   });
   return result.status === 0;
 }
 
 type Ancestry = { presence: Exclude<Presence, 'not-checked'>; reason?: string };
-function ancestorPresence(cwd: string, commit: string, tip: string, policy: ContextPolicy): Ancestry {
+function ancestorPresence(cwd: string, commit: string, tip: string): Ancestry {
   const result = spawnSync('git', ['merge-base', '--is-ancestor', commit, tip], {
     cwd,
     encoding: 'utf8',
-    maxBuffer: policy.probeBufferBytes,
+    maxBuffer: 16 * 1024,
   });
   if (result.status === 0) return { presence: 'present' };
   if (result.status === 1) return { presence: 'absent' };
   const reason = result.error?.message ?? result.stderr?.trim() ?? `git exited ${result.status}`;
-  return {
-    presence: 'unknown',
-    reason: bounded(reason, policy.diagnosticCharacters) ?? 'Git could not verify dependency ancestry',
-  };
+  return { presence: 'unknown', reason: bounded(reason, 300) ?? 'Git could not verify dependency ancestry' };
 }
 
 function dependencyReceipt(
   store: WorkerStore,
   id: string,
   source: { worktree: string | null; head: string | null; base: string | null; verified: boolean },
-  policy: ContextPolicy,
 ): DependencyReceipt {
-  const name = bounded(id, policy.textCharacters) ?? '<unknown dependency>';
+  const name = bounded(id) ?? '<unknown dependency>';
   const dependency = store.dependency(id);
   if (!dependency)
     return {
@@ -116,7 +112,7 @@ function dependencyReceipt(
       reason: 'no task record exists for this declared dependency',
     };
 
-  const state = bounded(dependency.state, policy.stateCharacters) ?? 'unknown';
+  const state = bounded(dependency.state, 80) ?? 'unknown';
   const commit =
     typeof dependency.task_commit === 'string' && OBJECT_ID.test(dependency.task_commit)
       ? dependency.task_commit
@@ -156,7 +152,7 @@ function dependencyReceipt(
       precondition: 'unknown',
       reason: 'the current task source identity could not be verified',
     };
-  if (!isCommit(source.worktree, commit, policy))
+  if (!isCommit(source.worktree, commit))
     return {
       id: name,
       state,
@@ -168,10 +164,10 @@ function dependencyReceipt(
       reason: 'the dependency commit is not available in the current task checkout',
     };
 
-  const sourceSeen = ancestorPresence(source.worktree, commit, source.head, policy);
+  const sourceSeen = ancestorPresence(source.worktree, commit, source.head);
   const baseSeen =
     source.base && source.base !== source.head
-      ? ancestorPresence(source.worktree, commit, source.base, policy)
+      ? ancestorPresence(source.worktree, commit, source.base)
       : source.base
         ? sourceSeen
         : { presence: 'unknown' as const, reason: 'prepared task base is unavailable' };
@@ -203,9 +199,9 @@ function dependencyReceipt(
   };
 }
 
-function sourceFacts(task: Task, policy: ContextPolicy) {
-  const worktree = bounded(task.worktree, policy.textCharacters);
-  const base = bounded(task.base, policy.revisionCharacters);
+function sourceFacts(task: Task) {
+  const worktree = bounded(task.worktree);
+  const base = bounded(task.base, 128);
   if (!task.worktree || !task.branch)
     return {
       worktree,
@@ -217,9 +213,9 @@ function sourceFacts(task: Task, policy: ContextPolicy) {
     };
   try {
     const expectedRoot = realpathSync(task.worktree);
-    const root = gitValue(task.worktree, ['rev-parse', '--show-toplevel'], policy);
-    const head = gitValue(task.worktree, ['rev-parse', '--verify', 'HEAD'], policy);
-    const branch = gitValue(task.worktree, ['branch', '--show-current'], policy);
+    const root = gitValue(task.worktree, ['rev-parse', '--show-toplevel']);
+    const head = gitValue(task.worktree, ['rev-parse', '--verify', 'HEAD']);
+    const branch = gitValue(task.worktree, ['branch', '--show-current']);
     if (!root.value || resolve(root.value) !== expectedRoot)
       return {
         worktree,
@@ -229,7 +225,7 @@ function sourceFacts(task: Task, policy: ContextPolicy) {
         verified: false,
         reason: 'Git root does not match the stored worktree identity',
       };
-    if (!head.value || !OBJECT_ID.test(head.value) || !isCommit(task.worktree, head.value, policy))
+    if (!head.value || !OBJECT_ID.test(head.value) || !isCommit(task.worktree, head.value))
       return {
         worktree,
         base,
@@ -247,7 +243,7 @@ function sourceFacts(task: Task, policy: ContextPolicy) {
         verified: false,
         reason: 'current Git branch does not match the stored task branch',
       };
-    if (!base || !isCommit(task.worktree, base, policy))
+    if (!base || !isCommit(task.worktree, base))
       return {
         worktree,
         base,
@@ -264,9 +260,7 @@ function sourceFacts(task: Task, policy: ContextPolicy) {
       head: null,
       branch: null,
       verified: false,
-      reason:
-        bounded(error instanceof Error ? error.message : String(error), policy.diagnosticCharacters) ??
-        'source identity is unavailable',
+      reason: bounded(error instanceof Error ? error.message : String(error), 300) ?? 'source identity is unavailable',
     };
   }
 }
@@ -277,7 +271,6 @@ export function captureLaunchContext(
   ref: AttemptRef,
   boundary: LaunchBoundary,
   origin: LaunchContext['origin'] = 'managed',
-  policy = store.policy.launchContext,
 ): LaunchContext {
   store.assertCurrent(ref);
   const task = store.task(ref.taskId);
@@ -300,10 +293,10 @@ export function captureLaunchContext(
       contractProof = 'unknown';
     }
   }
-  const source = sourceFacts(task, policy);
+  const source = sourceFacts(task);
   const rawAfter = (task.brief as { after?: unknown }).after;
   const after = Array.isArray(rawAfter) ? rawAfter : null;
-  const receipts = (after ?? []).slice(0, policy.dependencies).map((value, index) => {
+  const receipts = (after ?? []).slice(0, MAX_DEPENDENCIES).map((value, index) => {
     if (typeof value !== 'string')
       return {
         id: `<invalid dependency ${index + 1}>`,
@@ -315,29 +308,24 @@ export function captureLaunchContext(
         precondition: 'unknown' as const,
         reason: 'historical task record contains an invalid dependency id',
       };
-    return dependencyReceipt(
-      store,
-      value,
-      {
-        worktree: source.worktree,
-        head: source.head,
-        base: source.base,
-        verified: source.verified,
-      },
-      policy,
-    );
+    return dependencyReceipt(store, value, {
+      worktree: source.worktree,
+      head: source.head,
+      base: source.base,
+      verified: source.verified,
+    });
   });
   return {
     version: 1,
     boundary,
     origin,
     task: {
-      id: bounded(task.id, policy.textCharacters) ?? '<unknown task>',
+      id: bounded(task.id) ?? '<unknown task>',
       attempt: ref.attempt,
-      state: bounded(task.state, policy.stateCharacters) ?? 'unknown',
-      branch: bounded(task.branch, policy.textCharacters),
+      state: bounded(task.state, 80) ?? 'unknown',
+      branch: bounded(task.branch),
       worktree: source.worktree,
-      contractPath: bounded(task.briefPath, policy.pathCharacters),
+      contractPath: bounded(task.briefPath, 1024),
       contractSha256: hash,
       contractProof,
       base: source.base,
@@ -371,7 +359,7 @@ export function dependencyLine(receipt: DependencyReceipt): string {
 }
 
 /** Render the launch facts without log text, provider output, configuration, secrets or unbounded dependency lists. */
-export function renderLaunchContext(context: LaunchContext | undefined, policy = defaultPolicy.launchContext): string {
+export function renderLaunchContext(context: LaunchContext | undefined): string {
   if (!context)
     return [
       '## Current controller launch context',
@@ -385,7 +373,7 @@ export function renderLaunchContext(context: LaunchContext | undefined, policy =
     task: context.task,
   });
   const lines = context.dependencies.receipts.map(dependencyLine);
-  while (lines.length && Buffer.byteLength(lines.join('\n')) + Buffer.byteLength(json) > policy.renderedBytes)
+  while (lines.length && Buffer.byteLength(lines.join('\n')) + Buffer.byteLength(json) > MAX_RENDERED_BYTES)
     lines.pop();
   const omitted = (context.dependencies.required ?? context.dependencies.receipts.length) - lines.length;
   return [

@@ -1,4 +1,3 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
 import type { AcceptancePlacement, Brief, BriefContinuation, TaskKind } from './types.ts';
@@ -9,17 +8,17 @@ export type RiskOwnership = { version: number; areas: Record<string, string[]> }
  * A worker's prompt is one argument, which Linux limits to 128 KiB: a 127 KB brief failed every launch with E2BIG
  * (2026-10-29). Briefs link evidence files instead of pasting them. Declared paths share this bound.
  */
-export const MAX_BRIEF_BYTES = defaultPolicy.brief.bytes;
+export const MAX_BRIEF_BYTES = 64 * 1024;
 /** Visited (i, j) cells; wildcard products larger than this stall dispatch. */
-type BriefPolicy = ControlPolicy['brief'];
+const MAX_PATH_MATCH_STATES = 1_000_000;
 function pathMatchExceeded(): never {
   throw new Error('path pattern matching exceeded the supported bound; shorten wildcards or split the pattern');
 }
 /** Deliberately small path language: literals, *, ?, and whole-segment **. */
-export function validatePath(pattern: string, policy: BriefPolicy = defaultPolicy.brief): void {
-  if (pattern.length > policy.pathCharacters)
+export function validatePath(pattern: string): void {
+  if (pattern.length > MAX_BRIEF_BYTES)
     throw new Error(
-      `declared path is ${pattern.length} characters; keep each pattern under ${policy.pathCharacters} characters`,
+      `declared path is ${pattern.length} characters; keep each pattern under ${MAX_BRIEF_BYTES} characters`,
     );
   if (
     !pattern ||
@@ -36,7 +35,6 @@ function overlapReachable(
   lengthA: number,
   lengthB: number,
   expand: (i: number, j: number, push: (ni: number, nj: number) => void) => void,
-  policy: BriefPolicy,
 ): boolean {
   const width = lengthB + 1;
   const seen = new Set<number>();
@@ -45,7 +43,7 @@ function overlapReachable(
     const encoded = stack.pop()!;
     if (seen.has(encoded)) continue;
     seen.add(encoded);
-    if (seen.size > policy.pathMatchStates) pathMatchExceeded();
+    if (seen.size > MAX_PATH_MATCH_STATES) pathMatchExceeded();
     const i = Math.floor(encoded / width);
     const j = encoded - i * width;
     if (i === lengthA && j === lengthB) return true;
@@ -53,57 +51,41 @@ function overlapReachable(
   }
   return false;
 }
-function segmentOverlap(a: string, b: string, policy: BriefPolicy): boolean {
-  return overlapReachable(
-    a.length,
-    b.length,
-    (i, j, push) => {
-      const x = a[i],
-        y = b[j];
-      if (x === '*') push(i + 1, j);
-      if (y === '*') push(i, j + 1);
-      if (x === undefined || y === undefined) return;
-      if (x === '*' || x === '?' || y === '*' || y === '?' || x === y)
-        push(x === '*' ? i : i + 1, y === '*' ? j : j + 1);
-    },
-    policy,
-  );
+function segmentOverlap(a: string, b: string): boolean {
+  return overlapReachable(a.length, b.length, (i, j, push) => {
+    const x = a[i],
+      y = b[j];
+    if (x === '*') push(i + 1, j);
+    if (y === '*') push(i, j + 1);
+    if (x === undefined || y === undefined) return;
+    if (x === '*' || x === '?' || y === '*' || y === '?' || x === y) push(x === '*' ? i : i + 1, y === '*' ? j : j + 1);
+  });
 }
 /** Intersect the glob languages rather than testing a glob string as though it were a filename. */
-export function pathsOverlap(a: string, b: string, policy: BriefPolicy = defaultPolicy.brief): boolean {
+export function pathsOverlap(a: string, b: string): boolean {
   const left = a.split('/'),
     right = b.split('/');
-  return overlapReachable(
-    left.length,
-    right.length,
-    (i, j, push) => {
-      const x = left[i],
-        y = right[j];
-      if (x === '**') push(i + 1, j);
-      if (y === '**') push(i, j + 1);
-      if (x === undefined || y === undefined) return;
-      if (x === '**' || y === '**' || segmentOverlap(x, y, policy))
-        push(x === '**' ? i : i + 1, y === '**' ? j : j + 1);
-    },
-    policy,
-  );
+  return overlapReachable(left.length, right.length, (i, j, push) => {
+    const x = left[i],
+      y = right[j];
+    if (x === '**') push(i + 1, j);
+    if (y === '**') push(i, j + 1);
+    if (x === undefined || y === undefined) return;
+    if (x === '**' || y === '**' || segmentOverlap(x, y)) push(x === '**' ? i : i + 1, y === '**' ? j : j + 1);
+  });
 }
-export function matchesPath(
-  path: string,
-  patterns: readonly string[],
-  policy: BriefPolicy = defaultPolicy.brief,
-): boolean {
+export function matchesPath(path: string, patterns: readonly string[]): boolean {
   // A concrete path is a literal pattern; reject metacharacters to avoid granting extra scope.
   if (/[*?]/.test(path)) return false;
-  return patterns.some((pattern) => pathsOverlap(path, pattern, policy));
+  return patterns.some((pattern) => pathsOverlap(path, pattern));
 }
-export function readRiskOwnership(file: string, policy: BriefPolicy = defaultPolicy.brief): RiskOwnership {
+export function readRiskOwnership(file: string): RiskOwnership {
   const value = JSON.parse(readFileSync(file, 'utf8')) as RiskOwnership;
   if (value.version !== 1 || !value.areas || typeof value.areas !== 'object')
     throw new Error('invalid risk ownership table');
   for (const patterns of Object.values(value.areas)) {
     if (!Array.isArray(patterns)) throw new Error('risk ownership patterns must be arrays');
-    patterns.forEach((pattern) => validatePath(pattern, policy));
+    patterns.forEach(validatePath);
   }
   return value;
 }
@@ -327,15 +309,11 @@ export const BRIEF_KINDS: readonly TaskKind[] = [
   'verification',
   'mechanical',
 ];
-export function parseBrief(
-  markdown: string,
-  ownership: RiskOwnership,
-  policy: BriefPolicy = defaultPolicy.brief,
-): Brief {
+export function parseBrief(markdown: string, ownership: RiskOwnership): Brief {
   const bytes = Buffer.byteLength(markdown, 'utf8');
-  if (bytes > policy.bytes)
+  if (bytes > MAX_BRIEF_BYTES)
     throw new Error(
-      `brief is ${bytes} bytes; keep it under ${policy.bytes} bytes and link evidence files instead of pasting them`,
+      `brief is ${bytes} bytes; keep it under ${MAX_BRIEF_BYTES} bytes and link evidence files instead of pasting them`,
     );
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('brief needs Markdown front matter');
@@ -423,12 +401,12 @@ export function parseBrief(
     if (hasFrozenAcceptance) throw new Error('verification cannot supply frozen input blocks');
   } else if (raw.proof !== undefined) throw new Error('proof metadata requires kind verification');
   if (brief.acceptance.placement === 'local') validateLocalAcceptanceCommand(brief.acceptance.command);
-  brief.paths.forEach((pattern) => validatePath(pattern, policy));
+  brief.paths.forEach(validatePath);
   for (const area of brief.riskAreas)
     if (!Object.hasOwn(ownership.areas, area)) throw new Error(`unknown risk area: ${area}`);
   for (const [area, patterns] of Object.entries(ownership.areas)) {
     if (
-      brief.paths.some((path) => patterns.some((pattern) => pathsOverlap(path, pattern, policy))) &&
+      brief.paths.some((path) => patterns.some((pattern) => pathsOverlap(path, pattern))) &&
       !brief.riskAreas.includes(area)
     )
       throw new Error(`declared paths touch undeclared risk area: ${area}`);

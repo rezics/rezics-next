@@ -2,16 +2,17 @@ import type { Database } from 'bun:sqlite';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { defaultPolicy } from './policy.ts';
 
 export type ContainerPolicy = { maxAgeHours: number; keep: string[] };
 export type ContainerRow = { id: string; name: string; createdMs: number };
 
-function normalizePolicy(value: unknown, defaults = defaultPolicy.containers): ContainerPolicy | undefined {
+const DOCKER_TIMEOUT_MS = 15_000;
+
+function normalizePolicy(value: unknown): ContainerPolicy | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const raw = value as Record<string, unknown>;
   if (Object.keys(raw).some((key) => key !== 'maxAgeHours' && key !== 'keep')) return undefined;
-  const maxAgeHours = raw.maxAgeHours === undefined ? defaults.maxAgeHours : raw.maxAgeHours;
+  const maxAgeHours = raw.maxAgeHours === undefined ? 4 : raw.maxAgeHours;
   const keep = raw.keep === undefined ? [] : raw.keep;
   if (typeof maxAgeHours !== 'number' || !Number.isFinite(maxAgeHours) || maxAgeHours < 0) return undefined;
   if (!Array.isArray(keep) || keep.some((prefix) => typeof prefix !== 'string' || prefix.length === 0))
@@ -19,9 +20,9 @@ function normalizePolicy(value: unknown, defaults = defaultPolicy.containers): C
   return { maxAgeHours, keep: keep as string[] };
 }
 
-function docker(args: string[], policy: typeof defaultPolicy.containers) {
+function docker(args: string[]) {
   try {
-    return spawnSync('docker', args, { encoding: 'utf8', timeout: policy.commandTimeoutMs });
+    return spawnSync('docker', args, { encoding: 'utf8', timeout: DOCKER_TIMEOUT_MS });
   } catch {
     return undefined;
   }
@@ -39,7 +40,7 @@ export function staleContainers(
 ): string[] {
   const validPolicy = normalizePolicy(policy);
   if (!validPolicy) return [];
-  const maxAgeMs = validPolicy.maxAgeHours * 3_600_000; // Hours to milliseconds.
+  const maxAgeMs = validPolicy.maxAgeHours * 3_600_000;
   return rows
     .filter((row) => now - row.createdMs >= maxAgeMs)
     .filter((row) => !validPolicy.keep.some((prefix) => row.name.startsWith(prefix)))
@@ -58,12 +59,7 @@ function confirmedRemovals(stdout: string, selected: readonly ContainerRow[]): n
 }
 
 /** Removes stale containers when `<state>/containers.json` sets a policy; a host without it removes nothing. */
-export function reapContainers(
-  db: Database,
-  stateDirectory: string,
-  now = Date.now(),
-  defaults = defaultPolicy.containers,
-): number {
+export function reapContainers(db: Database, stateDirectory: string, now = Date.now()): number {
   const file = join(stateDirectory, 'containers.json');
   if (!existsSync(file)) return 0;
   let policyValue: unknown;
@@ -72,10 +68,10 @@ export function reapContainers(
   } catch {
     return 0;
   }
-  const policy = normalizePolicy(policyValue, defaults);
+  const policy = normalizePolicy(policyValue);
   if (!policy) return 0;
 
-  const listed = docker(['ps', '--format', '{{.ID}}\t{{.Names}}\t{{.CreatedAt}}'], defaults);
+  const listed = docker(['ps', '--format', '{{.ID}}\t{{.Names}}\t{{.CreatedAt}}']);
   if (!listed || listed.error || listed.status !== 0 || typeof listed.stdout !== 'string') return 0;
   const rows = listed.stdout
     .split('\n')
@@ -95,7 +91,7 @@ export function reapContainers(
   const staleIds = [...new Set(staleContainers(rows, policy, running, now))];
   if (!staleIds.length) return 0;
   const selected = staleIds.map((id) => rows.find((row) => row.id === id)!).filter(Boolean);
-  const removed = docker(['rm', '-f', '-v', ...staleIds], defaults);
+  const removed = docker(['rm', '-f', '-v', ...staleIds]);
   if (!removed) return 0;
   if (!removed.error && removed.status === 0) return staleIds.length;
   return typeof removed.stdout === 'string' ? confirmedRemovals(removed.stdout, selected) : 0;
