@@ -271,7 +271,7 @@ export function searchRoutes<App>(
         },
       },
       async ({ query, authorize, admission, job, set }) => {
-        if (body.population !== undefined) set.headers['cache-control'] = 'private, no-store';
+        set.headers['cache-control'] = 'private, no-store';
         const check = await authorize({
           ...resource,
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
@@ -341,7 +341,7 @@ export function searchRoutes<App>(
         },
       },
       ({ body, authorize, admission, job, actor, set }) => {
-        set.headers['cache-control'] = 'private, no-store';
+        if (body.population !== undefined) set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
           throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
         async function prepare(): Promise<AccessCheck> {
