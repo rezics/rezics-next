@@ -89,7 +89,8 @@ export async function seedNativeLabelHistory(
   const before = snapshot(await driver.inspect({ owner: 'owner', subjectIds: [subjectId] }), subjectId);
   const existing = assignmentRows(before);
   const effectiveBefore = existing.filter(
-    ({ assignment, parent }) => assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt === null,
+    ({ assignment, parent }) =>
+      assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt === null,
   );
   if (effectiveBefore.length > 0) throw new Error('Native label history seed requires an inactive baseline subject');
 
@@ -159,11 +160,7 @@ export async function seedNativeLabelHistory(
         : distributedRows > 0 &&
           Math.floor(((offset + 1) * distributedParentTombstones) / distributedRows) >
             Math.floor((offset * distributedParentTombstones) / distributedRows);
-    const created = await command(
-      'library_label.create',
-      { name: `history ${subjectId} ${index}` },
-      201,
-    );
+    const created = await command('library_label.create', { name: `history ${subjectId} ${index}` }, 201);
     const label = receiptObject(created.receipt, 'label');
     const labelId = requiredString(label.id, 'label ID');
     const labelRevision = requiredRevision(label.revision, 'label revision');
@@ -187,16 +184,20 @@ export async function seedNativeLabelHistory(
   const rows = assignmentRows(observed);
   const reservations = rows.filter(({ assignment }) => assignment.slotNo !== null);
   const parentTombstones = rows.filter(
-    ({ assignment, parent }) => assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt !== null,
+    ({ assignment, parent }) =>
+      assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt !== null,
   );
   const individualUnassigns = rows.filter(
     ({ assignment }) => assignment.slotNo === null && assignment.deletedAt !== null,
   );
   const effective = rows.filter(
-    ({ assignment, parent }) => assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt === null,
+    ({ assignment, parent }) =>
+      assignment.slotNo !== null && assignment.deletedAt === null && parent.deletedAt === null,
   );
   if (observed.retainedAssignments.length < totalCount)
-    throw new Error(`Native label history retained ${observed.retainedAssignments.length} rows, expected at least ${totalCount}`);
+    throw new Error(
+      `Native label history retained ${observed.retainedAssignments.length} rows, expected at least ${totalCount}`,
+    );
   if (reservations.length !== 32)
     throw new Error(`Native label history retained ${reservations.length} reserved slots, expected exactly 32`);
   if (new Set(reservations.map(({ assignment }) => assignment.assignmentId)).size !== 32)
