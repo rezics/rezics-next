@@ -109,7 +109,10 @@ function listingRow(route: number, count: number) {
 }
 
 /** Same-home listings plus envelope history, then unrelated listings plus history, each grown by `scale`. */
-export function listingCountsGrowthPopulations(homePartition: number, nonce: string): {
+export function listingCountsGrowthPopulations(
+  homePartition: number,
+  nonce: string,
+): {
   readonly sameHome: Population;
   readonly unrelated: Population;
 } {
@@ -217,7 +220,8 @@ export function assertListingCountReaderWork(report: GrowthReport, batch: Listin
       expect(statement).toMatch(/route < \(.*partition_no \+ 1\) \* 16/);
       const nodes = product[0]!.planDocuments.flatMap(planNodes);
       const scans = nodes.filter(
-        (node) => node.Schema === 'library' && node['Relation Name'] === 'subject_listing' && Number(node['Actual Loops']) > 0,
+        (node) =>
+          node.Schema === 'library' && node['Relation Name'] === 'subject_listing' && Number(node['Actual Loops']) > 0,
       );
       expect(scans).toHaveLength(1);
       const scan = scans[0]!;
