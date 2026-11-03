@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { claimReviewGrowthFixture } from './support/growth-realm-claim-review-fixture.ts';
+import { checkGrowth } from '../support/growth.ts';
+import reviewPage from '../../src/community/realm-claim-review-page.sql';
+import {
+  claimReviewGrowthAxes,
+  claimReviewGrowthScales,
+  claimReviewGrowthFixture,
+} from './support/growth-realm-claim-review-fixture.ts';
 
 test('registered owner erasure supplies the original episode and native HTTP request for claim review growth', async () => {
   const fixture = await claimReviewGrowthFixture();
@@ -21,6 +27,8 @@ test('registered owner erasure supplies the original episode and native HTTP req
       original_root: true,
       original_deadline: true,
       head_revision_id: fixture.realm.headRevisionId,
+      lifecycle_version: expect.any(Number),
+      discovery_epoch: expect.any(Number),
     });
     const orphan = await fixture.source();
     await fixture.prepareReview();
@@ -48,6 +56,7 @@ test('registered owner erasure supplies the original episode and native HTTP req
     expect(await fixture.list(1, first.next!)).toEqual({ claimRequests: [], next: null });
     await fixture.rejectedList('invalid_cursor', 'control', 1, first.next!);
     await fixture.rejectedList('invalid_cursor', 'reviewer', 2, first.next!);
+    await fixture.bumpPartitionEpochAndReject(first.next!);
     await fixture.rejectedList('not_found', 'claimant');
 
     // Forty genuine requests fill two raw candidate pages. A requested limit of
@@ -99,8 +108,44 @@ test('registered owner erasure supplies the original episode and native HTTP req
       claimRequests: expected.slice(0, 20),
       next: expect.any(String),
     });
+
+    // Each pressure axis is grown alone. The real registered Kernel route,
+    // production Access, native cursor, and shared growth classifier stay in
+    // the measured path; population and grant setup remain outside it.
+    for (const axis of claimReviewGrowthAxes) {
+      try {
+        const report = await checkGrowth(fixture.growthDatabase, {
+          name: `Realm claim review listing: ${axis}`,
+          scales: claimReviewGrowthScales,
+          bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+          indexProbes: 64,
+          repetitions: 3,
+          grow: (_database, scale, previous) => fixture.grow(axis, scale, previous),
+          warmup: async () => {
+            await fixture.grantReviewer();
+            await fixture.measureListingPaths(expected);
+          },
+          prepare: () => fixture.grantReviewer(),
+          operation: () => fixture.measureListingPaths(expected),
+        });
+        expect(report.samples.map(({ scale }) => scale)).toEqual([...claimReviewGrowthScales]);
+        for (const sample of report.samples) {
+          for (const cost of sample.repetitions) {
+            expect(cost.statements).toBeGreaterThan(0);
+            expect(cost.rows).toBeGreaterThan(0);
+            expect(cost.blocks).toBeGreaterThan(0);
+            expect(cost.plans).toBeGreaterThan(0);
+            expect(cost.backgroundStatements ?? 0).toBe(0);
+          }
+          for (const run of sample.statementRepetitions)
+            expect(run.some(({ statement }) => statement === reviewPage.sql)).toBe(true);
+        }
+      } finally {
+        await fixture.clearGrowth(axis);
+      }
+    }
     expect(await fixture.source()).toEqual(orphan);
   } finally {
     await fixture.close();
   }
-}, 600_000);
+}, 1_200_000);

@@ -5,15 +5,12 @@ current Global `realm:approve_claim`. Its authority and bounds remain in
 [Pending Realm claim review](../../services/kernel/src/community/README.md#pending-realm-claim-review).
 This document does not change that contract or register another gate.
 
-The inspected base source is `84073cae8387eca5c6de858498194a2c7003862f`. Inspection found
-the selected native prerequisite absent: `account-erasure.ts:236–237` dispatches
-the registered membership phase to `eraseAccountMembershipsPage`; that function
-closes/purges memberships and unlinks their locators without calling
-`eraseAccountRealmOwnership`. The latter exists at
-`account-erasure-memberships.ts:21`, but its only callers are focused tests.
-The owning [continuity contract](../../services/kernel/src/community/README.md#realm-ownership-continuity)
-requires: “The default Community participant must invoke this segment before
-retiring that locator.” A direct call to that helper cannot prove this binding.
+The inspected base source is `7611eb8d97eafcc58b5bcbf410b8fa626386f105`. Its registered
+membership phase dispatches to `eraseAccountMembershipsPage`, which qualifies each retained owner locator and
+calls `eraseAccountRealmOwnership` with installed worker Access before membership cleanup and locator retirement.
+This source wiring satisfies the native prerequisite in the owning
+[continuity contract](../../services/kernel/src/community/README.md#realm-ownership-continuity); controller execution
+is still required to establish the registered runtime outcome.
 
 The focused test composes the existing Community driver, production Access,
 native Auth account deletion and registered default worker. A deletable account
@@ -23,11 +20,10 @@ After native completion, the test requires an orphan episode at the immutable
 erasure root with the original 720-hour deadline and unchanged source head.
 It writes no ownership decision, grant result, committed event or locator in SQL.
 
-The proposed owning seam is the existing membership-erasure producer: invoke
-`eraseAccountRealmOwnership` with production Access before closing/unlinking each
-retained owner locator, retaining pending succession work for retry. That product
-change is outside this slice's authorization. The native orphan assertion remains
-the first prerequisite; no fallback scenario or SQL-generated orphan is accepted.
+The native fixture still begins with an Auth-deleted owner and requires the default registered participant to produce
+the orphan episode. The selected Realm is never orphaned through SQL, direct succession, synthetic events or
+permissive Access. The source remains active with its original head, orphan instant, 720-hour deadline,
+lifecycle version and public-source epoch.
 
 Decision: use the native fixture's trusted command clock to bracket the original
 eligibility deadline without rewriting the orphan source or its episode identity.
@@ -52,22 +48,18 @@ instant and 720-hour deadline. This does not measure a three-scale bound or cove
 concurrent head, lifecycle, public-source, partition or native episode changes
 between snapshots.
 
-The remaining listing series belongs in the same focused test and private fixture:
-independent unrelated Realms, pending requests and retained episodes at
-256/1024/4096; fixed selected neighbourhood and requested limit; populated, deep,
-terminal, fully filtered and empty-successor pages; denied authority with an
-allowed control. Use the shared growth observer/classifier around the HTTP read,
-with native request/lifecycle setup and unrelated pressure outside observation.
-Keep cursor semantics separate from measured work and retain the owning candidate,
-snapshot, deadline, epoch, lifecycle and operational-disclosure bounds.
+The focused test and private fixture now author three independent HTTP listing growth series for unrelated Realms,
+pending requests on an unrelated orphan Realm, and retained requests from older episodes of the selected Realm, each
+at 256/1024/4096. The selected candidate neighbourhood stays fixed. The shared growth harness observes
+the actual registered Kernel route with production Access for populated, deep, terminal, fully filtered,
+empty-successor, denied, and mid-read revoked-authority paths with an allowed control. Population and authority setup
+are outside measurement. A native cursor also rejects a changed partition epoch; viewer and limit binding and raw-key
+continuation remain outside measured work. Each source read retains the original head, deadline, lifecycle version
+and public-source epoch.
 
-Eventual acceptance command:
+Acceptance command:
 `bun run --cwd services/kernel check test/community/growth-realm-claim-review.test.ts`.
-Native/browser/acceptance launch remains deferred to controller admission. Authored
-coverage and compiler results establish neither native request/listing assertions
-nor a three-scale observation. The continuation at
-`.temp/continuation/realm-claim-review-growth.md` describes the remaining listing
-outcome after the native producer is supplied. At admitted execution, bind the
-then-current committed source revision and private fixture to the command above,
-and record reached assertions and native rows, buffers and statements at all
-three scales. No measured revision or growth observation is claimed here.
+Native/browser/acceptance launch remains deferred to controller admission. The authored assertions establish neither
+native request/listing outcomes nor a three-scale growth bound. At admitted execution, bind the then-current committed
+source revision and private fixture to the command above, and record reached assertions and native rows, buffers and
+statements at all three scales. No measured revision or growth observation is claimed here.
