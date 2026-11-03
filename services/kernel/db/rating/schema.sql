@@ -39,6 +39,22 @@ $$;
 
 
 --
+-- Name: keep_question_definition(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.keep_question_definition() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (OLD.realm_id IS NOT NULL OR NEW.realm_id IS NOT NULL) AND NEW IS DISTINCT FROM OLD THEN
+    RAISE EXCEPTION 'Realm question definitions are immutable; create another question';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: nonnegative_histogram(bigint[]); Type: FUNCTION; Schema: rating; Owner: -
 --
 
@@ -430,10 +446,13 @@ CREATE TABLE rating.question (
     minimum_units integer NOT NULL,
     maximum_units integer NOT NULL,
     step_units integer NOT NULL,
+    realm_id uuid,
+    meaning text,
     CONSTRAINT question_check CHECK (((minimum_units >= 0) AND (maximum_units >= minimum_units) AND (step_units > 0))),
     CONSTRAINT question_check1 CHECK ((((maximum_units - minimum_units) % step_units) = 0)),
     CONSTRAINT question_grain_check CHECK ((grain = ANY (ARRAY['work'::text, 'release'::text, 'episode'::text, 'character'::text]))),
     CONSTRAINT question_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 200))),
+    CONSTRAINT question_realm_definition_check CHECK ((((realm_id IS NULL) AND (meaning IS NULL)) OR ((realm_id IS NOT NULL) AND (owner_id IS NOT NULL) AND (meaning IS NOT NULL) AND ((char_length(btrim(meaning)) >= 1) AND (char_length(btrim(meaning)) <= 2000)) AND ((char_length(btrim(label)) >= 1) AND (char_length(btrim(label)) <= 200)) AND (minimum_units >= 0) AND (maximum_units <= 20) AND (maximum_units > minimum_units) AND (get_byte(uuid_send(id), 10) = get_byte(uuid_send(realm_id), 10)) AND (get_byte(uuid_send(id), 11) = get_byte(uuid_send(realm_id), 11))))),
     CONSTRAINT question_revision_check CHECK ((revision >= 1))
 );
 
@@ -894,6 +913,13 @@ CREATE INDEX public_figure_prior_pending_idx ON rating.public_figure USING btree
 
 
 --
+-- Name: question_realm_directory_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX question_realm_directory_idx ON rating.question USING btree (realm_id, id);
+
+
+--
 -- Name: realm_rank_score_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -935,6 +961,13 @@ ALTER TABLE rating.population_total_component ENABLE ALWAYS TRIGGER population_t
 --
 
 CREATE TRIGGER public_figure_realm_rank AFTER INSERT OR DELETE OR UPDATE ON rating.public_figure FOR EACH ROW EXECUTE FUNCTION rating.publish_realm_rank();
+
+
+--
+-- Name: question question_definition_immutable; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER question_definition_immutable BEFORE UPDATE ON rating.question FOR EACH ROW EXECUTE FUNCTION rating.keep_question_definition();
 
 
 --
