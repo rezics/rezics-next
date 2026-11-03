@@ -960,18 +960,27 @@ Decision: keep native list and selection calls behind the typed seam until Conte
 The [history reader contract](../../apps/web/src/threads/post-history-lifetime.md#native-page-admission) retains
 actual-reader provenance, exact-address return and recorded citation meaning. Native page identity and bounds
 are checked before related reads. Decision: keep the typed installed revisions/next seam until Content publishes
-its closed current-context and per-revision enrichment variants in KernelClient. The current base exposes neither
-those variants nor historical question scales, admitted conversation/head context or navigation advice.
+its closed current-context and per-revision enrichment variants in KernelClient. Admission requires the installed
+generated response declaration, factory and operation/exposure contract; native service schemas and constructed
+examples cannot enable current-context disclosure or establish native execution.
 
 The consumer now retains one replacing page, synchronously retires its former rows/joins/selection on cursor
 requests, retries failed or denied pages at that exact cursor, shares deduplicated author/mention hydration,
 and displays the selected revision and immutable author references. Decision: cursor replacement retires the
 previous page immediately; account/provenance replacement starts a new visit.
 
-The remaining visit needs native publication, revision-keyed enrichment, original versus terminal target
-disclosure, exact/comparison return and connected localized stories, with native variant/retirement acceptance. Existing
-author/mention/Subject/current-vote joins remain until the native envelope replaces them. Supplied-client tests
-cover only this page seam; frozen acceptance, native growth and phone/desktop inspection remain integration work.
+The closed-page consumer binds scores and comparison destinations by exact immutable revision identity. A bounded
+Subject summary that omits a recorded target withholds its presentation while retaining its original ID; only an
+empty recorded target list means absence. Failed enrichment retains the same history address for explicit retry.
+Exact destinations and comparison return keep selection and focus only within the admitted page lifetime.
+
+Consumer Cost: for N returned revisions and K supplied related keys/references, page validation and indexed
+projection use O(N + K) work and memory at 1/20/100 rows. One replacing page retains documents by reference and
+mounts one selected inspector. Closed native enrichment requires no follow-up hydration; the revisions/next seam
+retains its bounded deduplicated author/mention, Subject, media and current-vote joins until publication replaces
+them. These consumer bounds do not establish native 256/1024/4096 growth. Generated publication, the original
+mounted variant/retirement acceptance and eight-locale phone/desktop browser/Storybook inspection remain required
+for the complete visit; source review and constructed examples cannot substitute for them.
 References inspected: the earlier Work history region, the other post History page and UnitRevisionHistory,
 and the current [page-needs audit](../research/page-needs-api-render-audit.md).
 Their restore/moderation actions supply no authority to this reader; no legacy code is ported.
