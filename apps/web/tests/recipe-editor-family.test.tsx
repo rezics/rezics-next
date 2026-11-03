@@ -449,7 +449,7 @@ test('Recipe creation and current correction share complete frames with independ
     failCorrectionRead = true;
     const postedBeforeRead = posts(correction, '/candidates').length;
     await click(draft, m.catalogue_create_review_new());
-    await until(() => !!within(b).queryByRole('button', { name: m.correction_retry() }));
+    await until(() => within(b).queryAllByRole('button', { name: m.correction_retry() }).length > 0);
     expect(posts(correction, '/candidates')).toHaveLength(postedBeforeRead);
     correction.setScenario('ready');
     await click(b, m.correction_retry());
@@ -566,7 +566,7 @@ test('Recipe creation and current correction share complete frames with independ
     await until(() => !!within(a).queryByRole('button', { name: m.catalogue_create_review_new() }));
     expect(posts(creation, '/subjects')).toHaveLength(0);
     await click(a, m.catalogue_create_review_new());
-    await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
+    await until(() => within(a).queryAllByRole('button', { name: m.correction_retry() }).length > 0);
     expect(posts(creation, '/subjects')).toHaveLength(0);
     await click(a, m.correction_retry());
     await until(() => a.querySelector('form') !== null && a.textContent!.includes(currentIngredientLabel));
@@ -592,7 +592,7 @@ test('Recipe creation and current correction share complete frames with independ
     const lockedCreateCitation = citationChange(retainedMethod);
     await reviewRecipe(a);
     await click(a, m.recipe_title());
-    await until(() => !!within(a).queryByRole('button', { name: m.correction_retry() }));
+    await until(() => within(a).queryAllByRole('button', { name: m.correction_retry() }).length > 0);
     expect(creationCommands).toHaveLength(2);
     const sealedCreation = a.innerHTML;
     await act(async () => {
@@ -1040,7 +1040,7 @@ test('Recipe creation and current correction share complete frames with independ
       expect(fixture.calls).toHaveLength(count);
       expect(window.document.activeElement).toBe(outside);
       expect(host.textContent).not.toContain(m.correction_proposed());
-      expect(within(host).queryByRole('button', { name: m.correction_retry() })).toBeNull();
+      expect(within(host).queryAllByRole('button', { name: m.correction_retry() })).toHaveLength(0);
       // New live mount submits normally; no old command/key is revived.
       await click(section(host, fixture.release.properties['schema:cookTime']!.labels.en!), m.recipe_correct());
       const fresh = section(host, fixture.release.properties['schema:cookTime']!.labels.en!, true);
