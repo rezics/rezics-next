@@ -70,7 +70,7 @@ keys. Retirement has no synchronous child cleanup; eventual account erasure page
 Stale refusal rolls back the command path; replay uses the existing original receipt without repeating its mutation.
 
 Session pages use mutually exclusive first/timestamp/tie branches of `progress_session_live_page`, each limited to
-P (at most 100), followed by the existing bounded merge and continuation probe. The predicate is in the partial index,
+P + one continuation row (P is at most 100), followed by the existing bounded merge and continuation probe. The predicate is in the partial index,
 so neither first nor deep/terminal pages walk retained retirements. Raw live-source and owner seeks use their matching
 partial indexes. Account-erasure seeks retain the all-session owner index and visit retained rows in bounded pages.
 This is source derivation, not measured growth. Controller placement must measure actual nested statements,

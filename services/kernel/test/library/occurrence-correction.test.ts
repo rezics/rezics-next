@@ -50,8 +50,12 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   await send('PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned' }, 201);
   await send('POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, 201);
   const first = await start(subjectId);
-  const duplicate = await start(subjectId);
-  const repeat = await start(subjectId);
+  const duplicateStart = await start(subjectId);
+  const duplicate = (await send('POST', `/v1/progressSessions/${duplicateStart.id}/$complete`, { revision: 1 }))
+    .progressSession;
+  const repeatStart = await start(subjectId);
+  const repeat = (await send('POST', `/v1/progressSessions/${repeatStart.id}/$complete`, { revision: 1 }))
+    .progressSession;
   const path = `/v1/progressSessions/${first.id}`;
   const record = (await send('POST', `${path}/$record`, { revision: 1, amount: '10' })).progressSession;
   expect(record.state).toBe('active'); // A full amount is not completion.
@@ -75,14 +79,14 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
     { amount: '7' },
   ]);
   const retireKey = entryKey();
-  const retired = await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 1 }, 200, retireKey);
-  expect(retired.progressSession).toEqual({ ...duplicate, state: 'retired', revision: 2 });
-  expect(await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 1 }, 200, retireKey)).toEqual(
+  const retired = await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 2 }, 200, retireKey);
+  expect(retired.progressSession).toEqual({ ...duplicate, state: 'retired', completedAt: null, revision: 3 });
+  expect(await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 2 }, 200, retireKey)).toEqual(
     retired,
   );
   for (const suffix of ['', '/changes', '/completedUnits'])
     await send('GET', `/v1/progressSessions/${duplicate.id}${suffix}`, undefined, 404);
-  await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 2 }, 404);
+  await send('POST', `/v1/progressSessions/${duplicate.id}/$retire`, { revision: 3 }, 404);
   await send('POST', '/v1/publishedLogs', { sessionId: duplicate.id }, 404);
   const ids: string[] = [];
   let next: string | null = null;
@@ -103,6 +107,7 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   expect(after.copies).toEqual(before.copies);
   expect(after.sessions).toHaveLength(3); // Private history is retained for account erasure.
   expect(after.sessions.filter(({ row }) => row.state === 'retired')).toHaveLength(2);
+  expect(after.sessions.filter(({ row }) => row.state === 'completed')).toHaveLength(1);
 }, 120_000);
 
 test('retiring the last occurrence removes its native support; concealment and account fences govern fresh commands and retries', async () => {

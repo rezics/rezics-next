@@ -357,7 +357,7 @@ test('existing terminal runner retires released native capture children and fina
   let frontier: NativeSourceFrontier | null = null;
   for (let n = 0; n < 30; n++) {
     const page = await custody.capturePage({ ...work(), identity, frontier, limit: 100 });
-    if (page.status !== 'pending') throw new Error('Native capture unavailable');
+    if (page.status !== 'pending') throw new Error(`Native capture unavailable: ${JSON.stringify(page)}`);
     frontier = page.frontier;
     if (frontier.driver === 'done') break;
   }
