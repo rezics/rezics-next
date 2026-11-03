@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 import * as fs from 'node:fs';
 import { isIPv4 } from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +6,6 @@ import { isAbsolute } from 'node:path';
 
 export const STATE = '/etc/rezics-check-host-route.json';
 export const HOOK = '/etc/NetworkManager/dispatcher.d/90-rezics-check-host-route';
-// Stable route ownership marker; Linux interface widths, IPv4 masks/ports and permissions are protocol constants.
 export const METRIC = 42722;
 const DEVICE = /^[a-zA-Z0-9_.:-]{1,15}$/;
 type Host = { name: string; address: string; ip: string; identity?: string };
@@ -32,7 +30,6 @@ export interface FileSystem {
   remove(path: string): void;
 }
 export interface Dependencies {
-  policy?: ControlPolicy | undefined;
   run(argv: string[]): Promise<Result>;
   files: FileSystem;
   uid(): number;
@@ -234,13 +231,11 @@ except Exception as error:
     sys.exit(1)
 `;
 
-function sshProbe(policy: ControlPolicy['hostRoute']): string {
-  return `printf 'REZICS_SSH_CONNECTION=%s\\n' "$SSH_CONNECTION"
+const SSH_PROBE = `printf 'REZICS_SSH_CONNECTION=%s\\n' "$SSH_CONNECTION"
 printf 'REZICS_PROBE_TIME=%s\\n' "$(date +%s)"
-journalctl --no-pager -o json --since '-${policy.journalAgeSeconds % 60 === 0 ? `${policy.journalAgeSeconds / 60} minutes` : `${policy.journalAgeSeconds} seconds`}' -u ssh.service -u sshd.service`;
-}
+journalctl --no-pager -o json --since '-2 minutes' -u ssh.service -u sshd.service`;
 
-function peerEvidence(output: string, expected: string, policy: ControlPolicy['hostRoute']): string {
+function peerEvidence(output: string, expected: string): string {
   const lines = output.trim().split('\n');
   const fields = lines
     .find((line) => line.startsWith('REZICS_SSH_CONNECTION='))
@@ -268,8 +263,8 @@ function peerEvidence(output: string, expected: string, policy: ControlPolicy['h
       (entry) =>
         typeof entry.MESSAGE === 'string' &&
         match.test(entry.MESSAGE) &&
-        Number(entry.__REALTIME_TIMESTAMP) / 1e6 >= timestamp - policy.journalAgeSeconds &&
-        Number(entry.__REALTIME_TIMESTAMP) / 1e6 <= timestamp + policy.clockSkewSeconds,
+        Number(entry.__REALTIME_TIMESTAMP) / 1e6 >= timestamp - 120 &&
+        Number(entry.__REALTIME_TIMESTAMP) / 1e6 <= timestamp + 1,
     )
   ) {
     throw new Error('Missing matching sshd journal evidence for probe timestamp and client port');
@@ -278,7 +273,6 @@ function peerEvidence(output: string, expected: string, policy: ControlPolicy['h
 }
 
 export async function execute(argv: string[], d: Dependencies): Promise<void> {
-  const policy = (d.policy ?? defaultPolicy).hostRoute;
   const [action, ...options] = argv;
   if (!['plan', 'apply', 'verify', 'remove'].includes(action ?? ''))
     throw new Error('Use plan|apply|verify|remove --hosts <file> [--expected-peer <IPv4>]');
@@ -374,11 +368,11 @@ export async function execute(argv: string[], d: Dependencies): Promise<void> {
           '-o',
           'ControlPersist=no',
           '-o',
-          `ConnectTimeout=${policy.connectTimeoutSeconds}`,
+          'ConnectTimeout=15',
           host.address,
-          sshProbe(policy),
+          SSH_PROBE,
         ]);
-        d.print(`${host.name}: PASS sshd peer ${peerEvidence(output, expected!, policy)}`);
+        d.print(`${host.name}: PASS sshd peer ${peerEvidence(output, expected!)}`);
       }
     } catch (error) {
       failed = true;
@@ -424,7 +418,6 @@ const realFiles: FileSystem = {
 if (import.meta.main) {
   try {
     await execute(process.argv.slice(2), {
-      policy: (await import('../src/config.ts')).loadSettings().policy,
       files: realFiles,
       uid: () => process.getuid!(),
       print: console.log,

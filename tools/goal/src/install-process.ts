@@ -1,4 +1,3 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   closeSync,
@@ -24,9 +23,19 @@ export type ProcessLimits = Readonly<{
   terminationMs: number;
 }>;
 
-export const INSTALL_PROCESS_LIMITS: ProcessLimits = defaultPolicy.dependencies.install;
+export const INSTALL_PROCESS_LIMITS: ProcessLimits = {
+  startupMs: 15_000,
+  runMs: 180_000,
+  budgetMs: 180_000,
+  terminationMs: 15_000,
+};
 
-export const GOAL_GATE_CHECK_LIMITS: ProcessLimits = defaultPolicy.dependencies.gate;
+export const GOAL_GATE_CHECK_LIMITS: ProcessLimits = {
+  startupMs: 60_000,
+  runMs: 90 * 60_000,
+  budgetMs: 90 * 60_000,
+  terminationMs: 15_000,
+};
 
 type ProcessPhase = 'startup' | 'run' | 'exit' | 'supervisor';
 type ProcessResult = {
@@ -49,7 +58,6 @@ type ProcessRequest = {
   step: string;
   workspace: string;
   limits: ProcessLimits;
-  policy: ControlPolicy['dependencies'];
   stdoutPath: string;
   stderrPath: string;
   resultPath: string;
@@ -64,7 +72,6 @@ export type BoundedProcessOptions = {
   /** Preparation exits are infrastructure failures; ordinary check exits retain their assertion classification. */
   purpose?: 'preparation' | 'check';
   limits?: Partial<ProcessLimits>;
-  policy?: ControlPolicy | undefined;
   env?: NodeJS.ProcessEnv;
 };
 
@@ -127,14 +134,10 @@ export class BoundedProcessError extends Error {
   }
 }
 
-// Capture keeps a head and a ring-buffer tail, with limits serialized to the supervisor.
-function captureBounds(policy: ControlPolicy['dependencies']) {
-  const captureHeadLimit = policy.captureHeadBytes;
-  const captureTailLimit = policy.captureTailBytes;
-  const captureLimit = captureHeadLimit + captureTailLimit;
-  const captureMarker = `\n[process output truncated after ${captureLimit / (1024 * 1024)} MiB]\n`;
-  return { captureHeadLimit, captureTailLimit, captureLimit, captureMarker };
-}
+const captureLimit = 32 * 1024 * 1024;
+const captureHeadLimit = Math.floor(captureLimit / 2);
+const captureTailLimit = captureLimit - captureHeadLimit;
+const captureMarker = '\n[process output truncated after 32 MiB]\n';
 
 type CaptureState = {
   bytes: number;
@@ -142,8 +145,7 @@ type CaptureState = {
   truncated: boolean;
 };
 
-function readCapture(path: string, policy: ControlPolicy['dependencies'], tailPosition?: number): string {
-  const { captureHeadLimit, captureTailLimit, captureMarker } = captureBounds(policy);
+function readCapture(path: string, tailPosition?: number): string {
   if (!existsSync(path)) return '';
   if (tailPosition === undefined) return readFileSync(path, 'utf8');
   const fd = openSync(path, 'r');
@@ -160,8 +162,7 @@ function readCapture(path: string, policy: ControlPolicy['dependencies'], tailPo
   }
 }
 
-function recordCapture(fd: number, state: CaptureState, chunk: Buffer, policy: ControlPolicy['dependencies']): void {
-  const { captureHeadLimit, captureTailLimit, captureLimit } = captureBounds(policy);
+function recordCapture(fd: number, state: CaptureState, chunk: Buffer): void {
   const headBytes = Math.max(0, Math.min(chunk.length, captureHeadLimit - state.bytes));
   if (headBytes > 0) writeSync(fd, chunk, 0, headBytes, state.bytes);
 
@@ -198,8 +199,8 @@ function workspaceName(cwd: string, requested?: string): string {
   return cwd;
 }
 
-function normalizeLimits(input: Partial<ProcessLimits> | undefined, defaults: ProcessLimits): ProcessLimits {
-  const limits = { ...defaults, ...input };
+function normalizeLimits(input: Partial<ProcessLimits> | undefined): ProcessLimits {
+  const limits = { ...INSTALL_PROCESS_LIMITS, ...input };
   for (const [name, value] of Object.entries(limits))
     if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
   return limits;
@@ -232,8 +233,7 @@ function groupLeaderIdentity(pid: number): ProcessIdentity | null {
  */
 export function runBoundedInstallProcess(options: BoundedProcessOptions): BoundedProcessOutput {
   if (!options.command || !options.step) throw new Error('A command and exact process step are required');
-  const policy = options.policy ?? defaultPolicy;
-  const limits = normalizeLimits(options.limits, policy.dependencies.install);
+  const limits = normalizeLimits(options.limits);
   const workspace = workspaceName(options.cwd, options.workspace);
   const scratchRoot = join(options.cwd, '.temp');
   const ownsScratchRoot = mkdirSync(scratchRoot, { recursive: true }) !== undefined;
@@ -261,7 +261,6 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
     step: options.step,
     workspace,
     limits,
-    policy: policy.dependencies,
     stdoutPath,
     stderrPath,
     resultPath,
@@ -272,10 +271,7 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
   let fallbackError: string | undefined;
   try {
     writeFileSync(requestPath, JSON.stringify(request), { mode: 0o600 });
-    const supervisorLimit =
-      limits.budgetMs +
-      limits.terminationMs * policy.dependencies.supervisorTerminationMultiplier +
-      policy.dependencies.supervisorOverheadMs;
+    const supervisorLimit = limits.budgetMs + limits.terminationMs * 3 + 5_000;
     const supervisor = spawnSync(
       process.execPath,
       [fileURLToPath(import.meta.url), '--goal-bounded-install-supervisor', requestPath],
@@ -286,7 +282,7 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
         stdio: 'ignore',
         timeout: supervisorLimit,
         killSignal: 'SIGTERM',
-        maxBuffer: policy.dependencies.supervisorBufferBytes,
+        maxBuffer: 1024 * 1024,
       },
     );
     try {
@@ -302,8 +298,8 @@ export function runBoundedInstallProcess(options: BoundedProcessOptions): Bounde
         ...(fallbackError ? { error: fallbackError } : {}),
       };
     }
-    stdout = readCapture(stdoutPath, policy.dependencies, result.outputCapture?.stdout?.tailPosition);
-    stderr = readCapture(stderrPath, policy.dependencies, result.outputCapture?.stderr?.tailPosition);
+    stdout = readCapture(stdoutPath, result.outputCapture?.stdout?.tailPosition);
+    stderr = readCapture(stderrPath, result.outputCapture?.stderr?.tailPosition);
   } finally {
     try {
       rmSync(scratch, { recursive: true, force: true });
@@ -348,22 +344,18 @@ function signalGroup(identity: ProcessIdentity, signal: NodeJS.Signals): void {
   }
 }
 
-async function waitForGroupEmpty(identity: ProcessIdentity, deadline: number, pollMs: number): Promise<boolean> {
+async function waitForGroupEmpty(identity: ProcessIdentity, deadline: number): Promise<boolean> {
   for (;;) {
     const members = groupMembers(identity.group);
     identityMatchesGroup(identity, members);
     if (!members.length) return true;
     const remaining = deadline - Date.now();
     if (remaining <= 0) return false;
-    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(pollMs, remaining)));
+    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(20, remaining)));
   }
 }
 
-async function stopGroup(
-  identity: ProcessIdentity | null,
-  terminationMs: number,
-  pollMs: number,
-): Promise<string | undefined> {
+async function stopGroup(identity: ProcessIdentity | null, terminationMs: number): Promise<string | undefined> {
   if (!identity) return;
   if (identity.group !== identity.pid || identity.group === processIdentity(process.pid)?.group)
     return 'command did not own a detached process group';
@@ -374,9 +366,9 @@ async function stopGroup(
     if (!initial.length) return;
     signalGroup(identity, 'SIGTERM');
     const termDeadline = deadline - Math.max(1, Math.floor(terminationMs / 2));
-    if (await waitForGroupEmpty(identity, termDeadline, pollMs)) return;
+    if (await waitForGroupEmpty(identity, termDeadline)) return;
     signalGroup(identity, 'SIGKILL');
-    if (await waitForGroupEmpty(identity, deadline, pollMs)) return;
+    if (await waitForGroupEmpty(identity, deadline)) return;
     return `process group ${identity.group} remained alive after ${terminationMs}ms`;
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
@@ -422,7 +414,7 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
     const stderrCapture: CaptureState = { bytes: 0, tailPosition: 0, truncated: false };
     const record = (fd: number, state: CaptureState, chunk: Buffer) => {
       try {
-        recordCapture(fd, state, chunk, request.policy);
+        recordCapture(fd, state, chunk);
       } catch (error) {
         outputError.push(error instanceof Error ? error.message : String(error));
       }
@@ -442,7 +434,7 @@ async function supervise(request: ProcessRequest): Promise<ProcessResult> {
         void (async () => {
           if (!identity && child?.pid) identity = groupLeaderIdentity(child.pid);
           let cleanupError: string | undefined;
-          if (identity) cleanupError = await stopGroup(identity, request.limits.terminationMs, request.policy.pollMs);
+          if (identity) cleanupError = await stopGroup(identity, request.limits.terminationMs);
           else if (child?.pid && value.timedOut) {
             try {
               child.kill('SIGTERM');

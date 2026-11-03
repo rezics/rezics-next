@@ -1,15 +1,15 @@
 import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { AttemptRef } from './contracts.ts';
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
-export const WORKER_CPU_WEIGHT = defaultPolicy.workerResources.cpuWeight;
-export const WORKER_IO_WEIGHT = defaultPolicy.workerResources.ioWeight;
+export const WORKER_CPU_WEIGHT = 50;
+export const WORKER_IO_WEIGHT = 50;
 export const WORKER_SLICE = 'rezics-workers.slice';
 /** Finite bound for systemctl configuration only; worker and systemd-run keep the caller's launch options. */
-export const WORKER_SLICE_PREPARATION_TIMEOUT_MS = defaultPolicy.workerResources.preparationTimeoutMs;
-// Binary unit conversion, independent of admission policy.
+export const WORKER_SLICE_PREPARATION_TIMEOUT_MS = 5_000;
 const GIB = 1024 ** 3;
+// Total GiB minus local check MemoryMax minus 14 GiB (10 GiB floor + 4 GiB for managers, control plane and containers), at least a quarter of total.
+const WORKER_MEMORY_RESERVE_GIB = 14;
 const CHECK_SLICE = 'rezics-check.slice';
 
 type Run = (command: string, args: string[], options: SpawnSyncOptions) => SpawnSyncReturns<Buffer>;
@@ -26,7 +26,6 @@ function failure(result: SpawnSyncReturns<Buffer>): string | null {
 
 // A check-wake resume launches the same attempt again; systemd refuses a unit name that is still loaded, so each
 // launch gets its own name.
-// Base-36 time and a short random suffix provide unit identity, not a worker admission limit.
 function workerUnit(taskId: string, attempt: number): string {
   const safeTask = taskId.replace(/[^A-Za-z0-9:_.-]/g, '-').replace(/^-+|-+$/g, '') || 'task';
   return `rezics-worker-${safeTask}-${attempt}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.scope`;
@@ -40,8 +39,7 @@ export class WorkerSlice {
   constructor(
     private readonly run: Run = spawnSync,
     private readonly readMeminfo: ReadMeminfo = () => readFileSync('/proc/meminfo', 'utf8'),
-    private readonly preparationTimeoutMs?: number,
-    private readonly policy = defaultPolicy.workerResources,
+    private readonly preparationTimeoutMs = WORKER_SLICE_PREPARATION_TIMEOUT_MS,
   ) {}
 
   launch(
@@ -104,7 +102,7 @@ export class WorkerSlice {
     const configuration: SpawnSyncOptions = {
       ...options,
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: this.preparationTimeoutMs ?? this.policy.preparationTimeoutMs,
+      timeout: this.preparationTimeoutMs,
     };
     const env = options.env ?? process.env;
     const override = env.REZICS_WORKER_MEMORY_HIGH_GIB;
@@ -122,10 +120,7 @@ export class WorkerSlice {
       const checkValue = check.status === 0 ? check.stdout?.toString().trim() : '';
       const checkBytes = /^\d+$/.test(checkValue ?? '') ? Number(checkValue) : 0;
       const checkGiB = Math.floor(checkBytes / GIB);
-      memoryHigh = Math.max(
-        Math.ceil(totalGiB * this.policy.minimumMemoryFraction),
-        totalGiB - checkGiB - this.policy.memoryReserveGiB,
-      );
+      memoryHigh = Math.max(Math.ceil(totalGiB / 4), totalGiB - checkGiB - WORKER_MEMORY_RESERVE_GIB);
     }
     const result = this.run(
       'systemctl',
@@ -134,8 +129,8 @@ export class WorkerSlice {
         'set-property',
         '--runtime',
         WORKER_SLICE,
-        `CPUWeight=${this.policy.cpuWeight}`,
-        `IOWeight=${this.policy.ioWeight}`,
+        `CPUWeight=${WORKER_CPU_WEIGHT}`,
+        `IOWeight=${WORKER_IO_WEIGHT}`,
         `MemoryHigh=${memoryHigh}G`,
       ],
       configuration,
@@ -144,8 +139,7 @@ export class WorkerSlice {
   }
 }
 
-// Cache configuration attempts per immutable settings policy; one caller cannot replace another caller's policy.
-const workerSlices = new WeakMap<ControlPolicy['workerResources'], WorkerSlice>();
+const workerSlice = new WorkerSlice();
 
 export function launchWorkerProcess(
   taskId: string,
@@ -154,12 +148,6 @@ export function launchWorkerProcess(
   args: string[],
   options: SpawnSyncOptions,
   hasStarted: () => boolean,
-  policy = defaultPolicy.workerResources,
 ): SpawnSyncReturns<Buffer> {
-  let slice = workerSlices.get(policy);
-  if (!slice) {
-    slice = new WorkerSlice(undefined, undefined, undefined, policy);
-    workerSlices.set(policy, slice);
-  }
-  return slice.launch(taskId, attempt, command, args, options, hasStarted);
+  return workerSlice.launch(taskId, attempt, command, args, options, hasStarted);
 }

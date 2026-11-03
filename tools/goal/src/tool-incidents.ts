@@ -1,13 +1,12 @@
-import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import type { AttemptRef, ManagerInbox, ManagerEvent } from './contracts.ts';
 import { blockerFingerprint } from './attempt-progress.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Settings, Task } from './types.ts';
 
-export const TOOL_INCIDENT_THRESHOLD = defaultPolicy.toolIncidents.threshold;
-export const TOOL_INCIDENT_WINDOW_MS = defaultPolicy.toolIncidents.windowMs;
-export const TOOL_INCIDENT_PROBE_MS = defaultPolicy.toolIncidents.probeMs;
+export const TOOL_INCIDENT_THRESHOLD = 3;
+export const TOOL_INCIDENT_WINDOW_MS = 20 * 60_000;
+export const TOOL_INCIDENT_PROBE_MS = 10 * 60_000;
 
 const FAILURE_EVENT = 'tool-blocker-incident-failure';
 const STATE_EVENT = 'tool-blocker-incident-state';
@@ -95,13 +94,12 @@ function blockerLine(attempt: Attempt): string {
   );
 }
 
-function trackedSourceLocation(checkout: string, message: string, policy: typeof defaultPolicy.toolIncidents): string {
+function trackedSourceLocation(checkout: string, message: string): string {
   try {
     const result = spawnSync('git', ['grep', '-n', '-F', '--', message], {
       cwd: checkout,
       encoding: 'utf8',
-      maxBuffer: policy.sourceBufferBytes,
-      timeout: policy.sourceTimeoutMs,
+      maxBuffer: 1024 * 1024,
     });
     if (result.status === 0) return result.stdout.trim().split(/\r?\n/, 1)[0] ?? 'tracked match';
     if (result.status === 1) return 'no tracked source match';
@@ -120,14 +118,14 @@ function recentFailures(store: WorkerStore, fingerprint: string, since: string):
     .all(FAILURE_EVENT, since, fingerprint) as StoredEvent[];
 }
 
-function exampleTasks(rows: readonly StoredEvent[], limit: number): Array<{ taskId: string; attempt: number }> {
+function exampleTasks(rows: readonly StoredEvent[]): Array<{ taskId: string; attempt: number }> {
   const seen = new Set<string>();
   const examples: Array<{ taskId: string; attempt: number }> = [];
   for (const row of rows) {
     if (seen.has(row.task_id)) continue;
     seen.add(row.task_id);
     examples.push({ taskId: row.task_id, attempt: row.attempt });
-    if (examples.length === limit) break;
+    if (examples.length === 5) break;
   }
   return examples;
 }
@@ -175,10 +173,10 @@ function deliverIncident(
         kind: 'blocker',
         summary: [
           `Environment incident ${current.id}: ${current.errorLine ?? current.line}`,
-          `${current.taskIds.length} distinct tasks ended with this blocker within ${(settings.policy ?? defaultPolicy).toolIncidents.windowMs / 60_000} minutes.`,
+          `${current.taskIds.length} distinct tasks ended with this blocker within 20 minutes.`,
           `Example tasks: ${examples}.`,
           `Source location (git grep): ${current.sourceLocation}.`,
-          `Retries are held while one affected task is retried every ${(settings.policy ?? defaultPolicy).toolIncidents.probeMs / 60_000} minutes.`,
+          'Retries are held while one affected task is retried every 10 minutes.',
         ].join(' '),
       };
       inbox.deliver(event);
@@ -198,14 +196,13 @@ export function recordToolBlockerFailure(
   inbox: ManagerInbox,
   now = Date.now(),
 ): { incident: ToolIncident | null; opened: boolean } {
-  const policy = (settings.policy ?? defaultPolicy).toolIncidents;
   const ref = { taskId: task.id, attempt: attempt.attempt };
   const rawLine = blockerLine(attempt);
-  const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
+  const fingerprint = blockerFingerprint(attempt, task.worktree);
   if (!fingerprint) return { incident: null, opened: false };
   const line = fingerprint;
   const at = new Date(now).toISOString();
-  const openedAt = new Date(now - policy.windowMs).toISOString();
+  const openedAt = new Date(now - TOOL_INCIDENT_WINDOW_MS).toISOString();
   const existingFailure = store.db
     .query('SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind=? LIMIT 1')
     .get(ref.taskId, ref.attempt, FAILURE_EVENT);
@@ -226,8 +223,8 @@ export function recordToolBlockerFailure(
           ...current,
           updatedAt: at,
           taskIds,
-          exampleTasks: examples.slice(0, policy.exampleTasks),
-          ...(probingFailure ? { probe: ref, nextProbeAt: new Date(now + policy.probeMs).toISOString() } : {}),
+          exampleTasks: examples.slice(0, 5),
+          ...(probingFailure ? { probe: ref, nextProbeAt: new Date(now + TOOL_INCIDENT_PROBE_MS).toISOString() } : {}),
         };
         saveState(store, ref, 'open', updated);
         return updated;
@@ -235,20 +232,20 @@ export function recordToolBlockerFailure(
 
       const rows = recentFailures(store, fingerprint, openedAt);
       const ids = [...new Set(rows.map((row) => row.task_id))];
-      if (ids.length < policy.threshold) return null;
+      if (ids.length < TOOL_INCIDENT_THRESHOLD) return null;
 
       const created: ToolIncident = {
         id: crypto.randomUUID(),
         fingerprint,
         line,
         errorLine: rawLine || fingerprint,
-        sourceLocation: trackedSourceLocation(settings.mainCheckout, rawLine, policy),
+        sourceLocation: trackedSourceLocation(settings.mainCheckout, rawLine),
         openedAt: at,
         updatedAt: at,
-        nextProbeAt: new Date(now + policy.probeMs).toISOString(),
+        nextProbeAt: new Date(now + TOOL_INCIDENT_PROBE_MS).toISOString(),
         probe: ref,
         taskIds: ids,
-        exampleTasks: exampleTasks(rows, policy.exampleTasks),
+        exampleTasks: exampleTasks(rows),
         noticeDelivered: false,
       };
       opened = true;
@@ -258,7 +255,11 @@ export function recordToolBlockerFailure(
     .immediate();
 
   if (incident) {
-    ensureIncidentRetries(store, incident, new Date(Date.parse(incident.openedAt) - policy.windowMs).toISOString());
+    ensureIncidentRetries(
+      store,
+      incident,
+      new Date(Date.parse(incident.openedAt) - TOOL_INCIDENT_WINDOW_MS).toISOString(),
+    );
     if (!incident.noticeDelivered) {
       try {
         incident = deliverIncident(store, inbox, settings, incident) ?? incident;
@@ -292,7 +293,7 @@ export function toolIncidentForRetry(store: WorkerStore, ref: AttemptRef): ToolI
     const task = store.task(ref.taskId);
     const attempt = store.attempt(ref);
     if (attempt.failureKind !== 'tool') return null;
-    return openIncidentForFingerprint(store, blockerFingerprint(attempt, task.worktree, store.policy.worker));
+    return openIncidentForFingerprint(store, blockerFingerprint(attempt, task.worktree));
   } catch {
     return null;
   }
@@ -326,8 +327,7 @@ export function resolveToolIncidentsAfterAttempt(
   task: Task,
   attempt: Attempt,
 ): ToolIncident[] {
-  const fingerprint =
-    attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree, store.policy.worker) : null;
+  const fingerprint = attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree) : null;
   const resolved: ToolIncident[] = [];
   for (const incident of listOpenToolIncidents(store)) {
     if (

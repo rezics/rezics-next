@@ -9,9 +9,8 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration, type IntegrationRuntime } from './integration-cli.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { temporaryDirectory } from './test-support.ts';
-import { readControlPolicy, type ControlPolicy } from './policy.ts';
 
-async function setup(policy?: ControlPolicy) {
+async function setup() {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
@@ -24,7 +23,6 @@ async function setup(policy?: ControlPolicy) {
   const windows: { manager: string; argv: string[] }[] = [];
   const removed: string[] = [];
   const services = {
-    ...(policy ? { policy } : {}),
     connect: async () => client,
     windows: {
       register(manager: string, argv: string[]) {
@@ -327,34 +325,6 @@ test('inbox send reports a continuation confirmation to the manager host', async
     if (priorCodexThread === undefined) delete process.env.CODEX_THREAD_ID;
     else process.env.CODEX_THREAD_ID = priorCodexThread;
     if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
-    await s.close();
-  }
-});
-
-test('manager override changes prompt guidance, sleep alarms and the continuation boundary together', async () => {
-  const s = await setup(
-    readControlPolicy({
-      manager: { continuationBudgetPercent: 50, continuationCharacters: 1200, messageWords: 25, sleepAlarmPerHour: 1 },
-      backlog: { lowWater: 3, stoppedTaskLimitMs: 1000 },
-    }),
-  );
-  try {
-    const state = await s.managers.start(s.spec);
-    const opening = s.requests().find((request) => request.method === 'turn/start').params.input[0].text;
-    for (const text of ['keep at least 3', 'within 1000 ms', 'at most 25 words', 'under 1,200 characters'])
-      expect(opening).toContain(text);
-    await report(s, state.threadId!, 'active', 499);
-    expect(s.inbox.pending(state.id)).toHaveLength(0);
-    await report(s, state.threadId!, 'active', 500);
-    expect(s.inbox.pending(state.id)[0]!.event.summary).toContain('at least 50%');
-    expect(s.inbox.pending(state.id)[0]!.event.summary).toContain('at most 1,200 characters');
-    for (let index = 0; index < 3; index++)
-      await s.notify({
-        method: 'item/started',
-        params: { threadId: state.threadId, item: { type: 'sleep', id: `s${index}` } },
-      });
-    expect(s.inbox.pending('supervisor').filter((entry) => entry.event.kind === 'environment')).toHaveLength(1);
-  } finally {
     await s.close();
   }
 });

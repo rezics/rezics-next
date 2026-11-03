@@ -1,6 +1,4 @@
 #!/usr/bin/env bun
-import { scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
-import type { ControlPolicy } from '../src/policy.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,7 +7,7 @@ import { JSON5 } from 'bun';
 import { CHECK_COMPATIBILITY_CONTRACT } from '../src/check-compatibility.ts';
 import { runBoundedProcess, type BoundedProcessResult } from '../src/lifecycle-fixture.ts';
 
-export type ParityOptions = { inputRoot: string; scriptsRoot: string; policy?: ControlPolicy | undefined };
+export type ParityOptions = { inputRoot: string; scriptsRoot: string };
 type Identity = { root: string; commit: string; tree: string; status: string };
 export type ParityCommand = {
   id: string;
@@ -47,6 +45,7 @@ export const PARITY_OBLIGATIONS = [
 ] as const;
 
 const ROOT = resolve(import.meta.dir, '../../..');
+const LIMIT_MS = 270_000;
 const gateFixture =
   "a group's transport failure is retried once and a load-induced workspace is rerun within its group";
 const authFixture =
@@ -62,8 +61,8 @@ function within(root: string, path: string): boolean {
 function git(root: string, ...args: string[]): string {
   const result = spawnSync('git', ['--no-optional-locks', '-C', root, ...args], {
     encoding: 'utf8',
-    timeout: scriptPolicy().gateParity.gitTimeoutMs,
-    maxBuffer: scriptPolicy().gateParity.gitBufferBytes,
+    timeout: 5_000,
+    maxBuffer: 128 * 1024,
   });
   if (result.status !== 0 || result.error)
     throw new Error(result.error?.message ?? result.stderr.trim() ?? 'Git identity unavailable');
@@ -119,10 +118,6 @@ function namesTest(root: string, file: string, name: string): boolean {
 
 /** Read-only discovery. A delivered fixture is executable evidence to collect, never a parity pass. */
 export function planGateParity(options: ParityOptions): ParityPlan {
-  return withScriptPolicy(options.policy ?? scriptPolicy(), () => planGateParityWithPolicy(options));
-}
-
-function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
   const input = identity(resolve(options.inputRoot));
   const scripts = identity(resolve(options.scriptsRoot));
   const commands: ParityCommand[] = [];
@@ -153,12 +148,12 @@ function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
         'bun',
         'test',
         '--timeout',
-        String(scriptPolicy().gateParity.testTimeoutMs),
+        '30000',
         '--test-name-pattern',
         `^${testName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
         file,
       ],
-      timeoutMs: scriptPolicy().gateParity.fixtureTimeoutMs,
+      timeoutMs: 60_000,
       testName,
     });
   };
@@ -174,7 +169,7 @@ function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
       checkout: 'input',
       cwd: '.',
       argv: ['bun', 'tools/goal/scripts/check-compatibility.ts', '--scripts-root', '<scripts-root>'],
-      timeoutMs: scriptPolicy().gateParity.compatibilityTimeoutMs,
+      timeoutMs: 120_000,
     });
   } else
     missing(
@@ -203,7 +198,7 @@ function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
       checkout: 'scripts',
       cwd: 'services/auth',
       argv: ['bun', 'scripts/check.ts', 'test/check-placement.test.ts'],
-      timeoutMs: scriptPolicy().gateParity.budgetMs,
+      timeoutMs: LIMIT_MS,
     });
   } else
     missing(
@@ -231,7 +226,7 @@ function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
       checkout: 'scripts',
       cwd: 'apps/web',
       argv: ['bun', 'scripts/check.ts', 'tests/worker-persistence-isolation.test.ts'],
-      timeoutMs: scriptPolicy().gateParity.budgetMs,
+      timeoutMs: LIMIT_MS,
     });
   } else
     missing(
@@ -271,19 +266,13 @@ function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
         'Inherit ordinary caller placement settings; clear database, lane, recursion and explicit persistence overrides. Own TMPDIR/TMP/TEMP and prepend the installed runtime to PATH.',
       cleanup:
         'Only detached child groups and nonce-marked clones under this consumer worktree .temp/goal are owned; native owners retain their resource cleanup.',
-      deadlineMs: scriptPolicy().gateParity.budgetMs,
+      deadlineMs: LIMIT_MS,
     },
   };
 }
 
 /** Explicit postintegration execution of delivered producer evidence, with unavailable boundaries retained. */
 export async function driveGateParity(
-  options: ParityOptions & { execute?: boolean; report?: (plan: ParityPlan) => void },
-): Promise<ParityResult> {
-  return withScriptPolicy(options.policy ?? scriptPolicy(), () => driveGateParityWithPolicy(options));
-}
-
-async function driveGateParityWithPolicy(
   options: ParityOptions & { execute?: boolean; report?: (plan: ParityPlan) => void },
 ): Promise<ParityResult> {
   const plan = planGateParity(options);
@@ -299,7 +288,7 @@ async function driveGateParityWithPolicy(
   const token = randomUUID();
   const owner = join(scratch, '.owner');
   writeFileSync(owner, token, { flag: 'wx', mode: 0o600 });
-  const deadline = Date.now() + scriptPolicy().gateParity.budgetMs;
+  const deadline = Date.now() + LIMIT_MS;
   const environment: NodeJS.ProcessEnv = { ...process.env, TMPDIR: scratch, TMP: scratch, TEMP: scratch };
   // A caller's database/lane/runtime overrides are not authority for a new owned check.
   for (const key of [
@@ -320,8 +309,7 @@ async function driveGateParityWithPolicy(
       cwd,
       env: environment,
       timeoutMs: Math.max(1, Math.min(timeoutMs, deadline - Date.now())),
-      policy: scriptPolicy().launchSmoke,
-      outputLimit: scriptPolicy().gateParity.outputBytes,
+      outputLimit: 32 * 1024,
     });
   try {
     const roots = { input: join(scratch, 'input'), scripts: join(scratch, 'scripts') };
@@ -329,25 +317,17 @@ async function driveGateParityWithPolicy(
       const snapshot = plan[name];
       // Never add a worktree or update refs/config in either supplied checkout.
       const argv = ['git', 'clone', '--no-hardlinks', '--no-checkout', snapshot.root, roots[name]];
-      const clone = await run(argv, scratch, scriptPolicy().gateParity.cloneTimeoutMs);
+      const clone = await run(argv, scratch, 30_000);
       if (clone.status !== 0 || clone.timedOut || clone.error)
         throw new Error(`Parity clone failed: ${clone.error ?? clone.stderr}`);
-      const checkout = await run(
-        ['git', 'checkout', '--detach', snapshot.commit],
-        roots[name],
-        scriptPolicy().gateParity.checkoutTimeoutMs,
-      );
+      const checkout = await run(['git', 'checkout', '--detach', snapshot.commit], roots[name], 10_000);
       if (checkout.status !== 0 || checkout.timedOut || checkout.error)
         throw new Error(`Parity checkout failed: ${checkout.error ?? checkout.stderr}`);
     }
     const runtime = join(roots.scripts, CHECK_COMPATIBILITY_CONTRACT.workerCheck.bun.lookup);
     for (const root of Object.values(roots)) {
       if (!source(root, 'package.json')) continue;
-      const install = await run(
-        [process.execPath, 'install', '--frozen-lockfile'],
-        root,
-        scriptPolicy().gateParity.installTimeoutMs,
-      );
+      const install = await run([process.execPath, 'install', '--frozen-lockfile'], root, 120_000);
       if (install.status !== 0 || install.timedOut || install.error)
         throw new Error(`Parity dependency preparation failed: ${install.error ?? install.stderr}`);
     }
@@ -429,7 +409,6 @@ if (import.meta.main) {
   try {
     const result = await driveGateParity({
       ...parseParityArguments(process.argv.slice(2)),
-      policy: (await import('../src/config.ts')).loadSettings().policy,
       report: (plan) => console.log(JSON.stringify({ phase: 'plan', ...plan })),
     });
     console.log(JSON.stringify(result));

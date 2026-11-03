@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { ControlPolicy } from './policy.ts';
 import type { Cli, Pool, PoolReading, Profile, Settings } from './types.ts';
 import type { Tokens } from './types.ts';
 import { codexAdapter } from './agents/codex.ts';
@@ -55,7 +54,7 @@ export type AgentAdapter = {
   parseEvent?(event: Record<string, any>, hasRollout: boolean): AgentEvent | null;
   readSession?(configDirectory: string, session: string): string | null;
   readSessionPath?(configDirectory: string, session: string): string | null;
-  readAllowance?(pool: Pool, now: number, policy?: ControlPolicy['provider']): PoolReading;
+  readAllowance?(pool: Pool, now: number): PoolReading;
   signals?(text: string): { allowance: boolean; usageLimit: boolean; capacity: boolean };
   isUsageLimit?(event: Record<string, any>): boolean;
   pinProfile?(model: string, effort: string | undefined, route: Profile): Profile;
@@ -68,8 +67,8 @@ export type AgentAdapter = {
   environment(pool: Pool, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
   matchesEvent(event: Record<string, any>): boolean;
   afterExit(pool: Pool, log: string): void;
-  parseUsage(events: Record<string, any>[], start: number, end: number, policy?: ControlPolicy['provider']): AgentUsage;
-  createUsageAccumulator?(start: number, end: number, policy?: ControlPolicy['provider']): AgentUsageAccumulator;
+  parseUsage(events: Record<string, any>[], start: number, end: number): AgentUsage;
+  createUsageAccumulator?(start: number, end: number): AgentUsageAccumulator;
   failure(event: Record<string, any>): string | null;
   completed(event: Record<string, any>): boolean;
 };

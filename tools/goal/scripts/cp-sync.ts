@@ -4,10 +4,9 @@
  * temporary worktree of main, then publishes it to main, stabilize and dev in one compare-and-swap transaction and
  * updates the main checkout's working tree. See "Control plane on dev: cp-sync" in tools/goal/README.md.
  *
- * Only pure policy/settings helpers are imported from the source checkout; older target checkouts need no runtime composition.
+ * The script imports nothing from tools/goal/src, so it runs from any checkout of the repository, including before
+ * main has it.
  */
-import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
-import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -30,7 +29,6 @@ const MAIN = 'main';
 const DEV = 'dev';
 const STABILIZE = 'stabilize';
 const MINUTE = 60_000;
-// Git SHA-1 identity width; short hashes and baseline hashes below are persistent display/cache identities.
 const ZERO = '0'.repeat(40);
 
 export type Check = {
@@ -56,11 +54,11 @@ export const SMOKE_STATE = '.temp/cp-sync-state';
  * The candidate loaders parse the live local settings and the routing table they name. `checkSettings` is strict and
  * writes nothing; this check does not copy state, launch workers or signal processes.
  */
-export function configSmoke(checkout: string, policy = scriptPolicy()): Check {
+export function configSmoke(checkout: string): Check {
   return {
     name: 'config smoke',
     argv: ['bun', 'tools/goal/scripts/cp-config-smoke.ts'],
-    timeoutMs: policy.cpSync.configSmokeTimeoutMs,
+    timeoutMs: MINUTE,
     kind: 'smoke',
     env: () => ({
       GOAL_MAIN_CHECKOUT: checkout,
@@ -73,11 +71,11 @@ export function configSmoke(checkout: string, policy = scriptPolicy()): Check {
  * The candidate CLI loads the live settings and a copy of the live database, applying its migrations to the copy.
  * GOAL_MANAGER keeps orphan recovery from handing a train to a detached process, which would act on live refs.
  */
-export function cliSmoke(checkout: string, policy = scriptPolicy()): Check {
+export function cliSmoke(checkout: string): Check {
   return {
     name: 'cli smoke',
     argv: ['bun', 'tools/goal/src/cli.ts', 'status'],
-    timeoutMs: policy.cpSync.cliSmokeTimeoutMs,
+    timeoutMs: 5 * MINUTE,
     kind: 'smoke',
     env: (worktree) => ({
       GOAL_MAIN_CHECKOUT: checkout,
@@ -88,47 +86,38 @@ export function cliSmoke(checkout: string, policy = scriptPolicy()): Check {
   };
 }
 
-function proofChecks(policy: ControlPolicy): readonly Check[] {
-  const suite = ['bun', 'test', '--timeout', String(policy.cpSync.testTimeoutMs)];
-  // The install, typing and suite steps of the main-release proof (CONTROL_PLANE_CHECKS in src/merge-train.ts).
-  return [
-    {
-      name: 'root install',
-      argv: ['bun', 'install', '--frozen-lockfile'],
-      timeoutMs: policy.cpSync.installTimeoutMs,
-      kind: 'prepare',
-    },
-    {
-      name: 'tools/goal install',
-      argv: ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
-      timeoutMs: policy.cpSync.installTimeoutMs,
-      kind: 'prepare',
-    },
-    {
-      name: 'type check',
-      argv: ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-      timeoutMs: policy.cpSync.typecheckTimeoutMs,
-      kind: 'typecheck',
-    },
-    {
-      name: 'test suite',
-      argv: [...suite, 'tools/goal/src'],
-      timeoutMs: policy.cpSync.suiteTimeoutMs,
-      kind: 'suite',
-      rerun: (files) => [...suite, ...files],
-    },
-  ];
-}
-export const PROOF_CHECKS = proofChecks(defaultPolicy);
+const SUITE = ['bun', 'test', '--timeout', '30000'];
+// The install, typing and suite steps of the main-release proof (CONTROL_PLANE_CHECKS in src/merge-train.ts).
+export const PROOF_CHECKS: readonly Check[] = [
+  { name: 'root install', argv: ['bun', 'install', '--frozen-lockfile'], timeoutMs: 10 * MINUTE, kind: 'prepare' },
+  {
+    name: 'tools/goal install',
+    argv: ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
+    timeoutMs: 10 * MINUTE,
+    kind: 'prepare',
+  },
+  {
+    name: 'type check',
+    argv: ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
+    timeoutMs: 15 * MINUTE,
+    kind: 'typecheck',
+  },
+  {
+    name: 'test suite',
+    argv: [...SUITE, 'tools/goal/src'],
+    timeoutMs: 30 * MINUTE,
+    kind: 'suite',
+    rerun: (files) => [...SUITE, ...files],
+  },
+];
 
 /** Installs, the type check, live config/routing parse and the CLI smoke; `full` adds the suite. */
-export function syncChecks(checkout: string, full = false, policy = scriptPolicy()): Check[] {
-  const checks = proofChecks(policy);
-  const suite = checks.filter((check) => check.kind === 'suite');
+export function syncChecks(checkout: string, full = false): Check[] {
+  const suite = PROOF_CHECKS.filter((check) => check.kind === 'suite');
   return [
-    ...checks.filter((check) => check.kind !== 'suite'),
-    configSmoke(checkout, policy),
-    cliSmoke(checkout, policy),
+    ...PROOF_CHECKS.filter((check) => check.kind !== 'suite'),
+    configSmoke(checkout),
+    cliSmoke(checkout),
     ...(full ? suite : []),
   ];
 }
@@ -218,7 +207,7 @@ function run(cwd: string, args: readonly string[], options: { input?: string; en
     encoding: 'utf8',
     ...(options.input === undefined ? {} : { input: options.input }),
     env: { ...childEnvironment(), ...options.env },
-    maxBuffer: scriptPolicy().cpSync.gitBufferBytes,
+    maxBuffer: 256 * 1024 * 1024,
   });
   return {
     status: result.status ?? 1,
@@ -317,11 +306,9 @@ function assertCheckoutReady(checkout: string, expectedHead: string, paths: read
   if (dirty.length)
     throw new Refusal(
       `The main checkout has uncommitted changes under ${paths.join(', ')}:\n${dirty
-        .slice(0, scriptPolicy().cpSync.dirtyPaths)
+        .slice(0, 20)
         .map((line) => `  ${line}`)
-        .join(
-          '\n',
-        )}${dirty.length > scriptPolicy().cpSync.dirtyPaths ? `\n  ... ${dirty.length - scriptPolicy().cpSync.dirtyPaths} more` : ''}`,
+        .join('\n')}${dirty.length > 20 ? `\n  ... ${dirty.length - 20} more` : ''}`,
     );
 }
 
@@ -386,11 +373,11 @@ export async function runCheck(
     timedOut = true;
     print(`cp-sync: ${check.name} exceeded ${Math.round(check.timeoutMs / MINUTE)} min; stopping it`);
     killGroup(child.pid, 'SIGTERM');
-    setTimeout(() => killGroup(child.pid, 'SIGKILL'), scriptPolicy().cpSync.terminationGraceMs).unref();
+    setTimeout(() => killGroup(child.pid, 'SIGKILL'), 15_000).unref();
   }, check.timeoutMs);
   const heartbeat = setInterval(
     () => print(`cp-sync: ${check.name} running (${Math.round((Date.now() - started) / MINUTE)} min)`),
-    scriptPolicy().cpSync.heartbeatMs,
+    2 * MINUTE,
   );
   const exitCode = await new Promise<number>((done) => {
     child.on('error', (error) => {
@@ -400,7 +387,7 @@ export async function runCheck(
     child.on('exit', (code, signal) => {
       // Output pipes can stay open in leftover group members; give them a moment, then stop the group.
       const finish = () => done(code ?? 128 + (signal ? (constants.signals[signal] ?? 0) : 1));
-      const grace = setTimeout(finish, scriptPolicy().cpSync.pipeGraceMs);
+      const grace = setTimeout(finish, 5_000);
       child.on('close', () => {
         clearTimeout(grace);
         finish();
@@ -480,10 +467,7 @@ function reportStep(step: StepResult, print: (line: string) => void): void {
   } else if (step.exitCode !== 0) {
     // Compiler diagnostics lead; install failures end with their cause.
     const lines = output.trimEnd().split('\n').slice(1);
-    for (const line of step.kind === 'typecheck'
-      ? lines.slice(0, scriptPolicy().cpSync.compilerLines)
-      : lines.slice(-scriptPolicy().cpSync.failureLines))
-      print(`  | ${line}`);
+    for (const line of step.kind === 'typecheck' ? lines.slice(0, 40) : lines.slice(-30)) print(`  | ${line}`);
   }
 }
 
@@ -773,7 +757,7 @@ function plan(
       const own = changedPaths(cwd, git(cwd, 'merge-base', stabilize, source!), stabilize, paths);
       if (own.length)
         throw new Refusal(
-          `${STABILIZE} changed ${own.slice(0, scriptPolicy().cpSync.conflictPaths).join(', ')} without ${DEV}; syncing would drop those changes.`,
+          `${STABILIZE} changed ${own.slice(0, 10).join(', ')} without ${DEV}; syncing would drop those changes.`,
         );
     } else if (changedPaths(cwd, previous, stabilize, paths).length) {
       keep = true;
@@ -869,7 +853,7 @@ async function reinstall(
         name: `main checkout install (${directory})`,
         argv: ['bun', 'install', '--frozen-lockfile'],
         cwd: directory,
-        timeoutMs: scriptPolicy().cpSync.installTimeoutMs,
+        timeoutMs: 10 * MINUTE,
       },
       checkout,
       join(logs, `main-install-${directory === '.' ? 'root' : 'goal'}.log`),
@@ -884,143 +868,9 @@ async function reinstall(
 // ---------------------------------------------------------------------------------------------------------------
 // Commands
 
-export type ResidentHealth = {
-  liveWorkers: number;
-  passedGates: number;
-  landings: number;
-  workReady?: boolean;
-  landingsRequested?: boolean;
-};
-export type ResidentControl = {
-  observe(checkout: string): Promise<ResidentHealth>;
-  restart(checkout: string): Promise<void>;
-};
-
-/** A complete ten-minute window on each side of publication; sample worker width once per minute. */
-export async function observeResident(
-  checkout: string,
-  pause: (milliseconds: number) => Promise<unknown> = (milliseconds) => Bun.sleep(milliseconds),
-): Promise<ResidentHealth> {
-  const file = join(checkout, '.temp/goal/goal.sqlite');
-  const db = new Database(file, { readonly: true });
-  const start = new Date().toISOString();
-  let workers = 0;
-  let workReady = false,
-    landingsRequested = false;
-  try {
-    const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
-    const hasQueue = !!db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landing_queue'").get();
-    for (let minute = 0; minute < scriptPolicy().cpSync.residentSamples; minute++) {
-      workReady ||= !!db
-        .query("SELECT 1 FROM worker_tasks WHERE json_extract(body, '$.state') = 'ready' LIMIT 1")
-        .get();
-      if (hasQueue)
-        landingsRequested ||= !!db
-          .query(`SELECT 1 FROM landing_queue q JOIN worker_tasks t
-          ON t.id = q.task AND t.current_attempt = q.attempt
-          WHERE q.delivered = 0 AND q.outcome IS NULL AND json_extract(t.body, '$.state') = 'landing' LIMIT 1`)
-          .get();
-      const rows = db
-        .query(`SELECT a.body FROM worker_attempts a JOIN worker_tasks t ON t.id = a.task_id
-        AND t.current_attempt = a.attempt WHERE json_extract(a.body, '$.state') = 'running'`)
-        .all() as { body: string }[];
-      for (const row of rows) {
-        const identity = JSON.parse(row.body).process;
-        if (!identity || identity.boot !== boot) continue;
-        try {
-          const stat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
-          const fields = stat
-            .slice(stat.lastIndexOf(')') + 2)
-            .trim()
-            .split(/\s+/);
-          if (fields[0] !== 'Z' && fields[19] === identity.start && Number(fields[2]) === identity.group) workers++;
-        } catch (error) {
-          if (!['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
-        }
-      }
-      await pause(scriptPolicy().cpSync.residentSampleMs);
-    }
-    const events = db
-      .query(`SELECT body FROM worker_events WHERE kind = 'gate-outcome' AND at >= ? AND at < ?`)
-      .all(start, new Date().toISOString()) as { body: string }[];
-    const passed = events.map((row) => JSON.parse(row.body)).filter((outcome) => outcome.passed);
-    return {
-      liveWorkers: workers / scriptPolicy().cpSync.residentSamples,
-      workReady,
-      landingsRequested,
-      passedGates: passed.length,
-      landings: passed.filter((outcome) => outcome.stage === 'merge' && outcome.mergedCommit).length,
-    };
-  } finally {
-    db.close();
-  }
-}
-
-export type ResidentCommand = (argv: string[], checkout: string) => Promise<{ code: number; output: string }>;
-const residentCommand: ResidentCommand = async (argv, checkout) => {
-  const env = Object.fromEntries(
-    ['HOME', 'PATH', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS', 'KERNEL_CHECK_REMOTE'].flatMap((key) =>
-      process.env[key] === undefined ? [] : [[key, process.env[key]!]],
-    ),
-  );
-  const child = Bun.spawn(argv, {
-    cwd: checkout,
-    env: { ...env, GOAL_MAIN_CHECKOUT: checkout, GOAL_LOCAL_CONFIG: join(checkout, '.temp/goal/local.json') },
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const [code, out, err] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { code, output: out + err };
-};
-
-/** Run only after publication: the newly published main supplies the installer. */
-export async function restartResident(checkout: string, run: ResidentCommand = residentCommand): Promise<void> {
-  const host = 'rezics-goal-host.service';
-  const checked = async (argv: string[]) => {
-    const result = await run(argv, checkout);
-    if (result.code !== 0 && !(argv.includes('--property=LoadState') && result.output.trim() === 'not-found'))
-      throw new Refusal(result.output.trim() || `${argv.join(' ')}: exit ${result.code}`);
-    return result.output.trim();
-  };
-  const load = await checked(['systemctl', '--user', 'show', '--property=LoadState', '--value', host]);
-  const legacy = await checked([
-    'systemctl',
-    '--user',
-    'show',
-    '--property=LoadState',
-    '--value',
-    'rezics-goal-supervisor.service',
-  ]);
-  if (
-    !existsSync(join(checkout, '.temp/goal/goal.env')) ||
-    load === 'not-found' ||
-    legacy === 'loaded' ||
-    existsSync(join(checkout, '.temp/goal/manager-host-supervisor.lease')) ||
-    existsSync(join(checkout, '.temp/goal/manager-host-liveness.json'))
-  )
-    await checked([process.execPath, 'tools/goal/src/cli.ts', 'service', 'install']);
-  // Type=notify makes this wait for READY=1; only the host unit is restarted, preserving worker scopes.
-  await checked(['systemctl', '--user', 'restart', host]);
-  if ((await checked(['systemctl', '--user', 'show', '--property=ActiveState', '--value', host])) !== 'active')
-    throw new Refusal('Goal host did not become ready.');
-}
-
-export function residentRegression(_before: ResidentHealth, after: ResidentHealth): boolean {
-  return (
-    (after.workReady === true && after.liveWorkers === 0) || (after.landingsRequested === true && after.landings === 0)
-  );
-}
-const residentControl: ResidentControl = { observe: observeResident, restart: restartResident };
-
 export type Options = {
-  policy?: ControlPolicy;
   dryRun?: boolean;
   rollback?: boolean;
-  resident?: ResidentControl;
   includes?: string[];
   keepWorktree?: boolean;
   /** Also run the suite, gated on no failures beyond unmodified main's. */
@@ -1090,318 +940,274 @@ function validateIncludes(cwd: string, includes: readonly string[], main: string
 }
 
 export async function sync(options: Options = {}): Promise<number> {
-  return withScriptPolicy(
-    options.policy ?? readScriptPolicy(findMainCheckout(options.cwd ?? process.cwd())),
-    async () => {
-      const print = options.print ?? ((line: string) => console.log(redact(line)));
-      const now = (options.now ?? (() => new Date()))();
-      const checkout = findMainCheckout(options.cwd ?? process.cwd());
-      const state = join(checkout, '.temp/goal');
-      const main = head(checkout, MAIN)!;
-      const source = head(checkout, DEV);
-      if (!source) throw new Refusal(`Branch ${DEV} does not exist.`);
-      const includes = validateIncludes(checkout, options.includes ?? [], main, source);
-      const paths = [CONTROL_PLANE, ...includes];
-      print(
-        `cp-sync: ${options.dryRun ? 'dry run: ' : ''}${DEV} ${short(source)} -> ${MAIN} ${short(main)} (${checkout})`,
-      );
-      if (!isAncestor(checkout, main, source))
-        throw new Refusal(`${MAIN} ${short(main)} has commits ${DEV} lacks; syncing would drop them.`);
-      if (paths.every((path) => object(checkout, main, path) === object(checkout, source, path))) {
-        print(`cp-sync: ${MAIN} already has ${DEV}'s ${paths.join(', ')}; nothing to do.`);
-        return 0;
-      }
-      let ready = true;
-      try {
-        assertCheckoutReady(checkout, main, paths);
-      } catch (error) {
-        if (!(error instanceof Refusal) || !options.dryRun) throw error;
-        print(`cp-sync: a real run would refuse: ${error.message}`);
-        ready = false;
-      }
+  const print = options.print ?? ((line: string) => console.log(redact(line)));
+  const now = (options.now ?? (() => new Date()))();
+  const checkout = findMainCheckout(options.cwd ?? process.cwd());
+  const state = join(checkout, '.temp/goal');
+  const main = head(checkout, MAIN)!;
+  const source = head(checkout, DEV);
+  if (!source) throw new Refusal(`Branch ${DEV} does not exist.`);
+  const includes = validateIncludes(checkout, options.includes ?? [], main, source);
+  const paths = [CONTROL_PLANE, ...includes];
+  print(`cp-sync: ${options.dryRun ? 'dry run: ' : ''}${DEV} ${short(source)} -> ${MAIN} ${short(main)} (${checkout})`);
+  if (!isAncestor(checkout, main, source))
+    throw new Refusal(`${MAIN} ${short(main)} has commits ${DEV} lacks; syncing would drop them.`);
+  if (paths.every((path) => object(checkout, main, path) === object(checkout, source, path))) {
+    print(`cp-sync: ${MAIN} already has ${DEV}'s ${paths.join(', ')}; nothing to do.`);
+    return 0;
+  }
+  let ready = true;
+  try {
+    assertCheckoutReady(checkout, main, paths);
+  } catch (error) {
+    if (!(error instanceof Refusal) || !options.dryRun) throw error;
+    print(`cp-sync: a real run would refuse: ${error.message}`);
+    ready = false;
+  }
 
-      const references = rootReferences(checkout, main, source);
-      const differing = references.filter((reference) => reference.status !== 'same');
-      print(
-        `cp-sync: ${DEV}'s ${CONTROL_PLANE} reaches ${references.length} root files; ${differing.length} differ from ${MAIN}:`,
-      );
-      for (const reference of differing)
-        print(
-          `  ${reference.runtime ? 'runtime' : 'test   '}  ${reference.status.padEnd(9)} ${reference.path}${includes.some((path) => reference.path === path || reference.path.startsWith(`${path}/`)) ? '  (included)' : ''}  <- ${reference.from}`,
-        );
-      if (differing.length)
-        print(`cp-sync: checks use ${MAIN}'s copies; pass --include <path> to sync one from ${DEV} as well.`);
-      for (const path of ['bun.lock', 'package.json'])
-        if ((readBlob(checkout, main, path) ?? '').includes('tools/goal'))
-          print(`cp-sync: root ${path} names tools/goal; check whether it needs ${DEV}'s entries.`);
-
-      const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
-      const id = `${stamp(now)}-${short(source)}`;
-      const logs = join(state, 'cp-sync', id);
-      const worktree = join(options.worktreeRoot ?? join(dirname(checkout), 'worktrees'), `cp-sync-${id}`);
-      const checks = options.checks ?? syncChecks(checkout, options.full === true);
-      // Main's failing tests come from its installs and suite alone; its smoke would only exercise main's own CLI.
-      const baselineChecks = checks.filter((check) => check.kind === 'prepare' || check.kind === 'suite');
-      mkdirSync(logs, { recursive: true });
-      const created: string[] = [];
-      const addWorktree = (path: string, commit: string) => {
-        mkdirSync(dirname(path), { recursive: true });
-        git(checkout, 'worktree', 'add', '--detach', '--quiet', path, commit);
-        created.push(path);
-      };
-      const removeWorktree = (path: string) => {
-        const index = created.indexOf(path);
-        if (index < 0) return;
-        created.splice(index, 1);
-        if (options.keepWorktree) return print(`cp-sync: kept ${path}`);
-        const stopped = stopProcessesIn(path);
-        if (stopped) print(`cp-sync: stopped ${stopped} leftover processes in ${path}`);
-        const removed = run(checkout, ['worktree', 'remove', '--force', '--force', path]);
-        if (removed.status !== 0) print(`cp-sync: could not remove ${path}: ${redact(removed.stderr.trim())}`);
-      };
-      let cleaned = false;
-      const cleanup = () => {
-        if (cleaned) return;
-        cleaned = true;
-        if (activeChild) killGroup(activeChild.pid, 'SIGKILL');
-        for (const path of [...created]) removeWorktree(path);
-        release();
-      };
-      // Main's own failing tests, from the same checks on an unmodified worktree of main, cached per main commit.
-      const mainBaseline = async (): Promise<Baseline | undefined> => {
-        const file = baselineFile(state, main, baselineChecks);
-        const cached = options.freshBaseline ? undefined : readBaseline(file, main, baselineChecks);
-        if (cached) {
-          print(`cp-sync: ${MAIN} ${short(main)} has ${cached.failures.length} failing tests (cached ${cached.time})`);
-          return cached;
-        }
-        print(`cp-sync: running the same checks on unmodified ${MAIN} ${short(main)} to learn its failing tests`);
-        const path = `${worktree}-main`;
-        addWorktree(path, main);
-        try {
-          const steps = await runChecks(baselineChecks, path, logs, 'main ', true, print);
-          const suite = steps.find((step) => step.kind === 'suite');
-          if (!suite) return undefined;
-          const summary = summarizeTests(readFileSync(suite.log, 'utf8'));
-          if (suite.exitCode !== 0 && !comparable(suite, summary)) return undefined;
-          const baseline: Baseline = {
-            version: 1,
-            main,
-            checks: checksKey(baselineChecks),
-            time: new Date().toISOString(),
-            ran: summary.ran ?? '',
-            failures: suite.exitCode === 0 ? [] : summary.failures,
-          };
-          writeBaseline(file, baseline);
-          return baseline;
-        } finally {
-          removeWorktree(path);
-        }
-      };
-      const interrupt = (signal: NodeJS.Signals) => {
-        print(`cp-sync: ${signal}; no ref moved by this step`);
-        cleanup();
-        process.exit(128 + (constants.signals[signal] ?? 0));
-      };
-      process.once('SIGINT', interrupt);
-      process.once('SIGTERM', interrupt);
-      try {
-        addWorktree(worktree, main);
-        git(worktree, 'checkout', '--no-overlay', source, '--', ...paths);
-        const tree = git(worktree, 'write-tree');
-        const unexpected = git(worktree, 'diff', '--name-only', main, tree)
-          .split('\n')
-          .filter((path) => path && !paths.some((root) => path === root || path.startsWith(`${root}/`)));
-        if (unexpected.length || paths.some((path) => object(worktree, tree, path) !== object(worktree, source, path)))
-          throw new Error(`The candidate tree does not equal ${MAIN} plus ${DEV}'s ${paths.join(', ')}.`);
-        print(`cp-sync: changes (${MAIN} ${short(main)} -> candidate):`);
-        for (const line of git(worktree, 'diff', `--stat=${scriptPolicy().cpSync.statColumns}`, main, tree).split('\n'))
-          print(`  ${line}`);
-        for (const missing of missingControlPlanePaths(checkout, main, tree))
-          print(`cp-sync: WARNING: ${missing}, which the candidate lacks`);
-
-        // The checks run on the committed candidate, as the main-release proof does, so tests that read the checkout's
-        // HEAD see it. The commit stays unreachable on this detached worktree unless every step passes.
-        git(worktree, 'commit', '--quiet', '-m', `control-plane: sync tools/goal from dev ${short(source)}`);
-        const commit = git(worktree, 'rev-parse', 'HEAD');
-        if (
-          git(worktree, 'rev-parse', `${commit}^{tree}`) !== tree ||
-          git(worktree, 'rev-parse', `${commit}^`) !== main
-        )
-          throw new Error('The sync commit does not hold the candidate tree.');
-        if (checks.some((check) => check.kind === 'smoke')) {
-          const copied = copyDatabase(join(state, 'goal.sqlite'), join(worktree, SMOKE_STATE));
-          print(
-            `cp-sync: smoke state: ${copied ? 'read-only copy of the live Goal database' : 'empty (no live database)'}`,
-          );
-        }
-
-        // A dry run reports the suite even after a failed type check; a real run stops at the first failed step.
-        const steps = await runChecks(checks, worktree, logs, '', options.dryRun === true, print);
-        const verdict = await gate(checks, steps, worktree, logs, mainBaseline, print);
-        if (verdict.known.length) {
-          print(`cp-sync: ${verdict.known.length} failing tests also fail on unmodified ${MAIN}:`);
-          for (const name of verdict.known) print(`  (fail on ${MAIN} too) ${name}`);
-        }
-        for (const name of verdict.flaky) print(`  (failed, then passed on rerun) ${name}`);
-        for (const name of verdict.added) print(`  (NEW failure) ${name}`);
-        writeFileSync(
-          join(logs, 'results.json'),
-          `${JSON.stringify({ main, source, commit, paths, steps, gate: verdict }, null, 2)}\n`,
-        );
-        if (!verdict.passed) {
-          print(`cp-sync: refused: ${verdict.reason}; no ref moved. Logs: ${logs}`);
-          return 1;
-        }
-        const touched = git(worktree, 'status', '--porcelain', '--untracked-files=no');
-        if (touched || git(worktree, 'rev-parse', 'HEAD') !== commit)
-          throw new Refusal(
-            `The checks changed the candidate checkout:\n${touched.split('\n').slice(0, scriptPolicy().cpSync.changedPaths).join('\n')}`,
-          );
-        print(`cp-sync: checks passed (${verdict.reason}); sync commit ${short(commit)}`);
-
-        if (options.dryRun) {
-          const preview = plan(checkout, 'sync', main, commit, paths, source);
-          for (const update of preview.updates)
-            print(`cp-sync: would move ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
-          for (const warning of preview.warnings) print(`cp-sync: ${warning}`);
-          print(`cp-sync: dry run; no ref or checkout moved.${ready ? '' : ' A real run would refuse (see above).'}`);
-          return ready ? 0 : 1;
-        }
-
-        const resident = options.resident ?? residentControl;
-        print('cp-sync: observing resident workers and gate outcomes for ten minutes before publication.');
-        const before = await resident.observe(checkout);
-        const published = publish(checkout, 'sync', main, commit, paths, source, print);
-        const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
-        const pair = (update: RefUpdate | undefined) =>
-          update ? { previous: update.previous, current: update.next } : undefined;
-        const stabilizeMove = pair(ref(STABILIZE));
-        const devMove = pair(ref(DEV));
-        appendHistory(join(state, 'cp-sync-history.log'), {
-          time: now.toISOString(),
-          action: 'sync',
-          main: { previous: main, current: commit },
-          paths,
-          source,
-          ...(stabilizeMove ? { stabilize: stabilizeMove } : {}),
-          ...(devMove ? { dev: devMove } : {}),
-        });
-        for (const update of published.updates)
-          print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
-        for (const warning of published.warnings) print(`cp-sync: ${warning}`);
-        // The published commit is the one just checked, so its suite failures are the next sync's baseline.
-        if (checks.some((check) => check.kind === 'suite'))
-          writeBaseline(baselineFile(state, commit, baselineChecks), {
-            version: 1,
-            main: commit,
-            checks: checksKey(baselineChecks),
-            time: new Date().toISOString(),
-            ran: verdict.ran,
-            failures: verdict.failures,
-          });
-        if (!(await reinstall(checkout, main, commit, paths, logs, print))) {
-          print('cp-sync: the main checkout install failed; fix it, or run cp-sync --rollback.');
-          return 1;
-        }
-        try {
-          await resident.restart(checkout);
-          print('cp-sync: observing resident workers and gate outcomes for ten minutes after publication.');
-          const after = await resident.observe(checkout);
-          print(`cp-sync: resident before ${JSON.stringify(before)}; after ${JSON.stringify(after)}`);
-          if (residentRegression(before, after))
-            throw new Refusal(
-              'Resident produced no live workers with ready work or no landings with pending requests.',
-            );
-        } catch (error) {
-          print(`cp-sync: ${error instanceof Error ? error.message : String(error)}; rolling back.`);
-          // Release this sync's lock before invoking the ordinary forward-only rollback transaction.
-          cleanup();
-          await rollback({ ...options, resident });
-          return 1;
-        }
-        print(
-          `cp-sync: ${MAIN} now runs ${DEV}'s ${CONTROL_PLANE} from ${short(source)}; previous ${MAIN} ${short(main)}.`,
-        );
-        return 0;
-      } finally {
-        process.off('SIGINT', interrupt);
-        process.off('SIGTERM', interrupt);
-        cleanup();
-      }
-    },
+  const references = rootReferences(checkout, main, source);
+  const differing = references.filter((reference) => reference.status !== 'same');
+  print(
+    `cp-sync: ${DEV}'s ${CONTROL_PLANE} reaches ${references.length} root files; ${differing.length} differ from ${MAIN}:`,
   );
+  for (const reference of differing)
+    print(
+      `  ${reference.runtime ? 'runtime' : 'test   '}  ${reference.status.padEnd(9)} ${reference.path}${includes.some((path) => reference.path === path || reference.path.startsWith(`${path}/`)) ? '  (included)' : ''}  <- ${reference.from}`,
+    );
+  if (differing.length)
+    print(`cp-sync: checks use ${MAIN}'s copies; pass --include <path> to sync one from ${DEV} as well.`);
+  for (const path of ['bun.lock', 'package.json'])
+    if ((readBlob(checkout, main, path) ?? '').includes('tools/goal'))
+      print(`cp-sync: root ${path} names tools/goal; check whether it needs ${DEV}'s entries.`);
+
+  const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
+  const id = `${stamp(now)}-${short(source)}`;
+  const logs = join(state, 'cp-sync', id);
+  const worktree = join(options.worktreeRoot ?? join(dirname(checkout), 'worktrees'), `cp-sync-${id}`);
+  const checks = options.checks ?? syncChecks(checkout, options.full === true);
+  // Main's failing tests come from its installs and suite alone; its smoke would only exercise main's own CLI.
+  const baselineChecks = checks.filter((check) => check.kind === 'prepare' || check.kind === 'suite');
+  mkdirSync(logs, { recursive: true });
+  const created: string[] = [];
+  const addWorktree = (path: string, commit: string) => {
+    mkdirSync(dirname(path), { recursive: true });
+    git(checkout, 'worktree', 'add', '--detach', '--quiet', path, commit);
+    created.push(path);
+  };
+  const removeWorktree = (path: string) => {
+    const index = created.indexOf(path);
+    if (index < 0) return;
+    created.splice(index, 1);
+    if (options.keepWorktree) return print(`cp-sync: kept ${path}`);
+    const stopped = stopProcessesIn(path);
+    if (stopped) print(`cp-sync: stopped ${stopped} leftover processes in ${path}`);
+    const removed = run(checkout, ['worktree', 'remove', '--force', '--force', path]);
+    if (removed.status !== 0) print(`cp-sync: could not remove ${path}: ${redact(removed.stderr.trim())}`);
+  };
+  const cleanup = () => {
+    if (activeChild) killGroup(activeChild.pid, 'SIGKILL');
+    for (const path of [...created]) removeWorktree(path);
+    release();
+  };
+  // Main's own failing tests, from the same checks on an unmodified worktree of main, cached per main commit.
+  const mainBaseline = async (): Promise<Baseline | undefined> => {
+    const file = baselineFile(state, main, baselineChecks);
+    const cached = options.freshBaseline ? undefined : readBaseline(file, main, baselineChecks);
+    if (cached) {
+      print(`cp-sync: ${MAIN} ${short(main)} has ${cached.failures.length} failing tests (cached ${cached.time})`);
+      return cached;
+    }
+    print(`cp-sync: running the same checks on unmodified ${MAIN} ${short(main)} to learn its failing tests`);
+    const path = `${worktree}-main`;
+    addWorktree(path, main);
+    try {
+      const steps = await runChecks(baselineChecks, path, logs, 'main ', true, print);
+      const suite = steps.find((step) => step.kind === 'suite');
+      if (!suite) return undefined;
+      const summary = summarizeTests(readFileSync(suite.log, 'utf8'));
+      if (suite.exitCode !== 0 && !comparable(suite, summary)) return undefined;
+      const baseline: Baseline = {
+        version: 1,
+        main,
+        checks: checksKey(baselineChecks),
+        time: new Date().toISOString(),
+        ran: summary.ran ?? '',
+        failures: suite.exitCode === 0 ? [] : summary.failures,
+      };
+      writeBaseline(file, baseline);
+      return baseline;
+    } finally {
+      removeWorktree(path);
+    }
+  };
+  const interrupt = (signal: NodeJS.Signals) => {
+    print(`cp-sync: ${signal}; no ref moved by this step`);
+    cleanup();
+    process.exit(128 + (constants.signals[signal] ?? 0));
+  };
+  process.once('SIGINT', interrupt);
+  process.once('SIGTERM', interrupt);
+  try {
+    addWorktree(worktree, main);
+    git(worktree, 'checkout', '--no-overlay', source, '--', ...paths);
+    const tree = git(worktree, 'write-tree');
+    const unexpected = git(worktree, 'diff', '--name-only', main, tree)
+      .split('\n')
+      .filter((path) => path && !paths.some((root) => path === root || path.startsWith(`${root}/`)));
+    if (unexpected.length || paths.some((path) => object(worktree, tree, path) !== object(worktree, source, path)))
+      throw new Error(`The candidate tree does not equal ${MAIN} plus ${DEV}'s ${paths.join(', ')}.`);
+    print(`cp-sync: changes (${MAIN} ${short(main)} -> candidate):`);
+    for (const line of git(worktree, 'diff', '--stat=120', main, tree).split('\n')) print(`  ${line}`);
+    for (const missing of missingControlPlanePaths(checkout, main, tree))
+      print(`cp-sync: WARNING: ${missing}, which the candidate lacks`);
+
+    // The checks run on the committed candidate, as the main-release proof does, so tests that read the checkout's
+    // HEAD see it. The commit stays unreachable on this detached worktree unless every step passes.
+    git(worktree, 'commit', '--quiet', '-m', `control-plane: sync tools/goal from dev ${short(source)}`);
+    const commit = git(worktree, 'rev-parse', 'HEAD');
+    if (git(worktree, 'rev-parse', `${commit}^{tree}`) !== tree || git(worktree, 'rev-parse', `${commit}^`) !== main)
+      throw new Error('The sync commit does not hold the candidate tree.');
+    if (checks.some((check) => check.kind === 'smoke')) {
+      const copied = copyDatabase(join(state, 'goal.sqlite'), join(worktree, SMOKE_STATE));
+      print(
+        `cp-sync: smoke state: ${copied ? 'read-only copy of the live Goal database' : 'empty (no live database)'}`,
+      );
+    }
+
+    // A dry run reports the suite even after a failed type check; a real run stops at the first failed step.
+    const steps = await runChecks(checks, worktree, logs, '', options.dryRun === true, print);
+    const verdict = await gate(checks, steps, worktree, logs, mainBaseline, print);
+    if (verdict.known.length) {
+      print(`cp-sync: ${verdict.known.length} failing tests also fail on unmodified ${MAIN}:`);
+      for (const name of verdict.known) print(`  (fail on ${MAIN} too) ${name}`);
+    }
+    for (const name of verdict.flaky) print(`  (failed, then passed on rerun) ${name}`);
+    for (const name of verdict.added) print(`  (NEW failure) ${name}`);
+    writeFileSync(
+      join(logs, 'results.json'),
+      `${JSON.stringify({ main, source, commit, paths, steps, gate: verdict }, null, 2)}\n`,
+    );
+    if (!verdict.passed) {
+      print(`cp-sync: refused: ${verdict.reason}; no ref moved. Logs: ${logs}`);
+      return 1;
+    }
+    const touched = git(worktree, 'status', '--porcelain', '--untracked-files=no');
+    if (touched || git(worktree, 'rev-parse', 'HEAD') !== commit)
+      throw new Refusal(`The checks changed the candidate checkout:\n${touched.split('\n').slice(0, 10).join('\n')}`);
+    print(`cp-sync: checks passed (${verdict.reason}); sync commit ${short(commit)}`);
+
+    if (options.dryRun) {
+      const preview = plan(checkout, 'sync', main, commit, paths, source);
+      for (const update of preview.updates)
+        print(`cp-sync: would move ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
+      for (const warning of preview.warnings) print(`cp-sync: ${warning}`);
+      print(`cp-sync: dry run; no ref or checkout moved.${ready ? '' : ' A real run would refuse (see above).'}`);
+      return ready ? 0 : 1;
+    }
+
+    const published = publish(checkout, 'sync', main, commit, paths, source, print);
+    const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
+    const pair = (update: RefUpdate | undefined) =>
+      update ? { previous: update.previous, current: update.next } : undefined;
+    const stabilizeMove = pair(ref(STABILIZE));
+    const devMove = pair(ref(DEV));
+    appendHistory(join(state, 'cp-sync-history.log'), {
+      time: now.toISOString(),
+      action: 'sync',
+      main: { previous: main, current: commit },
+      paths,
+      source,
+      ...(stabilizeMove ? { stabilize: stabilizeMove } : {}),
+      ...(devMove ? { dev: devMove } : {}),
+    });
+    for (const update of published.updates)
+      print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
+    for (const warning of published.warnings) print(`cp-sync: ${warning}`);
+    // The published commit is the one just checked, so its suite failures are the next sync's baseline.
+    if (checks.some((check) => check.kind === 'suite'))
+      writeBaseline(baselineFile(state, commit, baselineChecks), {
+        version: 1,
+        main: commit,
+        checks: checksKey(baselineChecks),
+        time: new Date().toISOString(),
+        ran: verdict.ran,
+        failures: verdict.failures,
+      });
+    if (!(await reinstall(checkout, main, commit, paths, logs, print))) {
+      print('cp-sync: the main checkout install failed; fix it, or run cp-sync --rollback.');
+      return 1;
+    }
+    print(
+      `cp-sync: ${MAIN} now runs ${DEV}'s ${CONTROL_PLANE} from ${short(source)}; previous ${MAIN} ${short(main)}.`,
+    );
+    return 0;
+  } finally {
+    process.off('SIGINT', interrupt);
+    process.off('SIGTERM', interrupt);
+    cleanup();
+  }
 }
 
 export async function rollback(options: Options = {}): Promise<number> {
-  return withScriptPolicy(
-    options.policy ?? readScriptPolicy(findMainCheckout(options.cwd ?? process.cwd())),
-    async () => {
-      const print = options.print ?? ((line: string) => console.log(redact(line)));
-      const now = (options.now ?? (() => new Date()))();
-      const checkout = findMainCheckout(options.cwd ?? process.cwd());
-      const state = join(checkout, '.temp/goal');
-      const historyFile = join(state, 'cp-sync-history.log');
-      const history = readHistory(historyFile);
-      const current = head(checkout, MAIN)!;
-      const last = history.at(-1);
-      if (!last) throw new Refusal(`No cp-sync history in ${historyFile}; nothing to roll back.`);
-      if (last.main.current !== current)
-        throw new Refusal(
-          `${MAIN} moved since the last cp-sync (${short(last.main.current)} -> ${short(current)}); refusing to roll back.`,
-        );
-      const target = rollbackTarget(history);
-      if (!target) throw new Refusal('Every recorded sync is already rolled back.');
-      const { paths } = target;
-      if (changedPaths(checkout, target.main.current, current, paths).length)
-        throw new Refusal(`${MAIN}'s ${paths.join(', ')} no longer match the sync ${short(target.main.current)}.`);
-      const tree = replacePaths(checkout, current, target.main.previous, paths);
-      print(
-        `cp-sync: ${options.dryRun ? 'dry run: ' : ''}roll back ${paths.join(', ')} to ${MAIN} ${short(target.main.previous)} (now ${short(current)})`,
-      );
-      for (const line of git(checkout, 'diff', `--stat=${scriptPolicy().cpSync.statColumns}`, current, tree).split(
-        '\n',
-      ))
-        print(`  ${line}`);
-      const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
-      try {
-        // Main only moves forward (the repository's reference-transaction hook), so the rollback is a new commit
-        // holding the earlier tree.
-        const commit = commitTree(
-          checkout,
-          tree,
-          [current],
-          `control-plane: roll back tools/goal to ${short(target.main.previous)}`,
-        );
-        if (options.dryRun) {
-          assertCheckoutReady(checkout, current, paths);
-          for (const update of plan(checkout, 'rollback', current, commit, paths).updates)
-            print(`cp-sync: would move ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
-          print('cp-sync: dry run; no ref or checkout moved.');
-          return 0;
-        }
-        const published = publish(checkout, 'rollback', current, commit, paths, undefined, print);
-        appendHistory(historyFile, {
-          time: now.toISOString(),
-          action: 'rollback',
-          main: { previous: current, current: commit },
-          paths,
-          restores: target.main.previous,
-        });
-        for (const update of published.updates)
-          print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
-        for (const warning of published.warnings) print(`cp-sync: ${warning}`);
-        const logs = join(state, 'cp-sync', `${stamp(now)}-rollback`);
-        mkdirSync(logs, { recursive: true });
-        if (!(await reinstall(checkout, current, commit, paths, logs, print))) return 1;
-        await (options.resident ?? residentControl).restart(checkout);
-        print(`cp-sync: ${MAIN} runs the ${CONTROL_PLANE} of ${short(target.main.previous)} again.`);
-        return 0;
-      } finally {
-        release();
-      }
-    },
+  const print = options.print ?? ((line: string) => console.log(redact(line)));
+  const now = (options.now ?? (() => new Date()))();
+  const checkout = findMainCheckout(options.cwd ?? process.cwd());
+  const state = join(checkout, '.temp/goal');
+  const historyFile = join(state, 'cp-sync-history.log');
+  const history = readHistory(historyFile);
+  const current = head(checkout, MAIN)!;
+  const last = history.at(-1);
+  if (!last) throw new Refusal(`No cp-sync history in ${historyFile}; nothing to roll back.`);
+  if (last.main.current !== current)
+    throw new Refusal(
+      `${MAIN} moved since the last cp-sync (${short(last.main.current)} -> ${short(current)}); refusing to roll back.`,
+    );
+  const target = rollbackTarget(history);
+  if (!target) throw new Refusal('Every recorded sync is already rolled back.');
+  const { paths } = target;
+  if (changedPaths(checkout, target.main.current, current, paths).length)
+    throw new Refusal(`${MAIN}'s ${paths.join(', ')} no longer match the sync ${short(target.main.current)}.`);
+  const tree = replacePaths(checkout, current, target.main.previous, paths);
+  print(
+    `cp-sync: ${options.dryRun ? 'dry run: ' : ''}roll back ${paths.join(', ')} to ${MAIN} ${short(target.main.previous)} (now ${short(current)})`,
   );
+  for (const line of git(checkout, 'diff', '--stat=120', current, tree).split('\n')) print(`  ${line}`);
+  const release = options.dryRun ? () => {} : lock(join(state, 'cp-sync.lock'));
+  try {
+    // Main only moves forward (the repository's reference-transaction hook), so the rollback is a new commit
+    // holding the earlier tree.
+    const commit = commitTree(
+      checkout,
+      tree,
+      [current],
+      `control-plane: roll back tools/goal to ${short(target.main.previous)}`,
+    );
+    if (options.dryRun) {
+      assertCheckoutReady(checkout, current, paths);
+      for (const update of plan(checkout, 'rollback', current, commit, paths).updates)
+        print(`cp-sync: would move ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
+      print('cp-sync: dry run; no ref or checkout moved.');
+      return 0;
+    }
+    const published = publish(checkout, 'rollback', current, commit, paths, undefined, print);
+    appendHistory(historyFile, {
+      time: now.toISOString(),
+      action: 'rollback',
+      main: { previous: current, current: commit },
+      paths,
+      restores: target.main.previous,
+    });
+    for (const update of published.updates)
+      print(`cp-sync: moved ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
+    for (const warning of published.warnings) print(`cp-sync: ${warning}`);
+    const logs = join(state, 'cp-sync', `${stamp(now)}-rollback`);
+    mkdirSync(logs, { recursive: true });
+    if (!(await reinstall(checkout, current, commit, paths, logs, print))) return 1;
+    print(`cp-sync: ${MAIN} runs the ${CONTROL_PLANE} of ${short(target.main.previous)} again.`);
+    return 0;
+  } finally {
+    release();
+  }
 }
 
 const USAGE = `Usage: bun tools/goal/scripts/cp-sync.ts [--dry-run] [--rollback] [--include <path>]... [--keep-worktree]

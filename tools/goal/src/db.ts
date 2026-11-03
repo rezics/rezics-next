@@ -1,4 +1,3 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { Database } from 'bun:sqlite';
 
 /** One schema step owned by one module. A module's migrations must not reference another module's tables. */
@@ -30,9 +29,9 @@ DROP TABLE workspace_prepared;`,
 ];
 
 /** Opens the control-plane store: SQLite in WAL mode, independent of any product database. */
-export function openDb(path: string, policy: ControlPolicy['storage'] = defaultPolicy.storage): Database {
+export function openDb(path: string): Database {
   const db = new Database(path, { create: true, strict: true });
-  db.exec(`PRAGMA busy_timeout = ${policy.sqliteBusyTimeoutMs}`);
+  db.exec('PRAGMA busy_timeout = 30000');
   db.exec('PRAGMA journal_mode = WAL');
   // In WAL mode NORMAL survives a process crash and loses at most the last commits on power loss. FULL fsyncs every
   // commit, which costs 8.5 ms on the btrfs state directory against 0.12 ms.

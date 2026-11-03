@@ -1,4 +1,3 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
@@ -141,10 +140,7 @@ export function loadLocalSettings<T extends object>(
     } catch {
       throw error;
     }
-    const policy = (settings as { policy?: ControlPolicy }).policy ?? defaultPolicy;
-    const message = (error instanceof Error ? error.message : String(error))
-      .replace(/\s+/g, ' ')
-      .slice(0, policy.localSettings.diagnosticCharacters);
+    const message = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ').slice(0, 300);
     const key = sha(`${text}\0${message}`);
     const sameProblem = snapshot.problem === key && snapshot.problemToken !== undefined;
     const legacyReported = snapshot.problem === undefined && snapshot.reported === key;

@@ -1,4 +1,3 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -104,7 +103,6 @@ export function completeContinuation(
   markdown: string,
   task: Pick<Task, 'brief' | 'id'>,
   ownership: RiskOwnership,
-  policy: ControlPolicy['brief'] = defaultPolicy.brief,
 ): string {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) return markdown;
@@ -138,10 +136,7 @@ export function completeContinuation(
   const paths = front.paths;
   if (Array.isArray(areas) && Array.isArray(paths) && paths.every((path) => typeof path === 'string'))
     for (const [area, patterns] of Object.entries(ownership.areas))
-      if (
-        !areas.includes(area) &&
-        paths.some((path) => patterns.some((pattern) => pathsOverlap(path, pattern, policy)))
-      )
+      if (!areas.includes(area) && paths.some((path) => patterns.some((pattern) => pathsOverlap(path, pattern))))
         areas.push(area);
   front.riskAreas = areas;
   if (JSON.stringify(front) === JSON.stringify(raw)) return markdown;
@@ -153,15 +148,11 @@ export function completeContinuation(
 function invalidReason(
   markdown: string,
   task: Task,
-  settings: Pick<Settings, 'riskAreasFile' | 'policy'>,
+  settings: Pick<Settings, 'riskAreasFile'>,
   known: Set<string>,
 ): string | undefined {
   try {
-    const brief = parseBrief(
-      markdown,
-      readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
-      settings.policy?.brief,
-    );
+    const brief = parseBrief(markdown, readRiskOwnership(settings.riskAreasFile));
     if (brief.goal !== task.brief.goal) return `goal ${brief.goal} is not the task's goal ${task.brief.goal}`;
     if (brief.manager !== task.brief.manager)
       return `manager ${brief.manager} is not the task's manager ${task.brief.manager}`;
@@ -184,7 +175,7 @@ function invalidReason(
  */
 export function harvestContinuations(
   store: WorkerStore,
-  settings: Pick<Settings, 'stateDirectory' | 'riskAreasFile' | 'policy'>,
+  settings: Pick<Settings, 'stateDirectory' | 'riskAreasFile'>,
   task: Task,
   ref: AttemptRef,
 ): ContinuationHarvest {
@@ -201,7 +192,7 @@ export function harvestContinuations(
   const known = new Set(store.taskIds());
   let ownership: RiskOwnership | undefined;
   try {
-    ownership = readRiskOwnership(settings.riskAreasFile, settings.policy?.brief);
+    ownership = readRiskOwnership(settings.riskAreasFile);
   } catch {
     // Without the table nothing is completed; the parser reports the same failure for each brief.
   }
@@ -230,7 +221,7 @@ export function harvestContinuations(
       continue;
     }
     const written = readFileSync(path, 'utf8');
-    const markdown = ownership ? completeContinuation(written, task, ownership, settings.policy?.brief) : written;
+    const markdown = ownership ? completeContinuation(written, task, ownership) : written;
     const reason = invalidReason(markdown, task, settings, known);
     if (reason) {
       drop(reason);

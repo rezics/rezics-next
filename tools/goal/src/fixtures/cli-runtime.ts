@@ -8,6 +8,7 @@ import type { IntegrationRuntime } from '../integration-cli.ts';
 export function createIntegrationRuntime(): IntegrationRuntime {
   const stateDirectory = process.env.FAKE_GOAL_STATE!;
   const mainCheckout = process.env.FAKE_GOAL_MAIN!;
+  let hostEnvironmentRecorded = false;
   return {
     db: openDb(join(stateDirectory, process.env.FAKE_GOAL_DATABASE ?? 'state.sqlite')),
     mainCheckout,
@@ -15,7 +16,17 @@ export function createIntegrationRuntime(): IntegrationRuntime {
     worktreeRoot: join(stateDirectory, 'trees'),
     managerSocket: join(stateDirectory, 'manager.sock'),
     hostSweepIntervalMs: Number(process.env.FAKE_GOAL_HOST_SWEEP_MS ?? 60_000),
+    codeIsCurrent: () => {
+      const capture = process.env.FAKE_GOAL_HOST_ENV_CAPTURE;
+      if (capture && !hostEnvironmentRecorded) {
+        appendFileSync(capture, `${JSON.stringify({ pid: process.pid, env: process.env })}\n`);
+        hostEnvironmentRecorded = true;
+      }
+      const restartWhenPresent = process.env.FAKE_GOAL_REEXEC_FLAG;
+      return !restartWhenPresent || !existsSync(restartWhenPresent);
+    },
     supermanager: 'supermanager',
+    hostCommand: [process.execPath, import.meta.filename],
     fence: {
       assertCurrent() {},
       commitMerge(_ref, merge) {
