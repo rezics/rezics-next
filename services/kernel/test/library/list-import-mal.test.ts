@@ -3,6 +3,7 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 import { accountToken } from '../support/admitted-access.ts';
 import { randomUUID } from 'node:crypto';
 import { parseMal, malDate, MAL_LIMITS } from '../../src/library/list-import-mal-parser.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 const anime = (id: string, extra = '', status = 'Completed') =>
   `<anime><series_animedb_id>${id}</series_animedb_id><series_title><![CDATA[Private title & text]]></series_title><my_status>${status}</my_status>${extra}</anime>`;
 const xml = (rows: string) => `<myanimelist><myinfo><user_name>private</user_name></myinfo>${rows}</myanimelist>`;
@@ -306,6 +307,163 @@ test('native conflict defaults preserve facts; replacement has revision and rele
     401,
   );
   await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
+});
+
+test('MAL score review records explicit native units, preserves corrections and keeps missing vote admission unavailable', async () => {
+  const actor = await native.identity([
+      ...native.owner.actor.scopes,
+      'rating:vote',
+      'definitions:read',
+      'subject:read',
+    ]),
+    targets = await Promise.all(Array.from({ length: 4 }, () => native.createSubject('game')));
+  await native.grantLibraryGate(actor.actor.accountId);
+  const id = (
+    await json(
+      'POST',
+      `${base}:preview`,
+      {
+        xml: xml(
+          anime('301', '<my_score>9</my_score>') +
+            anime('302', '<my_score>0</my_score>') +
+            anime('303') +
+            anime('304', '<my_score>11</my_score>'),
+        ),
+      },
+      randomUUID(),
+      actor.bearer,
+    )
+  ).id as string;
+  const reviewScore = async (row: number, score?: Record<string, unknown>) => {
+    const version = randomUUID();
+    await json(
+      'POST',
+      `${base}/${id}/review`,
+      { row, target: targets[row], skip: false, replace: false, ...(score === undefined ? {} : { score }) },
+      version,
+      actor.bearer,
+    );
+    return version;
+  };
+  const adopt = (units: number) => ({
+    action: 'adopt',
+    questionId: STANDARD_QUESTION_ID,
+    questionRevision: 1,
+    units,
+  });
+  const clear = { action: 'clear', questionId: STANDARD_QUESTION_ID, questionRevision: 1 };
+  const first = await reviewScore(0, adopt(19));
+  const page = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+  expect(page.rows[0].review.score).toMatchObject({
+    source: { kind: 'value', value: 9, scale: { min: 1, max: 10, step: 1 } },
+    conversion: 'owner-selected-not-exact',
+    question: { id: STANDARD_QUESTION_ID, revision: 1, scale: { minimumUnits: 0, maximumUnits: 20, stepUnits: 1 } },
+    units: 19,
+    baseline: { state: 'absent', units: null, revision: null, at: null },
+    admission: { status: 'unavailable', reason: 'conditional-vote-admission-unavailable' },
+  });
+  expect(page.rows[0].review.score.question).toHaveProperty('meaning');
+  await json(
+    'PUT',
+    `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+    { units: 6 },
+    randomUUID(),
+    actor.bearer,
+    200,
+  );
+  const stale = await json(
+    'POST',
+    `${base}/${id}/apply`,
+    { confirm: true, rows: [{ row: 0, version: first, fields: ['score'] }] },
+    randomUUID(),
+    actor.bearer,
+  );
+  expect(stale.outcomes[0]).toMatchObject({ status: 'stale', score: { status: 'stale', reason: 'refresh-review' } });
+  expect(
+    await json(
+      'GET',
+      `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+      undefined,
+      randomUUID(),
+      actor.bearer,
+    ),
+  ).toMatchObject({ units: 6 });
+
+  await json(
+    'POST',
+    `${base}/${id}/review`,
+    { row: 1, target: targets[1], skip: false, replace: false, score: adopt(0) },
+    randomUUID(),
+    actor.bearer,
+    400,
+  );
+  const clearVersion = await reviewScore(1, clear);
+  expect(
+    (await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 1, version: clearVersion, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+    )).outcomes[0],
+  ).toMatchObject({
+    status: 'skipped',
+    score: { action: 'clear', status: 'skipped', reason: 'no-current-vote-to-clear' },
+  });
+
+  const omitted = await reviewScore(2);
+  expect(
+    (await json(
+      'POST',
+      `${base}/${id}/apply`,
+      { confirm: true, rows: [{ row: 2, version: omitted, fields: ['score'] }] },
+      randomUUID(),
+      actor.bearer,
+    )).outcomes[0],
+  ).toMatchObject({ status: 'unsupported', score: { status: 'unsupported', reason: 'score-action-not-reviewed' } });
+
+  const unsupported = await reviewScore(3, adopt(13)),
+    refreshed = await reviewScore(3, adopt(15));
+  await json(
+    'POST',
+    `${base}/${id}/apply`,
+    { confirm: true, rows: [{ row: 3, version: unsupported, fields: ['score'] }] },
+    randomUUID(),
+    actor.bearer,
+    409,
+  );
+  const unsupportedPage = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+  expect(unsupportedPage.rows[3]).toMatchObject({
+    score: { kind: 'invalid', raw: '11' },
+    review: {
+      score: {
+        units: 15,
+        conversion: 'owner-selected-not-exact',
+        sourceSupport: { status: 'owner-selection-required', reason: 'source-score-outside-integer-1-through-10' },
+      },
+    },
+  });
+  const unavailable = await json(
+    'POST',
+    `${base}/${id}/apply`,
+    { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+    randomUUID(),
+    actor.bearer,
+  );
+  expect(unavailable.outcomes[0]).toMatchObject({
+    status: 'unavailable',
+    score: { action: 'adopt', status: 'unavailable', reason: 'conditional-vote-admission-unavailable', vote: null },
+  });
+  await json(
+    'GET',
+    `/v1/subjects/${targets[3]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+    undefined,
+    randomUUID(),
+    actor.bearer,
+    404,
+  );
+  await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
+  await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
 });
 
 test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns, clears only by consent and retries the original journal PATCH', async () => {

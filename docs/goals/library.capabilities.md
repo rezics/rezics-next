@@ -617,10 +617,14 @@ measurement. Frozen integration remains deferred; no new growth measurement is c
 
 Mounted source: [MAL contract and Web transport examples](../library-import-mal.md). The implementation binds
 current authority, admitted external identifiers, released state roles, native entry revisions and original command
-receipts. Private evidence retains fields without native admission, including simultaneous chapter/volume values.
-`services/kernel/test/library/list-import-mal.test.ts` covers parser losses and HTTP preview/review/apply,
-unmatched selection, conflicts, retry, owner isolation, malformed input, cancellation and terminal denial.
-Broader acceptance and integration remain deferred; constructed transport examples are not execution evidence.
+receipts. Score review retains the source value and scale, owner-selected standard-question units, private own-vote
+baseline and explicit clear/replacement consent in the existing bounded plan. The conditional Content vote writer is
+not installed, so selected score actions return typed unavailable and perform no vote effect; score adoption is not
+Done. Private evidence retains fields without admission, including simultaneous chapter/volume values.
+`services/kernel/test/library/list-import-mal.test.ts` covers parser losses, score review/unit selection, zero and
+missing score consent, stale local votes, typed unavailable outcomes and the existing preview/review/apply, retry,
+owner isolation, malformed input, cancellation and terminal denial cases. Broader frozen acceptance and integration
+remain deferred; constructed transport examples are not execution evidence.
 
 ## MAL and AniList scalar progress adoption
 

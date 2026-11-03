@@ -162,7 +162,7 @@ export function parseMal(xml: string): MalRow[] {
             field === 'my_comments'
               ? 'private-note-only'
               : field === 'my_score'
-                ? 'no-native-vote-admission'
+                ? 'native-vote-admission-unavailable'
                 : /episodes|chapters|volumes|times_/.test(field)
                   ? 'no-dated-session-or-native-measure-admission'
                   : 'private-source-evidence',

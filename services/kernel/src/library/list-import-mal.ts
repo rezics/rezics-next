@@ -21,6 +21,7 @@ import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import type { Entry } from './entry-model.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { MAL_LIMITS, parseMal, type MalRow } from './list-import-mal-parser.ts';
+import { STANDARD_QUESTION_ID, type RatingQuestion, type Vote } from '../rating/votes.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { reviewMalLabels } from './list-import-mal-labels.ts';
@@ -65,6 +66,44 @@ export type MalReviewInput = {
   replace: boolean;
   labels?: MalLabelSelection[];
   progress?: ProgressAdoptionInput;
+  score?: MalScoreReviewInput;
+};
+export type MalScoreReviewInput =
+  | { action: 'adopt'; questionId: string; questionRevision: number; units: number; replaceCurrent?: boolean }
+  | { action: 'clear'; questionId: string; questionRevision: number };
+export type MalScoreReview = {
+  action: 'adopt' | 'clear';
+  source: MalRow['score'];
+  sourceSupport: {
+    status: 'owner-selection-required' | 'no-source-vote';
+    reason:
+      | 'native-units-require-explicit-selection'
+      | 'source-score-outside-integer-1-through-10'
+      | 'source-zero-means-no-rating'
+      | 'source-score-absent';
+  };
+  conversion: 'owner-selected-not-exact';
+  question: Pick<RatingQuestion, 'id' | 'revision' | 'label' | 'meaning' | 'grain' | 'scale' | 'lifecycleState'>;
+  units: number | null;
+  replaceCurrent: boolean;
+  support: { status: 'supported' | 'unsupported'; reason: string | null };
+  baseline: {
+    state: 'present' | 'cleared' | 'absent';
+    units: number | null;
+    revision: number | null;
+    at: string | null;
+  };
+  admission: {
+    status: 'unavailable';
+    reason: 'conditional-vote-admission-unavailable';
+    missingGuard: 'question-revision-and-target-identity-and-current-vote-revision';
+  };
+};
+export type MalScoreOutcome = {
+  action: 'adopt' | 'clear' | null;
+  status: 'unavailable' | 'stale' | 'skipped' | 'unsupported' | 'failed';
+  reason: string | null;
+  vote: { units: number; revision: number; at: string } | null;
 };
 export type MalDateField = 'startDate' | 'finishDate';
 export type MalDateAction = 'adopt' | 'clear';
@@ -118,10 +157,11 @@ export const MAL_DATE_LIMITS = {
 export type MalApplyInput = { confirm: true; rows: { row: number; version: string; fields: string[] }[] };
 export type MalOutcome = {
   row: number;
-  status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
+  status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'unavailable' | 'failed';
   applied: string[];
   retained: string[];
   reason: string | null;
+  score?: MalScoreOutcome;
   labels?: MalLabelOutcome[];
   remainingLabels?: number[];
   progress?: {
@@ -142,6 +182,7 @@ export type MalReview = {
   source: { release: string; epoch: string; acceptingType: string } | null;
   conflict: boolean;
   unsupported: string | null;
+  score?: MalScoreReview;
   labels?: MalLabelReview;
   fingerprint: string;
   progress?: ProgressAdoptionPlan;
@@ -151,6 +192,11 @@ type Intent = {
   review: MalReview;
   fields: string[];
   key: string;
+  score?: {
+    key: string;
+    attribution: { provider: 'mal'; uploadId: string; sourceRow: number; reviewVersion: string };
+    outcome?: MalScoreOutcome;
+  };
   progress?: ProgressAdoptionCheckpoint;
   outcome?: MalOutcome;
 };
@@ -190,6 +236,8 @@ type Dependencies = {
   tokens: KeyRing;
   routeKey: Uint8Array;
   journal: ReturnType<typeof createSessionCommands>;
+  readScoreQuestion?: (actor: Actor, questionId: string) => Promise<RatingQuestion>;
+  readOwnScoreVote?: (actor: Actor, questionId: string, targetId: string) => Promise<Vote | null>;
   clock?: KernelClock;
 };
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
@@ -646,12 +694,16 @@ export function createMalImport(deps: Dependencies) {
       const review = doc.reviews[row.index];
       const observed = await observe(actor, row, review?.binding ? null : (review?.target ?? null), deadline);
       const { profile, profileBinding: _profileBinding, ...observation } = observed;
+      const scoreReviewState = review?.score
+        ? await scoreReviewCurrent(actor, row, review, observed)
+        : null;
       rows.push({
         ...row,
         ...observation,
         tagEvidence: malTagEvidence(row),
         candidates: observation.target ? [{ subjectId: observation.target }] : [],
         review: review ?? null,
+        scoreReviewState,
         outcome: doc.intents[row.index]?.outcome ?? null,
         dateReview: doc.dateReviews[row.index] ?? null,
         dateOutcome: doc.dateIntents[row.index]?.outcome ?? null,
@@ -672,17 +724,117 @@ export function createMalImport(deps: Dependencies) {
       labelLimits: MAL_LABEL_LIMITS,
     };
   }
+  function scoreQuestionView(question: RatingQuestion): MalScoreReview['question'] {
+    return {
+      id: question.id,
+      revision: question.revision,
+      label: question.label,
+      meaning: question.meaning,
+      grain: question.grain,
+      scale: {
+        minimumUnits: question.scale.minimumUnits,
+        maximumUnits: question.scale.maximumUnits,
+        stepUnits: question.scale.stepUnits,
+      },
+      lifecycleState: question.lifecycleState,
+    };
+  }
+  function scoreBaseline(vote: Vote | null): MalScoreReview['baseline'] {
+    return {
+      state: vote === null ? 'absent' : vote.units === null ? 'cleared' : 'present',
+      units: vote?.units ?? null,
+      revision: vote?.revision ?? null,
+      at: vote?.changedAt ?? null,
+    };
+  }
+  async function scoreReviewCurrent(
+    actor: Actor,
+    row: MalRow,
+    review: MalReview,
+    observation: Awaited<ReturnType<typeof observe>>,
+  ): Promise<'observations-match' | 'stale' | 'unavailable'> {
+    const selected = review.score;
+    if (!selected || !review.target || !deps.readScoreQuestion || !deps.readOwnScoreVote) return 'unavailable';
+    const question = await deps.readScoreQuestion(actor, selected.question.id),
+      vote = await deps.readOwnScoreVote(actor, selected.question.id, review.target);
+    const contextCurrent = sameReviewContext(review, observation),
+      questionCurrent = hash(scoreQuestionView(question)) === hash(selected.question),
+      voteCurrent = hash(scoreBaseline(vote)) === hash(selected.baseline);
+    return contextCurrent && questionCurrent && voteCurrent && hash(row) === review.fingerprint
+      ? 'observations-match'
+      : 'stale';
+  }
+  async function reviewScore(
+    actor: Actor,
+    row: MalRow,
+    target: string,
+    input: MalScoreReviewInput,
+  ): Promise<MalScoreReview> {
+    if (
+      input.questionId !== STANDARD_QUESTION_ID ||
+      input.questionRevision !== 1 ||
+      !deps.readScoreQuestion ||
+      !deps.readOwnScoreVote
+    )
+      throw new ProblemError('conflict');
+    if (input.action === 'adopt') {
+      if (row.score.kind === 'zero' || row.score.kind === 'missing' || row.score.kind === 'unknown')
+        throw new ProblemError('invalid_request');
+      if (row.score.kind === 'invalid' && row.score.raw === undefined) throw new ProblemError('invalid_request');
+      if (!Number.isSafeInteger(input.units) || input.units < 0 || input.units > 20)
+        throw new ProblemError('invalid_request');
+    }
+    const question = await deps.readScoreQuestion(actor, input.questionId);
+    if (question.revision !== input.questionRevision) throw stale();
+    const vote = await deps.readOwnScoreVote(actor, input.questionId, target);
+    const view = scoreQuestionView(question),
+      scaleSupported =
+        view.id === STANDARD_QUESTION_ID &&
+        view.revision === 1 &&
+        view.grain === 'work' &&
+        view.lifecycleState === 'active' &&
+        view.scale.minimumUnits === 0 &&
+        view.scale.maximumUnits === 20 &&
+        view.scale.stepUnits === 1;
+    return {
+      action: input.action,
+      source: row.score,
+      sourceSupport:
+        row.score.kind === 'zero'
+          ? { status: 'no-source-vote', reason: 'source-zero-means-no-rating' }
+          : row.score.kind === 'missing' || row.score.kind === 'unknown'
+            ? { status: 'no-source-vote', reason: 'source-score-absent' }
+            : row.score.kind === 'invalid'
+              ? { status: 'owner-selection-required', reason: 'source-score-outside-integer-1-through-10' }
+              : { status: 'owner-selection-required', reason: 'native-units-require-explicit-selection' },
+      conversion: 'owner-selected-not-exact',
+      question: view,
+      units: input.action === 'adopt' ? input.units : null,
+      replaceCurrent: input.action === 'adopt' && input.replaceCurrent === true,
+      baseline: scoreBaseline(vote),
+      support: {
+        status: scaleSupported ? 'supported' : 'unsupported',
+        reason: scaleSupported ? null : 'standard-question-revision-or-scale-unsupported',
+      },
+      admission: {
+        status: 'unavailable',
+        reason: 'conditional-vote-admission-unavailable',
+        missingGuard: 'question-revision-and-target-identity-and-current-vote-revision',
+      },
+    };
+  }
   async function review(actor: Actor, id: string, input: MalReviewInput, key: string, deadline: number) {
     const { doc } = await load(actor, id, deadline),
       row = doc.rows[input.row];
     if (!row) throw missing();
-    if (input.skip && input.progress) throw new ProblemError('invalid_request');
+    if (input.skip && (input.progress || input.score)) throw new ProblemError('invalid_request');
     if (doc.metadataReviews?.[input.row]?.some((item) => item.confirmation && !item.confirmation.outcome))
       throw stale();
     const observed = await observe(actor, row, input.target, deadline);
     if (!input.skip && (!observed.source || !observed.target)) throw missing();
     if (input.progress && (!observed.profile || !observed.profileBinding || !observed.target))
       throw new ProblemError('unsupported_library_profile');
+    if (input.score && !observed.target) throw new ProblemError('not_found');
     const proposed: MalReview = {
       version: key,
       target: observed.target,
@@ -695,6 +847,7 @@ export function createMalImport(deps: Dependencies) {
       conflict: observed.current !== null && observed.current.state !== observed.state,
       unsupported: observed.state === null ? 'no-unique-released-status-role' : null,
       fingerprint: hash(row),
+      ...(input.score ? { score: await reviewScore(actor, row, observed.target!, input.score) } : {}),
       ...(input.progress
         ? {
             progress: await reviewProgressAdoption(
@@ -718,7 +871,13 @@ export function createMalImport(deps: Dependencies) {
         input.labels,
       );
     const result = await mutate(actor, id, key, 'review', input, (doc) => {
-      if (input.labels === undefined && doc.intents[input.row] && doc.intents[input.row]!.outcome?.status !== 'stale')
+      const priorOutcome = doc.intents[input.row]?.outcome?.status;
+      if (
+        input.labels === undefined &&
+        doc.intents[input.row] &&
+        priorOutcome !== 'stale' &&
+        priorOutcome !== 'unavailable'
+      )
         throw stale();
       if (malDigest(doc.rows[input.row]) !== malDigest(row)) throw stale();
       delete doc.intents[input.row];
@@ -1030,7 +1189,20 @@ export function createMalImport(deps: Dependencies) {
       if (!row || !review || review.version !== selected.version || doc.canceled) throw stale();
       const existing = doc.intents[selected.row];
       if (existing && hash(existing.fields) !== hash(selected.fields)) throw new ProblemError('idempotency_conflict');
-      if (existing?.outcome && !selected.fields.includes('tags') && (!review.progress || existing.progress?.complete)) {
+      const scoreState = selected.fields.includes('score') && review.score
+        ? await scoreReviewCurrent(
+            actor,
+            row,
+            review,
+            await observe(actor, row, review.binding ? null : review.target, deadline),
+          )
+        : null;
+      if (
+        existing?.outcome &&
+        !selected.fields.includes('tags') &&
+        (!review.progress || existing.progress?.complete) &&
+        scoreState !== 'stale'
+      ) {
         outcomes.push(existing.outcome);
         continue;
       }
@@ -1038,6 +1210,19 @@ export function createMalImport(deps: Dependencies) {
         review,
         fields: selected.fields,
         key: `mal:${id}:${selected.row}:${hash(review.version)}`,
+        ...(review.score
+          ? {
+              score: {
+                key: `mal:${id}:${selected.row}:${hash(review.version)}:score`,
+                attribution: {
+                  provider: 'mal' as const,
+                  uploadId: id,
+                  sourceRow: row.index,
+                  reviewVersion: review.version,
+                },
+              },
+            }
+          : {}),
       };
       // Commit immutable operands before dispatch. A lost acknowledgement retries this exact native command.
       await mutate(actor, id, `${intent.key}:intent`, 'intent', selected, (doc) => {
@@ -1107,6 +1292,75 @@ export function createMalImport(deps: Dependencies) {
             }
           }
         }
+      }
+      if (selected.fields.includes('score')) {
+        const scoreReview = r.score;
+        if (!scoreReview) {
+          outcome.score = {
+            action: null,
+            status: 'unsupported',
+            reason: 'score-action-not-reviewed',
+            vote: null,
+          };
+          if (!outcome.applied.length) outcome.status = 'unsupported';
+          outcome.reason = 'score-action-not-reviewed';
+        } else if (hash(row) !== r.fingerprint) {
+          outcome.score = { action: scoreReview.action, status: 'stale', reason: 'refresh-review', vote: null };
+          outcome.status = 'stale';
+          outcome.reason = 'refresh-review';
+        } else if (scoreReview.support.status !== 'supported') {
+          outcome.score = {
+            action: scoreReview.action,
+            status: 'unsupported',
+            reason: scoreReview.support.reason,
+            vote: null,
+          };
+          if (!outcome.applied.length) outcome.status = 'unsupported';
+          outcome.reason = scoreReview.support.reason;
+        } else {
+          if (scoreState === 'stale') {
+            outcome.score = { action: scoreReview.action, status: 'stale', reason: 'refresh-review', vote: null };
+            outcome.status = 'stale';
+            outcome.reason = 'refresh-review';
+          } else if (scoreState !== 'observations-match') {
+            outcome.score = {
+              action: scoreReview.action,
+              status: 'unavailable',
+              reason: 'conditional-vote-admission-unavailable',
+              vote: null,
+            };
+            outcome.status = 'unavailable';
+            outcome.reason = 'conditional-vote-admission-unavailable';
+          } else if (scoreReview.action === 'clear' && scoreReview.baseline.state !== 'present') {
+            outcome.score = { action: 'clear', status: 'skipped', reason: 'no-current-vote-to-clear', vote: null };
+            if (!outcome.applied.length) outcome.status = 'skipped';
+            outcome.reason = null;
+          } else if (
+            scoreReview.action === 'adopt' &&
+            scoreReview.baseline.state === 'present' &&
+            !scoreReview.replaceCurrent
+          ) {
+            outcome.score = {
+              action: 'adopt',
+              status: 'skipped',
+              reason: 'preserve-current-vote',
+              vote: null,
+            };
+            if (!outcome.applied.length) outcome.status = 'skipped';
+            outcome.reason = 'preserve-current-vote';
+          } else {
+            // Content has not installed the conditional writer contract; retain the reviewed intent without effect.
+            outcome.score = {
+              action: scoreReview.action,
+              status: 'unavailable',
+              reason: 'conditional-vote-admission-unavailable',
+              vote: null,
+            };
+            outcome.status = 'unavailable';
+            outcome.reason = 'conditional-vote-admission-unavailable';
+          }
+        }
+        if (intent.score) intent.score.outcome = outcome.score;
       }
       if (selected.fields.includes('tags') && review.labels && !review.skip) {
         const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
@@ -1195,14 +1449,16 @@ export function createMalImport(deps: Dependencies) {
         (!r.progress || intent.progress?.complete)
       )
         await mutate(actor, id, `${intent.key}:outcome`, 'outcome', outcome, (doc) => {
-          doc.intents[selected.row]!.outcome = outcome;
+          const saved = doc.intents[selected.row]!;
+          saved.outcome = outcome;
+          if (saved.score && outcome.score) saved.score.outcome = outcome.score;
         });
       outcomes.push(outcome);
       if (outcome.remainingLabels?.length) break;
     }
     await authority(actor, deadline);
-    if (Buffer.byteLength(canonicalize(outcomes.flatMap((o) => o.labels ?? []))!) > MAL_LABEL_LIMITS.outputBytes)
-      throw new ProblemError('invalid_request', { detail: 'MAL: label outcomes exceed encoded byte limit' });
+    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS.resultBytes)
+      throw new ProblemError('invalid_request', { detail: 'MAL: apply outcomes exceed encoded byte limit' });
     return {
       id,
       outcomes,

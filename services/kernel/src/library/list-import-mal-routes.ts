@@ -16,6 +16,7 @@ import { MAL_LIMITS } from './list-import-mal-parser.ts';
 import { MAL_LABEL_LIMITS } from './list-import-mal-tags.ts';
 import { MAL_DATE_LIMITS } from './list-import-mal.ts';
 import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../rating/votes.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' }),
@@ -41,6 +42,28 @@ const progressSelection = t.Optional(
     },
     closed,
   ),
+);
+const scoreSelection = t.Optional(
+  t.Union([
+    t.Object(
+      {
+        action: t.Literal('adopt'),
+        questionId: t.Literal(STANDARD_QUESTION_ID),
+        questionRevision: t.Literal(1),
+        units: t.Integer({ minimum: 0, maximum: 20 }),
+        replaceCurrent: t.Optional(t.Boolean()),
+      },
+      closed,
+    ),
+    t.Object(
+      {
+        action: t.Literal('clear'),
+        questionId: t.Literal(STANDARD_QUESTION_ID),
+        questionRevision: t.Literal(1),
+      },
+      closed,
+    ),
+  ]),
 );
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const params = t.Object({ id }, closed);
@@ -79,7 +102,16 @@ export function malImportRoutes(
     clock?: KernelClock;
   },
 ) {
-  const service = () => createMalImport({ ...deps, access: deps.access() });
+  const service = () => {
+    const access = deps.access(),
+      votes = createVoteCommands({ pool: deps.pool, access, ...(deps.clock === undefined ? {} : { clock: deps.clock }) });
+    return createMalImport({
+      ...deps,
+      access,
+      readScoreQuestion: (actor, questionId) => votes.readRatingQuestion(actor, questionId),
+      readOwnScoreVote: (actor, questionId, targetId) => votes.readOwnVote(actor, questionId, targetId),
+    });
+  };
   async function safe<T>(body: () => Promise<T>): Promise<T> {
     try {
       return await body();
@@ -147,6 +179,7 @@ export function malImportRoutes(
             skip: t.Boolean(),
             replace: t.Boolean(),
             progress: progressSelection,
+            score: scoreSelection,
             labels: t.Optional(
               t.Array(
                 t.Object(
