@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
@@ -16,7 +17,7 @@ import {
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { EntryAnnotationReviewStoppedError, LibraryConflictError } from './entry-errors.ts';
+import { EntryAnnotationReviewStoppedError, LibraryConflictError, SourceObservationCapacityError } from './entry-errors.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import {
   MAX_SOURCE_OBSERVATIONS,
@@ -33,6 +34,7 @@ import {
   parseTimestampChange,
   parseTimestampValue,
   type PersonalEntry,
+  type PersonalEntryArchiveObservationGuard,
   type PersonalEntryObservation,
   type PrivacyFact,
   type TimestampFact,
@@ -182,7 +184,7 @@ function parseAnnotationInput(value: unknown) {
   return { revision: parsePersonalRevision(input.revision), note, priority, ...(entryGuard ? { entryGuard } : {}) };
 }
 
-function parseObservationInput(value: unknown) {
+function parseObservationInput(value: unknown, allowCleared = false) {
   const input = closed(
     value,
     ['provider', 'recordId', 'confirmReviewed', 'privacy', 'sourceCreated', 'sourceUpdated'],
@@ -192,10 +194,18 @@ function parseObservationInput(value: unknown) {
     provider: parseProviderKey(input.provider),
     recordId: parseProviderRecordId(input.recordId),
     confirmReviewed: parseConfirmation(input.confirmReviewed),
-    privacy: parsePrivacyValue(input.privacy),
-    sourceCreated: parseTimestampValue(input.sourceCreated),
-    sourceUpdated: parseTimestampValue(input.sourceUpdated),
+    privacy: parseAdmissionValue(input.privacy, parsePrivacyValue, allowCleared),
+    sourceCreated: parseAdmissionValue(input.sourceCreated, parseTimestampValue, allowCleared),
+    sourceUpdated: parseAdmissionValue(input.sourceUpdated, parseTimestampValue, allowCleared),
   };
+}
+
+function parseAdmissionValue<T>(value: unknown, parse: (input: unknown) => T, allowCleared: boolean): T | { status: 'cleared' } {
+  if (allowCleared && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if (record.op === 'clear' && Object.keys(record).length === 1) return { status: 'cleared' };
+  }
+  return parse(value);
 }
 
 function parseObservationCorrection(value: unknown) {
@@ -217,6 +227,81 @@ function parseObservationCorrection(value: unknown) {
     privacy,
     sourceCreated,
     sourceUpdated,
+  };
+}
+
+function parseArchiveObservationGuard(value: unknown): PersonalEntryArchiveObservationGuard {
+  const guard = closed(
+    value,
+    ['uploadId', 'ordinal', 'reviewRevision', 'sourceFingerprint', 'action', 'expectedRevision', 'fields', 'profileGuard'],
+    'archive observation guard',
+  );
+  if (
+    typeof guard.uploadId !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guard.uploadId) ||
+    !Number.isInteger(guard.ordinal) ||
+    Number(guard.ordinal) < 0 ||
+    Number(guard.ordinal) > 99_999 ||
+    typeof guard.sourceFingerprint !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(guard.sourceFingerprint) ||
+    (guard.action !== 'admit' && guard.action !== 'correct')
+  )
+    throw new TypeError('Invalid archive observation guard');
+  const reviewRevision = parsePersonalRevision(guard.reviewRevision, false);
+  const expectedRevision =
+    guard.action === 'admit' ? guard.expectedRevision === null ? null : undefined : parsePersonalRevision(guard.expectedRevision, false);
+  if (expectedRevision === undefined) throw new TypeError('Invalid archive observation revision');
+
+  const fields = closed(guard.fields, ['privacy', 'sourceCreated', 'sourceUpdated'], 'archive observation fields');
+  if (
+    Object.keys(fields).length < 1 ||
+    (guard.action === 'admit' && Object.keys(fields).length !== 3) ||
+    Object.entries(fields).some(
+      ([, choice]) =>
+        (choice !== 'preserve' && choice !== 'set' && choice !== 'clear') ||
+        (guard.action === 'admit' && choice === 'preserve'),
+    )
+  )
+    throw new TypeError('Invalid archive observation fields');
+
+  const profile = closed(
+    guard.profileGuard,
+    ['subjectId', 'identityEpoch', 'acceptingType', 'requestedSubjectId', 'component', 'pin'],
+    'archive observation profile guard',
+  );
+  const uuid = (input: unknown) =>
+    typeof input === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input);
+  if (
+    !uuid(profile.subjectId) ||
+    typeof profile.identityEpoch !== 'string' ||
+    !/^\d+$/.test(profile.identityEpoch) ||
+    typeof profile.acceptingType !== 'string' ||
+    (profile.requestedSubjectId !== null && !uuid(profile.requestedSubjectId)) ||
+    !profile.component ||
+    typeof profile.component !== 'object' ||
+    Array.isArray(profile.component) ||
+    !profile.pin ||
+    typeof profile.pin !== 'object' ||
+    Array.isArray(profile.pin)
+  )
+    throw new TypeError('Invalid archive observation profile guard');
+
+  return {
+    uploadId: guard.uploadId,
+    ordinal: Number(guard.ordinal),
+    reviewRevision,
+    sourceFingerprint: guard.sourceFingerprint,
+    action: guard.action,
+    expectedRevision,
+    fields: fields as PersonalEntryArchiveObservationGuard['fields'],
+    profileGuard: {
+      subjectId: profile.subjectId,
+      identityEpoch: profile.identityEpoch,
+      acceptingType: profile.acceptingType,
+      requestedSubjectId: profile.requestedSubjectId as string | null,
+      component: profile.component as Record<string, unknown>,
+      pin: profile.pin as Record<string, unknown>,
+    },
   };
 }
 
@@ -346,6 +431,110 @@ async function resolveCanonicalSubject(
   return resolved.subjectId;
 }
 
+async function verifyArchiveObservationGuard(
+  dependencies: Dependencies,
+  tx: QueryClient,
+  account: AccountActor,
+  at: AuthoritativeTime,
+  subjectId: string,
+  requestKey: string,
+  requestInput: Record<string, unknown>,
+  guard: PersonalEntryArchiveObservationGuard,
+): Promise<void> {
+  const route = requireRoute(account.accountId);
+  if (routeOf(guard.uploadId) !== route || guard.profileGuard.subjectId !== subjectId)
+    throw new LibraryConflictError();
+
+  const bound = await tx.query<{
+    section: string;
+    status: string;
+    reviewRevision: number;
+    nativeCommandKind: string | null;
+    nativeRequestKey: string | null;
+    nativeOperands: Record<string, unknown> | null;
+    review: Record<string, unknown> | null;
+    recordJson: string;
+    cancelled: boolean;
+    expired: boolean;
+  }>(
+    `SELECT i.section,i.status,i.review_revision AS "reviewRevision",
+       i.native_command_kind AS "nativeCommandKind",i.native_request_key AS "nativeRequestKey",
+       i.native_operands AS "nativeOperands",i.review,i.record_json AS "recordJson",
+       u.cancelled_at IS NOT NULL AS cancelled,u.expires_at <= $5::timestamptz AS expired
+     FROM library.library_archive_merge_upload AS u
+     JOIN library.library_archive_merge_item AS i
+       ON i.route=u.route AND i.account_id=u.account_id AND i.upload_id=u.upload_id
+     WHERE u.route=$1 AND u.account_id=$2 AND u.upload_id=$3 AND i.ordinal=$4
+     FOR SHARE OF u,i`,
+    [route, account.accountId, guard.uploadId, guard.ordinal, authoritativeTimeValue(at)],
+  );
+  const item = bound.rows[0];
+  const review = item?.review;
+  const current = review && typeof review.current === 'object' && review.current !== null && !Array.isArray(review.current)
+    ? (review.current as Record<string, unknown>)
+    : null;
+  const choicesMatchInput = Object.entries(guard.fields).every(([field, choice]) => {
+    const selected = requestInput[field];
+    if (guard.action === 'admit') {
+      const value = selected && typeof selected === 'object' && !Array.isArray(selected)
+        ? (selected as Record<string, unknown>)
+        : null;
+      return choice === 'clear' ? value?.status === 'cleared' : choice === 'set' && value?.status !== 'cleared';
+    }
+    const change = selected && typeof selected === 'object' && !Array.isArray(selected)
+      ? (selected as Record<string, unknown>)
+      : null;
+    return change?.op === (choice === 'preserve' ? 'unchanged' : choice);
+  });
+  if (
+    !item ||
+    item.section !== 'provenance' ||
+    item.status !== 'applying' ||
+    item.reviewRevision !== guard.reviewRevision ||
+    item.nativeCommandKind !== 'observation' ||
+    item.nativeRequestKey !== requestKey ||
+    item.cancelled ||
+    item.expired ||
+    !item.nativeOperands ||
+    !review ||
+    review.action !== guard.action ||
+    review.sourceFingerprint !== guard.sourceFingerprint ||
+    review.targetSubjectId !== subjectId ||
+    review.provider !== (requestInput.provider as unknown) ||
+    review.recordId !== (requestInput.recordId as unknown) ||
+    canonicalize(review.fields) !== canonicalize(guard.fields) ||
+    current?.status !== (guard.action === 'admit' ? 'absent' : 'present') ||
+    (guard.action === 'correct' && current.revision !== guard.expectedRevision) ||
+    !choicesMatchInput ||
+    canonicalize(item.nativeOperands) !== canonicalize(requestInput) ||
+    createHash('sha256').update(item.recordJson).digest('hex') !== guard.sourceFingerprint
+  )
+    throw new LibraryConflictError();
+
+  const observation = await readLibraryProfileSourceObservation(
+    {
+      pool: dependencies.pool,
+      access: dependencies.access,
+      actor: account,
+      at,
+      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+    },
+    subjectId,
+  );
+  if (!observation) throw new LibraryNotFoundError();
+  const { source, anchor } = observation;
+  if (source?.kind !== 'supported') throw new ProblemError('unsupported_library_profile');
+  if (
+    source.subjectId !== subjectId ||
+    anchor.identityEpoch.toString() !== guard.profileGuard.identityEpoch ||
+    anchor.acceptingType !== guard.profileGuard.acceptingType ||
+    anchor.requestedSubjectId !== guard.profileGuard.requestedSubjectId ||
+    canonicalize(anchor.component) !== canonicalize(guard.profileGuard.component) ||
+    canonicalize(source.pin) !== canonicalize(guard.profileGuard.pin)
+  )
+    throw new LibraryConflictError();
+}
+
 function event(type: string, accountId: string, subjectId: string, data: Record<string, string> = {}) {
   return { type, subject: accountId, data: { subjectId, ...data } };
 }
@@ -380,6 +569,52 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         const value = await readPersonal(client, requireRoute(account.accountId), account.accountId, canonical);
         await client.query('COMMIT');
         return value;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    });
+  }
+
+  async function readSourceObservation(
+    actor: Actor,
+    subjectId: string,
+    provider: string,
+    recordId: string,
+  ): Promise<PersonalEntryObservation | null> {
+    const account = owner(actor, 'library_entry:read');
+    requireRoute(subjectId);
+    const parsedProvider = parseProviderKey(provider);
+    const parsedRecordId = parseProviderRecordId(recordId);
+    const canonical = await resolveCanonicalSubject(dependencies, account, subjectId);
+    return withConnection(pool, async (client) => {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try {
+        const current = await readAccount(client, requireRoute(account.accountId), account.accountId);
+        if (
+          !current ||
+          current.kind !== 'actor' ||
+          current.state !== 'active' ||
+          current.fenced ||
+          !Number.isSafeInteger(account.authnEpoch) ||
+          account.authnEpoch < 1 ||
+          current.minimumAuthnEpoch > BigInt(account.authnEpoch)
+        )
+          throw new GrantDeniedError();
+        const found = await client.query<ObservationRow>(
+          `SELECT provider,record_id AS "recordId",revision,privacy_status AS "privacyStatus",
+            privacy_meaning AS "privacyMeaning",privacy_source_value AS "privacySourceValue",
+            source_created_status AS "sourceCreatedStatus",source_created_value AS "sourceCreatedValue",
+            source_created_precision AS "sourceCreatedPrecision",source_created_zone AS "sourceCreatedZone",
+            source_updated_status AS "sourceUpdatedStatus",source_updated_value AS "sourceUpdatedValue",
+            source_updated_precision AS "sourceUpdatedPrecision",source_updated_zone AS "sourceUpdatedZone",
+            to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedAt"
+           FROM library.entry_source_observation
+           WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND provider=$4 AND record_id=$5`,
+          [requireRoute(account.accountId), account.accountId, canonical, parsedProvider, parsedRecordId],
+        );
+        await client.query('COMMIT');
+        return found.rows[0] ? observation(found.rows[0]) : null;
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -579,20 +814,33 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     );
   }
 
-  async function admitSourceObservation(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
+  async function admitSourceObservation(
+    actor: Actor,
+    subjectId: string,
+    input: unknown,
+    requestKey: string,
+    internalGuard?: unknown,
+  ) {
     const account = owner(actor, 'library_entry:update');
     requireRoute(subjectId);
-    const parsed = parseObservationInput(input);
+    const archiveGuard = internalGuard === undefined ? undefined : parseArchiveObservationGuard(internalGuard);
+    if (archiveGuard && archiveGuard.action !== 'admit') throw new TypeError('Invalid archive observation action');
+    const parsed = parseObservationInput(input, archiveGuard !== undefined);
     const privacy = privacyColumns(parsed.privacy);
     const created = timestampColumns(parsed.sourceCreated);
     const updated = timestampColumns(parsed.sourceUpdated);
+    const requestInput = {
+      subjectId,
+      ...parsed,
+      ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
+    };
     return runner.ownAccountPrepared(
       actor,
       {
         action: 'library_entry:update',
         kind: 'library.entry.source-observation.admit',
         requestKey,
-        input: { subjectId, ...parsed },
+        input: requestInput,
         async prepare(attempt) {
           try {
             return { subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time) };
@@ -605,6 +853,17 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         if ('error' in prepared) throw prepared.error;
         const route = requireRoute(account.accountId);
         const time = authoritativeTimeValue(command.time);
+        if (archiveGuard)
+          await verifyArchiveObservationGuard(
+            dependencies,
+            tx,
+            account,
+            command.time,
+            prepared.subjectId,
+            requestKey,
+            requestInput,
+            archiveGuard,
+          );
         await tx.query(
           `INSERT INTO library.entry_personal_fact
             (route,account_id,subject_id,fact_id,annotation_revision,note,priority,annotation_updated_at,
@@ -623,12 +882,18 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           'SELECT 1 FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE',
           [route, account.accountId, prepared.subjectId],
         );
+        const currentAddress = await tx.query(
+          `SELECT 1 FROM library.entry_source_observation
+           WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND provider=$4 AND record_id=$5 FOR UPDATE`,
+          [route, account.accountId, prepared.subjectId, parsed.provider, parsed.recordId],
+        );
+        if (currentAddress.rowCount) throw new LibraryConflictError();
         const count = await tx.query<{ total: string }>(
           'SELECT count(*)::text AS total FROM library.entry_source_observation WHERE route=$1 AND account_id=$2 AND subject_id=$3',
           [route, account.accountId, prepared.subjectId],
         );
         if (Number(count.rows[0]?.total ?? '0') >= MAX_SOURCE_OBSERVATIONS)
-          throw new TypeError('Source observation limit reached');
+          throw new SourceObservationCapacityError();
         const inserted = await tx.query(
           `INSERT INTO library.entry_source_observation
             (route,account_id,subject_id,provider,record_id,revision,privacy_status,privacy_meaning,privacy_source_value,
@@ -679,17 +944,32 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     );
   }
 
-  async function correctSourceObservation(actor: Actor, subjectId: string, input: unknown, requestKey: string) {
+  async function correctSourceObservation(
+    actor: Actor,
+    subjectId: string,
+    input: unknown,
+    requestKey: string,
+    internalGuard?: unknown,
+  ) {
     const account = owner(actor, 'library_entry:update');
     requireRoute(subjectId);
+    const archiveGuard = internalGuard === undefined ? undefined : parseArchiveObservationGuard(internalGuard);
+    if (archiveGuard && archiveGuard.action !== 'correct') throw new TypeError('Invalid archive observation action');
     const parsed = parseObservationCorrection(input);
+    if (archiveGuard && archiveGuard.expectedRevision !== parsed.revision)
+      throw new LibraryConflictError();
+    const requestInput = {
+      subjectId,
+      ...parsed,
+      ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
+    };
     return runner.ownAccountPrepared(
       actor,
       {
         action: 'library_entry:update',
         kind: 'library.entry.source-observation.correct',
         requestKey,
-        input: { subjectId, ...parsed },
+        input: requestInput,
         async prepare(attempt) {
           try {
             return { subjectId: await resolveCanonicalSubject(dependencies, account, subjectId, attempt.time) };
@@ -701,6 +981,17 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
       async (tx, command, prepared) => {
         if ('error' in prepared) throw prepared.error;
         const route = requireRoute(account.accountId);
+        if (archiveGuard)
+          await verifyArchiveObservationGuard(
+            dependencies,
+            tx,
+            account,
+            command.time,
+            prepared.subjectId,
+            requestKey,
+            requestInput,
+            archiveGuard,
+          );
         const current = await tx.query<ObservationRow>(
           `SELECT provider,record_id AS "recordId",revision,privacy_status AS "privacyStatus",
             privacy_meaning AS "privacyMeaning",privacy_source_value AS "privacySourceValue",
@@ -793,6 +1084,8 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
 
   return {
     readPersonalEntry,
+    readSourceObservation: (...args: Parameters<typeof readSourceObservation>) =>
+      withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => readSourceObservation(...args)),
     saveAnnotations: (...args: Parameters<typeof saveAnnotations>) =>
       withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => saveAnnotations(...args)),
     admitSourceObservation: (...args: Parameters<typeof admitSourceObservation>) =>

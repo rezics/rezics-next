@@ -1,19 +1,18 @@
-# Personal archive annotation and journal recovery
+# Personal archive annotation, journal, and source-observation recovery
 
 This journey extends the existing private [archive review and merge](library-archive-merge.md) consumer. It uses the
 installed V2 export sections and the native Entry and Session commands; it adds no archive format, retention store,
 exporter, or restoration path. [Library export](library-export.md) remains the authority for producer facts and format
 limits.
 
-Decision: Recovered annotations remain private; V2 exports and native setters expose no visibility field, and source visibility never authorizes publication.
+Decision: Recovered annotations and source observations remain private; source-visible privacy is source meaning only and never authorizes REZICS publication.
 
 ## Evidence and supported operations
 
 `decodeLibraryArchive(bytes)` accepts completed V1 and V2 manifests. V1 continues to admit only its declared
-sections. V2 annotations and journals require explicit current-target mapping; V2 provenance and all other
-unimplemented sections remain retained unsupported evidence. Missing sections are not synthesized. Archived
-account, Subject, Entry, Session, pin, revision, capture, audit, completion, and source-observation values never grant
-authority.
+sections. V2 annotations, journals, and provenance require explicit current-target mapping; other unimplemented
+sections remain retained unsupported evidence. Missing sections are not synthesized. Archived account, Subject,
+Entry, Session, pin, revision, capture, audit, completion, and source-observation values never grant authority.
 
 The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET /:id`, `GET /:id/preview`,
 `PATCH /:id/review`, `POST /:id/apply`, `GET /:id/results`, `DELETE /:id`, and `POST /:id/prune` journey. Review
@@ -24,6 +23,7 @@ occurrence editor.
 | ------------- | ----------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
 | `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                      | `createEntryPersonalCommands().saveAnnotations` |
 | `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate`, `reflection` | `createSessionCommands().patchSessionJournal`   |
+| `provenance`  | Explicitly mapped readable canonical Subject    | `privacy`, `sourceCreated`, `sourceUpdated` | `createEntryPersonalCommands().admitSourceObservation` or `.correctSourceObservation` |
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
 uses the native null/clear operation. Setting an absent or null archived value is unsupported. Empty notes and
@@ -40,6 +40,21 @@ Decision: native reflection text excludes malformed Unicode and U+0000, which th
 archive review retains that evidence and explicitly refuses its adoption. Omitted assessment remains native-owned;
 its coordinated producer uses journal-local CAS and version 3 exports, with V1/V2 absence never inferred.
 
+Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
+uses the native null/clear operation. For admission, an archived cleared fact requires `clear`; absent and unknown
+values require an explicit `set` to remain distinct. Correction binds the exact current observation revision and
+requires a deliberate `preserve`, `set`, or `clear` for each selected field. Admission inserts only when the exact
+provider/record address is currently absent. Duplicate addresses, cap exhaustion, changed canonical identity,
+changed target, and competing correction refuse the write or require fresh review. Unsupported provider/privacy
+tokens and declared timestamp precision/zone mismatches remain private evidence with a reason. Supported unknown
+tokens pass through native bounds. Timestamp values retain their original string, year/month/day/minute/second/
+fractional precision and utc/offset/unknown zone; parsing never normalizes through a timezone or `Date`.
+
+Empty notes and invalid priorities are rejected by the installed native parsers. Journal dates retain year,
+year/month, or year/month/day precision and pass through the existing calendar-date parser. Reflection is evidence
+only; no archived reflection, Session creation, completion, repeat counter, state, progress, or unit checklist is
+replayed.
+
 Entry application binds the current incarnation, Entry revision, annotation revision, canonical Subject anchor,
 profile pin, and selected field values. The native annotation command rechecks that binding and always records the
 visibility outcome as private. Journal application binds current Session and journal revisions, state, Subject,
@@ -47,7 +62,12 @@ profile anchor, and the selected dates/reflection. Review exposes current reflec
 scope for the native journal command; the archive route's `library_entry:update` scope alone is insufficient. The
 native journal command rechecks owner authority and that binding. Imported consumption dates do not change Session
 start/completion timestamps, progress history, or native command audit time. Journal patch state and its native
-receipt remain independent of archive progress recovery commands, revisions and checkpoints.
+receipt remains independent of archive progress recovery commands, revisions and checkpoints. Observation review
+reads the exact native address;
+the native transaction rechecks the owner, canonical Subject/profile anchor, retained row fingerprint, review
+revision, selected fields, and expected absence or revision before using the native receipt, source fence, event,
+audit time, and writer. Archived timestamps and `recordedAt` never set native `recordedAt`. No Entry, Session,
+account link, catalogue contribution, or provider grant is created.
 
 Outcomes are per item: `accepted`, `unchanged`, `stale`, `unsupported`, or `failed`. A changed target, incarnation,
 revision, profile, or review epoch cannot reuse an earlier confirmation or native receipt. Preview and review expose
@@ -72,35 +92,43 @@ annotation and journal rows share the existing retained item table and lifecycle
 The [merge owner caller derivation](library-archive-merge.md#bounds-and-verification) remains authoritative for
 shared archive and nested native work.
 
-For fixed addressed selections `R <= 20`, journal fields `F <= 3`, reflection bytes `B <= 4096` and
-escaped frame `J <= 16384`, whole-caller work includes upload, pages, `R × (Creview + Cintent + Cnative + Cresult)`
-and cleanup, repeating only the reached terms on retries. Upload remains `O(encoded bytes + N)` under existing caps;
-preview/results seek at most `P+1 <= 101` indexed retained rows. Review performs exact retained-row, canonical
-Subject/profile, owner/session and journal reads per selection; no owner-history search is involved. The native
-current-profile/access reads and preparation remain charged per target, including their independent authority gates.
-Apply preflights`R`retained keys under the upload lock, repeats each revision check at begin, serializes one original
-patch and bounded guard into existing durable operands, then records one small result per reached item. Text appears
-once in the original PATCH operands, keeping maximum escaped frames inside the existing 16,384-byte JSONB bound.
-Review retains at most one bounded current reflection for comparison. JSON parsing, equality, hashing and full caller
-serialization cost`O(R × (F + J))`, including simultaneous source, review and operand copies.
+Let `N≤100,000` be uploaded records, `B≤34 MiB` uploaded bytes, `R≤20` selected review/apply rows, `F≤3` selected
+observation fields, `O≤32` observations on one Subject, `P≤100` returned page rows, `J≤4096` reflection bytes,
+and `E≤16,384` escaped patch-frame bytes. Upload parses and serializes `O(B+N)` input, checks and writes one indexed
+owner upload slot, and inserts `N` child rows in one bounded batch. Preview and results do one owner/upload lookup plus
+one ordinal-index seek returning at most `P+1` rows and serialize at most `P` rows.
 
-Each native command charges current owner/scopes/currentness and terminal fencing, exact session/journal locking,
-profile checks, upload lifetime/cancellation lock, one native receipt lookup, at most one journal CAS, ordinary command
-fence and ID-only event/export-source invalidation. Native receipts retain only identifiers/revision/change. Replay
-repeats current native authority and receipt work, returns the original acknowledgement, and adds no write/event.
-Cancellation/expiry blocks uncommitted native effects under the upload lock and preserves accepted edits. Cleanup
-uses existing indexed pages of at most 100 retained keys and native account erasure; no new payer, reservation, scan,
-side store or background task is added. Holding `R,F,B` fixed keeps this addressed work independent of unrelated
-sessions/history/evidence. Native64/512/4096, browser/root and composed growth measurements remain controller-owned
-and unmeasured here; source derivation does not establish those execution results.
+Review reads one upload and `R` indexed ordinals, performs the relevant current Subject/profile and Entry/Session
+reads, and performs one exact provider/record observation read for each selected observation. It persists `R` bounded
+review rows with their next immutable revision. Parsing, equality, hashing, and full serialization are bounded by the
+selected evidence and fields, including the simultaneous source, review, and operand copies.
+
+Apply preflights `R` retained keys under the upload lock and begins each effect with locked upload/ordinal reads and
+one persisted native binding. Native commands charge current owner/scopes/currentness and terminal fencing, profile
+checks, cancellation/lifetime lock, original receipt lookup, target/address locking, and any selected-field CAS.
+Admission locks the parent personal-fact row and counts at most `O` observations; correction reads only its exact
+address and expected revision. Successful native writes use the ordinary receipt, event, and source-fence path once;
+native observation serialization reads at most `O` records, then a bounded archive result is acknowledged. Journal
+patches persist one original key and entire bounded body, with text kept within `E`.
+
+Work is bounded by upload bytes/rows, returned `P`, and `R×(F+O)` plus addressed authority/profile work; it is
+independent of unrelated account or observation history. A lost acknowledgement retries the same stored key and
+operands, repeating only that bounded path. Cancellation fences pending effects while preserving acknowledgements.
+Expiry and terminal erasure drain the existing retained graph; cleanup deletes at most 100 indexed rows and checks
+one remaining-row key before deleting the upload. There is no GET repair, refill, account-wide matching, new payer,
+or reservation. Native64/512/4096, final-page, negative-target, maximum-field, replay, cancellation, cleanup, and
+composed growth measurements remain deferred to integration.
 
 ## Verification and ownership
 
-Focused native coverage uses an actual V2 export, adopts one existing Entry and Session, proves partial-date
-precision, preserve/set/clear, source-visible provenance remains unsupported, stale revision/incarnation handling,
-missing targets, per-item replay, cancellation, expiry pruning, foreign-owner denial and terminal erasure. It also
-checks Session progress and command timestamps remain separate from imported dates. Focused tests and workspace
-typechecks are worker checks; frozen acceptance and composed native growth measurements run after integration.
+Focused native coverage uses an actual V2 export, admits exact source observations with source-visible, unknown,
+absent, cleared, fractional, partial, and unknown-zone values, and reads the values back through the addressed native
+reader. It also covers duplicate admission, observation-cap refusal, competing corrections, changed canonical
+identity, immutable confirmation, commit-before-checkpoint replay, partial cancellation, expiry pruning,
+foreign-owner denial, and terminal erasure. Annotation and journal coverage retains partial-date precision,
+preserve/set/clear, stale revision/incarnation handling, missing targets, per-item replay, and checks that Session
+progress and command timestamps remain separate from imported dates. Frozen acceptance and composed native growth
+measurements run after integration.
 
 The route/schema producer is implemented in this source. Generated client snapshot emission awaits successful
 workspace compilation; the existing snapshot must not be presented as the reflection handoff.

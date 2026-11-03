@@ -617,10 +617,13 @@ the adjacent Web recovery interface remain deferred to integration; Web323 still
 
 [Personal archive review and merge](../library-archive-merge.md) shares the installed V1/V2 producer vocabulary and
 bounds. The bounded decoder checks completed artifacts; private consumer methods page evidence and coverage,
-require explicit current subject/state/label or Entry/Session review, and delegate selected entry, label, assignment,
-annotation and journal date/reflection effects to native commands with a per-item replay journal, cancellation, seven-day
-retention and owned-graph erasure. V2 provenance remains retained unsupported evidence. Focused native scenarios
-cover actual V2 producer compatibility, private fact recovery, stale targets, replay, cancellation and denial paths.
+require explicit current subject/state/label, Entry/Session, or source-observation review, and delegate selected
+entry, label, assignment, annotation, journal-date, and provenance effects to native commands with a per-item replay
+journal, cancellation, seven-day retention and owned-graph erasure. Provenance admission is insert-only at an
+explicitly mapped current Subject/provider/record address; correction binds its current revision and deliberate
+per-field choices. Native source observations remain private, preserve source timestamp precision/zone, and receive
+no archived authority or timestamp. Focused native scenarios cover actual V2 producer compatibility, private fact
+recovery, stale targets, replay, cancellation and denial paths.
 Web adoption, frozen acceptance and measured native64/512/4096 cost evidence remain deferred; the existing export
 evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
 supported fields, immutable review confirmations, exact native PATCH replay and visibility decision. Reflection

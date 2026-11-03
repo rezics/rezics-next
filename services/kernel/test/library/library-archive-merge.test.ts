@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { createEntryPersonalCommands } from '../../src/library/entry-personal.ts';
@@ -9,6 +9,7 @@ import { createSessionCommands } from '../../src/library/sessions.ts';
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 type Identity = Awaited<ReturnType<NativeProfileFixture['identity']>>;
@@ -29,11 +30,13 @@ const exportScopes = [
   'collection:read',
 ];
 const mergePath = '/v1/libraryArchiveMerges';
+const mergeScopes = [...exportScopes, 'account:delete'];
 const key = () => randomUUID();
 let f: NativeProfileFixture;
 let source: Identity, main: Identity, createOwner: Identity, staleRevision: Identity, staleIncarnation: Identity;
 let unknownStateOwner: Identity, cancelledOwner: Identity, deletedOwner: Identity;
 let staleFactOwner: Identity, missingFactOwner: Identity, pruneOwner: Identity;
+let duplicateOwner: Identity, correctionOwner: Identity, capOwner: Identity, identityOwner: Identity;
 let subjects: [string, string];
 let artifact: Archive;
 let sourceLabels: [string, string];
@@ -78,6 +81,14 @@ async function previewAll(person: Identity, id: string, limit = 100) {
 function selected(ordinals: number[], reviewRevision = 1) {
   return { items: ordinals.map((ordinal) => ({ ordinal, reviewRevision })) };
 }
+function selectedFrom(records: any[], ordinals: number[]) {
+  return {
+    items: ordinals.map((ordinal) => {
+      const row = records.find((item) => item.ordinal === ordinal);
+      return { ordinal, reviewRevision: row.reviewRevision };
+    }),
+  };
+}
 async function makeUpload(person: Identity) {
   const status = await upload(person);
   return { id: status.uploadId as string, status };
@@ -88,7 +99,6 @@ beforeAll(async () => {
   for (const group of ['personal_library', 'reading_progress', 'collections'])
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   source = await f.identity(exportScopes);
-  const mergeScopes = [...exportScopes, 'account:delete'];
   main = await f.identity(mergeScopes);
   createOwner = await f.identity(mergeScopes);
   staleRevision = await f.identity(mergeScopes);
@@ -99,6 +109,22 @@ beforeAll(async () => {
   staleFactOwner = await f.identity(mergeScopes);
   missingFactOwner = await f.identity(mergeScopes);
   pruneOwner = await f.identity(mergeScopes);
+  duplicateOwner = await f.identity(mergeScopes);
+  correctionOwner = await f.identity(mergeScopes);
+  capOwner = await f.identity(mergeScopes);
+  identityOwner = await f.identity([...mergeScopes, 'subject:merge', 'gate:subject_identity']);
+  const archiveGrants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
+  await archiveGrants.create(
+    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30_000) },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: identityOwner.actor.accountId },
+      actions: ['subject:merge', 'gate:subject_identity'],
+      valid: '(,)',
+      key: key(),
+    },
+  );
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/subject_identity:open')).status).toBe(200);
 
   async function createSubject(label: string) {
     const response = await send(source, 'POST', '/v1/subjects', { type: 'ex:Child', labels: { en: label } });
@@ -147,8 +173,48 @@ beforeAll(async () => {
       recordId: 'source-visible-row',
       confirmReviewed: true,
       privacy: { status: 'known', meaning: 'source_visible' },
+      sourceCreated: { status: 'known', value: '2022-11-17T14:03:04.123456789-00:00' },
+      sourceUpdated: { status: 'unknown', sourceValue: 'source-clock-pending' },
+    },
+    key(),
+  );
+  await personal.admitSourceObservation(
+    source.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'unknown-and-partial-row',
+      confirmReviewed: true,
+      privacy: { status: 'unknown', sourceValue: 'source_future_visibility' },
+      sourceCreated: { status: 'known', value: '1984-02' },
+      sourceUpdated: { status: 'absent' },
+    },
+    key(),
+  );
+  await personal.admitSourceObservation(
+    source.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'cleared-row',
+      confirmReviewed: true,
+      privacy: { status: 'absent' },
       sourceCreated: { status: 'absent' },
       sourceUpdated: { status: 'absent' },
+    },
+    key(),
+  );
+  await personal.correctSourceObservation(
+    source.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'cleared-row',
+      revision: 1,
+      confirmReviewed: true,
+      privacy: { op: 'clear' },
+      sourceCreated: { op: 'clear' },
+      sourceUpdated: { op: 'set', value: { status: 'known', value: '2017' } },
     },
     key(),
   );
@@ -245,7 +311,7 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
       expect.objectContaining({ section: 'collections', treatment: 'retained-unsupported' }),
       expect.objectContaining({ section: 'annotations', treatment: 'requires-explicit-mapping', rows: 1 }),
       expect.objectContaining({ section: 'journals', treatment: 'requires-explicit-mapping', rows: 1 }),
-      expect.objectContaining({ section: 'provenance', treatment: 'retained-unsupported', rows: 1 }),
+      expect.objectContaining({ section: 'provenance', treatment: 'requires-explicit-mapping', rows: 3 }),
     ]),
   );
   const entryOne = rows.find((row) => row.section === 'entries' && row.evidence.subject_id === subjects[0])!;
@@ -255,9 +321,20 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const assignment = rows.find((row) => row.section === 'assignments')!;
   const annotation = rows.find((row) => row.section === 'annotations' && row.evidence.subjectId === subjects[0])!;
   const journalItem = rows.find((row) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId)!;
-  const provenance = rows.find((row) => row.section === 'provenance')!;
-  expect(provenance.status).toBe('unsupported');
-  expect(provenance.evidence.observation.privacy).toEqual({ status: 'known', meaning: 'source_visible' });
+  const provenanceRows = rows.filter((row) => row.section === 'provenance');
+  const visibleProvenance = provenanceRows.find((row) => row.evidence.observation.recordId === 'source-visible-row')!;
+  const unknownProvenance = provenanceRows.find(
+    (row) => row.evidence.observation.recordId === 'unknown-and-partial-row',
+  )!;
+  const clearedProvenance = provenanceRows.find((row) => row.evidence.observation.recordId === 'cleared-row')!;
+  expect(provenanceRows.every((row) => row.status === 'unresolved')).toBe(true);
+  expect(visibleProvenance.evidence.observation.privacy).toEqual({ status: 'known', meaning: 'source_visible' });
+  expect(visibleProvenance.evidence.observation.sourceCreated).toEqual({
+    status: 'known',
+    value: '2022-11-17T14:03:04.123456789-00:00',
+    precision: 'fraction',
+    zone: 'unknown',
+  });
   const targetLabels = createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
   const existingLabel = (await targetLabels.listLabels(main.actor, { limit: 100 })).labels[0]!;
   const initialReview = await json(
@@ -280,6 +357,33 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
           subjectId: subjects[0],
           sessionId: targetSessionId,
           fields: { startDate: 'set', finishDate: 'preserve', reflection: 'set' },
+        },
+        {
+          ordinal: visibleProvenance.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'source-visible-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
+        {
+          ordinal: unknownProvenance.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'unknown-and-partial-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
+        {
+          ordinal: clearedProvenance.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'cleared-row',
+          action: 'admit',
+          fields: { privacy: 'clear', sourceCreated: 'clear', sourceUpdated: 'set' },
         },
       ],
     }),
@@ -310,9 +414,114 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(reviewedAnnotation.reviewRevision).toBe(
     initialReview.reviewed.find((row: any) => row.ordinal === annotation.ordinal).reviewRevision + 1,
   );
+  expect(refreshed.records.filter((row: any) => provenanceRows.some((item) => item.ordinal === row.ordinal))).toMatchObject([
+    { status: 'mapped', review: { visibility: 'private', action: 'admit' } },
+    { status: 'mapped', review: { visibility: 'private', action: 'admit' } },
+    { status: 'mapped', review: { visibility: 'private', action: 'admit' } },
+  ]);
   expect(reviewedAnnotation.review.fields).toEqual({ note: 'set', priority: 'clear' });
   expect(reviewedJournal.review.fields).toEqual({ startDate: 'set', finishDate: 'preserve', reflection: 'set' });
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
+  const visibleReview = refreshed.records.find((row: any) => row.ordinal === visibleProvenance.ordinal)!;
+  const retainedObservation = await f.pool.query<{ review_revision: number; record_json: string }>(
+    `SELECT review_revision,record_json FROM library.library_archive_merge_item
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+    [routeOf(main.actor.accountId), main.actor.accountId, id, visibleProvenance.ordinal],
+  );
+  const observationRevision = retainedObservation.rows[0]!.review_revision;
+  const observationKey = `archive-merge-${id.replaceAll('-', '')}-${visibleProvenance.ordinal}-${observationRevision}`;
+  const archiveReviewGuard = {
+    uploadId: id,
+    ordinal: visibleProvenance.ordinal,
+    reviewRevision: observationRevision,
+    sourceFingerprint: createHash('sha256').update(retainedObservation.rows[0]!.record_json).digest('hex'),
+    action: 'admit',
+    expectedRevision: null,
+    fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+    profileGuard: visibleReview.review.profile,
+  };
+  const observationOperands = {
+    subjectId: subjects[0],
+    provider: 'archive-fixture',
+    recordId: 'source-visible-row',
+    confirmReviewed: true,
+    privacy: { status: 'known', meaning: 'source_visible' },
+    sourceCreated: {
+      status: 'known',
+      value: '2022-11-17T14:03:04.123456789-00:00',
+      precision: 'fraction',
+      zone: 'unknown',
+    },
+    sourceUpdated: { status: 'unknown', sourceValue: 'source-clock-pending' },
+    archiveReviewGuard,
+  };
+  await f.pool.query(
+    `UPDATE library.library_archive_merge_item SET status='applying',native_command_kind='observation',
+      native_request_key=$5,native_operands=$6::jsonb
+     WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+    [
+      routeOf(main.actor.accountId),
+      main.actor.accountId,
+      id,
+      visibleProvenance.ordinal,
+      observationKey,
+      JSON.stringify(observationOperands),
+    ],
+  );
+  const committedObservation = await personal.admitSourceObservation(
+    main.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'source-visible-row',
+      confirmReviewed: true,
+      privacy: { status: 'known', meaning: 'source_visible' },
+      sourceCreated: { status: 'known', value: '2022-11-17T14:03:04.123456789-00:00' },
+      sourceUpdated: { status: 'unknown', sourceValue: 'source-clock-pending' },
+    },
+    observationKey,
+    archiveReviewGuard,
+  );
+  expect(committedObservation.value.sourceObservation.revision).toBe(1);
+  const replayedObservation = await json(
+    await send(main, 'POST', `${mergePath}/${id}/apply`, selectedFrom(refreshed.records, [visibleProvenance.ordinal])),
+  );
+  expect(replayedObservation.applied).toMatchObject([
+    {
+      status: 'accepted',
+      result: {
+        outcome: 'accepted',
+        sourceObservation: {
+          revision: 1,
+          privacy: { status: 'known', meaning: 'source_visible' },
+        },
+      },
+    },
+  ]);
+  expect(
+    (
+      await send(main, 'PATCH', `${mergePath}/${id}/review`, {
+        items: [
+          {
+            ordinal: visibleProvenance.ordinal,
+            kind: 'observation',
+            subjectId: subjects[0],
+            provider: 'archive-fixture',
+            recordId: 'source-visible-row',
+            action: 'admit',
+            fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+          },
+        ],
+      })
+    ).status,
+  ).toBe(409);
+  const observationReceipt = await f.pool.query<{ count: string }>(
+    `SELECT count(*)::text AS count FROM core.receipt
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+       AND command_kind='library.entry.source-observation.admit' AND idempotency_key=$3`,
+    [partitionOf(routeOf(main.actor.accountId)!), main.actor.accountId, observationKey],
+  );
+  expect(observationReceipt.rows[0]?.count).toBe('1');
   const currentAnnotation = await personal.readPersonalEntry(main.actor, subjects[0]);
   const currentEntry = await f.commands.readEntry(main.actor, subjects[0]);
   const annotationEpoch = await f.pool.query<{ review_revision: number }>(
@@ -385,7 +594,13 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
 
   const appliedFacts = await json(
     await send(main, 'POST', `${mergePath}/${id}/apply`, {
-      items: [...selected([annotation.ordinal], 2).items, ...selected([journalItem.ordinal]).items],
+      ...selectedFrom(refreshed.records, [
+        annotation.ordinal,
+        journalItem.ordinal,
+        visibleProvenance.ordinal,
+        unknownProvenance.ordinal,
+        clearedProvenance.ordinal,
+      ]),
     }),
   );
   expect(appliedFacts.applied).toMatchObject([
@@ -400,7 +615,80 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
         fields: { startDate: 'accepted', finishDate: 'preserved', reflection: 'accepted' },
       },
     },
+    {
+      status: 'accepted',
+      result: {
+        outcome: 'accepted',
+        effect: 'entry.source-observation.admit',
+        visibility: 'private',
+        sourceObservation: {
+          privacy: { status: 'known', meaning: 'source_visible' },
+          sourceCreated: {
+            status: 'known',
+            value: '2022-11-17T14:03:04.123456789-00:00',
+            precision: 'fraction',
+            zone: 'unknown',
+          },
+          sourceUpdated: { status: 'unknown', sourceValue: 'source-clock-pending' },
+        },
+      },
+    },
+    {
+      status: 'accepted',
+      result: {
+        outcome: 'accepted',
+        visibility: 'private',
+        sourceObservation: {
+          privacy: { status: 'unknown', sourceValue: 'source_future_visibility' },
+          sourceCreated: { status: 'known', value: '1984-02', precision: 'month', zone: 'unknown' },
+          sourceUpdated: { status: 'absent' },
+        },
+      },
+    },
+    {
+      status: 'accepted',
+      result: {
+        outcome: 'accepted',
+        visibility: 'private',
+        sourceObservation: {
+          privacy: { status: 'cleared' },
+          sourceCreated: { status: 'cleared' },
+          sourceUpdated: { status: 'known', value: '2017', precision: 'year', zone: 'unknown' },
+        },
+      },
+    },
   ]);
+  const recoveredVisible = await personal.readSourceObservation(main.actor, subjects[0], 'archive-fixture', 'source-visible-row');
+  const recoveredUnknown = await personal.readSourceObservation(
+    main.actor,
+    subjects[0],
+    'archive-fixture',
+    'unknown-and-partial-row',
+  );
+  const recoveredCleared = await personal.readSourceObservation(main.actor, subjects[0], 'archive-fixture', 'cleared-row');
+  expect(recoveredVisible).toMatchObject({
+    privacy: { status: 'known', meaning: 'source_visible' },
+    sourceCreated: {
+      status: 'known',
+      value: '2022-11-17T14:03:04.123456789-00:00',
+      precision: 'fraction',
+      zone: 'unknown',
+    },
+    sourceUpdated: { status: 'unknown', sourceValue: 'source-clock-pending' },
+  });
+  expect(recoveredUnknown).toMatchObject({
+    privacy: { status: 'unknown', sourceValue: 'source_future_visibility' },
+    sourceCreated: { status: 'known', value: '1984-02', precision: 'month', zone: 'unknown' },
+    sourceUpdated: { status: 'absent' },
+  });
+  expect(recoveredCleared).toMatchObject({
+    privacy: { status: 'cleared' },
+    sourceCreated: { status: 'cleared' },
+    sourceUpdated: { status: 'known', value: '2017', precision: 'year', zone: 'unknown' },
+  });
+  expect(Date.parse(recoveredVisible!.recordedAt)).toBeGreaterThan(
+    Date.parse(visibleProvenance.evidence.observation.recordedAt),
+  );
   expect((await personal.readPersonalEntry(main.actor, subjects[0])).note).toBe('Recovered owner note');
   expect((await personal.readPersonalEntry(main.actor, subjects[0])).priority).toBeNull();
   const recoveredJournal = await sessions.readSessionJournal(main.actor, targetSessionId);
@@ -435,7 +723,13 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect(progressChangesAfter.rows[0]?.count).toBe(progressChangesBefore.rows[0]?.count);
   const replayedFacts = await json(
     await send(main, 'POST', `${mergePath}/${id}/apply`, {
-      items: [...selected([annotation.ordinal], 2).items, ...selected([journalItem.ordinal]).items],
+      ...selectedFrom(refreshed.records, [
+        annotation.ordinal,
+        journalItem.ordinal,
+        visibleProvenance.ordinal,
+        unknownProvenance.ordinal,
+        clearedProvenance.ordinal,
+      ]),
     }),
   );
   expect(replayedFacts.applied).toEqual(appliedFacts.applied);
@@ -485,6 +779,8 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   expect((await json(await send(main, 'POST', `${mergePath}/${id}/prune`))).complete).toBe(true);
   expect((await personal.readPersonalEntry(main.actor, subjects[0])).note).toBe('Recovered owner note');
   expect((await sessions.readSessionJournal(main.actor, targetSessionId)).startDate).toEqual({ year: 2004, month: 2 });
+  expect(await personal.readSourceObservation(main.actor, subjects[0], 'archive-fixture', 'source-visible-row'))
+    .toMatchObject({ privacy: { status: 'known', meaning: 'source_visible' } });
 });
 
 test('unknown archived state remains readable but cannot enter the current profile', async () => {
@@ -779,11 +1075,41 @@ test('annotation application rejects a recreated Entry and expiry cleanup remove
   ).toMatchObject([{ status: 'stale' }]);
 
   const expiring = await makeUpload(pruneOwner);
+  const expiredObservation = (await previewAll(pruneOwner, expiring.id)).records.find(
+    (row: any) => row.section === 'provenance' && row.evidence.observation.recordId === 'source-visible-row',
+  )!;
+  await json(
+    await send(pruneOwner, 'PATCH', `${mergePath}/${expiring.id}/review`, {
+      items: [
+        {
+          ordinal: expiredObservation.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'source-visible-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
+      ],
+    }),
+  );
   await f.pool.query(
     `UPDATE library.library_archive_merge_upload SET expires_at=clock_timestamp()-interval '1 second'
      WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
     [routeOf(pruneOwner.actor.accountId), pruneOwner.actor.accountId, expiring.id],
   );
+  expect(
+    (await send(pruneOwner, 'POST', `${mergePath}/${expiring.id}/apply`, selected([expiredObservation.ordinal])))
+      .status,
+  ).toBe(404);
+  expect(
+    await createEntryPersonalCommands({ pool: f.pool, access: f.access }).readSourceObservation(
+      pruneOwner.actor,
+      subjects[0],
+      'archive-fixture',
+      'source-visible-row',
+    ),
+  ).toBeNull();
   const pruned = await json(await send(pruneOwner, 'POST', `${mergePath}/${expiring.id}/prune`));
   expect(pruned).toMatchObject({ removed: artifact.records.length, complete: true });
 });
@@ -795,20 +1121,45 @@ test('cancellation stops pending effects and terminal erasure removes retained a
   const rows = (await previewAll(cancelledOwner, id)).records;
   const entry = rows.find((row: any) => row.section === 'entries' && row.evidence.subject_id === subjects[0]);
   const label = rows.find((row: any) => row.section === 'labels' && row.evidence.label_id === sourceLabels[1]);
+  const provenance = rows.find(
+    (row: any) => row.section === 'provenance' && row.evidence.observation.recordId === 'source-visible-row',
+  );
   await json(
     await send(cancelledOwner, 'PATCH', `${mergePath}/${id}/review`, {
       items: [
         { ordinal: entry.ordinal, kind: 'entry', subjectId: subjects[0], stateId: 'planned', action: 'update' },
         { ordinal: label.ordinal, kind: 'label', target: { mode: 'create' } },
+        {
+          ordinal: provenance.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'source-visible-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
       ],
     }),
   );
-  await json(await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([label.ordinal])));
+  await json(
+    await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, {
+      ...selectedFrom(await previewAll(cancelledOwner, id).then((result) => result.records), [label.ordinal, provenance.ordinal]),
+    }),
+  );
   await json(await send(cancelledOwner, 'DELETE', `${mergePath}/${id}`));
   expect((await send(cancelledOwner, 'POST', `${mergePath}/${id}/apply`, selected([entry.ordinal]))).status).toBe(409);
   expect((await f.commands.readEntry(cancelledOwner.actor, subjects[0])).state).toBe(before.state);
   const results = await json(await send(cancelledOwner, 'GET', `${mergePath}/${id}/results`));
   expect(results.results.find((row: any) => row.ordinal === label.ordinal).status).toBe('acknowledged');
+  expect(results.results.find((row: any) => row.ordinal === provenance.ordinal).status).toBe('accepted');
+  expect(
+    await createEntryPersonalCommands({ pool: f.pool, access: f.access }).readSourceObservation(
+      cancelledOwner.actor,
+      subjects[0],
+      'archive-fixture',
+      'source-visible-row',
+    ),
+  ).toMatchObject({ privacy: { status: 'known', meaning: 'source_visible' } });
 
   const { id: deletedId } = await makeUpload(deletedOwner);
   const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' });
@@ -1016,3 +1367,264 @@ test('exact occurrence confirmations fence competing corrections and replay the 
   expect((await send(owner, 'POST', `${mergePath}/${id}/apply`, { items: [confirmation.items[1]] })).status).toBe(409);
   expect((await sessions.readSessionJournal(owner.actor, targets[1]!)).reflection).toBe('later local correction');
 }, 120_000);
+test('archive admission refuses an address that appears after review without replacing it', async () => {
+  const { id } = await makeUpload(duplicateOwner);
+  const row = (await previewAll(duplicateOwner, id)).records.find(
+    (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',
+  )!;
+  await json(
+    await send(duplicateOwner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: [
+        {
+          ordinal: row.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'source-visible-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
+      ],
+    }),
+  );
+  const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
+  await personal.admitSourceObservation(
+    duplicateOwner.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'source-visible-row',
+      confirmReviewed: true,
+      privacy: { status: 'known', meaning: 'private' },
+      sourceCreated: { status: 'known', value: '1990' },
+      sourceUpdated: { status: 'absent' },
+    },
+    key(),
+  );
+  const applied = await json(
+    await send(duplicateOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])),
+  );
+  expect(applied.applied).toMatchObject([{ status: 'stale', result: { visibility: 'private' } }]);
+  expect(
+    await personal.readSourceObservation(duplicateOwner.actor, subjects[0], 'archive-fixture', 'source-visible-row'),
+  ).toMatchObject({
+    revision: 1,
+    privacy: { status: 'known', meaning: 'private' },
+    sourceCreated: { status: 'known', value: '1990', precision: 'year', zone: 'unknown' },
+    sourceUpdated: { status: 'absent' },
+  });
+});
+
+test('correction binds its reviewed revision and permits a fresh deliberately selected correction', async () => {
+  const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
+  await personal.admitSourceObservation(
+    correctionOwner.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'source-visible-row',
+      confirmReviewed: true,
+      privacy: { status: 'known', meaning: 'private' },
+      sourceCreated: { status: 'absent' },
+      sourceUpdated: { status: 'absent' },
+    },
+    key(),
+  );
+  const { id } = await makeUpload(correctionOwner);
+  const row = (await previewAll(correctionOwner, id)).records.find(
+    (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',
+  )!;
+  const review = async (revision: number, fields: Record<string, string>) =>
+    json(
+      await send(correctionOwner, 'PATCH', `${mergePath}/${id}/review`, {
+        items: [
+          {
+            ordinal: row.ordinal,
+            kind: 'observation',
+            subjectId: subjects[0],
+            provider: 'archive-fixture',
+            recordId: 'source-visible-row',
+            action: 'correct',
+            revision,
+            fields,
+          },
+        ],
+      }),
+    );
+  await review(1, { privacy: 'set', sourceCreated: 'preserve', sourceUpdated: 'clear' });
+  await personal.correctSourceObservation(
+    correctionOwner.actor,
+    subjects[0],
+    {
+      provider: 'archive-fixture',
+      recordId: 'source-visible-row',
+      revision: 1,
+      confirmReviewed: true,
+      privacy: { op: 'set', value: { status: 'unknown', sourceValue: 'local-correction' } },
+      sourceCreated: { op: 'unchanged' },
+      sourceUpdated: { op: 'set', value: { status: 'known', value: '2001' } },
+    },
+    key(),
+  );
+  const stale = await json(
+    await send(correctionOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])),
+  );
+  expect(stale.applied).toMatchObject([{ status: 'stale' }]);
+  expect(
+    await personal.readSourceObservation(correctionOwner.actor, subjects[0], 'archive-fixture', 'source-visible-row'),
+  ).toMatchObject({ revision: 2, privacy: { status: 'unknown', sourceValue: 'local-correction' } });
+
+  const refreshed = await review(2, { privacy: 'preserve', sourceCreated: 'set', sourceUpdated: 'preserve' });
+  const accepted = await json(
+    await send(
+      correctionOwner,
+      'POST',
+      `${mergePath}/${id}/apply`,
+      selected([row.ordinal], refreshed.reviewed[0]!.reviewRevision),
+    ),
+  );
+  expect(accepted.applied).toMatchObject([{ status: 'accepted', result: { outcome: 'accepted', visibility: 'private' } }]);
+  expect(
+    await personal.readSourceObservation(correctionOwner.actor, subjects[0], 'archive-fixture', 'source-visible-row'),
+  ).toMatchObject({
+    revision: 3,
+    privacy: { status: 'unknown', sourceValue: 'local-correction' },
+    sourceCreated: {
+      status: 'known',
+      value: '2022-11-17T14:03:04.123456789-00:00',
+      precision: 'fraction',
+      zone: 'unknown',
+    },
+    sourceUpdated: { status: 'known', value: '2001', precision: 'year', zone: 'unknown' },
+  });
+});
+
+test('observation admission refuses when the native per-Subject cap is full', async () => {
+  const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
+  for (let ordinal = 0; ordinal < 32; ordinal++)
+    await personal.admitSourceObservation(
+      capOwner.actor,
+      subjects[0],
+      {
+        provider: 'cap-fixture',
+        recordId: `row-${ordinal}`,
+        confirmReviewed: true,
+        privacy: { status: 'absent' },
+        sourceCreated: { status: 'absent' },
+        sourceUpdated: { status: 'absent' },
+      },
+      key(),
+    );
+  const { id } = await makeUpload(capOwner);
+  const row = (await previewAll(capOwner, id)).records.find(
+    (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',
+  )!;
+  await json(
+    await send(capOwner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: [
+        {
+          ordinal: row.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: 'source-visible-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
+      ],
+    }),
+  );
+  const applied = await json(await send(capOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
+  expect(applied.applied).toMatchObject([
+    { status: 'stale', result: { visibility: 'private', reason: 'observation-cap-reached' } },
+  ]);
+  expect(await personal.readSourceObservation(capOwner.actor, subjects[0], 'archive-fixture', 'source-visible-row'))
+    .toBeNull();
+});
+
+test('a merged canonical target invalidates the reviewed observation identity', async () => {
+  const subjectIds: string[] = [];
+  for (const label of ['archive identity first', 'archive identity second']) {
+    const response = await send(identityOwner, 'POST', '/v1/subjects', { type: 'ex:Child', labels: { en: label } });
+    expect(response.status).toBe(201);
+    subjectIds.push(((await response.json()) as { subject: { id: string } }).subject.id);
+  }
+  const [survivor, redirected] = [...subjectIds].sort();
+  const { id } = await makeUpload(identityOwner);
+  const row = (await previewAll(identityOwner, id)).records.find(
+    (item: any) => item.section === 'provenance' && item.evidence.observation.recordId === 'source-visible-row',
+  )!;
+  await json(
+    await send(identityOwner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: [
+        {
+          ordinal: row.ordinal,
+          kind: 'observation',
+          subjectId: redirected,
+          provider: 'archive-fixture',
+          recordId: 'source-visible-row',
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        },
+      ],
+    }),
+  );
+  const merged = await send(identityOwner, 'POST', '/v1/subjects:merge', { subjects: [survivor, redirected] });
+  expect(merged.status).toBe(200);
+  expect(await merged.json()).toMatchObject({ survivor, redirected });
+  const applied = await json(await send(identityOwner, 'POST', `${mergePath}/${id}/apply`, selected([row.ordinal])));
+  expect(applied.applied).toMatchObject([{ status: 'stale' }]);
+  const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
+  expect(await personal.readSourceObservation(identityOwner.actor, survivor, 'archive-fixture', 'source-visible-row'))
+    .toBeNull();
+});
+
+test('unsupported archived observation tokens stay private evidence with a field reason', async () => {
+  const records = artifact.records.map((row) => {
+    if (row.section !== 'provenance') return row;
+    const observation = (row as any).observation;
+    if (observation.recordId === 'source-visible-row')
+      return { ...row, observation: { ...observation, privacy: { status: 'known', meaning: 'future-public' } } };
+    if (observation.recordId === 'unknown-and-partial-row')
+      return {
+        ...row,
+        observation: { ...observation, sourceCreated: { ...observation.sourceCreated, precision: 'day' } },
+      };
+    if (observation.recordId === 'cleared-row')
+      return {
+        ...row,
+        observation: { ...observation, sourceUpdated: { ...observation.sourceUpdated, zone: 'utc' } },
+      };
+    return row;
+  });
+  const { id } = await makeUpload(pruneOwner, framed(records));
+  const provenance = (await previewAll(pruneOwner, id)).records.filter((item: any) => item.section === 'provenance');
+  const selected = provenance.filter((item: any) =>
+    ['source-visible-row', 'unknown-and-partial-row', 'cleared-row'].includes(item.evidence.observation.recordId),
+  );
+  await json(
+    await send(pruneOwner, 'PATCH', `${mergePath}/${id}/review`, {
+      items: selected.map((row: any) => ({
+          ordinal: row.ordinal,
+          kind: 'observation',
+          subjectId: subjects[0],
+          provider: 'archive-fixture',
+          recordId: row.evidence.observation.recordId,
+          action: 'admit',
+          fields: { privacy: 'set', sourceCreated: 'set', sourceUpdated: 'set' },
+        })),
+    }),
+  );
+  const reviewed = (await previewAll(pruneOwner, id)).records.filter((item: any) =>
+    selected.some((row: any) => row.ordinal === item.ordinal),
+  );
+  expect(reviewed.map((item: any) => ({ status: item.status, reason: item.review.reason, field: item.review.field })))
+    .toEqual(
+      expect.arrayContaining([
+        { status: 'unsupported', reason: 'unsupported-privacy-value', field: 'privacy' },
+        { status: 'unsupported', reason: 'declared-timestamp-precision-mismatch', field: 'sourceCreated' },
+        { status: 'unsupported', reason: 'declared-timestamp-zone-mismatch', field: 'sourceUpdated' },
+      ]),
+    );
+  expect(reviewed.every((item: any) => item.review.visibility === 'private')).toBe(true);
+});

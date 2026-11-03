@@ -119,6 +119,45 @@ const reviewItem = t.Union([
     },
     closed,
   ),
+  t.Object(
+    {
+      ordinal,
+      kind: t.Literal('observation'),
+      subjectId: id,
+      provider: t.String({ minLength: 1, maxLength: 64 }),
+      recordId: t.String({ minLength: 1 }),
+      action: t.Literal('admit'),
+      fields: t.Object(
+        {
+          privacy: t.Union([t.Literal('set'), t.Literal('clear')]),
+          sourceCreated: t.Union([t.Literal('set'), t.Literal('clear')]),
+          sourceUpdated: t.Union([t.Literal('set'), t.Literal('clear')]),
+        },
+        closed,
+      ),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ordinal,
+      kind: t.Literal('observation'),
+      subjectId: id,
+      provider: t.String({ minLength: 1, maxLength: 64 }),
+      recordId: t.String({ minLength: 1 }),
+      action: t.Literal('correct'),
+      revision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
+      fields: t.Object(
+        {
+          privacy: t.Optional(fieldChoice),
+          sourceCreated: t.Optional(fieldChoice),
+          sourceUpdated: t.Optional(fieldChoice),
+        },
+        closed,
+      ),
+    },
+    closed,
+  ),
 ]);
 const failures = {
   400: problemSchema('invalid_request'),

@@ -38,8 +38,20 @@ import {
   type ArchiveRecord,
 } from './library-archive.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
+import { SourceObservationCapacityError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
-import { parsePersonalNote, parsePersonalPriority } from './entry-personal-model.ts';
+import {
+  parsePersonalNote,
+  parsePersonalPriority,
+  parsePrivacyValue,
+  parseProviderKey,
+  parseProviderRecordId,
+  parseTimestampValue,
+  type PersonalEntryArchiveObservationGuard,
+  type PersonalEntryObservation,
+  type PrivacyFact,
+  type TimestampFact,
+} from './entry-personal-model.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands, type AssignmentReviewGuard } from './label-assignment-commands.ts';
 import { normalizePersonalLabelName } from './label-store.ts';
@@ -101,6 +113,33 @@ export type ArchiveMergeReviewInput =
       subjectId: string;
       sessionId: string;
       fields: { startDate?: ArchiveFieldChoice; finishDate?: ArchiveFieldChoice; reflection?: ArchiveFieldChoice };
+    }
+  | {
+      ordinal: number;
+      kind: 'observation';
+      subjectId: string;
+      provider: string;
+      recordId: string;
+      action: 'admit';
+      fields: {
+        privacy: Exclude<ArchiveFieldChoice, 'preserve'>;
+        sourceCreated: Exclude<ArchiveFieldChoice, 'preserve'>;
+        sourceUpdated: Exclude<ArchiveFieldChoice, 'preserve'>;
+      };
+    }
+  | {
+      ordinal: number;
+      kind: 'observation';
+      subjectId: string;
+      provider: string;
+      recordId: string;
+      action: 'correct';
+      revision: number;
+      fields: {
+        privacy?: ArchiveFieldChoice;
+        sourceCreated?: ArchiveFieldChoice;
+        sourceUpdated?: ArchiveFieldChoice;
+      };
     };
 
 export type ArchiveMergeSelection = { ordinal: number; reviewRevision: number };
@@ -143,7 +182,7 @@ type Item = {
   result: Record<string, unknown> | null;
 };
 type Effect = {
-  kind: 'entry' | 'label' | 'assignment' | 'annotation' | 'journal';
+  kind: 'entry' | 'label' | 'assignment' | 'annotation' | 'journal' | 'observation';
   key: string;
   operands: Record<string, unknown>;
 };
@@ -199,7 +238,7 @@ function sameIdentity(left: string | null, right: unknown): left is string {
 }
 
 function isPersonalRecovery(section: string) {
-  return section === 'annotations' || section === 'journals';
+  return section === 'annotations' || section === 'journals' || section === 'provenance';
 }
 
 function personalOutcome(section: string, status: string, result: Record<string, unknown> | null) {
@@ -214,6 +253,146 @@ function personalOutcome(section: string, status: string, result: Record<string,
 
 function sameJson(left: unknown, right: unknown) {
   return canonicalize(left) === canonicalize(right);
+}
+
+const observationFieldNames = ['privacy', 'sourceCreated', 'sourceUpdated'] as const;
+type ObservationField = (typeof observationFieldNames)[number];
+type ParsedArchiveObservation = {
+  provider: string;
+  recordId: string;
+  privacy: PrivacyFact;
+  sourceCreated: TimestampFact;
+  sourceUpdated: TimestampFact;
+};
+
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]) {
+  return Object.keys(value).length === keys.length && Object.keys(value).every((key) => keys.includes(key));
+}
+
+function parseArchivePrivacy(value: unknown): { value?: PrivacyFact; reason?: string } {
+  const record = object(value);
+  if (!record) return { reason: 'unsupported-privacy-value' };
+  if (record.status === 'cleared' && exactKeys(record, ['status'])) return { value: { status: 'cleared' } };
+  try {
+    return { value: parsePrivacyValue(record) };
+  } catch {
+    return { reason: 'unsupported-privacy-value' };
+  }
+}
+
+function parseArchiveTimestamp(value: unknown): { value?: TimestampFact; reason?: string } {
+  const record = object(value);
+  if (!record) return { reason: 'unsupported-timestamp-value' };
+  if (record.status === 'cleared' && exactKeys(record, ['status'])) return { value: { status: 'cleared' } };
+  try {
+    if (record.status === 'known') {
+      if (!exactKeys(record, ['status', 'value', 'precision', 'zone']))
+        return { reason: 'unsupported-timestamp-value' };
+      const parsed = parseTimestampValue({ status: 'known', value: record.value });
+      if (record.precision !== parsed.precision) return { reason: 'declared-timestamp-precision-mismatch' };
+      if (record.zone !== parsed.zone) return { reason: 'declared-timestamp-zone-mismatch' };
+      return { value: parsed };
+    }
+    return { value: parseTimestampValue(record) };
+  } catch {
+    return { reason: 'unsupported-timestamp-value' };
+  }
+}
+
+function parseArchiveObservation(value: unknown):
+  | { value: ParsedArchiveObservation }
+  | { reason: string; field?: string } {
+  const record = object(value);
+  if (
+    !record ||
+    !exactKeys(record, ['provider', 'recordId', 'revision', 'privacy', 'sourceCreated', 'sourceUpdated', 'recordedAt']) ||
+    !Number.isSafeInteger(record.revision) ||
+    (record.revision as number) < 1 ||
+    typeof record.recordedAt !== 'string'
+  )
+    return { reason: 'invalid-source-observation' };
+  let provider: string;
+  let recordId: string;
+  try {
+    provider = parseProviderKey(record.provider);
+  } catch {
+    return { reason: 'unsupported-provider', field: 'provider' };
+  }
+  try {
+    recordId = parseProviderRecordId(record.recordId);
+  } catch {
+    return { reason: 'unsupported-record-address', field: 'recordId' };
+  }
+  const privacy = parseArchivePrivacy(record.privacy);
+  if (!privacy.value) return { reason: privacy.reason ?? 'unsupported-privacy-value', field: 'privacy' };
+  const sourceCreated = parseArchiveTimestamp(record.sourceCreated);
+  if (!sourceCreated.value)
+    return { reason: sourceCreated.reason ?? 'unsupported-timestamp-value', field: 'sourceCreated' };
+  const sourceUpdated = parseArchiveTimestamp(record.sourceUpdated);
+  if (!sourceUpdated.value)
+    return { reason: sourceUpdated.reason ?? 'unsupported-timestamp-value', field: 'sourceUpdated' };
+  return {
+    value: {
+      provider,
+      recordId,
+      privacy: privacy.value,
+      sourceCreated: sourceCreated.value,
+      sourceUpdated: sourceUpdated.value,
+    },
+  };
+}
+
+function observationChoices(value: unknown, action: 'admit' | 'correct') {
+  const choices = selectedFields(value, observationFieldNames);
+  if (action === 'admit') {
+    if (
+      !exactKeys(choices, observationFieldNames) ||
+      Object.values(choices).some((choice) => choice === 'preserve')
+    )
+      throw new ProblemError('invalid_request');
+  }
+  return choices as Partial<Record<ObservationField, ArchiveFieldChoice>>;
+}
+
+function canonicalArchiveValue(value: PrivacyFact | TimestampFact) {
+  return value;
+}
+
+function observationChange(value: PrivacyFact | TimestampFact, choice: ArchiveFieldChoice | undefined) {
+  if (choice === undefined || choice === 'preserve') return { op: 'unchanged' };
+  if (choice === 'clear') return { op: 'clear' };
+  if (value.status === 'cleared') throw new ProblemError('invalid_request');
+  return { op: 'set', value: canonicalArchiveValue(value) };
+}
+
+function admittedObservationValue(value: PrivacyFact | TimestampFact, choice: ArchiveFieldChoice) {
+  if (choice === 'clear') {
+    if (value.status !== 'cleared') throw new ProblemError('invalid_request');
+    return { status: 'cleared' };
+  }
+  if (value.status === 'cleared') throw new ProblemError('invalid_request');
+  return canonicalArchiveValue(value);
+}
+
+function nativeObservationInput(value: unknown, timestamp: boolean, correction: boolean) {
+  const field = object(value);
+  const publicValue = (candidate: unknown) => {
+    const record = object(candidate);
+    if (timestamp && record?.status === 'known') return { status: 'known', value: record.value };
+    if (record?.status === 'cleared') return { op: 'clear' };
+    return candidate;
+  };
+  if (correction) {
+    if (!field || !['unchanged', 'clear', 'set'].includes(String(field.op)))
+      throw new Error('Archive observation field binding is invalid');
+    if (field.op === 'set') return { op: 'set', value: publicValue(field.value) };
+    return { op: field.op };
+  }
+  return publicValue(value);
+}
+
+function sourceFingerprint(item: Item) {
+  return createHash('sha256').update(item.record_json).digest('hex');
 }
 
 function selectedFields(value: unknown, allowed: readonly string[]): Record<string, ArchiveFieldChoice> {
@@ -237,6 +416,16 @@ function nativeChange(choice: ArchiveFieldChoice, value: unknown) {
 function unchangedPersonalResult(item: Item): Record<string, unknown> {
   const review = item.review ?? {};
   const choices = object(review.fields) ?? {};
+  if (item.section === 'provenance')
+    return {
+      outcome: 'unchanged',
+      visibility: 'private',
+      fields: Object.fromEntries(
+        observationFieldNames
+          .filter((field) => choices[field] !== undefined)
+          .map((field) => [field, choices[field] === 'preserve' ? 'preserved' : 'unchanged']),
+      ),
+    };
   if (item.section === 'annotations')
     return {
       outcome: 'unchanged',
@@ -258,6 +447,7 @@ function reviewedPersonalRefusal(item: Item): Record<string, unknown> {
   const review = item.review ?? {};
   return {
     outcome: personalOutcome(item.section, item.status, null),
+    ...(item.section === 'provenance' ? { visibility: 'private' } : {}),
     ...(typeof review.reason === 'string' ? { reason: review.reason } : {}),
     ...(typeof review.field === 'string' ? { field: review.field } : {}),
   };
@@ -449,7 +639,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           `INSERT INTO library.library_archive_merge_item
             (route,account_id,upload_id,ordinal,section,source_subject_id,source_label_id,record_json,status)
           SELECT $1,$2,$3,r.ordinal,r.section,r.source_subject_id,r.source_label_id,r.evidence,
-            CASE WHEN r.section IN ('entries','labels','assignments','annotations','journals') THEN 'unresolved' ELSE 'unsupported' END
+            CASE WHEN r.section IN ('entries','labels','assignments','annotations','journals','provenance') THEN 'unresolved' ELSE 'unsupported' END
           FROM jsonb_to_recordset($4::jsonb) AS r(
             ordinal integer,section text,source_subject_id uuid,source_label_id uuid,evidence text)`,
           [route, owner.accountId, uploadId, JSON.stringify(records)],
@@ -571,8 +761,126 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
     signal?: AbortSignal,
   ): Promise<{ status: ItemStatus; review: Record<string, unknown> }> {
     const evidence = decodeRecord(item) as Record<string, unknown>;
-    if (decision.kind !== item.section.slice(0, -1) && !(decision.kind === 'entry' && item.section === 'entries'))
+    if (
+      decision.kind !== item.section.slice(0, -1) &&
+      !(decision.kind === 'entry' && item.section === 'entries') &&
+      !(decision.kind === 'observation' && item.section === 'provenance')
+    )
       throw new ProblemError('invalid_request');
+
+    if (decision.kind === 'observation') {
+      if (item.section !== 'provenance' || !sameIdentity(item.source_subject_id, evidence.subjectId))
+        throw new ProblemError('invalid_request');
+      if (!isRoutedId(decision.subjectId)) throw new ProblemError('invalid_request');
+      const parsed = parseArchiveObservation(evidence.observation);
+      if (!('value' in parsed))
+        return {
+          status: 'unsupported',
+          review: {
+            sourceFingerprint: sourceFingerprint(item),
+            requestedSubjectId: decision.subjectId,
+            sourceSubjectId: item.source_subject_id,
+            visibility: 'private',
+            reason: parsed.reason,
+            ...(parsed.field ? { field: parsed.field } : {}),
+          },
+        };
+      if (decision.provider !== parsed.value.provider || decision.recordId !== parsed.value.recordId)
+        throw new ProblemError('invalid_request');
+      const choices = observationChoices(decision.fields, decision.action);
+      if (decision.action === 'admit') {
+        for (const field of observationFieldNames) {
+          if ((parsed.value[field].status === 'cleared') !== (choices[field] === 'clear'))
+            throw new ProblemError('invalid_request');
+        }
+      } else if (
+        observationFieldNames.some((field) => choices[field] === 'set' && parsed.value[field].status === 'cleared')
+      ) {
+        throw new ProblemError('invalid_request');
+      }
+
+      return identityTime(async (at) => {
+        const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+        const observation = await readLibraryProfileSourceObservation(
+          { pool: deps.pool, access: deps.access, actor, at, deadline },
+          decision.subjectId,
+        );
+        const base = {
+          sourceFingerprint: sourceFingerprint(item),
+          sourceSubjectId: item.source_subject_id,
+          requestedSubjectId: decision.subjectId,
+          targetSubjectId: observation?.source.subjectId ?? decision.subjectId,
+          provider: parsed.value.provider,
+          recordId: parsed.value.recordId,
+          action: decision.action,
+          fields: choices,
+          visibility: 'private',
+        };
+        if (!observation)
+          return { status: 'unresolved', review: { ...base, reason: 'target-unavailable' } };
+        const { source, anchor } = observation;
+        if (source.kind !== 'supported')
+          return { status: 'unsupported', review: { ...base, reason: 'current-profile-unsupported' } };
+        if (source.subjectId !== decision.subjectId)
+          return { status: 'current_conflict', review: { ...base, reason: 'target-not-canonical' } };
+
+        let current: PersonalEntryObservation | null;
+        try {
+          current = await personal().readSourceObservation(
+            actor,
+            source.subjectId,
+            parsed.value.provider,
+            parsed.value.recordId,
+          );
+        } catch (error) {
+          if (error instanceof LibraryNotFoundError)
+            return { status: 'unresolved', review: { ...base, reason: 'target-unavailable' } };
+          throw error;
+        }
+        const currentBinding = current
+          ? {
+              status: 'present',
+              revision: current.revision,
+              privacy: current.privacy,
+              sourceCreated: current.sourceCreated,
+              sourceUpdated: current.sourceUpdated,
+            }
+          : { status: 'absent' };
+        if (decision.action === 'admit' && current)
+          return {
+            status: 'current_conflict',
+            review: { ...base, current: currentBinding, reason: 'observation-already-exists' },
+          };
+        if (decision.action === 'correct' && !current)
+          return { status: 'unresolved', review: { ...base, current: currentBinding, reason: 'observation-unavailable' } };
+        if (decision.action === 'correct' && current!.revision !== decision.revision)
+          return { status: 'current_conflict', review: { ...base, current: currentBinding, reason: 'observation-revision-changed' } };
+
+        const changes =
+          decision.action === 'admit' ||
+          observationFieldNames.some((field) => {
+            const choice = choices[field];
+            if (choice === undefined || choice === 'preserve') return false;
+            const next = choice === 'clear' ? { status: 'cleared' } : parsed.value[field];
+            return !sameJson(current?.[field], next);
+          });
+        return {
+          status: changes ? 'mapped' : 'already_equal',
+          review: {
+            ...base,
+            profile: {
+              subjectId: source.subjectId,
+              identityEpoch: anchor.identityEpoch.toString(),
+              acceptingType: anchor.acceptingType,
+              requestedSubjectId: anchor.requestedSubjectId,
+              component: anchor.component,
+              pin: source.pin,
+            },
+            current: currentBinding,
+          },
+        };
+      });
+    }
 
     if (decision.kind === 'entry') {
       if (!sameIdentity(item.source_subject_id, evidence.subject_id)) throw new ProblemError('invalid_request');
@@ -1098,6 +1406,46 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         },
       };
     }
+    if (item.status === 'mapped' && item.section === 'provenance' && object(decision.current)) {
+      const profile = object(decision.profile);
+      const current = object(decision.current)!;
+      const archived = parseArchiveObservation(decodeRecord(item).observation);
+      if (!profile || !('value' in archived)) return null;
+      const choices = object(decision.fields) ?? {};
+      const observation = archived.value;
+      if (decision.action === 'admit') {
+        if (current.status !== 'absent') return null;
+        return {
+          kind: 'observation',
+          key: '',
+          operands: {
+            subjectId: decision.targetSubjectId,
+            provider: decision.provider,
+            recordId: decision.recordId,
+            confirmReviewed: true,
+            privacy: admittedObservationValue(observation.privacy, choices.privacy as ArchiveFieldChoice),
+            sourceCreated: admittedObservationValue(observation.sourceCreated, choices.sourceCreated as ArchiveFieldChoice),
+            sourceUpdated: admittedObservationValue(observation.sourceUpdated, choices.sourceUpdated as ArchiveFieldChoice),
+          },
+        };
+      }
+      if (current.status !== 'present' || typeof decision.revision !== 'number' || current.revision !== decision.revision)
+        return null;
+      return {
+        kind: 'observation',
+        key: '',
+        operands: {
+          subjectId: decision.targetSubjectId,
+          provider: decision.provider,
+          recordId: decision.recordId,
+          revision: decision.revision,
+          confirmReviewed: true,
+          privacy: observationChange(observation.privacy, choices.privacy as ArchiveFieldChoice | undefined),
+          sourceCreated: observationChange(observation.sourceCreated, choices.sourceCreated as ArchiveFieldChoice | undefined),
+          sourceUpdated: observationChange(observation.sourceUpdated, choices.sourceUpdated as ArchiveFieldChoice | undefined),
+        },
+      };
+    }
     if (
       (item.status === 'mapped' || item.status === 'already_equal') &&
       item.section === 'journals' &&
@@ -1242,14 +1590,37 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         return { mode: 'done' as const, section: item.section, status: item.status, result };
       }
       const key = commandKey(id, ordinal, item.review_revision);
-      const binding = {
-        ...proposed,
-        key,
-        operands: {
-          ...proposed.operands,
-          ...(proposed.kind === 'journal' ? { archive: { uploadId: id, ordinal, reviewRevision } } : {}),
-        },
-      };
+      let operands = proposed.operands;
+      if (proposed.kind === 'observation') {
+        const review = item.review;
+        const profile = object(review?.profile);
+        const current = object(review?.current);
+        const fields = object(review?.fields);
+        if (
+          !review ||
+          !profile ||
+          !current ||
+          !fields ||
+          (review.action !== 'admit' && review.action !== 'correct') ||
+          typeof review.sourceFingerprint !== 'string' ||
+          (review.action === 'admit' && current.status !== 'absent') ||
+          (review.action === 'correct' && (current.status !== 'present' || typeof current.revision !== 'number'))
+        )
+          throw conflict();
+        const archiveReviewGuard: PersonalEntryArchiveObservationGuard = {
+          uploadId: id,
+          ordinal,
+          reviewRevision: item.review_revision,
+          sourceFingerprint: review.sourceFingerprint,
+          action: review.action,
+          expectedRevision: review.action === 'admit' ? null : (current.revision as number),
+          fields: fields as PersonalEntryArchiveObservationGuard['fields'],
+          profileGuard: profile as PersonalEntryArchiveObservationGuard['profileGuard'],
+        };
+        operands = { ...operands, archiveReviewGuard };
+      }
+      if (proposed.kind === 'journal') operands = { ...operands, archive: { uploadId: id, ordinal, reviewRevision } };
+      const binding = { ...proposed, operands, key };
       const updated = await tx.query(
         `UPDATE library.library_archive_merge_item
         SET status='applying',native_command_kind=$5,native_request_key=$6,native_operands=$7::jsonb,result=NULL
@@ -1274,6 +1645,54 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
 
   async function runEffect(actor: Actor, effect: Effect): Promise<Record<string, unknown>> {
     const owner = account(actor, 'library_entry:update');
+    if (effect.kind === 'observation') {
+      const guard = object(effect.operands.archiveReviewGuard);
+      const subjectId = effect.operands.subjectId;
+      const provider = effect.operands.provider;
+      const recordId = effect.operands.recordId;
+      const action = guard?.action;
+      if (
+        typeof subjectId !== 'string' ||
+        typeof provider !== 'string' ||
+        typeof recordId !== 'string' ||
+        !guard ||
+        (action !== 'admit' && action !== 'correct')
+      )
+        throw new Error('Archive source observation binding is invalid');
+      const correction = action === 'correct';
+      const input: Record<string, unknown> = {
+        provider,
+        recordId,
+        confirmReviewed: true,
+        ...(correction ? { revision: effect.operands.revision } : {}),
+        privacy: nativeObservationInput(effect.operands.privacy, false, correction),
+        sourceCreated: nativeObservationInput(effect.operands.sourceCreated, true, correction),
+        sourceUpdated: nativeObservationInput(effect.operands.sourceUpdated, true, correction),
+      };
+      if (correction && typeof input.revision !== 'number')
+        throw new Error('Archive source observation revision binding is invalid');
+      const result = correction
+        ? await personal().correctSourceObservation(actor, subjectId, input, effect.key, guard)
+        : await personal().admitSourceObservation(actor, subjectId, input, effect.key, guard);
+      const sourceObservation = result.value.sourceObservation;
+      const fields = object(guard.fields) ?? {};
+      return {
+        outcome: 'accepted',
+        effect: correction ? 'entry.source-observation.correct' : 'entry.source-observation.admit',
+        subjectId,
+        provider: sourceObservation.provider,
+        recordId: sourceObservation.recordId,
+        revision: sourceObservation.revision,
+        visibility: 'private',
+        sourceObservation,
+        fields: Object.fromEntries(
+          observationFieldNames.map((field) => [
+            field,
+            fields[field] === 'preserve' ? 'preserved' : fields[field] === 'clear' ? 'cleared' : 'accepted',
+          ]),
+        ),
+      };
+    }
     if (effect.kind === 'entry') {
       const profile = object(effect.operands.profile);
       if (!profile || typeof profile.subjectId !== 'string' || typeof profile.identityEpoch !== 'string')
@@ -1496,6 +1915,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       if (item.status !== 'applying') throw conflict();
       const personalResult = {
         outcome: outcome ?? personalOutcome(item.section, status, null),
+        ...(item.section === 'provenance' ? { visibility: 'private' } : {}),
         ...(reason ? { reason } : {}),
       };
       const result = isPersonalRecovery(item.section) ? personalResult : { code: status };
@@ -1558,6 +1978,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           result: acknowledged,
         });
       } catch (error) {
+        if (error instanceof SourceObservationCapacityError) {
+          applied.push({
+            ordinal,
+            ...(await refuse(actor, id, ordinal, 'current_conflict', 'stale', 'observation-cap-reached')),
+          });
+          continue;
+        }
         if (error instanceof LibraryConflictError || error instanceof ProgressConflictError) {
           applied.push({
             ordinal,
