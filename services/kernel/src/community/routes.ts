@@ -49,7 +49,6 @@ import {
   SpaceConflictError,
   SpaceInputError,
   updateSpace,
-  type Space,
   type SpaceDependencies,
 } from './space.ts';
 import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from './space-address.ts';
@@ -60,7 +59,6 @@ import {
   RealmInputError,
   updateRealm,
   type RealmDependencies,
-  type RealmView,
 } from './realm.ts';
 import {
   ContainerLifecycleConflictError,

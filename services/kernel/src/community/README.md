@@ -168,7 +168,8 @@ Subject calls until its owner binds this mounted transport; this shelf alone is 
   participating homes and rechecks admitted Subject/edition disclosure. Charge preparation and all three possible
   representative-plan attempts, including unsuccessful dispatched statements and failed rollback attempts. All these operations use
   the supplied Kernel pool, including Access preparation/verification and partition dispatch; there is no HTTP or
-  additional membership, ban, member-count, board or presentation reader in this shelf. Native executor/Access
+  direct membership, ban, member-count, board or presentation reader in this shelf. Nested Access membership/ban
+  work remains chargeable. Native executor/Access
   retries retain their own controls and the original deadline. Empty selection skips Semantic data hydration but still dispatches final BEGIN/SET/COMMIT; denial conceals;
   missing preparation, failed dependencies and changed sources propagate failure without another raw selection.
 - **Bound:** Twelve limits selected keys, not examined rows or bytes. Publication seeks use
