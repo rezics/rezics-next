@@ -1,3 +1,4 @@
+import { productionActions } from '../support/production-actions.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -6,7 +7,6 @@ import { initializeSpaceDiscoveryDependencies } from '../../src/community/space-
 import { publishNativeSpaceDiscoveryWitness } from '../../src/community/space-discovery-publisher.ts';
 import { publishSpaceDiscoveryTupleWitness } from '../../src/community/space-discovery-source-fences.ts';
 import { spaceDiscoverySource } from '../../src/community/space-discovery.ts';
-import { productionActions } from '../support/production-actions.ts';
 import { createContentSystemWithOrdinaryScopes, type ContentSystem } from '../content/support/system.ts';
 
 let system: ContentSystem;
