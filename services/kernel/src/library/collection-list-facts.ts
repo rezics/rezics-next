@@ -19,7 +19,8 @@ export type CollectionListFactsDependencies = {
 };
 
 /**
- * Shared FULL/preview attachment boundary. Pass the complete RAW prefix (including duplicates), <=100 rows.
+ * Shared FULL shelf/Collection and future preview attachment boundary. Pass the complete raw prefix,
+ * duplicates included, <=100 rows.
  * `revalidate` must reauthorize and compare the caller's current source/membership fence after foreign reads.
  * No checkout may be held when calling this helper. Null/denied subjects are omitted, never given sibling facts.
  * Preview producers must use this same helper once over their globally bounded prefix, not once per Collection.

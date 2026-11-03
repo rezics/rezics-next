@@ -288,7 +288,7 @@ export async function fullMembers(
   deps: Dependencies,
   actor: Actor,
   collectionId: string,
-  options: { cursor?: string; limit?: number },
+  options: { cursor?: string; limit?: number; languages?: readonly string[] },
   deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
 ) {
   const builtins = createBuiltinRuntime(deps);
@@ -406,6 +406,7 @@ export async function fullMembers(
       return { id: row.id, subjectId: row.subjectId, note: row.note, addedAt: new Date(row.addedAt).toISOString() };
     }),
     {
+      languages: options.languages,
       async revalidate() {
         // Reauthorize after the released Semantic homes; never publish a page from a changed source.
         const current = await readPage();

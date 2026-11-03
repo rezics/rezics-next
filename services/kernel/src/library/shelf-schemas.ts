@@ -1,4 +1,5 @@
 import { t } from 'elysia';
+import { FactSchema } from '../search/http/routes.ts';
 import { SHELF_DIRECTIONS, SHELF_ORDERS } from './shelf-contract.ts';
 import { embedded, subjectFields, viewQuery } from './views.ts';
 import { libraryStoredVocabularySchema } from './profile-schemas.ts';
@@ -7,6 +8,7 @@ const closed = { additionalProperties: false } as const;
 const text = t.String();
 const nullable = t.Union([text, t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
+const listFacts = t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }));
 export const shelfPageQuery = {
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
   cursor: t.Optional(t.String({ maxLength: 4096 })),
@@ -62,7 +64,7 @@ export const shelfEntrySchema = embedded(
     },
     closed,
   ),
-  subjectFields,
+  { ...subjectFields, facts: listFacts },
 );
 const count = t.Integer({ minimum: 0 });
 const tab = t.Object({ total: count, shown: count }, closed);

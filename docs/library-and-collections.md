@@ -214,6 +214,35 @@ The adopted plan uses same-pg-client DBOS transactional enqueue, existing gate/A
 recovery, with no separate intent table/relay/queue. Current executor source is present; Library preparation and
 its native custody proof remain required pending. `runCommand`/`noEffect` or enqueue after commit cannot replace it.
 
+## FULL personal list facts
+
+FULL Library list pages and static curated Collection member pages attach the existing Type-specific Semantic list facts
+to the selected, visible rows. The member or Entry Type and current active Semantic release select the properties; a
+Collection presentation kind never changes its members' Types. BASIC keeps its existing fields and page shape. FULL
+uses the existing summary and cover projection beside optional `facts`; a visible subject with no configured values
+has `facts: {}`. Missing or denied originals and terminals expose neither their row nor sibling facts. Semantic
+unavailability and a changed native page fail closed with `503 semantic_not_ready`.
+
+The projection receives only returned rows, at most 100 raw occurrences; a keyset lookahead determines `next` but
+does not enter Semantic or Rating authority. It preserves duplicate Collection occurrences, original UUIDs and order.
+After Semantic facts and summaries return with their homes released, Library or Collection reauthorizes and rereads
+the same native page before disclosure. `Accept-Language` reaches both the fact batch and shared subject summary,
+including cover selection. The Semantic producer rechecks active release, identity, disclosure, related items and
+source tuples during its batch.
+
+`viewerFacts` is caller-private and separate from curator presentation. A zero vote is `present`; a clear or missing
+vote is `absent`; per-row scope/question gaps and page-level identity/currentness/response-size failures remain
+explicitly `unavailable` without disclosing stale values. Imported scores, occurrence assessments and raw vote
+presence do not establish a counted public vote. Personal-score shelf ordering remains unavailable with
+`503 dependency_unavailable` until Content binds a whole-owner currentness fence over Entries, counted votes and
+identity/lifecycle effects, including rows outside the returned page.
+
+Decision: Forward `Accept-Language` to the shared Semantic fact and summary batch for FULL Library and static
+Collection rows; preserve Semantic's current default when the header is absent.
+
+Search owns mixed-result composition. A future preview consumer must call the same helper once over its complete
+globally bounded prefix with owner homes released, then perform final native source and membership reauthorization.
+
 ## Logical identities and canonical browsing
 
 Built-in identities are stable and deterministic from owner and built-in key, independent of labels, release digest

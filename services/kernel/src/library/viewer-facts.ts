@@ -106,27 +106,37 @@ const viewerFactSchema = t.Object(
   closed,
 );
 
-/** Wire type for admitted Library and Collection rows; unready facts are omitted by those consumers. */
-export const viewerFactsResponseSchema = t.Object(
-  {
-    state: t.Literal('current'),
-    question: t.Union([
-      t.Object(
-        {
-          id: idSchema,
-          revision: t.Integer({ minimum: 1 }),
-          grain: t.String(),
-          scale: t.Object({ min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) }, closed),
-          meaning: t.String(),
-        },
-        closed,
-      ),
-      t.Null(),
-    ]),
-    rows: t.Array(viewerFactSchema, { maxItems: MAX_VIEWER_FACTS_ROWS }),
-  },
-  closed,
-);
+/** Wire type for admitted Library and Collection rows; unavailable authority remains explicit and value-free. */
+export const viewerFactsResponseSchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('current'),
+      question: t.Union([
+        t.Object(
+          {
+            id: idSchema,
+            revision: t.Integer({ minimum: 1 }),
+            grain: t.String(),
+            scale: t.Object({ min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) }, closed),
+            meaning: t.String(),
+          },
+          closed,
+        ),
+        t.Null(),
+      ]),
+      rows: t.Array(viewerFactSchema, { maxItems: MAX_VIEWER_FACTS_ROWS }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('unavailable'),
+      reason: t.Union([t.Literal('identity'), t.Literal('currentness'), t.Literal('response_limit')]),
+      retryable: t.Boolean(),
+    },
+    closed,
+  ),
+]);
 
 type MappingRecord = Readonly<{ subjectId: string; mapping: IdentityMapping }>;
 export type PreparedViewerFacts = Readonly<{

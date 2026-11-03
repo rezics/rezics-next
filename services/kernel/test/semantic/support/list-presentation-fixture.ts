@@ -95,12 +95,19 @@ export async function createListPresentationFixture(options: { poolMax?: number;
     'definitions:activate',
   ];
   type Persona = keyof typeof personas | 'anonymous';
-  async function call(method: string, path: string, body?: unknown, as: Persona = 'editor') {
+  async function call(
+    method: string,
+    path: string,
+    body?: unknown,
+    as: Persona = 'editor',
+    extraHeaders: Record<string, string> = {},
+  ) {
     const response = await kernel.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
           ...(as === 'anonymous' ? {} : { authorization: `Bearer ${personas[as].bearer}` }),
+          ...extraHeaders,
           ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': `"${randomUUID()}"` }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

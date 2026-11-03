@@ -19,6 +19,7 @@ import { languageRanges } from '../semantic/language.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { LibraryNotFoundError } from './command-support.ts';
+import { FactSchema } from '../search/http/routes.ts';
 import {
   createEntryAnnotationCorrectionCommands,
   ENTRY_ANNOTATION_CORRECTION_LIMITS,
@@ -74,6 +75,7 @@ import {
 } from './shelf-schemas.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.ts';
+import { attachCollectionListFacts } from './collection-list-facts.ts';
 
 import { basicQuery, embedded, fullView, subjectFields, targetFields, viewQuery } from './views.ts';
 
@@ -95,6 +97,7 @@ type Dependencies = {
 const closed = { additionalProperties: false } as const;
 const id = t.String();
 const nullable = t.Union([id, t.Null()]);
+const listFacts = t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }));
 // Request fields remain optional for exact historical receipts; fresh non-null
 // incarnations enforce the guard inside the authorized command after receipt lookup.
 const incarnationId = t.String({ format: 'uuid' });
@@ -591,7 +594,16 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     if (viewer.kind !== 'account' || result.libraryEntries.length === 0) return result;
     const rows = result.libraryEntries.map((entry, index) => ({ rowKey: String(index), subjectId: entry.subjectId }));
     const facts = await readViewerFactsPage(config(), viewer, rows, STANDARD_QUESTION_ID, deadline);
-    return facts.state === 'current' ? { ...result, viewerFacts: facts } : result;
+    return { ...result, viewerFacts: facts };
+  }
+  async function attachLibraryListFacts<T extends { subjectId: string }>(
+    actor: Actor,
+    rows: readonly T[],
+    deadline: number,
+    languages: readonly string[] | undefined,
+    revalidate: () => Promise<void>,
+  ) {
+    return attachCollectionListFacts({ ...config(), actor, deadline }, rows, { languages, revalidate });
   }
   return app
     .post(
@@ -723,7 +735,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         response: {
           200: t.Object(
             {
-              libraryEntries: t.Array(t.Union([shelfEntrySchema, embedded(entrySchema, subjectFields)])),
+              libraryEntries: t.Array(
+                t.Union([shelfEntrySchema, embedded(entrySchema, { ...subjectFields, facts: listFacts })]),
+              ),
               scoreQuestion: t.Optional(shelfScoreQuestionSchema),
               next: nullable,
               viewerFacts: t.Optional(viewerFactsResponseSchema),
@@ -734,31 +748,68 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         },
         detail: detail('library_entry.list', 'library_entry:list'),
       },
-      async ({ actor, query, admission, job, set }) => {
+      async ({ actor, query, admission, job, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
         account(actor);
+        const languages = languageRanges(request.headers.get('accept-language'));
         if (query.orderBy !== undefined) {
           shelfOwner(actor);
-          const result = await admission.run('normal', job, async () => {
-            await admitShelfRead({ ...config(), clock: dependencies.clock ?? systemClock }, actor, job.deadline);
-            return command(() => shelves('listShelf').listShelf(actor, basicQuery(query)));
-          });
-          const response = await fullView(config(), actor, query.view, {
-            libraryEntries: result.entries.map(shelfEntryView),
+          const pageQuery = basicQuery(query);
+          const readPage = () =>
+            admission.run('normal', job, async () => {
+              await admitShelfRead({ ...config(), clock: dependencies.clock ?? systemClock }, actor, job.deadline);
+              return command(() => shelves('listShelf').listShelf(actor, pageQuery));
+            });
+          const result = await readPage();
+          const libraryEntries =
+            query.view === 'FULL'
+              ? await attachLibraryListFacts(
+                  actor,
+                  result.entries.map(shelfEntryView),
+                  job.deadline,
+                  languages,
+                  async () => {
+                    const current = await readPage();
+                    if (
+                      JSON.stringify(current.entries) !== JSON.stringify(result.entries) ||
+                      Boolean(current.next) !== Boolean(result.next) ||
+                      JSON.stringify(current.scoreQuestion ?? null) !== JSON.stringify(result.scoreQuestion ?? null)
+                    )
+                      throw new ProblemError('semantic_not_ready');
+                  },
+                )
+              : result.entries.map(shelfEntryView);
+          const response = {
+            libraryEntries,
             ...(result.scoreQuestion ? { scoreQuestion: result.scoreQuestion } : {}),
             next: result.next,
-          });
+          };
           return withLibraryViewerFacts(actor, response, job.deadline);
         }
         if (query.direction !== undefined || query.type !== undefined) throw new ProblemError('invalid_request');
         const { orderBy: _orderBy, direction: _direction, type: _type, ...oldQuery } = query;
-        const result = await admission.run('normal', job, () =>
-          command(() => entries().listEntries(actor, basicQuery(oldQuery))),
-        );
-        const response = await fullView(config(), actor, query.view, {
-          libraryEntries: result.entries.map(entryView),
-          next: result.next,
-        });
+        const pageQuery = basicQuery(oldQuery);
+        const readPage = () =>
+          admission.run('normal', job, () => command(() => entries().listEntries(actor, pageQuery)));
+        const result = await readPage();
+        const libraryEntries =
+          query.view === 'FULL'
+            ? await attachLibraryListFacts(
+                actor,
+                result.entries.map(entryView),
+                job.deadline,
+                languages,
+                async () => {
+                  const current = await readPage();
+                  if (
+                    JSON.stringify(current.entries) !== JSON.stringify(result.entries) ||
+                    Boolean(current.next) !== Boolean(result.next)
+                  )
+                    throw new ProblemError('semantic_not_ready');
+                },
+              )
+            : result.entries.map(entryView);
+        const response = { libraryEntries, next: result.next };
         return withLibraryViewerFacts(actor, response, job.deadline);
       },
     )
