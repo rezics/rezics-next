@@ -27,6 +27,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     DocumentFragment: window.DocumentFragment,
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
+    CSS: window.CSS,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
@@ -231,7 +232,7 @@ test('standalone Literary creation reviews evidence, copies references, and retr
     expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).not.toBe(languageCitation);
     await act(async () => user.click(within(repairUrl).getByRole('button', { name: m.literary_remove_fact() })));
     await act(async () => user.click(within(repairUrl).getByRole('button', { name: m.literary_remove_fact() })));
-    expect(host.querySelector(`#${CSS.escape(repairUrl.id)}`)).toBeNull();
+    expect(host.ownerDocument.getElementById(repairUrl.id)).toBeNull();
     expect(citation(repairLanguage).id).toBe(languageCitation);
     await confirm();
     await waitFor(() => expect(commands).toHaveLength(2));
