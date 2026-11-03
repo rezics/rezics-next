@@ -579,11 +579,13 @@ function result<Noun extends keyof typeof CREATED_EVENT>(
         data: { ...value, actorId: account(actor).accountId, ...index },
       },
       ...(firstPublication
-        ? [{
-            type: 'com.rezics.content.post.published.v1',
-            subject: value.itemId,
-            data: { ...value, actorId: account(actor).accountId, ...publicationIndex },
-          }]
+        ? [
+            {
+              type: 'com.rezics.content.post.published.v1',
+              subject: value.itemId,
+              data: { ...value, actorId: account(actor).accountId, ...publicationIndex },
+            },
+          ]
         : []),
     ],
   };
@@ -778,12 +780,18 @@ export async function createThread(
             revisionId: value.revisionId,
             boardId: body.boardId,
           });
-        const created = result(value, actor, 'thread', {
-          placeId: threadPlaceId,
-          kind: threadKind,
-          subjectIds,
-          activityAt: eventActivityAt(command.time),
-        }, body.visibility === 'published');
+        const created = result(
+          value,
+          actor,
+          'thread',
+          {
+            placeId: threadPlaceId,
+            kind: threadKind,
+            subjectIds,
+            activityAt: eventActivityAt(command.time),
+          },
+          body.visibility === 'published',
+        );
         const qualified = discovery.get(command.time);
         const deltas = qualified
           ? await appendDiscoveryStart(tx, {
@@ -880,12 +888,18 @@ export async function createPost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'post', {
-        placeId: container.placeId,
-        kind: container.current.thread.kind,
-        subjectIds: storedSubjectIds(firstPost.subject_ids),
-        activityAt: eventActivityAt(command.time),
-      }, visibility === 'published');
+      return result(
+        value,
+        actor,
+        'post',
+        {
+          placeId: container.placeId,
+          kind: container.current.thread.kind,
+          subjectIds: storedSubjectIds(firstPost.subject_ids),
+          activityAt: eventActivityAt(command.time),
+        },
+        visibility === 'published',
+      );
     },
   );
 }
@@ -986,13 +1000,19 @@ export async function revisePost(
       const indexSubjectIds = isFirstPost
         ? revisedSubjectIds
         : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
-      return result(value, actor, 'revision', {
-        placeId: container.placeId,
-        kind: container.current.thread.kind,
-        subjectIds: indexSubjectIds,
-        activityAt: eventActivityAt(command.time),
-        ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
-      }, firstPublication);
+      return result(
+        value,
+        actor,
+        'revision',
+        {
+          placeId: container.placeId,
+          kind: container.current.thread.kind,
+          subjectIds: indexSubjectIds,
+          activityAt: eventActivityAt(command.time),
+          ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
+        },
+        firstPublication,
+      );
     },
   );
 }

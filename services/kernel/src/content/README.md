@@ -131,8 +131,8 @@ document order, up to the first ten. Duplicate nodes do not consume additional s
 its first publication uses that published revision's mentions. Later revisions send no mentions. Web adds the
 mention node to `packages/document`. The explicit `com.rezics.content.post.published.v1` event is the
 first-publication authority for openings and replies, pinning the exact published revision. Creation and revision
-events retain their existing consumers but are not notice authority. Draft creation is not a
-publication transition, and this delivery path adds no draft publication command.
+events retain their existing consumers but are not notice authority. Draft creation is not a publication transition.
+Publication uses the existing revision API; notice delivery never changes authoring visibility.
 
 For these post notices a recipient gets at most one notice per post, with `reply` winning over `mention`.
 The actor never receives their own notice. A nested reply does not independently notify the opening-post author;

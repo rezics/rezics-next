@@ -37,7 +37,11 @@ const valid = {
     ...threadIndex,
   },
   'com.rezics.content.post.published.v1': {
-    threadId: ids.threadId, itemId: ids.postId, revisionId: ids.revisionId, actorId: ids.actorId, ...threadIndex,
+    threadId: ids.threadId,
+    itemId: ids.postId,
+    revisionId: ids.revisionId,
+    actorId: ids.actorId,
+    ...threadIndex,
   },
   'com.rezics.content.revision.created.v1': {
     threadId: ids.threadId,

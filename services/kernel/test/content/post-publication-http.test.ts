@@ -75,6 +75,14 @@ test('immediate opening and default/explicit published replies emit publication;
   for (const post of [immediate.firstPost, await f.reply(immediate.id), await f.reply(immediate.id, 'published')]) {
     expect(await publications(post.id)).toMatchObject([{ data: { revisionId: post.revisionId } }]);
   }
+  const key = crypto.randomUUID();
+  const path = `/v1/threads/${immediate.id}/posts`;
+  const input = { body: mentionDocument(f.author.actor.accountId), licence: 'MIT' };
+  const created = await f.call('POST', path, input, { key });
+  const replay = await f.call('POST', path, input, { key });
+  expect(created.status).toBe(201);
+  expect(replay.value.post).toEqual(created.value.post);
+  expect(await publications(created.value.post.id)).toHaveLength(1);
   const draft = await f.thread('draft');
   expect(await publications(draft.firstPost.id)).toEqual([]);
   const before = await f.state(draft.firstPost.id);
@@ -153,6 +161,7 @@ test('real denied actor, current ancestor loss, erasure and takedown refuse publ
   const before = await f.state(draft.id);
   expect((await f.revise(draft, { visibility: 'published' }, { other: true })).status).toBe(404);
   expect(await f.state(draft.id)).toEqual(before);
+  expect((await f.revise(thread.firstPost, { visibility: 'published' }, { other: true })).status).toBe(403);
   await f.command(`/v1/threads/${thread.id}:takeDown`, { reason: 'Ancestor unavailable' }, 200);
   expect((await f.revise(draft, { visibility: 'published' })).status).toBe(404);
   expect(await f.state(draft.id)).toEqual(before);
@@ -160,10 +169,15 @@ test('real denied actor, current ancestor loss, erasure and takedown refuse publ
   for (const operation of ['erase', 'takeDown']) {
     const scope = await f.thread();
     const post = await f.reply(scope.id, 'draft');
+    const child = await f.reply(scope.id, 'draft', post.id);
+    const childBefore = await f.state(child.id);
     await f.command(`/v1/posts/${post.id}:${operation}`, { reason: 'Unavailable' }, 200);
     const unavailable = await f.state(post.id);
     expect((await f.revise(post, { visibility: 'published' })).status).toBe(404);
     expect(await f.state(post.id)).toEqual(unavailable);
     expect(await publications(post.id)).toEqual([]);
+    expect((await f.revise(child, { visibility: 'published' })).status).toBe(404);
+    expect(await f.state(child.id)).toEqual(childBefore);
+    expect(await publications(child.id)).toEqual([]);
   }
 });
