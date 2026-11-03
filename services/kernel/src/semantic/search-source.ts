@@ -339,6 +339,7 @@ export function subjectSource(
     },
 
     matchRelationFacets: relations.match,
+    prepareRelationFacets: relations.preparePage,
     readConceptStatements: relations.readConceptStatements,
 
     async count(partition) {

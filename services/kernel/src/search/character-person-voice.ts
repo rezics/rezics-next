@@ -6,9 +6,10 @@ import {
   type IndexedStatement,
   type RelationFacetMatch,
   type RelationFacetProbe,
+  type RetainedRelationFacetPage,
 } from './source.ts';
 
-type DisclosedStatement = { subject: string; statement: IndexedStatement };
+export type DisclosedStatement = { subject: string; statement: IndexedStatement };
 const appearanceKey = (subject: string, character: string, threshold: SpoilerThreshold) =>
   JSON.stringify([subject, character, threshold]);
 const nativeKey = (probe: RelationFacetProbe) => JSON.stringify([probe.subject, probe.property, probe.value]);
@@ -125,6 +126,10 @@ export async function matchCharacterPersonWitnessPlan(
   const evidence = new Map<string, RelationFacetMatch>();
   const dispatched = new Map<number, number>();
   for (const { partition, entries } of plan.appearanceBatches) {
+    const bound = plan.touchedPools.find((pool) => pool.partition === partition);
+    const count = (dispatched.get(partition) ?? 0) + 1;
+    if (!bound || count > bound.appearanceBatches) throw new Error('Appearance dispatch exceeded its retained bound');
+    dispatched.set(partition, count);
     const results = await matchAppearances(
       entries.map(([, probe]) => probe),
       partition,
@@ -137,7 +142,6 @@ export async function matchCharacterPersonWitnessPlan(
         throw new Error('Malformed appearance probe results');
       evidence.set(key, result);
     }
-    dispatched.set(partition, (dispatched.get(partition) ?? 0) + 1);
   }
   for (const bound of plan.touchedPools)
     if ((dispatched.get(bound.partition) ?? 0) !== bound.appearanceBatches)
@@ -180,4 +184,115 @@ export async function matchCharacterPersonWitnesses(
   reanchor?: () => Promise<readonly DisclosedStatement[]>,
 ): Promise<RelationFacetMatch[]> {
   return matchCharacterPersonWitnessPlan(planCharacterPersonWitnesses(probes, statements), matchAppearances, reanchor);
+}
+
+/** Authorize the union of every retained cut, never a fresh allowance for each cut. */
+export function authorizeCharacterPersonPage(plan: CharacterPersonWitnessPlan) {
+  const bounds = Object.freeze(plan.touchedPools.map((bound) => Object.freeze({ ...bound })));
+  const used = new Map<number, { primary: number; appearance: number }>();
+  let retired = false;
+  return {
+    bounds,
+    dispatch(partition: number, kind: 'primary' | 'appearance') {
+      const bound = bounds.find((pool) => pool.partition === partition);
+      const count = used.get(partition) ?? { primary: 0, appearance: 0 };
+      const maximum = kind === 'primary' ? bound?.primaryBatches : bound?.appearanceBatches;
+      if (retired || maximum === undefined || count[kind] >= maximum) {
+        retired = true;
+        throw new Error('Relation page dispatch exceeded its retained bound');
+      }
+      count[kind]++;
+      used.set(partition, count);
+    },
+  };
+}
+
+export type CharacterPersonSourceCut = Readonly<{
+  partition: number;
+  input: readonly RelationFacetProbe[];
+  probes: readonly RelationFacetProbe[];
+  statements: readonly DisclosedStatement[];
+  revalidate(): Promise<boolean>;
+  finish(witnesses: readonly RelationFacetMatch[]): Promise<RelationFacetMatch[]>;
+}>;
+
+/** Retain every source cut, including rejected keys, before dispatching any native witness batch. */
+export async function prepareCharacterPersonPage(
+  input: readonly RelationFacetProbe[],
+  prepareMatch: (partition: number, probes: readonly RelationFacetProbe[]) => Promise<CharacterPersonSourceCut | null>,
+): Promise<RetainedRelationFacetPage> {
+  // Own the input: caller mutation must not enlarge an already authorized page.
+  const probes = structuredClone(input);
+  const groups = new Map<number, Map<string, RelationFacetProbe[]>>();
+  for (const probe of probes) {
+    const partition = subjectPartition(probe.subject);
+    const group = groups.get(partition) ?? new Map<string, RelationFacetProbe[]>();
+    const key = JSON.stringify([probe.subject, probe.property, probe.value]);
+    const variants = group.get(key) ?? [];
+    variants.push(probe);
+    group.set(key, variants);
+    groups.set(partition, group);
+  }
+  const cuts: CharacterPersonSourceCut[] = [];
+  for (const [partition, group] of [...groups].sort(([a], [b]) => a - b)) {
+    const keys = [...group.values()];
+    for (let offset = 0; offset < keys.length; offset += MAX_RELATION_FACET_PROBES) {
+      const cut = await prepareMatch(partition, keys.slice(offset, offset + MAX_RELATION_FACET_PROBES).flat());
+      if (!cut) return { bounds: [], match: async () => probes.map(() => 'not_proven'), revalidate: async () => false };
+      cuts.push(cut);
+    }
+  }
+  const plan = planCharacterPersonWitnesses(
+    probes,
+    cuts.flatMap((cut) => cut.statements),
+  );
+  // All primary cuts contribute appearances before the first witness dispatch, including
+  // cuts with no accepted candidate. Thresholds remain distinct even for the same work/character.
+  const appearances: typeof cuts = [];
+  for (const batch of plan.appearanceBatches) {
+    const cut = await prepareMatch(
+      batch.partition,
+      batch.entries.map(([, probe]) => probe),
+    );
+    if (!cut) return { bounds: [], match: async () => probes.map(() => 'not_proven'), revalidate: async () => false };
+    appearances.push(cut);
+  }
+  const authorization = authorizeCharacterPersonPage(plan);
+  const retained = [...cuts, ...appearances];
+  let matched = false;
+  const revalidate = async () => {
+    for (const cut of retained) if (!(await cut.revalidate())) return false;
+    return true;
+  };
+  return {
+    bounds: authorization.bounds,
+    revalidate,
+    async match() {
+      if (matched) throw new Error('Relation page was already dispatched');
+      matched = true;
+      if (!(await revalidate())) return probes.map(() => 'not_proven');
+      let appearance = 0;
+      const witnesses = await matchCharacterPersonWitnessPlan(plan, async (_, partition) => {
+        authorization.dispatch(partition, 'appearance');
+        const cut = appearances[appearance++]!;
+        const local = planCharacterPersonWitnesses(cut.probes, cut.statements);
+        return cut.finish(
+          await matchCharacterPersonWitnessPlan(local, async () => {
+            throw new Error('Unexpected nested appearance dispatch');
+          }),
+        );
+      });
+      const keyOf = (probe: RelationFacetProbe) => JSON.stringify(probe);
+      const evidence = new Map(probes.map((probe, index) => [keyOf(probe), witnesses[index]!]));
+      const results = new Map<string, RelationFacetMatch>();
+      for (const cut of cuts) {
+        authorization.dispatch(cut.partition, 'primary');
+        const values = await cut.finish(cut.probes.map((probe) => evidence.get(keyOf(probe)) ?? 'not_proven'));
+        // finish preserves the original positional input, including unsupported and missing keys.
+        for (const [index, probe] of cut.input.entries()) results.set(keyOf(probe), values[index]!);
+      }
+      if (!(await revalidate())) return probes.map(() => 'not_proven');
+      return probes.map((probe) => results.get(keyOf(probe)) ?? 'not_proven');
+    },
+  };
 }

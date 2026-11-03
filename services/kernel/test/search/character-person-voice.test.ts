@@ -1,11 +1,20 @@
 import { expect, test } from 'bun:test';
 import {
   matchCharacterPersonWitnesses,
+  prepareCharacterPersonPage,
+  authorizeCharacterPersonPage,
   planCharacterPersonWitnesses,
 } from '../../src/search/character-person-voice.ts';
+import { collectRetainedUsefulPage, type SearchConsumedWindow } from '../../src/search/useful-page.ts';
 import { holdsCurrentStatements } from '../../src/search/current-leaf.ts';
 import { checkHits } from '../../src/search/disclosure/check.ts';
-import type { IndexedStatement, IndexedSubject, RelationFacetProbe, SubjectSource } from '../../src/search/source.ts';
+import type {
+  IndexedStatement,
+  IndexedSubject,
+  RelationFacetProbe,
+  RelationFacetMatch,
+  SubjectSource,
+} from '../../src/search/source.ts';
 
 const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
 const credit = (character?: string, role = id(8)) => ({
@@ -136,4 +145,185 @@ test('inverse Boolean checks forward the threshold and unavailable appearances r
     expect(result.relationRejected).toBe(true);
   }
   expect(seen).toEqual([probe(0), probe(0)]);
+});
+
+function retainedFixture() {
+  const rows: { subject: string; statement: IndexedStatement }[] = [];
+  const prepared: RelationFacetProbe[][] = [];
+  const dispatched: RelationFacetProbe[][] = [];
+  let epoch = 0;
+  let onDispatch = () => {};
+  return {
+    rows,
+    prepared,
+    dispatched,
+    change() {
+      epoch++;
+    },
+    onDispatch(callback: () => void) {
+      onDispatch = callback;
+    },
+    async prepare(partition: number, input: readonly RelationFacetProbe[]) {
+      const before = epoch;
+      const statements = structuredClone(
+        rows.filter((row) =>
+          input.some(
+            (p) =>
+              p.subject === row.subject && p.property === row.statement.property && p.value === row.statement.value,
+          ),
+        ),
+      );
+      prepared.push([...input]);
+      return {
+        partition,
+        input,
+        probes: input,
+        statements,
+        revalidate: async () => before === epoch,
+        async finish(values: readonly RelationFacetMatch[]) {
+          dispatched.push([...input]);
+          onDispatch();
+          return [...values];
+        },
+      };
+    },
+  };
+}
+
+test('one page authorizes all cuts and distinct work/character/threshold keys before dispatch', async () => {
+  const f = retainedFixture();
+  const probes = Array.from({ length: 257 }, (_, n) => ({ ...probe(0), value: id(n + 1000) }));
+  // The same appearance is introduced by different native credits, across the 256-key cut.
+  for (const p of probes) f.rows.push({ ...credit(id(3)), statement: { ...credit(id(3)).statement, value: p.value } });
+  probes.push({ ...probes[0]!, spoilerThreshold: 1 }, probes[0]!);
+  const otherWork = id(2).replace('00a0', '00b0');
+  probes.push({ ...probe(0), subject: otherWork });
+  f.rows.push({ ...credit(id(3)), subject: otherWork });
+  for (const subject of [id(1), otherWork])
+    f.rows.push({
+      subject,
+      statement: {
+        property: 'schema:character',
+        value: id(3),
+        qualifiers: [{ property: 'rezics:spoilerLevel', value: '0' }],
+      },
+    });
+  const page = await prepareCharacterPersonPage(probes, f.prepare);
+  expect(f.dispatched).toEqual([]);
+  expect(page.bounds).toEqual([
+    { partition: 10, primaryKeys: 257, appearanceKeys: 2, primaryBatches: 2, appearanceBatches: 1, probeBatchBound: 3 },
+    { partition: 11, primaryKeys: 1, appearanceKeys: 1, primaryBatches: 1, appearanceBatches: 1, probeBatchBound: 2 },
+  ]);
+  const preparedCount = f.prepared.length;
+  f.onDispatch(() => expect(f.prepared).toHaveLength(preparedCount));
+  probes.length = 0;
+  expect((await page.match()).every((value) => value === true)).toBe(true);
+  expect(f.dispatched).toHaveLength(5);
+  await expect(page.match()).rejects.toThrow('already dispatched');
+  const authorization = authorizeCharacterPersonPage(planCharacterPersonWitnesses([probe(0)], [credit(id(3))]));
+  authorization.dispatch(10, 'primary');
+  expect(() => authorization.dispatch(10, 'primary')).toThrow('exceeded its retained bound');
+  expect(() => authorization.dispatch(10, 'appearance')).toThrow('exceeded its retained bound');
+});
+
+test('a changed retained cut before or during dispatch retires the complete page and a fresh page repairs it', async () => {
+  for (const during of [false, true]) {
+    const f = retainedFixture();
+    f.rows.push(credit(id(3)), {
+      subject: id(1),
+      statement: {
+        property: 'schema:character',
+        value: id(3),
+        qualifiers: [{ property: 'rezics:spoilerLevel', value: '0' }],
+      },
+    });
+    const page = await prepareCharacterPersonPage([probe(0)], f.prepare);
+    if (during) f.onDispatch(() => f.change());
+    else f.change();
+    expect(await page.match()).toEqual(['not_proven']);
+    expect(await page.revalidate()).toBe(false);
+    if (!during) expect(f.dispatched).toEqual([]);
+    f.onDispatch(() => {});
+    expect(await (await prepareCharacterPersonPage([probe(0)], f.prepare)).match()).toEqual([true]);
+  }
+});
+
+test('first next and final retained pages stay ordered through dense current voice rejections', async () => {
+  const accepted = new Set([3, 7, 10, 14, 18].map((n) => id(n + 100)));
+  const subjects: IndexedSubject[] = Array.from({ length: 20 }, (_, n) => ({
+    id: id(n + 100),
+    type: 'schema:Movie',
+    visibility: 'visible',
+    redirect: null,
+    securityRevision: 1,
+    labels: [],
+    aliases: [],
+    descriptions: [],
+    statements: [],
+  }));
+  const f = retainedFixture();
+  for (const subject of subjects.filter((s) => accepted.has(s.id)))
+    f.rows.push(
+      { ...credit(id(3)), subject: subject.id },
+      {
+        subject: subject.id,
+        statement: {
+          property: 'schema:character',
+          value: id(3),
+          qualifiers: [{ property: 'rezics:spoilerLevel', value: '0' }],
+        },
+      },
+    );
+  const source: SubjectSource = {
+    read: async (partition, ids) => ({ partition, position: 1n, subjects: subjects.filter((s) => ids.includes(s.id)) }),
+    count: async () => ({ position: 1n, count: subjects.length }),
+    prepareRelationFacets: (probes) => prepareCharacterPersonPage(probes, f.prepare),
+  };
+  let offset = 0;
+  let consumed = 0;
+  let continuation: SearchConsumedWindow | undefined;
+  const pages: string[][] = [];
+  for (let pageNumber = 0; pageNumber < 3; pageNumber++) {
+    const page = await collectRetainedUsefulPage({
+      limit: 2,
+      continuation,
+      read: async (size) => {
+        offset += consumed;
+        const hits = subjects.slice(offset, offset + size).map((s) => ({
+          id: s.id,
+          partition: 10,
+          securityRevision: 1,
+          matched: [],
+          sort: [s.id],
+        }));
+        return {
+          execution: `window-${offset}`,
+          hits,
+          window: {
+            examined: hits.length,
+            positions: hits.map((_, i) => i),
+            exhausted: offset + hits.length === subjects.length,
+          },
+        };
+      },
+      check: async (hits) =>
+        new Map(
+          (
+            await checkHits(source, hits, new Map(), {
+              filter: { statement: { property: 'wdt:P725', in: [id(2)] } },
+              relationProperties: ['wdt:P725'],
+              spoilerThreshold: 0,
+            })
+          ).passed.map(({ hit, subject }) => [hit, subject]),
+        ),
+      consume: async (prefix) => {
+        consumed = prefix.consumed;
+      },
+      canonicalId: (subject) => subject.id,
+    });
+    expect(page.status).toBe(pageNumber === 2 ? 'exhausted' : 'filled');
+    continuation = page.continuation;
+    pages.push(page.values.map((s) => s.id));
+  }
+  expect(pages).toEqual([[id(103), id(107)], [id(110), id(114)], [id(118)]]);
 });

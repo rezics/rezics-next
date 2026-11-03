@@ -76,6 +76,13 @@ export type IndexedSubject = {
 /** The partition's `core.partition.position` and the listed subjects' state, read in one snapshot. */
 export type SubjectSnapshot = { partition: number; position: bigint; subjects: IndexedSubject[] };
 
+/** A page retains its source cuts and complete per-pool authorization until disclosure finishes. */
+export type RetainedRelationFacetPage = Readonly<{
+  bounds: readonly Readonly<{ partition: number; probeBatchBound: number }>[];
+  match(): Promise<RelationFacetMatch[]>;
+  revalidate(): Promise<boolean>;
+}>;
+
 export interface SubjectSource {
   /** Unknown ids are omitted. Every id must route to `partition`. */
   read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
@@ -95,6 +102,8 @@ export interface SubjectSource {
    * Optional for historical mocks. Search must fail closed
    * when an overflow probe is needed and this method is absent.
    */
+  /** Gather all indexed keys and current cuts before authorizing any page witness dispatch. */
+  prepareRelationFacets?(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage>;
   matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
 }
 

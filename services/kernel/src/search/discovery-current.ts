@@ -277,6 +277,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
     }
     const cached: SubjectSource = {
       count: source.count.bind(source),
+      ...(source.prepareRelationFacets ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) } : {}),
       ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
       async read(partition, ids) {
         const snapshot = snapshots.get(partition);

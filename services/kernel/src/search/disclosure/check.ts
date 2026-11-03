@@ -11,6 +11,7 @@ import {
   type RelationFacetMatch,
   type RelationFacetProbe,
   type SubjectSource,
+  type RetainedRelationFacetPage,
 } from '../source.ts';
 
 /** One OpenSearch hit, including the indexed partition, security revision and matched query names. */
@@ -55,8 +56,9 @@ export async function checkHits(
   );
   if (hasInverse && (!plan || !options?.observeRelationRelease))
     throw new Error('Inverse disclosure requires the current filter plan and runtime release observer');
-  const releaseBefore = hasInverse ? await options!.observeRelationRelease!() : undefined;
-  if (hasInverse && !releaseBefore) return { passed: [], dropped: hits.length, relationRejected: true };
+  const observeRelease = options?.observeRelationRelease;
+  const releaseBefore = observeRelease ? await observeRelease() : undefined;
+  if (observeRelease && !releaseBefore) return { passed: [], dropped: hits.length, relationRejected: true };
   const relationProperties = new Set(options?.relationProperties);
   let relationRejected = false;
   const hints = new Map<string, number>();
@@ -89,6 +91,10 @@ export async function checkHits(
   const checked: ({ hit: Hit; subject: IndexedSubject } | undefined)[] = new Array(hits.length);
   const partitions = [...groups];
   const lifetime = new RequestSourceLifetime();
+  type Point = { probe: RelationFacetProbe; inverse?: true; result?: RelationFacetMatch };
+  const pagePoints: Point[] = [];
+  const dispatches: (() => Promise<void>)[] = [];
+  let dispatchSource = source;
   let next = 0;
   async function worker(): Promise<void> {
     while (!lifetime.stopped) {
@@ -111,7 +117,6 @@ export async function checkHits(
           positions.set(id, read.value.position);
         }
       }
-      type Point = { probe: RelationFacetProbe; inverse?: true; result?: RelationFacetMatch };
       const points = new Map<string, Point>();
       const evaluations = new Map<string, () => { passed: boolean; relationRejected: boolean }>();
       const eligible: { hit: Hit; subject: IndexedSubject; index: number }[] = [];
@@ -210,82 +215,89 @@ export async function checkHits(
         checked[index] = { hit, subject };
       }
       const pending = [...points.values()];
-      for (const inverse of [false, true]) {
-        const selected = pending.filter((point) => !!point.inverse === inverse);
-        for (let offset = 0; offset < selected.length; offset += MAX_RELATION_FACET_PROBES) {
-          if (lifetime.stopped) return;
-          const batch = selected.slice(offset, offset + MAX_RELATION_FACET_PROBES);
-          const probe = await lifetime.start(() => {
-            if (inverse) {
-              if (!options?.observeRelationRelease)
-                throw new Error('Inverse disclosure requires a runtime release observer');
-              return matchInverseRelationFacets(
-                source,
+      pagePoints.push(...pending);
+      dispatches.push(async () => {
+        for (const inverse of [false, true]) {
+          const selected = pending.filter((point) => !!point.inverse === inverse);
+          for (let offset = 0; offset < selected.length; offset += MAX_RELATION_FACET_PROBES) {
+            if (lifetime.stopped) return;
+            const batch = selected.slice(offset, offset + MAX_RELATION_FACET_PROBES);
+            const probe = await lifetime.start(() => {
+              if (inverse) {
+                if (!options?.observeRelationRelease)
+                  throw new Error('Inverse disclosure requires a runtime release observer');
+                return matchInverseRelationFacets(
+                  dispatchSource,
+                  partition,
+                  batch.map(({ probe }) => ({
+                    subject: probe.subject,
+                    source: probe.value,
+                    property: probe.property,
+                    ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
+                    ...(probe.spoilerThreshold === undefined ? {} : { spoilerThreshold: probe.spoilerThreshold }),
+                  })),
+                  options.observeRelationRelease,
+                );
+              }
+              if (!dispatchSource.matchRelationFacets)
+                throw new Error('Relation disclosure requires relation facet probes');
+              return dispatchSource.matchRelationFacets(
                 partition,
-                batch.map(({ probe }) => ({
-                  subject: probe.subject,
-                  source: probe.value,
-                  property: probe.property,
-                  ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
-                  ...(probe.spoilerThreshold === undefined ? {} : { spoilerThreshold: probe.spoilerThreshold }),
-                })),
-                options.observeRelationRelease,
+                batch.map((point) => point.probe),
               );
-            }
-            if (!source.matchRelationFacets) throw new Error('Relation disclosure requires relation facet probes');
-            return source.matchRelationFacets(
-              partition,
-              batch.map((point) => point.probe),
-            );
-          });
-          if (!probe.ok) return;
-          const results = probe.value;
-          if (!Array.isArray(results) || results.length !== batch.length)
-            throw new Error('Malformed relation facet probe results');
-          for (const [index, point] of batch.entries()) {
-            const result = results[index];
-            if (!Object.hasOwn(results, index) || (result !== true && result !== false && result !== 'not_proven'))
+            });
+            if (!probe.ok) return;
+            const results = probe.value;
+            if (!Array.isArray(results) || results.length !== batch.length)
               throw new Error('Malformed relation facet probe results');
-            point.result = result;
+            for (const [index, point] of batch.entries()) {
+              const result = results[index];
+              if (!Object.hasOwn(results, index) || (result !== true && result !== false && result !== 'not_proven'))
+                throw new Error('Malformed relation facet probe results');
+              point.result = result;
+            }
           }
         }
-      }
-      // Reanchor the complete inverse window, including changes between separate native batches
-      // and the gap between the original candidate read and the seam's first read.
-      const retired = new Set<string>();
-      if (pending.some((point) => point.inverse)) {
-        for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
-          const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
-          const read = await lifetime.start(async () => {
-            const snapshot = await source.read(partition, chunk);
-            return { position: snapshot.position, subjects: validateRequestSourceSnapshot(snapshot, partition, chunk) };
-          });
-          if (!read.ok) return;
-          for (const id of chunk) {
-            const before = subjects.get(id);
-            const after = read.value.subjects.get(id);
-            if (
-              !before ||
-              !after ||
-              positions.get(id) !== read.value.position ||
-              after.visibility !== 'visible' ||
-              after.redirect !== null ||
-              after.type !== before.type ||
-              after.securityRevision !== before.securityRevision
-            )
-              retired.add(id);
+        // Reanchor the complete inverse window, including changes between separate native batches
+        // and the gap between the original candidate read and the seam's first read.
+        const retired = new Set<string>();
+        if (pending.some((point) => point.inverse)) {
+          for (let offset = 0; offset < ids.length; offset += REQUEST_SOURCE_KEYS) {
+            const chunk = ids.slice(offset, offset + REQUEST_SOURCE_KEYS);
+            const read = await lifetime.start(async () => {
+              const snapshot = await source.read(partition, chunk);
+              return {
+                position: snapshot.position,
+                subjects: validateRequestSourceSnapshot(snapshot, partition, chunk),
+              };
+            });
+            if (!read.ok) return;
+            for (const id of chunk) {
+              const before = subjects.get(id);
+              const after = read.value.subjects.get(id);
+              if (
+                !before ||
+                !after ||
+                positions.get(id) !== read.value.position ||
+                after.visibility !== 'visible' ||
+                after.redirect !== null ||
+                after.type !== before.type ||
+                after.securityRevision !== before.securityRevision
+              )
+                retired.add(id);
+            }
           }
         }
-      }
-      for (const { hit, subject, index } of eligible) {
-        const result = evaluations.get(subject.id)!();
-        if (retired.has(subject.id)) {
-          relationRejected = true;
-          continue;
+        for (const { hit, subject, index } of eligible) {
+          const result = evaluations.get(subject.id)!();
+          if (retired.has(subject.id)) {
+            relationRejected = true;
+            continue;
+          }
+          if (result.passed) checked[index] = { hit, subject };
+          relationRejected ||= result.relationRejected;
         }
-        if (result.passed) checked[index] = { hit, subject };
-        relationRejected ||= result.relationRejected;
-      }
+      });
     }
   }
 
@@ -299,8 +311,32 @@ export async function checkHits(
     }),
   );
   lifetime.throwIfFailed();
-  if (hasInverse) {
-    const releaseAfter = await options!.observeRelationRelease!();
+  let retained: RetainedRelationFacetPage | undefined;
+  if (source.prepareRelationFacets && pagePoints.length) {
+    const forward = pagePoints.map(({ probe, inverse }) =>
+      inverse ? { ...probe, subject: probe.value, value: probe.subject } : probe,
+    );
+    retained = await source.prepareRelationFacets(forward);
+    const values = await retained.match();
+    if (
+      values.length !== forward.length ||
+      values.some((value) => value !== true && value !== false && value !== 'not_proven')
+    )
+      throw new Error('Malformed relation facet probe results');
+    const evidence = new Map(forward.map((probe, index) => [JSON.stringify(probe), values[index]!]));
+    dispatchSource = {
+      read: source.read.bind(source),
+      count: source.count.bind(source),
+      async matchRelationFacets(_, probes) {
+        return probes.map((probe) => evidence.get(JSON.stringify(probe)) ?? 'not_proven');
+      },
+    };
+  }
+  for (const dispatch of dispatches) await dispatch();
+  lifetime.throwIfFailed();
+  if (retained && !(await retained.revalidate())) return { passed: [], dropped: hits.length, relationRejected: true };
+  if (observeRelease) {
+    const releaseAfter = await observeRelease();
     if (releaseAfter?.digest !== releaseBefore!.digest || releaseAfter?.head !== releaseBefore!.head)
       return { passed: [], dropped: hits.length, relationRejected: true };
   }

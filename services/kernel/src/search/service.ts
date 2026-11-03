@@ -1004,6 +1004,9 @@ export function createSearchService({
                 return snapshot;
               },
               count: (partition) => source.count(partition),
+              ...(source.prepareRelationFacets
+                ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) }
+                : {}),
               ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
             }
           : source;
