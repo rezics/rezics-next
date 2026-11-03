@@ -26,8 +26,14 @@ export type UnresolvedResourceType = Readonly<{
   unmountedActions: readonly string[];
 }>;
 const installed = new WeakMap<Access, ResolvedResourceRoles>();
-const identifier = /^[a-z][a-z0-9_.-]*$/;
-const actionName = /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/;
+// Function declarations stay callable during circular Access composition; module
+// consts remain uninitialized while http/request loads this file.
+function isRoleIdentifier(value: string): boolean {
+  return /^[a-z][a-z0-9_.-]*$/.test(value);
+}
+function isActionName(value: string): boolean {
+  return /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/.test(value);
+}
 // Role compilation uses mounted names and creation declarations only. Anonymous
 // admission remains owned by the full ActionCatalogue in the Access evaluator.
 type RoleActions = ReadonlyMap<string, Partial<ActionMetadata>>;
@@ -44,7 +50,7 @@ function unmountedActions(actions: RoleActions, values: unknown): readonly strin
   if (!Array.isArray(values)) return [];
   const missing = new Set<string>();
   for (const action of values) {
-    if (typeof action !== 'string' || !actionName.test(action) || !actions.has(action)) {
+    if (typeof action !== 'string' || !isActionName(action) || !actions.has(action)) {
       if (typeof action === 'string') missing.add(action);
     }
   }
@@ -53,10 +59,10 @@ function unmountedActions(actions: RoleActions, values: unknown): readonly strin
 
 function roleResolves(actions: RoleActions, role: string, values: unknown): values is readonly string[] {
   return (
-    identifier.test(role) &&
+    isRoleIdentifier(role) &&
     Array.isArray(values) &&
     values.length > 0 &&
-    values.every((action) => typeof action === 'string' && actionName.test(action) && actions.has(action))
+    values.every((action) => typeof action === 'string' && isActionName(action) && actions.has(action))
   );
 }
 
@@ -68,7 +74,7 @@ function declaredResourceTypes(actions: RoleActions): ReadonlyMap<string, readon
     if (
       !Array.isArray(types) ||
       types.length === 0 ||
-      types.some((type) => typeof type !== 'string' || !identifier.test(type)) ||
+      types.some((type) => typeof type !== 'string' || !isRoleIdentifier(type)) ||
       new Set(types).size !== types.length
     )
       throw new TypeError(`${action} declares invalid resource types`);
@@ -103,7 +109,7 @@ function compileResourceRoles(actions: RoleActions, extension?: ResourceRoleCata
   const dropped = new Map<string, readonly string[]>();
   for (const [role, values] of Object.entries(definitions)) {
     if (!roleResolves(actions, role, values)) {
-      if (identifier.test(role)) dropped.set(role, unmountedActions(actions, values));
+      if (isRoleIdentifier(role)) dropped.set(role, unmountedActions(actions, values));
       continue;
     }
     roles.set(role, Object.freeze([...new Set(values)].sort()));
@@ -111,7 +117,7 @@ function compileResourceRoles(actions: RoleActions, extension?: ResourceRoleCata
   const types = new Map<string, ResourceRoleTemplate>();
   for (const [type, template] of Object.entries(templates)) {
     if (
-      !identifier.test(type) ||
+      !isRoleIdentifier(type) ||
       !template ||
       !Array.isArray(template.standing) ||
       (template.owner !== undefined && !roles.has(template.owner)) ||

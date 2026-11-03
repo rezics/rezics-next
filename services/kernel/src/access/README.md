@@ -1,5 +1,7 @@
 # Access
 
+Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
+
 ## Fixed Global viewer-action bindings
 
 Mounted resource-authority metadata may declare `x-authority-resource-id` only as the canonical
