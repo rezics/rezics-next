@@ -12,6 +12,7 @@ import {
   type OwnDraftEntry,
   type OwnDraftIdentity,
   type OwnDraftIndex,
+  type OwnDraftLocale,
   type OwnDraftPageData,
   type OwnDraftReader,
   type OwnDraftSelection,
@@ -29,7 +30,7 @@ type SelectionState =
 
 const control = 'min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
 
-function timestamp(value: string, locale: string): string {
+function timestamp(value: string, locale: OwnDraftLocale): string {
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) return value;
   try {
@@ -39,11 +40,11 @@ function timestamp(value: string, locale: string): string {
   }
 }
 
-function kindLabel(entry: OwnDraftEntry, locale: string): string {
+function kindLabel(entry: OwnDraftEntry, locale: OwnDraftLocale): string {
   return entry.kind === 'review' ? m.own_drafts_review({}, { locale }) : m.own_drafts_discussion({}, { locale });
 }
 
-function documentKindLabel(entry: OwnDraftEntry, locale: string): string {
+function documentKindLabel(entry: OwnDraftEntry, locale: OwnDraftLocale): string {
   return entry.documentKind === 'reply' ? m.own_drafts_reply({}, { locale }) : m.own_drafts_opening({}, { locale });
 }
 
@@ -188,7 +189,7 @@ export function OwnDraftsPage({
   };
 
   const continuePage = () => {
-    if (!page || page.state === 'loading' || page.state === 'unavailable' || page.state === 'denied') return;
+    if (!page || (page.state !== 'ready' && page.state !== 'preparing')) return;
     if (page.page.next === null) return;
     selectionController.current?.abort();
     selectionGeneration.current++;

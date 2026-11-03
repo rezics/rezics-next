@@ -1616,6 +1616,7 @@
   "own_drafts_stale_selection": "This draft changed after the page was read. Restart the inventory to select its current revision.",
   "own_drafts_read_failed": "The selected draft could not be read. Its body remains private.",
   "own_drafts_retry_selection": "Retry selected draft",
+  "own_drafts_revision": "Revision",
   "own_drafts_body_heading": "Draft body",
   "own_drafts_subjects": "Subject references",
   "own_drafts_media": "Media references",

@@ -38,7 +38,7 @@ export type OwnDraftPageData = Readonly<{
 }>;
 
 export type OwnDraftSelection = Readonly<{
-  post: Pick<CurrentPost, 'id' | 'threadId' | 'revisionId' | 'body'>;
+  post: Readonly<Pick<CurrentPost, 'id' | 'threadId'> & { body: DocumentSnapshot }>;
   revision: string;
 }>;
 
@@ -149,8 +149,11 @@ export async function readSelectedOwnDraft(
   const result = await reader.resume({ accountId: identity.accountId, id: entry.id, threadId: entry.threadId }, signal);
   if (typeof result === 'string') return result;
   if (result.post.id !== entry.id || result.post.threadId !== entry.threadId) return 'concealed';
-  if (result.post.revisionId !== result.revision || result.revision !== entry.revisionId) return 'stale';
-  return result;
+  if (result.post.body === null || result.revision !== entry.revisionId) return 'stale';
+  return {
+    revision: result.revision,
+    post: { id: result.post.id, threadId: result.post.threadId, body: result.post.body },
+  };
 }
 
 export function documentForInspection(selection: OwnDraftSelection): DocumentSnapshot {

@@ -1590,6 +1590,7 @@
   "own_drafts_stale_selection": "페이지를 읽은 뒤 초안이 변경되었습니다. 목록을 다시 시작해 현재 버전을 선택하세요.",
   "own_drafts_read_failed": "선택한 초안을 읽지 못했습니다. 본문은 비공개로 유지됩니다.",
   "own_drafts_retry_selection": "선택한 초안 재시도",
+  "own_drafts_revision": "개정",
   "own_drafts_body_heading": "초안 본문",
   "own_drafts_subjects": "주제 참조",
   "own_drafts_media": "미디어 참조",

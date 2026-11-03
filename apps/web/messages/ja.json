@@ -1590,6 +1590,7 @@
   "own_drafts_stale_selection": "ページの読み込み後に下書きが変更されました。一覧を再開して現在の版を選択してください。",
   "own_drafts_read_failed": "選択した下書きを読み込めませんでした。本文は非公開のままです。",
   "own_drafts_retry_selection": "選択した下書きを再試行",
+  "own_drafts_revision": "改訂",
   "own_drafts_body_heading": "下書き本文",
   "own_drafts_subjects": "対象の参照",
   "own_drafts_media": "メディア参照",

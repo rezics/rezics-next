@@ -1590,6 +1590,7 @@
   "own_drafts_stale_selection": "Ce brouillon a changé depuis la lecture de la page. Relancez l’inventaire pour choisir sa version actuelle.",
   "own_drafts_read_failed": "Le brouillon sélectionné n’a pas pu être lu. Son contenu reste privé.",
   "own_drafts_retry_selection": "Réessayer le brouillon sélectionné",
+  "own_drafts_revision": "Révision",
   "own_drafts_body_heading": "Texte du brouillon",
   "own_drafts_subjects": "Références de sujets",
   "own_drafts_media": "Références média",

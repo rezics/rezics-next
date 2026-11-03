@@ -1590,6 +1590,7 @@
   "own_drafts_stale_selection": "Este borrador cambió después de leer la página. Reinicia la lista para seleccionar su versión actual.",
   "own_drafts_read_failed": "No se pudo leer el borrador seleccionado. Su contenido sigue siendo privado.",
   "own_drafts_retry_selection": "Reintentar borrador seleccionado",
+  "own_drafts_revision": "Revisión",
   "own_drafts_body_heading": "Texto del borrador",
   "own_drafts_subjects": "Referencias a temas",
   "own_drafts_media": "Referencias multimedia",

@@ -2,7 +2,7 @@ import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { OwnDraftsPage } from '../threads/own-drafts/page';
-import type { OwnDraftEntry, OwnDraftIdentity, OwnDraftPageData, OwnDraftReader } from '../threads/own-drafts/model';
+import type { OwnDraftEntry, OwnDraftIdentity, OwnDraftLocale, OwnDraftPageData, OwnDraftReader } from '../threads/own-drafts/model';
 
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const threadId = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
@@ -41,7 +41,7 @@ function nativePage(drafts: readonly OwnDraftEntry[], state: OwnDraftPageData['s
   return { state, viewer: { accountId, authnEpoch: 7 }, drafts, next };
 }
 
-type StoryArgs = { locale: string; scenario: 'ready' | 'empty' | 'preparing' | 'sparse' | 'concealed' | 'denied' };
+type StoryArgs = { locale: OwnDraftLocale; scenario: 'ready' | 'empty' | 'preparing' | 'sparse' | 'concealed' | 'denied' };
 
 function readerFor(scenario: StoryArgs['scenario']): OwnDraftReader {
   return {
@@ -70,7 +70,6 @@ function readerFor(scenario: StoryArgs['scenario']): OwnDraftReader {
         post: {
           id: request.id,
           threadId: request.threadId,
-          revisionId,
           body: fromPlainText('The exact selected draft body stays in this private inspection.', 'blocks'),
         },
       };

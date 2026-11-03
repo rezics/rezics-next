@@ -1590,6 +1590,7 @@
   "own_drafts_stale_selection": "讀取頁面後，此草稿已變更。請重新開始清單並選取目前版本。",
   "own_drafts_read_failed": "無法讀取所選草稿，正文仍保持私密。",
   "own_drafts_retry_selection": "重試所選草稿",
+  "own_drafts_revision": "版本",
   "own_drafts_body_heading": "草稿正文",
   "own_drafts_subjects": "關聯主題",
   "own_drafts_media": "媒體引用",

@@ -1590,6 +1590,7 @@
   "own_drafts_stale_selection": "Dieser Entwurf wurde seit dem Laden der Seite geändert. Starte die Übersicht neu, um die aktuelle Fassung auszuwählen.",
   "own_drafts_read_failed": "Der ausgewählte Entwurf konnte nicht gelesen werden. Sein Inhalt bleibt privat.",
   "own_drafts_retry_selection": "Ausgewählten Entwurf erneut laden",
+  "own_drafts_revision": "Fassung",
   "own_drafts_body_heading": "Entwurfstext",
   "own_drafts_subjects": "Themenverweise",
   "own_drafts_media": "Medienverweise",

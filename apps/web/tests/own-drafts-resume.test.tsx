@@ -32,7 +32,7 @@ test('explicit selection reads one exact current draft; stale or concealed revis
       calls.push(request);
       return {
         revision: stale ? 'newer-revision' : revisionId,
-        post: { id: postId, threadId, revisionId: stale ? 'newer-revision' : revisionId, body: fromPlainText('Only this chosen body', 'blocks') },
+        post: { id: postId, threadId, body: fromPlainText('Only this chosen body', 'blocks') },
       };
     },
   };
