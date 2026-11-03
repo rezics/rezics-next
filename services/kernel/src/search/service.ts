@@ -148,9 +148,10 @@ function scopeEvaluationReservation(work: ScopeWork, rawKeys: number) {
 }
 
 export function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown {
-  const record = request !== null && typeof request === 'object' && !Array.isArray(request)
-    ? (request as Record<string, unknown>)
-    : { request };
+  const record =
+    request !== null && typeof request === 'object' && !Array.isArray(request)
+      ? (request as Record<string, unknown>)
+      : { request };
   return {
     ...record,
     scopeBasis: {
@@ -179,11 +180,7 @@ function scopeCursorAfter(
     return after[0];
   }
   if (sort === 'name') {
-    if (
-      after.length !== 2 ||
-      !(after[0] === null || typeof after[0] === 'string') ||
-      typeof after[1] !== 'string'
-    )
+    if (after.length !== 2 || !(after[0] === null || typeof after[0] === 'string') || typeof after[1] !== 'string')
       throw new ProblemError('search_restart_required');
     return [after[0], after[1]] as const;
   }
@@ -518,7 +515,9 @@ export function createSearchService({
         );
         scopeWork.native(scope.work(preparedScope));
       }
-      const cursorRequest = preparedScope ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis) : bindingRequest;
+      const cursorRequest = preparedScope
+        ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis)
+        : bindingRequest;
       const binding = { operation: 'subjects.search', request: cursorRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
@@ -583,9 +582,8 @@ export function createSearchService({
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
-      const compiledFilter = admitted && !preparedScope
-        ? compileFilter(admitted, { prefix: 'f', relationOverflow: true })
-        : undefined;
+      const compiledFilter =
+        admitted && !preparedScope ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
       ];
@@ -643,11 +641,7 @@ export function createSearchService({
         if (!scope || !preparedScope || !scopeWork) throw indexNotReady();
         if (ids.length === 0) return [] as const;
         const evaluation = await sourceRequest(() =>
-          scope.evaluate(
-            preparedScope!,
-            [...ids],
-            scopeEvaluationReservation(scopeWork!, ids.length),
-          ),
+          scope.evaluate(preparedScope!, [...ids], scopeEvaluationReservation(scopeWork!, ids.length)),
         );
         scopeWork.native(scope.work(evaluation));
         if (
@@ -790,8 +784,7 @@ export function createSearchService({
         const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
         const as_of = await asOf(generation!);
         const witnesses = new Map<string, number>();
-        for (const subject of shown.slice(0, 2))
-          witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+        for (const subject of shown.slice(0, 2)) witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
         const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
         const response: PublicSearchPage = {
           subjects: publicResults,
