@@ -30,7 +30,7 @@ test('native canonical names seek across ties and missing names and bind committ
     );
     const snapshot = await source.read(partition, ids);
     expect(snapshot.subjects.map(({ id, labels }) => [id, labels[0]?.value ?? null])).toEqual(
-      ids.map((id, index) => [id, ['Zeta', 'Alpha', 'Alpha', null][index]]),
+      ids.map((id, index) => [id, ['Zeta', 'Alpha', 'Alpha', null][index] ?? null]),
     );
     const observed = await source.canonicalNames.observe(context());
     expect(observed.homes.some((home) => home.partition === partition)).toBe(true);
