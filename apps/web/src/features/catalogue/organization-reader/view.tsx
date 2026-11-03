@@ -3,7 +3,7 @@ import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { CandidateValue } from '../../pages/data';
-import { PlainLink, type Snak, type LinkProps, type PageLink } from '../../pages/shared';
+import { ExternalValue, PlainLink, type Snak, type LinkProps, type PageLink } from '../../pages/shared';
 import { connectionReturnHref, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { catalogueEntries } from '../catalogue-entry';
@@ -148,17 +148,19 @@ export function OrganizationReader({
   const heading = useRef<HTMLHeadingElement>(null);
   const region = useRef<HTMLElement>(null);
   const focused = useRef(false);
+  const previous = useRef(observation.key);
   useLayoutEffect(() => {
-    if (!observation.available && focused.current) {
+    if ((!observation.available || previous.current !== observation.key) && focused.current) {
       heading.current?.focus();
       focused.current = false;
     }
+    previous.current = observation.key;
   }, [observation.available, observation.key]);
   return (
     <section
       ref={region}
       data-slot="organization-reader"
-      className="min-w-0 space-y-5 [overflow-wrap:anywhere]"
+      className="min-w-0 space-y-5 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
       onFocusCapture={() => {
         focused.current = true;
       }}
@@ -256,6 +258,11 @@ function OrganizationFacts({
           {m.people_biography_title({}, o)}: {m.people_biography_unsupported({}, o)}
         </p>
       )}
+      {!model.fields.some((field) => field.kind === 'dates') && (
+        <p role="status">
+          {m.producer_history_dates({}, o)}: {m.people_biography_unsupported({}, o)}
+        </p>
+      )}
       {!!model.unreleased.length && (
         <p role="status">
           {m.producer_history_unreleased({}, o)}{' '}
@@ -333,6 +340,13 @@ function OrganizationFacts({
         </CurrentLink>
       </nav>
       <ProfileSourceList sources={profileSourceRecords(subject)} locale={locale} />
+      {profileSourceRecords(subject)
+        .filter((record) => record.licence)
+        .map((record) => (
+          <p key={`${record.name}:${record.url}`} className="text-sm">
+            {record.name}: {record.licence!.id} {record.licence!.url && <ExternalValue value={record.licence!.url} />}
+          </p>
+        ))}
     </>
   );
 }

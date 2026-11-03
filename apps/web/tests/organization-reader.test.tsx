@@ -84,6 +84,10 @@ test('ordinary Organization reading keeps directed history, partial dates, ranks
   expect(model.fields.find((field) => field.id === 'wdt:P1365')!.facts).toEqual([fact]);
   expect(model.unreleased.map((field) => field.meaning)).toEqual(['parent', 'successor']);
   expect(model.authoredUnsupported).toBe(true);
+  fact.qualifiers = Array.from({ length: 33 }, () => fact.qualifiers[0]!);
+  const bounded = organizationHistory(read, 'en')!;
+  expect(bounded.limited).toBe(true);
+  expect(bounded.fields.find((field) => field.id === 'wdt:P1365')).toMatchObject({ facts: [], unavailable: true });
   delete read.release.properties['wdt:P1365'];
   expect(organizationHistory(read, 'en')!.fields.some((field) => field.id === 'wdt:P1365')).toBe(false);
   expect(organizationHistory(read, 'en')!.unreleased).toHaveLength(3);
