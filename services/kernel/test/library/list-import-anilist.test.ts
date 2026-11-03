@@ -178,9 +178,15 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(label.status).toBe(201);
   const selections = [{ key: 'customLists:Personal', target: { labelId: (await label.json()).label.id } }];
   expect((await f.send(importer.bearer, 'POST', path3 + ':reviewLabels', { ordinal: 0, selections })).status).toBe(409);
-  const labelReview = await f.send(importer.bearer, 'POST', path3 + ':reviewLabels', { ordinal: 0, subjectId, selections });
+  const labelReview = await f.send(importer.bearer, 'POST', path3 + ':reviewLabels', {
+    ordinal: 0,
+    subjectId,
+    selections,
+  });
   expect(labelReview.status).toBe(200);
-  const labelApply = await f.send(importer.bearer, 'POST', path3 + ':applyLabels', { confirmations: [{ ordinal: 0, reviewId: (await labelReview.json()).review.id }] });
+  const labelApply = await f.send(importer.bearer, 'POST', path3 + ':applyLabels', {
+    confirmations: [{ ordinal: 0, reviewId: (await labelReview.json()).review.id }],
+  });
   expect(labelApply.status).toBe(200);
   expect((await labelApply.json()).outcomes[0].items[0].status).toBe('applied');
   const guarded = await review(1, { subjectId, fields: ['status'], replace: true }, path3);

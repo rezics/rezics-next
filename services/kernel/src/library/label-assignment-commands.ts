@@ -154,10 +154,12 @@ export function createLabelAssignmentCommands(deps: {
       if (operation === 'assign') {
         if (guard) {
           await assertAniListLabel(tx, account, guard);
-          const label = (await tx.query<{ revision: number }>(
-            'SELECT revision FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE',
-            [route, account.accountId, labelId],
-          )).rows[0];
+          const label = (
+            await tx.query<{ revision: number }>(
+              'SELECT revision FROM library.personal_label WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL FOR SHARE',
+              [route, account.accountId, labelId],
+            )
+          ).rows[0];
           if (!label || label.revision !== guard.labelRevision) throw new LibraryConflictError();
         }
         const result = await setLabelAssignment(tx, tuple, context);
@@ -171,7 +173,10 @@ export function createLabelAssignmentCommands(deps: {
           case 'existing':
             return noEffect({ ...minimal(result.assignment), ...(guard ? { unchanged: true } : {}) });
           case 'applied':
-            return { value: { ...minimal(result.assignment), ...(guard ? { unchanged: false } : {}) }, events: events(account, labelId) };
+            return {
+              value: { ...minimal(result.assignment), ...(guard ? { unchanged: false } : {}) },
+              events: events(account, labelId),
+            };
         }
       }
       const expected = { ...tuple, ...(parsed as Expected) };
@@ -231,10 +236,21 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string, guard?: AniListLabelGuard) {
-    return (await mutate(actor, labelId, value, key, 'assign', guard)) as import('../command/command.ts').CommandOutcome<
-      ReturnType<typeof minimal> & { unchanged?: boolean }
-    >;
+  async function assignLabel(
+    actor: Actor,
+    labelId: string,
+    value: { subjectId: string },
+    key: string,
+    guard?: AniListLabelGuard,
+  ) {
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'assign',
+      guard,
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {
     return (await mutate(actor, labelId, value, key, 'unassign')) as import('../command/command.ts').CommandOutcome<{

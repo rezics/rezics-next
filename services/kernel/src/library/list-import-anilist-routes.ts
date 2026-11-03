@@ -69,11 +69,15 @@ export function aniListImportRoutes(
     .post(
       customMethod('/v1/libraryImports/anilist', 'preview'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         headers,
         body: t.Object(
           {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+            beforeHandle: ({ set }) => {
+              set.headers['Cache-Control'] = 'private, no-store';
+            },
             upload: t.String({ maxLength: 1048576 }),
             scoreFormat: t.Optional(
               t.Union(['POINT_100', 'POINT_10', 'POINT_10_DECIMAL', 'POINT_5', 'POINT_3'].map((v) => t.Literal(v))),
@@ -92,7 +96,9 @@ export function aniListImportRoutes(
     .get(
       path,
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
         query: t.Object({ after: t.Optional(t.Integer({ minimum: -1, maximum: 199 })) }, closed),
         // Exact private result type is shared with the native composition, including retained arbitrary source JSON.
@@ -109,12 +115,16 @@ export function aniListImportRoutes(
     .post(
       customMethod(path, 'review'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
         headers,
         body: t.Object(
           {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+            beforeHandle: ({ set }) => {
+              set.headers['Cache-Control'] = 'private, no-store';
+            },
             ordinal,
             subjectId: t.Optional(id),
             skip: t.Optional(t.Boolean()),
@@ -141,7 +151,9 @@ export function aniListImportRoutes(
     .post(
       customMethod(path, 'apply'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
         body: t.Object(
           { confirmations: t.Array(t.Object({ ordinal, reviewId: id }, closed), { minItems: 1, maxItems: 20 }) },
@@ -161,41 +173,79 @@ export function aniListImportRoutes(
     .post(
       customMethod(path, 'reviewLabels'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
-        params, headers,
-        body: t.Object({
-          ordinal, subjectId: t.Optional(id),
-          selections: t.Array(t.Object({
-            key: t.String({ minLength: 1, maxLength: 4096 }),
-            target: t.Union([
-              t.Object({ labelId: id }, closed),
-              t.Object({ name: t.String({ minLength: 1, maxLength: 4096 }) }, closed),
-            ]),
-          }, closed), { minItems: 1, maxItems: ANILIST_LABEL_LIMITS.selected }),
-        }, closed),
-        response: { 200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewLabels']>>>(t.Object({}, { additionalProperties: true })), ...failures },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
+        params,
+        headers,
+        body: t.Object(
+          {
+            ordinal,
+            subjectId: t.Optional(id),
+            selections: t.Array(
+              t.Object(
+                {
+                  key: t.String({ minLength: 1, maxLength: 4096 }),
+                  target: t.Union([
+                    t.Object({ labelId: id }, closed),
+                    t.Object({ name: t.String({ minLength: 1, maxLength: 4096 }) }, closed),
+                  ]),
+                },
+                closed,
+              ),
+              { minItems: 1, maxItems: ANILIST_LABEL_LIMITS.selected },
+            ),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['reviewLabels']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
+          ...failures,
+        },
         detail: detail('reviewLabels'),
       },
       ({ actor, params, body, headers }) => {
         const { ordinal, ...input } = body;
-        return command(() => imports().reviewLabels(actor, params.importId, ordinal, input, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])));
+        return command(() =>
+          imports().reviewLabels(actor, params.importId, ordinal, input, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+        );
       },
     )
     .post(
       customMethod(path, 'applyLabels'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
-        body: t.Object({ confirmations: t.Array(t.Object({ ordinal, reviewId: id }, closed), { minItems: 1, maxItems: ANILIST_LABEL_LIMITS.rows }) }, closed),
-        response: { 200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyLabels']>>>(t.Object({}, { additionalProperties: true })), ...failures },
+        body: t.Object(
+          {
+            confirmations: t.Array(t.Object({ ordinal, reviewId: id }, closed), {
+              minItems: 1,
+              maxItems: ANILIST_LABEL_LIMITS.rows,
+            }),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<Awaited<ReturnType<ReturnType<typeof createAniListImport>['applyLabels']>>>(
+            t.Object({}, { additionalProperties: true }),
+          ),
+          ...failures,
+        },
         detail: detail('applyLabels'),
       },
-      ({ actor, params, body, request }) => command(() => imports().applyLabels(actor, params.importId, body.confirmations, request.signal)),
+      ({ actor, params, body, request }) =>
+        command(() => imports().applyLabels(actor, params.importId, body.confirmations, request.signal)),
     )
     .post(
       customMethod(path, 'cancel'),
       {
-        beforeHandle: ({ set }) => { set.headers['Cache-Control'] = 'private, no-store'; },
+        beforeHandle: ({ set }) => {
+          set.headers['Cache-Control'] = 'private, no-store';
+        },
         params,
         headers,
         body: t.Object({ remove: t.Optional(t.Boolean()) }, closed),

@@ -28,10 +28,14 @@ origin and membership; `selectable` contains only supported positive evidence.
 `POST /v1/libraryImports/anilist/{importId}:reviewLabels`, with the ordinary quoted Idempotency-Key, takes:
 
 ```json
-{"ordinal":0,"subjectId":"canonical-uuid","selections":[
-  {"key":"customLists:Favourites","target":{"labelId":"owned-live-label-uuid"}},
-  {"key":"group:name","target":{"name":"Private favourites"}}
-]}
+{
+  "ordinal": 0,
+  "subjectId": "canonical-uuid",
+  "selections": [
+    { "key": "customLists:Favourites", "target": { "labelId": "owned-live-label-uuid" } },
+    { "key": "group:name", "target": { "name": "Private favourites" } }
+  ]
+}
 ```
 
 It returns `{ordinal,review}` with a fresh `review.id`. The Subject defaults to the row's existing explicit review

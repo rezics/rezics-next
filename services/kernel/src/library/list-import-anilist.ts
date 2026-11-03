@@ -18,7 +18,11 @@ import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
 import { readEntry } from './entry-store.ts';
-import { createAniListLabelAdoption, type AniListLabelReview, type AniListLabelWork } from './list-import-anilist-labels.ts';
+import {
+  createAniListLabelAdoption,
+  type AniListLabelReview,
+  type AniListLabelWork,
+} from './list-import-anilist-labels.ts';
 import { aniListLabelEvidence, ANILIST_LABEL_LIMITS } from './list-import-anilist-label-evidence.ts';
 import { ANILIST_LIMITS, AniListInputError, parseAniList, type AniListRow } from './list-import-anilist-parser.ts';
 
@@ -52,8 +56,12 @@ export type AniListOutcome = {
   retained: string[];
 };
 export type AniListStored = {
-  source: AniListRow; review?: Review; started?: boolean; outcome?: AniListOutcome;
-  labelReview?: AniListLabelReview; labelWork?: Record<number, AniListLabelWork>;
+  source: AniListRow;
+  review?: Review;
+  started?: boolean;
+  outcome?: AniListOutcome;
+  labelReview?: AniListLabelReview;
+  labelWork?: Record<number, AniListLabelWork>;
 };
 type Stored = AniListStored;
 type Header = { document: unknown; rawUpload: string; scoreFormat: string | null; count: number; cancelled: boolean };
@@ -317,7 +325,13 @@ export function createAniListImport(deps: Dependencies) {
         matching.state === 'matched'
           ? propose(await observe(actor, matching.candidates[0]!), row.payload.source)
           : null;
-      rows.push({ ordinal: row.ordinal, ...row.payload, labelEvidence: aniListLabelEvidence(row.payload.source), match: matching, proposal: observation });
+      rows.push({
+        ordinal: row.ordinal,
+        ...row.payload,
+        labelEvidence: aniListLabelEvidence(row.payload.source),
+        match: matching,
+        proposal: observation,
+      });
     }
     await snapshot(actor, async () => undefined);
     const result = { header, rows, next: raw.length === 20 ? raw[raw.length - 1]!.ordinal : null };
@@ -447,7 +461,9 @@ export function createAniListImport(deps: Dependencies) {
       if (status !== 'failed')
         await save(actor, id, confirmation.ordinal, 'finish', reviewed.commandKey, outcome, (row) => {
           if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
-          return status === 'stale' && !row.started ? { ...row, review: undefined, started: undefined, outcome: undefined } : { ...row, outcome };
+          return status === 'stale' && !row.started
+            ? { ...row, review: undefined, started: undefined, outcome: undefined }
+            : { ...row, outcome };
         });
       outcomes.push(outcome);
     }

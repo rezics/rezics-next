@@ -60,23 +60,45 @@ const events = (owner: AccountActor, labelId: string) => [
 ];
 
 /** Native private catalogue; receipts contain identity and revision only. */
-export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRing; clock?: KernelClock; access?: Access }) {
+export function createPersonalLabelCommands(config: {
+  pool: Pool;
+  tokens: KeyRing;
+  clock?: KernelClock;
+  access?: Access;
+}) {
   const { pool, tokens } = config;
   const clock = config.clock ?? systemClock;
   const runner = createLibraryCommandRunner({ pool, clock });
 
-  async function run<T>(actor: Actor, kind: string, input: unknown, requestKey: string, body: LibraryCommandBody<T>, guard?: AniListLabelGuard) {
+  async function run<T>(
+    actor: Actor,
+    kind: string,
+    input: unknown,
+    requestKey: string,
+    body: LibraryCommandBody<T>,
+    guard?: AniListLabelGuard,
+  ) {
     try {
-      const request = { action: 'library_entry:update', kind, input: guard ? { input, importReview: guard } : input, requestKey };
+      const request = {
+        action: 'library_entry:update',
+        kind,
+        input: guard ? { input, importReview: guard } : input,
+        requestKey,
+      };
       if (guard) {
         const owner = account(actor, 'library_entry:update');
-        return await createLibraryCommandRunner(config).ownAccountPrepared(actor, {
-          ...request, prepare: attempt => prepareAniListLabel(config, owner, guard, attempt.time),
-        }, async (tx, command, prepared) => {
-          if (prepared.error !== undefined) throw prepared.error;
-          await assertAniListLabel(tx, owner, guard);
-          return body(tx, command);
-        });
+        return await createLibraryCommandRunner(config).ownAccountPrepared(
+          actor,
+          {
+            ...request,
+            prepare: (attempt) => prepareAniListLabel(config, owner, guard, attempt.time),
+          },
+          async (tx, command, prepared) => {
+            if (prepared.error !== undefined) throw prepared.error;
+            await assertAniListLabel(tx, owner, guard);
+            return body(tx, command);
+          },
+        );
       }
       return await runner.ownAccount(actor, request, body);
     } catch (error) {
@@ -127,16 +149,23 @@ export function createPersonalLabelCommands(config: { pool: Pool; tokens: KeyRin
   async function createLabel(actor: Actor, input: unknown, key: string, guard?: AniListLabelGuard) {
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input);
-    return run(actor, 'library_label.create', { name: parsed.name }, key, async (tx, command) => {
-      const route = routeOf(owner.accountId)!;
-      const label = await store.insertPersonalLabel(
-        tx,
-        route,
-        { accountId: owner.accountId, id: newId(route), name: parsed.normalized },
-        { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
-      );
-      return { value: minimal(label), events: events(owner, label.id) };
-    }, guard);
+    return run(
+      actor,
+      'library_label.create',
+      { name: parsed.name },
+      key,
+      async (tx, command) => {
+        const route = routeOf(owner.accountId)!;
+        const label = await store.insertPersonalLabel(
+          tx,
+          route,
+          { accountId: owner.accountId, id: newId(route), name: parsed.normalized },
+          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+        );
+        return { value: minimal(label), events: events(owner, label.id) };
+      },
+      guard,
+    );
   }
 
   async function renameLabel(actor: Actor, labelId: string, input: unknown, key: string) {
