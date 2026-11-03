@@ -142,12 +142,7 @@ export function useBoardPinVisit(senderOverride?: BoardPinSender): BoardPinVisit
     observation,
     revision,
     sender,
-    key: JSON.stringify([
-      observation.id,
-      revision,
-      sender?.subject ?? null,
-      sender?.csrfToken ?? null,
-    ]),
+    key: JSON.stringify([observation.id, revision, sender?.subject ?? null, sender?.csrfToken ?? null]),
   };
 }
 
@@ -201,20 +196,16 @@ export function useBoardPinPage(input: {
 
   const isCurrent = () => live.current && input.visit.observation.snapshot() === input.visit.revision;
   if (!caller.current) {
-    caller.current = new BoardPinCommandCaller(
-      producer,
-      isCurrent,
-      (threadId, status, result) => {
-        setRowStatuses((current) => ({ ...current, [threadId]: status }));
-        if (result?.state !== 'applied' || result.boardId !== input.boardId) return;
-        setState((current) => {
-          if (current.state !== 'ready' || !current.byThreadId.has(threadId)) return current;
-          const byThreadId = new Map(current.byThreadId);
-          byThreadId.set(threadId, result.thread);
-          return { ...current, byThreadId };
-        });
-      },
-    );
+    caller.current = new BoardPinCommandCaller(producer, isCurrent, (threadId, status, result) => {
+      setRowStatuses((current) => ({ ...current, [threadId]: status }));
+      if (result?.state !== 'applied' || result.boardId !== input.boardId) return;
+      setState((current) => {
+        if (current.state !== 'ready' || !current.byThreadId.has(threadId)) return current;
+        const byThreadId = new Map(current.byThreadId);
+        byThreadId.set(threadId, result.thread);
+        return { ...current, byThreadId };
+      });
+    });
   }
 
   const refresh = async () => {
@@ -235,7 +226,9 @@ export function useBoardPinPage(input: {
       if (next.state === 'ready') {
         setRowStatuses((current) =>
           Object.fromEntries(
-            Object.entries(current).filter(([, status]) => status?.state === 'unknown' || status?.state === 'unavailable'),
+            Object.entries(current).filter(
+              ([, status]) => status?.state === 'unknown' || status?.state === 'unavailable',
+            ),
           ),
         );
       }
@@ -334,9 +327,7 @@ export function BoardPinThreadControls({
   onRefresh(): void;
 }): ReactNode {
   const action: BoardPinAction | null = row ? (row.pinned ? 'unpin' : 'pin') : null;
-  const actionable = Boolean(
-    row && action && management === 'allowed' && sender && row.actions.includes(action),
-  );
+  const actionable = Boolean(row && action && management === 'allowed' && sender && row.actions.includes(action));
   const blocked = status !== undefined && status.state !== 'applied';
   const statusText = status
     ? status.state === 'submitting'
@@ -373,7 +364,9 @@ export function BoardPinThreadControls({
           action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
         )
       : null,
-    statusText ? createElement('span', { role: 'status', className: 'text-sm text-muted-foreground' }, statusText) : null,
+    statusText
+      ? createElement('span', { role: 'status', className: 'text-sm text-muted-foreground' }, statusText)
+      : null,
     status?.state === 'unknown' || status?.state === 'unavailable'
       ? createElement(
           Button,

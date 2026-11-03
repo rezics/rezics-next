@@ -309,9 +309,7 @@ test('denied and unavailable pin reads keep ordinary discussions visible and nev
   for (const pinRead of [{ state: 'denied' }, { state: 'unavailable' }] as const) {
     const markup = await render([{ page, sort: 'active', pinRead }]);
     expect(markup).toContain(page.threads.threads[0]!.title!);
-    expect(markup).toContain(
-      pinRead.state === 'denied' ? m.board_pin_read_denied() : m.board_pin_unavailable(),
-    );
+    expect(markup).toContain(pinRead.state === 'denied' ? m.board_pin_read_denied() : m.board_pin_unavailable());
     expect(markup).not.toContain(m.board_pin_badge());
     expect(markup).not.toContain(m.board_pin_pin());
     expect(markup).toContain(m.board_community_retry());

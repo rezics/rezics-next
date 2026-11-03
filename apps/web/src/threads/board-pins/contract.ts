@@ -36,11 +36,7 @@ export type BoardPinCommandResult =
 
 export type BoardPinProducer = Readonly<{
   /** Read statuses for the exact ordinary feed page; no directory or second feed is requested. */
-  readPage(input: {
-    boardId: string;
-    threadIds: readonly string[];
-    signal: AbortSignal;
-  }): Promise<BoardPinReadResult>;
+  readPage(input: { boardId: string; threadIds: readonly string[]; signal: AbortSignal }): Promise<BoardPinReadResult>;
   change(command: BoardPinCommand): Promise<BoardPinCommandResult>;
 }>;
 

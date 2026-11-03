@@ -19,12 +19,7 @@ import {
   useBoardPinVisit,
 } from './board-pins/controller';
 import { unavailableBoardPinProducer } from './board-pins/contract';
-import type {
-  BoardPinProducer,
-  BoardPinReadResult,
-  BoardPinSender,
-  BoardPinThread,
-} from './board-pins/contract';
+import type { BoardPinProducer, BoardPinReadResult, BoardPinSender, BoardPinThread } from './board-pins/contract';
 import {
   boardThreadPreview,
   boardThreadReactionCount,
@@ -237,18 +232,19 @@ function BoardFeedVisit({
                 ? pins.state.byThreadId.get(thread.id)
                 : undefined;
             const rowStatus = pins.rowStatuses[thread.id];
-            const pinControl = row || rowStatus ? (
-              <BoardPinThreadControls
-                discussionTitle={thread.title ?? m.threads_untitled()}
-                {...(row === undefined ? {} : { row })}
-                management={pins.state.state === 'ready' ? pins.state.management : null}
-                sender={pins.sender}
-                {...(rowStatus === undefined ? {} : { status: rowStatus })}
-                onChange={(action) => pins.start(thread.id, action)}
-                onRetry={() => pins.retry(thread.id)}
-                onRefresh={pins.refresh}
-              />
-            ) : null;
+            const pinControl =
+              row || rowStatus ? (
+                <BoardPinThreadControls
+                  discussionTitle={thread.title ?? m.threads_untitled()}
+                  {...(row === undefined ? {} : { row })}
+                  management={pins.state.state === 'ready' ? pins.state.management : null}
+                  sender={pins.sender}
+                  {...(rowStatus === undefined ? {} : { status: rowStatus })}
+                  onChange={(action) => pins.start(thread.id, action)}
+                  onRetry={() => pins.retry(thread.id)}
+                  onRefresh={pins.refresh}
+                />
+              ) : null;
             return (
               <ThreadCard
                 key={`${boardId}:${thread.id}:${thread.availability}`}

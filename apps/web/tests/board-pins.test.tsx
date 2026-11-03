@@ -2,10 +2,7 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { m } from '../src/paraglide/messages.js';
-import {
-  BoardPinPageStatus,
-  BoardPinThreadControls,
-} from '../src/threads/board-pins/controller';
+import { BoardPinPageStatus, BoardPinThreadControls } from '../src/threads/board-pins/controller';
 import {
   BoardPinCommandCaller,
   joinBoardPinPage,
@@ -33,18 +30,22 @@ test('pin page requires a complete identity match and keeps the producer state a
   if (state.state !== 'ready') throw new Error('Expected a ready pin page.');
   expect(state.byThreadId.get('first')?.pinned).toBe(true);
   expect(state.byThreadId.get('second')?.actions).toEqual(['pin']);
-  expect(joinBoardPinPage(boardId, ['first', 'second'], {
-    state: 'ready',
-    boardId: 'another-board',
-    management: 'allowed',
-    threads: [],
-  })).toEqual({ state: 'unavailable' });
-  expect(joinBoardPinPage(boardId, ['first'], {
-    state: 'ready',
-    boardId,
-    management: 'allowed',
-    threads: [],
-  })).toEqual({ state: 'unavailable' });
+  expect(
+    joinBoardPinPage(boardId, ['first', 'second'], {
+      state: 'ready',
+      boardId: 'another-board',
+      management: 'allowed',
+      threads: [],
+    }),
+  ).toEqual({ state: 'unavailable' });
+  expect(
+    joinBoardPinPage(boardId, ['first'], {
+      state: 'ready',
+      boardId,
+      management: 'allowed',
+      threads: [],
+    }),
+  ).toEqual({ state: 'unavailable' });
 });
 
 test('unavailable pin reads expose a retry state without presenting a pin action', () => {
