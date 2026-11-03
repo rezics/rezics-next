@@ -158,15 +158,7 @@ export function DiscoveryPublicRow({
     case 'collection':
       return <PublicCollectionRow id={id} summary={summary.value} kind={kind} locale={locale} />;
     case 'review':
-      return (
-        <ReviewRow
-          id={id}
-          summary={summary.value}
-          kind={kind}
-          locale={locale}
-          subjectHrefFor={subjectHrefFor}
-        />
-      );
+      return <ReviewRow id={id} summary={summary.value} kind={kind} locale={locale} subjectHrefFor={subjectHrefFor} />;
     case 'space':
       return <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} />;
   }

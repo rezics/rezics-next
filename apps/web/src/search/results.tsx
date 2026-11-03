@@ -113,7 +113,8 @@ export function ResultRow({
 }: ResultPresentation & { hit: ResultHit }) {
   const label = localizedLabel(hit.labels, locale);
   const title = label.text || m.subject_value_unlabelled({}, { locale: locale as never });
-  const subjectLink = subjectHrefFor?.({ id: hit.id, label: title }) ?? subjectHref({ id: hit.id, label: title }, locale).href;
+  const subjectLink =
+    subjectHrefFor?.({ id: hit.id, label: title }) ?? subjectHref({ id: hit.id, label: title }, locale).href;
   const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
   const description = localizedLabel(hit.descriptions ?? {}, locale);
   const date = hitCalendarDate(hit.facts, yearProperties);
