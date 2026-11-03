@@ -35,17 +35,17 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/archive-entry-recovery.test.tsx
     - tests/archive-entry-recovery-native.test.ts
   placement: default
   tests:
-    - "The mounted journey uploads a completed producer artifact, reviews bounded inventory and conflicts, maps current states and labels explicitly, and applies only the exact native reviewed selection."
-    - "Wrong or incomplete formats, unavailable old vocabulary, revision or incarnation changes, replaced selections, partial receipts, lost checkpoints, original retry, cancellation, and account or source retirement preserve privacy and exact intent. Pending or recoverable applications expose no progress facts; only checkpointed native receipts expose outcomes."
-    - "Supplied pages of 1, 50, and 100 rows add no per-row hydration or full-archive traversal with 64, 512, and 4096 unrelated records; unsupported sections are never restored."
+    - 'The mounted journey uploads a completed producer artifact, reviews bounded inventory and conflicts, maps current states and labels explicitly, and applies only the exact native reviewed selection.'
+    - 'Wrong or incomplete formats, unavailable old vocabulary, revision or incarnation changes, replaced selections, partial receipts, lost checkpoints, original retry, cancellation, and account or source retirement preserve privacy and exact intent. Pending or recoverable applications expose no progress facts; only checkpointed native receipts expose outcomes.'
+    - 'Supplied pages of 1, 50, and 100 rows add no per-row hydration or full-archive traversal with 64, 512, and 4096 unrelated records; unsupported sections are never restored.'
   failing: true
 criticalPath: false
 waiting: []
