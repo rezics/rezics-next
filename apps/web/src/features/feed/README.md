@@ -141,13 +141,14 @@ for manual copying and a Close action returning focus. Replacement visits retire
 Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,
 and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
 
-Kernel generation publishes optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content
-thread/post summaries and optional `reactionsAsOf` on the page. Home consumes those generated fields directly and
-passes the exact target, count map, viewer slot and page watermark into the shared reaction engine. It does not add a
-browser DTO or infer a thread target from `summary.id`. A post target is admitted only when its supplied post ID
-matches the native destination. An empty count map means known zero, absent counts mean unavailable. Anonymous
-viewer-slot omission differs from authenticated `null`, and a null watermark does not prove a later write converged.
-Following projection failure withholds its rows and preserves its input frontier for retry.
+Kernel source defines optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content thread/post
+summaries and optional `reactionsAsOf` on the page. Home receiving is wired to those response fields and passes the
+exact target, count map, viewer slot and page watermark into the shared reaction engine. It does not add a browser
+DTO or infer a thread target from `summary.id`. A post target is admitted only when its supplied post ID matches the
+native destination. An empty count map means known zero, absent counts mean unavailable. Anonymous viewer-slot
+omission differs from authenticated `null`, and a null watermark does not prove a later write converged. Following
+projection failure withholds its rows and preserves its input frontier for retry. The committed client declarations
+still need regeneration; Kernel generation currently stops on retained Kernel type errors.
 
 Home also renders the generated current review target and citation, including the cited question identity and
 revision, recorded units, and vote revision. A concealed target never falls back to the discovery label. Reply cards
