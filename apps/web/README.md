@@ -87,6 +87,8 @@ For a focused fake, component, route-loader or story-render test that does not n
 bun scripts/focused.ts -- bun test tests/<focused-file>.test.ts
 ```
 
+Session BFF caller identity is asserted by `tests/session-bff-identity.test.ts`. The Vite `session.test.ts` and Playwright `session-controls.test.ts` suites remain integration evidence.
+
 The focused runner prepares generated messages and routes, gives the command an owned temporary Worker state root, and
 removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
 database leases, Docker, a database or remote dispatch. Add `--private-network` before `--` when a focused browser test
