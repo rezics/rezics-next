@@ -1155,6 +1155,34 @@ source witnesses, owner fencing and exact request on retry. The reader adds no r
 Decision: native own-score reads prepare identity and disclosure before the caller checkout, read only counted-target
 truth plus exact original-slot witnesses in the caller snapshot, then return `preparing` with the same input when final native observations differ.
 
+The mounted factory signature is
+`createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencies): OwnCountedVoteReader`, where dependencies
+are `{ pool: Pool; access: Access }`. Its public protocol is:
+
+```ts
+prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;
+read(client: Pick<PoolClient, 'query'>, request: OwnCountedVoteRequest,
+     preparation: OwnCountedVotePreparation): Promise<OwnCountedVoteReadResult>;
+finish(request: OwnCountedVoteRequest, preparation: OwnCountedVotePreparation,
+       readResult: OwnCountedVoteReadResult, deadline: number): Promise<OwnCountedVoteResult>;
+```
+
+`request` is `{ actor: Actor; targetIds: readonly string[] }`; deadlines are absolute milliseconds. Duplicate keys
+keep their first occurrence, but all raw keys count toward the 100-key cap. The canonical Subject is the mapping's
+terminal and equals `countingTargetId`; `originalTargetId` identifies the selected native vote, which can differ
+from both the requested and canonical Subject. `sourceEpoch` is a decimal string. Fingerprints are SHA-256 hex
+digests of JSON observations; the request digest binds account, client, sorted scopes, authentication epoch,
+requested-by identity and ordered raw keys. Native account observations bind route, standing and transaction
+identity; instance-local witnesses also bind published epochs on the requested and canonical homes.
+
+Dependency errors propagate: callers retain their cursor and exact input, without publishing empty or refreshed
+observations. A changed `countedRevision` invalidates final confirmation even when units and original `revision`
+are unchanged. Display values are units divided by two; `null` remains clear. The review witness encoding and byte
+limit below apply to these observations, but confer no atomic conditional write admission.
+
+Decision: publish the named reader and dependency types from the generated mounted module so consumers never infer
+the protocol from private source; the account-page `createOwnVotesReader` remains a separate authority.
+
 ### Conditional provider vote review
 
 `createVoteCommands({pool, access, clock?}).putVoteOutcome(actor, input, idempotencyKey)` accepts
@@ -1265,7 +1293,8 @@ deadline and abort. A completed transaction cannot admit again. Preparation crea
   selected/unrelated question/lifecycle histories at 256/1024/4096 and fixed keys/native byte caps; no measured
   growth pass is claimed by these source bounds.
 
-Commerce and own-score consumers import `OwnCountedVoteRequest`, `OwnCountedVotePreparation`,
+Commerce and own-score consumers import `OwnCountedVoteReader`, `OwnCountedVoteReaderDependencies`,
+`OwnCountedVoteRequest`, `OwnCountedVotePreparation`,
 `OwnCountedVoteReadResult`, `OwnCountedVoteResult`, `OwnCountedVoteObservation` and their supporting types from
 `@rezics/client`. `packages/client/src/index.ts` re-exports these source declarations from
 `services/kernel/src/rating/own-votes-counted.ts`, generated as

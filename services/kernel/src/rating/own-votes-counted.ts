@@ -184,7 +184,21 @@ export type OwnCountedVoteResult =
     }>;
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
-type Dependencies = Readonly<{ pool: Pool; access: Access }>;
+export type OwnCountedVoteReaderDependencies = Readonly<{ pool: Pool; access: Access }>;
+export type OwnCountedVoteReader = Readonly<{
+  prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;
+  read(
+    client: Pick<PoolClient, 'query'>,
+    request: OwnCountedVoteRequest,
+    preparation: OwnCountedVotePreparation,
+  ): Promise<OwnCountedVoteReadResult>;
+  finish(
+    request: OwnCountedVoteRequest,
+    preparation: OwnCountedVotePreparation,
+    readResult: OwnCountedVoteReadResult,
+    deadline: number,
+  ): Promise<OwnCountedVoteResult>;
+}>;
 type QueryRow = NonNullable<Awaited<ReturnType<typeof countedVotes.run>>>[number];
 
 function owner(actor: Actor): AccountActor {
@@ -262,7 +276,7 @@ function questionObservation(
 }
 
 async function readQuestionObservation(
-  deps: Dependencies,
+  deps: OwnCountedVoteReaderDependencies,
   actor: Actor,
   deadline: number,
 ): Promise<OwnCountedVoteQuestionObservation> {
@@ -405,7 +419,7 @@ function validPreparation(preparation: OwnCountedVotePreparation): boolean {
   );
 }
 
-export function createOwnCountedVoteReader(deps: Dependencies) {
+export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencies): OwnCountedVoteReader {
   const identityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly IdentityMapping[]>();
   const visibilityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly string[]>();
   const epochWitnesses = new WeakMap<OwnCountedVotePreparation, readonly VoteReviewEpoch[]>();

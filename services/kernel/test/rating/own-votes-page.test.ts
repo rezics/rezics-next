@@ -7,7 +7,7 @@ import { identityEpochStore } from '../../src/semantic/identity-epoch-store.ts';
 import * as summaries from '../../src/semantic/summaries.ts';
 import { createOwnVotesReader } from '../../src/rating/own-votes-page.ts';
 import { createOwnCountedVoteReader } from '../../src/rating/own-votes-counted.ts';
-import type { OwnCountedVoteRequest } from '../../src/rating/own-votes-counted.ts';
+import type { OwnCountedVoteReader, OwnCountedVoteRequest } from '../../src/rating/own-votes-counted.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
@@ -39,7 +39,7 @@ async function body(response: Response, status = 200) {
 }
 
 async function countedVoteResult(
-  reader: ReturnType<typeof createOwnCountedVoteReader>,
+  reader: OwnCountedVoteReader,
   request: OwnCountedVoteRequest,
   deadline: number,
 ) {
@@ -54,7 +54,7 @@ async function countedVoteResult(
 }
 
 async function prepareCountedVoteRead(
-  reader: ReturnType<typeof createOwnCountedVoteReader>,
+  reader: OwnCountedVoteReader,
   request: OwnCountedVoteRequest,
   deadline: number,
 ) {
@@ -397,6 +397,14 @@ test('the counted reader distinguishes absent, zero, clear and unavailable and r
   expect(await body(await fixture.request('PUT', votePath(target), { key: zeroKey, body: { units: 0 } }))).toEqual(
     zero,
   );
+  const beforeNoop = await prepareCountedVoteRead(reader, request, deadline);
+  if (beforeNoop.prepared.status !== 'prepared' || beforeNoop.read === null)
+    throw new Error('Expected a prepared zero observation');
+  expect(await body(await fixture.request('PUT', votePath(target), { body: { units: 0 } }))).toEqual(zero);
+  expect(await reader.finish(request, beforeNoop.prepared.preparation, beforeNoop.read, deadline)).toMatchObject({
+    status: 'current',
+    observations: [{ state: 'counted', units: 0, revision: 2, countedRevision: 2 }],
+  });
   expect(await countedVoteResult(reader, request, deadline)).toMatchObject({
     status: 'current',
     observations: [
@@ -503,6 +511,10 @@ test('equal-time merge selection and eventless losing-row cleanup leave the coun
   await fixture.nativeFigures!.drain();
   await fixture.merge(second, survivor);
   await fixture.nativeFigures!.drain();
+  const request = { actor, targetIds: [second] } satisfies OwnCountedVoteRequest;
+  const beforeCleanup = await prepareCountedVoteRead(reader, request, deadline);
+  if (beforeCleanup.prepared.status !== 'prepared' || beforeCleanup.read === null)
+    throw new Error('Expected a prepared losing-slot observation');
   const removed = await fixture.database.admin.query(
     `DELETE FROM rating.vote
      WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND target_id=$4 AND counted_target IS NULL
@@ -510,6 +522,11 @@ test('equal-time merge selection and eventless losing-row cleanup leave the coun
     [routeOf(actor.accountId), actor.accountId, STANDARD_QUESTION_ID, second],
   );
   expect(removed.rows).toHaveLength(1);
+  expect(await reader.finish(request, beforeCleanup.prepared.preparation, beforeCleanup.read, deadline)).toEqual({
+    status: 'preparing',
+    reason: 'vote-changed',
+    retry: 'same-input',
+  });
   expect(await countedVoteResult(reader, { actor, targetIds: [second] }, deadline)).toMatchObject({
     status: 'current',
     observations: [
@@ -521,6 +538,32 @@ test('equal-time merge selection and eventless losing-row cleanup leave the coun
         units: 6,
       },
     ],
+  });
+}, 180_000);
+
+test('counting revisions change an observation independently of units and the original vote revision', async () => {
+  const target = await fixture.createSubject();
+  const reader = createOwnCountedVoteReader({ pool: fixture.database.pool, access: fixture.access });
+  const { actor } = await countedVoteActor();
+  const deadline = Date.now() + 120_000;
+  const request = { actor, targetIds: [target] } satisfies OwnCountedVoteRequest;
+  await body(await fixture.request('PUT', votePath(target), { body: { units: 11 } }));
+  const before = await prepareCountedVoteRead(reader, request, deadline);
+  if (before.prepared.status !== 'prepared' || before.read === null)
+    throw new Error('Expected a prepared native vote observation');
+  await fixture.database.admin.query(
+    `UPDATE rating.vote SET counted_revision=counted_revision+1
+     WHERE route=$1 AND voter_id=$2 AND question_id=$3 AND target_id=$4`,
+    [routeOf(actor.accountId), actor.accountId, STANDARD_QUESTION_ID, target],
+  );
+  expect(await reader.finish(request, before.prepared.preparation, before.read, deadline)).toEqual({
+    status: 'preparing',
+    reason: 'vote-changed',
+    retry: 'same-input',
+  });
+  expect(await countedVoteResult(reader, request, deadline)).toMatchObject({
+    status: 'current',
+    observations: [{ state: 'counted', units: 11, revision: 1, countedRevision: 2 }],
   });
 }, 180_000);
 

@@ -258,6 +258,8 @@ export type {
   OwnCountedVotePreparedTarget,
   OwnCountedVotePreparation,
   OwnCountedVoteQuestionObservation,
+  OwnCountedVoteReader,
+  OwnCountedVoteReaderDependencies,
   OwnCountedVoteReadResult,
   OwnCountedVoteRequest,
   OwnCountedVoteResult,
