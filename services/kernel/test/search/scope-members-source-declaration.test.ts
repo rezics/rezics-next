@@ -22,12 +22,8 @@ test('the Members Source subtotal composes finite named axes and refuses an inco
     'engineRequests',
   ]);
   expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.status).toBe('incomplete');
-  expect(
-    MEMBERS_PREPARATION_SOURCE_MISSING_DECLARATIONS.every((dependency) =>
-      dependency.axes.length === MEMBERS_PREPARATION_SOURCE_AXES.length &&
-      MEMBERS_PREPARATION_SOURCE_AXES.every((axis) => dependency.axes.includes(axis)),
-    ),
-  ).toBe(true);
+  for (const dependency of MEMBERS_PREPARATION_SOURCE_MISSING_DECLARATIONS)
+    expect(dependency.axes).toEqual(MEMBERS_PREPARATION_SOURCE_AXES);
   expect(MEMBERS_PREPARATION_SOURCE_DECLARATION.knownSubtotal).toEqual({
     candidateKeys: 0,
     nativeRows: 45,
