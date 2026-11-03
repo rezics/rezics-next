@@ -5,6 +5,7 @@ import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
   f = await createProfileEntryFixture();
@@ -46,6 +47,18 @@ test('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, inv
     JSON.stringify([{ status: 'FUTURE', score: 80, progress: -1, completedAt: { year: 2023, month: 2, day: 29 } }]),
   );
   expect(invalid.rows[0]!.fields.map((f) => f.validity)).toEqual(['invalid', 'unknown', 'invalid', 'invalid']);
+  const precise = parseAniList('[{"score":1.0000000000000001}]', 'POINT_100');
+  expect(precise.rows[0]!.scoreLexeme).toBe('1.0000000000000001');
+  expect(precise.rows[0]!.fields[0]).toMatchObject({ validity: 'invalid', reason: expect.stringContaining('POINT_100') });
+  expect(parseAniList('[{"score":0.31}]', 'POINT_10_DECIMAL').rows[0]!.fields[0]!.validity).toBe('invalid');
+  const point3 = parseAniList('[{"score":2}]', 'POINT_3');
+  expect(point3.rows[0]!.fields[0]).toMatchObject({ validity: 'valid', reason: expect.stringContaining('POINT_3') });
+  const absentAndNull = parseAniList('[{"score":null},{},{"score":0}]', 'POINT_10');
+  expect(absentAndNull.rows.map((item) => item.fields.find((field) => field.field === 'score')?.validity ?? 'absent')).toEqual([
+    'unknown',
+    'absent',
+    'valid',
+  ]);
   expect(parseAniList(JSON.stringify([{ id: 9 }])).rows[0]!.identifiers).toEqual([]);
   for (const upload of [
     '{',
@@ -64,6 +77,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     'subject:read',
     'library_entry:update',
     'library_entry:read',
+    'rating:vote',
   ]);
   await f.grantLibraryGate(importer.actor.accountId);
   const steward = await authenticateAccount(
@@ -107,6 +121,12 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     subjects.push(result.value.id);
   }
   const subjectId = subjects[0]!;
+  const votes = createVoteCommands({ pool: f.pool, access: f.access });
+  await votes.putVoteOutcome(
+    importer.actor,
+    { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 11 },
+    entryKey(),
+  );
   const upload = JSON.stringify([
     { ...row, mediaId, media: { ...row.media, id: mediaId } },
     { ...row, mediaId: mediaId + 1, media: {} },
@@ -147,6 +167,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(applied.outcomes.map((r: { status: string }) => r.status)).toEqual(['applied', 'skipped']);
   expect(applied.outcomes[0].retained).toContain('score');
   expect(await apply([first])).toEqual({ outcomes: [applied.outcomes[0]], complete: true });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 11 });
   const entry = await (await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).json();
   expect(entry.libraryEntry.state).toBe('planned');
   expect(entry.libraryEntry.revision).toBe(1);
@@ -154,12 +175,55 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await apply([conflict])).outcomes[0].status).toBe('skipped');
   const resolved = await f.send(importer.bearer, 'POST', base + ':preview', {
     upload: JSON.stringify([{ status: 'COMPLETED' }, { score: 9 }]),
+    scoreFormat: 'POINT_10',
   });
   const path2 = base + '/' + (await resolved.json()).id;
   const chosen = await review(0, { subjectId, fields: ['status'], replace: true }, path2);
   expect((await apply([chosen], path2)).outcomes[0].status).toBe('applied');
   const unsupported = await review(1, { subjectId, fields: ['score'] }, path2);
   expect((await apply([unsupported], path2)).outcomes[0].status).toBe('unsupported');
+  const scoreChoiceResponse = await f.send(importer.bearer, 'POST', path2 + ':review', {
+    ordinal: 1,
+    subjectId,
+    fields: [],
+    score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 0 },
+  });
+  expect(scoreChoiceResponse.status).toBe(200);
+  const scoreChoice = (await scoreChoiceResponse.json()).review;
+  expect(scoreChoice.score).toMatchObject({
+    source: { value: 9, lexeme: '9', scale: 'POINT_10', validity: 'valid' },
+    action: 'vote',
+    units: 0,
+    conversion: 'owner-selected-native-units',
+    native: {
+      availability: 'unavailable',
+      reason: 'conditional_vote_admission_missing',
+      question: { id: STANDARD_QUESTION_ID, revision: 1, minimumUnits: 0, maximumUnits: 20, stepUnits: 1 },
+      currentVote: { status: 'unavailable', reason: 'counted_vote_review_missing' },
+      consented: false,
+    },
+  });
+  const scoreConfirmation = { ordinal: 1, reviewId: scoreChoice.id };
+  const omittedConsent = await apply([scoreConfirmation], path2);
+  expect(omittedConsent).toMatchObject({ complete: false, outcomes: [{ score: { status: 'skipped' } }] });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 11 });
+  const consented = await f.send(importer.bearer, 'POST', path2 + ':apply', {
+    confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
+  });
+  expect(consented.status).toBe(200);
+  expect(await consented.json()).toMatchObject({ complete: false, outcomes: [{ score: { status: 'unavailable' } }] });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toMatchObject({ units: 11 });
+  const refreshedScore = await f.send(importer.bearer, 'POST', path2 + ':review', {
+    ordinal: 1,
+    subjectId,
+    fields: [],
+    score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 12 },
+  });
+  expect(refreshedScore.status).toBe(409);
+  const foreignScoreApply = await f.send('other', 'POST', path2 + ':apply', {
+    confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
+  });
+  expect(foreignScoreApply.status).toBe(404);
   const mangaId = mediaId + 1000000;
   const mangaUpload = await f.send(importer.bearer, 'POST', base + ':preview', {
     upload: JSON.stringify([
@@ -198,8 +262,9 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     upload: JSON.stringify([
       { mediaId, media: { idMal: mediaId }, status: 'PLANNING', customLists: { Personal: true } },
       { status: 'PLANNING' },
-      { status: 'PLANNING' },
+      { status: 'PLANNING', score: null },
     ]),
+    scoreFormat: 'POINT_10',
   });
   const path3 = base + '/' + (await conflicts.json()).id;
   const ambiguous = await (await f.send(importer.bearer, 'GET', path3)).json();
@@ -223,6 +288,18 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   });
   expect(labelApply.status).toBe(200);
   expect((await labelApply.json()).outcomes[0].items[0].status).toBe('applied');
+  const clearChoiceResponse = await f.send(importer.bearer, 'POST', path3 + ':review', {
+    ordinal: 2,
+    subjectId,
+    fields: [],
+    score: { action: 'clear', questionId: STANDARD_QUESTION_ID, questionRevision: 1 },
+  });
+  expect(clearChoiceResponse.status).toBe(200);
+  expect((await clearChoiceResponse.json()).review.score).toMatchObject({
+    source: { value: null, lexeme: null, scale: 'POINT_10', validity: 'unknown' },
+    action: 'clear',
+    units: null,
+  });
   const guarded = await review(1, { subjectId, fields: ['status'], replace: true }, path3);
   const before = (await (await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).json()).libraryEntry;
   const changed = await f.send(importer.bearer, 'PUT', `/v1/libraryEntries/${subjectId}`, {

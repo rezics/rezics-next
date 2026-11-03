@@ -82,7 +82,10 @@ composition with persisted native authority and subjects. The [source contract](
 shape, mapping, retained losses, bounds and Web responses. Independent custom-list label adoption is specified in
 [the label adoption contract](../library-import-anilist-labels.md) and covered by
 `test/library/list-import-anilist-labels.test.ts`; native64/512/4096 complete-caller growth remains deferred.
-The label methods are producer composition; Web325 remains the complete AniList interface; broader frozen acceptance remains an integration check.
+The generated AniList requests/results now include exact source score evidence, owner-selected native units, separate
+effect consent and typed unavailable results. Content's conditional counted-vote/currentness producer is still
+missing, so no native score write or clear is admitted and score adoption is not Done. Web325 remains the complete
+AniList interface; broader frozen acceptance remains an integration check.
 
 Personal VNDB XML upload now has mounted preview/page/source/review/apply/cancel/delete methods documented in
 [its owner contract](../library-import-vndb.md), with focused native HTTP scenarios in

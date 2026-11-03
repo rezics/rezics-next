@@ -19,6 +19,10 @@ CURRENT maps to active, PLANNING to planned, COMPLETED to completed, DROPPED to 
 REPEATING remains unsupported because repeat state/count does not authorize historical occurrences. Missing or
 ambiguous native roles remain unsupported. A present local entry is preserved unless review explicitly sets replace.
 
+Decision: a retained source score has no inferred native conversion; the owner may separately choose native units or
+clear the native vote, then separately confirm its effects. Missing, null, zero, invalid and exact numeric source
+evidence remain distinct.
+
 `mediaId` and `media.id` identify AniList media; entry `id` never does. `media.idMal` separately declares a
 `myanimelist` identifier. Existing native external claims resolve `anilist`/`myanimelist` tuples; current canonical
 subject access and identity epochs are checked. No provider availability is inferred from these generic native
@@ -29,23 +33,35 @@ fingerprint and release pin; a stale unstarted review must be refreshed. Native 
 revision/incarnation guards and current account admission; an optional internal review guard pins identity/profile
 again inside native command preparation without changing ordinary entry requests. Source timestamps never order commands.
 
-Every row exposes its evidence, group metadata, provider identifiers and field validity/reason; header rawUpload
-retains the original text, including numeric spellings that JSON parsing cannot represent exactly. Absent fields
-stay absent, null is unknown, zero stays zero, invalid values stay visible. Scores require separately declared
-POINT_100, POINT_10_DECIMAL, POINT_10, POINT_5 or POINT_3; omission means unknown scale. Scores and advanced
-components never create votes or aggregates. Progress keeps episodes (ANIME), chapters (MANGA), unknown measures
-and volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all
-unrecognized fields are retained, never applied. Unknown date components are not filled. Private notes are not
-reviews; custom/private lists are not public Collections. No holdings, entitlements or labels are inferred. Explicitly selected supported custom membership can be adopted
+Every row exposes its evidence, group metadata, provider identifiers and field validity/reason; `scoreLexeme` keeps
+the exact JSON token for a numeric score, while header `rawUpload` retains the original text. Absent fields stay
+absent, null is unknown, zero stays zero and invalid values stay visible. `POINT_100`, `POINT_10_DECIMAL`,
+`POINT_10`, `POINT_5` and `POINT_3` remain distinct scales; omission means unknown scale. Decimal precision outside
+the declared scale is invalid. Advanced components do not imply a standard score, and POINT_3 labels do not imply
+enjoyment intervals. No conversion is inferred. A score review shows the retained value, exact numeric token,
+scale, Content's current standard question/revision/meaning and owner-selected 0–20 native units. Review can select
+an explicit native clear separately. Apply needs a separate `confirmNativeVoteEffects:true`; source privacy,
+upload confirmation, state import and the score value do not provide that consent.
+
+The mounted Content writer currently exposes `createVoteCommands.putVoteOutcome(actor, {questionId, targetId, units},
+idempotencyKey)` without a guard for the reviewed question revision, current counted vote or absence, canonical/counting
+identity and local correction. The AniList plan persists the original operands, question, target observation, stable
+native command key, separate consent and client attribution, but returns typed `unavailable` with
+`counted_vote_review_missing` and performs no native write or clear until Content supplies that conditional producer.
+The owner read authorizes score review and every result replay before disclosing the private plan. This unavailable
+path is not score-adoption completion. Progress keeps episodes (ANIME), chapters (MANGA), unknown measures and
+volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all unrecognized fields are
+retained, never applied. Unknown date components are not filled. Private notes are not reviews; custom/private lists
+are not public Collections. No holdings, entitlements or labels are inferred. Explicitly selected supported custom membership can be adopted
 through the independent [private-label review](library-import-anilist-labels.md).
 
 Limits: 1,048,576 UTF-8 upload bytes, JSON depth 24, 200 rows (65,536 bytes/128 fields each, 100-character field names),
 8,192-byte group metadata, valid Unicode without NUL, five retained uploads per owner, 20 rows per
 read/apply page. Upload is JSON text inside the request envelope. Headers carry the ordinary quoted Idempotency-Key
 on preview/review/cancel. Apply confirms stored review ids; each review binds a stable native command key, original
-operands and client attribution. Failed commands resume with those operands. Acknowledged row outcomes replay
-without new effects. Outcomes are applied, skipped, stale, unsupported or failed; retained lists identify fields
-not admitted. Failed attempts remain retryable. Stale started attempts retain their original identity for inspection;
+  operands and client attribution. Failed commands resume with those operands. Acknowledged row outcomes replay
+  without new effects. Outcomes are applied, skipped, stale, unsupported, failed or unavailable; native score outcomes
+  are nested per row. Retained lists identify fields not admitted. Failed attempts remain retryable. Stale started attempts retain their original identity for inspection;
 start a fresh upload for a new choice. Pages stop starting rows at cancellation, disconnection or the request
 deadline (20 seconds outside HTTP). Cancellation does not undo committed native effects. An in-flight command may
 finish after cancellation. `complete:false` leaves remaining confirmations resumable. Evidence remains until explicit
@@ -68,9 +84,13 @@ GET /v1/libraryImports/anilist/{importId}?after=-1
 POST /v1/libraryImports/anilist/{importId}:review
 { ordinal: 0, subjectId: 'canonical-uuid', fields: ['status'], replace: false }
 // 200 { ordinal: number, review: {id,match,observation,input,commandKey,clientId,requestedBy} }
+// A score choice is separate: {ordinal: 0, subjectId: 'canonical-uuid', fields: [], score: {action: 'vote', questionId: '00000000-0000-7000-8000-000000000001', questionRevision: 1, units: 12}}
+// Review retains source score/scale and the current Content question; current counted vote is typed unavailable.
 POST /v1/libraryImports/anilist/{importId}:apply
 { confirmations: [{ordinal: 0, reviewId: 'review-uuid'}] }
 // 200 {outcomes:[{ordinal:0,status:'applied',retained:['mediaId','notes']}],complete:true}
+// A native score action additionally requires confirmNativeVoteEffects: true; until the guarded Content producer
+// exists its score result is unavailable and complete is false. Missing consent reports skipped and remains resumable.
 POST /v1/libraryImports/anilist/{importId}:cancel
 { remove: true } // 200 {cancelled:true}; false/omitted stops new work while retaining evidence
 ```
@@ -94,8 +114,10 @@ Decision: unmatched target search is display assistance through the existing aut
 the explicit UUID submitted to `review.subjectId` is identity. Apply defaults to preserving local facts
 (`replace:false`). Only admitted `status` is selectable in state review. The independent `reviewLabels`/`applyLabels` methods
 adopt explicitly selected retained custom membership without changing state/progress choices. Missing `scoreFormat` stays unknown scale and is never
-converted into native enjoyment. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated
-client snapshot may omit this surface; missing methods render unavailable rather than a local parser.
+converted into native units. Native score review offers only the standard question, records its current Content
+revision/meaning and requires a second effect confirmation; the absent counted-vote/currentness producer keeps score
+effects unavailable. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated client snapshot may
+omit this surface; missing methods render unavailable rather than a local parser.
 
 Own-upload attestation does not verify an AniList account. Preview does not mutate Library facts. Apply revalidates
 identity, access, claim fingerprint and release; a stale unstarted review refreshes, and started original work keeps
@@ -109,10 +131,24 @@ not admitted facts. `complete:false` is resumable, not success for every row.
 - Touched neighbourhood: `library.list_import_anilist` on the owner route, unique AniList and separate MyAnimeList
   external claims, current released profile state roles, and the personal Library entry command. Web retains the
   current 20-row page plus N metadata rows; it does not scan other owners or fork the native engine.
-- Formula: `1 preview + K page reads + M reviews + Q apply batches + lifecycle + R retries`, with page `<= 20`,
-  apply `<= 20`, `M <= N <= 200` and `Q <= ceil(M/20)` only when the user confirms full batches.
-- Installed caps: `ANILIST_LIMITS` in `services/kernel/src/library/list-import-anilist-parser.ts`.
+- Formula: `preview(B,N) + K page reads + M reviews + Q apply batches + lifecycle + R retries`, with upload bytes
+  `B <= 1,048,576`, rows `N <= 200`, page/apply `<= 20`, and `Q <= ceil(M/20)` only for full batches. Preview
+  accounts for UTF-8 sizing, JSON parse, structural validation and one bounded source-token walk over `B`, then
+  writes the header and `N` rows through the existing owner receipt/event. Each page accounts for its indexed
+  20-row read, per-row provider claims and current Subject/Profile/Entry observations; score-review rows add one
+  authorized Content question read. Each review repeats its row, provider-claim and Subject/Profile/Entry reads;
+  selecting a score adds the question read, header score-format read and one bounded plan/receipt write. Each apply
+  confirmation repeats cancellation/header and row reads; a selected score repeats Content question, provider-claim
+  and current target reads and writes the persisted consent plan before returning unavailable. Existing state commands
+  retain their own admission and receipt work. No history discovery or account-wide vote scan is added.
+- Caps and encoding: the existing 1 MiB upload, 200-row, 65,536-byte row, 8,192-byte group and SQL 4 MiB row-payload
+  limits retain `scoreLexeme`, reviewed operands and consent in the existing rows. Page encoding checks the existing
+  result-byte bound after adding score/question details; apply still selects at most 20 bounded outcomes. There is
+  no additional evidence store. Upload deletion and account cleanup remain the existing explicit delete and 100-key
+  owned-graph phase. A future native score attempt must include Content's repeated question/current-counted-vote/
+  identity admission, component and aggregate work, native receipt, retry and serialization cost; that producer is
+  missing and its cost is unmeasured here.
 - Growth check: Web focused test `apps/web/tests/personal-anilist-import.test.tsx` drives 20, 100 and 200
   native-shaped rows through the same controller and asserts call counts, 20-row reads, 20-row writes and the
   retained-byte bound. Native statement/index bounds stay with the Commerce engine; this journey introduces no new
-  kernel query path.
+  kernel query path. Content conditional admission and its write cost remain unavailable and unmeasured.

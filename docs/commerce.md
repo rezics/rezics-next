@@ -73,3 +73,9 @@ The installed Content writer, `createVoteCommands.putVoteOutcome(actor, input, i
 guard for the reviewed question revision, canonical/counting identity and current vote or absence. VNDB score review
 and private evidence are installed, while score effects remain typed unavailable until Content supplies that guard
 inside its native writer; no Library vote writer or provider aggregate is introduced.
+
+## AniList native score admission
+
+Decision: AniList score effects remain unavailable until Content provides a conditional native vote guard for the
+reviewed question revision, counted vote or absence, canonical/counting identity and local correction; score review
+stores owner-selected units and separate effects consent.

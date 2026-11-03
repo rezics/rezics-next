@@ -125,6 +125,23 @@ export function aniListImportRoutes(
             skip: t.Optional(t.Boolean()),
             fields: t.Array(t.String({ maxLength: 100 }), { maxItems: 30, uniqueItems: true }),
             replace: t.Optional(t.Boolean()),
+            score: t.Optional(
+              t.Union([
+                t.Object(
+                  {
+                    action: t.Literal('vote'),
+                    questionId: id,
+                    questionRevision: t.Integer({ minimum: 1 }),
+                    units: t.Integer({ minimum: 0, maximum: 20 }),
+                  },
+                  closed,
+                ),
+                t.Object(
+                  { action: t.Literal('clear'), questionId: id, questionRevision: t.Integer({ minimum: 1 }) },
+                  closed,
+                ),
+              ]),
+            ),
             progress: t.Optional(
               t.Object(
                 {
@@ -176,7 +193,12 @@ export function aniListImportRoutes(
         },
         params,
         body: t.Object(
-          { confirmations: t.Array(t.Object({ ordinal, reviewId: id }, closed), { minItems: 1, maxItems: 20 }) },
+          {
+            confirmations: t.Array(
+              t.Object({ ordinal, reviewId: id, confirmNativeVoteEffects: t.Optional(t.Literal(true)) }, closed),
+              { minItems: 1, maxItems: 20 },
+            ),
+          },
           closed,
         ),
         response: {
