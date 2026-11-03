@@ -7,7 +7,8 @@ import { t } from 'elysia';
 import { kernelContract } from '../../scripts/openapi.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createApp } from '../../src/http/app.ts';
-import { bodyBytes, bodyWireBytes, DEFAULT_BODY_LIMIT, MAX_BODY_LIMIT, requestBody } from '../../src/http/body.ts';
+import { bodyBytes, bodyLimitOf, bodyWireBytes, DEFAULT_BODY_LIMIT, MAX_BODY_LIMIT, MAX_HTTP_BODY_LIMIT, requestBody } from '../../src/http/body.ts';
+import { LIBRARY_ARCHIVE_LIMITS } from '../../src/library/library-archive.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { customMethodPath } from '../../src/http/custom-method.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
@@ -356,9 +357,18 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
   }
   expect([...seenOwnParsers].sort()).toEqual([...ownParsers].sort());
   expect(shared).toBeGreaterThan(0);
-  expect(largest).toBe(MAX_BODY_LIMIT);
+  const catalogueMaximum = Math.max(DEFAULT_BODY_LIMIT, MAX_BODY_LIMIT,
+    ...kernel.routes.map((route) => bodyLimitOf(route.hooks?.detail as Record<string, unknown> | undefined)));
+  expect(largest).toBe(catalogueMaximum);
+  const archive = kernel.routes.find((route) => route.method === 'POST' && route.path === '/v1/libraryArchiveMerges')!;
+  const collection = kernel.routes.find((route) => route.method === 'POST' && route.path === '/v1/libraryArchiveCollectionRecoveries')!;
+  expect(bodyLimitOf(archive.hooks?.detail as Record<string, unknown>)).toBe(LIBRARY_ARCHIVE_LIMITS.uploadBytes);
+  const archiveWireBytes = Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4 + 128;
+  expect(bodyLimitOf(collection.hooks?.detail as Record<string, unknown>)).toBe(archiveWireBytes);
+  expect(catalogueMaximum).toBeGreaterThanOrEqual(archiveWireBytes);
+  expect(MAX_HTTP_BODY_LIMIT).toBeGreaterThanOrEqual(catalogueMaximum);
   const server = await Bun.file(new URL('../../src/server.ts', import.meta.url)).text();
-  expect(server).toContain('maxRequestBodySize: MAX_BODY_LIMIT');
+  expect(server).toContain('maxRequestBodySize: MAX_HTTP_BODY_LIMIT');
 });
 
 test('public custom-method rewriting preserves raw ownership, abort and transport attribution', async () => {
