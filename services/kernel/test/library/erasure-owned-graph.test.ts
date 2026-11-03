@@ -127,9 +127,10 @@ test('default native worker removes private sessions/history, labels, archives, 
     row: 0, target: subjectId, skip: false, replace: false, labels: [{ value: 0, target: { name: 'Adopted before erasure' } }],
   })).status).toBe(200);
   const reviewKey = (await f.json(as, 'GET', `/v1/libraryImports/mal/${mal.id}`, 200)).rows[0].review.version;
-  await f.json(as, 'POST', `/v1/libraryImports/mal/${mal.id}/apply`, 200, {
+  const adoption = await f.json(as, 'POST', `/v1/libraryImports/mal/${mal.id}/apply`, 200, {
     confirm: true, rows: [{ row: 0, version: reviewKey, fields: ['tags'] }],
   });
+  expect(adoption.outcomes[0].labels[0].status).toBe('accepted');
   for (const table of [
     'list_import_mal',
     'entry_deleted',

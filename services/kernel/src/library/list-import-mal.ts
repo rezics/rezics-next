@@ -539,6 +539,8 @@ export function createMalImport(deps: Dependencies) {
       if (outcome.remainingLabels?.length) break;
     }
     await authority(actor, deadline);
+    if (Buffer.byteLength(canonicalize(outcomes.flatMap((o) => o.labels ?? []))!) > MAL_LABEL_LIMITS.outputBytes)
+      throw new ProblemError('invalid_request', { detail: 'MAL: label outcomes exceed encoded byte limit' });
     return {
       id,
       outcomes,

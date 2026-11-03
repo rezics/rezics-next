@@ -75,7 +75,9 @@ test('actual MAL upload adopts existing and new labels on its admitted Subject; 
   expect(native.map((a) => a.labelId).sort()).toEqual([existing.id, adopted[1].labelId].sort());
   expect(native.find((a) => a.labelId === adopted[1].labelId)?.id).toBe(adopted[1].assignment.id);
   await json('GET', `/v1/libraryEntries/${subject}`, undefined, 404);
-  expect((await json('GET', `/v1/libraryLabels/${adopted[1].labelId}`)).label.name).toBe('MAL Café');
+  expect((await json('GET', '/v1/libraryLabels?limit=100')).labels).toContainEqual(
+    { id: adopted[1].labelId, name: 'MAL Café', revision: 1 },
+  );
   // Both native commands committed; acknowledgement of their operands/outcome was lost.
   await f.pool.query(`UPDATE library.list_import_mal SET document=document
     #- '{labelIntents,0,items,1,label}' #- '{labelIntents,0,items,1,outcome}' WHERE account_id=$1 AND id=$2`, [f.owner.actor.accountId, id]);
