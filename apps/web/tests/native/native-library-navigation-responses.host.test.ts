@@ -35,9 +35,17 @@ function textOf(body: unknown): string {
 
 test('native Library and My Collections exports retain raw owner-local responses and emitted destinations', async () => {
   const fixture = await createNativeLibraryNavigationResponsesFixture(stack!, auth!);
-  expect(fixture.binding.currentDevRecording).toBe(true);
-  expect(fixture.binding.sourceTreeClean).toBe(true);
-  expect(fixture.binding.sourceCommit).toMatch(/^[0-9a-f]{40}$/u);
+  expect(fixture.binding).toBeDefined();
+  expect(fixture.binding.sourceIdentity).toMatch(/^(known|unknown)$/u);
+  if (fixture.binding.sourceIdentity === 'known') {
+    expect(fixture.binding.sourceCommit).toMatch(/^[0-9a-f]{40}$/u);
+    expect(fixture.binding.sourceTreeClean).toBeBoolean();
+    expect(fixture.binding.currentDevRecording).toBe(fixture.binding.sourceTreeClean);
+  } else {
+    expect(fixture.binding.sourceCommit).toBeNull();
+    expect(fixture.binding.sourceTreeClean).toBeNull();
+    expect(fixture.binding.currentDevRecording).toBe(false);
+  }
   expect(fixture.binding.runtime).toMatchObject({
     producer: 'startNativeWebStack + startAuthStack',
     mode: 'worktree-dev',

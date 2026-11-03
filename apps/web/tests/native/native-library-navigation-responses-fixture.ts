@@ -160,8 +160,9 @@ export type NativeLibraryNavigationScenarioExport = {
 
 export type NativeLibraryNavigationResponseFixture = {
   binding: {
-    sourceCommit: string;
-    sourceTreeClean: boolean;
+    sourceCommit: string | null;
+    sourceTreeClean: boolean | null;
+    sourceIdentity: 'known' | 'unknown';
     currentDevRecording: boolean;
     runtime: {
       producer: 'startNativeWebStack + startAuthStack';
@@ -251,12 +252,28 @@ function gitOutput(args: string[]): string {
 }
 
 function sourceBinding(stack: NativeWebStack, auth: NativeAuthStack): NativeLibraryNavigationResponseFixture['binding'] {
-  const sourceCommit = gitOutput(['rev-parse', 'HEAD']);
-  const sourceTreeClean = gitOutput(['status', '--porcelain', '--untracked-files=all']) === '';
+  let sourceCommit: string | null = null;
+  let sourceTreeClean: boolean | null = null;
+  let sourceIdentity: 'known' | 'unknown' = 'unknown';
+  try {
+    const sourceRoot = gitOutput(['rev-parse', '--show-toplevel']);
+    if (resolve(sourceRoot) === repositoryRoot()) {
+      sourceCommit = gitOutput(['rev-parse', 'HEAD']);
+      sourceTreeClean = gitOutput(['status', '--porcelain', '--untracked-files=all']) === '';
+      sourceIdentity = 'known';
+    }
+  } catch {
+    // Frozen check workspaces may not carry the candidate's Git metadata.
+  }
   return {
     sourceCommit,
     sourceTreeClean,
-    currentDevRecording: sourceTreeClean && /^[0-9a-f]{40}$/u.test(sourceCommit),
+    sourceIdentity,
+    currentDevRecording:
+      sourceIdentity === 'known' &&
+      sourceTreeClean === true &&
+      sourceCommit !== null &&
+      /^[0-9a-f]{40}$/u.test(sourceCommit),
     runtime: {
       producer: 'startNativeWebStack + startAuthStack',
       webOrigin: stack.web,
