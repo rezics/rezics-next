@@ -690,7 +690,7 @@ export async function sweepBacklog(runtime: BacklogRuntime): Promise<BacklogSwee
   // One run at a time, across host restarts too: claim recovery assumes no other run holds a claim.
   let lease;
   try {
-    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'), runtime.policy?.leases);
+    lease = acquireDirectoryLease(join(runtime.stateDirectory, 'leases', 'backlog'));
   } catch (error) {
     if (error instanceof LeaseHeldError)
       return { skipped: true, dispatched: [], continued: [], refused: [], expired: [], woken: [] };

@@ -180,10 +180,7 @@ export class PublicationLegacyReconciliation {
       throw new Error('legacy preparation requires the current configured operations provider session');
   }
   private lease() {
-    return acquireDirectoryLease(
-      join(this.options.stateDirectory, 'publication', 'custody.lease'),
-      this.options.policy?.leases,
-    );
+    return acquireDirectoryLease(join(this.options.stateDirectory, 'publication', 'custody.lease'));
   }
   private provenance(messageId: number, actor: PublicationActor): Provenance {
     this.authenticate(actor);

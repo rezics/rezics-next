@@ -4,12 +4,11 @@ import { dirname, join } from 'node:path';
 import type { Pool, PoolReading } from './types.ts';
 import { agentAdapter } from './agents.ts';
 import { unknownReading } from './agents/shared.ts';
-import { defaultPolicy } from './policy.ts';
 export { parseCodexAllowance as parseCodexUsage } from './agents/codex.ts';
 export { parseClaudeUsage, recordClaudeRateLimit } from './agents/claude.ts';
 
 /** Other CLIs can supply a normalized quota observation through the local-only usageFile. */
-export function readPool(pool: Pool, now = Date.now(), policy = defaultPolicy.provider): PoolReading {
+export function readPool(pool: Pool, now = Date.now()): PoolReading {
   try {
     if (pool.usageFile) {
       const raw = JSON.parse(readFileSync(pool.usageFile, 'utf8')) as PoolReading;
@@ -29,7 +28,7 @@ export function readPool(pool: Pool, now = Date.now(), policy = defaultPolicy.pr
         exhausted: raw.exhausted === true || raw.windows.some((w) => w.usedPercent >= 100),
       };
     }
-    return agentAdapter(pool.cli).readAllowance?.(pool, now, policy) ?? unknownReading(pool, now);
+    return agentAdapter(pool.cli).readAllowance?.(pool, now) ?? unknownReading(pool, now);
   } catch {
     return unknownReading(pool, now, 'quota observation unavailable');
   }
@@ -51,7 +50,6 @@ export function assessUsageLimitRefusal(
   before: PoolReading | null,
   pool: Pool,
   now = Date.now(),
-  policy = defaultPolicy.provider,
 ): UsageLimitAssessment {
   const readings = [after, before]
     .filter(
@@ -67,7 +65,7 @@ export function assessUsageLimitRefusal(
     if (reading.exhausted || reading.windows.some((window) => window.usedPercent >= 100))
       return { confirmedExhaustion: true, reason: 'window-used-up', reading };
     const observedAt = Date.parse(reading.observedAt!);
-    if (observedAt > now + policy.observationClockSkewMs || now - observedAt > pool.policy.maxAgeMs)
+    if (observedAt > now + 60_000 || now - observedAt > pool.policy.maxAgeMs)
       return { confirmedExhaustion: true, reason: 'reading-stale', reading };
     return { confirmedExhaustion: false, reason: 'allowance-left', reading };
   }

@@ -220,10 +220,7 @@ export async function removeFinishedWorktree(
 ): Promise<string | null> {
   const lease = (() => {
     try {
-      return acquireDirectoryLease(
-        join(settings.stateDirectory, 'leases', 'worktree-lifetime'),
-        settings.policy?.leases,
-      );
+      return acquireDirectoryLease(join(settings.stateDirectory, 'leases', 'worktree-lifetime'));
     } catch (error) {
       if (error instanceof LeaseHeldError) return null;
       throw error;
@@ -245,7 +242,7 @@ export async function removeFinishedWorktree(
       if (!eligibleDirectory(task, roots)) continue;
       let taskLease: DirectoryLease;
       try {
-        taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id), settings.policy?.leases);
+        taskLease = acquireDirectoryLease(join(settings.stateDirectory, 'leases', task.id));
       } catch (error) {
         if (error instanceof LeaseHeldError) continue;
         throw error;

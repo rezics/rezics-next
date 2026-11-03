@@ -1,7 +1,6 @@
 import { agentAdapter, isAgentCli, pinnedModelProfile, requireOriginalProofProfile } from './agents.ts';
 import { readFileSync } from 'node:fs';
 import type { Brief, Effort, Profile, TaskClass } from './types.ts';
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
 // fallbacks are tried in order when no pool of the first profile's CLI has quota. A new task of a paced class goes to
 // the allowed profile whose allowance most needs spending; `paced: false` keeps the order, for work that belongs on its
@@ -51,7 +50,7 @@ function parseProfile(value: unknown, label: string): Profile {
     ...(profile.serviceTier === undefined ? {} : { serviceTier: 'default' as const }),
   };
 }
-function parseRoute(value: unknown, label: string, limits: { maxSteps: number; maxMs: number }): Route {
+function parseRoute(value: unknown, label: string): Route {
   const route = object(value, label);
   const first = parseProfile(route.first, `${label}.first`);
   let fallbacks: Profile[] | undefined;
@@ -63,8 +62,8 @@ function parseRoute(value: unknown, label: string, limits: { maxSteps: number; m
   return {
     first,
     ...(fallbacks === undefined ? {} : { fallbacks }),
-    maxSteps: finitePositive(route.maxSteps === undefined ? limits.maxSteps : route.maxSteps, `${label}.maxSteps`),
-    maxMs: finitePositive(route.maxMs === undefined ? limits.maxMs : route.maxMs, `${label}.maxMs`),
+    maxSteps: finitePositive(route.maxSteps, `${label}.maxSteps`),
+    maxMs: finitePositive(route.maxMs, `${label}.maxMs`),
     ...(route.paced === undefined ? {} : { paced: route.paced }),
   };
 }
@@ -83,11 +82,11 @@ function parseExperiment(value: unknown, label: string): RoutingTable['experimen
   };
 }
 /** Validate a routing document at the configuration boundary; every error names the responsible field. */
-export function parseRouting(value: unknown, policy = defaultPolicy.routing): RoutingTable {
+export function parseRouting(value: unknown): RoutingTable {
   const table = object(value, 'routing');
   const classesValue = object(table.classes, 'classes');
   const classes = {} as RoutingTable['classes'];
-  for (const key of ROUTED_CLASSES) classes[key] = parseRoute(classesValue[key], `classes.${key}`, policy[key]);
+  for (const key of ROUTED_CLASSES) classes[key] = parseRoute(classesValue[key], `classes.${key}`);
   if (!Array.isArray(table.experiments)) throw new Error('experiments must be an array');
   const open = new Set<TaskClass>();
   const experiments = table.experiments.map((item, index) => {
@@ -107,8 +106,8 @@ export function parseRouting(value: unknown, policy = defaultPolicy.routing): Ro
       : text(table.version, 'version');
   return { version, classes, experiments, consultation };
 }
-export function readRouting(file: string, policy: ControlPolicy['routing'] = defaultPolicy.routing): RoutingTable {
-  return parseRouting(JSON.parse(readFileSync(file, 'utf8')), policy);
+export function readRouting(file: string): RoutingTable {
+  return parseRouting(JSON.parse(readFileSync(file, 'utf8')));
 }
 /** A retry keeps its attempt's profile while that has quota; otherwise it reroutes as a new task of its class would. */
 export function retryFallbacks(table: RoutingTable, taskClass: TaskClass): Profile[] {

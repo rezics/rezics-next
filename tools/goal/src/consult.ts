@@ -1,7 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { defaultPolicy } from './policy.ts';
 import { choosePool } from './allowance.ts';
 import { agentAdapter } from './agents.ts';
 import { launchCommand, workerEnvironment } from './launch.ts';
@@ -11,15 +10,15 @@ import { processIdentity, terminateProcessGroup, type ProcessIdentity } from './
 import type { AttemptRef } from './contracts.ts';
 import type { WorkerTasks } from './tasks.ts';
 
-export const CONSULTATION_LIMIT_MS = defaultPolicy.consultation.timeoutMs;
+export const CONSULTATION_LIMIT_MS = 120_000;
 
-function boundedCause(text: string, characters: number): string {
-  return text.split(/\r?\n/, 1)[0]!.trim().slice(0, characters);
+function boundedCause(text: string): string {
+  return text.split(/\r?\n/, 1)[0]!.trim().slice(0, 1000);
 }
 
-function stderrCause(path: string, characters: number): string {
+function stderrCause(path: string): string {
   try {
-    return boundedCause(readFileSync(path, 'utf8'), characters);
+    return boundedCause(readFileSync(path, 'utf8'));
   } catch {
     return '';
   }
@@ -55,11 +54,10 @@ function asConsultationFailure(error: unknown, cause: string): Error {
 /** The prompt is assembled from only the four evidence artifacts. No transcript or project access is requested. */
 export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: string): Promise<string> {
   const store = tasks.store;
-  const policy = tasks.settings.policy ?? defaultPolicy;
   store.assertCurrent(ref);
   const attempt = store.attempt(ref);
   if (attempt.consulted) throw new Error('this task already used its one consultation');
-  const profile = readRouting(tasks.settings.routingFile, tasks.settings.policy?.routing).consultation;
+  const profile = readRouting(tasks.settings.routingFile).consultation;
   const readings = tasks.settings.pools.map((p) => tasks.reader(p));
   const pool = choosePool(profile, tasks.settings.pools, readings);
   const contract = readFileSync(join(directory, 'contract.md'), 'utf8');
@@ -128,14 +126,14 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
     const outcome = await Promise.race([
       exited,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('consultation timed out')), policy.consultation.timeoutMs);
+        timer = setTimeout(() => reject(new Error('consultation timed out')), CONSULTATION_LIMIT_MS);
       }),
     ]);
     store.assertCurrent(ref);
     if (outcome.signal || outcome.code !== 0)
-      throw failedConsultation(outcome.code, outcome.signal, stderrCause(errPath, policy.consultation.causeCharacters));
+      throw failedConsultation(outcome.code, outcome.signal, stderrCause(errPath));
     const endedAt = new Date().toISOString();
-    const measurement = measureLog(readFileSync(logPath, 'utf8'), { adapter: agentAdapter(profile.cli), policy });
+    const measurement = measureLog(readFileSync(logPath, 'utf8'), { adapter: agentAdapter(profile.cli) });
     if (!measurement.result.trim()) throw new Error('consultation produced no usable advice');
     writeFileSync(join(directory, 'consultation.md'), measurement.result);
     store.event(ref, 'consultation-completed', {
@@ -149,9 +147,9 @@ export async function consult(tasks: WorkerTasks, ref: AttemptRef, directory: st
     return measurement.result;
   } catch (error) {
     store.assertCurrent(ref);
-    throw asConsultationFailure(error, stderrCause(errPath, policy.consultation.causeCharacters));
+    throw asConsultationFailure(error, stderrCause(errPath));
   } finally {
     clearTimeout(timer);
-    await terminateProcessGroup(identity, tasks.settings.terminationGraceMs, tasks.settings.policy?.process);
+    await terminateProcessGroup(identity, tasks.settings.terminationGraceMs);
   }
 }

@@ -2,22 +2,22 @@ import { spawnSync } from 'node:child_process';
 import type { AttemptRef } from './contracts.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, Settings, Task } from './types.ts';
-import { defaultPolicy } from './policy.ts';
 
 /**
  * Retry delays for a tool blocker by how often its fingerprint was seen across all tasks in the last hour: the first
  * sighting waits two minutes, the second ten, later ones thirty. Zero-delay retries repeated the same blocker 176 times
  * within five minutes (2026-11-01).
  */
-export const TOOL_RETRY_BACKOFF_MS = defaultPolicy.worker.toolRetryBackoffMs;
+export const TOOL_RETRY_BACKOFF_MS = [2 * 60_000, 10 * 60_000, 30 * 60_000] as const;
+const BACKOFF_WINDOW_MS = 60 * 60_000;
+/** The backoff count reads only recent event rows, so its cost does not grow with the store's history. */
+const BACKOFF_EVENT_ROWS = 5_000;
 
 /** Test processes retry at once unless a test sets its own delays. */
-export function toolRetryBackoff(settings: Pick<Settings, 'toolRetryBackoffMs' | 'policy'>): readonly number[] {
+export function toolRetryBackoff(settings: Pick<Settings, 'toolRetryBackoffMs'>): readonly number[] {
   return (
     settings.toolRetryBackoffMs ??
-    (process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1'
-      ? (settings.policy ?? defaultPolicy).worker.toolRetryBackoffMs.map(() => 0) // Test-only immediate retries.
-      : (settings.policy ?? defaultPolicy).worker.toolRetryBackoffMs)
+    (process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1' ? [0, 0, 0] : TOOL_RETRY_BACKOFF_MS)
   );
 }
 
@@ -126,21 +126,20 @@ function escapeRegExp(value: string): string {
 /** The delay before retrying a tool blocker with this fingerprint; records the sighting for later retries. */
 export function toolRetryDelay(
   store: WorkerStore,
-  settings: Pick<Settings, 'toolRetryBackoffMs' | 'policy'>,
+  settings: Pick<Settings, 'toolRetryBackoffMs'>,
   ref: AttemptRef,
   fingerprint: string,
   now = Date.now(),
 ): number {
   const ladder = toolRetryBackoff(settings);
-  const policy = (settings.policy ?? defaultPolicy).worker;
-  const since = new Date(now - policy.toolRetryWindowMs).toISOString();
+  const since = new Date(now - BACKOFF_WINDOW_MS).toISOString();
   const rows = store.db
     .query(
       `SELECT body FROM worker_events
         WHERE sequence > (SELECT COALESCE(MAX(sequence), 0) FROM worker_events) - ?
           AND kind = 'tool-blocker-retry' AND at >= ?`,
     )
-    .all(policy.toolRetryEventRows, since) as { body: string }[];
+    .all(BACKOFF_EVENT_ROWS, since) as { body: string }[];
   const seen = rows.filter((row) => parse(row.body).fingerprint === fingerprint).length;
   const delayMs = ladder[Math.min(seen, ladder.length - 1)] ?? 0;
   store.event(ref, 'tool-blocker-retry', { fingerprint, seen, delayMs });

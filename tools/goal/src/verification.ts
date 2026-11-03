@@ -1,4 +1,3 @@
-import { defaultPolicy } from './policy.ts';
 import type { ProofMetadata } from './types.ts';
 
 /** CP reservation identity; mapped exactly to the delivered native token wire field. */
@@ -84,12 +83,7 @@ const PRODUCER_START = `import {pathToFileURL} from 'node:url';
 const binding = JSON.parse(await Bun.stdin.text());
 const {startControllerWorkerCheck} = await import(pathToFileURL(binding.cwd + '/scripts/worker-check.ts').href);
 console.log(JSON.stringify(await startControllerWorkerCheck(binding)));`;
-async function invokeProofProducer(
-  binding: ProofBinding,
-  registry: string,
-  env: NodeJS.ProcessEnv,
-  policy = defaultPolicy.proof,
-): Promise<unknown> {
+async function invokeProofProducer(binding: ProofBinding, registry: string, env: NodeJS.ProcessEnv): Promise<unknown> {
   return await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--eval', PRODUCER_START], {
       cwd: binding.cwd,
@@ -110,7 +104,7 @@ async function invokeProofProducer(
       output += chunk.toString();
     });
     child.stderr.on('data', (chunk: Buffer) => {
-      error = (error + chunk.toString()).slice(-policy.producerErrorCharacters);
+      error = (error + chunk.toString()).slice(-8192);
     });
     child.once('error', reject);
     child.once('close', (code) => {
@@ -190,11 +184,7 @@ export function productionProofProducer(store: WorkerStore, registry: string, en
               throw new Error('Native proof reservation was revoked or changed');
           } else writeAtomicJson(path, reservation);
         });
-        return receiveProofStart(
-          binding,
-          registry,
-          await invokeProofProducer(binding, registry, env, store.policy.proof),
-        );
+        return receiveProofStart(binding, registry, await invokeProofProducer(binding, registry, env));
       } catch (error) {
         return { status: 'unknown', cause: String(error) };
       }
@@ -876,10 +866,7 @@ export type HistoricalProofReaderSource = {
 };
 const importedHistoricalSources = new Map<string, string>();
 /** Validate code against the controller's Git objects before importing any part of the native module closure. */
-export function validateHistoricalProofReaderSource(
-  source: HistoricalProofReaderSource,
-  policy = defaultPolicy.proof,
-): string {
+export function validateHistoricalProofReaderSource(source: HistoricalProofReaderSource): string {
   const { root, integrationRoot, integrationBranch } = source;
   if (!isAbsolute(root) || realpathSync(root) !== root || git(root, ['rev-parse', '--show-toplevel']) !== root)
     throw new Error('Historical reader root must be a canonical Git checkout root');
@@ -922,7 +909,7 @@ export function validateHistoricalProofReaderSource(
       throw new Error(`Historical reader module is not a captured regular file: ${path}`);
     const expected = spawnSync('git', ['show', `${commit}:${path}`], {
       cwd: integrationRoot,
-      maxBuffer: policy.sourceBufferBytes,
+      maxBuffer: 8 * 1024 * 1024,
     });
     const contents = readFileSync(absolute);
     if (expected.status !== 0 || !contents.equals(expected.stdout))
@@ -940,9 +927,8 @@ export function validateHistoricalProofReaderSource(
 export async function loadHistoricalProofReader(
   registry: string,
   source: HistoricalProofReaderSource,
-  policy = defaultPolicy.proof,
 ): Promise<HistoricalProofReader> {
-  const commit = validateHistoricalProofReaderSource(source, policy);
+  const commit = validateHistoricalProofReaderSource(source);
   // Even a failed import can populate Bun's module cache. Never reuse that root for another captured revision.
   importedHistoricalSources.set(source.root, commit);
   const wrapper = join(source.root, 'scripts/worker-check.ts');
@@ -1011,7 +997,7 @@ export async function refreshHistoricalProofAdmission(
   if (!checks.length) return;
   let reader: HistoricalProofReader;
   try {
-    reader = await loadHistoricalProofReader(registry, source, store.policy.proof);
+    reader = await loadHistoricalProofReader(registry, source);
   } catch (error) {
     const cause = `Historical admission requires the trusted current native reader: ${String(error)}`;
     store.historicalProofReaderUnavailable(checks[0]!, cause);
@@ -1092,10 +1078,8 @@ export function proofSourceUnchanged(task: Task, integrationBranch: string): boo
 }
 
 export class ProofCapacityQueuedError extends Error {
-  constructor(concurrency = defaultPolicy.proof.concurrency) {
-    // English number names preserve the existing diagnostic, not admission policy.
-    const count = ['zero', 'one', 'two', 'three'][concurrency] ?? String(concurrency);
-    super(`Proof queued: ${count} current ordinary checks active`);
+  constructor() {
+    super('Proof queued: three current ordinary checks active');
   }
 }
 
