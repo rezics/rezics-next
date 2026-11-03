@@ -1,3 +1,4 @@
+import { productionActions } from '../support/production-actions.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
@@ -16,7 +17,6 @@ import {
   contentGovernanceCredential,
   type ContentSystem,
 } from '../content/support/system.ts';
-import { productionActions } from '../support/production-actions.ts';
 
 let system: ContentSystem;
 beforeAll(async () => {
