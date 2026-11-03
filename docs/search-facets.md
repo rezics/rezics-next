@@ -13,6 +13,30 @@ Keep `POST /v1/subjects:facets`, with existing optional `text`, `filter` and `la
 Properties must be distinct. Size is an integer from 1 through 20, default 10. Each property's cursor is optional;
 sibling facets may start or resume independently. Existing text/filter admission and language semantics remain.
 
+## Second-scope request and readiness
+
+The additive scoped request uses `scope: { kind: 'realm' | 'collection', id: string }` and optional `conditions`,
+carrying the same semantic condition tree as the corresponding Search request. The unscoped request shape remains
+unchanged. Scoped condition validation and authorization belong to the shared Search scope admission; it must
+authorize every resource reference in the complete tree, including references under `NOT` and otherwise unrelated
+`OR` branches.
+
+The adjacent `readScopedFacetDiscovery` adapter consumes the existing `ScopedFacetAdmission` from
+`scoped-facet-source.ts`, returned by shared Search admission. The identity hashes its source, admitted meaning,
+population and authorization observations; the Search consumer context carries the existing deadline. The adapter
+binds the submitted scope and complete condition tree into the static cursor request, then treats changed dynamic
+admission or released metadata as `search_restart_required`. A different principal, static query, scope reference,
+language or size cannot authenticate the cursor. Shared admission runs before cursor validation or provider I/O.
+
+Readiness remains partial: native facet plans already carry an admitted scope, and native storage consumes it only
+through the optional `ScopedFacetSource` ports. Missing or unready scoped ports leave the request preparing and the
+existing runtime returns `503 index_not_ready`; it never falls through to Global values. The public service handler
+does not yet call this adjacent adapter, so the public endpoint remains unscoped. Once wired, configured native
+scope ports can execute the admitted capture. The unscoped route keeps its existing wire, eight-distinct-property
+limit, sizes 1 through 20, count-free values and native value ordering.
+
+Decision: scoped facets use the additive Realm/Collection reference and the same Search condition tree through shared `ScopedFacetAdmission`; until the public route adopts the adapter, it remains unscoped and native unready work fails closed.
+
 The successful `200` envelope is:
 
 ```ts

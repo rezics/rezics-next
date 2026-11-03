@@ -1,12 +1,21 @@
 import { admitFilter, FilterError, walkFilter, type FilterDocument, type FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
-import type { FacetDiscoveryRequest } from './facet-discovery-contract.ts';
+import type { FacetDiscoveryRequest, FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import { RequestSourceLifetime } from './request-source-lifetime.ts';
 import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from './source.ts';
 
 export type FacetRequest = FacetDiscoveryRequest;
+
+export type ScopedFacetRequest = Readonly<{
+  scope: FacetDiscoveryScope;
+  conditions?: unknown;
+  text?: string;
+  filter?: unknown;
+  languages?: string[];
+  facets: Facet[];
+}>;
 
 export type Facet = { property: string; size: number; cursor?: string };
 export type FacetValue = { value: string; count: number; labels: Record<string, string> };
@@ -78,6 +87,31 @@ export function validateFacets(request: FacetRequest): Facet[] {
     }
     return { property: facet.property, size, ...(facet.cursor === undefined ? {} : { cursor: facet.cursor }) };
   });
+}
+
+/** Validate the additive scoped wire while leaving semantic conditions to shared Search admission. */
+export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest {
+  const body = closed(request, ['text', 'filter', 'languages', 'scope', 'conditions', 'facets'], '');
+  if (body.scope === undefined) invalid('/scope', 'required');
+  const scope = closed(body.scope, ['kind', 'id'], '/scope');
+  if (scope.kind !== 'realm' && scope.kind !== 'collection') invalid('/scope/kind', 'invalid_format');
+  if (typeof scope.id !== 'string' || !scope.id || !scope.id.isWellFormed()) invalid('/scope/id', 'invalid_format');
+  if (body.text !== undefined && typeof body.text !== 'string') invalid('/text', 'invalid_type');
+  if (body.languages !== undefined && (!Array.isArray(body.languages) || body.languages.some((v) => typeof v !== 'string')))
+    invalid('/languages', 'invalid_type');
+  const facets = validateFacets({
+    ...(body.text === undefined ? {} : { text: body.text as string }),
+    ...(body.filter === undefined ? {} : { filter: body.filter }),
+    facets: body.facets as FacetRequest['facets'],
+  });
+  return {
+    scope: { kind: scope.kind, id: scope.id },
+    ...(body.conditions === undefined ? {} : { conditions: body.conditions }),
+    ...(body.text === undefined ? {} : { text: body.text as string }),
+    ...(body.filter === undefined ? {} : { filter: body.filter }),
+    ...(body.languages === undefined ? {} : { languages: body.languages as string[] }),
+    facets,
+  };
 }
 
 /** Probe admission with the same immediate type anchors, without spending the query's leaf/depth budget. */

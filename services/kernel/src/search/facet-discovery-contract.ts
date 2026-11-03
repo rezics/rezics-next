@@ -7,10 +7,27 @@ export type FacetDiscoveryRequestedFacet = {
   cursor?: string;
 };
 
+export type FacetDiscoveryScope = Readonly<{
+  kind: 'realm' | 'collection';
+  id: string;
+}>;
+
+/** Hashes over these fields are made only after the shared Search scope admission has authorized the request. */
+export type FacetScopeCursorBinding = Readonly<{
+  /** Static resource reference and submitted condition tree; mismatch is an invalid cursor request. */
+  request: string;
+  /** Dynamic authorized scope/query meaning; change requires a first-page restart. */
+  admission: string;
+}>;
+
 export type FacetDiscoveryRequest = {
   text?: string;
   filter?: unknown;
   languages?: string[];
+  /** Additive second-scope reference. Omit to retain the existing unscoped request. */
+  scope?: FacetDiscoveryScope;
+  /** The same semantic condition tree submitted to the shared Search scope admission. */
+  conditions?: unknown;
   /** One to eight entries with distinct properties. */
   facets: FacetDiscoveryRequestedFacet[];
 };

@@ -5,6 +5,7 @@ import { ProblemError } from '../http/problem.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
+import type { FacetScopeCursorBinding } from './facet-discovery-contract.ts';
 import { decodeSearchCursor, encodeSearchCursor, type SearchCursorBinding } from './cursor.ts';
 import type { FacetDiscovery200Response, FacetDiscoveryValue } from './facet-discovery-contract.ts';
 import type { FacetDiscoveryProvider, FacetNativePlan, FacetNativeRead } from './facet-discovery-native.ts';
@@ -41,6 +42,7 @@ export type FacetDiscoveryInput = Readonly<{
   context: PublicFilterConsumerContext;
   /** Internal request supplied by the Realm/Collection admission owner; absent from the facet wire DTO. */
   scope?: ScopedFacetAdmission;
+  scopeBinding?: FacetScopeCursorBinding;
 }>;
 
 function invalid(index: number): never {
@@ -65,13 +67,17 @@ export function admitFacetPage(facets: readonly Facet[]) {
   };
 }
 
-type CursorInput = Pick<FacetDiscoveryInput, 'principal' | 'text' | 'originalFilter' | 'languages' | 'facets' | 'now'>;
-const releaseBinding = (release: FilterRelease) =>
-  createHash('sha256')
-    .update(canonicalize(release) ?? '')
-    .digest('hex');
+export type FacetCursorInput = Pick<
+  FacetDiscoveryInput,
+  'principal' | 'text' | 'originalFilter' | 'languages' | 'facets' | 'now' | 'scopeBinding'
+>;
+export function facetCursorReleaseBinding(release: FilterRelease, scopeBinding?: FacetScopeCursorBinding): string {
+  const canonical = canonicalize(scopeBinding ? { release, admission: scopeBinding.admission } : release);
+  if (canonical === undefined) throw ready();
+  return createHash('sha256').update(canonical).digest('hex');
+}
 
-function binding(input: CursorInput, facet: Facet): SearchCursorBinding {
+export function facetCursorBinding(input: FacetCursorInput, facet: Facet): SearchCursorBinding {
   return {
     operation,
     principal: input.principal,
@@ -81,13 +87,19 @@ function binding(input: CursorInput, facet: Facet): SearchCursorBinding {
       property: facet.property,
       languages: input.languages ?? null,
       size: facet.size,
+      ...(input.scopeBinding ? { scope: input.scopeBinding.request } : {}),
     },
   };
 }
 
-async function position(ring: KeyRing, input: CursorInput, facet: Facet, index: number): Promise<Position | undefined> {
+async function position(
+  ring: KeyRing,
+  input: FacetCursorInput,
+  facet: Facet,
+  index: number,
+): Promise<Position | undefined> {
   if (facet.cursor === undefined) return undefined;
-  const decoded = await decodeSearchCursor(ring, binding(input, facet), facet.cursor, input.now);
+  const decoded = await decodeSearchCursor(ring, facetCursorBinding(input, facet), facet.cursor, input.now);
   if (!decoded.ok) {
     if (decoded.reason === 'expired') throw restart();
     invalid(index);
@@ -113,17 +125,37 @@ async function position(ring: KeyRing, input: CursorInput, facet: Facet, index: 
     !/^[0-9a-f]{64}$/.test(release)
   )
     invalid(index);
-  return { observation, build, generation, key, source, consumer, release, searchGeneration: decoded.generation };
+  return {
+    observation,
+    build,
+    generation,
+    key,
+    source,
+    consumer,
+    release,
+    searchGeneration: decoded.generation,
+  };
 }
 
 /** Authenticate original static query/principal before reading changing meaning or runtime availability. */
-export async function authenticateFacetCursors(ring: KeyRing, input: CursorInput) {
+export async function authenticateFacetCursors(ring: KeyRing, input: FacetCursorInput) {
   const positions: (Position | undefined)[] = [];
   for (const [index, facet] of input.facets.entries()) positions.push(await position(ring, input, facet, index));
   return positions;
 }
-export function validateFacetCursorRelease(positions: readonly (Position | undefined)[], release: FilterRelease) {
-  if (positions.some((previous) => previous && previous.release !== releaseBinding(release))) throw restart();
+export function validateFacetCursorRelease(
+  positions: readonly (Position | undefined)[],
+  release: FilterRelease,
+  scopeBinding?: FacetScopeCursorBinding,
+) {
+  if (
+    positions.some(
+      (previous) =>
+        previous &&
+        previous.release !== facetCursorReleaseBinding(release, scopeBinding),
+    )
+  )
+    throw restart();
 }
 
 // Native registration includes physical incarnation, complete meaning and the registered read definition.
@@ -221,8 +253,10 @@ export async function readFacetDiscovery(
     if (Date.now() >= input.context.deadline) throw new ProblemError('deadline_exceeded');
   };
   checkDeadline();
-  if (input.scope) scopedFacetIdentityKey(input.scope.identity);
-  validateFacetCursorRelease(positions, input.release);
+  const scopeIdentity = input.scope ? scopedFacetIdentityKey(input.scope.identity) : undefined;
+  if (input.scope !== undefined && input.scopeBinding?.admission !== scopeIdentity) throw ready();
+  if (input.scope === undefined && input.scopeBinding !== undefined) throw ready();
+  validateFacetCursorRelease(positions, input.release, input.scopeBinding);
   if (!Number.isSafeInteger(provider.generation) || provider.generation < 1 || !provider.source) throw ready();
   if (positions.some((previous) => previous && previous.source !== provider.source)) throw restart();
   if (canonicalize(provider.meaning.release) !== canonicalize(input.release)) {
@@ -304,7 +338,7 @@ export async function readFacetDiscovery(
     if (snapshot.kind !== 'prepared' || facet.after === null) throw ready();
     result[index]!.next = await encodeSearchCursor(
       ring,
-      binding(input, input.facets[index]!),
+      facetCursorBinding(input, input.facets[index]!),
       {
         generation: provider.generation,
         after: [
@@ -314,8 +348,8 @@ export async function readFacetDiscovery(
           snapshot.generation.toString(),
           facet.after,
           provider.source,
-          consumerBinding(reads[index]!),
-          releaseBinding(input.release),
+          consumerBinding(reads[index]!, input.scopeBinding),
+          facetCursorReleaseBinding(input.release, input.scopeBinding),
         ],
       },
       input.now,
