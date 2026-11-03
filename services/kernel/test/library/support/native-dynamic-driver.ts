@@ -5,6 +5,7 @@ import type {
   ProfileName,
 } from '../../../../../specs/dynamic-collections-driver.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
+import { mountCollectionInZone } from './native-zone-collection-fixture.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
 import { deleteAccount, grantSubjectRead, json, publish, setEntry, unavailable, write } from './native-conformance.ts';
 import { provisionOwnerReadableSubject } from './native-private-subject.ts';
@@ -126,9 +127,7 @@ export async function createDynamicCollectionsDriver(): Promise<DynamicCollectio
         return unavailable(`native all-private-fact cleanup command for ${subjectId}`);
       },
       deleteAccount: () => deleteAccount(world),
-      async mountCollection() {
-        return unavailable('Zone Collection mount command binding');
-      },
+      mountCollection: (collectionId) => mountCollectionInZone(world.native.request, collectionId),
       async exportCollection() {
         return unavailable('common Collection export command binding');
       },
