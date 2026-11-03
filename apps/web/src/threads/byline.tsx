@@ -42,6 +42,7 @@ const personLink =
 export function Byline({
   author,
   createdAt,
+  revisedAt,
   now,
   showAuthor = true,
   size = 'default',
@@ -50,6 +51,7 @@ export function Byline({
 }: {
   author: PageAuthor | undefined;
   createdAt: string;
+  revisedAt?: string | null | undefined;
   now: string;
   showAuthor?: boolean;
   size?: 'default' | 'sm';
@@ -71,7 +73,7 @@ export function Byline({
       : [author?.displayName, author?.handle ? `@${author.handle}` : null].filter(Boolean).join(' ');
 
   return (
-    <div className={cn('flex min-w-0 items-center gap-2.5 text-sm text-muted-foreground', className)}>
+    <div className={cn('flex min-w-0 items-start gap-2.5 text-sm text-muted-foreground', className)}>
       {showAuthor ? (
         <Avatar aria-hidden="true" size={size === 'sm' ? 'sm' : 'default'}>
           {avatar && variant ? (
@@ -85,10 +87,7 @@ export function Byline({
       <p className="min-w-0 flex-1">
         <span className="block min-w-0">
           {showAuthor ? (
-            <span
-              className="block min-w-0 truncate overflow-visible! text-clip! whitespace-normal! [overflow-wrap:anywhere]"
-              title={identityTitle}
-            >
+            <span className="block min-w-0 whitespace-normal [overflow-wrap:anywhere]" title={identityTitle}>
               {deleted ? (
                 <span>
                   {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
@@ -126,6 +125,11 @@ export function Byline({
               <time dateTime={createdAt} title={fullDateTime(createdAt, locale)}>
                 {timeText(createdAt, now, locale)}
               </time>,
+              revisedAt && new Date(revisedAt).getTime() > new Date(createdAt).getTime() ? (
+                <time dateTime={revisedAt} title={fullDateTime(revisedAt, locale)}>
+                  {m.thread_post_edited()}
+                </time>
+              ) : null,
               children,
             ]}
           />

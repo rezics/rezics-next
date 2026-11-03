@@ -1,4 +1,4 @@
-import { DocumentBody } from '../document-body';
+import { PostReadingBody } from './post-reading-body';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
@@ -80,8 +80,8 @@ export function ExactRevisionView({
             now={page.now}
             className="[&_.truncate]:overflow-visible [&_.truncate]:text-clip [&_.truncate]:whitespace-normal"
           />
-          <DocumentBody
-            className="mx-0! w-full overflow-x-auto [overflow-wrap:anywhere]"
+          <PostReadingBody
+            key={`${page.revision.id}:${page.revision.revisionId}`}
             document={page.revision.body}
             mentions={page.mentions}
             locale={locale}

@@ -58,22 +58,38 @@ export async function readThreadDocumentMedia(
   };
 }
 
+/** Index only exact current-document disclosures. Building the index never reads or guesses attachment URLs. */
+export function documentImagesForPost(
+  media: ThreadDocumentMedia | undefined,
+  post: ThreadPost,
+): ReadonlyMap<string, DocumentImagePresentation> {
+  const images = new Map<string, DocumentImagePresentation>();
+  if (media?.kind !== 'ready' || post.availability !== 'available') return images;
+  const bound = new Set<string>();
+  for (const document of media.documents) {
+    if (
+      document.postId === post.id &&
+      document.threadId === post.threadId &&
+      document.revisionId === post.revisionId &&
+      document.sha256 === post.sha256
+    ) {
+      for (const mediaId of document.mediaIds) bound.add(mediaId);
+    }
+  }
+  if (bound.size === 0) return images;
+  const declared = new Set(post.mediaIds);
+  for (const image of media.images) {
+    if (image.containerId === post.threadId && declared.has(image.id) && bound.has(image.id) && !images.has(image.id))
+      images.set(image.id, image);
+  }
+  return images;
+}
+
 /** Local edits and newly returned replies cannot borrow a previous page's image summaries. */
 export function documentImageForPost(
   media: ThreadDocumentMedia | undefined,
   post: ThreadPost,
   mediaId: string,
 ): DocumentImagePresentation | null {
-  if (media?.kind !== 'ready' || post.availability !== 'available' || !post.mediaIds.includes(mediaId)) return null;
-  const binding = media.documents.find(
-    (document) =>
-      document.postId === post.id &&
-      document.threadId === post.threadId &&
-      document.revisionId === post.revisionId &&
-      document.sha256 === post.sha256 &&
-      document.mediaIds.includes(mediaId),
-  );
-  return binding
-    ? (media.images.find((image) => image.id === mediaId && image.containerId === post.threadId) ?? null)
-    : null;
+  return documentImagesForPost(media, post).get(mediaId) ?? null;
 }

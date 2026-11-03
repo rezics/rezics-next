@@ -1,0 +1,175 @@
+/* Reading detail: prose stays measured; admitted media stays in the authored sequence. */
+.post-reading-frame:target > article {
+  background: color-mix(in oklab, var(--accent) 30%, var(--background));
+}
+
+.post-reading-frame:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.post-reading-body {
+  --post-prose-measure: 65ch;
+  --post-media-measure: 88ch;
+  width: 100%;
+  max-width: var(--post-media-measure);
+  margin-inline: auto;
+  /* Document language belongs to individual supplied blocks/marks, never the interface locale. */
+  text-autospace: normal;
+}
+
+.post-reading-body > .post-reading-document.rezics-document {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(100%, var(--post-prose-measure)) minmax(0, 1fr);
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+
+.post-reading-document > * {
+  grid-column: 2;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.post-reading-document > :is(figure, [data-slot='document-image'], .document-table-scroll, pre) {
+  grid-column: 1 / -1;
+}
+
+.post-reading-document :is(p, li, blockquote, figcaption):is(:lang(zh), :lang(ja), :lang(ko)) {
+  line-height: 1.95;
+}
+
+.post-reading-document > :is(p, ul, ol, blockquote):is(:lang(zh), :lang(ja), :lang(ko)) {
+  width: 100%;
+  max-width: 36em;
+  justify-self: center;
+}
+
+.post-reading-document :is(p, li) :is(:lang(zh), :lang(ja), :lang(ko)) {
+  line-height: 1.95;
+}
+
+.post-reading-document :is(h1, h2, h3, h4, h5, h6) {
+  text-wrap: pretty;
+  scroll-margin-block-start: 6rem;
+}
+
+.post-reading-document :is(a, figcaption, blockquote, td, th) {
+  overflow-wrap: anywhere;
+}
+
+.post-reading-document a:focus-visible {
+  border-radius: 0.125rem;
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.post-reading-document :is(figure, [data-slot='document-image']) {
+  width: fit-content;
+  max-width: 100%;
+  justify-self: center;
+}
+
+.post-reading-document picture {
+  display: block;
+  max-width: 100%;
+}
+
+.post-reading-document img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.post-reading-document figcaption {
+  max-width: var(--post-prose-measure);
+  margin-inline: auto;
+  line-height: 1.65;
+}
+
+/* Wrapping code keeps indentation/newlines and permits reading every token without sideways page scrolling. */
+.post-reading-document pre {
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  line-height: 1.65;
+  text-align: start;
+  direction: ltr;
+}
+
+.post-reading-document pre code {
+  white-space: inherit;
+  overflow-wrap: inherit;
+}
+
+.post-reading-document .document-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.post-reading-document table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.post-reading-document :is(td, th) {
+  min-width: 0;
+  white-space: normal;
+}
+
+.post-reading-document :is(ul, ol) {
+  padding-inline-start: 1.5em;
+}
+
+.post-reading-document blockquote {
+  padding-inline-start: 1em;
+  padding-inline-end: 0.25em;
+}
+
+/* The concealed text and the revealed text occupy the same line, with an independent phone target. */
+.post-reading-document .document-spoiler {
+  display: inline-block;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  max-width: 100%;
+  padding-block: 0.25rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+}
+
+.post-reading-document .document-spoiler-revealed:focus {
+  border-radius: 0.125rem;
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.post-reading-document [data-slot='document-image'] button {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.post-reading-document figcaption a {
+  display: inline-block;
+  min-height: 2.75rem;
+  align-content: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .post-reading-frame > article {
+    transition: background-color 150ms ease;
+  }
+}
+
+@media (forced-colors: active) {
+  .post-reading-frame:target,
+  .post-reading-frame:focus {
+    outline: 2px solid Highlight;
+  }
+}

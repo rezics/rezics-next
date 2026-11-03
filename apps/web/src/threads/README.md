@@ -118,3 +118,29 @@ without changing report submission, verification, session retirement or copy rec
 Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
 or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the
 exported port as described in [feed actions](../features/feed/README.md#card-actions), retaining pins and slow mode.
+
+## Post reading rhythm
+
+`PostReadingFrame` owns the byline-to-body hierarchy and the visible permalink/focus surface; its action and reply
+context slots consume the existing controls unchanged. The header uses the installed `FeedActionBar` detail port;
+licence, history and provenance retain their positions after the body. `ThreadPostReadingBody` passes the complete snapshot to the
+existing `DocumentBody` and `NativeDocumentImage`, with a single exact-document media index. The current document's
+post, thread, revision, digest and declared media must all match the supplied disclosure. A replacement revision
+starts a fresh spoiler visit. Erased/withheld placeholders, keyed editing and current-reader retirement retain their
+existing owners and never pass a retired body to this composition.
+
+The shared `PostReadingBody` uses a 65-character prose column and an 88-character media region. Figures, code and
+tables stay in authored order and may use that wider region. Supplied CJK block/mark languages retain their semantic
+attributes and taller leading; unknown document language stays unknown, independent of the interface locale.
+Decision: Code wraps long tokens while preserving indentation and newlines, so phone readers can read complete code
+without a separate horizontal-scroll focus target.
+
+Long links and table cells wrap; native media keeps its supplied alt text, credit and unavailability/retry behavior.
+Spoiler and image-recovery controls retain phone targets and keyboard focus. Detail documents stay selectable and
+complete. The exact-revision page uses the same body composition and its existing localized return-to-post link;
+opening provenance/history never substitutes a current head for the selected immutable revision.
+
+Rendering adds no loader, observer or network read. One media index plus one renderer traversal gives O(B+V) work
+within the existing native document/media limits. Prepared multilingual stories cover the post/revision/return
+journey at 390 and 1280 pixels in both themes, plus keyboard use and unavailable media. They reuse recorded DTO
+shapes and visibly identify prepared content; they are not native disclosure proof.
