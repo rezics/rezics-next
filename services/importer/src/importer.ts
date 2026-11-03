@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { validateSourceClassificationProjection, type SourceRecord } from '@rezics/conversion';
+import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
 import {
   FIELD_GROUPS,
   type BatchCommand,
@@ -152,6 +153,17 @@ export type ImporterOptions = {
       subject: string;
       conversion: ImportConversion;
     }): ClassificationAssociation | null;
+  };
+  /**
+   * Caller-owned source vocabulary rows and current native scheme/concept bindings.
+   * Binding availability is re-read each convert; unchanged source bytes must not hide it.
+   */
+  vocabularyAdmission?: {
+    request?(input: {
+      owner: Owner;
+      conversion: ImportConversion;
+      subject?: string;
+    }): ConversionContext['sourceVocabulary'];
   };
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
@@ -328,6 +340,7 @@ export class Importer {
       mediaIds?: Readonly<Record<string, string>>;
       resolvedReferences?: Readonly<Record<string, string>>;
       sourceClassification?: unknown;
+      sourceVocabulary?: ConversionContext['sourceVocabulary'];
     } = {},
   ): ImportConversion {
     const result = registration.convert(
@@ -1838,12 +1851,17 @@ export class Importer {
       if (
         isDeepStrictEqual(acknowledged, row) &&
         prior === ownReferences.signature &&
-        !this.options.classificationAdmission
+        !this.options.classificationAdmission &&
+        !this.options.vocabularyAdmission
       ) {
         return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
       }
       store.stageReferenceSignature(run, row.recordKey, ownReferences.signature);
-    } else if (isDeepStrictEqual(acknowledged, row) && !this.options.classificationAdmission) {
+    } else if (
+      isDeepStrictEqual(acknowledged, row) &&
+      !this.options.classificationAdmission &&
+      !this.options.vocabularyAdmission
+    ) {
       return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
     const candidates = this.current(owner);
@@ -1859,6 +1877,7 @@ export class Importer {
           subjectId: string;
           mediaIds?: Readonly<Record<string, string>>;
           resolvedReferences?: Readonly<Record<string, string>>;
+          sourceVocabulary?: ConversionContext['sourceVocabulary'];
         }
       | undefined;
     if (row.state === 'present') {
@@ -1879,7 +1898,12 @@ export class Importer {
         const resolvedReferences = this.options.identifierLookup
           ? await this.options.identifierLookup.resolve({ owner, conversion, signal })
           : ownReferences?.resolvedReferences;
-        const context = { subjectId: subject, ...(resolvedReferences ? { resolvedReferences } : {}) };
+        const vocabulary = this.options.vocabularyAdmission?.request?.({ owner, conversion, subject });
+        const context = {
+          subjectId: subject,
+          ...(resolvedReferences ? { resolvedReferences } : {}),
+          ...(vocabulary ? { sourceVocabulary: vocabulary } : {}),
+        };
         conversionContext = context;
         conversion = this.convert(registration, staged, context);
         this.retainDiagnostics(run, staged, conversion, 'application');

@@ -22,6 +22,7 @@ import {
   crossMediaEntityKind,
   bangumiRecordUrl,
   vndbRecordUrl,
+  type CrossMediaEntityConversion,
 } from '@rezics/conversion/cross-media-entities';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
@@ -44,7 +45,12 @@ export type SourceAssets = {
   readonly sourceVocabularyGaps?: readonly SourceVocabularyGap[];
 };
 
-type NativeConversion = BangumiConversion | VndbConversion | WikidataConversion | OpenLibraryConversion;
+type NativeConversion =
+  | BangumiConversion
+  | VndbConversion
+  | WikidataConversion
+  | OpenLibraryConversion
+  | CrossMediaEntityConversion;
 
 // This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
 const VNDB_DUMP_AS_OF = '2026-10-25';
@@ -207,10 +213,16 @@ function sourceVocabularyResult(
   request: NonNullable<ConversionContext['sourceVocabulary']>,
 ) {
   const metadata = describeSourceRecord(sourceKind, result.external_id);
+  const recorded =
+    'sourceMetadata' in result && result.sourceMetadata && typeof result.sourceMetadata === 'object'
+      ? (result.sourceMetadata as { recordUrl?: unknown }).recordUrl
+      : undefined;
   const recordUrl =
-    sourceKind === 'bangumi'
-      ? (result as BangumiConversion).sourceMetadata.recordUrl
-      : `https://vndb.org/${result.external_id}.${result.record_revision}`;
+    typeof recorded === 'string' && recorded
+      ? recorded
+      : sourceKind === 'bangumi'
+        ? bangumiRecordUrl(result.external_id)
+        : `https://vndb.org/${result.external_id}.${result.record_revision}`;
   const input: SourceVocabularyInput = {
     metadata: {
       provider: sourceKind,
@@ -256,7 +268,7 @@ export function createSourceRegistration(
         const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
         if (kind) {
           const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });
-          return { ...entity, normalized: entity.normalizedRecord, coverAssets: [], mediaImportIntents: [] };
+          return addAliases(entity, source, sourceKind, context);
         }
       }
       const result = native.convert(input, context, { converterRevision });

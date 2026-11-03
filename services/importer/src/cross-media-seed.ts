@@ -15,7 +15,7 @@ import { subjectSlug } from '@rezics/definitions/slug';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { CrossMediaGraph, citedProviderBinding, type GraphEdgeDraft } from './cross-media-bindings.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
-import { createImporter, type ImportRunResult } from './importer.ts';
+import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
 
 type Provider = 'bangumi' | 'vndb';
@@ -926,10 +926,12 @@ export async function seedCrossMedia(
   path: string,
   port: CrossMediaPort,
   destination?: { origin: string },
+  extras?: { vocabularyAdmission?: ImporterOptions['vocabularyAdmission'] },
 ) {
   const importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
+    ...(extras?.vocabularyAdmission ? { vocabularyAdmission: extras.vocabularyAdmission } : {}),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),

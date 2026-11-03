@@ -8,9 +8,12 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
-import { commandKey, sourceDigest, sourceEnvelope, type ConversionContext } from './support.ts';
+import { commandKey, sourceDigest, sourceEnvelope, textDocument, type ConversionContext } from './support.ts';
 
-export const converter_revision = 'cross-media-entities@1';
+export const converter_revision = 'cross-media-entities@2';
+const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
+const durationSecond = 'http://www.wikidata.org/entity/Q11574';
+const episodeOrdinalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
 
 export type SourceMapping = {
   status: 'existing' | 'proposed' | 'omitted';
@@ -205,6 +208,10 @@ export type CrossMediaEntityConversion = ConvertedRecord<BatchCommand> & {
   normalizedRecord: Normalized;
   coverAssets: readonly [];
   mediaImportIntents: readonly [];
+  sourceMetadata?: {
+    recordUrl: string;
+    summary?: { language: string; takedownEligible: true };
+  };
 };
 
 const fail = (pointer: string, code = 'invalid_record'): never => {
@@ -234,6 +241,65 @@ function text(value: unknown, pointer: string, max: number, empty = false): stri
 function nativeNumber(value: unknown, pointer: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) fail(pointer, 'invalid_identifier');
   return value as number;
+}
+
+function episodeOrdinal(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const rendered = String(value);
+    return episodeOrdinalPattern.test(rendered) ? rendered : undefined;
+  }
+  if (typeof value === 'string' && episodeOrdinalPattern.test(value)) return value;
+  return undefined;
+}
+
+function gregorianDay(year: number, month: number, day: number): boolean {
+  const february = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  const days = [31, february, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day >= 1 && day <= days[month - 1]!;
+}
+
+/** Gregorian year/month/day only. Unparseable source text is withheld, never coerced. */
+export function episodeAirdate(value: unknown):
+  | { time: string; precision: 9 | 10 | 11; calendarmodel: typeof gregorianCalendar }
+  | undefined {
+  if (typeof value !== 'string' || !value.trim()) return;
+  const iso = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/u.exec(value.trim());
+  if (!iso || iso[0] !== value.trim()) return;
+  const year = iso[1]!;
+  const month = iso[2];
+  const day = iso[3];
+  if (month !== undefined && (Number(month) < 1 || Number(month) > 12)) return;
+  if (day !== undefined && !gregorianDay(Number(year), Number(month!), Number(day))) return;
+  return {
+    time: `+${year}-${month ?? '00'}-${day ?? '00'}T00:00:00Z`,
+    precision: day ? 11 : month ? 10 : 9,
+    calendarmodel: gregorianCalendar,
+  };
+}
+
+/** Explicit second/minute/hour or ISO-8601 playback length. Unitless and clock-style values stay unknown. */
+export function episodeDuration(value: unknown): { amount: string; unit: typeof durationSecond } | 'unknown' | undefined {
+  if (value === undefined || value === null) return;
+  if (typeof value === 'string' && !value.trim()) return;
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) return 'unknown';
+    return 'unknown';
+  }
+  if (typeof value !== 'string' || !value.isWellFormed()) return 'unknown';
+  const text = value.trim();
+  const iso = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/iu.exec(text);
+  if (iso && iso[0] === text && (iso[1] || iso[2] || iso[3])) {
+    const seconds = Number(iso[1] ?? 0) * 3600 + Number(iso[2] ?? 0) * 60 + Number(iso[3] ?? 0);
+    return { amount: `+${seconds}`, unit: durationSecond };
+  }
+  const named = /^(\d+)\s*(h|hours?|m|min|minutes?|s|sec|seconds?)$/iu.exec(text);
+  if (named) {
+    const count = Number(named[1]);
+    const unit = named[2]!.toLowerCase();
+    const seconds = unit.startsWith('h') ? count * 3600 : unit.startsWith('m') ? count * 60 : count;
+    return { amount: `+${seconds}`, unit: durationSecond };
+  }
+  return 'unknown';
 }
 
 const profiles: Record<EntityKind, { type: string; identifier: string; sourceKind: 'bangumi' | 'vndb' }> = {
@@ -337,6 +403,14 @@ function project(
     if (sort !== undefined) normalized.sort = sort;
     const subjectId = own(raw, 'subject_id', '/subject_id');
     if (subjectId !== undefined) normalized.subject_id = subjectId;
+    const episodeType = own(raw, 'type', '/type');
+    if (episodeType !== undefined) normalized.type = episodeType;
+    const airdate = own(raw, 'airdate', '/airdate');
+    if (airdate !== undefined) normalized.airdate = airdate;
+    const duration = own(raw, 'duration', '/duration');
+    if (duration !== undefined) normalized.duration = duration;
+    const description = own(raw, 'description', '/description');
+    if (description !== undefined) normalized.description = description;
   }
   if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
   return { normalized, type, labels, identifier: expected };
@@ -419,8 +493,29 @@ function convert(
     fact(profile.identifier, identifierContent),
     ...Object.entries(projected.labels).map(([language, value]) => fact('schema:name', { language, text: value })),
   ];
-  if (kind === 'bangumi-episode' && projected.normalized.sort !== undefined)
-    facts.push(fact('schema:episodeNumber', projected.normalized.sort));
+  const diagnostics: ConversionDiagnostic[] = [];
+  let descriptionText: string | undefined;
+  if (kind === 'bangumi-episode') {
+    const ordinal = episodeOrdinal(projected.normalized.sort);
+    if (ordinal) facts.push(fact('schema:episodeNumber', ordinal));
+    else if (projected.normalized.sort !== undefined)
+      diagnostics.push({ pointer: '/sort', code: 'invalid_source_value' });
+    const published = episodeAirdate(projected.normalized.airdate);
+    if (published) facts.push(fact('schema:datePublished', published));
+    else if (typeof projected.normalized.airdate === 'string' && projected.normalized.airdate.trim())
+      diagnostics.push({ pointer: '/airdate', code: 'invalid_source_value' });
+    const duration = episodeDuration(projected.normalized.duration);
+    if (duration === 'unknown') diagnostics.push({ pointer: '/duration', code: 'unknown_duration_unit' });
+    else if (duration) facts.push(fact('schema:duration', duration));
+    const description = projected.normalized.description;
+    if (typeof description === 'string' && description.trim()) {
+      try {
+        descriptionText = text(description, '/description', 32_768, true);
+      } catch {
+        fail('/description', 'invalid_record_summary_document_limit');
+      }
+    }
+  }
   const proposals: BatchCommand[] = [];
   if (context.subjectId === undefined) {
     proposals.push({
@@ -443,6 +538,26 @@ function convert(
         subject: context.subjectId,
         statement,
       });
+    if (descriptionText) {
+      let document;
+      try {
+        document = textDocument(descriptionText);
+      } catch {
+        fail('/description', 'invalid_record_summary_document_limit');
+      }
+      proposals.push({
+        op: 'propose',
+        key: key('summary', 'summary'),
+        source: envelope('summary'),
+        subject: context.subjectId,
+        statement: fact('schema:abstract', { language: 'und', document }),
+        rights: {
+          license: 'CC-BY-SA-3.0',
+          obligations: ['cc:Attribution', 'cc:ShareAlike'],
+          attribution: `Bangumi contributors (${url})`,
+        },
+      });
+    }
   }
   if (checkBatchWrite({ commands: proposals }).length) fail('', 'invalid_record_proposals');
   return {
@@ -450,11 +565,14 @@ function convert(
     source: sourceKind,
     outcome: 'converted',
     proposals,
-    diagnostics: [],
+    diagnostics,
     digest,
     normalizedRecord: projected.normalized,
     coverAssets: [],
     mediaImportIntents: [],
+    ...(descriptionText
+      ? { sourceMetadata: { recordUrl: url, summary: { language: 'und', takedownEligible: true as const } } }
+      : { sourceMetadata: { recordUrl: url } }),
   };
 }
 

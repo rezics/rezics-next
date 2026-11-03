@@ -603,6 +603,18 @@ not additional check requests.
   The [rich proposal report](../research/imports-audit/wikidata-rich-cli.md) binds supported cited proposals,
   withheld qualification, stable identity, independent selection and late facts fencing. It records no terminal
   native pass; rich registration does not inherit the scalar-feed receipt.
+- `production operator imports authored Bangumi episodes through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/bangumi-episode-fidelity.test.ts`.
+  Frozen scenario names:
+  `production episode caller admits fractional ordinal, special kind, duration, airdate and attributed description`;
+  `unknown duration units and unknown or missing kind remain visible review gaps`;
+  `operator plans authored episodes without using disc as identity and imports through the seed caller`;
+  `production operator imports authored Bangumi episodes through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: duration maps explicit
+  ISO-8601 or named second/minute/hour units to seconds (`wd:Q11574`); clock-style and unitless values stay unknown;
+  kind uses operator vocabulary rows over currently accepted/adopted scheme and concepts; disc stays omitted from
+  identity.
 - `Ordinary operator exact ACK interruption and restart recovery`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
   The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,

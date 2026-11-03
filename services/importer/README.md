@@ -1536,6 +1536,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: run time about ceil(N / K) x the record's request path x request latency, plus the media tail capped by `mediaDeadlineMs`. In-flight records at most K. Live state O(K) plus one page of 100 staged rows, independent of N and of history.
 - Growth check: `../../specs/imports-pipeline.test.ts`, test `virtual throughput at sixty four two hundred fifty six and one thousand twenty four keeps bounded live state`, at N = 64, 256 and 1024 on a virtual clock.
 
+### Import authored Bangumi episode members
+
+- Touches: one bounded authored episode table (cap 64) plus matching parent subjects, the existing seed/importer caller, current native scheme/concept point reads supplied by the operator, and ordinary public batch/fence/candidate commands. Disc is omitted from episode identity and normalized records.
+- Bound: O((P+E) log R) indexed importer work for admitted parents P and episodes E≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged source bytes cannot hide missing or retracted kind availability. Duration admits only explicit ISO-8601 or named second/minute/hour units as seconds (`wd:Q11574`); clock-style and unitless values stay unknown review gaps.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import run (processor)
 
 - Touches: per record, its conversion, its journal rows and its request bodies, each once. Every SQL text is prepared once per connection, the cover intent, batch and result bodies are validated once however many modules they cross (a small memory of accepted bodies, bounded in entries and bytes), a record's journals are written in one commit and its receipts in one commit, and a page of staged records shares one commit. Per record: at most five converter calls, 165 statements and 3 commits; no statement is prepared per call.
