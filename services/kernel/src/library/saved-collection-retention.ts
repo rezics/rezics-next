@@ -3,6 +3,7 @@ import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import type { CollectionCleanupPage } from './collection-retention.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
+import retireFence from './native-source-custody-retire-fence.sql';
 import outputHead from './collection-source-output-head.sql';
 import { retireNativeCollectionCapturePage } from './native-source-custody.ts';
 
@@ -114,14 +115,23 @@ export async function purgeSavedCollectionPage(
     await tx.query('UPDATE library.collection SET curator_account_id=NULL WHERE route=$1 AND collection_id=$2', keys);
     return { status: 'purged', removed: 1 };
   }
-  // With actual custody exhausted, historical visibility alone cannot keep private payload forever.
-  if (row.visibility !== 'private') {
-    await tx.query(`UPDATE library.collection SET visibility='private',listing_ever_public=false
-      WHERE route=$1 AND collection_id=$2`, keys);
-    return { status: 'progress', removed: 1 };
-  }
-  await tx.query(`UPDATE library.collection SET listing_ever_public=false
-    WHERE route=$1 AND collection_id=$2 AND listing_ever_public`, keys);
-  return null;
-
+  // Drain any retained local associations before removing the terminal parent. No visibility rewrite.
+  const references = await tx.query(`WITH keys AS (SELECT account_id,subject_id
+    FROM library.builtin_state_reference_source WHERE route=$1 AND collection_id=$2
+    ORDER BY subject_id LIMIT 100)
+    DELETE FROM library.builtin_state_reference_source r USING keys k
+    WHERE r.route=$1 AND r.collection_id=$2 AND r.account_id=k.account_id AND r.subject_id=k.subject_id`, keys);
+  if (references.rowCount) return { status: 'progress', removed: references.rowCount };
+  await tx.query('DELETE FROM library.builtin_collection_reference WHERE route=$1 AND collection_id=$2', keys);
+  const children = await tx.query(`WITH keys AS (SELECT member_id FROM library.collection_member
+    WHERE route=$1 AND collection_id=$2 ORDER BY member_id LIMIT 100)
+    DELETE FROM library.collection_member r USING keys k
+    WHERE r.route=$1 AND r.collection_id=$2 AND r.member_id=k.member_id`, keys);
+  if (children.rowCount) return { status: 'progress', removed: children.rowCount };
+  await tx.query(`DELETE FROM library.collection WHERE route=$1 AND collection_id=$2
+    AND curator_account_id=$3`, [...keys, input.accountId]);
+  // The ordinary delete trigger writes local identity history; terminal disposition consumes that exact key.
+  await tx.query('DELETE FROM library.collection_listing_history WHERE route=$1 AND collection_id=$2', keys);
+  await retireFence.run(tx, { route: keys[0]!, collection_id: input.collectionId, account_id: input.accountId });
+  return { status: 'purged', removed: 1 };
 }
