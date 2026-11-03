@@ -1,7 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { SourceRecord } from '@rezics/conversion';
+import { validateSourceClassificationProjection, type SourceRecord } from '@rezics/conversion';
 import {
   FIELD_GROUPS,
   type BatchCommand,
@@ -321,6 +321,11 @@ export class Importer {
     );
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');
+    const classification = result.sourceClassification
+      ? validateSourceClassificationProjection(result.sourceClassification)
+      : undefined;
+    if (!isDeepStrictEqual(classification, staged.projection.sourceClassification))
+      throw new Error('Persisted source classification differs from its registered projection');
     return result;
   }
 
@@ -438,6 +443,9 @@ export class Importer {
           projection: {
             sourceKind: registration.sourceKind,
             normalizedRecord: conversion.normalized,
+            ...(conversion.sourceClassification === undefined
+              ? {}
+              : { sourceClassification: conversion.sourceClassification }),
             ...(ignored
               ? {}
               : registration.describeSourceRecord

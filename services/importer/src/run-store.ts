@@ -1,6 +1,10 @@
 import { Database, type SQLQueryBindings, type Statement } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import type { SourceId } from '@rezics/conversion';
+import {
+  validateSourceClassificationProjection,
+  type SourceClassificationProjection,
+  type SourceId,
+} from '@rezics/conversion';
 import {
   BatchStatementSchema,
   FIELD_GROUPS,
@@ -49,6 +53,7 @@ export type SourceProjection = {
   normalizedRecord: unknown;
   /** Reviewed descriptor snapshot, separate from semantic revisions and envelopes. */
   sourceRecordMetadata?: ImportSourceRecord;
+  sourceClassification?: SourceClassificationProjection;
 };
 export type Staged<Projection = BatchStatement[]> = { row: RecordRow; projection: Projection };
 export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: string };
@@ -1156,7 +1161,7 @@ export class RunStore<Projection = BatchStatement[]> {
     let projection: string;
     if (this.projectionMode === 'source-record') {
       const sourceProjection: unknown = record.projection;
-      exact(sourceProjection, ['sourceKind', 'normalizedRecord'], ['sourceRecordMetadata']);
+      exact(sourceProjection, ['sourceKind', 'normalizedRecord'], ['sourceRecordMetadata', 'sourceClassification']);
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
       const normalizedRecord = boundedJson(sourceProjection.normalizedRecord, MAX_DUMP_RECORD_BYTES);
@@ -1164,7 +1169,13 @@ export class RunStore<Projection = BatchStatement[]> {
         sourceProjection.sourceRecordMetadata === undefined
           ? ''
           : `,"sourceRecordMetadata":${boundedJson(sourceProjection.sourceRecordMetadata, 8192)}`;
-      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}}`;
+      const classification = sourceProjection.sourceClassification === undefined
+        ? ''
+        : `,"sourceClassification":${boundedJson(
+            validateSourceClassificationProjection(sourceProjection.sourceClassification),
+            8192,
+          )}`;
+      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();
       projection = boundedJson(record.projection);
@@ -1274,7 +1285,11 @@ export class RunStore<Projection = BatchStatement[]> {
     // revision or a reason to advance the complete source-generation pointer.
     const semantic = (bytes: string) => {
       const projection = JSON.parse(bytes) as SourceProjection;
-      return JSON.stringify([projection.sourceKind, projection.normalizedRecord]);
+      return JSON.stringify([
+        projection.sourceKind,
+        projection.normalizedRecord,
+        projection.sourceClassification ?? null,
+      ]);
     };
     return semantic(left) === semantic(right);
   }

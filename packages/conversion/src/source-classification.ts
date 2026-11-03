@@ -217,3 +217,42 @@ export function projectSourceClassification(input: unknown): SourceClassificatio
     return { state: 'unavailable', reason: 'invalid-observation' };
   return projection;
 }
+
+/** Validate a projection produced by a trusted converter; this does not admit its source data. */
+export function validateSourceClassificationProjection(input: unknown): SourceClassificationProjection {
+  const projection = object(input);
+  if (!projection || typeof projection.state !== 'string')
+    throw new TypeError('Invalid source classification projection');
+  if (projection.state === 'unavailable') {
+    const reasons = [
+      'unadmitted',
+      'unsupported-record',
+      'incomplete-input',
+      'invalid-observation',
+      'association-unavailable',
+    ];
+    if (!exactKeys(projection, ['state', 'reason']) || !reasons.includes(projection.reason as string))
+      throw new TypeError('Invalid source classification projection');
+    type Unavailable = Extract<SourceClassificationProjection, { state: 'unavailable' }>;
+    return { state: 'unavailable', reason: projection.reason as Unavailable['reason'] };
+  }
+  if (projection.state !== 'available' || !exactKeys(projection, ['state', 'provenance', 'value']))
+    throw new TypeError('Invalid source classification projection');
+  const provenance = object(projection.provenance);
+  if (!provenance) throw new TypeError('Invalid source classification projection');
+  const provenanceKeys = [
+    'sourceAlias',
+    'sourceRecordId',
+    'sourceRevision',
+    ...(Object.hasOwn(provenance, 'sourceDigest') ? ['sourceDigest'] : []),
+    'converterRevision',
+    'observedAt',
+    'coverage',
+    'attribution',
+    'licence',
+  ];
+  if (!exactKeys(provenance, provenanceKeys)) throw new TypeError('Invalid source classification projection');
+  const checked = projectSourceClassification({ ...provenance, value: projection.value });
+  if (checked.state !== 'available') throw new TypeError('Invalid source classification projection');
+  return checked;
+}
