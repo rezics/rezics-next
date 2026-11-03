@@ -519,7 +519,7 @@ It emits the existing original revision event, so a title-only edit still suppli
 Thread creation, opening title/body revisions, opening publication, soft deletion, restoration, takedown and
 erasure invalidate their retained review identities. Replies have no opening-post dependency and therefore produce
 empty source progress. Native subject lifecycle/identity events, account standing events, Realm/Space lifecycle,
-Realm bans, resource grants and source-fence takedowns feed the same pipeline. A gate event never supplies a public
+Realm bans, board schemes, subject publication verdicts, resource grants and source-fence takedowns feed the same pipeline. A gate event never supplies a public
 review document. Native reviews that began protected are present in the identity dependency directory and can become
 public on a later gate refresh. Withdrawn and physically missing reviews retain their directory entries so removal
 is delivered. Board, pinned subject, author, opening post and immutable Realm/Space ancestry supply dependency keys;
