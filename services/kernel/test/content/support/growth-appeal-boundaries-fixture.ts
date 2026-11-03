@@ -30,6 +30,12 @@ type QueueRecord = Readonly<{
   appealId: string;
 }>;
 export type AppealHistoryAxis = 'unrelated-pending' | 'retained-history' | 'identity-history' | 'authority-history';
+export type DecisionPageHistoryAxis =
+  | 'unrelated-decisions'
+  | 'target-decisions'
+  | 'appeals'
+  | 'identity-history'
+  | 'authority-history';
 
 const retentionTimestamp = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
@@ -237,6 +243,34 @@ export async function createGrowthAppealBoundariesFixture() {
       );
     }
 
+    async function createDecision(target: ThreadTarget, targetKind: 'thread' | 'post' = 'thread') {
+      const targetId = targetKind === 'post' ? target.postId : target.threadId;
+      await grant(targetId, people.decider.accountId, ['moderation:takedown']);
+      await grant(targetId, people.reviewer.accountId, ['moderation:takedown']);
+      const result = await command(
+        'POST',
+        `/v1/${targetKind === 'post' ? 'posts' : 'threads'}/${targetId}:takeDown`,
+        { reason: 'Policy violation' },
+        { bearer: people.decider.bearer, expectedStatus: 200 },
+      );
+      await completeRegisteredCommand(people.decider.accountId, result.key);
+      const decision = (
+        await db!.admin.query<{ decision_id: string }>(
+          `SELECT decision_id FROM content.moderation_decision
+           WHERE route=$1 AND target_id=$2 ORDER BY security_revision DESC LIMIT 1`,
+          [routed(targetId), targetId],
+        )
+      ).rows[0];
+      if (!decision) throw new Error(`Takedown did not create a moderation decision for ${targetId}`);
+      return {
+        target,
+        targetId,
+        targetKind,
+        decisionId: decision.decision_id,
+        path: `/v1/moderation-decisions/${decision.decision_id}`,
+      };
+    }
+
     async function submitAppeal(
       boardId: string,
       target: ThreadTarget,
@@ -319,11 +353,11 @@ export async function createGrowthAppealBoundariesFixture() {
       };
     }
 
-    async function resolveAppeal(record: QueueRecord): Promise<void> {
+    async function resolveAppeal(record: QueueRecord, outcome: 'uphold' | 'reverse' = 'uphold'): Promise<void> {
       const result = await command(
         'POST',
         `/v1/moderation-appeals/${record.appealId}:resolve`,
-        { outcome: 'uphold', statement: 'Reviewed independently' },
+        { outcome, statement: 'Reviewed independently' },
         { bearer: people.reviewer.bearer, expectedStatus: 200 },
       );
       await completeRegisteredCommand(people.reviewer.accountId, result.key, 'content.resolve-appeal');
@@ -336,6 +370,8 @@ export async function createGrowthAppealBoundariesFixture() {
     }
 
     const authorityOffsets = new Map<string, number>();
+    const decisionPageAuthorityOffsets = new Map<string, number>();
+    const decisionPageDecisionIds = new Map<string, string[]>();
     async function seedHistory(
       database: GrowthDatabase,
       axis: AppealHistoryAxis,
@@ -422,6 +458,148 @@ export async function createGrowthAppealBoundariesFixture() {
       );
     }
 
+    async function growDecisionRows(
+      database: GrowthDatabase,
+      targetId: string,
+      tag: string,
+      scale: number,
+      previous: number,
+    ): Promise<string[]> {
+      const targetRoute = routed(targetId);
+      const statement = `decision-page-history:${tag}`;
+      const existing = (
+        await database.admin.query<{ count: number }>(
+          `SELECT count(*)::integer AS count FROM content.moderation_decision
+           WHERE route=$1 AND target_id=$2 AND statement=$3`,
+          [targetRoute, targetId, statement],
+        )
+      ).rows[0]!.count;
+      if (existing !== previous) throw new Error(`${tag} decisions are ${existing}; expected ${previous}`);
+      const ids = decisionPageDecisionIds.get(tag) ?? [];
+      if (ids.length !== previous) throw new Error(`${tag} decision keys are ${ids.length}; expected ${previous}`);
+      const missing = scale - previous;
+      if (missing <= 0) return ids;
+
+      const decisionIds = Array.from({ length: missing }, () => newId(targetRoute));
+      const maximum = (
+        await database.admin.query<{ revision: number }>(
+          `SELECT COALESCE(max(security_revision),0)::integer AS revision
+           FROM content.moderation_decision WHERE route=$1 AND target_id=$2`,
+          [targetRoute, targetId],
+        )
+      ).rows[0]!.revision;
+      await database.admin.query(
+        `INSERT INTO content.moderation_decision
+         (route,decision_id,target_kind,target_id,action,statement,decider_account_id,security_revision,decided_at)
+         SELECT $1,decision_id,'thread',$3,'takedown',$4,$5,ordinality+$6,$7
+         FROM unnest($2::uuid[]) WITH ORDINALITY AS d(decision_id,ordinality)`,
+        [targetRoute, decisionIds, targetId, statement, people.decider.accountId, maximum, retentionTimestamp],
+      );
+      const all = [...ids, ...decisionIds];
+      decisionPageDecisionIds.set(tag, all);
+      return all;
+    }
+
+    async function seedDecisionPageDecisionHistory(
+      database: GrowthDatabase,
+      targetId: string,
+      tag: string,
+      count: number,
+    ): Promise<void> {
+      await growDecisionRows(database, targetId, tag, count, 0);
+    }
+
+    async function seedDecisionPageHistory(
+      database: GrowthDatabase,
+      axis: DecisionPageHistoryAxis,
+      tag: string,
+      scale: number,
+      previous: number,
+      boardId: string,
+      selectedThreadId: string,
+      unrelatedThreadId: string,
+      authorityResourceId = selectedThreadId,
+    ): Promise<void> {
+      if (axis === 'identity-history') {
+        const ids = Array.from({ length: scale - previous }, () => newId(routed(people.author.accountId)));
+        await database.admin.query(
+          `INSERT INTO access.account (route,account_id,kind,state,display_name,biography,transaction_id)
+           SELECT $1,id,'actor','pending',$3,'Private identity sentinel',$4 FROM unnest($2::uuid[]) AS a(id)`,
+          [routed(people.author.accountId), ids, `decision-page-history:${tag}`, randomUUID()],
+        );
+        return;
+      }
+      if (axis === 'authority-history') {
+        if (!decisionPageAuthorityOffsets.has(tag))
+          decisionPageAuthorityOffsets.set(tag, decisionPageAuthorityOffsets.size * 1_000_000);
+        const offset = decisionPageAuthorityOffsets.get(tag)!;
+        const resourceRoute = routed(authorityResourceId);
+        await database.admin.query(
+          `INSERT INTO access.resource_grant
+           (route,resource_id,subject_id,action,valid,transaction_id)
+           SELECT $1,$2,$3,'moderation:takedown',
+             tstzrange('2000-01-01'::timestamptz + n * interval '1 second',
+                       '2000-01-01'::timestamptz + (n+1) * interval '1 second','[)'),$4
+           FROM generate_series($5::integer,$6::integer) AS n`,
+          [
+            resourceRoute,
+            authorityResourceId,
+            people.reviewer.accountId,
+            randomUUID(),
+            offset + previous,
+            offset + scale - 1,
+          ],
+        );
+        return;
+      }
+      if (axis !== 'appeals') {
+        await growDecisionRows(
+          database,
+          axis === 'unrelated-decisions' ? unrelatedThreadId : selectedThreadId,
+          tag,
+          scale,
+          previous,
+        );
+        return;
+      }
+
+      const ids = decisionPageDecisionIds.get(tag);
+      if (!ids || ids.length < scale) throw new Error(`${tag} appeal decisions must be fixed before appeal growth`);
+      const statement = `decision-page-appeal-history:${tag}`;
+      const existing = (
+        await database.admin.query<{ count: number }>(
+          `SELECT count(*)::integer AS count FROM content.moderation_appeal
+           WHERE route=$1 AND thread_id=$2 AND statement=$3`,
+          [routed(selectedThreadId), selectedThreadId, statement],
+        )
+      ).rows[0]!.count;
+      if (existing !== previous) throw new Error(`${tag} appeals are ${existing}; expected ${previous}`);
+      const decisionIds = ids.slice(previous, scale);
+      if (decisionIds.length === 0) return;
+      const appealIds = decisionIds.map(() => newId(routed(selectedThreadId)));
+      await database.admin.query(
+        `INSERT INTO content.moderation_appeal
+         (route,appeal_id,decision_id,appellant_account_id,statement,thread_id,board_id,created_at)
+         SELECT $1,appeal_id,decision_id,$4,$5,$6,$7,$8
+         FROM unnest($2::uuid[],$3::uuid[]) AS a(appeal_id,decision_id)`,
+        [
+          routed(selectedThreadId),
+          appealIds,
+          decisionIds,
+          people.author.accountId,
+          statement,
+          selectedThreadId,
+          boardId,
+          retentionTimestamp,
+        ],
+      );
+      await database.admin.query(
+        `INSERT INTO content.moderation_appeal_board (route,board_id,appeal_id,created_at,pending)
+         SELECT $1,$2,appeal_id,$3,true FROM unnest($4::uuid[]) AS a(appeal_id)`,
+        [routed(boardId), boardId, retentionTimestamp, appealIds],
+      );
+    }
+
     async function revokeTargetModeration(
       resourceId: string,
       subjectId: string,
@@ -431,6 +609,15 @@ export async function createGrowthAppealBoundariesFixture() {
         `DELETE FROM access.resource_grant
          WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4`,
         [routed(resourceId), resourceId, subjectId, action],
+      );
+    }
+
+    async function revokeCurrentTargetModeration(resourceId: string, subjectId: string): Promise<void> {
+      await db!.pool.query(
+        `DELETE FROM access.resource_grant
+         WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='moderation:takedown'
+           AND lower_inf(valid) AND upper_inf(valid)`,
+        [routed(resourceId), resourceId, subjectId],
       );
     }
 
@@ -445,7 +632,11 @@ export async function createGrowthAppealBoundariesFixture() {
       resolveAppeal,
       listAppeals,
       seedHistory,
+      createDecision,
+      seedDecisionPageDecisionHistory,
+      seedDecisionPageHistory,
       revokeTargetModeration,
+      revokeCurrentTargetModeration,
       completeRegisteredCommand,
       moderationEffect: registered.find((effect) => effect.name === 'content_moderation_decision')!,
       observer,
