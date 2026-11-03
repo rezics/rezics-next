@@ -657,17 +657,66 @@ CREATE TABLE rating.source_statistic (
     attribution text NOT NULL,
     transaction_id uuid NOT NULL,
     source_alias text DEFAULT 'vndb'::text NOT NULL,
+    observation_digest text,
     CONSTRAINT source_statistic_attribution_check CHECK (((char_length(attribution) >= 1) AND (char_length(attribution) <= 2000))),
     CONSTRAINT source_statistic_check CHECK ((scale_max > scale_min)),
     CONSTRAINT source_statistic_check1 CHECK (((mean >= (scale_min)::numeric) AND (mean <= (scale_max)::numeric))),
     CONSTRAINT source_statistic_check2 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT source_statistic_count_check CHECK ((count > 0)),
     CONSTRAINT source_statistic_licence_check CHECK (((char_length(licence) >= 1) AND (char_length(licence) <= 1024))),
+    CONSTRAINT source_statistic_observation_digest_check CHECK ((observation_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_statistic_provider_check CHECK (((scale_max <= 4096) AND ((source = 'vndb'::text) OR ((scale_min = 0) AND (scale_max = 10) AND (source_record_id ~ '^[1-9][0-9]*$'::text) AND (length(source_record_id) <= 16) AND
+CASE
+    WHEN (source_record_id ~ '^[1-9][0-9]{0,15}$'::text) THEN ((source_record_id)::numeric <= ('9007199254740991'::bigint)::numeric)
+    ELSE false
+END)))),
     CONSTRAINT source_statistic_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT source_statistic_scale_min_check CHECK ((scale_min >= 0)),
     CONSTRAINT source_statistic_source_alias_check CHECK ((((octet_length(source_alias) >= 1) AND (octet_length(source_alias) <= 32)) AND (source_alias ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (source_alias !~ '[^a-z0-9_-]'::text))),
-    CONSTRAINT source_statistic_source_check CHECK ((source = 'vndb'::text)),
+    CONSTRAINT source_statistic_source_check CHECK ((source = ANY (ARRAY['vndb'::text, 'bangumi'::text]))),
     CONSTRAINT source_statistic_source_record_id_check CHECK (((char_length(source_record_id) >= 1) AND (char_length(source_record_id) <= 1024)))
+);
+
+
+--
+-- Name: source_statistic_head; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.source_statistic_head (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    source text NOT NULL,
+    digest text NOT NULL
+);
+
+
+--
+-- Name: source_statistic_observation; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.source_statistic_observation (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    source text NOT NULL,
+    digest text NOT NULL,
+    source_alias text NOT NULL,
+    source_record_id text NOT NULL,
+    as_of date NOT NULL,
+    payload jsonb NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT source_statistic_observation_check CHECK (((source = 'vndb'::text) OR ((source_record_id ~ '^[1-9][0-9]{0,15}$'::text) AND
+CASE
+    WHEN (source_record_id ~ '^[1-9][0-9]{0,15}$'::text) THEN ((source_record_id)::numeric <= ('9007199254740991'::bigint)::numeric)
+    ELSE false
+END))),
+    CONSTRAINT source_statistic_observation_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT source_statistic_observation_check2 CHECK ((((payload ->> 'sourceAlias'::text) = source_alias) AND ((payload ->> 'sourceRecordId'::text) = source_record_id) AND ((payload ->> 'asOf'::text) = (as_of)::text))),
+    CONSTRAINT source_statistic_observation_digest_check1 CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_statistic_observation_payload_check CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT source_statistic_observation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT source_statistic_observation_source_alias_check CHECK (((source_alias ~ '^[a-z][a-z0-9_-]{0,31}$'::text) AND (source_alias !~ '[^a-z0-9_-]'::text))),
+    CONSTRAINT source_statistic_observation_source_check CHECK ((source = ANY (ARRAY['vndb'::text, 'bangumi'::text]))),
+    CONSTRAINT source_statistic_observation_source_record_id_check CHECK (((octet_length(source_record_id) >= 1) AND (octet_length(source_record_id) <= 1024)))
 );
 
 
@@ -964,6 +1013,22 @@ ALTER TABLE ONLY rating.realm_rank
 
 
 --
+-- Name: source_statistic_head source_statistic_head_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_statistic_head
+    ADD CONSTRAINT source_statistic_head_pkey PRIMARY KEY (route, subject_id, source);
+
+
+--
+-- Name: source_statistic_observation source_statistic_observation_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_statistic_observation
+    ADD CONSTRAINT source_statistic_observation_pkey PRIMARY KEY (route, subject_id, source, digest);
+
+
+--
 -- Name: source_statistic source_statistic_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -1243,6 +1308,22 @@ ALTER TABLE ONLY rating.question_label_revision
 
 ALTER TABLE ONLY rating.question_lifecycle
     ADD CONSTRAINT question_lifecycle_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id) ON DELETE CASCADE;
+
+
+--
+-- Name: source_statistic_head source_statistic_head_route_subject_id_source_digest_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_statistic_head
+    ADD CONSTRAINT source_statistic_head_route_subject_id_source_digest_fkey FOREIGN KEY (route, subject_id, source, digest) REFERENCES rating.source_statistic_observation(route, subject_id, source, digest);
+
+
+--
+-- Name: source_statistic_observation source_statistic_observation_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_statistic_observation
+    ADD CONSTRAINT source_statistic_observation_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --
