@@ -1029,8 +1029,8 @@ Decision: generate this envelope with `bun run --cwd services/kernel typecheck -
 repository generators share the admitted compiler database and return their installed outputs to the worktree.
 
 The call is `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
-the source response contains the retained top-level decision, `viewer` and `targetContext`. Regenerate the
-installed declarations and OpenAPI before Web adopts the added fields. Narrow on
+the source response and OpenAPI contain the retained top-level decision, `viewer` and `targetContext`. Regenerate
+the installed client declarations before Web adopts the added fields. Narrow on
 `targetContext.state` before accessing navigation, and on `viewer.appeal.state` before presenting an appeal action.
 The existing `.$appeal.post({ statement }, { headers: { authorization, 'idempotency-key': key } })` command is
 unchanged. Keep the private-reader lifetime, departure and uncertain-submission engines in Web. A board response

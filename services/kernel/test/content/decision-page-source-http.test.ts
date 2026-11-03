@@ -223,7 +223,7 @@ test('independent reversal exposes only current header context and keeps the ori
     appeal: { state: 'unavailable', reason: 'not_affected_author' },
   });
   for (const bearer of [undefined, fixture.system.actors.suspended.bearer]) {
-    const denied = await fixture.call('GET', path, { bearer });
+    const denied = await fixture.call('GET', path, bearer === undefined ? {} : { bearer });
     expect([401, 404]).toContain(denied.response.status);
     expect(denied.response.headers.get(SESSION_HEADER)).toBeNull();
     expect(denied.text).not.toContain('Retained private statement');
