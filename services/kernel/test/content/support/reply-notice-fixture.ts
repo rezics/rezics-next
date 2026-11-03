@@ -23,7 +23,10 @@ export async function replyNoticeFixture() {
       return Reflect.apply(query, client, args);
     },
   });
-  const accounts = await standingFixture(['account:read', 'account:update', 'realm:read', 'realm:participate']);
+  const accounts = await standingFixture(
+    ['account:read', 'account:update', 'realm:read', 'realm:participate'],
+    db.pool,
+  );
   await accounts.reset();
   const credentials = new Map<string, string>();
   const authenticate = accounts.access.authenticate;
