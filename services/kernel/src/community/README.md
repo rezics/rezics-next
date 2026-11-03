@@ -566,7 +566,7 @@ references are `legacy-final:apps/web/features/realm-appeal/{ban-read,reading}.t
 is `apps/web/features/realms/{realm-members.tsx,data/membership-preconditions.ts}` in the older Rezics checkout.
 These supply user behavior only; current native commands retain authority.
 
-The installed `@rezics/client` root exports these four DTO names by deriving them from the mounted route.
+Publication uses the normal native generator; consumers derive the response and query from the installed `realm.bans` route, rather than maintaining a forked DTO.
 
 #### Cost: current ban selection and inspection
 

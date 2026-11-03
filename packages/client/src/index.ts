@@ -101,13 +101,6 @@ export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 
-type BanReviewRoute = Routes['realms'][':realmId']['bans']['get'];
-/** Native ban review DTOs come from the installed mounted route. */
-export type BanReviewPage = BanReviewRoute['response'][200];
-export type BanReviewPageQuery = BanReviewRoute['query'];
-export type BanReviewPageItem = BanReviewPage['items'][number];
-export type BanReviewIdentity = BanReviewPageItem['account'];
-
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
 export type KernelClientOptions = {

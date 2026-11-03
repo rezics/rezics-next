@@ -64,22 +64,24 @@ function present(accountId: string, identities: ReadonlyMap<string, PublicIdenti
  */
 export async function readBanReviewPage(
   deps: BanDependencies,
-  actor: Actor,
+  actorInput: Actor,
   realmId: string,
   context: { deadline: number },
   query: BanReviewPageQuery = {},
 ): Promise<BanReviewPage> {
-  const route = routeOf(realmId);
+  const routed = routeOf(realmId);
   const limit = query.limit ?? 20;
   if (
-    route === null ||
+    routed === null ||
     !Number.isInteger(limit) ||
     limit < 1 ||
     limit > BAN_REVIEW_LIMITS.page ||
     (query.selectedAccountId !== undefined && routeOf(query.selectedAccountId) === null)
   )
     throw new RealmBanInputError();
-  if (actor.kind !== 'account') throw new GrantDeniedError();
+  if (actorInput.kind !== 'account') throw new GrantDeniedError();
+  const actor = actorInput;
+  const route = routed;
   const caller = canonicalize(actor);
   const resource = { route, id: realmId };
   const accessContext = { pool: deps.pool, deadline: context.deadline };
@@ -90,7 +92,7 @@ export async function readBanReviewPage(
       limit,
       viewer: actor.accountId,
       client: actor.clientId,
-      scopes: [...actor.scopes].sort(),
+      scopes: JSON.stringify([...actor.scopes].sort()),
       requestedBy: actor.requestedBy,
       authnEpoch: actor.authnEpoch,
     },
