@@ -23,6 +23,7 @@ export type RealmSubjectCoverage = Readonly<{
   generation: string;
   revision: string;
   unresolved: string;
+  ownerEpoch: number;
 }>;
 export type CandidateKey = Readonly<{ terminal: string; original: string; thread: string }>;
 export function realmSubjectRoute(id: string): number {
@@ -53,6 +54,10 @@ export async function realmSubjectHome<T>(
       const client = deadlineClient(connection, deadline);
       try {
         await client.query(write ? 'BEGIN' : 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        if (write)
+          await client.query('SELECT partition_no FROM core.partition WHERE partition_no=$1 FOR SHARE', [
+            partitionOf(route),
+          ]);
         const home = await readPartition(client, partitionOf(route));
         if (!home || home.writeState === 'moved' || (write && home.writeState !== 'active'))
           throw new ProblemError('dependency_unavailable');
@@ -122,20 +127,16 @@ export function createRealmSubjectCandidates(pool: Pool) {
     },
     async observe(realm: string, deadline: number): Promise<RealmSubjectCoverage | null> {
       const route = realmSubjectRoute(realm);
-      return realmSubjectHome(
-        pool,
-        route,
-        deadline,
-        false,
-        async (client) =>
-          (
-            await client.query<RealmSubjectCoverage>(
-              `SELECT generation::text,revision::text,unresolved::text
-          FROM content.realm_subject_generation WHERE route=$1 AND realm_id=$2`,
-              [route, realm],
-            )
-          ).rows[0] ?? null,
-      );
+      return realmSubjectHome(pool, route, deadline, false, async (client, version) => {
+        const row = (
+          await client.query<Omit<RealmSubjectCoverage, 'ownerEpoch'>>(
+            `SELECT generation::text,revision::text,unresolved::text FROM content.realm_subject_generation
+           WHERE route=$1 AND realm_id=$2`,
+            [route, realm],
+          )
+        ).rows[0];
+        return row ? { ...row, ownerEpoch: version.epoch } : null;
+      });
     },
     async fence(realm: string, thread: string, version: CandidateVersion, deadline: number) {
       candidateVersion(version);

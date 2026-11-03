@@ -1859,8 +1859,8 @@ Structural maxima: 34 home checkouts for match, three for prefix, five statement
 32 candidate rows plus two fixed rows/checkout, 4 KiB/candidate plus 1 KiB/checkout. Census
 steps use one source keyset of one thread, two opening/revision points, one board point,
 one native Semantic identity mapping and one candidate write; revisions hold at most 128
-originals. Each write updates one exact key under one Realm generation lock. Homes are
-released before another home or disclosure work. Generation/revision, Realm/place, reader
+originals. Each write updates one exact key under a Realm generation lock and a shared native home lock. Homes are
+released before another home or disclosure work. Generation/revision/native home epoch, Realm/place, reader
 and disclosure dependencies are rechecked after pages; changes refuse the page. Deadlines
 and exact LeafOptions reach both capabilities; bigint positions and epochs remain lossless.
 Production lifecycle registration belongs to live maintenance.

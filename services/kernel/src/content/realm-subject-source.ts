@@ -113,7 +113,10 @@ function frontier(token: string, revision: string): Frontier {
 }
 const encode = (value: Frontier) => Buffer.from(JSON.stringify(value)).toString('base64url');
 const same = (a: RealmSubjectCoverage, b: RealmSubjectCoverage) =>
-  a.generation === b.generation && a.revision === b.revision && a.unresolved === b.unresolved;
+  a.ownerEpoch === b.ownerEpoch &&
+  a.generation === b.generation &&
+  a.revision === b.revision &&
+  a.unresolved === b.unresolved;
 
 /** No default evaluator, lifecycle stand-in or production registration. */
 export function createRealmSubjectSource(input: {
