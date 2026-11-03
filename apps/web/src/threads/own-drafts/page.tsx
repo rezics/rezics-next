@@ -53,12 +53,10 @@ export function OwnDraftsPage({
   identity,
   active,
   reader,
-  initialPage,
 }: {
   identity: OwnDraftIdentity;
   active: boolean;
   reader: OwnDraftReader;
-  initialPage?: OwnDraftPageData;
 }) {
   const binding = useRef({ reader, active, generation: 0 });
   if (binding.current.reader !== reader || binding.current.active !== active)
@@ -69,7 +67,6 @@ export function OwnDraftsPage({
       identity={identity}
       active={active}
       reader={reader}
-      initialPage={initialPage}
     />
   );
 }
@@ -78,12 +75,10 @@ function BoundOwnDraftsPage({
   identity,
   active,
   reader,
-  initialPage,
 }: {
   identity: OwnDraftIdentity;
   active: boolean;
   reader: OwnDraftReader;
-  initialPage?: OwnDraftPageData;
 }) {
   const locale = identity.locale;
   const identityKey = ownDraftIdentityKey(identity);
@@ -99,21 +94,7 @@ function BoundOwnDraftsPage({
   const currentCursor = cursor.key === identityKey ? cursor.value : null;
   const requestKey = ownDraftRequestKey(identityKey, currentCursor);
   const [retry, setRetry] = useState(0);
-  const admittedInitial =
-    initialPage?.viewer.accountId === identity.accountId && initialPage.viewer.authnEpoch === identity.authnEpoch
-      ? initialPage
-      : undefined;
-  const initial = useRef(admittedInitial);
-  const [pageState, setPageState] = useState<PageState | null>(() =>
-    admittedInitial
-      ? {
-          requestKey,
-          state: admittedInitial.state,
-          page: admittedInitial,
-          index: indexOwnDraftPage(admittedInitial),
-        }
-      : null,
-  );
+  const [pageState, setPageState] = useState<PageState | null>(null);
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null);
   const page = active && pageState?.requestKey === requestKey ? pageState : null;
   const selection = active && page && selectionState?.identityKey === identityKey ? selectionState : null;
@@ -140,13 +121,11 @@ function BoundOwnDraftsPage({
       selectionController.current?.abort();
       selectionGeneration.current++;
       returnFocus.current = null;
-      initial.current = undefined;
       setPageState(null);
       setSelectionState(null);
       return;
     }
     if (initial.current && retry === 0 && currentCursor === null) {
-      initial.current = undefined;
       return;
     }
     const controller = new AbortController();

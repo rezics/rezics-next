@@ -155,6 +155,6 @@ export const SelectedPhoneDark: Story = {
     ),
   ],
 };
-export const PreparingPhoneDark: Story = { ...SelectedPhoneDark, args: { scenario: 'preparing' }, play: undefined };
-export const DeniedPhoneDark: Story = { ...SelectedPhoneDark, args: { scenario: 'denied' }, play: undefined };
-export const LongGermanPhoneDark: Story = { ...SelectedPhoneDark, args: { locale: 'de' }, play: undefined };
+export const PreparingPhoneDark: Story = { decorators: SelectedPhoneDark.decorators!, args: { scenario: 'preparing' } };
+export const DeniedPhoneDark: Story = { decorators: SelectedPhoneDark.decorators!, args: { scenario: 'denied' } };
+export const LongGermanPhoneDark: Story = { decorators: SelectedPhoneDark.decorators!, args: { locale: 'de' } };
