@@ -54,9 +54,6 @@ test('age rating uses its released unit and producer roles stay release-specific
 
 test('language alone uses the released release-level language facet', () => {
   expect(buildReleaseSearchFilter(bundledRelease, releaseType, { languages: ['en', 'ja'] })).toEqual({
-    and: [
-      { type: { in: [releaseType] } },
-      { statement: { property: 'schema:inLanguage', in: ['en', 'ja'] } },
-    ],
+    and: [{ type: { in: [releaseType] } }, { statement: { property: 'schema:inLanguage', in: ['en', 'ja'] } }],
   });
 });
