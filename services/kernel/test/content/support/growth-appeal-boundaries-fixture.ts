@@ -2,6 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { registerContent } from '../../../src/content/register.ts';
 import { effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type Envelope } from '../../../src/events/log.ts';
@@ -48,6 +49,11 @@ export async function createGrowthAppealBoundariesFixture() {
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
       receiptKeys: testReceiptKeys(),
+      writeRate: createWriteRateLimiter({
+        secret: randomUUID() + randomUUID(),
+        overrides: JSON.stringify({ 'new-account': { write: { maximum: 100_000, seconds: 86400 } } }),
+      }),
+      ratePeer: () => '127.0.0.1',
     });
 
     const suffix = randomUUID().replaceAll('-', '');
