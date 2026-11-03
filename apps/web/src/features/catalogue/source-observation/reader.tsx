@@ -11,9 +11,13 @@ import type {
 } from './contract';
 
 type Failure = Exclude<SourceObservationOutcome, { kind: 'ready' }>;
+type RetainedSnapshot = {
+  inspection?: SourceObservationInspection;
+  selected: SourceObservationItem | null;
+};
 type State =
-  | { kind: 'loading'; request: SourceObservationRequest }
-  | { kind: 'failure'; outcome: Failure; request: SourceObservationRequest }
+  | { kind: 'loading'; request: SourceObservationRequest; previous?: RetainedSnapshot }
+  | { kind: 'failure'; outcome: Failure; request: SourceObservationRequest; selected: SourceObservationItem | null }
   | {
       kind: 'ready';
       inspection: SourceObservationInspection;
@@ -113,6 +117,7 @@ function ObservationDetails({
 function failureMessage(outcome: Failure, locale: string) {
   const options = { locale: locale as never };
   if (outcome.kind === 'denied') return m.sources_denied({}, options);
+  if (outcome.kind === 'missing') return m.not_found_message({}, options);
   if (outcome.kind === 'invalid') return m.sources_invalid({}, options);
   if (outcome.kind === 'conflict') return m.sources_conflict({}, options);
   return m.sources_unavailable({}, options);
@@ -120,8 +125,8 @@ function failureMessage(outcome: Failure, locale: string) {
 
 /**
  * This reader holds at most the current head, one selected payload and one
- * native history page. Each request replaces that bounded snapshot; cursors
- * stay in component memory and are retried without changing their operands.
+ * native history page. History replaces the prior page; cursors stay in
+ * component memory and retry with the same operands.
  */
 export function SourceObservationReader({
   subjectId,
@@ -145,34 +150,49 @@ export function SourceObservationReader({
   );
   const [state, setState] = useState<State>({ kind: 'loading', request: initialRequest });
   const generation = useRef(0);
+  const active = useRef(true);
   const run = useCallback(
-    async (request: SourceObservationRequest) => {
+    async (request: SourceObservationRequest, previous?: RetainedSnapshot) => {
+      if (!active.current) return;
       const attempt = ++generation.current;
-      setState({ kind: 'loading', request });
+      setState({ kind: 'loading', request, ...(previous ? { previous } : {}) });
       let outcome: SourceObservationOutcome;
       try {
         outcome = await inspect(request);
       } catch {
         outcome = { kind: 'unavailable' };
       }
-      if (generation.current !== attempt) return;
+      if (!active.current || generation.current !== attempt) return;
       if (outcome.kind === 'ready') {
+        const historyRequest = request.history === true || request.cursor !== undefined;
         setState({
           kind: 'ready',
           inspection: outcome.inspection,
-          selected: request.digest === undefined ? null : (outcome.inspection.selectedObservation ?? null),
+          selected: historyRequest
+            ? (previous?.selected ?? null)
+            : request.digest === undefined
+              ? null
+              : (outcome.inspection.selectedObservation ?? null),
           request,
         });
       } else {
-        setState({ kind: 'failure', outcome, request });
+        const canRetrySameSelection = outcome.kind === 'conflict' || outcome.kind === 'unavailable';
+        setState({
+          kind: 'failure',
+          outcome,
+          request,
+          selected: canRetrySameSelection ? (previous?.selected ?? null) : null,
+        });
       }
     },
     [inspect],
   );
 
   useEffect(() => {
+    active.current = true;
     void run(initialRequest);
     return () => {
+      active.current = false;
       generation.current += 1;
     };
   }, [digest, initialRequest, run, source, subjectId]);
@@ -185,7 +205,7 @@ export function SourceObservationReader({
       state.outcome.kind !== 'missing' &&
       state.outcome.kind !== 'invalid'
     )
-      void run(state.request);
+      void run(state.request, { selected: state.selected });
   };
   const chooseHistory = (item: SourceObservationItem) => {
     setState((current) => (current.kind === 'ready' ? { ...current, selected: item } : current));
@@ -193,13 +213,18 @@ export function SourceObservationReader({
   const loadHistory = () => {
     if (state.kind !== 'ready') return;
     const cursor = state.inspection.history?.nextCursor;
-    void run(cursor ? { subjectId, source, cursor } : { subjectId, source, history: true });
+    const request = cursor
+      ? { subjectId: state.request.subjectId, source: state.request.source, cursor }
+      : { subjectId: state.request.subjectId, source: state.request.source, history: true as const };
+    void run(request, { inspection: state.inspection, selected: state.selected });
   };
+  const retained = state.kind === 'ready' ? state : state.kind === 'loading' ? state.previous : undefined;
 
   return (
     <section
       data-slot="subject-source-observation"
       aria-labelledby={titleId}
+      aria-busy={state.kind === 'loading'}
       className="min-w-0 space-y-4 rounded-lg border p-4 [overflow-wrap:anywhere] sm:p-5"
     >
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -226,79 +251,99 @@ export function SourceObservationReader({
               </Button>
             )}
         </div>
-      ) : (
+      ) : null}
+      {retained && (
         <div className="min-w-0 space-y-5" data-slot="source-observation-snapshot">
-          <section aria-labelledby={`${titleId}-current`} className="min-w-0 space-y-2">
-            <h3 id={`${titleId}-current`} className="text-lg font-semibold">
-              {m.source_observation_current({}, options)}
-            </h3>
-            {state.inspection.head.state === 'empty' ? (
-              <p role="status">{m.source_observation_head_empty({}, options)}</p>
-            ) : state.inspection.head.state === 'cleared' ? (
-              <div className="space-y-2">
-                <p role="status">{m.source_observation_head_cleared({}, options)}</p>
-                {state.inspection.head.observation && (
-                  <ObservationDetails item={state.inspection.head.observation} source={source} locale={locale} />
-                )}
-              </div>
-            ) : state.inspection.head.observation ? (
-              <ObservationDetails item={state.inspection.head.observation} source={source} locale={locale} />
-            ) : null}
-          </section>
+          {retained.inspection && (
+            <section aria-labelledby={`${titleId}-current`} className="min-w-0 space-y-2">
+              <h3 id={`${titleId}-current`} className="text-lg font-semibold">
+                {m.source_observation_current({}, options)}
+              </h3>
+              {retained.inspection.head.state === 'empty' ? (
+                <p role="status">{m.source_observation_head_empty({}, options)}</p>
+              ) : retained.inspection.head.state === 'cleared' ? (
+                <div className="space-y-2">
+                  <p role="status">{m.source_observation_head_cleared({}, options)}</p>
+                  {retained.inspection.head.observation && (
+                    <ObservationDetails item={retained.inspection.head.observation} source={source} locale={locale} />
+                  )}
+                </div>
+              ) : retained.inspection.head.observation ? (
+                <ObservationDetails item={retained.inspection.head.observation} source={source} locale={locale} />
+              ) : null}
+            </section>
+          )}
 
-          {state.selected && (
+          {retained.selected && (
             <section aria-labelledby={`${titleId}-selected`} className="min-w-0 space-y-2">
               <h3 id={`${titleId}-selected`} className="text-lg font-semibold">
                 {m.source_observation_selected({}, options)}
               </h3>
-              <ObservationDetails item={state.selected} source={source} locale={locale} />
+              <ObservationDetails item={retained.selected} source={source} locale={locale} />
             </section>
           )}
 
-          <section aria-labelledby={`${titleId}-history`} className="min-w-0 space-y-3">
-            <h3 id={`${titleId}-history`} className="text-lg font-semibold">
-              {m.source_observation_history({}, options)}
-            </h3>
-            {!state.inspection.history ? (
-              <Button className={controlClass} variant="outline" onClick={loadHistory}>
-                {m.source_observation_load_history({}, options)}
-              </Button>
-            ) : (
-              <div className="space-y-3" data-slot="source-observation-history-page">
-                {state.inspection.history.items.length === 0 ? (
-                  <p role="status">
-                    {state.inspection.history.nextCursor
-                      ? m.source_observation_no_visible_item({}, options)
-                      : m.source_observation_exhausted({}, options)}
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {state.inspection.history.items.map((item) => (
-                      <li key={item.digest} className="min-w-0">
-                        <Button
-                          className={controlClass}
-                          variant={state.selected?.digest === item.digest ? 'default' : 'outline'}
-                          aria-pressed={state.selected?.digest === item.digest}
-                          onClick={() => chooseHistory(item)}
-                        >
-                          {m.source_observation_select({ record: item.sourceRecordId, date: item.asOf }, options)}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {state.inspection.history.nextCursor ? (
-                  <Button className={controlClass} variant="outline" onClick={loadHistory}>
-                    {m.source_observation_continue({}, options)}
-                  </Button>
-                ) : (
-                  state.inspection.history.items.length > 0 && (
-                    <p role="status">{m.source_observation_exhausted({}, options)}</p>
-                  )
-                )}
-              </div>
-            )}
-          </section>
+          {retained.inspection && (
+            <section aria-labelledby={`${titleId}-history`} className="min-w-0 space-y-3">
+              <h3 id={`${titleId}-history`} className="text-lg font-semibold">
+                {m.source_observation_history({}, options)}
+              </h3>
+              {!retained.inspection.history ? (
+                <Button
+                  className={controlClass}
+                  variant="outline"
+                  disabled={state.kind !== 'ready'}
+                  onClick={loadHistory}
+                >
+                  {m.source_observation_load_history({}, options)}
+                </Button>
+              ) : (
+                <div
+                  className="space-y-3"
+                  data-slot="source-observation-history-page"
+                  aria-busy={state.kind === 'loading'}
+                >
+                  {retained.inspection.history.items.length === 0 ? (
+                    <p role="status">
+                      {retained.inspection.history.nextCursor
+                        ? m.source_observation_no_visible_item({}, options)
+                        : m.source_observation_exhausted({}, options)}
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {retained.inspection.history.items.map((item) => (
+                        <li key={item.digest} className="min-w-0">
+                          <Button
+                            className={controlClass}
+                            variant={retained.selected?.digest === item.digest ? 'default' : 'outline'}
+                            aria-pressed={retained.selected?.digest === item.digest}
+                            disabled={state.kind !== 'ready'}
+                            onClick={() => chooseHistory(item)}
+                          >
+                            {m.source_observation_select({ record: item.sourceRecordId, date: item.asOf }, options)}
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {retained.inspection.history.nextCursor ? (
+                    <Button
+                      className={controlClass}
+                      variant="outline"
+                      disabled={state.kind !== 'ready'}
+                      onClick={loadHistory}
+                    >
+                      {m.source_observation_continue({}, options)}
+                    </Button>
+                  ) : (
+                    retained.inspection.history.items.length > 0 && (
+                      <p role="status">{m.source_observation_exhausted({}, options)}</p>
+                    )
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       )}
     </section>

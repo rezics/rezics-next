@@ -120,6 +120,22 @@ test('the consumer admits ten supplied bins and one native history row while pre
     kind: 'unavailable',
     capability: SOURCE_OBSERVATION_GENERATED_SEAM,
   });
+  expect(
+    await inspectSourceObservation(async () => ({ status: 404 }), {
+      subjectId,
+      source: 'bangumi',
+      digest: selectedDigest,
+    }),
+  ).toEqual({ kind: 'missing' });
+  expect(
+    await inspectSourceObservation(async () => ({ status: 404 }), { subjectId, source: 'bangumi', history: true }),
+  ).toEqual({ kind: 'missing' });
+  expect(
+    await inspectSourceObservation(async () => ({ status: 409 }), { subjectId, source: 'bangumi', history: true }),
+  ).toEqual({ kind: 'conflict' });
+  expect(
+    await inspectSourceObservation(async () => ({ status: 503 }), { subjectId, source: 'bangumi', history: true }),
+  ).toEqual({ kind: 'unavailable' });
 });
 
 test('one selected reading compares with the current head and each explicit history action replaces one bounded page', async () => {
@@ -203,6 +219,8 @@ test('one selected reading compares with the current head and each explicit hist
     expect(calls[1]).toEqual({ subjectId, source: 'bangumi', history: true });
     expect(host.textContent).toContain(m.source_observation_no_visible_item());
     expect(host.textContent).not.toContain(m.source_observation_exhausted());
+    expect(host.textContent).toContain(selectedDigest);
+    expect(host.textContent).toContain('2026-11-01');
     expect(host.querySelectorAll('[data-slot="source-observation-history-page"] li')).toHaveLength(0);
 
     const next = [...host.querySelectorAll('button')].find(
@@ -215,6 +233,7 @@ test('one selected reading compares with the current head and each explicit hist
     });
     expect(calls[2]).toEqual({ subjectId, source: 'bangumi', cursor: 'opaque-native-cursor' });
     expect(host.querySelectorAll('[data-slot="source-observation-history-page"] li')).toHaveLength(1);
+    expect(host.textContent).toContain(selectedDigest);
     const compare = [...host.querySelectorAll('button')].find(
       (button) => button.textContent?.includes('248001') && button.textContent.includes('2026-10-19'),
     );
@@ -241,6 +260,23 @@ test('one selected reading compares with the current head and each explicit hist
     expect(host.textContent).toContain(m.source_observation_cleared());
     expect(host.textContent).toContain('cleared-record');
     expect(host.textContent).not.toContain('120');
+
+    await act(async () => {
+      root.render(
+        h(SourceObservationReader, {
+          key: 'concealed-observation',
+          subjectId,
+          source: 'bangumi',
+          digest: selectedDigest,
+          locale: 'en',
+          sourcesHref: `/en/subjects/${subjectId}/example/sources?realm=realm-a#subject-sources-heading`,
+          inspect: async () => ({ kind: 'missing' }),
+        }),
+      );
+      await tick();
+    });
+    expect(host.textContent).toContain(m.not_found_message());
+    expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.sources_retry())).toBe(false);
   } finally {
     await act(async () => root.unmount());
     host.remove();
@@ -278,7 +314,8 @@ test('a conflict retry replays the exact original cursor and a late retired obse
   const root = createRoot(host);
   const calls: SourceObservationRequest[] = [];
   const cursor = 'retry-the-supplied-cursor';
-  let firstAttempt = true;
+  let cursorConflict = true;
+  let historyUnavailable = true;
   let releaseOld!: (outcome: ReturnType<typeof ready>) => void;
   const retired = new Promise<ReturnType<typeof ready>>((resolve) => {
     releaseOld = resolve;
@@ -290,11 +327,22 @@ test('a conflict retry replays the exact original cursor and a late retired obse
   };
   const inspect: SourceObservationInspect = async (request) => {
     calls.push(request);
-    if (request.source === 'bangumi' && firstAttempt) {
-      firstAttempt = false;
+    if (request.source === 'bangumi' && request.digest) return ready(exactInspection);
+    if (request.source === 'bangumi' && request.history) {
+      return ready({
+        source: 'bangumi',
+        head: exactInspection.head,
+        history: { items: [], nextCursor: cursor },
+      });
+    }
+    if (request.source === 'bangumi' && request.cursor && cursorConflict) {
+      cursorConflict = false;
       return { kind: 'conflict' };
     }
-    if (request.source === 'bangumi' && request.digest) return ready(exactInspection);
+    if (request.source === 'bangumi' && request.cursor && historyUnavailable) {
+      historyUnavailable = false;
+      return { kind: 'unavailable' };
+    }
     if (request.source === 'bangumi') return retired;
     return ready(replacementInspection);
   };
@@ -315,16 +363,6 @@ test('a conflict retry replays the exact original cursor and a late retired obse
       await tick();
     });
     expect(calls[0]).toEqual({ subjectId, source: 'bangumi', digest: selectedDigest });
-    expect(host.textContent).toContain(m.sources_conflict());
-    const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.sources_retry());
-    expect(retry).toBeTruthy();
-    await act(async () => {
-      retry!.click();
-      await tick();
-    });
-    expect(calls[1]).toEqual(calls[0]);
-    expect(host.textContent).toContain('248001');
-
     const load = [...host.querySelectorAll('button')].find(
       (button) => button.textContent === m.source_observation_load_history(),
     );
@@ -333,7 +371,34 @@ test('a conflict retry replays the exact original cursor and a late retired obse
       load!.click();
       await tick();
     });
-    expect(calls[2]).toEqual({ subjectId, source: 'bangumi', history: true });
+    expect(calls[1]).toEqual({ subjectId, source: 'bangumi', history: true });
+    const continueHistory = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.source_observation_continue(),
+    );
+    expect(continueHistory).toBeTruthy();
+    await act(async () => {
+      continueHistory!.click();
+      await tick();
+    });
+    expect(calls[2]).toEqual({ subjectId, source: 'bangumi', cursor });
+    expect(host.textContent).toContain(m.sources_conflict());
+    const retryConflict = [...host.querySelectorAll('button')].find((button) => button.textContent === m.sources_retry());
+    expect(retryConflict).toBeTruthy();
+    await act(async () => {
+      retryConflict!.click();
+      await tick();
+    });
+    expect(calls[3]).toEqual(calls[2]);
+    expect(host.textContent).toContain(m.sources_unavailable());
+    const retryUnavailable = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.sources_retry(),
+    );
+    expect(retryUnavailable).toBeTruthy();
+    await act(async () => {
+      retryUnavailable!.click();
+      await tick();
+    });
+    expect(calls[4]).toEqual(calls[2]);
 
     await act(async () => {
       root.render(
@@ -349,7 +414,7 @@ test('a conflict retry replays the exact original cursor and a late retired obse
       );
       await tick();
     });
-    expect(calls[3]).toEqual({ subjectId, source: 'vndb', digest: replacement.digest });
+    expect(calls[5]).toEqual({ subjectId, source: 'vndb', digest: replacement.digest });
     releaseOld(ready(exactInspection));
     await act(async () => tick());
     expect(host.textContent).toContain('12345');

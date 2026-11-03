@@ -1322,6 +1322,9 @@ remain in the mounted reader.
 Decision: provider observation inspection keeps the existing `source_statistic:write` admission; a displayed record
 link grants no read or write permission.
 
+Decision: returning from the observation panel preserves the current Realm query and targets the Subject Sources
+heading for keyboard focus.
+
 The reader presents the current head beside the exact selected retained observation. Empty head, clear tombstone,
 published payload and unavailable payload remain distinct. Provider date and committed native order have separate
 labels; native order is local commit order, not provider chronology. The content digest is labelled unversioned, not a
@@ -1331,9 +1334,9 @@ classification ballots and native enjoyment remain independent.
 
 History is an explicit one-page action. An empty page with a cursor is continuing, including a page whose candidate
 was concealed; it does not refill locally or claim exhaustion. A page with no cursor is exhausted. Selecting a row
-retains one selected observation beside the page's current head. Continuing replaces the page and selection. Exact or
-current concealment stays indistinguishable from missing, and failures show no provider identifiers. A `409` retains
-the original request and cursor for explicit retry. Protected responses use private no-store delivery and stay in the
+retains one selected observation beside the page's current head. Continuing replaces the page and retains that
+selection. Exact or current concealment stays indistinguishable from missing, and failures show no provider identifiers.
+A `409` retains the original request and cursor for explicit retry. Protected responses use private no-store delivery and stay in the
 mounted reader. Subject, provider/digest, route, locale, viewer or CSRF-session replacement retires the reader, and a
 late response cannot restore its contents.
 
@@ -1352,12 +1355,13 @@ Cost:
   current head and at most one native row. Every continuation is one further explicit request with the same opaque
   cursor on retry. No row hydration or importer recovery command is added.
 - **Bound:** One mounted reader retains one head, one selected payload and one history page of at most one row. The
-  native contract caps each payload at 32,768 bytes, the response at 68,000 bytes, the cursor at 512 characters and
+  Web admission matches the native limits: each payload at 32,768 bytes, the response at 68,000 bytes, the cursor at 512 characters and
   figures at ten bins. The current public provider array remains at most two rows.
 - **Growth:** Projection and display are O(rows + admitted bytes), with rows at most one per history page. There is no
   accumulated history, local refill or per-row request. `apps/web/tests/subject-source-observation.test.tsx` pins
-  ten-bin payloads, the native one-row page, withheld continuation, same-input retry and retired late results. The
-  stories use illustrative responses; generated transport, native acceptance and browser geometry remain pending.
+  ten-bin payloads, the native one-row page, withheld continuation, retained selection, exact 404, retry inputs and
+  retired late results. Stories pass native-shaped examples through admission and the existing Sources page; generated
+  transport, native acceptance and browser geometry remain pending.
 
 ## Realm context
 

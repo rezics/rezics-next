@@ -63,6 +63,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
       <article className="space-y-4" aria-busy={busy || result.kind === 'loading'}>
         <ViewHeading
           label={m.subject_sources({}, o)}
+          headingId="subject-sources-heading"
           headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-ring"
           headingRef={headingRef}
           headingTabIndex={-1}
@@ -93,6 +94,7 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
       </article>
     );
   const { page } = result;
+  const sourcesReturnHref = `${contextHref(page.sourcesHref, page.realm)}#subject-sources-heading`;
   const ContextLink: PageLink = ({ href, ...props }) => <PlainLink {...props} href={contextHref(href, page.realm)} />;
   const unlabelled = m.subject_value_unlabelled({}, o);
   const value: OverviewValue = {
@@ -154,13 +156,14 @@ export function SubjectSourcesPage({ result, locale, onRetry, busy = false, head
           source={observation.source}
           digest={observation.digest}
           locale={locale}
-          sourcesHref={page.sourcesHref}
+          sourcesHref={sourcesReturnHref}
           inspect={observation.inspect}
         />
       )}
       <div className="space-y-2">
         <ViewHeading
           label={m.subject_sources({}, o)}
+          headingId="subject-sources-heading"
           headingClassName="font-sans focus-visible:outline-2 focus-visible:outline-ring"
           headingRef={headingRef}
           headingTabIndex={-1}

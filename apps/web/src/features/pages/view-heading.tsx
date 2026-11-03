@@ -21,12 +21,14 @@ export function StreamHeading({
 export function ViewHeading({
   label,
   count,
+  headingId,
   headingClassName,
   headingRef,
   headingTabIndex,
 }: {
   label: string;
   count?: ReactNode;
+  headingId?: string | undefined;
   headingClassName?: string;
   headingRef?: Ref<HTMLHeadingElement> | undefined;
   headingTabIndex?: number | undefined;
@@ -34,6 +36,7 @@ export function ViewHeading({
   return (
     <div data-slot="view-heading" className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-3 gap-y-1">
       <h1
+        id={headingId}
         ref={headingRef}
         tabIndex={headingTabIndex}
         className={cn(
