@@ -382,7 +382,9 @@ test('a conflict retry replays the exact original cursor and a late retired obse
     });
     expect(calls[2]).toEqual({ subjectId, source: 'bangumi', cursor });
     expect(host.textContent).toContain(m.sources_conflict());
-    const retryConflict = [...host.querySelectorAll('button')].find((button) => button.textContent === m.sources_retry());
+    const retryConflict = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.sources_retry(),
+    );
     expect(retryConflict).toBeTruthy();
     await act(async () => {
       retryConflict!.click();

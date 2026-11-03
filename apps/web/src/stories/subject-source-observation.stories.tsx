@@ -161,18 +161,11 @@ function ObservationStory({ mode }: { mode: Mode }) {
       <AppShell>
         <main className="mx-auto min-w-0 max-w-4xl p-4 sm:p-8">
           {mode === 'replacement' && selection.source === 'bangumi' && (
-            <Button
-              className="mb-4 min-h-11"
-              onClick={() => setSelection({ source: 'vndb', digest: clearDigest })}
-            >
+            <Button className="mb-4 min-h-11" onClick={() => setSelection({ source: 'vndb', digest: clearDigest })}>
               Replace provider while the read is pending
             </Button>
           )}
-          <SubjectSourcesPage
-            result={{ kind: 'ready', page: sourcesPage }}
-            locale={locale}
-            observation={observation}
-          />
+          <SubjectSourcesPage result={{ kind: 'ready', page: sourcesPage }} locale={locale} observation={observation} />
         </main>
       </AppShell>
     </PatternStory>
