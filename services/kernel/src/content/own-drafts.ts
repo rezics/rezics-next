@@ -1,4 +1,5 @@
 import { accessCheck, AuthenticationError, type AccessCheck, type AccessClient } from '../request/access.ts';
+import { ProblemError } from '../http/problem.ts';
 import type { CursorBinding } from '../tokens/cursor.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -162,6 +163,8 @@ export async function listOwnDrafts(
     const coverage = await client.query<{ complete: boolean }>(
       'SELECT complete FROM content.own_draft_progress WHERE singleton=0',
     );
+    const progress = coverage.rows[0];
+    if (!progress) throw new ProblemError('dependency_unavailable', { effectStatus: 'not_applicable' });
     // Source pending is a partial author-leading prefix; delayed delivery cannot
     // turn a known server draft into a complete empty inventory.
     const pending = await client.query(
@@ -169,7 +172,7 @@ export async function listOwnDrafts(
        AND visibility='draft' AND availability='available' LIMIT 1`,
       [accountId],
     );
-    return { candidates: candidates.rows, ready: coverage.rows[0]?.complete === true && pending.rows.length === 0 };
+    return { candidates: candidates.rows, ready: progress.complete === true && pending.rows.length === 0 };
   });
   const entries: OwnDraftEntry[] = [];
   const anchors: AnchoredPosition[] = [selected.anchor];

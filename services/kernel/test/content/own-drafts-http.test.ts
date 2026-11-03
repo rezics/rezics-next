@@ -199,6 +199,48 @@ test('pending locators are preparing, bounded repair returns the draft, and late
   expect((await f.call('GET', home())).value.drafts.some((item: any) => item.id === thread.firstPost.id)).toBe(false);
 });
 
+test('missing locator coverage is unavailable and an exact cursor retry remains usable', async () => {
+  await f.pool.query('UPDATE content.own_draft_progress SET complete=false WHERE singleton=0');
+  await f.thread('draft');
+  await f.thread('draft');
+  let complete = false;
+  for (let page = 0; page < 20 && !complete; page++) complete = (await repairOwnDraftPage(f.pool)).complete;
+  expect(complete).toBe(true);
+
+  await f.pool.query('UPDATE content.own_draft_progress SET complete=false WHERE singleton=0');
+  const progress = await f.pool.query<{ after_route: number; after_thread: string; after_post: string }>(
+    'SELECT after_route,after_thread,after_post FROM content.own_draft_progress WHERE singleton=0',
+  );
+  expect(progress.rows).toHaveLength(1);
+  const first = await f.call('GET', `${home()}?limit=1`);
+  expect(first.status).toBe(200);
+  expect(first.value.state).toBe('preparing');
+  expect(first.value.drafts).toHaveLength(1);
+  expect(first.value.next).toBeString();
+  const retryPath = `${home()}?limit=1&cursor=${encodeURIComponent(first.value.next)}`;
+
+  await f.pool.query('DELETE FROM content.own_draft_progress WHERE singleton=0');
+  try {
+    const unavailable = await f.call('GET', retryPath);
+    expect(unavailable.status).toBe(503);
+    expect(unavailable.value.code).toBe('dependency_unavailable');
+    const stillMissing = await f.pool.query('SELECT 1 FROM content.own_draft_progress WHERE singleton=0');
+    expect(stillMissing.rows).toHaveLength(0);
+  } finally {
+    await f.pool.query(
+      `INSERT INTO content.own_draft_progress (singleton,after_route,after_thread,after_post,complete)
+       VALUES (0,$1,$2,$3,false)
+       ON CONFLICT (singleton) DO UPDATE SET after_route=$1,after_thread=$2,after_post=$3,complete=false`,
+      [progress.rows[0]!.after_route, progress.rows[0]!.after_thread, progress.rows[0]!.after_post],
+    );
+  }
+
+  const retry = await f.call('GET', retryPath);
+  expect(retry.status).toBe(200);
+  expect(retry.value.state).toBe('preparing');
+  expect(retry.value.drafts).toHaveLength(1);
+});
+
 test('native review draft retains original Subject, root language, licence and canonical bytes on return', async () => {
   const r = await createReviewLifecycleFixture();
   try {
