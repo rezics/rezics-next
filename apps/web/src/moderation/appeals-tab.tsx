@@ -570,7 +570,9 @@ function AppealCard({
                   <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
                   <dd className="select-text break-all font-mono leading-6">{appeal.decisionId}</dd>
                 </div>
-                {identity && identity.kind !== 'board' && currentTargetIsAvailable(target, identity) ? (
+                {identity &&
+                identity.kind !== 'board' &&
+                currentTargetIsAvailable(target, { kind: identity.kind, id: identity.id }) ? (
                   <div className="space-y-1">
                     <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
                     <dd className="select-text break-all font-mono leading-6">{identity.id}</dd>
