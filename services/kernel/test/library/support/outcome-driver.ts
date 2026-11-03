@@ -32,6 +32,7 @@ import {
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import type { NativeConformanceOptions, NativeConformanceWorld } from './native-conformance.ts';
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 import type { Access } from '../../../src/request/access.ts';
@@ -362,6 +363,7 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     let managementObserver: Parameters<NativeConformanceWorld['native']['observeManagement']>[0];
     let nativeAccess: Access;
     const app = createKernel({
+      receiptKeys: testReceiptKeys(),
       requestDeadlineMs: 30_000,
       pool: db!.pool,
       clock: () => new Date(scenarioNow()),

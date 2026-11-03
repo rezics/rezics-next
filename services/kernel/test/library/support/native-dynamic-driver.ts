@@ -20,6 +20,7 @@ import {
 import { provisionOwnerReadableSubject } from './native-private-subject.ts';
 import { inspectNativeDynamicCollections } from './native-dynamic-inspection.ts';
 import type { StateReferenceRepairLatch } from './native-state-reference-repair.ts';
+import { createNativePrivateFactsFixture } from './native-private-facts-fixture.ts';
 
 export type NativeDynamicCollectionsDriver = Omit<DynamicCollectionsDriver, 'holdStateReferenceRepair'> & {
   world: NativeConformanceWorld;
@@ -45,11 +46,19 @@ export async function createDynamicCollectionsDriver(
         profileId: profile.id,
         stateSetId: profile.entryStateSet.id,
         releaseDigest: digest,
-        states: profile.entryStateSet.states.map((state) => ({ id: state.id, labels: state.labels })),
+        states: profile.entryStateSet.states.map((state) => ({
+          id: state.id,
+          labels: state.labels,
+        })),
       };
     };
-    const profiles = { game: fixture('game'), recipe: fixture('recipe'), record: fixture('record') };
+    const profiles = {
+      game: fixture('game'),
+      recipe: fixture('recipe'),
+      record: fixture('record'),
+    };
     const labels = new Map<string, string>();
+    const privateFacts = createNativePrivateFactsFixture(world);
     const driver: NativeDynamicCollectionsDriver = {
       world,
       accounts: world.accounts,
@@ -70,7 +79,9 @@ export async function createDynamicCollectionsDriver(
         const schema = JSON.parse(input.schemas['fixture.yaml']!);
         const className = name === 'game' ? 'Parent' : name === 'recipe' ? 'Recipe' : 'Record';
         const declaration = schema.classes[className].annotations.library;
-        declaration.entryStateSet.states = change.states.map((state) => ({ id: state.id }));
+        declaration.entryStateSet.states = change.states.map((state) => ({
+          id: state.id,
+        }));
         for (const [key, source] of Object.entries(input.presentation)) {
           if (!key.startsWith('fixture/')) continue;
           const locale = key.slice('fixture/'.length);
@@ -124,27 +135,21 @@ export async function createDynamicCollectionsDriver(
       async removeLabel(subjectId, name) {
         const labelId = labels.get(name);
         if (!labelId) throw new Error('No label was provisioned under this fixture name');
-        const page = await json<{ assignments: { subjectId: string; labelId: string; revision: number }[] }>(
-          await world.native.request('owner', {
-            method: 'GET',
-            path: `/v1/libraryLabelAssignments?subjectId=${subjectId}`,
-          }),
-        );
-        const assignment = page.assignments.find((row) => row.labelId === labelId);
-        if (!assignment) throw new Error('Native assignment is absent');
-        return write(world, 'owner', 'POST', `/v1/libraryLabels/${labelId}:unassign`, {
-          subjectId,
-          revision: assignment.revision,
-        });
+        return privateFacts.removeLabels(subjectId, labelId);
       },
       startProgressSession: (subjectId) =>
-        write(world, 'owner', 'POST', '/v1/progressSessions', { subjectId, mode: 'scalar_amount', unit: 'minute' }),
+        write(world, 'owner', 'POST', '/v1/progressSessions', {
+          subjectId,
+          mode: 'scalar_amount',
+          unit: 'minute',
+        }),
       createHolding: (subjectId) =>
-        write(world, 'owner', 'POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }),
-      async removeAllPrivateFacts(subjectId) {
-        // The existing Library driver owns the full real cleanup transport; do not model Everything membership.
-        return unavailable(`native all-private-fact cleanup command for ${subjectId}`);
-      },
+        write(world, 'owner', 'POST', '/v1/copies', {
+          subjectId,
+          kind: 'physical',
+          status: 'owned',
+        }),
+      removeAllPrivateFacts: privateFacts.removeAllPrivateFacts,
       deleteAccount: () => deleteAccount(world),
       mountCollection: (collectionId) => mountCollectionInZone(world.native.request, collectionId),
       async exportCollection() {
