@@ -82,7 +82,9 @@ export function aniListImportRoutes(
         detail: detail('preview'),
       },
       ({ actor, body, headers }) =>
-        command(() => imports().preview(actor, body.upload, body.scoreFormat, idempotencyKeyOf(headers))),
+        command(() =>
+          imports().preview(actor, body.upload, body.scoreFormat, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+        ),
     )
     .get(
       path,
@@ -121,7 +123,9 @@ export function aniListImportRoutes(
       },
       ({ actor, params, body, headers }) => {
         const { ordinal, ...input } = body;
-        return command(() => imports().review(actor, params.importId, ordinal, input, idempotencyKeyOf(headers)));
+        return command(() =>
+          imports().review(actor, params.importId, ordinal, input, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+        );
       },
     )
     .post(
@@ -151,6 +155,8 @@ export function aniListImportRoutes(
         detail: detail('cancel'),
       },
       ({ actor, params, body, headers }) =>
-        command(() => imports().cancel(actor, params.importId, idempotencyKeyOf(headers), body.remove)),
+        command(() =>
+          imports().cancel(actor, params.importId, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), body.remove),
+        ),
     );
 }

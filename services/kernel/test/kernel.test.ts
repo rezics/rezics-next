@@ -37,6 +37,11 @@ type Routes = TypedRoutes<Kernel['~Routes']>;
 // Type-checking proves that each entry is a typed route, that no typed route is missing, and that every success
 // response keeps its schema's type. An error names the offending routes.
 const typed = [
+  'POST /v1/libraryImports/anilist/$preview',
+  'GET /v1/libraryImports/anilist/:importId',
+  'POST /v1/libraryImports/anilist/:importId/$review',
+  'POST /v1/libraryImports/anilist/:importId/$apply',
+  'POST /v1/libraryImports/anilist/:importId/$cancel',
   'GET /health',
   'GET /v1/commerceMoney',
   'GET /v1/commerceSales',
