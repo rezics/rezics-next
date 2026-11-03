@@ -62,7 +62,7 @@ export async function startSearchIndexing(options: {
     ? startDiscoveryIndexing({
         ...options,
         routeKey: options.discovery.routeKey,
-        reviewSource: options.discovery.reviewSource,
+        ...(options.discovery.reviewSource ? { reviewSource: options.discovery.reviewSource } : {}),
         requiredKinds: options.discovery.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
       })
     : undefined;
