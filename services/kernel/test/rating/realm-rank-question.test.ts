@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createRealmRankSource, type RealmRankRequest } from '../../src/rating/realm-rank.ts';
+import type { Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { communityFixtureRuntime } from '../community/community-driver.ts';
 import { createFigureFixture } from './support/figure-fixture.ts';
@@ -25,7 +26,7 @@ test('selected questions keep their scale, private prior, threshold and continua
       realmId: fixture.realmId, questionId: questionIds[0]!,
       partition: partitionOf(routeOf(fixture.subjectIds[0]!)!), sort: 'score_desc', limit: 100,
     };
-    const page = (input: RealmRankRequest = request, principal = actor) =>
+    const page = (input: RealmRankRequest = request, principal: Actor = actor) =>
       source.page(principal, input, { deadline: Date.now() + 30_000 });
     const write = async (questionId: string, subjectId: string, voter: { bearer: string }, units: number | null) => {
       const response = await kernel.handle(new Request(
@@ -74,8 +75,7 @@ test('selected questions keep their scale, private prior, threshold and continua
     await expect(page({ ...request, questionId: newId(0x2100) })).rejects.toMatchObject({ code: 'not_found' });
     await expect(page({ ...request, realmId: newId(0x2300) })).rejects.toMatchObject({ code: 'not_found' });
     await expect(page(request, { kind: 'anonymous' })).rejects.toMatchObject({ code: 'not_found' });
-    if (actor.kind !== 'anonymous')
-      await expect(page(request, { ...actor, scopes: actor.scopes.filter((scope) => scope !== 'definitions:read') }))
+    await expect(page(request, { ...actor, scopes: actor.scopes.filter((scope) => scope !== 'definitions:read') }))
         .rejects.toMatchObject({ code: 'not_found' });
     // A below-threshold change contributes no rank generation or cursor evidence.
     await write(request.questionId, boundary, fixture.realmMembers[0]!, null);

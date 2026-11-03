@@ -108,16 +108,16 @@ BEGIN
   IF TG_OP <> 'DELETE' AND NEW.population_id <> '00000000-0000-8000-8000-000000000000'::uuid
      AND NEW.score IS NOT NULL AND NEW.as_of IS NOT NULL THEN
     INSERT INTO rating.realm_rank
-      (partition_no,question_id,population_id,subject_id,count,mean,score,prior_epoch,prior_generation,revision,as_of)
+      (partition_no,question_id,population_id,subject_id,count,mean,score,prior_epoch,prior_generation,revision,as_of,question_identity)
     VALUES (NEW.partition_no,NEW.question_id,NEW.population_id,NEW.subject_id,NEW.count,NEW.mean,NEW.score,
-            NEW.prior_epoch,NEW.published_prior_generation,NEW.revision,NEW.as_of)
+            NEW.prior_epoch,NEW.published_prior_generation,NEW.revision,NEW.as_of,NEW.question_identity)
     ON CONFLICT (partition_no,question_id,population_id,subject_id) DO UPDATE
       SET count=EXCLUDED.count,mean=EXCLUDED.mean,score=EXCLUDED.score,prior_epoch=EXCLUDED.prior_epoch,
-          prior_generation=EXCLUDED.prior_generation,revision=EXCLUDED.revision,as_of=EXCLUDED.as_of
+          prior_generation=EXCLUDED.prior_generation,revision=EXCLUDED.revision,as_of=EXCLUDED.as_of,question_identity=EXCLUDED.question_identity
       WHERE (realm_rank.count,realm_rank.mean,realm_rank.score,realm_rank.prior_epoch,
-             realm_rank.prior_generation,realm_rank.revision,realm_rank.as_of)
+             realm_rank.prior_generation,realm_rank.revision,realm_rank.as_of,realm_rank.question_identity)
         IS DISTINCT FROM (EXCLUDED.count,EXCLUDED.mean,EXCLUDED.score,EXCLUDED.prior_epoch,
-                          EXCLUDED.prior_generation,EXCLUDED.revision,EXCLUDED.as_of);
+                          EXCLUDED.prior_generation,EXCLUDED.revision,EXCLUDED.as_of,EXCLUDED.question_identity);
   ELSE
     DELETE FROM rating.realm_rank
       WHERE partition_no=OLD.partition_no AND question_id=OLD.question_id
@@ -274,6 +274,7 @@ CREATE TABLE rating.population_prior_epoch (
     start_count bigint,
     m numeric(12,4),
     c bigint,
+    question_identity text DEFAULT '[1,"work",0,20,1]'::text,
     CONSTRAINT population_prior_epoch_c_check CHECK (((c IS NULL) OR (c >= 1))),
     CONSTRAINT population_prior_epoch_check CHECK ((route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
     CONSTRAINT population_prior_epoch_check1 CHECK ((((start_count IS NULL) AND (m IS NULL) AND (c IS NULL)) OR ((start_count IS NOT NULL) AND (m IS NOT NULL) AND (c IS NOT NULL)))),
@@ -465,6 +466,7 @@ CREATE TABLE rating.public_figure (
     pending_position bigint,
     pending_prior_generation bigint,
     published_prior_generation bigint DEFAULT 0 NOT NULL,
+    question_identity text DEFAULT '[1,"work",0,20,1]'::text,
     CONSTRAINT public_figure_check CHECK (((pending_position IS NULL) OR (pending_position > "position"))),
     CONSTRAINT public_figure_check1 CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
     CONSTRAINT public_figure_check2 CHECK ((((mean IS NULL) OR ((mean >= (0)::numeric) AND (mean <= (10)::numeric))) AND ((m IS NULL) OR ((m >= (0)::numeric) AND (m <= (10)::numeric))))),
@@ -547,6 +549,7 @@ CREATE TABLE rating.realm_rank (
     prior_generation bigint NOT NULL,
     revision bigint NOT NULL,
     as_of timestamp with time zone NOT NULL,
+    question_identity text DEFAULT '[1,"work",0,20,1]'::text NOT NULL,
     CONSTRAINT realm_rank_check CHECK ((partition_no = (((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)) >> 4))),
     CONSTRAINT realm_rank_count_check CHECK ((count >= 5)),
     CONSTRAINT realm_rank_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
@@ -632,6 +635,7 @@ CREATE TABLE rating.subject_home_prior_input (
     status text NOT NULL,
     m numeric(12,4),
     c bigint,
+    question_identity text DEFAULT '[1,"work",0,20,1]'::text,
     CONSTRAINT subject_home_prior_input_c_check CHECK ((c >= 1)),
     CONSTRAINT subject_home_prior_input_check CHECK ((population_route = ((get_byte(uuid_send(population_id), 10) * 256) + get_byte(uuid_send(population_id), 11)))),
     CONSTRAINT subject_home_prior_input_check1 CHECK ((((status = 'absent'::text) AND (generation = 0) AND (epoch IS NULL) AND (m IS NULL) AND (c IS NULL)) OR ((status = 'inactive'::text) AND (generation > 0) AND (epoch IS NOT NULL) AND (m IS NULL) AND (c IS NULL)) OR ((status = 'active'::text) AND (generation > 0) AND (epoch IS NOT NULL) AND (m IS NOT NULL) AND (c IS NOT NULL)))),
@@ -1021,7 +1025,7 @@ CREATE INDEX question_realm_directory_idx ON rating.question USING btree (realm_
 -- Name: realm_rank_score_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
-CREATE INDEX realm_rank_score_idx ON rating.realm_rank USING btree (partition_no, question_id, population_id, prior_generation, score DESC, subject_id DESC);
+CREATE INDEX realm_rank_score_idx ON rating.realm_rank USING btree (partition_no, question_id, population_id, question_identity, prior_generation, score DESC, subject_id DESC);
 
 
 --
