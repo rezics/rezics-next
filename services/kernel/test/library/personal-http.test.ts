@@ -191,15 +191,9 @@ test('personal routes mount once and declare their gate in OpenAPI', () => {
     for (const method of methods) {
       expect(document.paths[path]?.[method]?.['x-exposure']).toBe('gate:personal_library');
       const native = path.replace(/\{(\w+)\}/g, ':$1');
-      const route =
-        path.endsWith(':restore')
-          ? native.replace(/:restore$/, '/$restore')
-          : native;
+      const route = path.endsWith(':restore') ? native.replace(/:restore$/, '/$restore') : native;
       expect(
-        app.routes.filter(
-          (candidate) =>
-            candidate.path === route && candidate.method.toLowerCase() === method,
-        ),
+        app.routes.filter((candidate) => candidate.path === route && candidate.method.toLowerCase() === method),
       ).toHaveLength(1);
     }
 });
@@ -279,11 +273,12 @@ test('entry state history is private, bounded by change and restores only the re
   expect(restored.libraryEntry).toMatchObject({ state: 'planned', revision: current.revision + 1 });
   expect(await json(await request('POST', restorePath, restoreBody, 'owner', restoreKey))).toEqual(restored);
   expect(
-    (await db.admin.query(`SELECT revision,command_kind FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3 ORDER BY revision`, [
-      routeOf(accounts.owner),
-      accounts.owner,
-      id,
-    ])).rows,
+    (
+      await db.admin.query(
+        `SELECT revision,command_kind FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3 ORDER BY revision`,
+        [routeOf(accounts.owner), accounts.owner, id],
+      )
+    ).rows,
   ).toHaveLength(4);
 
   const otherId = await subject();
@@ -291,30 +286,32 @@ test('entry state history is private, bounded by change and restores only the re
   const staleReview = await json(await request('GET', `/v1/libraryEntries/${id}/state-history/4`));
   const changed = await entry(id, 'paused', restored.libraryEntry.revision);
   await problem(
-    await request(
-      'POST',
-      `/v1/libraryEntries/${id}/state-history/4:restore`,
-      { incarnationId: first.incarnationId, currentRevision: staleReview.current.revision },
-    ),
+    await request('POST', `/v1/libraryEntries/${id}/state-history/4:restore`, {
+      incarnationId: first.incarnationId,
+      currentRevision: staleReview.current.revision,
+    }),
     409,
     'library_entry_state_restore_stale',
   );
   expect((await json(await request('GET', `/v1/libraryEntries/${otherId}`))).libraryEntry).toEqual(otherEntry);
 
-  expect((await request(
-    'DELETE',
-    `/v1/libraryEntries/${id}?revision=${changed.libraryEntry.revision}&incarnationId=${first.incarnationId}`,
-  )).status).toBe(204);
+  expect(
+    (
+      await request(
+        'DELETE',
+        `/v1/libraryEntries/${id}?revision=${changed.libraryEntry.revision}&incarnationId=${first.incarnationId}`,
+      )
+    ).status,
+  ).toBe(204);
   await problem(await request('GET', `/v1/libraryEntries/${id}/state-history`), 404, 'not_found');
   const recreated = await entry(id, 'planned');
   const recreatedHistory = await json(await request('GET', `/v1/libraryEntries/${id}/state-history`));
   expect(recreatedHistory.incarnationId).not.toBe(first.incarnationId);
   await problem(
-    await request(
-      'POST',
-      `/v1/libraryEntries/${id}/state-history/4:restore`,
-      { incarnationId: first.incarnationId, currentRevision: recreated.revision },
-    ),
+    await request('POST', `/v1/libraryEntries/${id}/state-history/4:restore`, {
+      incarnationId: first.incarnationId,
+      currentRevision: recreated.revision,
+    }),
     409,
     'library_entry_state_restore_stale',
   );
@@ -324,10 +321,11 @@ test('history exposes unknown legacy coverage and refuses a former state outside
   const legacyId = await subject();
   const legacyEntry = await entry(legacyId);
   const legacyPage = await json(await request('GET', `/v1/libraryEntries/${legacyId}/state-history`));
-  await db.admin.query(
-    `DELETE FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3`,
-    [routeOf(accounts.owner), accounts.owner, legacyId],
-  );
+  await db.admin.query(`DELETE FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3`, [
+    routeOf(accounts.owner),
+    accounts.owner,
+    legacyId,
+  ]);
   expect(await json(await request('GET', `/v1/libraryEntries/${legacyId}/state-history`))).toMatchObject({
     incarnationId: legacyPage.incarnationId,
     currentRevision: legacyEntry.revision,
@@ -356,16 +354,17 @@ test('history exposes unknown legacy coverage and refuses a former state outside
       new Date().toISOString(),
     ],
   );
-  expect(await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}`))).toMatchObject({
+  expect(
+    await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}`)),
+  ).toMatchObject({
     change: { beforeState: 'retired.meaning' },
     availability: 'state_unavailable',
   });
   await problem(
-    await request(
-      'POST',
-      `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}:restore`,
-      { incarnationId: history.incarnationId, currentRevision: current.revision },
-    ),
+    await request('POST', `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}:restore`, {
+      incarnationId: history.incarnationId,
+      currentRevision: current.revision,
+    }),
     409,
     'library_entry_state_restore_unavailable',
   );
@@ -381,7 +380,10 @@ test('state history prunes at the retained cap and keeps continuation coverage t
   expect(first.changes).toHaveLength(50);
   expect(first.coverage).toBe('partial');
   const second = await json(
-    await request('GET', `/v1/libraryEntries/${subjectId}/state-history?limit=50&cursor=${encodeURIComponent(first.next)}`),
+    await request(
+      'GET',
+      `/v1/libraryEntries/${subjectId}/state-history?limit=50&cursor=${encodeURIComponent(first.next)}`,
+    ),
   );
   expect(second.changes).toHaveLength(14);
   expect(second.coverage).toBe('partial');

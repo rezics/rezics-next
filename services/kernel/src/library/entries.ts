@@ -235,7 +235,10 @@ function validStateHistoryAfter(keys: CursorKey[]): keys is [string, string, str
 type EntryStateCommandKind = 'library.entry.put' | 'library.entry.state.restore';
 
 function stateChangeView(
-  change: Pick<StoredEntryStateChange, 'revision' | 'priorRevision' | 'beforeState' | 'afterState' | 'commandId' | 'commandKind' | 'changedAt'>,
+  change: Pick<
+    StoredEntryStateChange,
+    'revision' | 'priorRevision' | 'beforeState' | 'afterState' | 'commandId' | 'commandKind' | 'changedAt'
+  >,
 ) {
   return {
     revision: change.revision,
@@ -368,9 +371,9 @@ export function createEntryCommands(config: Dependencies) {
       const source = observation?.source;
       return Boolean(
         source &&
-          source.kind === 'supported' &&
-          source.subjectId === subjectId &&
-          hasEntryState(source.profile, historicalState),
+        source.kind === 'supported' &&
+        source.subjectId === subjectId &&
+        hasEntryState(source.profile, historicalState),
       );
     } finally {
       releaseOperationalTime(time);
@@ -664,11 +667,7 @@ export function createEntryCommands(config: Dependencies) {
     }
   }
 
-  async function listEntryStateHistory(
-    actor: Actor,
-    subjectId: string,
-    options: EntryStateHistoryOptions = {},
-  ) {
+  async function listEntryStateHistory(actor: Actor, subjectId: string, options: EntryStateHistoryOptions = {}) {
     const owner = account(actor, 'library_entry:read');
     requireRoute(subjectId);
     if (typeof options !== 'object' || options === null || Array.isArray(options))
@@ -774,7 +773,13 @@ export function createEntryCommands(config: Dependencies) {
     };
   }
 
-  async function restoreEntryState(actor: Actor, subjectId: string, selectedRevision: number, input: unknown, requestKey: string) {
+  async function restoreEntryState(
+    actor: Actor,
+    subjectId: string,
+    selectedRevision: number,
+    input: unknown,
+    requestKey: string,
+  ) {
     const owner = account(actor, 'library_entry:update');
     requireRoute(subjectId);
     const selected = revision(selectedRevision);
@@ -809,8 +814,7 @@ export function createEntryCommands(config: Dependencies) {
               }),
             );
             if (!change) throw new LibraryNotFoundError();
-            if (change.beforeState === null)
-              throw new LibraryEntryStateRestoreConflictError('unavailable');
+            if (change.beforeState === null) throw new LibraryEntryStateRestoreConflictError('unavailable');
             const observation = await readLibraryProfileSourceObservation(
               { pool, access, actor: owner, at: attempt.time, deadline },
               subjectId,
@@ -842,10 +846,7 @@ export function createEntryCommands(config: Dependencies) {
           subject_id: subjectId,
         });
         if (!current) throw new LibraryNotFoundError();
-        if (
-          current.revision !== request.currentRevision ||
-          current.incarnationId !== request.incarnationId
-        )
+        if (current.revision !== request.currentRevision || current.incarnationId !== request.incarnationId)
           throw new LibraryEntryStateRestoreConflictError('stale');
         const change = await readEntryStateChange(tx, {
           route,

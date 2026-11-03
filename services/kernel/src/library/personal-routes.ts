@@ -107,11 +107,7 @@ const entryStateReviewSchema = t.Object(
       { incarnationId: t.Union([incarnationId, t.Null()]), revision, state: libraryStoredVocabularySchema },
       closed,
     ),
-    availability: t.Union([
-      t.Literal('available'),
-      t.Literal('no_prior_state'),
-      t.Literal('state_unavailable'),
-    ]),
+    availability: t.Union([t.Literal('available'), t.Literal('no_prior_state'), t.Literal('state_unavailable')]),
   },
   closed,
 );

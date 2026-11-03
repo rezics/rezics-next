@@ -44,7 +44,12 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
   expect(first.value.removed).toBe(1);
   expect(first.value.exhausted).toBe(false);
   expect(
-    (await pool.query(`SELECT subject_id FROM library.entry_state_change WHERE route=$1 AND account_id=$2`, [route, id(1)])).rows,
+    (
+      await pool.query(`SELECT subject_id FROM library.entry_state_change WHERE route=$1 AND account_id=$2`, [
+        route,
+        id(1),
+      ])
+    ).rows,
   ).toEqual([{ subject_id: id(11) }]);
   const replay = await purgeAccountFactsPage({ pool }, input);
   expect(replay.replayed).toBe(true);
@@ -58,7 +63,8 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
   expect(second.value.removed).toBe(1);
   expect(second.value.exhausted).toBe(true);
   expect(
-    (await pool.query(`SELECT account_id FROM library.entry_state_change WHERE route=$1 ORDER BY account_id`, [route])).rows,
+    (await pool.query(`SELECT account_id FROM library.entry_state_change WHERE route=$1 ORDER BY account_id`, [route]))
+      .rows,
   ).toEqual([{ account_id: id(2) }]);
   expect(
     (await pool.query(`SELECT account_id FROM library.entry WHERE route=$1 ORDER BY account_id`, [route])).rows,
