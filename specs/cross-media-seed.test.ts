@@ -64,13 +64,17 @@ test('three anime/VN franchises elect family membership and retain exact unsuppo
   expect(plan.entities.bangumi.map((r) => r.key).sort()).toEqual(['character:7', 'episode:10', 'person:8']);
   expect(plan.entities.vndb.map((r) => r.key).sort()).toEqual(['c3', 's4']);
   expect(plan.franchises.clannad.bangumi).toEqual(['2', '4']);
-  expect(plan.edges.some((edge) => edge.property === 'wdt:P155' && edge.holder === '4' && edge.target === '2')).toBe(true);
+  expect(plan.edges.some((edge) => edge.property === 'wdt:P155' && edge.holder === '4' && edge.target === '2')).toBe(
+    true,
+  );
   expect(plan.edges.some((edge) => edge.property === 'schema:character' && edge.target === 'character:7')).toBe(true);
   expect(plan.edges.some((edge) => edge.property === 'wdt:P725')).toBe(true);
   expect(plan.edges.some((edge) => edge.property === 'schema:author' && edge.target === 'person:8')).toBe(true);
-  expect(plan.gaps.some((gap) => gap.fields.includes('subject-relations.relation_type') && gap.record.relation_type === 1002)).toBe(
-    true,
-  );
+  expect(
+    plan.gaps.some(
+      (gap) => gap.fields.includes('subject-relations.relation_type') && gap.record.relation_type === 1002,
+    ),
+  ).toBe(true);
   expect(plan.gaps.some((gap) => gap.fields.includes('chars_vns.vid') && gap.record.vid === 'v99')).toBe(true);
   expect(plan.gaps.find((gap) => gap.fields.includes('vn_anime.aid'))?.reason).toContain('AniDB');
   expect(plan.gaps.some((gap) => gap.reason.includes('Concept binding'))).toBe(true);
@@ -145,7 +149,9 @@ test('the registered importer reopens idempotently and returns only readings sup
     expect(again.runs.bangumi?.counts.unchanged).toBe(7);
     expect(again.runs.vndb?.counts.unchanged).toBe(5);
     expect(again.readings).toEqual(first.readings);
-    expect(again.readings.some((row) => row.externalId === 'character:7' && row.route.startsWith('/subjects/'))).toBe(true);
+    expect(again.readings.some((row) => row.externalId === 'character:7' && row.route.startsWith('/subjects/'))).toBe(
+      true,
+    );
     expect(reads.length).toBe(first.readings.length * 2);
     expect(again.status).toBe('imported-with-gaps');
     expect(again.unresolved.some((edge) => edge.target === 'character:7' || edge.holder === '99')).toBe(true);

@@ -10,14 +10,14 @@ or retract a previous candidate.
 
 The [package exports](package.json) are only these entry points:
 
-| Import                            | Named exports                                                                                               |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@rezics/conversion`              | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError` |
-| `@rezics/conversion/bangumi`      | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                 |
-| `@rezics/conversion/vndb`         | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                          |
-| `@rezics/conversion/open-library` | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                         |
-| `@rezics/conversion/wikidata`     | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                             |
-| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `CrossMediaEntityConversion` |
+| Import                                    | Named exports                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@rezics/conversion`                      | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError` |
+| `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                 |
+| `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                          |
+| `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                         |
+| `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                             |
+| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `CrossMediaEntityConversion`       |
 
 Each converter takes an input, an optional context, and optional registered
 converter options. The option is `converterRevision`; import the matching

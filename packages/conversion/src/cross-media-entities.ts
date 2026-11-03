@@ -20,7 +20,15 @@ export type SourceMapping = {
   concept?: { id: string; scheme: string; label: string };
 };
 
-type InventoryValue = { id?: number | string; value?: string; mapping?: SourceMapping; term?: string; inverse?: boolean; status?: string; reason?: string };
+type InventoryValue = {
+  id?: number | string;
+  value?: string;
+  mapping?: SourceMapping;
+  term?: string;
+  inverse?: boolean;
+  status?: string;
+  reason?: string;
+};
 type BangumiInventory = { enumerations: { id: string; values: InventoryValue[] }[] };
 type VndbInventory = { enumerations: Record<string, InventoryValue[]> };
 
@@ -127,7 +135,11 @@ export type EntityKind =
   | 'vndb-release'
   | 'vndb-producer';
 
-export function crossMediaEntityKind(sourceKind: 'bangumi' | 'vndb', externalId: string, record: unknown): EntityKind | undefined {
+export function crossMediaEntityKind(
+  sourceKind: 'bangumi' | 'vndb',
+  externalId: string,
+  record: unknown,
+): EntityKind | undefined {
   if (sourceKind === 'bangumi') {
     if (/^character:[1-9][0-9]*$/.test(externalId)) return 'bangumi-character';
     if (/^person:[1-9][0-9]*$/.test(externalId)) return 'bangumi-person';
@@ -198,10 +210,7 @@ function nativeNumber(value: unknown, pointer: string): number {
   return value as number;
 }
 
-const profiles: Record<
-  EntityKind,
-  { type: string; identifier: string; sourceKind: 'bangumi' | 'vndb' }
-> = {
+const profiles: Record<EntityKind, { type: string; identifier: string; sourceKind: 'bangumi' | 'vndb' }> = {
   'bangumi-character': { type: 'wd:Q95074', identifier: 'wdt:P6296', sourceKind: 'bangumi' },
   'bangumi-person': { type: 'schema:Person', identifier: 'wdt:P6298', sourceKind: 'bangumi' },
   'bangumi-episode': { type: 'schema:Episode', identifier: 'schema:url', sourceKind: 'bangumi' },
@@ -230,9 +239,19 @@ function producerType(record: object): string {
 function project(
   kind: EntityKind,
   input: ConversionInput,
-): { normalized: Normalized; type: string; labels: Record<string, string>; identifier: string; ignored?: ConversionDiagnostic } {
+): {
+  normalized: Normalized;
+  type: string;
+  labels: Record<string, string>;
+  identifier: string;
+  ignored?: ConversionDiagnostic;
+} {
   const raw = object(input.record, '');
-  const idField = kind.startsWith('vndb') ? 'id' : kind.startsWith('bangumi') && !kind.includes('music') && !kind.includes('live') ? 'id' : 'id';
+  const idField = kind.startsWith('vndb')
+    ? 'id'
+    : kind.startsWith('bangumi') && !kind.includes('music') && !kind.includes('live')
+      ? 'id'
+      : 'id';
   const nativeId = own(raw, idField, '/id');
   const expected =
     kind === 'bangumi-character'
@@ -248,7 +267,8 @@ function project(
   } else if (typeof nativeId !== 'string' || nativeId !== expected) fail('/id', 'invalid_identifier');
   const name = own(raw, 'name', '/name');
   const title = own(raw, 'title', '/title');
-  const label = name !== undefined ? text(name, '/name', 500) : title !== undefined ? text(title, '/title', 500) : expected;
+  const label =
+    name !== undefined ? text(name, '/name', 500) : title !== undefined ? text(title, '/title', 500) : expected;
   const chinese = own(raw, 'name_cn', '/name_cn');
   const labels: Record<string, string> = { und: label };
   if (typeof chinese === 'string' && chinese.trim()) labels.zh = text(chinese, '/name_cn', 500, true);
@@ -315,9 +335,9 @@ function convert(
   options: { readonly converterRevision?: string; readonly sourceKind?: 'bangumi' | 'vndb' },
 ): CrossMediaEntityConversion {
   const sourceKind =
-    options.sourceKind ??
-    (/^(?:character|person|episode):|^[1-9]/.test(input.external_id) ? 'bangumi' : 'vndb');
-  const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record) ?? fail('/external_id', 'unsupported_type');
+    options.sourceKind ?? (/^(?:character|person|episode):|^[1-9]/.test(input.external_id) ? 'bangumi' : 'vndb');
+  const kind =
+    crossMediaEntityKind(sourceKind, input.external_id, input.record) ?? fail('/external_id', 'unsupported_type');
   const projected = project(kind, input);
   const digest = sourceDigest(projected.normalized);
   const revision = options.converterRevision ?? converter_revision;
@@ -344,7 +364,10 @@ function convert(
       mediaImportIntents: [],
     };
   }
-  const url = sourceKind === 'bangumi' ? bangumiRecordUrl(input.external_id) : vndbRecordUrl(input.external_id, input.record_revision);
+  const url =
+    sourceKind === 'bangumi'
+      ? bangumiRecordUrl(input.external_id)
+      : vndbRecordUrl(input.external_id, input.record_revision);
   const references = (): BatchReference[] => [
     { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] },
   ];

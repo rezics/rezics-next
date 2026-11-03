@@ -78,7 +78,9 @@ function catalogue() {
     };
   }
   const metadata = sourceRecordMetadataFixture();
-  const port = (persona: Persona): CrossMediaPort & { accept(id: string, candidate: string): void; adopt(id: string): void } => ({
+  const port = (
+    persona: Persona,
+  ): CrossMediaPort & { accept(id: string, candidate: string): void; adopt(id: string): void } => ({
     async batch(request) {
       return {
         results: request.commands.map((command: BatchCommand) => {
@@ -98,11 +100,20 @@ function catalogue() {
           }
           if (command.op === 'propose') {
             const subject = subjects.get(command.subject);
-            if (!subject) return { key: command.key, status: 404 as const, problem: { type: 'about:blank', title: 'missing', status: 404 } };
+            if (!subject)
+              return {
+                key: command.key,
+                status: 404 as const,
+                problem: { type: 'about:blank', title: 'missing', status: 404 },
+              };
             const candidate = { id: randomUUID(), statement: command.statement, accepted: false };
             subject.candidates.push(candidate);
             subject.revision += 1;
-            return { key: command.key, status: 201 as const, value: { candidate: candidate.id, revision: subject.revision } };
+            return {
+              key: command.key,
+              status: 201 as const,
+              value: { candidate: candidate.id, revision: subject.revision },
+            };
           }
           return { key: command.key, status: 200 as const, value: { revision: 1 } };
         }),

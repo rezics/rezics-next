@@ -117,8 +117,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const member = (entry: CrossMediaMember) => {
     if (!plan.members.some((row) => row.source === entry.source && row.key === entry.key)) plan.members.push(entry);
   };
-  const tagged = (franchise: Franchise | undefined): { franchise: Franchise } | {} =>
-    franchise ? { franchise } : {};
+  const tagged = (franchise: Franchise | undefined): { franchise: Franchise } | {} => (franchise ? { franchise } : {});
 
   const types = new Map<number, number>();
   const titled = new Map<number, Franchise>();
@@ -235,7 +234,11 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       record: row,
       fields: fieldsOf('subject-relations', row),
       ...(typeof order === 'number'
-        ? { qualifiers: [{ property: 'schema:position', content: { amount: String(order < 1 ? order + 1 : order), unit: '1' } }] }
+        ? {
+            qualifiers: [
+              { property: 'schema:position', content: { amount: String(order < 1 ? order + 1 : order), unit: '1' } },
+            ],
+          }
         : {}),
     });
   }
@@ -291,7 +294,13 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     const person = `person:${number(row, 'person_id')}`;
     const workType = types.get(number(row, 'subject_id'));
     const mapping = mapSourceEnumeration('bangumi', `staff.${workType}`, row.position as number);
-    member({ source: 'bangumi', key: person, kind: 'person', membership: 'referenced', ...tagged(familyIds.get(number(row, 'subject_id'))) });
+    member({
+      source: 'bangumi',
+      key: person,
+      kind: 'person',
+      membership: 'referenced',
+      ...tagged(familyIds.get(number(row, 'subject_id'))),
+    });
     if (!mapping?.term || mapping.status === 'omitted') {
       gap(
         'bangumi',
@@ -323,10 +332,27 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     const work = String(number(row, 'subject_id'));
     const person = `person:${number(row, 'person_id')}`;
     const character = `character:${number(row, 'character_id')}`;
-    member({ source: 'bangumi', key: person, kind: 'person', membership: 'referenced', ...tagged(familyIds.get(number(row, 'subject_id'))) });
-    member({ source: 'bangumi', key: character, kind: 'character', membership: 'referenced', ...tagged(familyIds.get(number(row, 'subject_id'))) });
+    member({
+      source: 'bangumi',
+      key: person,
+      kind: 'person',
+      membership: 'referenced',
+      ...tagged(familyIds.get(number(row, 'subject_id'))),
+    });
+    member({
+      source: 'bangumi',
+      key: character,
+      kind: 'character',
+      membership: 'referenced',
+      ...tagged(familyIds.get(number(row, 'subject_id'))),
+    });
     if (!familyWorks.has(number(row, 'subject_id')) && !familyIds.has(number(row, 'subject_id'))) {
-      gap('bangumi', 'person-characters', row, 'Voice credit work is outside the elected family; appearance retained as a referenced endpoint');
+      gap(
+        'bangumi',
+        'person-characters',
+        row,
+        'Voice credit work is outside the elected family; appearance retained as a referenced endpoint',
+      );
     }
     edge({
       source: 'bangumi',
@@ -389,9 +415,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
         membership: 'referenced',
         record: row,
         fields: fieldsOf('episode', row),
-        ...(row.sort !== undefined
-          ? { qualifiers: [{ property: 'schema:episodeNumber', content: row.sort }] }
-          : {}),
+        ...(row.sort !== undefined ? { qualifiers: [{ property: 'schema:episodeNumber', content: row.sort }] } : {}),
       });
     }
 
@@ -510,7 +534,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     chars = new Set<string>(),
     aliases = new Set<string>(),
     staff = new Set<string>();
-  for await (const row of input.rows('vndb', 'releases_vn')) if (vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
+  for await (const row of input.rows('vndb', 'releases_vn'))
+    if (vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
   for await (const row of input.rows('vndb', 'releases_vn')) {
     if (!releases.has(text(row, 'id'))) continue;
     edge({
@@ -525,14 +550,25 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       record: row,
       fields: fieldsOf('releases_vn', row),
     });
-    member({ source: 'vndb', key: text(row, 'id'), kind: 'release', membership: 'referenced', ...tagged(vnFamily.get(text(row, 'vid'))) });
+    member({
+      source: 'vndb',
+      key: text(row, 'id'),
+      kind: 'release',
+      membership: 'referenced',
+      ...tagged(vnFamily.get(text(row, 'vid'))),
+    });
   }
   for await (const row of input.rows('vndb', 'vn_staff')) {
     if (!vnIds.has(text(row, 'id'))) continue;
     aliases.add(text(row, 'aid'));
     const mapping = mapSourceEnumeration('vndb', 'credit_type', text(row, 'role'));
     if (!mapping?.term || mapping.status === 'omitted') {
-      gap('vndb', 'vn_staff', row, mapping?.reason ?? 'No registered native converter for this source relation or entity');
+      gap(
+        'vndb',
+        'vn_staff',
+        row,
+        mapping?.reason ?? 'No registered native converter for this source relation or entity',
+      );
       continue;
     }
     edge({
@@ -591,7 +627,13 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       record: row,
       fields: fieldsOf('chars_vns', row),
     });
-    member({ source: 'vndb', key: text(row, 'id'), kind: 'character', membership: 'referenced', ...tagged(vnFamily.get(text(row, 'vid'))) });
+    member({
+      source: 'vndb',
+      key: text(row, 'id'),
+      kind: 'character',
+      membership: 'referenced',
+      ...tagged(vnFamily.get(text(row, 'vid'))),
+    });
   }
   for await (const row of input.rows('vndb', 'staff_alias'))
     if (aliases.has(text(row, 'aid'))) staff.add(text(row, 'id'));
@@ -619,7 +661,12 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     if (typeof row.main === 'string' && /^c[1-9][0-9]*$/.test(row.main)) {
       chars.add(row.main);
       member({ source: 'vndb', key: row.main, kind: 'character', membership: 'referenced' });
-      gap('vndb', 'chars', { id: row.id, main: row.main }, 'chars.main is a referenced character endpoint; the source relation is not a standalone profile field');
+      gap(
+        'vndb',
+        'chars',
+        { id: row.id, main: row.main },
+        'chars.main is a referenced character endpoint; the source relation is not a standalone profile field',
+      );
     }
     plan.entities.vndb.push({ source: 'vndb', key: text(row, 'id'), revision: null, payload: row });
   }
@@ -908,12 +955,7 @@ export async function seedCrossMedia(plan: CrossMediaPlan, path: string, port: C
       claim: (owner) => importer.session.bindings.claim(owner),
       batch: (request) => port.batch(request),
     });
-    const keys = [
-      ...plan.records.bangumi,
-      ...plan.entities.bangumi,
-      ...plan.records.vndb,
-      ...plan.entities.vndb,
-    ];
+    const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     for (const record of keys) {
       const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';
       const alias = crossMediaAliases[provider];

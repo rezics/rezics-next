@@ -26,14 +26,7 @@ export type ProposedEdge = { key: string; holder: string; target: string; proper
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function graphEdgeKey(draft: GraphEdgeDraft): string {
-  return commandKey([
-    draft.alias,
-    draft.table,
-    draft.holder,
-    draft.target,
-    draft.property,
-    sourceDigest(draft.record),
-  ]);
+  return commandKey([draft.alias, draft.table, draft.holder, draft.target, draft.property, sourceDigest(draft.record)]);
 }
 
 export class CrossMediaGraph {
@@ -98,9 +91,7 @@ export class CrossMediaGraph {
           : input.claim({ source: draft.alias, external_id: draft.target });
       if (holder?.state !== 'bound' || target?.state !== 'bound') {
         const reason =
-          holder?.state !== 'bound'
-            ? `Missing target record ${draft.holder}`
-            : `Missing target record ${draft.target}`;
+          holder?.state !== 'bound' ? `Missing target record ${draft.holder}` : `Missing target record ${draft.target}`;
         unresolved.push({ ...draft, reason });
         mark.run('unresolved', null, graphEdgeKey(draft));
         continue;
