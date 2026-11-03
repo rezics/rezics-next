@@ -38,6 +38,8 @@ const KNOWN_RUN_ID_TABLES = new Set([
   'run_aggregate_operations',
   'run_staging_checkpoints',
   'run_staging_prefix',
+  'run_disappearance_stops',
+  'run_disappearance_missing',
   'vndb_table_runs',
   'vndb_table_rows',
   'vndb_table_spool',
@@ -52,6 +54,8 @@ const DELETE_PHASES = [
   'aggregate_operations',
   'staging_prefix',
   'staging_checkpoints',
+  'disappearance_missing',
+  'disappearance_stops',
   'vndb_spool',
   'vndb_rows',
   'vndb_runs',
@@ -736,6 +740,7 @@ export async function buildRetentionPlan(
         'per-generation run_entries, run_envelopes, run_commands, run_conversion_diagnostics and run_conversion_diagnostic_records',
         'per-generation run_aggregate_operations when present',
         'per-generation run_staging_checkpoints and run_staging_prefix leftover after seal, when present',
+        'per-generation run_disappearance_stops and run_disappearance_missing when present',
         'per-generation VNDB materialization rows when those tables exist',
       ],
       sqliteNote: SQLITE_NOTE,
@@ -1150,6 +1155,25 @@ function runPhasePage(
       if (!tables.has('run_staging_checkpoints')) return { cursor, done: true, deleted: 0 };
       const changes = database
         .query('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?')
+        .run(source, runId);
+      return { cursor: '', done: true, deleted: Number(changes.changes ?? 0) };
+    }
+    case 'disappearance_missing':
+      return deletePage(
+        database,
+        'run_disappearance_missing',
+        `SELECT record_key AS key FROM run_disappearance_missing WHERE source=? AND run_id=? AND record_key>? ORDER BY record_key LIMIT ?`,
+        'DELETE FROM run_disappearance_missing WHERE source=? AND run_id=? AND record_key=?',
+        source,
+        runId,
+        cursor,
+        pageSize,
+        tables,
+      );
+    case 'disappearance_stops': {
+      if (!tables.has('run_disappearance_stops')) return { cursor, done: true, deleted: 0 };
+      const changes = database
+        .query('DELETE FROM run_disappearance_stops WHERE source=? AND run_id=?')
         .run(source, runId);
       return { cursor: '', done: true, deleted: Number(changes.changes ?? 0) };
     }
