@@ -17,7 +17,11 @@ export type NativePostRevisionPage = Page<RevisionView> &
   Readonly<{
     /** Exact native posts, in the same order as entries; no second hydration. */
     posts: readonly ItemView[];
+    /** The initially observed current head, kept distinct from every selected revision. */
+    currentHead: PostEntry;
     anchors: readonly AnchoredPosition[];
+    /** Recheck the retained source and exact selected reads after page enrichment. */
+    revalidate(): Promise<boolean>;
   }>;
 
 type Dependencies = Readonly<{
@@ -30,6 +34,29 @@ type Dependencies = Readonly<{
   ): Promise<Anchored<Readonly<{ candidates: readonly RevisionKey[]; nextKey: RevisionKey | null }>>>;
   unavailable(): never;
 }>;
+
+function postWitness(value: PostEntry | null): string {
+  if (!value) return 'null';
+  return JSON.stringify({
+    id: value.id,
+    threadId: value.threadId,
+    route: value.route,
+    revisionId: 'revisionId' in value ? value.revisionId : null,
+    authorId: 'authorId' in value ? value.authorId : null,
+    parentId: value.parentId,
+    licence: 'licence' in value ? value.licence : null,
+    subjectIds: 'subjectIds' in value ? value.subjectIds : [],
+    boardId: 'boardId' in value ? value.boardId : null,
+    visibility: 'visibility' in value ? value.visibility : null,
+    securityRevision: 'securityRevision' in value ? value.securityRevision : null,
+    availability: value.availability,
+    createdAt: 'createdAt' in value ? value.createdAt : null,
+    revisedAt: 'revisedAt' in value ? value.revisedAt : null,
+    sha256: 'sha256' in value ? value.sha256 : null,
+    mediaIds: 'mediaIds' in value ? value.mediaIds : [],
+    voteCitation: 'voteCitation' in value ? value.voteCitation : null,
+  });
+}
 
 /** One raw native page. Candidate keys never grant disclosure, and a sparse
  * page never causes a refill or moves the cursor beyond the admitted frontier.
@@ -82,12 +109,9 @@ export async function readNativePostRevisionPage(
   // Reuse each exact disclosure's original prepared checks, rather than running
   // a fresh exact read which could silently accept a changed source identity.
   for (const { key, observation } of observed) {
-    const final = await observation.current();
-    anchors.push(final.anchor);
-    const value = final.value;
+    const value = observation.initial.value;
     if (
       !value ||
-      final.anchor.epoch !== initial.anchor.epoch ||
       !('revisionId' in value) ||
       value.availability === 'withheld' ||
       value.id !== postId ||
@@ -95,7 +119,7 @@ export async function readNativePostRevisionPage(
       value.revisionId !== key.id
     )
       return dependencies.unavailable();
-    posts.push(value);
+    posts.push(value as ItemView);
     const {
       revisionId,
       id,
@@ -106,23 +130,48 @@ export async function readNativePostRevisionPage(
     } = value;
     entries.push({ ...revision, id: revisionId, itemId: id, createdAt: key.at });
   }
-  // Empty, removed and sparse pages have the same final source check. A changed
-  // head, container, epoch or current authorization withholds the entire page.
-  const finalSource = await source.current();
-  if (!finalSource.value || finalSource.anchor.epoch !== initial.anchor.epoch) return dependencies.unavailable();
-  anchors.push(finalSource.anchor);
+  const revalidate = async () => {
+    for (const { key, observation } of observed) {
+      const current = await observation.current();
+      anchors.push(current.anchor);
+      const value = current.value;
+      if (
+        !value ||
+        current.anchor.epoch !== initial.anchor.epoch ||
+        !('revisionId' in value) ||
+        value.availability === 'withheld' ||
+        value.id !== postId ||
+        value.threadId !== threadId ||
+        value.revisionId !== key.id ||
+        postWitness(value) !== postWitness(observation.initial.value)
+      )
+        return false;
+    }
+    // Empty, removed and sparse pages retain the same source check. Reuse each
+    // disclosure's original prepared Access checks rather than adopting a new baseline.
+    const currentSource = await source.current();
+    anchors.push(currentSource.anchor);
+    return (
+      currentSource.value !== null &&
+      currentSource.anchor.epoch === initial.anchor.epoch &&
+      postWitness(currentSource.value) === postWitness(initial.value)
+    );
+  };
+  if (!(await revalidate())) return dependencies.unavailable();
   const frontier = selected.value.candidates.at(-1);
   return {
     entries,
     posts,
+    currentHead: initial.value,
     anchors,
-    anchor: finalSource.anchor,
+    anchor: anchors.at(-1) ?? initial.anchor,
+    revalidate,
     nextCursor:
       selected.value.nextKey && frontier
         ? encodeCursor(
             dependencies.tokens,
             binding,
-            { epoch: finalSource.anchor.epoch, after: [frontier.at, frontier.id] },
+            { epoch: initial.anchor.epoch, after: [frontier.at, frontier.id] },
             dependencies.now(),
           )
         : null,

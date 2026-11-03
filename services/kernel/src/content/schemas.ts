@@ -385,8 +385,290 @@ export const PostPageResponseSchema = t.Object(
   },
   closed,
 );
+const historyAvatar = t.Union([
+  t.Object(
+    {
+      media: ContentIdSchema,
+      width: t.Integer({ minimum: 1 }),
+      height: t.Integer({ minimum: 1 }),
+      placeholder: t.Object({ thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+      variants: t.Array(t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed), { maxItems: 12 }),
+      focalPoint: t.Union([
+        t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+        t.Null(),
+      ]),
+      credit: t.Null(),
+    },
+    closed,
+  ),
+  t.Null(),
+]);
+const historyAuthor = t.Union([
+  t.Object(
+    {
+      id: ContentIdSchema,
+      state: t.Literal('available'),
+      displayName: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+      handle: t.Union([t.String({ maxLength: 64 }), t.Null()]),
+      avatar: historyAvatar,
+    },
+    closed,
+  ),
+  t.Object({ id: ContentIdSchema, state: t.Literal('concealed') }, closed),
+]);
+const historyMention = t.Union([
+  t.Object({ id: ContentIdSchema, state: t.Literal('available'), handle: t.String({ maxLength: 64 }) }, closed),
+  t.Object({ id: ContentIdSchema, state: t.Literal('concealed') }, closed),
+]);
+const historyCover = t.Union([
+  t.Object(
+    {
+      media: ContentIdSchema,
+      width: t.Integer({ minimum: 1 }),
+      height: t.Integer({ minimum: 1 }),
+      placeholder: t.Object({ thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+      variants: t.Array(
+        t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
+        { maxItems: 12 },
+      ),
+      focalPoint: t.Union([
+        t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+        t.Null(),
+      ]),
+      credit: t.Union([CoverCreditSchema, t.Null()]),
+    },
+    closed,
+  ),
+  t.Null(),
+]);
+const historySubjectSummary = t.Object(
+  {
+    id: ContentIdSchema,
+    type: t.String({ minLength: 1, maxLength: 128 }),
+    types: t.Array(t.String({ minLength: 1, maxLength: 128 }), { maxItems: 128 }),
+    label: t.Union([t.Object({ value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed), t.Null()]),
+    creativeWork: t.Boolean(),
+    cover: historyCover,
+  },
+  closed,
+);
+const historySubject = t.Union([
+  t.Object({ id: ContentIdSchema, state: t.Literal('available'), summary: historySubjectSummary }, closed),
+  t.Object({ id: ContentIdSchema, state: t.Literal('concealed'), summary: t.Null() }, closed),
+]);
+const historyQuestion = t.Object(
+  {
+    id: ContentIdSchema,
+    revision: t.Integer({ minimum: 1 }),
+    label: t.String({ maxLength: 4096 }),
+    grain: t.Union([t.Literal('work'), t.Literal('release'), t.Literal('episode'), t.Literal('character')]),
+    scale: t.Object({ min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) }, closed),
+    realmId: t.Optional(ContentIdSchema),
+    meaning: t.Optional(t.String({ maxLength: 4096 })),
+    canonicalLabel: t.Optional(t.String({ maxLength: 4096 })),
+    labelRevision: t.Optional(t.Integer({ minimum: 1 })),
+    lifecycle: t.Optional(
+      t.Object({ state: t.Union([t.Literal('active'), t.Literal('retired')]), revision: t.Integer({ minimum: 1 }) }, closed),
+    ),
+  },
+  closed,
+);
+const historyReviewItem = t.Union([
+  t.Object({ revisionId: ContentIdSchema, state: t.Literal('available'), citation: voteCitation, question: historyQuestion }, closed),
+  t.Object({ revisionId: ContentIdSchema, state: t.Literal('unavailable'), citation: t.Null(), question: t.Null() }, closed),
+]);
+const historyImage = t.Object(
+  {
+    id: ContentIdSchema,
+    containerId: ContentIdSchema,
+    digest: mediaDigest,
+    width: imageDimension,
+    height: imageDimension,
+    variants: t.Array(
+      t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1, maximum: 2560 }), height: imageDimension }, closed),
+      { minItems: 1, maxItems: 12 },
+    ),
+    placeholder: t.Union([
+      t.Object({ thumbhash: t.String({ minLength: 1, maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+      t.Null(),
+    ]),
+    focalPoint: t.Union([
+      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+      t.Null(),
+    ]),
+    credit: t.Union([CoverCreditSchema, t.Null()]),
+  },
+  closed,
+);
+const historyMediaItem = t.Union([
+  t.Object(
+    {
+      id: ContentIdSchema,
+      state: t.Literal('available'),
+      image: historyImage,
+    },
+    closed,
+  ),
+  t.Object({ id: ContentIdSchema, state: t.Literal('concealed') }, closed),
+]);
+const historyOperation = t.Object(
+  {
+    action: t.String({ minLength: 1, maxLength: 128 }),
+    operationId: t.String({ minLength: 1, maxLength: 256 }),
+    state: t.Union([
+      t.Literal('available'),
+      t.Literal('denied'),
+      t.Literal('sign_in_required'),
+      t.Literal('unavailable'),
+      t.Literal('not_applicable'),
+    ]),
+  },
+  closed,
+);
+const historyActionReference = t.Union([
+  t.Object(
+    {
+      type: t.Literal('content.thread'),
+      id: ContentIdSchema,
+      state: t.Union([t.Literal('current'), t.Literal('withheld')]),
+      operations: t.Array(historyOperation, { maxItems: 256 }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      type: t.Literal('content.post'),
+      id: ContentIdSchema,
+      sourceRevisionId: ContentIdSchema,
+      state: t.Union([t.Literal('current'), t.Literal('withheld')]),
+      operations: t.Array(historyOperation, { maxItems: 256 }),
+    },
+    closed,
+  ),
+]);
+const historyPageCurrentness = t.Object(
+  {
+    source: t.Literal('current'),
+    conversation: t.Literal('current'),
+    board: t.Literal('current'),
+    place: t.Literal('current'),
+    head: t.Literal('current'),
+    authors: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+    mentions: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+    subjects: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+    reviewScores: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+    media: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+    actions: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+  },
+  closed,
+);
+export const HistoryPageContextSchema = t.Object(
+  {
+    viewer: t.Union([
+      t.Object({ kind: t.Literal('account'), id: ContentIdSchema }, closed),
+      t.Object({ kind: t.Literal('anonymous') }, closed),
+    ]),
+    conversation: t.Object(
+      {
+        id: ContentIdSchema,
+        kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+        title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+        authorId: ContentIdSchema,
+        boardId: ContentIdSchema,
+        subjectIds: t.Array(ContentIdSchema, { maxItems: 128 }),
+        createdAt: t.String({ format: 'date-time' }),
+      },
+      closed,
+    ),
+    board: BoardViewSchema,
+    place: t.Union([
+      t.Object({ kind: t.Literal('global'), id: ContentIdSchema }, closed),
+      t.Object({ kind: t.Literal('realm'), id: ContentIdSchema }, closed),
+    ]),
+    head: t.Object(
+      {
+        postId: ContentIdSchema,
+        revisionId: t.Union([ContentIdSchema, t.Null()]),
+        state: t.Union([t.Literal('current'), t.Literal('erased')]),
+        authorId: t.Union([ContentIdSchema, t.Null()]),
+        createdAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+        revisedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+      },
+      closed,
+    ),
+    authors: t.Object(
+      {
+        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+        retryable: t.Boolean(),
+        items: t.Array(historyAuthor, { maxItems: 102 }),
+      },
+      closed,
+    ),
+    mentions: t.Object(
+      {
+        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+        retryable: t.Boolean(),
+        items: t.Array(historyMention, { maxItems: 100 }),
+      },
+      closed,
+    ),
+    subjects: t.Object(
+      {
+        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+        retryable: t.Boolean(),
+        limit: t.Literal(4),
+        items: t.Array(historySubject, { maxItems: 4 }),
+      },
+      closed,
+    ),
+    reviewScores: t.Object(
+      {
+        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+        retryable: t.Boolean(),
+        items: t.Array(historyReviewItem, { maxItems: 100 }),
+      },
+      closed,
+    ),
+    media: t.Object(
+      {
+        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+        retryable: t.Boolean(),
+        items: t.Array(historyMediaItem, { maxItems: 3200 }),
+      },
+      closed,
+    ),
+    actions: t.Object(
+      {
+        state: t.Union([t.Literal('current'), t.Literal('unavailable')]),
+        retryable: t.Boolean(),
+        references: t.Array(historyActionReference, { maxItems: 2 }),
+      },
+      closed,
+    ),
+    navigation: t.Object(
+      {
+        exact: t.Array(t.Object({ postId: ContentIdSchema, revisionId: ContentIdSchema }, closed), { maxItems: 100 }),
+        compareToHead: t.Array(
+          t.Object({ postId: ContentIdSchema, fromRevisionId: ContentIdSchema, toRevisionId: ContentIdSchema }, closed),
+          { maxItems: 100 },
+        ),
+      },
+      closed,
+    ),
+    currentness: historyPageCurrentness,
+    retry: t.Union([
+      t.Object({ state: t.Literal('same_cursor'), cursor: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]) }, closed),
+      t.Object({ state: t.Literal('none') }, closed),
+    ]),
+  },
+  closed,
+);
 export const RevisionPageResponseSchema = t.Object(
-  { revisions: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  {
+    revisions: t.Array(ItemViewSchema, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+    page: HistoryPageContextSchema,
+  },
   closed,
 );
 

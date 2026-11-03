@@ -4,13 +4,15 @@ Content owns boards, threads, posts, immutable documents, media state and public
 
 ## Native post history selection
 
-`listPostRevisions(dependencies, threadId, postId, context, cursor?, limit?)` retains the existing
-`entries`, `nextCursor` and `anchor` interface and adds internal `posts` and `anchors`. The mounted
-`GET /v1/posts/{id}/revisions` consumes those exact disclosed posts directly. Its public response
-remains `{ revisions, next }`, default 20, with limits 1–100. The separate exact revision route and
-its `editionIdentity=true` option are unchanged.
+`listPostRevisions(dependencies, threadId, postId, context, cursor?, limit?)` retains its existing
+`entries`, `nextCursor` and `anchor` interface and adds the exact disclosed `posts`, source `anchors`,
+current `currentHead` and retained `revalidate()` check. The mounted
+`GET /v1/posts/{id}/revisions` consumes those exact posts directly and adds a closed native `page`
+envelope. The top-level response remains `{ revisions, next, page }`, default 20, with limits 1–100;
+the existing `revisions` and `next` fields and separate exact revision route, including
+`editionIdentity=true`, keep their meanings.
 
-Decision: history advances one admitted raw page without refill; changed source observations withhold the page and retry uses the same cursor.
+Decision: keep the `revisions`/`next` contract and put current history context in a closed `page`; historical scores use only each exact revision's stored vote citation and a currently readable question and Subject.
 
 The existing signed cursor still binds the post, thread, viewer, epoch and ascending
 `(recorded_at, revision_id)` frontier. `history-page.ts` orchestrates one selection through
@@ -24,41 +26,68 @@ place of a selected revision. A current erased post returns empty history under 
 Empty and sparse selections still revalidate the source; denied or changed sources withhold all
 rows and session headers. Every successful native anchor contributes to the existing session header.
 
-This is the native selection and revalidation primitive for the history page. The page-level
-conversation/viewer presentation, batched current identity/mentions/Subject/media enrichment,
-historical vote context and generated enriched response remain to be composed before Web can
-replace its current joins. Web retains its historical reader and selection lifetime.
+`history-page-context.ts` adds the current viewer, conversation, board/place, current head,
+navigation and current action advice alongside the selected history. Immutable `authorId` and
+`subjectIds` remain on each revision; current account names and handles are separate bounded
+summaries, and unresolved identities stay concealed. Conversation author plus historical and
+current-head authors total at most `p+2`; document mentions add at most 100 deduplicated account
+keys. Account discovery accepts 100 IDs per call, so the at most 202 combined keys use at most
+three owner batches. Subject summaries retain the page-wide four-key limit. Current Media
+presentations are requested in chunks of at most 32 IDs, with at most 32 references per revision
+and 3,200 distinct IDs at `p=100`. Review pages read at most 100 distinct recorded question IDs;
+each score retains its exact citation (question ID, units, vote revision, including zero) and the
+currently readable question meaning and scale. The author's latest vote is not attached. A missing
+citation or concealed question/Subject is explicitly unavailable. Current action advice references
+the conversation and actual current head only; selected historical revisions receive no command
+or reaction advice. The exact revision route, `editionIdentity=true`, and Web's historical reader
+lifetime remain compatible.
 
-### Cost: native history selection and retained disclosure
+The page rechecks the retained Content source, exact selected revisions, conversation and board
+after owner enrichment. Account, Subject, question and Media reads use their existing owner
+authorities and are rechecked before serialization; independent homes do not form a global atomic
+snapshot. Required native source or authorization changes withhold the page and session header.
+Optional dependency failures use concealed/unavailable states and expose same-input-cursor retry;
+they do not become positive cache entries or confirmed absence. Successful reads are private and
+no-store and do not change heads, replies, reactions or review votes.
 
-- Touches: one existing route/post locator and one raw `(route, post_id, recorded_at, revision_id)`
-  keyset query; one root disclosure and at most `p` exact disclosures, then their retained final
-  checks. Each full successful observation uses seven native snapshots (five initial and two
-  retained), each with BEGIN, partition observation and COMMIT. For an ancestry of `d<=33` posts,
-  the native content statements excluding Access/Realm/question internals are `3d+33` per
-  observation: three chains of `d+2` points, four board points, two body points and 21 snapshot
-  controls. The raw selection adds four statements including controls. Native checks execute
-  `2d+5` prepared Access evaluations per successful observation and at most two nonstandard
-  question-disclosure reads, with their own pools, snapshots and account/Realm/Space anchors.
-  Locator catalogue freshness, Access preparation and those nested owner terms are additional;
-  these local counts are not a composed all-pool ceiling. No foreign dependency is prepared while
-  a native checkout is retained. Reads write no receipts, reactions, revisions or retry state.
-- Bound: `p<=100`, with one extra raw lookahead key, no refill and at most 32 reply ancestors per
-  exact disclosure. The source and selected keys are retained until final checks, including an
-  empty result. At most `2(p+1)` body loads and JSON parses occur for successful full observations;
-  each canonical document is at most 2 MiB of UTF-8, with at most 128 Subject and 32 media keys
-  per revision. Entry/post projections share document objects. Serialization emits at most `p`
-  bodies, plus bounded native metadata; licence strings allow 128 characters, not 128 bytes
-  (up to 512 UTF-8 bytes). No identity, media or author-vote batch runs in this slice. Denied and
-  changed branches stop early, withholding their accumulated bodies. There is no internal retry;
-  same-cursor retry repeats current observations and the same raw frontier. Native snapshots
-  release normally or roll back and evict on failed rollback, including cold and withheld paths.
-- Growth check: `test/content/history-page.test.ts` covers mounted native 20/21 continuation,
-  limits, viewer binding, exact readback, actual head changes and takedown, empty final
-  revalidation and same-cursor retry. Existing `test/content/revision-pages.test.ts` owns selector
-  prefix/growth checks. Independent native256/1024/4096 selected-history and nested-authority
-  growth, strict residual-join plans and composed all-pool/runner ceilings remain required for
-  the complete enriched page; no new performance proof is claimed by this primitive.
+### Cost: composed native history page
+
+- Touches: the existing route/post locator and raw revision keyset; root plus exact native
+  disclosure with retained Content, Board, Realm, Access and session/partition observations; and
+  two current conversation/board reads around hydration. Each full native observation retains its
+  existing Content/Access terms (`3d+33` Content statements and `2d+5` prepared Access evaluations
+  for `d<=33` ancestry posts); the raw selection adds four statements including controls. Enrichment
+  adds up to `A=ceil(I/100)<=3` Account discovery batches for `I<=202` identities, with each
+  Account owner call retaining its two account snapshots, exact handle-claim checks and deduplicated
+  avatar/agent lookups; at most four keys use one Semantic Subject summary observation; `M<=3200`
+  media IDs use `ceil(M/32)<=100` Media owner calls; and `q<=p` distinct review questions use the
+  Rating question reader and its current authority check. Current action advice covers at most two
+  refs. These nested Account, Semantic, Media, Rating and action terms use their own pools, homes,
+  controls and Access preparation; no foreign dependency is prepared while a Content checkout is
+  retained. Reads write no receipts, reactions, revisions or retry state.
+- Bound: `p<=100`, at most `p+1` raw revision keys including lookahead, no refill, and at most 32
+  ancestors per exact Content disclosure. The source and selected keys are rechecked after
+  enrichment, including empty pages. Selected bodies are at most `p * 2,097,152` = 209,715,200
+  UTF-8 bytes at `p=100`; document JSON escaping is bounded at six output bytes per UTF-8 byte,
+  giving 1,258,291,200 body JSON bytes before bounded metadata. Revision metadata adds at most
+  8 KiB per row; displayed identities are at most `p+2` authors and 100 mentions, Subjects at most
+  four summaries/128 KiB, review context at most `p` entries/8 KiB each, and Media at most 3,200
+  reference states with available descriptors capped at 16 MiB. The response guard caps the complete
+  serialized JSON at the sum of these body and reference bounds plus a 1 MiB envelope. Each native revision retains at most 128 Subject
+  and 32 Media references; each identity batch admits 100 IDs and every pool/home operation keeps
+  its owner limit. Denied or changed required sources withhold accumulated bodies; optional
+  dependency failure returns unavailable fields and the same cursor. Snapshots release normally or
+  roll back and evict on failed rollback.
+- Growth check: `test/content/history-page.test.ts` covers the mounted 20/21 journey, exact IDs,
+  current head versus selected rows, viewer context, no-store/session headers, exact and
+  `editionIdentity=true` callers, unchanged command state, source-change withholding and same-cursor
+  retry. The controller acceptance must independently capture native 256/1024/4096 growth at fixed
+  admitted keys/homes/payload for unrelated posts, selected-post history, authority, identity and
+  Media, across all pools and runner phases, including cold/retry/empty/denied/revoked/withheld
+  paths and exact readback. It must also record physical examined rows, UTF-8/serialized bytes and
+  statement/transaction controls, and prove strict route/post/revision plus identity-byIds plans
+  including residual joins and selected-history depth. Those measurements and strict plans are
+  controller acceptance evidence, not inferred from the focused mounted test.
 
 ## Own reporter history
 

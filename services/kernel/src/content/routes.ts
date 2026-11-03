@@ -68,11 +68,11 @@ import {
   ReadingPageResponseSchema,
   READING_PAGE_REQUEST_BYTES,
 } from './reading-page.ts';
+import { readContentHistoryPage } from './history-page-context.ts';
 import type { ReadingPageViewerActionRuntime } from './reading-page.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
   ContentNotFoundError as ReadNotFoundError,
-  listPostRevisions,
   listThreadPosts,
   readPost,
   readThread,
@@ -1100,7 +1100,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         query: ContentPageQuerySchema,
-        response: { 200: withHeaders(revisionPageResponse, sessionHeader), ...readFailures },
+        response: {
+          200: withHeaders(revisionPageResponse, { ...sessionHeader, 'cache-control': t.Optional(t.String()) }),
+          ...readFailures,
+        },
         detail: {
           operationId: 'post.history',
           'x-resource-types': ['content.post'],
@@ -1109,14 +1112,23 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: readSecurity,
         },
       },
-      async ({ params: { id }, query, actor, admission, job, session }) =>
+      async ({ params: { id }, query, actor, admission, job, session, set }) =>
         contentOperation(() =>
           admission.run('normal', job, async () => {
+            set.headers['cache-control'] = 'private, no-store';
             const context = { actor, deadline: job.deadline };
             const threadId = await containingThread(id, context);
-            const page = await listPostRevisions(dependencies, threadId, id, context, query.cursor, query.limit ?? 20);
+            const page = await readContentHistoryPage(
+              dependencies,
+              threadId,
+              id,
+              actor,
+              job.deadline,
+              query.cursor,
+              query.limit ?? 20,
+            );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-            return { revisions: [...page.posts], next: page.nextCursor };
+            return { revisions: page.revisions, next: page.next, page: page.page };
           }),
         ),
     )
