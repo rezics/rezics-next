@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { CommandUnavailableError } from '../../src/command/command.ts';
 import source from '../../src/content/decision-page-source.sql';
+import postHeaders from '../../src/content/read-post-batch.sql';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createNativePointFixture, type NativePointFixture } from './moderation-native-point-fixture.ts';
@@ -81,6 +82,19 @@ test('an exact private read retires across appeal creation and resolution, then 
   expect(first.value).not.toHaveProperty('witness');
   expect(first.value).not.toHaveProperty('decider_account_id');
   expect(first.response.headers.get(SESSION_HEADER)).not.toBeNull();
+  const contextObserver = observeSql(fixture.system.database.pool);
+  try {
+    contextObserver.armFault({
+      match: { statement: postHeaders.sql }, boundary: 'before', error: new CommandUnavailableError('overloaded', 0),
+    });
+    const unavailable = await open();
+    expect(unavailable.response.status).toBe(200);
+    expect(unavailable.value?.targetContext).toEqual({ state: 'unavailable' });
+    expect(unavailable.value?.viewer.appeal).toEqual({ state: 'permitted' });
+    expect(unavailable.value?.appeal).toBeNull();
+  } finally {
+    await contextObserver.close();
+  }
   expect((await fixture.call('GET', path, { bearer: fixture.other.bearer })).response.status).toBe(404);
   let appealId = '';
   await changeDuringRead(path, fixture.moderator.bearer, async () => {
@@ -224,4 +238,35 @@ test('failure of the final exact source withholds the retained response and its 
   } finally {
     await observer.close();
   }
+}, 120_000);
+
+test('a board decision has no affected author or appeal deadline', async () => {
+  const target = await fixture.createRealmTarget('Decision board advice', 'public');
+  await fixture.grant(target.boardId, ['moderation:takedown']);
+  await fixture.command('POST', `/v1/boards/${target.boardId}:takeDown`, { reason: 'Board decision' }, {
+    bearer: fixture.moderator.bearer, expectedStatus: 200,
+  });
+  const { rows } = await fixture.system.database.pool.query<{ decision_id: string }>(
+    'SELECT decision_id FROM content.moderation_decision WHERE route=$1 AND target_id=$2',
+    [target.boardRoute, target.boardId],
+  );
+  expect(rows).toHaveLength(1);
+  const path = `/v1/moderation-decisions/${rows[0]!.decision_id}`;
+  const result = await fixture.call('GET', path, { bearer: fixture.moderator.bearer });
+  expect(result.response.status).toBe(200);
+  expect(result.value).toMatchObject({
+    targetKind: 'board', targetId: target.boardId, appealDeadline: null, appeal: null,
+    viewer: { affectedAuthor: false, appeal: { state: 'unsupported', reason: 'board' } },
+  });
+  expect((await fixture.call('GET', path, { bearer: fixture.author.bearer })).response.status).toBe(404);
+}, 120_000);
+
+test('suspending the independent author during selection retires disclosure and session provenance', async () => {
+  const { path } = await decide('Revoked native author session');
+  await changeDuringRead(path, fixture.author.bearer, () =>
+    fixture.command('POST', `/v1/accounts/${fixture.author.accountId}:suspend`, { reason: 'Revoke current admission' }, {
+      bearer: fixture.governance.bearer, expectedStatus: 200,
+    }),
+  );
+  expect((await fixture.call('GET', path, { bearer: fixture.moderator.bearer })).response.status).toBe(200);
 }, 120_000);
