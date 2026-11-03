@@ -4,11 +4,38 @@ import { beginCollectionSourceOutput } from '../../src/library/collection-source
 import { purgeOwnedGraphPage } from '../../src/library/erasure-owned-graph.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { deletePersona } from '../support/account-deletion.ts';
+import { cookies, password } from '../access/native-account-bindings-fixture.ts';
+import { registerTestClient } from '../support/test-kernel.ts';
 import { createOwnedErasureFixture } from './support/erasure-worker.ts';
 
 let f: Awaited<ReturnType<typeof createOwnedErasureFixture>>;
 beforeAll(async () => {
   f = await createOwnedErasureFixture();
+  const clientId = crypto.randomUUID();
+  const scopes = [
+    'collection:create',
+    'collection:read',
+    'collection:update',
+    'collection:delete',
+    'library_entry:read',
+    'library_entry:update',
+    'progress_session:read',
+    'copy:read',
+    'account:manage',
+  ];
+  await registerTestClient(f.auth.host.service, { clientId, firstParty: true, scopes });
+  for (const person of [f.people.alice, f.people.bob]) {
+    const signed = await f.auth.request('/signin', {
+      account_id: person.accountId,
+      password,
+      client_id: clientId,
+      scope: scopes,
+    });
+    expect(signed.status).toBe(200);
+    const issued = await f.auth.request('/token', {}, cookies(signed));
+    expect(issued.status).toBe(200);
+    person.bearer = (await issued.json()).access_token;
+  }
 }, 360000);
 afterAll(async () => {
   await f?.close();
