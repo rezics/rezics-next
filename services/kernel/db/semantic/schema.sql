@@ -204,6 +204,20 @@ END $$;
 
 
 --
+-- Name: bump_search_canonical_generation(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.bump_search_canonical_generation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM nextval('semantic.search_canonical_generation');
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: capture_acceptance_current_erasure(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -8218,6 +8232,18 @@ CREATE TABLE semantic.revision (
 
 
 --
+-- Name: search_canonical_generation; Type: SEQUENCE; Schema: semantic; Owner: -
+--
+
+CREATE SEQUENCE semantic.search_canonical_generation
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
 -- Name: search_relation_probe; Type: TABLE; Schema: semantic; Owner: -
 --
 
@@ -14006,6 +14032,13 @@ CREATE CONSTRAINT TRIGGER outbound_link_erasure_capture AFTER INSERT OR UPDATE O
 
 
 --
+-- Name: subject_page_publication page_publication_search_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER page_publication_search_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.subject_page_publication FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
+
+
+--
 -- Name: source_candidate provider_review_queue_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -14202,6 +14235,13 @@ CREATE TRIGGER redirect_immutable BEFORE DELETE OR UPDATE ON semantic.redirect F
 
 
 --
+-- Name: redirect redirect_search_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER redirect_search_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.redirect FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
+
+
+--
 -- Name: release_composite release_composite_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -14279,6 +14319,20 @@ CREATE TRIGGER search_project_subject AFTER INSERT ON semantic.subject FOR EACH 
 
 
 --
+-- Name: search_selected selected_fact_search_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER selected_fact_search_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.search_selected FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
+
+
+--
+-- Name: search_selection_state selection_state_search_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER selection_state_search_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.search_selection_state FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
+
+
+--
 -- Name: source_candidate source_candidate_erasure_capture; Type: TRIGGER; Schema: semantic; Owner: -
 --
 
@@ -14339,6 +14393,13 @@ CREATE TRIGGER subject_page_repair_work_home AFTER INSERT OR UPDATE OF state ON 
 --
 
 CREATE TRIGGER subject_record_purge_gate BEFORE DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.record_purge_source_gate();
+
+
+--
+-- Name: subject subject_search_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER subject_search_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.subject FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
 
 
 --
@@ -15575,34 +15636,5 @@ ALTER TABLE ONLY semantic.term_head
 --
 -- PostgreSQL database dump complete
 --
-
-CREATE SEQUENCE semantic.search_canonical_generation START WITH 1;
-
-CREATE FUNCTION semantic.bump_search_canonical_generation() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  PERFORM nextval('semantic.search_canonical_generation');
-  RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER subject_search_canonical_generation
-AFTER INSERT OR UPDATE OR DELETE ON semantic.subject
-FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
-
-CREATE TRIGGER redirect_search_canonical_generation
-AFTER INSERT OR UPDATE OR DELETE ON semantic.redirect
-FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
-
-CREATE TRIGGER selected_fact_search_canonical_generation
-AFTER INSERT OR UPDATE OR DELETE ON semantic.search_selected
-FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
-
-CREATE TRIGGER selection_state_search_canonical_generation
-AFTER INSERT OR UPDATE OR DELETE ON semantic.search_selection_state
-FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
-
-CREATE TRIGGER page_publication_search_canonical_generation
-AFTER INSERT OR UPDATE OR DELETE ON semantic.subject_page_publication
-FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
 
 

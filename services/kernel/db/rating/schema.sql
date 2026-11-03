@@ -24,6 +24,20 @@ CREATE SCHEMA rating;
 
 
 --
+-- Name: bump_realm_rank_publication_generation(); Type: FUNCTION; Schema: rating; Owner: -
+--
+
+CREATE FUNCTION rating.bump_realm_rank_publication_generation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM nextval('rating.realm_rank_publication_generation');
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: initialize_question_label(); Type: FUNCTION; Schema: rating; Owner: -
 --
 
@@ -590,6 +604,18 @@ CREATE TABLE rating.realm_rank_generation (
 
 
 --
+-- Name: realm_rank_publication_generation; Type: SEQUENCE; Schema: rating; Owner: -
+--
+
+CREATE SEQUENCE rating.realm_rank_publication_generation
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
 -- Name: source_statistic; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -1022,6 +1048,13 @@ CREATE INDEX question_realm_directory_idx ON rating.question USING btree (realm_
 
 
 --
+-- Name: realm_rank_generation_population_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX realm_rank_generation_population_idx ON rating.realm_rank_generation USING btree (question_id, population_id, partition_no);
+
+
+--
 -- Name: realm_rank_score_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -1084,6 +1117,13 @@ CREATE TRIGGER question_label_initial AFTER INSERT ON rating.question FOR EACH R
 --
 
 CREATE TRIGGER question_label_revision_immutable BEFORE UPDATE ON rating.question_label_revision FOR EACH ROW EXECUTE FUNCTION rating.keep_question_label_revision();
+
+
+--
+-- Name: realm_rank_generation realm_rank_publication_generation; Type: TRIGGER; Schema: rating; Owner: -
+--
+
+CREATE TRIGGER realm_rank_publication_generation AFTER INSERT OR DELETE OR UPDATE ON rating.realm_rank_generation FOR EACH ROW EXECUTE FUNCTION rating.bump_realm_rank_publication_generation();
 
 
 --
@@ -1184,21 +1224,5 @@ ALTER TABLE ONLY rating.vote
 --
 -- PostgreSQL database dump complete
 --
-
-CREATE SEQUENCE rating.realm_rank_publication_generation START WITH 1;
-
-CREATE FUNCTION rating.bump_realm_rank_publication_generation() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  PERFORM nextval('rating.realm_rank_publication_generation');
-  RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER realm_rank_publication_generation
-AFTER INSERT OR UPDATE OR DELETE ON rating.realm_rank_generation
-FOR EACH ROW EXECUTE FUNCTION rating.bump_realm_rank_publication_generation();
-
-CREATE INDEX realm_rank_generation_population_idx
-ON rating.realm_rank_generation(question_id,population_id,partition_no);
 
 
