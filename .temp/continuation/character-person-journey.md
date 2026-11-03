@@ -38,10 +38,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "An admitted universal API request and installed character/person page find characters by admitted trait/gender concepts and same-statement appearance/role, and people by active released credited roles and selected works, including repeated voice credits for different characters and permitted character appearances."
-    - "Spoiler thresholds 0/1/2 govern membership and every returned context/label/link; hidden or unavailable evidence remains unknown under mixed Boolean/NOT, stale/current mutations retire unsafe results, and first/next/final pages remain useful and deterministic through authorized finite preparation."
-    - "The installed browser page preserves applied mode, name, works, role, ordered languages, threshold, sort and pagination through reload/back navigation; request/principal/locale/release replacement retires stale output; invalid/preparing/unavailable/restart states remain repairable in eight locales."
-    - "Native 1x/4x/16x source growth executes the installed route, including high-degree actors, sparse qualifiers, dense rejects, overflow and current mutations, and compares every touched pool to a pre-dispatch derived whole-page bound; missing execution remains unmeasured."
+    - 'An admitted universal API request and installed character/person page find characters by admitted trait/gender concepts and same-statement appearance/role, and people by active released credited roles and selected works, including repeated voice credits for different characters and permitted character appearances.'
+    - 'Spoiler thresholds 0/1/2 govern membership and every returned context/label/link; hidden or unavailable evidence remains unknown under mixed Boolean/NOT, stale/current mutations retire unsafe results, and first/next/final pages remain useful and deterministic through authorized finite preparation.'
+    - 'The installed browser page preserves applied mode, name, works, role, ordered languages, threshold, sort and pagination through reload/back navigation; request/principal/locale/release replacement retires stale output; invalid/preparing/unavailable/restart states remain repairable in eight locales.'
+    - 'Native 1x/4x/16x source growth executes the installed route, including high-degree actors, sparse qualifiers, dense rejects, overflow and current mutations, and compares every touched pool to a pre-dispatch derived whole-page bound; missing execution remains unmeasured.'
   workerOwned: true
 estimate:
   lines: 1400
