@@ -270,6 +270,18 @@ function BoundOwnDraftsPage({
           (identity.authnEpoch !== 0 && result.viewer.authnEpoch !== identity.authnEpoch) ||
           (nativeEpoch.current.value !== null && result.viewer.authnEpoch !== nativeEpoch.current.value)
         ) {
+          selectionController.current?.abort();
+          localWritingController.current?.abort();
+          commandController.current?.abort();
+          eraseController.current?.abort();
+          erasePending.current = false;
+          selectionGeneration.current++;
+          returnFocus.current = null;
+          setSelectionState(null);
+          setLocalWritingState(null);
+          setEditingSource(null);
+          setEraseState(null);
+          setCommandFeedback(null);
           setPageState({ requestKey, state: 'denied' });
           return;
         }

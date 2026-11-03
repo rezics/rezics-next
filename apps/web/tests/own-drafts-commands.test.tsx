@@ -165,3 +165,50 @@ test('publish sends the selected revision and separates acknowledgement from pub
     await fixture.close();
   }
 });
+
+test('a changed native credential epoch retires private command readback', async () => {
+  const entry = row();
+  let authnEpoch = 2;
+  const currentBody = fromPlainText('Private readback from the old credential', 'blocks');
+  const reader: OwnDraftReader = {
+    list: async () => ({ state: 'ready', viewer: { accountId, authnEpoch }, drafts: [entry], next: null }),
+    resume: async () => selected(entry),
+  };
+  const fixture = await mountOwnDrafts();
+  try {
+    await fixture.render({
+      identity: { ...identity, authnEpoch: 0 },
+      active: true,
+      reader,
+      commands: {
+        async write() {
+          return { ok: true, post: {} as unknown as RevisedPost };
+        },
+        async erase() {
+          return { ok: true };
+        },
+        async readback() {
+          return {
+            state: 'available',
+            revision: 'current-revision',
+            visibility: 'draft',
+            body: currentBody,
+            mediaIds: [],
+          };
+        },
+      },
+    });
+    await fixture.click('Inspect draft privately');
+    await fixture.click('Use server-saved body in editor');
+    await fixture.click('Save changes');
+    await fixture.click('Read current post');
+    expect(fixture.host.textContent).toContain('Private readback from the old credential');
+
+    authnEpoch = 3;
+    await fixture.click('Retry this page');
+    expect(fixture.host.textContent).toContain('This private inventory is unavailable for the current account.');
+    expect(fixture.host.textContent).not.toContain('Private readback from the old credential');
+  } finally {
+    await fixture.close();
+  }
+});
