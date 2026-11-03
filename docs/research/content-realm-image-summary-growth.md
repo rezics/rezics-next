@@ -3,7 +3,7 @@
 This operation binding covers Content Done-when 2 and 3 through the existing
 [`readRealmPresentationImages`](../../services/kernel/src/content/realm-media.ts) producer and
 [Realm image summary Cost](../../services/kernel/src/content/README.md#cost-realm-image-summary-and-download).
-It adds native acceptance evidence without changing the producer, API, authority or schema.
+It binds native acceptance assertions without changing the producer, API, authority or schema.
 
 Decision: use two independent pressure sweeps with fixed selected assets, and an actually closed private PostgreSQL pool for optional dependency loss; keep publication and receipt replay in setup.
 
@@ -71,6 +71,8 @@ The workspace compiler command is `bun run --cwd services/kernel typecheck`. The
 committed source revision. Shared runner profiles retain actual statement text, rows, shared buffer hits/reads,
 three-scale samples and reached failures when execution reaches the operation.
 
+The compiler attempt at `28d6aaefad` exited 70 during shared runner preparation with
+`absolute preparation deadline exceeded` in `source-artifact-publication`; no compiler diagnostic was reached.
 The focused command at `2d98ba938a` stopped in shared schema preparation with
 `error: Schema dump differs from db/library/schema.sql.` before loading the test. That snapshot and its library
 migrations are unchanged from the retained base. No product assertion was reached and observations at 256, 1024
