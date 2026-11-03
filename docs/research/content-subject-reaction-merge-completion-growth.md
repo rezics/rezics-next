@@ -43,6 +43,11 @@ they do not claim that an unbounded merge has constant total work.
 ## Execution record
 
 - Source base: `c968558f1f20e21ca88ac8e7b26754a3fd642d7a`.
+- Typecheck revision: `e62018d2994421e971601ef285c1b51a370b68d4`.
+- Typecheck command: `bun run --cwd services/kernel typecheck`. The compiler reached the workspace and reported errors
+  only in untouched files, including `src/access/shared-history*.ts`, `src/history/receiving.ts`,
+  `src/search/identity-receiving-native.ts`, and unrelated existing tests; it reported no errors in the new test or
+  private fixture.
 - Acceptance command: `bun run --cwd services/kernel check test/content/growth-subject-reaction-merge-completion.test.ts`.
 - Fixtures: native Content/Auth/Access composition, registered production Content runtime, the shared growth observer,
   and private seeded pressure populations. Existing merge page and functional tests remain unchanged.
@@ -53,4 +58,4 @@ they do not claim that an unbounded merge has constant total work.
   were not captured in this source attempt because the controller launch defers acceptance until integration; no
   acceptance pass is claimed here.
 - Execution limits: acceptance, native, browser, root, worker, and remote checks are deferred by the current launch
-  context. The changed kernel workspace will be type-checked before delivery.
+  context. The exact acceptance command was not run, so none of the three-scale cost observations are measured here.
