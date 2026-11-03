@@ -208,3 +208,27 @@ native revalidation closures. The returned counts describe traversal progress, n
 receipts. This seam deliberately remains outside universal Search until its caller composes the
 native owner, retained membership, release/body, identity and tuple-fence reservations before
 dispatch. It introduces no lifecycle, public cursor, retained permission or closure-size cap.
+
+## Native Boolean concept conditions
+
+Decision: one Boolean concept attempt shares its native window and raw-row allowance across deduplicated leaves and revalidates every visited witness after all leaves' membership work.
+
+`matchNativeConceptFilter` admits scheme-bound exact and descendant concept conditions, then uses
+`compileCurrentFilter` for deduplication and the current three-valued AND, OR and NOT semantics.
+Each first-occurrence leaf resolves its retained cut before native I/O. A missing cut returns
+preparing without native reads. Conditions, qualifiers, spoiler meaning and retained definitions
+are owned before asynchronous work. Exact and descendant leaves may share the same scheme-bound
+closure; each statement still supplies its own property, value and qualifier witness.
+
+All leaves together admit at most 32 native windows and 2048 raw rows. A spent allowance leaves
+unvisited evidence unknown, including under exclusion, and never starts a refill. Empty terminal
+seeks consume their full admitted limit. The final root-membership checks for every leaf precede
+all native revalidators. A changed candidate in an earlier, rejected leaf therefore retires the
+attempt's cuts even if another leaf already matched. Unavailable native evidence discards the
+whole provisional expression. A lost retained cut leaves the expression unknown.
+
+The single-prefix matcher uses the same bounded scanner and finalization. This internal Boolean
+port accepts only concept leaves; callers must use the current native owner for other conditions.
+It retains no permissions or public cursor. Native all-pool reservations, retained ownership of
+larger prefixes, universal Search dispatch and the localized browsing journey remain required
+before public activation. The live useful-page owner interface remains unchanged.
