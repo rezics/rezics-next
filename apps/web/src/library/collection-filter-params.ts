@@ -91,7 +91,10 @@ export function readCollectionFilterParams(
         reject(key, 'invalid');
         continue;
       }
-      if (definition.datatype === 'time' && [from, to].some((bound) => bound !== undefined && !Number.isSafeInteger(bound))) {
+      if (
+        definition.datatype === 'time' &&
+        [from, to].some((bound) => bound !== undefined && !Number.isSafeInteger(bound))
+      ) {
         reject(key, 'invalid');
         continue;
       }

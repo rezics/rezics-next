@@ -571,7 +571,8 @@ function RefinementInstance({
           ({ property, value }) =>
             !shown.includes(property) ||
             (!perPropertyState &&
-              (disabled || !pages.find((entry) => entry.property === property)?.values.some((entry) => entry.value === value))),
+              (disabled ||
+                !pages.find((entry) => entry.property === property)?.values.some((entry) => entry.value === value))),
         )
         .map(({ property, value }) => (
           <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
@@ -645,7 +646,9 @@ function RefinementInstance({
                       name={`f.${property}`}
                       value={entry.value}
                       checked={selectedValues.includes(entry.value)}
-                      disabled={busy || (perPropertyState && propertyFailed(property) && !selectedValues.includes(entry.value))}
+                      disabled={
+                        busy || (perPropertyState && propertyFailed(property) && !selectedValues.includes(entry.value))
+                      }
                       onChange={(event) => {
                         const nextValues = event.currentTarget.checked
                           ? [...selectedValues, entry.value]
@@ -655,9 +658,7 @@ function RefinementInstance({
                             property,
                             nextValues,
                             nextValues[0],
-                            nextValues[0] === entry.value
-                              ? label(entry.labels) || selectedLabels[property]
-                              : undefined,
+                            nextValues[0] === entry.value ? label(entry.labels) || selectedLabels[property] : undefined,
                           );
                         if (onConditionsChange) {
                           onConditionsChange({
@@ -869,42 +870,44 @@ function RangeControl({
             {m.refinement_range_remove_action({}, options)}
           </a>
         )}
-        {!deferNavigation && <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!time && !unit}
-          onClick={() => {
-            const gte = lower === '' ? undefined : Number(lower);
-            const lte = upper === '' ? undefined : Number(upper);
-            if (
-              (gte === undefined && lte === undefined) ||
-              [gte, lte].some(
-                (value) => value !== undefined && (!Number.isFinite(value) || (time && !Number.isSafeInteger(value))),
-              ) ||
-              (gte !== undefined && lte !== undefined && gte > lte)
-            ) {
-              onDraftChange({ ...draft, invalid: true });
-              return;
-            }
-            onDraftChange({ ...draft, invalid: false });
-            navigate(
-              href({
-                ...conditions,
-                ranges: {
-                  ...conditions.ranges,
-                  [definition.property]: {
-                    ...(gte !== undefined ? { gte } : {}),
-                    ...(lte !== undefined ? { lte } : {}),
-                    ...(!time ? { unit } : {}),
+        {!deferNavigation && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!time && !unit}
+            onClick={() => {
+              const gte = lower === '' ? undefined : Number(lower);
+              const lte = upper === '' ? undefined : Number(upper);
+              if (
+                (gte === undefined && lte === undefined) ||
+                [gte, lte].some(
+                  (value) => value !== undefined && (!Number.isFinite(value) || (time && !Number.isSafeInteger(value))),
+                ) ||
+                (gte !== undefined && lte !== undefined && gte > lte)
+              ) {
+                onDraftChange({ ...draft, invalid: true });
+                return;
+              }
+              onDraftChange({ ...draft, invalid: false });
+              navigate(
+                href({
+                  ...conditions,
+                  ranges: {
+                    ...conditions.ranges,
+                    [definition.property]: {
+                      ...(gte !== undefined ? { gte } : {}),
+                      ...(lte !== undefined ? { lte } : {}),
+                      ...(!time ? { unit } : {}),
+                    },
                   },
-                },
-              }),
-            );
-          }}
-        >
-          {m.search_apply({}, options)}
-        </Button>}
+                }),
+              );
+            }}
+          >
+            {m.search_apply({}, options)}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -944,14 +947,7 @@ function PropertyFacetStatus({
       </p>
       {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
       {state.status !== 'refused' && (
-        <Button
-          ref={retryRef}
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy || waiting}
-          onClick={onRetry}
-        >
+        <Button ref={retryRef} type="button" variant="outline" size="sm" disabled={busy || waiting} onClick={onRetry}>
           {m.search_facet_retry({}, options)}
         </Button>
       )}

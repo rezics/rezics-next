@@ -7,7 +7,9 @@ import { readCollectionFilterParams } from '../src/library/collection-filter-par
 import type { FacetState, RequestedFacet } from '../src/search/refinement/request';
 import { refinementProperties } from '../src/search/refinement/model';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://rezics.test/en/search' });
 const globals = {
   window,
@@ -46,10 +48,7 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     ),
   };
   const properties = refinementProperties(release, 'fixture:Book').filter((entry) => entry.property !== 'type');
-  const kept = [
-    '00000000-0000-4000-8000-000000000001',
-    '00000000-0000-4000-8000-000000000002',
-  ];
+  const kept = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
   const appliedParams = new URLSearchParams(kept.map((value) => [`f.${properties[0]!.property}`, value]));
   const filter = readCollectionFilterParams(appliedParams, release, 'fixture:Book').document!;
   const beyondWindow = readCollectionFilterParams(
@@ -68,14 +67,16 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     status: 'ready',
     page: {
       as_of: new Date(0).toISOString(),
-      facets: [{
-        property: facet.property,
-        values: Array.from({ length: 10 }, (_, index) => ({
-          value: `value-${offset + index + 1}`,
-          labels: { en: `Value ${offset + index + 1}` },
-        })),
-        next: offset ? null : 'opaque-next',
-      }],
+      facets: [
+        {
+          property: facet.property,
+          values: Array.from({ length: 10 }, (_, index) => ({
+            value: `value-${offset + index + 1}`,
+            labels: { en: `Value ${offset + index + 1}` },
+          })),
+          next: offset ? null : 'opaque-next',
+        },
+      ],
     },
   });
   const contexts = [
@@ -86,8 +87,7 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
   const load = async (facets: RequestedFacet[]) => {
     const request = collectionFacetRequest(contexts[reader]!, facets);
     reads.push(request);
-    if (reader === 0)
-      return await new Promise<FacetState>((resolve) => pending.push({ resolve }));
+    if (reader === 0) return await new Promise<FacetState>((resolve) => pending.push({ resolve }));
     if (outcome !== 'ready') return { status: outcome, code: `collection_${outcome}` };
     return page(facets[0]!, facets[0]!.cursor ? 10 : 0);
   };
@@ -116,7 +116,9 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     await router.load();
     await act(async () => root.render(<RouterProvider router={router} />));
     expect(host.querySelector('fieldset')).not.toBeNull();
-    expect([...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map((input) => input.value)).toContain(kept[0]);
+    expect(
+      [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map((input) => input.value),
+    ).toContain(kept[0]);
 
     const choose = async (property: string) => {
       const select = host.querySelector<HTMLSelectElement>('select')!;
@@ -133,7 +135,9 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     await choose(properties[8]!.property);
     expect(await host.querySelector('input[value="value-1"]')).not.toBeNull();
     expect(host.querySelector<HTMLInputElement>(`input[type="checkbox"][value="${kept[0]}"]`)?.checked).toBe(true);
-    const more = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'More values')!;
+    const more = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'More values',
+    )!;
     await act(async () => more.click());
     expect(await host.querySelector('input[value="value-20"]')).not.toBeNull();
     expect(reads.slice(1)).toEqual([
@@ -153,7 +157,9 @@ test('Collection readers keep exact facet scope, page count-free values, retain 
     props = { ...props, data: { ...props.data, key: 'builtin:owner:unavailable' } };
     await act(async () => refresh());
     await choose(properties[6]!.property);
-    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Try again')!;
+    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === 'Try again',
+    )!;
     await act(async () => retry.click());
     expect(reads.slice(-2).every((request) => request.resource.id === 'builtin-owner')).toBe(true);
     expect(reads.every((request) => request.resource.kind === 'collection')).toBe(true);

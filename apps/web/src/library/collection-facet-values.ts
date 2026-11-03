@@ -68,10 +68,7 @@ export const readCollectionFacetValues = createServerFn({ method: 'POST' })
     let filter: FilterDocument | undefined;
     try {
       if (data.filter !== undefined) filter = admitFilter(parseFilter(data.filter), release, { saved: false });
-      const request = facetRequest(
-        { ...(filter ? { filter } : {}), languages: data.languages },
-        data.facets,
-      );
+      const request = facetRequest({ ...(filter ? { filter } : {}), languages: data.languages }, data.facets);
       const roster = new Map(refinementProperties(release, data.type).map((property) => [property.property, property]));
       if (request.facets.some((facet) => !['values', 'types'].includes(roster.get(facet.property)?.mode ?? '')))
         return { status: 'refused', code: 'collection_facet_property_refused' };

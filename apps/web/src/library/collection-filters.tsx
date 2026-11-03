@@ -21,7 +21,12 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { SlidersHorizontalIcon } from 'lucide-react';
 import { Refinement, type RefinementData } from '../search/refinement/refinement';
 import { MAX_CACHED_FACET_PROPERTIES } from '../search/refinement/facet-continuation';
-import { createRangeDraftState, getRangeDraft, updateRangeDraft, type RangeDraftState } from '../search/refinement/range-draft';
+import {
+  createRangeDraftState,
+  getRangeDraft,
+  updateRangeDraft,
+  type RangeDraftState,
+} from '../search/refinement/range-draft';
 import type { RefinementConditions, RefinementProperty } from '../search/refinement/model';
 
 export type CollectionFilterProperty = {
@@ -173,7 +178,9 @@ export function CollectionFilters({
       if (key.startsWith('f.') && String(value)) (selected[key.slice(2)] ??= []).push(String(value));
       if (key.startsWith('l.') && String(value)) labels[key.slice(2)] = String(value);
     });
-    for (const property of properties.filter((item) => refinementProperties.find((entry) => entry.property === item.id)?.mode === 'range')) {
+    for (const property of properties.filter(
+      (item) => refinementProperties.find((entry) => entry.property === item.id)?.mode === 'range',
+    )) {
       const from = String(form.get(`range.from.${property.id}`) ?? '').trim();
       const to = String(form.get(`range.to.${property.id}`) ?? '').trim();
       const lower = from ? Number(from) : undefined;
@@ -257,7 +264,11 @@ export function CollectionFilters({
           }}
         />
         {properties
-          .filter((property) => !shown.includes(property.id) && refinementProperties.find((entry) => entry.property === property.id)?.mode === 'range')
+          .filter(
+            (property) =>
+              !shown.includes(property.id) &&
+              refinementProperties.find((entry) => entry.property === property.id)?.mode === 'range',
+          )
           .map((property) => {
             const draft = getRangeDraft(rangeDraftState, identity, property.id, rangeDraft(property, params));
             return (
@@ -343,10 +354,7 @@ export function CollectionFilters({
   );
 }
 
-function collectionConditions(
-  params: CollectionFilterParams,
-  properties: RefinementProperty[],
-): RefinementConditions {
+function collectionConditions(params: CollectionFilterParams, properties: RefinementProperty[]): RefinementConditions {
   const byProperty = new Map(properties.map((property) => [property.property, property]));
   const ranges = Object.fromEntries(
     Object.entries(params.ranges).map(([property, range]) => {
