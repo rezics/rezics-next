@@ -78,9 +78,8 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
     priorActive: priorEpoch !== null,
     priorUpdating: false,
   };
-  const scores = priorEpoch === null
-    ? [null, null, null, null, null, null, null, null]
-    : [9, 9, 9, 0, null, null, 1, null];
+  const scores =
+    priorEpoch === null ? [null, null, null, null, null, null, null, null] : [9, 9, 9, 0, null, null, 1, null];
   const labels: (string | null)[] = ['A', 'A', null, 'B', 'C', 'C', 'E', null];
   const hits: RealmRatingHit[] = scores.map((score, index) => {
     const subjectId = id(index + 1);
@@ -226,7 +225,9 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
           return {
             partition,
             hits: population
-              .sort((a, b) => compareFrontier({ after: a.sort, ratingPhase: 'scored' }, { after: b.sort, ratingPhase: 'scored' }))
+              .sort((a, b) =>
+                compareFrontier({ after: a.sort, ratingPhase: 'scored' }, { after: b.sort, ratingPhase: 'scored' }),
+              )
               .slice(0, request.size)
               .map((hit) => ({
                 ...hit,
@@ -260,7 +261,9 @@ function fixture(priorEpoch: number | null = 17, withSecondPartition = false) {
             ...(scored || (input.text && !textMatches.has(hit.id)) ? { suppressed: true as const } : {}),
           };
         })
-        .sort((a, b) => compareFrontier({ after: a.sort, ratingPhase: 'unscored' }, { after: b.sort, ratingPhase: 'unscored' }))
+        .sort((a, b) =>
+          compareFrontier({ after: a.sort, ratingPhase: 'unscored' }, { after: b.sort, ratingPhase: 'unscored' }),
+        )
         .filter(
           (hit) =>
             !request.after ||
@@ -366,7 +369,9 @@ test('selected native Realm traverses scored ties, zero, below-threshold and abs
   old.ratingPhase = 'unscored';
   old.sort = ['A', old.id];
   stale.hits.splice(3, 0, old);
-  expect((await stale.run(undefined, 100)).subjects.map((subject) => subject.id)).toEqual([3, 2, 7, 4, 1, 5, 6, 8].map(id));
+  expect((await stale.run(undefined, 100)).subjects.map((subject) => subject.id)).toEqual(
+    [3, 2, 7, 4, 1, 5, 6, 8].map(id),
+  );
 });
 
 test('merges scored frontiers across partitions and consumes a sparsely denied subject privately', async () => {
@@ -374,9 +379,16 @@ test('merges scored frontiers across partitions and consumes a sparsely denied s
   const denied = (await f.source.read(10, [id(2)])).subjects[0]!;
   f.source.put({ ...denied, visibility: 'hidden' });
   const page = await f.run(undefined, 100);
-  expect(page.subjects.map((subject) => subject.id)).toEqual(
-    [idInSecondPartition(9), id(3), id(1), id(7), id(4), id(5), id(6), id(8)],
-  );
+  expect(page.subjects.map((subject) => subject.id)).toEqual([
+    idInSecondPartition(9),
+    id(3),
+    id(1),
+    id(7),
+    id(4),
+    id(5),
+    id(6),
+    id(8),
+  ]);
   const cursor = await f.run();
   if (cursor.next) {
     const decoded = await decodeSearchCursor(ring, binding, cursor.next, 1001);
