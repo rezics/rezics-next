@@ -212,7 +212,7 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
         persona,
       );
       await expectStatus(created, 201, `Create ${persona} ${currency} offer`);
-      const offerId = ((await json<{ offer: { id: string } }>(created)).offer.id);
+      const offerId = (await json<{ offer: { id: string } }>(created)).offer.id;
       const current = await stack!.kernel(`/v1/offers/${offerId}`, {}, persona);
       await expectStatus(current, 200, `Read ${persona} ${currency} offer`);
       const offer = (await json<{ offer: { id: string; revision: number } }>(current)).offer;
@@ -293,11 +293,15 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
     const originalStatement = (await json<{ statement: NativeStatement }>(beforePaid)).statement;
     const paidReference = `external-test-reference:${randomUUID()}`;
     const markPaidKey = keyed('mark-paid:alice-usd');
-    const markPaid = await stack.kernel(`/v1/payoutStatements/${paidStatement.id}:markPaid`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': markPaidKey },
-      body: JSON.stringify({ paidReference }),
-    }, 'bob');
+    const markPaid = await stack.kernel(
+      `/v1/payoutStatements/${paidStatement.id}:markPaid`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': markPaidKey },
+        body: JSON.stringify({ paidReference }),
+      },
+      'bob',
+    );
     await expectStatus(markPaid, 200, 'Record authorized external-payment attestation');
     const paidAttestation = (await json<{ statement: NativePaidAttestation }>(markPaid)).statement;
     if (
@@ -319,11 +323,7 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
     const pagedStatement = secondPage.payoutStatements[0];
     if (!pagedStatement) throw new Error('Alice statement continuation returned no statement');
 
-    const linesFirst = await stack.kernel(
-      `/v1/payoutStatements/${pagedStatement.id}/lines?limit=1`,
-      {},
-      'alice',
-    );
+    const linesFirst = await stack.kernel(`/v1/payoutStatements/${pagedStatement.id}/lines?limit=1`, {}, 'alice');
     await expectStatus(linesFirst, 200, 'Read first statement line page');
     const firstLines = await json<NativeStatementLines>(linesFirst);
     if (!firstLines.next) throw new Error('The native creator statement needs a line continuation');
@@ -354,7 +354,10 @@ export async function startNativeCreatorStatementsFixture(): Promise<NativeCreat
     const otherCreatorDetailAddress = statementHref('en', paidStatement.id);
     const aliceJourney = await auth.signIn('alice');
     const bobJourney = await auth.signIn('bob');
-    const cookieValue = async (persona: 'alice' | 'bob', context: Awaited<ReturnType<typeof auth.signIn>>['context']) => {
+    const cookieValue = async (
+      persona: 'alice' | 'bob',
+      context: Awaited<ReturnType<typeof auth.signIn>>['context'],
+    ) => {
       const cookie = (await context.cookies(stack!.web)).find(({ name }) => name === '__Host-rezics_session');
       if (!cookie?.value) throw new Error(`The native ${persona} website session cookie is missing`);
       return `${cookie.name}=${cookie.value}`;
