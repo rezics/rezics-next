@@ -1278,3 +1278,72 @@ Global catalogue queue membership does not disclose protected Realm or removed-h
   actor/principal/grant work separately, as derived by `eligibility-access-work.ts`.
 - Growth check: Content's native report outcome suite uses real Access; independent grant,
   membership-history and report-population measurements remain continuation work.
+
+### Operation: readRealmSettingsPage
+
+`GET /v1/realms/:realmId/settings` (`realm.settings`, `realm:manage`) prepares the existing
+Realm commands. It requires current ordinary Realm disclosure, host disclosure and management;
+public readership or owner labels alone grant nothing. Required dependency failure withholds the
+response. Source/head, lifecycle, partition or host changes during composition withhold the whole
+response. Governance read-only state disables the advisory operations. Every command still owns
+admission, preconditions, reauthorization before replay and writes.
+
+The response is `{snapshot,host,operations}`. `snapshot` structurally extends Web's existing
+`RealmAppearanceSnapshot`; `head` and the ETag are the actual Realm revision used by If-Match.
+It also includes summary, visibility, ownership/governance state, current votes and board scheme.
+The host identifies its current Space title and head. Rules summaries use Web's existing first-line
+160-character title and remaining 800-character summary, alongside the exact pinned canonical
+native body, SPDX licence and SHA256. A later post head never replaces that revision.
+
+Decision: keep Web's existing optional interface: selected concealed references have `state:"none"`
+and `value:null`, with their selected IDs retained only in `presentation`; dependency failures use
+`state:"unavailable"`, and unset references also use `none`.
+
+For example, `snapshot.rules` is `{state:"available",value:{postId,revisionId,title,summary,body,
+licence,sha256}}` when disclosed, `{state:"none",value:null}` when concealed, and
+`{state:"unavailable",value:null}` on optional source failure. Avatar/banner reuse Content's exact
+`RealmPresentationImage`, without transport keys, credentials, signed URLs or private provenance.
+Only the two selected image keys and one selected rules pin are resolved. No candidate inventory,
+media claim, receipt, idempotency key or successful-write evidence is created by GET.
+
+Two current owner reads of the selected references precede the final freshly prepared Access/source
+round; changed optional facts become concealed. Foreign preparation happens on released source
+connections. This composes rechecked native observations, without an atomic cross-home guarantee.
+The response is private and not stored. Request identity and Access's current session provenance
+remain the mounted HTTP/Access owners' responsibility; Web keeps its existing caller lifetime.
+
+`operations.update` names PATCH `/v1/realms/:realmId`, `boardScheme` names PUT
+`/v1/realms/:realmId/boardScheme`, and `reserveMedia` names POST `/v1/realms/:realmId/media`.
+Their header/precondition and selection requirements are advisory current command facts. Existing
+PATCH omission semantics are unchanged: omitting presentation preserves it; supplying it requires
+its complete strict object. Omitting Context, votes and board scheme preserves them too. Rules
+preparation and media claim remain internal to the existing update command. There is no settings
+writer, asset picker or upload/lifecycle engine here.
+
+#### Cost
+
+- **Touches:** `readRealm` first prepares ordinary Access and reads the selected current Realm.
+  Each of two source rounds prepares fresh management, Realm and host Access outside checkout,
+  then opens one read-only repeatable-read transaction, mints one read time, reads one partition,
+  checks those three permissions, reads the exact Realm head, exact host head and existing
+  lifecycle binding, and commits (or rolls back and releases on failure). Two selected rounds call
+  Content's `readRealmPresentationImages` for at most two same-route keys and
+  `readExactPublishedRules` for at most one pin; each owner reader includes its own source/final
+  checks and Access preparation. All Community, Access, Auth and Content participating pools and
+  registered runner phases belong to this operation, including cold evidence release and denial.
+- **Bound:** outer source rounds and selected calls have no retries, inventory or population loop.
+  Existing materialized Realm/Space identity seeks join only their exact head revision; lifecycle
+  binding and partition are exact keys. Selected rules inherit the owner's 33-post ancestry cap,
+  at most one thread/board/Realm and exact revision/body, and 65536 canonical UTF-8 bytes. Images
+  admit at most two keys, each with at most twelve variants. The response copies variants at each
+  selected round and serializes each selected result for comparison, then the final response;
+  rules are parsed/canonicalized/hashed in each owner read and copied into one response. Native
+  title/summary caps are characters, allowing up to four UTF-8 bytes per admitted code point;
+  they are not byte caps. Nested Access/identity/media statement, physical-row and JSON costs
+  still require the connected pool/runner accounting and strict growth plans before this journey's
+  complete cost ceiling can be claimed.
+- **Growth check:** existing `growth-realm-presentation-settings` proves the update command,
+  not this GET. `realm-settings-page.test.ts` connects native creation, empty/read-only effects,
+  exact pinned rules, existing CAS updates/readback, omission and management revocation. Connected
+  GET growth at 256/1024/4096 for unrelated Realms, selected histories, optional media and authority
+  histories, with all participating pools and runner phases, remains in the continuation brief.
