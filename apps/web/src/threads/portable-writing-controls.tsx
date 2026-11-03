@@ -30,11 +30,11 @@ export function usePortableWriting(source: WritingSource, admitted: boolean) {
       download: (url, filename) => {
         if (typeof HTMLAnchorElement === 'undefined' || !('download' in HTMLAnchorElement.prototype))
           throw new Error('Download unavailable');
-        const link = document.createElement('a');
+        const link = window.document.createElement('a');
         link.href = url;
         link.download = filename;
         link.hidden = true;
-        document.body.append(link);
+        window.document.body.append(link);
         try { link.click(); } finally { link.remove(); }
       },
       copy: async (text) => { await navigator.clipboard.writeText(text); },
