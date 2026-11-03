@@ -2,47 +2,48 @@
 
 `createRealmRatingNativeSource` in [realm-rating-native.ts](realm-rating-native.ts) is installed as
 `realmRatings` in the production `createSearchService` caller in [server.ts](../server.ts).
-It currently returns typed `index_not_ready` with Retry-After for observation and reads.
-This binding does not establish native order execution.
+Observation and both reads return typed `index_not_ready` with Retry-After until complete
+native order is available, including for authenticated readers and empty predicates.
 
 ## Readiness
 
-The installed Content export is `createRealmRankSource` / `RealmRankSource.page` in
-[realm-rank.ts](../rating/realm-rank.ts). It supplies a partition-local scored-only
-`score_desc` page. Its request has no complete Subject predicate; its candidates have
-no canonical name key, unscored complement or independently homed source observations.
-Its existing API remains unchanged. Content's complete-order factory/types and
-`35-realm-rank-complete-order.md` are absent from this source.
+Content exports `createRealmRankOrderSource` / `RealmRankOrderSource` in
+[realm-rank.ts](../rating/realm-rank.ts). Its `readScoredPartition` seeks
+`score DESC, subject_id DESC`, its candidates have no canonical name, and its input
+has no complete Subject predicate capability. `proveFigures` supplies exact native
+figure eligibility probes, not a canonical unscored seek. These exports do not yet
+supply the complete order required here. The older scored-only `createRealmRankSource`
+and its API remain unchanged. The named `35-realm-rank-complete-order.md` is absent.
 
-Search therefore retains explicit unavailability until Content delivers the complete
-capability. A scored preview cannot supply this adapter, and absence of a preview
-candidate cannot establish an unscored Subject. The selected rating Realm does not
-impose membership, thread or Space scope. Global order is never a substitute.
+Decision: retain typed unavailability for the selected Realm until Content supplies
+complete canonical predicate/order execution; never adapt the partial score/UUID seek.
 
-The delivered capability must admit the complete Search text/catalogue/resource
-predicate, canonical identity and name generation, question identity/revision/scale,
-same-question/population prior eligibility interval, native figure publication and
-independent home epochs/snapshots. Search must adapt to those observations rather
-than assume that figure and Subject positions are equal. Publication or authority
-changes, including dependencies discovered during hydration and empty pages, must
-be checked before disclosure. Inactive-prior ABA needs an eligibility generation.
-Private below-threshold values must never become order keys or readiness clues.
+The replacement binding must consume the complete admitted Search text/catalogue/resource
+predicate once, with canonical identity/name generation, question identity/revision/scale,
+same-question/population prior eligibility interval, figure publication and independent
+home epochs/snapshots. A figure position is not a canonical Subject position merely
+because both are numbers. Private below-threshold figures cannot affect order or readiness.
+The complete Subject domain is independent of Realm membership, threads and Spaces.
+
+Final native validation must include dependencies discovered during hydration and empty
+pages. Changes to names, identity, prior, question, source or current Realm/Subject authority
+must restart or refuse before disclosure. Inactive-prior ABA requires an eligibility
+interval. Missing native evidence cannot establish an unscored Subject or empty success.
 
 ## Cost
 
-Touches: the current readiness boundary performs no native statements, seeks,
-hydration or candidate retention. These zero operations describe refusal only.
+Touches: the installed readiness boundary issues no native statements, seeks, hydration
+or candidate retention. These zero operations describe refusal only.
 
-Bound: successful useful-page execution is not admitted. Once Content delivers its
-capability, derive partition count P, finite windows W, raw window size B and native
-producer terms S, E(B), H(B) from that capability before dispatch. The journey bound
-is C_compile + P*W*(S+E(B)+H(B)) + C_final, with memory at most P*B tuples plus the
-existing finite merge frontier. Use static sums and indexed LIMIT; no refill cap or
-local preview filter establishes useful pages. Unresolved native terms go to
-Performance before admission.
+Bound: successful useful-page execution remains unadmitted. Derive partition count P,
+finite windows W, raw window size B and producer terms S, E(B), H(B) from the complete
+capability before dispatch. The bound is C_compile + P*W*(S+E(B)+H(B)) + C_final,
+with memory at most P*B tuples plus the finite merge frontier. Use static sums and indexed
+LIMIT. A scored preview, local filtering or fitted refill cap does not establish W.
+Unresolved native terms require Performance review before admission.
 
-Growth check: native 1x/4x/16x complete-order execution remains **unmeasured**. It
-requires the installed product path, fixed request/page limits, sparse rejection
-and currentness invalidation, recording statements, examined/returned rows, seeks,
-actions and retained candidates. Separate each bounded step from total resumable
-preparation/catch-up. The refusal tests are not growth or native execution evidence.
+Growth check: actual 1x/4x/16x complete-order execution remains **unmeasured**.
+The continuation must exercise the installed service with fixed request/page limits,
+sparse rejection and currentness invalidation, recording native statements,
+examined/returned rows, seeks, actions and retained candidates. Separate per-step
+work from total resumable preparation/catch-up. Refusal tests do not prove native order.
