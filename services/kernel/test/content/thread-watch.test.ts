@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createThreadWatchNoticeEffect } from '../../src/content/watch-notices.ts';
+import { contentNoticeEffects } from '../../src/content/relays.ts';
 import { eraseAccountNoticesPage } from '../../src/content/notices.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
@@ -42,7 +42,13 @@ test('readers can privately watch a visible thread and clear their watch after a
 });
 
 test('later replies reach current watchers once, and unwatch or a durable preference refusal prevents delivery', async () => {
-  const effect = createThreadWatchNoticeEffect(f.db.pool, f.accounts.access);
+  const effects = contentNoticeEffects(f.db.pool, f.accounts.access);
+  expect(effects.map((effect) => effect.name)).toEqual([
+    'content_mention_notice',
+    'content_reply_notice',
+    'content_thread_watch_notice',
+  ]);
+  const effect = effects.find((candidate) => candidate.name === 'content_thread_watch_notice')!;
   const reader = f.accounts.principal;
   const pathFor = (threadId: string) => `/v1/threads/${threadId}/watch`;
 

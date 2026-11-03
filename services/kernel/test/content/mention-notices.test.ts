@@ -21,11 +21,7 @@ function registeredMentionEffect() {
     fixture.pool,
     createContentWorkAccess(() => new Date(), fixture.pool),
   );
-  expect(effects.map((effect) => effect.name)).toEqual([
-    'content_mention_notice',
-    'content_reply_notice',
-    'content_thread_watch_notice',
-  ]);
+  expect(effects.map((effect) => effect.name)).toEqual(['content_mention_notice', 'content_reply_notice']);
   const mentions = effects.filter((effect) => effect.name === 'content_mention_notice');
   expect(mentions).toHaveLength(1);
   return mentions[0]!;
@@ -363,7 +359,6 @@ test('mention notices recheck current board and every post ancestor before sendi
 });
 
 test('a native first-publication mention reads the independent board anchor and reaches its recipient', async () => {
-  await fixture.close();
   const driver = await createContentNotificationDriver();
   try {
     const people = await driver.provision();
