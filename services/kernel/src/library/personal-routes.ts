@@ -1,6 +1,6 @@
 import { createFollowCountReads } from './follow-count-reads.ts';
 import { t } from 'elysia';
-import type { TSchema } from 'typebox';
+import type { Static, TSchema } from 'typebox';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
@@ -472,7 +472,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ...personalEntry,
             sourceObservations: personalEntry.sourceObservations.map((observation) => ({ ...observation })),
           },
-        };
+        } satisfies Static<typeof personalEntryResponse>;
       },
     )
     .put(
@@ -505,7 +505,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             ...result.value,
             sourceObservations: result.value.sourceObservations.map((observation) => ({ ...observation })),
           },
-        };
+        } satisfies Static<typeof personalEntryResponse>;
       },
     )
     .post(
@@ -537,7 +537,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         session.record(result);
         set.status = 201;
         set.headers['cache-control'] = 'private, no-store';
-        return { sourceObservation: { ...result.value.sourceObservation } };
+        return {
+          sourceObservation: { ...result.value.sourceObservation },
+        } satisfies Static<typeof personalObservationResponse>;
       },
     )
     .patch(
@@ -574,7 +576,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
-        return { sourceObservation: { ...result.value.sourceObservation } };
+        return {
+          sourceObservation: { ...result.value.sourceObservation },
+        } satisfies Static<typeof personalObservationResponse>;
       },
     )
     .put(
