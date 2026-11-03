@@ -9,4 +9,5 @@ LEFT JOIN LATERAL (
   WHERE route = :route::integer AND voter_id = :voter_id::uuid
     AND question_id = :question_id::uuid AND target_id = selected.target_id
   LIMIT 1
-) AS own ON true;
+) AS own ON true
+WHERE selected.target_id IS NOT NULL;
