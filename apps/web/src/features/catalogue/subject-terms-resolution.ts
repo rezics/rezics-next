@@ -47,13 +47,14 @@ export function intentPresence(original: Terms, intent: TermsPatch, field: TermF
   const map = intent[field];
   if (!map || !Object.hasOwn(map, language)) return termPresence(original, field, language);
   const value = map[language];
-  if (value === null || (Array.isArray(value) && value.length === 0)) return { present: false };
+  if (value === null || value === undefined || (Array.isArray(value) && value.length === 0))
+    return { present: false };
   return { present: true, value };
 }
 
 export function formatTermPresence(presence: TermPresence): string {
   if (!presence.present) return '';
-  return Array.isArray(presence.value) ? presence.value.join('\n') : presence.value;
+  return Array.isArray(presence.value) ? presence.value.join('\n') : String(presence.value);
 }
 
 function validText(value: string): boolean {
@@ -116,7 +117,7 @@ function patchValue(field: TermField, presence: TermPresence): string | string[]
 }
 
 function writePatch(patch: TermsPatch, field: TermField, language: string, presence: TermPresence) {
-  const map = (patch[field] ??= Object.create(null) as NonNullable<TermsPatch[TermField]>);
+  const map = (patch[field] ??= Object.create(null)) as Record<string, string | string[] | null>;
   Object.defineProperty(map, language, {
     value: patchValue(field, presence),
     enumerable: true,
