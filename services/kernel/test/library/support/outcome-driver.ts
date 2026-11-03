@@ -61,11 +61,7 @@ type SavedMeasurement = {
   buffers: number;
 };
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-type ConnectCallback = (
-  error: Error | undefined,
-  client: PoolClient,
-  release: (error?: Error) => void,
-) => void;
+type ConnectCallback = (error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => void;
 type ConnectPrototype = { connect: (...args: unknown[]) => unknown };
 
 function queryText(query: unknown): string | undefined {
@@ -138,11 +134,7 @@ function bindDatabaseClock(pool: Pool, now: () => string): () => void {
 }
 
 /** Instrument library-owned pg.Pool instances as well as the shared growth pool. */
-function instrumentLibraryPools(
-  databaseUrl: string,
-  mainPool: Pool,
-  active: () => CapturedStatements | undefined,
-) {
+function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () => CapturedStatements | undefined) {
   const prototype = Pool.prototype as unknown as ConnectPrototype;
   const original = prototype.connect;
   const clients = new WeakSet<PoolClient>();
@@ -170,11 +162,7 @@ function instrumentLibraryPools(
     const callback = args[0];
     if (typeof callback === 'function') {
       const done = callback as ConnectCallback;
-      return original.call(this, ((
-        error: Error | undefined,
-        client: PoolClient,
-        release: (error?: Error) => void,
-      ) => {
+      return original.call(this, ((error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => {
         if (error) {
           done(error, client, release);
           return;
@@ -218,10 +206,7 @@ function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-function difference(
-  left: readonly string[],
-  right: readonly string[],
-): { added: string[]; removed: string[] } {
+function difference(left: readonly string[], right: readonly string[]): { added: string[]; removed: string[] } {
   const remaining = [...right];
   const added: string[] = [];
   for (const statement of left) {
@@ -303,52 +288,23 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     db = await openGrowthDatabase(databaseUrl);
     restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
 
-    authPool = new Pool({
-      connectionString: await createAuthDatabase(base, authName),
-      max: 2,
-    });
+    authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
     authPool.on('error', () => {});
     authPool.on('connect', (client) => client.on('error', () => {}));
 
     const routeKey = new Uint8Array(32).fill(17);
     const tokens = new Map<string, string>();
-    const ownerAccount = {
-      id: newId(0x3300),
-      route: 0x3300,
-      partition: partitionOf(0x3300),
-    };
-    const otherAccount = {
-      id: newId(0x3301),
-      route: 0x3301,
-      partition: partitionOf(0x3301),
-    };
-    const suspendedAccount = {
-      id: newId(0x5520),
-      route: 0x5520,
-      partition: partitionOf(0x5520),
-    };
-    const governor = {
-      id: newId(0x1101),
-      route: 0x1101,
-      partition: partitionOf(0x1101),
-    };
-    const seedSamePartition = {
-      id: newId(0x3302),
-      route: 0x3302,
-      partition: partitionOf(0x3302),
-    };
-    const seedOtherPartition = {
-      id: newId(0x6610),
-      route: 0x6610,
-      partition: partitionOf(0x6610),
-    };
-    const seedParallelPeople = [0x7710, 0x8810, 0x9910, 0xaa10, 0xbb10, 0xcc10, 0xdd10, 0xee10].map(
-      (route) => ({
-        id: newId(route),
-        route,
-        partition: partitionOf(route),
-      }),
-    );
+    const ownerAccount = { id: newId(0x3300), route: 0x3300, partition: partitionOf(0x3300) };
+    const otherAccount = { id: newId(0x3301), route: 0x3301, partition: partitionOf(0x3301) };
+    const suspendedAccount = { id: newId(0x5520), route: 0x5520, partition: partitionOf(0x5520) };
+    const governor = { id: newId(0x1101), route: 0x1101, partition: partitionOf(0x1101) };
+    const seedSamePartition = { id: newId(0x3302), route: 0x3302, partition: partitionOf(0x3302) };
+    const seedOtherPartition = { id: newId(0x6610), route: 0x6610, partition: partitionOf(0x6610) };
+    const seedParallelPeople = [0x7710, 0x8810, 0x9910, 0xaa10, 0xbb10, 0xcc10, 0xdd10, 0xee10].map((route) => ({
+      id: newId(route),
+      route,
+      partition: partitionOf(route),
+    }));
     const knownPeople = [
       ownerAccount,
       otherAccount,
@@ -373,10 +329,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     });
     const audience = 'https://ordinary.api.test';
 
-    const cursorKeys = {
-      current: 1,
-      keys: new Map([[1, new Uint8Array(32).fill(19)]]),
-    };
+    const cursorKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
     let managementObserver: Parameters<NativeConformanceWorld['native']['observeManagement']>[0];
     const app = createKernel({
       requestDeadlineMs: 30_000,
@@ -408,10 +361,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         access.authorize = (...args) => {
           const [, , action, resource] = args;
           if (['collection:update', 'space:manage', 'account:manage'].includes(action))
-            managementObserver?.({
-              action,
-              resource: { route: resource.route, id: resource.id },
-            });
+            managementObserver?.({ action, resource: { route: resource.route, id: resource.id } });
           return authorize(...args);
         };
         return access;
@@ -542,15 +492,9 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     if (active.digest !== digest) throw new Error('Definitions did not activate the compiled fixture release');
 
     for (const group of ['collections', 'personal_library', 'reading_progress']) {
-      const response = await byRoute(
-        tokenFor(governor),
-        'POST',
-        `/v1/platform/exposure/${group}:open`,
-        undefined,
-        {
-          'Idempotency-Key': key(),
-        },
-      );
+      const response = await byRoute(tokenFor(governor), 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
+        'Idempotency-Key': key(),
+      });
       await expectJson(`Opening ${group}`, response, 200);
     }
     for (const person of [seedSamePartition, seedOtherPartition, ...seedParallelPeople]) {
@@ -572,21 +516,9 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
     restorePoolInstrumentation = instrumentLibraryPools(databaseUrl, db.pool, () => activeInternalCapture);
 
     const accounts = {
-      owner: {
-        id: ownerAccount.id,
-        route: ownerAccount.route,
-        partition: ownerAccount.partition,
-      },
-      other: {
-        id: otherAccount.id,
-        route: otherAccount.route,
-        partition: otherAccount.partition,
-      },
-      suspended: {
-        id: suspendedAccount.id,
-        route: suspendedAccount.route,
-        partition: suspendedAccount.partition,
-      },
+      owner: { id: ownerAccount.id, route: ownerAccount.route, partition: ownerAccount.partition },
+      other: { id: otherAccount.id, route: otherAccount.route, partition: otherAccount.partition },
+      suspended: { id: suspendedAccount.id, route: suspendedAccount.route, partition: suspendedAccount.partition },
     };
     const unknown = {
       collectionId: newId(ownerAccount.route),
@@ -697,9 +629,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
             `Production library executor: ${workerFailure}${events ? `; events=${JSON.stringify(events.rows)}` : ''}`,
           );
         }
-        const workflows = (await workClient!.listWorkflows({ limit: 10000 })).filter(
-          (row) => row.status !== 'SUCCESS',
-        );
+        const workflows = (await workClient!.listWorkflows({ limit: 10000 })).filter((row) => row.status !== 'SUCCESS');
         if (workflows.length) {
           for (const workflow of workflows.filter((row) => row.status !== 'DELAYED')) {
             await workClient!.retrieveWorkflow(workflow.workflowID).getResult();
@@ -877,16 +807,10 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         multiplicity: row.multiplicity === null ? null : Number(row.multiplicity),
       })) as LibraryInspection['subjectPartitionRows'];
       const events = (
-        await db!.admin.query(
-          'SELECT id, type, data FROM core.outbox ORDER BY partition_no, position, event_seq',
-        )
+        await db!.admin.query('SELECT id, type, data FROM core.outbox ORDER BY partition_no, position, event_seq')
       ).rows as LibraryInspection['events'];
       const workflows = (await workClient!.listWorkflows({ limit: 10000 }))
-        .map((row) => ({
-          id: row.workflowID,
-          name: row.workflowName,
-          status: row.status,
-        }))
+        .map((row) => ({ id: row.workflowID, name: row.workflowName, status: row.status }))
         .sort((left, right) => left.id.localeCompare(right.id));
       return {
         collections,
@@ -904,10 +828,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
       };
     }
 
-    async function provisionSubject(
-      input: { versionOf?: string } = {},
-      author: Anchor = governor,
-    ): Promise<Anchor> {
+    async function provisionSubject(input: { versionOf?: string } = {}, author: Anchor = governor): Promise<Anchor> {
       const body =
         input.versionOf === undefined
           ? { type: 'schema:Book', labels: { en: 'Library outcome subject' } }
@@ -930,17 +851,11 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         subject: { id: string; type: string; release: string };
       }>('Creating semantic subject', response, 201);
       if (result.subject.type !== body.type || result.subject.release !== digest)
-        throw new Error(
-          'Semantic did not accept the subject against the activated Library outcome definitions',
-        );
+        throw new Error('Semantic did not accept the subject against the activated Library outcome definitions');
       const subjectRoute = routeOf(result.subject.id);
       if (subjectRoute === null) throw new Error('Production semantic create returned an unroutable subject');
       initialSubjectIds.add(result.subject.id);
-      return {
-        id: result.subject.id,
-        route: subjectRoute,
-        partition: partitionOf(subjectRoute),
-      };
+      return { id: result.subject.id, route: subjectRoute, partition: partitionOf(subjectRoute) };
     }
 
     const nativeRequest: NativeConformanceWorld['native']['request'] = (as, input) => {
@@ -967,11 +882,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         async principal(partition) {
           if (!Number.isInteger(partition) || partition < 0 || partition >= 4096)
             throw new RangeError('Native principal partition must be below 4096');
-          const person = await provisionAccount({
-            id: newId(partition * 16),
-            route: partition * 16,
-            partition,
-          });
+          const person = await provisionAccount({ id: newId(partition * 16), route: partition * 16, partition });
           return { accountId: person.id, credential: tokenFor(person) };
         },
         async reauthenticate(accountId, selected = scopes) {
@@ -1018,25 +929,14 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
           const response = await nativeRequest(author, {
             method: 'POST',
             path: '/v1/subjects',
-            body: {
-              type,
-              labels: { en: 'Native Library conformance subject' },
-            },
+            body: { type, labels: { en: 'Native Library conformance subject' } },
             headers: { 'Idempotency-Key': key() },
           });
-          const result = await expectJson<{ subject: { id: string } }>(
-            'Creating native typed subject',
-            response,
-            201,
-          );
+          const result = await expectJson<{ subject: { id: string } }>('Creating native typed subject', response, 201);
           const route = routeOf(result.subject.id);
           if (route === null) throw new Error('Semantic returned an unroutable subject');
           initialSubjectIds.add(result.subject.id);
-          return {
-            id: result.subject.id,
-            route,
-            partition: partitionOf(route),
-          };
+          return { id: result.subject.id, route, partition: partitionOf(route) };
         },
         async rotateCursorKeys() {
           cursorKeys.current++;
@@ -1050,9 +950,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
           const internal: CapturedStatements = { statements: [], plans: [] };
           activeInternalCapture = internal;
           try {
-            const result = await capture(db!, operation, {
-              includeBackends: true,
-            });
+            const result = await capture(db!, operation, { includeBackends: true });
             if (internal.statements.length)
               throw new Error(
                 'Native cross-pool wire/backend attribution unavailable; refusing incomplete cost evidence',
@@ -1081,15 +979,8 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
           const shift = issuedAt - claims.iat!;
           tokens.set(
             id,
-            await new SignJWT({
-              ...claims,
-              auth_time: Number(claims.auth_time) + shift,
-            })
-              .setProtectedHeader({
-                alg: 'ES256',
-                kid: signingKey.kid,
-                typ: 'at+jwt',
-              })
+            await new SignJWT({ ...claims, auth_time: Number(claims.auth_time) + shift })
+              .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
               .setIssuedAt(issuedAt)
               .setExpirationTime(claims.exp! + shift)
               .sign(tokenSigningKey),
@@ -1138,12 +1029,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
                 client,
                 route,
                 input.collectionId,
-                {
-                  id: newId(route),
-                  subjectId: input.subjectId,
-                  note: null,
-                  ordinalKey,
-                },
+                { id: newId(route), subjectId: input.subjectId, note: null, ordinalKey },
                 { transactionId, time },
               );
               if (!member) throw new Error(`Collection ${input.collectionId} refused a seeded member`);
@@ -1343,12 +1229,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
                 },
               ],
               'library.progress_unit': [
-                {
-                  route,
-                  session_id: sessionId,
-                  unit_id: `growth-unit:${placement.ordinal}`,
-                  added_at: time,
-                },
+                { route, session_id: sessionId, unit_id: `growth-unit:${placement.ordinal}`, added_at: time },
               ],
               'library.progress_change': [
                 {
@@ -1463,9 +1344,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
           buffers: cost.blocks,
         };
         savedMeasurements.push(saved);
-        await mkdir(resolve(import.meta.dir, '../../../../../.temp'), {
-          recursive: true,
-        });
+        await mkdir(resolve(import.meta.dir, '../../../../../.temp'), { recursive: true });
         await Bun.write(
           resolve(import.meta.dir, `../../../../../.temp/library-outcome-${suffix}.json`),
           JSON.stringify(savedMeasurements, null, 2),
@@ -1481,15 +1360,10 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
               'Captured statement texts are in .temp/library-outcome-*.json.',
           );
         }
-        return {
-          value: result.value,
-          statements: raw.statements.length,
-          buffers: cost.blocks,
-        };
+        return { value: result.value, statements: raw.statements.length, buffers: cost.blocks };
       },
       async close() {
         tokens.clear();
-        approvals.clear();
         await cleanup();
         dropped = true;
       },

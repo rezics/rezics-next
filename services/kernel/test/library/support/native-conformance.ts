@@ -71,30 +71,18 @@ export function write(
   body?: unknown,
   key = requestKey(),
 ) {
-  return world.native.request(persona, {
-    method,
-    path,
-    body,
-    headers: { 'Idempotency-Key': key },
-  });
+  return world.native.request(persona, { method, path, body, headers: { 'Idempotency-Key': key } });
 }
 export async function publish(world: NativeConformanceWorld, release: Release) {
   const { digest } = await json<{ digest: string }>(
-    await write(world, 'steward', 'POST', '/v1/definitions/releases', {
-      release,
-    }),
+    await write(world, 'steward', 'POST', '/v1/definitions/releases', { release }),
     201,
   );
   const head = await json<{ head: number }>(
-    await world.native.request('anonymous', {
-      method: 'GET',
-      path: '/v1/definitions/active',
-    }),
+    await world.native.request('anonymous', { method: 'GET', path: '/v1/definitions/active' }),
   );
   await json(
-    await write(world, 'steward', 'POST', `/v1/definitions/releases/${digest}:activate`, {
-      expected_head: head.head,
-    }),
+    await write(world, 'steward', 'POST', `/v1/definitions/releases/${digest}:activate`, { expected_head: head.head }),
   );
   return digest;
 }
@@ -109,9 +97,7 @@ export async function worldWithRelease(release: Release) {
   }
 }
 export async function setGate(world: NativeConformanceWorld, gate: string, open: boolean) {
-  await json(
-    await write(world, 'steward', 'POST', `/v1/platform/exposure/${gate}:${open ? 'open' : 'close'}`),
-  );
+  await json(await write(world, 'steward', 'POST', `/v1/platform/exposure/${gate}:${open ? 'open' : 'close'}`));
 }
 export async function setEntry(
   world: NativeConformanceWorld,
@@ -119,10 +105,7 @@ export async function setEntry(
   subjectId: string,
   state: string | null,
 ) {
-  const existing = await world.native.request(persona, {
-    method: 'GET',
-    path: `/v1/libraryEntries/${subjectId}`,
-  });
+  const existing = await world.native.request(persona, { method: 'GET', path: `/v1/libraryEntries/${subjectId}` });
   if (existing.status !== 200 && existing.status !== 404) return existing;
   const guard =
     existing.status === 200
@@ -149,9 +132,7 @@ export async function addLabel(world: NativeConformanceWorld, subjectId: string,
     await write(world, 'owner', 'POST', '/v1/libraryLabels', { name }),
     201,
   );
-  return write(world, 'owner', 'POST', `/v1/libraryLabels/${label.id}:assign`, {
-    subjectId,
-  });
+  return write(world, 'owner', 'POST', `/v1/libraryLabels/${label.id}:assign`, { subjectId });
 }
 /** Preserve the original Response interface, carrying Accounts' committed T receipt. */
 export async function deleteAccount(
@@ -173,10 +154,7 @@ export async function grantSubjectRead(
   viewer: 'owner' | 'other',
   readable: boolean,
 ) {
-  const resource = {
-    route: (await import('../../../src/route/route.ts')).routeOf(subjectId),
-    id: subjectId,
-  };
+  const resource = { route: (await import('../../../src/route/route.ts')).routeOf(subjectId), id: subjectId };
   await json(
     await write(world, 'steward', 'POST', `/v1/grants${readable ? '' : ':revoke'}`, {
       resource,

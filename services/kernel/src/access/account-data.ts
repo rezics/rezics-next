@@ -86,10 +86,7 @@ export async function readPublicAccountByHandle(
   if (!claim) return [];
   const forwards = claim.formerUntil !== null && Date.parse(claim.formerUntil) > at.getTime();
   if (claim.state !== 'active' && !forwards) return [];
-  const row = await publicRead.run(client, {
-    route: routeOf(claim.accountId)!,
-    account_id: claim.accountId,
-  });
+  const row = await publicRead.run(client, { route: routeOf(claim.accountId)!, account_id: claim.accountId });
   if (!row || row.state === 'pending' || row.state === 'deleted') return [];
   if (forwards && (row.state !== 'active' || row.handle === null || row.handle === handle)) return [];
   return publicIdentityForAccount(client, row, forwards ? row.handle! : undefined);
@@ -158,10 +155,7 @@ async function publicIdentityForAccount(
       import('../semantic/subject.ts'),
       import('../semantic/link-keys.ts'),
     ]);
-    const [labels, types] = await Promise.all([
-      readLabels(client, [subjectId]),
-      readItemTypes(client, [subjectId]),
-    ]);
+    const [labels, types] = await Promise.all([readLabels(client, [subjectId]), readItemTypes(client, [subjectId])]);
     const labelSet = labels.get(subjectId);
     const type = types.get(subjectId);
     const label = labelSet ? subjectLabel(labelSet) : '';

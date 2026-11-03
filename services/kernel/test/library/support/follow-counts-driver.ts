@@ -63,10 +63,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
       }
       throw new Error('Native Follow growth exhausted distinct fixture partition placements');
     };
-    const steward: Principal = {
-      accountId: world.native.steward.id,
-      credential: world.native.token('steward'),
-    };
+    const steward: Principal = { accountId: world.native.steward.id, credential: world.native.token('steward') };
     const request: FollowCountsDriver['request'] = (credential, path, init) =>
       world.native.bearerRequest(credential, path, init);
     const write = (as: Principal, method: string, path: string, body?: unknown) =>
@@ -113,10 +110,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
       }
     }
     async function inspectRows(relation: string, sql: string, args: unknown[]) {
-      return (await reader.query(sql, args)).rows.map((row) => ({
-        relation,
-        row,
-      }));
+      return (await reader.query(sql, args)).rows.map((row) => ({ relation, row }));
     }
     const driver: NativeFollowCountsDriver = {
       world,
@@ -139,10 +133,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
         let revoke: { path: string; body: unknown } | undefined;
         if (kind === 'collection') {
           target = await collection(manager);
-          const resource = {
-            route: route(target.targetId),
-            id: target.targetId,
-          };
+          const resource = { route: route(target.targetId), id: target.targetId };
           const body = {
             resource,
             subject: { kind: 'account', id: granted.accountId },
@@ -209,10 +200,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           staff: steward,
           noScope,
           suspended,
-          unknown: {
-            targetType: target.targetType,
-            targetId: newId(route(target.targetId)),
-          },
+          unknown: { targetType: target.targetType, targetId: newId(route(target.targetId)) },
         };
         fixtures.push(fixture);
         if (revoke) revocations.set(fixture, revoke);
@@ -229,12 +217,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           return;
         }
         await json(
-          await write(
-            steward,
-            'POST',
-            `/v1/accounts/${accountId}:${state === 'active' ? 'reinstate' : 'suspend'}`,
-            {},
-          ),
+          await write(steward, 'POST', `/v1/accounts/${accountId}:${state === 'active' ? 'reinstate' : 'suspend'}`, {}),
         );
       },
       reauthenticate: (as) => world.native.reauthenticate(as.accountId),
@@ -245,12 +228,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
         return target;
       },
       async libraryFollow(as, target) {
-        await json(
-          await write(as, 'PUT', `/v1/libraryEntries/${target.targetId}`, {
-            state: 'in_progress',
-          }),
-          201,
-        );
+        await json(await write(as, 'PUT', `/v1/libraryEntries/${target.targetId}`, { state: 'in_progress' }), 201);
       },
       async capture(as, target) {
         await world.native.hold();
@@ -295,9 +273,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
             )
           ).rows[0];
           if (!admitted) throw new Error('Native Library terminal effect admission is absent');
-          await client.resumeWorkflow(admitted.workflow_id, {
-            queueName: 'effects',
-          });
+          await client.resumeWorkflow(admitted.workflow_id, { queueName: 'effects' });
           await client.retrieveWorkflow(admitted.workflow_id).getResult();
         } finally {
           await world.native.hold();
@@ -333,11 +309,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
               pages += stats.pages;
             }
             if (!('continuation' in result) || result.continuation === null)
-              return {
-                pages,
-                maxRows: await observedMaxPage(accountId),
-                complete: false,
-              };
+              return { pages, maxRows: await observedMaxPage(accountId), complete: false };
             const next = result.continuation;
             if (typeof next !== 'object' || !('segment' in next) || typeof next.segment !== 'number')
               throw new Error('Invalid Library continuation');
@@ -434,11 +406,7 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
                 ? `/v1/spaces/${fixture.target.targetId}`
                 : `/v1/subjects/${fixture.target.targetId}`;
           const response = await request(null, path);
-          responses.push({
-            path,
-            status: response.status,
-            body: await response.json(),
-          });
+          responses.push({ path, status: response.status, body: await response.json() });
         }
         const artifacts: { surface: string; value: unknown }[] = [{ surface: 'responses', value: responses }];
         for (const [surface, pattern] of [
@@ -478,18 +446,11 @@ export async function createFollowCountsDriver(): Promise<NativeFollowCountsDriv
           let publicResponse: unknown;
           if (surface === 'sitemaps') {
             const response = await request(null, '/v1/sitemap/collections');
-            publicResponse = {
-              status: response.status,
-              body: await response.json(),
-            };
+            publicResponse = { status: response.status, body: await response.json() };
           }
           artifacts.push({
             surface,
-            value: {
-              rows,
-              events,
-              ...(publicResponse === undefined ? {} : { response: publicResponse }),
-            },
+            value: { rows, events, ...(publicResponse === undefined ? {} : { response: publicResponse }) },
           });
         }
         return artifacts;
