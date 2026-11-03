@@ -57,7 +57,8 @@ export function editorialSettingsInput(input: unknown): { digest?: string; sessi
 }
 
 export function asEditorialSettingsFailure(read: SettingsRead): EditorialFailure | null {
-  if (read.kind === 'denied') return { ok: false, reason: 'denied', ...(read.session ? { session: read.session } : {}) };
+  if (read.kind === 'denied')
+    return { ok: false, reason: 'denied', ...(read.session ? { session: read.session } : {}) };
   if (read.kind === 'unavailable')
     return { ok: false, reason: 'unavailable', ...(read.session ? { session: read.session } : {}) };
   return null;
@@ -67,9 +68,7 @@ export function reviewedCreateBody(
   labels: Record<string, string>,
   preview: SettingsPreview,
 ): { labels: Record<string, string>; settings?: string } {
-  return preview.settings && settingsId(preview.settings)
-    ? { labels, settings: preview.settings }
-    : { labels };
+  return preview.settings && settingsId(preview.settings) ? { labels, settings: preview.settings } : { labels };
 }
 
 export function previewChanged(previous: SettingsPreview, next: SettingsPreview): boolean {

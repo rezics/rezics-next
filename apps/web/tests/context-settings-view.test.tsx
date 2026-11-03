@@ -86,7 +86,9 @@ async function until(predicate: () => boolean) {
   expect(predicate()).toBe(true);
 }
 function button(host: ParentNode, label: string) {
-  const result = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === label);
+  const result = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (node) => node.textContent?.trim() === label,
+  );
   if (!result) throw new Error(`Missing button: ${label}`);
   return result;
 }
@@ -152,7 +154,9 @@ test('both surfaces review multilingual labels, post the selected settings ID an
     const second = rows[1]!.querySelector('select') as HTMLSelectElement;
     await act(async () => userEvent.selectOptions(second, 'ja'));
     await act(async () => userEvent.type(rows[1]!.querySelector('input') as HTMLInputElement, '机'));
-    await act(async () => userEvent.click(panel.host.querySelector('input[value="suppress-readers"]') as HTMLInputElement));
+    await act(async () =>
+      userEvent.click(panel.host.querySelector('input[value="suppress-readers"]') as HTMLInputElement),
+    );
     expect(panel.host.textContent).toContain(m.ctxw_review_creation({}, o));
     expect(panel.host.textContent).toContain('Desk');
     expect(panel.host.textContent).toContain('机');
@@ -207,8 +211,12 @@ test('both surfaces review multilingual labels, post the selected settings ID an
   );
   try {
     await until(() => !!catalogue.host.querySelector('input[value="inherit-readers"]'));
-    await act(async () => userEvent.type(catalogue.host.querySelector('input[id$="-text"]') as HTMLInputElement, 'Shelf'));
-    await act(async () => userEvent.click(catalogue.host.querySelector('input[value="inherit-readers"]') as HTMLInputElement));
+    await act(async () =>
+      userEvent.type(catalogue.host.querySelector('input[id$="-text"]') as HTMLInputElement, 'Shelf'),
+    );
+    await act(async () =>
+      userEvent.click(catalogue.host.querySelector('input[value="inherit-readers"]') as HTMLInputElement),
+    );
     await act(async () => userEvent.click(button(catalogue.host, m.editorial_create({}, o))));
     await until(() => sent.length === 1);
     expect(sent[0]).toMatchObject({ operation: 'create', labels: { en: 'Shelf' }, settings: 'inherit-readers' });
@@ -244,7 +252,9 @@ test('acknowledged create shows the returned policy when it differs from the rev
   try {
     await until(() => !!panel.host.querySelector('input[value="suppress-readers"]'));
     await act(async () => userEvent.type(panel.host.querySelector('input[id$="-text"]') as HTMLInputElement, 'Race'));
-    await act(async () => userEvent.click(panel.host.querySelector('input[value="suppress-readers"]') as HTMLInputElement));
+    await act(async () =>
+      userEvent.click(panel.host.querySelector('input[value="suppress-readers"]') as HTMLInputElement),
+    );
     await act(async () => userEvent.click(button(panel.host, m.ctxw_create({}, o))));
     await until(() => (panel.host.textContent ?? '').includes(m.ctxw_captured_mismatch({}, o)));
     expect(panel.host.textContent).toContain('inherit-readers');

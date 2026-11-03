@@ -55,10 +55,7 @@ export function settingsId(value: unknown): value is string {
 export function parseSettingsSnapshot(digest: string, release: unknown): SettingsSnapshot | null {
   if (typeof digest !== 'string' || !digest || digest.length > 256 || !record(release)) return null;
   const source = record(release.contexts) ? release.contexts : {};
-  const ids = Object.keys(source)
-    .filter(settingsId)
-    .sort()
-    .slice(0, SETTINGS_CAP);
+  const ids = Object.keys(source).filter(settingsId).sort().slice(0, SETTINGS_CAP);
   const contexts: Record<string, SettingsChoice> = {};
   const needed = new Set<string>();
   for (const id of ids) {
@@ -79,8 +76,7 @@ export function parseSettingsSnapshot(digest: string, release: unknown): Setting
   const released = record(release.properties) ? release.properties : {};
   for (const property of needed) {
     const definition = released[property];
-    properties[property] =
-      record(definition) && textMap(definition.labels) ? { ...definition.labels } : {};
+    properties[property] = record(definition) && textMap(definition.labels) ? { ...definition.labels } : {};
   }
   return {
     digest,
@@ -141,7 +137,11 @@ export function policyPreview(snapshot: SettingsSnapshot, id: string | null): Se
 }
 
 function defaultsKey(defaults: Readonly<Record<string, DefaultMode>>): string {
-  return JSON.stringify(Object.keys(defaults).sort().map((property) => [property, defaults[property]]));
+  return JSON.stringify(
+    Object.keys(defaults)
+      .sort()
+      .map((property) => [property, defaults[property]]),
+  );
 }
 
 export function policyFingerprint(preview: SettingsPreview): string {
@@ -171,10 +171,7 @@ export function labelsFromRows(rows: readonly LabelRow[]): Record<string, string
   return labels;
 }
 
-export function labelRowIssue(
-  rows: readonly LabelRow[],
-  row: LabelRow,
-): 'language' | 'text' | 'duplicate' | null {
+export function labelRowIssue(rows: readonly LabelRow[], row: LabelRow): 'language' | 'text' | 'duplicate' | null {
   const language = row.language.trim();
   const text = row.text.trim();
   if (!language) return 'language';

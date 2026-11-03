@@ -96,18 +96,25 @@ describe('Released editorial settings inventory and sealed Context creation', ()
     const page = pageSettings(filtered, 0);
     expect(page.items.length).toBeLessThanOrEqual(SETTINGS_PAGE);
     expect(page.previous).toBeNull();
-    const later = pageSettings(snapshot.ids.map((id) => snapshot.contexts[id]!), SETTINGS_PAGE);
+    const later = pageSettings(
+      snapshot.ids.map((id) => snapshot.contexts[id]!),
+      SETTINGS_PAGE,
+    );
     expect(later.previous).toBe(0);
     const inherit = policyPreview(snapshot, 'inherit-readers');
     const suppress = policyPreview(snapshot, 'suppress-readers');
     expect(inherit.defaults).toEqual({ 'schema:url': 'inherit' });
     expect(suppress.defaults).toEqual({ 'schema:url': 'suppress' });
     expect(policyFingerprint(inherit)).not.toBe(policyFingerprint(suppress));
-    expect(capturedMatches(inherit, { settings: { id: 'inherit-readers', release: digest }, defaults: inherit.defaults })).toBe(
+    expect(
+      capturedMatches(inherit, { settings: { id: 'inherit-readers', release: digest }, defaults: inherit.defaults }),
+    ).toBe(true);
+    expect(capturedMatches({ settings: null, release: digest, defaults: {} }, { settings: null, defaults: {} })).toBe(
       true,
     );
-    expect(capturedMatches({ settings: null, release: digest, defaults: {} }, { settings: null, defaults: {} })).toBe(true);
-    expect(parseSettingsSnapshot(digest, { contexts: { 'Bad': { labels: { en: 'x' }, defaults: {} } } })!.ids).toEqual([]);
+    expect(parseSettingsSnapshot(digest, { contexts: { Bad: { labels: { en: 'x' }, defaults: {} } } })!.ids).toEqual(
+      [],
+    );
     const unlabelled = parseSettingsSnapshot(digest, {
       contexts: { quiet: { labels: { en: 'Quiet' }, defaults: { 'schema:url': 'suppress' } } },
       properties: {},

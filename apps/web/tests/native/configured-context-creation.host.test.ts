@@ -193,7 +193,10 @@ test('both Web creation callers capture a reviewed released policy and keep nati
                 references: [
                   {
                     parts: [
-                      { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/source' } },
+                      {
+                        property: { id: 'schema:url' },
+                        value: { type: 'value', content: 'https://example.org/source' },
+                      },
                     ],
                   },
                 ],
@@ -254,11 +257,7 @@ test('both Web creation callers capture a reviewed released policy and keep nati
 
   const later = await activateSettings({ 'schema:url': 'suppress' }, { 'schema:url': 'inherit' });
   expect(later).not.toBe(first);
-  const persisted = await json<ContextBody>(
-    await stack.kernel(`/v1/contexts/${personalId}`),
-    'persisted capture',
-    200,
-  );
+  const persisted = await json<ContextBody>(await stack.kernel(`/v1/contexts/${personalId}`), 'persisted capture', 200);
   expect(persisted.context.settings).toEqual({ id: 'suppress-readers', release: first });
   expect(persisted.context.defaults).toEqual({ 'schema:url': 'suppress' });
 

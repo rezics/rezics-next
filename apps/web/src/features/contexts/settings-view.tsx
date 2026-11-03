@@ -302,10 +302,14 @@ export function SettingsDefaultsList({
         const caption = propertyCaption(snapshot, property, locale);
         return (
           <div key={property} className="min-w-0 space-y-1 rounded-lg border border-border p-3">
-            <dt className="font-medium">{caption.missing ? m.ctx_reader_rule({ number: index + 1 }, o) : caption.text}</dt>
+            <dt className="font-medium">
+              {caption.missing ? m.ctx_reader_rule({ number: index + 1 }, o) : caption.text}
+            </dt>
             <dd className="space-y-1">
               <p>{mode === 'suppress' ? m.ctxw_suppress({}, o) : m.ctxw_inherit({}, o)}</p>
-              {caption.missing ? <p className="text-sm text-muted-foreground">{m.ctxw_property_unlabelled({}, o)}</p> : null}
+              {caption.missing ? (
+                <p className="text-sm text-muted-foreground">{m.ctxw_property_unlabelled({}, o)}</p>
+              ) : null}
               <details className="min-w-0 text-sm">
                 <summary className={summaryClassName}>{m.ctx_reader_rule_reference({ number: index + 1 }, o)}</summary>
                 <dl className="space-y-1 pb-2">

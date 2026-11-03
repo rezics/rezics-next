@@ -49,19 +49,13 @@ export function contextFixture(scenario: Scenario = 'directory') {
   const id = scenario === 'global' ? PAGE_GLOBAL_CONTEXT : fixtureId;
   const calls: Call[] = [];
   const writes = new Map<string, unknown>();
-  let createdPolicy:
-    | { settings: ContextDto['settings']; defaults: ContextDto['defaults'] }
-    | undefined;
+  let createdPolicy: { settings: ContextDto['settings']; defaults: ContextDto['defaults'] } | undefined;
   const dto = (): ContextDto => ({
     id,
     kind: scenario === 'global' ? 'global' : 'community',
     labels: { ...labels },
-    settings: createdPolicy
-      ? createdPolicy.settings
-      : { id: 'editorial', release: 'released-settings-digest' },
-    defaults: createdPolicy
-      ? createdPolicy.defaults
-      : { 'core:description': 'inherit', 'core:rating': 'suppress' },
+    settings: createdPolicy ? createdPolicy.settings : { id: 'editorial', release: 'released-settings-digest' },
+    defaults: createdPolicy ? createdPolicy.defaults : { 'core:description': 'inherit', 'core:rating': 'suppress' },
   });
   const entry = (): ContextDirectoryEntry => ({
     id,

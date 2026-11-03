@@ -393,8 +393,7 @@ export function ContextCreateView({
   const intent = useContextIntent(submit, reload);
   const locked = intent.busy || !!intent.pending;
   const created = intent.result?.kind === 'confirmed' ? intent.result : null;
-  const createdContext =
-    created?.created ?? (created?.current.kind === 'ready' ? created.current.value.context : null);
+  const createdContext = created?.created ?? (created?.current.kind === 'ready' ? created.current.value.context : null);
   const snapshot = inventory?.kind === 'ready' ? inventory.snapshot : null;
   const capturedLabels =
     createdContext?.settings &&
@@ -405,9 +404,7 @@ export function ContextCreateView({
           ? 'ready'
           : captured.kind
         : null);
-  const review = snapshot
-    ? policyPreview(snapshot, selected)
-    : { settings: selected, release: '', defaults: {} };
+  const review = snapshot ? policyPreview(snapshot, selected) : { settings: selected, release: '', defaults: {} };
   useEffect(() => {
     if (settings) setInventory(settings);
   }, [settings]);
@@ -456,7 +453,11 @@ export function ContextCreateView({
         preview.current = next;
       } else {
         if (latest) setInventory(latest);
-        preview.current = { settings: selected, release: snapshot?.digest ?? '', defaults: snapshot?.contexts[selected]?.defaults ?? {} };
+        preview.current = {
+          settings: selected,
+          release: snapshot?.digest ?? '',
+          defaults: snapshot?.contexts[selected]?.defaults ?? {},
+        };
       }
     } else {
       preview.current = review;
