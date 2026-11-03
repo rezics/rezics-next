@@ -217,12 +217,7 @@ function readCursor(
   dependencies: SourceObservationReadDependencies,
   binding: CursorBinding,
 ): DecodedCursor {
-  const decoded = decodeCursor(
-    dependencies.tokens,
-    binding,
-    value,
-    (dependencies.clock?.() ?? new Date()).getTime(),
-  );
+  const decoded = decodeCursor(dependencies.tokens, binding, value, (dependencies.clock?.() ?? new Date()).getTime());
   if (!decoded.ok || decoded.after.length !== 6 || decoded.after.some((part) => typeof part !== 'string'))
     return invalidCursor();
   const [format, kind, order, digest, nativeCeiling, legacyCeiling] = decoded.after as string[];
@@ -241,9 +236,7 @@ function readCursor(
         normalizedNativeCeiling === null ||
         BigInt(normalizedOrder) > BigInt(normalizedNativeCeiling))) ||
     (kind === 'legacy' &&
-      (normalizedOrder !== null ||
-        normalizedLegacyCeiling === null ||
-        digest! > normalizedLegacyCeiling))
+      (normalizedOrder !== null || normalizedLegacyCeiling === null || digest! > normalizedLegacyCeiling))
   )
     return invalidCursor();
   return {
@@ -553,13 +546,8 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       throw new ProblemError('invalid_request');
     const source = input.source as SourceProvider;
     const historyBinding =
-      input.cursor !== undefined || input.history
-        ? historyCursorBinding(input, route, source)
-        : null;
-    const cursor =
-      input.cursor === undefined
-        ? null
-        : readCursor(input.cursor, dependencies, historyBinding!);
+      input.cursor !== undefined || input.history ? historyCursorBinding(input, route, source) : null;
+    const cursor = input.cursor === undefined ? null : readCursor(input.cursor, dependencies, historyBinding!);
     const initial = await metadataFor(input, source, route, cursor?.boundary ?? null);
     const currentMeta = initial.current;
     // Current and exact observations are required resources. History positions are
@@ -583,7 +571,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     for (const tuple of tupleList)
       before.set(tupleKey(tuple), await readFenceSnapshot(dependencies, tuple, input.deadline));
     const expectedHome = partitionOf(route);
-    const firstSnapshot = tupleList.length > 0 ? before.get(tupleKey(tupleList[0]!)) ?? null : null;
+    const firstSnapshot = tupleList.length > 0 ? (before.get(tupleKey(tupleList[0]!)) ?? null) : null;
     if (!firstSnapshot && cursor) throw new ProblemError('conflict');
     if (firstSnapshot) {
       if (firstSnapshot.home !== expectedHome) throw new ProblemError('partition_unavailable');

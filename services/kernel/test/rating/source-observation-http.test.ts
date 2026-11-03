@@ -145,9 +145,7 @@ test('history cursors use native caller, home, epoch, expiry and page bindings',
   if (!decoded.ok) throw new Error('Generated history cursor did not decode');
   expect(decoded.epoch).toBeGreaterThan(0);
 
-  await expectInvalidCursor(
-    await inspect(id, `?cursor=${encodeURIComponent(cursor)}`, fixture.actors.secondImporter),
-  );
+  await expectInvalidCursor(await inspect(id, `?cursor=${encodeURIComponent(cursor)}`, fixture.actors.secondImporter));
   const parameters = binding.parameters;
   const wrongHome = encodeCursor(
     fixture.tokens,
@@ -161,18 +159,9 @@ test('history cursors use native caller, home, epoch, expiry and page bindings',
     decoded,
   );
   await expectInvalidCursor(await inspect(id, `?cursor=${encodeURIComponent(wrongAuthnEpoch)}`));
-  const wrongNativeEpoch = encodeCursor(
-    fixture.tokens,
-    binding,
-    { epoch: decoded.epoch + 1, after: decoded.after },
-  );
+  const wrongNativeEpoch = encodeCursor(fixture.tokens, binding, { epoch: decoded.epoch + 1, after: decoded.after });
   await expectInvalidCursor(await inspect(id, `?cursor=${encodeURIComponent(wrongNativeEpoch)}`));
-  const expired = encodeCursor(
-    fixture.tokens,
-    binding,
-    decoded,
-    Date.now() - 15 * 60_000 - 1_000,
-  );
+  const expired = encodeCursor(fixture.tokens, binding, decoded, Date.now() - 15 * 60_000 - 1_000);
   await expectInvalidCursor(await inspect(id, `?cursor=${encodeURIComponent(expired)}`));
 });
 
