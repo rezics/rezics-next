@@ -619,8 +619,8 @@ test(
         });
         if (prepared)
           await assertCollectedBatch({
-            system,
-            database,
+            system: system!,
+            database: database!,
             store,
             partition: thread.partition,
             targets: prepared,
