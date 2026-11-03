@@ -896,97 +896,97 @@ export function StatementFields({
     <>
       {!referencesOnly && (
         <>
-      <section {...section('fact')} className={sectionClassName}>
-        <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
-          <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
-            {creation ? m.correction_value({}, o) : m.correction_replacement({}, o)}
-          </ContentItemHeading>
-          <p className="min-w-0 font-medium">
-            {pageText(definition?.labels, locale).text || m.subject_value_unlabelled({}, o)}
-          </p>
-          <DefinitionGuideLink
-            locale={locale}
-            field
-            address={{
-              type: current.public.subject.type,
-              property: draft.property.id,
-              release: current.source?.rezics.release,
-              returnTo: guideReturn,
-            }}
-          />
-          <p className="text-sm text-muted-foreground">
-            <DefinitionMeaning values={definition?.descriptions} locale={locale} />
-          </p>
-          {valueControl ?? (
-            <ScalarControl
-              part={draft}
-              feedback={scalarFeedback('fact')}
-              definition={definition}
+          <section {...section('fact')} className={sectionClassName}>
+            <ContentItemFrame as="div" className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
+              <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
+                {creation ? m.correction_value({}, o) : m.correction_replacement({}, o)}
+              </ContentItemHeading>
+              <p className="min-w-0 font-medium">
+                {pageText(definition?.labels, locale).text || m.subject_value_unlabelled({}, o)}
+              </p>
+              <DefinitionGuideLink
+                locale={locale}
+                field
+                address={{
+                  type: current.public.subject.type,
+                  property: draft.property.id,
+                  release: current.source?.rezics.release,
+                  returnTo: guideReturn,
+                }}
+              />
+              <p className="text-sm text-muted-foreground">
+                <DefinitionMeaning values={definition?.descriptions} locale={locale} />
+              </p>
+              {valueControl ?? (
+                <ScalarControl
+                  part={draft}
+                  feedback={scalarFeedback('fact')}
+                  definition={definition}
+                  read={current}
+                  locale={locale}
+                  onChange={(value) => change({ ...draft, value })}
+                />
+              )}
+              <p className="text-sm text-muted-foreground">
+                {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
+              </p>
+            </ContentItemFrame>
+          </section>
+          <section {...section('qualifiers')} className={sectionClassName}>
+            <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
+              {m.correction_qualifiers({}, o)}
+            </ContentItemHeading>
+            {(draft.qualifiers ?? []).map((part, index) => (
+              <PartEditor
+                localKey={identity(part).key}
+                control={partControl}
+                feedback={scalarFeedback(`qualifier-${index}`, part)}
+                key={identity(part).key}
+                part={part}
+                read={current}
+                locale={locale}
+                removal={
+                  identity(part).added && (
+                    <>
+                      <Button
+                        className={actionClassName}
+                        type="button"
+                        variant="ghost"
+                        onClick={(event) => remove(event.currentTarget, part, 'qualifier')}
+                      >
+                        {m.correction_remove_qualifier({}, o)}
+                      </Button>
+                      {choice(identity(part).key, 'qualifier')}
+                    </>
+                  )
+                }
+                onChange={(value) =>
+                  change({
+                    ...draft,
+                    qualifiers: draft.qualifiers!.map((item, i) =>
+                      i === index ? revision(item, { ...item, value }) : item,
+                    ),
+                  })
+                }
+              />
+            ))}
+            <AddPart
+              allowItems={!!partControl}
+              ids={definition?.qualifiers ?? []}
               read={current}
               locale={locale}
-              onChange={(value) => change({ ...draft, value })}
+              label={m.correction_add_qualifier({}, o)}
+              onAdd={(id, event) =>
+                change({
+                  ...draft,
+                  qualifiers: [
+                    ...(draft.qualifiers ?? []),
+                    addition({ property: { id }, value: { type: 'value', content: '' } }, event),
+                  ],
+                })
+              }
             />
-          )}
-          <p className="text-sm text-muted-foreground">
-            {definition?.multivalued ? m.correction_multiple({}, o) : m.correction_single({}, o)}
-          </p>
-        </ContentItemFrame>
-      </section>
-      <section {...section('qualifiers')} className={sectionClassName}>
-        <ContentItemHeading level={Heading === 'h4' ? 4 : 2} className={headingClassName}>
-          {m.correction_qualifiers({}, o)}
-        </ContentItemHeading>
-        {(draft.qualifiers ?? []).map((part, index) => (
-          <PartEditor
-            localKey={identity(part).key}
-            control={partControl}
-            feedback={scalarFeedback(`qualifier-${index}`, part)}
-            key={identity(part).key}
-            part={part}
-            read={current}
-            locale={locale}
-            removal={
-              identity(part).added && (
-                <>
-                  <Button
-                    className={actionClassName}
-                    type="button"
-                    variant="ghost"
-                    onClick={(event) => remove(event.currentTarget, part, 'qualifier')}
-                  >
-                    {m.correction_remove_qualifier({}, o)}
-                  </Button>
-                  {choice(identity(part).key, 'qualifier')}
-                </>
-              )
-            }
-            onChange={(value) =>
-              change({
-                ...draft,
-                qualifiers: draft.qualifiers!.map((item, i) =>
-                  i === index ? revision(item, { ...item, value }) : item,
-                ),
-              })
-            }
-          />
-        ))}
-        <AddPart
-          allowItems={!!partControl}
-          ids={definition?.qualifiers ?? []}
-          read={current}
-          locale={locale}
-          label={m.correction_add_qualifier({}, o)}
-          onAdd={(id, event) =>
-            change({
-              ...draft,
-              qualifiers: [
-                ...(draft.qualifiers ?? []),
-                addition({ property: { id }, value: { type: 'value', content: '' } }, event),
-              ],
-            })
-          }
-        />
-      </section>
+          </section>
         </>
       )}
       <section {...section('references')} className={`${sectionClassName} space-y-4`}>

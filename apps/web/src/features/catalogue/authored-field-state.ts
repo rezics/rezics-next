@@ -29,9 +29,7 @@ const blank = (): AuthoredDraft => ({
   language: '',
   licence: '',
   // Preserve the existing URL citation affordance as the first ordinary reference part.
-  references: [
-    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }] },
-  ],
+  references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: '' } }] }],
   original: false,
 });
 

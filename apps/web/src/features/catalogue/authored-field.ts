@@ -91,8 +91,7 @@ export function authoredDocumentErrors(document: unknown): Violation['code'][] {
   const errors: Violation['code'][] = [];
   if (!valid || !hasDocumentContent(document)) errors.push('invalid_format');
   if (valid) {
-    if (new TextEncoder().encode(serializeDocument(document)).byteLength > 2 * 1024 * 1024)
-      errors.push('out_of_range');
+    if (new TextEncoder().encode(serializeDocument(document)).byteLength > 2 * 1024 * 1024) errors.push('out_of_range');
     const pending = [document.doc];
     while (pending.length) {
       const node = pending.pop()!;

@@ -34,7 +34,12 @@ import {
   StatementViolationLinks,
   type StatementFieldsRead,
 } from './statement-editor-view';
-import { authoredDraftHasContent, authoredState, initialAuthoredState, type AuthoredDraft } from './authored-field-state';
+import {
+  authoredDraftHasContent,
+  authoredState,
+  initialAuthoredState,
+  type AuthoredDraft,
+} from './authored-field-state';
 import { AuthoredFieldNavigation } from './authored-field-navigation';
 import {
   authoredProperties,
@@ -144,10 +149,12 @@ function DraftReviewCard({
   heading: string;
 }) {
   const o = { locale: locale as never };
-  const content = (prepared.statement.value as {
-    type: 'value';
-    content: { document: AuthoredDraft['document']; language: string; licence: string };
-  }).content;
+  const content = (
+    prepared.statement.value as {
+      type: 'value';
+      content: { document: AuthoredDraft['document']; language: string; licence: string };
+    }
+  ).content;
   const documentError = authoredDocumentError(content.document);
   const property = current.release.properties[prepared.property];
   const read: StatementFieldsRead = {
@@ -189,7 +196,9 @@ function DraftReviewCard({
           <ol className="min-w-0 space-y-3">
             {prepared.statement.references.map((reference, referenceIndex) => (
               <li key={referenceIndex} className="min-w-0 border-s-2 border-border ps-3">
-                <p className="text-sm font-medium">{m.correction_references({}, o)} {referenceIndex + 1}</p>
+                <p className="text-sm font-medium">
+                  {m.correction_references({}, o)} {referenceIndex + 1}
+                </p>
                 {reference.parts.length ? (
                   <ol className="min-w-0 space-y-2">
                     {reference.parts.map((part, partIndex) => (
@@ -527,10 +536,7 @@ function AuthoredFieldLive({
       keyboard: keyboard && discardButton.current?.ownerDocument.activeElement === discardButton.current,
     };
     discardQuestion.current = question;
-    if (
-      authoredDraftHasContent(draft)
-    )
-      setDiscarding(question);
+    if (authoredDraftHasContent(draft)) setDiscarding(question);
     else discard(question, keyboard);
   }
 
@@ -721,7 +727,7 @@ function AuthoredFieldLive({
         : error.pointer.includes('/licence')
           ? 'licence'
           : error.pointer.includes('/references')
-          ? 'evidence'
+            ? 'evidence'
             : 'document';
   const labels = {
     original: m.authored_original({}, o),
@@ -730,18 +736,19 @@ function AuthoredFieldLive({
     evidence: m.authored_evidence({}, o),
     document: m.authored_text({}, o),
   };
-  const statementDraft: StatementInput | undefined = current && property && draft
-    ? {
-        property: { id: property },
-        value: {
-          type: 'value',
-          content: { document: draft.document, language: draft.language, licence: draft.licence },
-        },
-        references: draft.references,
-        qualifiers: [],
-        rank: 'normal',
-      }
-    : undefined;
+  const statementDraft: StatementInput | undefined =
+    current && property && draft
+      ? {
+          property: { id: property },
+          value: {
+            type: 'value',
+            content: { document: draft.document, language: draft.language, licence: draft.licence },
+          },
+          references: draft.references,
+          qualifiers: [],
+          rank: 'normal',
+        }
+      : undefined;
   const fieldsRead: StatementFieldsRead | undefined = current
     ? {
         release: current.release,
@@ -1215,7 +1222,9 @@ function AuthoredFieldLive({
           )}
           {prepared && current && stage === 'preview' && (
             <section aria-label={m.authored_preview_step({}, o)} className="min-w-0 space-y-4">
-              <ContentItemHeading className="text-xl font-semibold">{m.authored_preview_step({}, o)}</ContentItemHeading>
+              <ContentItemHeading className="text-xl font-semibold">
+                {m.authored_preview_step({}, o)}
+              </ContentItemHeading>
               <div className="grid min-w-0 gap-4 lg:grid-cols-2">
                 <DraftReviewCard
                   prepared={prepared}
@@ -1273,7 +1282,9 @@ function AuthoredFieldLive({
                 </Button>
                 {!proposed && (
                   <Button type="button" className={actionClassName} disabled={locked} onClick={() => void submit()}>
-                    {command && failure === 'unavailable' ? m.correction_retry({}, o) : m.authored_submit_contribution({}, o)}
+                    {command && failure === 'unavailable'
+                      ? m.correction_retry({}, o)
+                      : m.authored_submit_contribution({}, o)}
                   </Button>
                 )}
               </div>
