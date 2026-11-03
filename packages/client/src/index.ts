@@ -3,6 +3,7 @@ import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
+import type { ModerationDecisionPage } from './kernel/content/decision-page.ts';
 import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
 import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
@@ -85,6 +86,15 @@ type ClientApp = Elysia<
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
 type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
+type DecisionPagePath = ReturnType<GeneratedKernelClient['moderation-decisions']>;
+type DecisionPageGet = DecisionPagePath['get'];
+type DecisionPageRead = Awaited<ReturnType<DecisionPageGet>>;
+type DecisionPageReadResult = Omit<DecisionPageRead, 'data'> & { data: ModerationDecisionPage | null };
+type DecisionPageEndpoints = Omit<DecisionPagePath, 'get'> & {
+  get(...args: Parameters<DecisionPageGet>): Promise<DecisionPageReadResult>;
+};
+type DecisionPages = Omit<GeneratedKernelClient['moderation-decisions'], keyof Function> &
+  ((...args: Parameters<GeneratedKernelClient['moderation-decisions']>) => DecisionPageEndpoints);
 type PersonalEntryCall<T> = Promise<{
   data: T | null;
   error: unknown;
@@ -165,11 +175,21 @@ type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
 type SubjectPath = ReturnType<SubjectsClient>;
 type SourceClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
 
-export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries' | 'libraryExports'> & {
+export type KernelClient = Omit<
+  GeneratedKernelClient,
+  'subjects' | 'libraryEntries' | 'libraryExports' | 'moderation-decisions'
+> & {
   libraryEntries: PersonalLibraryEntries;
   libraryExports: LibraryExportsClient;
   subjects: KernelSubjectsClient;
+  'moderation-decisions': DecisionPages;
 };
+export type {
+  DecisionPageAppeal,
+  DecisionPageAppealAdvice,
+  DecisionPageTargetContext,
+  ModerationDecisionPage,
+} from './kernel/content/decision-page.ts';
 type NoticeInboxClient = ReturnType<KernelClient['accounts']>['notifications'];
 type NoticeInboxRead = Awaited<ReturnType<NoticeInboxClient['get']>>;
 type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;

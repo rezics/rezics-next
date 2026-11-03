@@ -100,10 +100,22 @@ test('an exact private read retires across appeal creation and resolution, then 
   expect((await fixture.call('GET', path, { bearer: fixture.other.bearer })).response.status).toBe(404);
   let appealId = '';
   await changeDuringRead(path, fixture.moderator.bearer, async () => {
-    const appeal = await fixture.command<{ id: string }>('POST', `${path}:appeal`, {
-      statement: 'Please reconsider',
+    const key = crypto.randomUUID();
+    const body = { statement: 'Please reconsider' };
+    const appeal = await fixture.call('POST', `${path}:appeal`, {
+      bearer: fixture.author.bearer,
+      key,
+      body,
     });
-    appealId = appeal.id;
+    expect(appeal.response.status).toBe(201);
+    const retry = await fixture.call('POST', `${path}:appeal`, {
+      bearer: fixture.author.bearer,
+      key,
+      body,
+    });
+    expect(retry.response.status).toBe(201);
+    expect(retry.value).toEqual(appeal.value);
+    appealId = appeal.value!.id;
   });
   const pending = await open();
   expect(pending.value?.appeal).toMatchObject({
@@ -217,6 +229,9 @@ test('independent reversal exposes only current header context and keeps the ori
   expect(author.value?.targetId).toBe(target.postId);
   expect(author.value?.statement).toBe('Retained private statement');
   expect(author.value?.targetContext).not.toHaveProperty('body');
+  expect(
+    (await fixture.call('GET', `/v1/posts/${target.postId}`, { bearer: fixture.author.bearer })).response.status,
+  ).toBe(200);
   const moderator = await fixture.call('GET', path, { bearer: fixture.moderator.bearer });
   expect(moderator.value?.viewer).toMatchObject({
     affectedAuthor: false,

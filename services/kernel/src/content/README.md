@@ -1103,7 +1103,8 @@ This API handoff does not establish rendered acceptance or the all-pool physical
   cold release and total HTTP serialization still require the connected accounting proof; this is not that proof.
 - Growth check: the focused source HTTP suite pins native author advice, pending/resolved readback, inclusive/late
   deadline command agreement, independent reversal, current header presentation, removed-target context, empty and
-  switched-account concealment, and source/authority withholding. A mounted author Inbox test projects the takedown
+  switched-account concealment, same-key appeal retry/readback through the mounted writer, restored ordinary target
+  disclosure, and source/authority withholding. A mounted author Inbox test projects the takedown
   notice, opens its exact decision and retires an in-flight Inbox read when native account erasure revokes the author.
   `decision-page-lifetime-http.test.ts` adds same-client and changed-client credential replacement at initial and final
   selection, delegated principal suspension/assignment revocation, exact-author erasure with a pending appeal and
