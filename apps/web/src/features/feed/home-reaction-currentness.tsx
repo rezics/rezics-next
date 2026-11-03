@@ -28,8 +28,7 @@ export function useHomeReactionCurrentness(
     page?.sources,
     page?.reactionsAsOf,
   ]);
-  const retired =
-    busy || result.state !== 'ready' || (signedIn && !!client && (!observation.healthy() || !reader));
+  const retired = busy || result.state !== 'ready' || (signedIn && !!client && (!observation.healthy() || !reader));
   const [binding, setBinding] = useState({ result, source, observation, revision, retired, visit: 0 });
   if (binding.result !== result)
     setBinding({ result, source, observation, revision, retired, visit: binding.visit + 1 });
@@ -45,8 +44,7 @@ export function useHomeReactionCurrentness(
     origin: {
       key: String(binding.visit),
       reader,
-      isCurrent: () =>
-        current.current === binding && !binding.retired && observation.snapshot() === binding.revision,
+      isCurrent: () => current.current === binding && !binding.retired && observation.snapshot() === binding.revision,
     },
   };
 }

@@ -26,6 +26,7 @@ export type ReactionSnapshot = {
   ok: true;
   counts: Partial<Record<ReactionKind, number>>;
   value: ReactionKind | null;
+  reactionsAsOf?: NonNullable<Awaited<ReturnType<ReturnType<KernelClient['threads']>['get']>>['data']>['reactionsAsOf'];
 };
 
 // Existing point producers: one thread/post read, or one Subject counts read plus one own-slot read.
@@ -137,6 +138,7 @@ export async function readReactionRequest(
   try {
     let counts: Partial<Record<ReactionKind, number>>;
     let value: unknown;
+    let reactionsAsOf: ReactionSnapshot['reactionsAsOf'];
     if (input.target === 'subject') {
       const resource = client.subjects({ id: input.id });
       const counted = await resource.reactions.get({ headers });
@@ -164,6 +166,7 @@ export async function readReactionRequest(
           ? await client.threads({ id: input.id }).get({ headers })
           : await client.posts({ id: input.id }).get({ headers });
       if (result.error) return refusal(result.status, result.headers, result.error.value);
+      reactionsAsOf = result.data?.reactionsAsOf;
       const data = result.data as { thread?: unknown; post?: unknown } | null;
       const target = (input.target === 'thread' ? data?.thread : data?.post) as
         | { reactions?: Partial<Record<ReactionKind, number>>; viewerReaction?: unknown }
@@ -181,7 +184,12 @@ export async function readReactionRequest(
       )
     )
       return { ok: false, reason: 'unavailable' };
-    return { ok: true, counts, value: value as ReactionKind | null };
+    return {
+      ok: true,
+      counts,
+      value: value as ReactionKind | null,
+      ...(input.target === 'subject' ? {} : { reactionsAsOf }),
+    };
   } catch (error) {
     return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }

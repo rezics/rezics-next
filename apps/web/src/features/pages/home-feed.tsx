@@ -226,7 +226,7 @@ export function HomeFeed({
         getItemKey={(item) => item.id}
         itemPresentation={(item) => {
           const presentation = homeFeedItemPresentation(item, locale);
-          const reaction = reactions.available ? homeReactionAdmission(item, signedIn) : undefined;
+          const reaction = reactions.available ? homeReactionAdmission(item, signedIn, page?.reactionsAsOf) : undefined;
           return {
             ...presentation,
             actions: (

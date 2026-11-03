@@ -1,8 +1,12 @@
-import type { FeedItem } from '../pages/home-feed-read';
+import type { FeedItem, FeedPage } from '../pages/home-feed-read';
 import type { FeedReaction } from './vote-control';
 
 /** Only the generated Content summary can supply a reaction baseline. Never hydrate a row. */
-export function homeReactionAdmission(item: FeedItem, signedIn: boolean): FeedReaction | undefined {
+export function homeReactionAdmission(
+  item: FeedItem,
+  signedIn: boolean,
+  sourceWatermark?: FeedPage['reactionsAsOf'],
+): FeedReaction | undefined {
   const summary = item.summary;
   if (
     item.key.owner !== 'content' ||
@@ -34,5 +38,6 @@ export function homeReactionAdmission(item: FeedItem, signedIn: boolean): FeedRe
     counts: summary.reactions,
     value: signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
     personalReady: !signedIn || personalReady,
+    sourceWatermark,
   };
 }

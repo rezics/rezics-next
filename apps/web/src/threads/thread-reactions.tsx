@@ -94,6 +94,8 @@ export type ThreadReactionsProps = {
   presentation?: 'chips' | 'vote' | 'vote-plain';
   /** Feed callers reconcile one successful explicit write with the existing bounded point reader. */
   settleWithRead?: boolean;
+  /** A supplied Home baseline requires a current projected watermark before point-read settlement. */
+  sourceWatermark?: ReactionSnapshot['reactionsAsOf'];
   locale?: string;
   /** Explicitly illustrative transports for isolated stories; production callers leave this absent. */
   preparedTransport?: {
@@ -182,6 +184,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.signedIn,
     props.personalReady ?? true,
     props.reactionOrigin?.key ?? null,
+    props.sourceWatermark,
     hydrated,
   ]);
   const desiredKey = useRef(key);
@@ -196,6 +199,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
       revision={revision}
       csrfToken={client ? (session?.csrfToken ?? '') : null}
       expectedReader={expectedReader}
+      requireWatermark={Object.hasOwn(props, 'sourceWatermark')}
       {...(props.reactionOrigin ? { reactionOrigin: props.reactionOrigin } : {})}
       isDesired={() => desiredKey.current === key}
     />
@@ -221,6 +225,8 @@ function ReactionCaller({
   settleWithRead,
   locale,
   preparedTransport,
+  sourceWatermark,
+  requireWatermark,
 }: ThreadReactionsProps & {
   admitted: boolean;
   disabled: boolean;
@@ -230,6 +236,7 @@ function ReactionCaller({
   expectedReader: string | null;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
   isDesired(): boolean;
+  requireWatermark: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   type Intent = { kind: ReactionKind | null; commandId: string; phase: 'write' | 'read' };
@@ -371,6 +378,17 @@ function ReactionCaller({
         const message = refusalText(snapshot);
         retain(intent, snapshot.reason === 'unavailable' ? undefined : message);
         throw new Error(message);
+      }
+      if (
+        requireWatermark &&
+        (!snapshot.reactionsAsOf ||
+          (sourceWatermark &&
+            (snapshot.reactionsAsOf.epoch < sourceWatermark.epoch ||
+              (snapshot.reactionsAsOf.epoch === sourceWatermark.epoch &&
+                BigInt(snapshot.reactionsAsOf.position) < BigInt(sourceWatermark.position)))))
+      ) {
+        retain(intent);
+        throw new Error(m.reaction_unavailable());
       }
       unresolved.current = null;
       epoch.current++;
