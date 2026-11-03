@@ -36,7 +36,7 @@ after:
   - d2243d75-acbc-4fcc-97b4-99303fbe5e4a
 acceptance:
   tests:
-    - "Import an admitted classification observation through the production converter/coordinator and mounted generated native client; bind the authentic Semantic association, preserve separate provenance/native ballots, recover unknown delivery and deliberate CAS resolution with immutable original intent, and independently read the result. Unadmitted VNDB payload/licence combinations have zero native effects."
+    - 'Import an admitted classification observation through the production converter/coordinator and mounted generated native client; bind the authentic Semantic association, preserve separate provenance/native ballots, recover unknown delivery and deliberate CAS resolution with immutable original intent, and independently read the result. Unadmitted VNDB payload/licence combinations have zero native effects.'
 ---
 
 Finish classification observation import after the generated Content client contract is available. Carry admitted converter output through the coordinator, resolve and verify exact Semantic associations, and persist one immutable operation in the aggregate journal. Complete independent head reads, unknown-delivery retry, deliberate compare-and-swap review, bounded operator inspection, binding inspection, retention, snapshot backup and restore, progress reporting, and the mounted native acceptance. Keep VNDB classification output unavailable until payload and rights admission are reviewed. Use authored fixtures with truthful attribution; do not present fixture data as VNDB data.

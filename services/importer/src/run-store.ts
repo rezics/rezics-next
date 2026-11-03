@@ -1169,12 +1169,13 @@ export class RunStore<Projection = BatchStatement[]> {
         sourceProjection.sourceRecordMetadata === undefined
           ? ''
           : `,"sourceRecordMetadata":${boundedJson(sourceProjection.sourceRecordMetadata, 8192)}`;
-      const classification = sourceProjection.sourceClassification === undefined
-        ? ''
-        : `,"sourceClassification":${boundedJson(
-            validateSourceClassificationProjection(sourceProjection.sourceClassification),
-            8192,
-          )}`;
+      const classification =
+        sourceProjection.sourceClassification === undefined
+          ? ''
+          : `,"sourceClassification":${boundedJson(
+              validateSourceClassificationProjection(sourceProjection.sourceClassification),
+              8192,
+            )}`;
       projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();

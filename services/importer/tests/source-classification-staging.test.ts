@@ -41,7 +41,11 @@ test('staging retains only bounded, validated converter classification output', 
     expect(read('authored-1')).toEqual(classification);
     expect(read('authored-2')).toEqual({ state: 'unavailable', reason: 'unadmitted' });
     expect(() =>
-      stage('authored-3', { state: 'available', provenance: {}, value: { kind: 'clear' } } as SourceClassificationProjection),
+      stage('authored-3', {
+        state: 'available',
+        provenance: {},
+        value: { kind: 'clear' },
+      } as SourceClassificationProjection),
     ).toThrow('Invalid source classification projection');
   } finally {
     store.close();
