@@ -35,8 +35,8 @@ export function rulesBody(bytes = 65_536) {
   return body;
 }
 
-export async function presentationSettingsFixture() {
-  const base = await createReactionRelayBase();
+export async function presentationSettingsFixture(options?: Parameters<typeof createReactionRelayBase>[1]) {
+  const base = await createReactionRelayBase(undefined, options);
   const db = await openGrowthDatabase(base.system.database.pool.options.connectionString!).catch(async (error) => {
     await base.system.close();
     throw error;

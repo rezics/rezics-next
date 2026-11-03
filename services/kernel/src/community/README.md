@@ -1890,6 +1890,38 @@ writer, asset picker or upload/lifecycle engine here.
   serialization ceilings require the native callee and physical-prefix composition below;
   no total ceiling is inferred from output size or observed runs.
 
+- **Whole available statement composition:** let `j=1,2` index complete media calls,
+  `t=1..4` complete rules snapshots, and `F_t` the sum of that snapshot's four
+  actual formula costs. The complete expression is
+  `S_auth + 114 + sum_j(m_j+2*a_j+b_locator_j+b_final_j)
+   + b_locator+b_initial+b_final + sum_t(H_t+e_t+B_t+F_t)
+   + sum_outer(P_i+Q_i) + sum_media(P_i+Q_i) + E_1+E_2`.
+  Here 114 is `28+2*27+4*8`; the seven outer preparations, up to ten media
+  preparations and two batched rules preparations are separate. The fixed local
+  and eligibility terms are at most 273 before those preparations, formulas and
+  authentication; this is a source coefficient, not a total measured ceiling.
+  The complete two-image/two-rules path has fourteen read-only snapshots and
+  twenty-eight controls: two/four outer, eight/sixteen media and four/eight rules
+  snapshots/controls respectively. Locator and preparation statements and any
+  authentication transactions remain additional. Empty image or rules selection
+  removes its dispatched owner calls; it does not remove outer proofs. Denial,
+  optional failure and rollback charge their executed prefixes; an explicit caller
+  retry adds both complete attempts, including authentication.
+
+- **Direct source physical keys:** `realm-read.sql` and `space-read.sql` materialize
+  one routed active identity before joining its exact revision. The revision PKs
+  are `(route,revision_id)`; the owner ID equality is either an additional indexed
+  condition in the three-column unique index or a residual equality on that one
+  exact row. The selected Realm also checks its exact active host. `LIMIT 1` is
+  not the bound. Native growth inspects those actual source plans for both route
+  and revision equality in `Index Cond`; its examined-row/block accounting remains
+  separate from output cardinality. This does not bound foreign Access, rules or
+  media residual joins, which still need their own native prefix composition.
+
+Decision: mounted settings growth reuses the existing dual-database capture combiner;
+caller retry retains both Auth captures and both complete Kernel requests before growth
+comparison. No separately measured media operation stands in for either selected call.
+
 - **Growth check:** existing `growth-realm-presentation-settings` proves the update command,
   not this GET. `realm-settings-page.test.ts` connects native creation, empty/read-only effects,
   exact pinned and concealed rules, host removal, CAS updates/readback, omission, account switching,
@@ -1898,5 +1930,12 @@ writer, asset picker or upload/lifecycle engine here.
   `realm-settings-page-media-rules.test.ts` connects avatar, banner and an exact rules pin together,
   then withdraws one selected image. `realm-settings-page-lifecycle.test.ts` covers protected access,
   orphan read-only state, erased selected rules and suspension during composition. Controller-owned
-  connected GET growth at 256/1024/4096 still captures unrelated Realms, Realm/rules/media/authority
-  histories, all participating pools, strict physical plans, cold release, retries and withheld phases.
+  `realm-settings-page-growth.test.ts` adds mounted available, empty, denied, revoked,
+  optional-unavailable, caller-retry and final-authority-withheld branches against independent
+  unrelated Realm, selected Realm revision and selected rules revision populations at
+  256/1024/4096. Each request constructs fresh native Access/JWKS state, captures Kernel
+  and Auth separately and aggregates before growth comparison. The available pinned-rules
+  branch checks seven outer preparations, two batched rules preparations and sixteen rules
+  formulas. Native execution, selected media/authority-history growth, maximal ancestry,
+  all remaining callee prefixes, cold release and complete examined-row/byte/copy/JSON
+  ceilings remain with this journey; these source additions claim no measured pass.

@@ -13,6 +13,7 @@ import { composeWork, type WorkModule } from '../../src/work/registry.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
+import type { ContentSystemOptions } from './support/system.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
 const idempotencyKey = () => randomUUID();
@@ -94,9 +95,12 @@ export type ReactionEventCapture = Readonly<{
  * The existing reactions-http and reaction-counts-http suites prove viewer slots and public projections separately.
  * This fixture joins those native paths and keeps production work registration observable for exact barriers.
  */
-export async function createReactionRelayBase(databaseUrl = process.env.DATABASE_URL): Promise<ReactionRelayBase> {
+export async function createReactionRelayBase(
+  databaseUrl = process.env.DATABASE_URL,
+  options: Pick<ContentSystemOptions, 'authPoolFactory'> = {},
+): Promise<ReactionRelayBase> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const system = await createNativeContentSystemWithWriteRateOverrides({ databaseUrl }, writeRateOverrides);
+  const system = await createNativeContentSystemWithWriteRateOverrides({ databaseUrl, ...options }, writeRateOverrides);
   try {
     const pool = system.database.pool;
     await bootstrapRelease(pool, bundledRelease);
