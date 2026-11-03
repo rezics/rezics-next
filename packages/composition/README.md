@@ -558,9 +558,8 @@ release defines, in this order: `schema:author`, `schema:illustrator`, `schema:t
 `schema:isPartOf`. The series template has the same sections with contents instead of editions: `SubjectList`s for
 works in the series (`wdt:P179`) and parts (`schema:isPartOf`).
 
-`types` has five templates. The Recipe overview uses the generic overview order and a configured
-`Statements` node for its author, publication date, cooking time, yield, ingredients, instructions and diet.
-The other four templates follow below. Each list is a `SubjectList` after the header, with its title in the eight UI locales, and
+`types` has four templates. Recipe remains a home `TypeList` vertical and uses the generic page; it has no type template.
+Each list is a `SubjectList` after the header, with its title in the eight UI locales, and
 the type's view for those lists is Works (Appearances for a character, Characters for the voice roles of a person).
 `schema:Person` lists
 `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy` and `wdt:P725`,

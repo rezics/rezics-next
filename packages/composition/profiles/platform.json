@@ -2274,182 +2274,6 @@
       }
     },
     {
-      "type": "schema:Recipe",
-      "views": {
-        "overview": {
-          "root": {
-            "props": {}
-          },
-          "content": [
-            {
-              "type": "Slot",
-              "props": {
-                "id": "header",
-                "name": "header",
-                "children": [
-                  {
-                    "type": "SubjectHeader",
-                    "props": {
-                      "id": "subject-header"
-                    }
-                  },
-                  {
-                    "type": "Slot",
-                    "props": {
-                      "id": "actions",
-                      "name": "actions",
-                      "children": []
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "type": "Summary",
-              "props": {
-                "id": "summary"
-              }
-            },
-            {
-              "type": "Statements",
-              "props": {
-                "id": "statements",
-                "properties": [
-                  "schema:author",
-                  "schema:datePublished",
-                  "schema:cookTime",
-                  "schema:recipeYield",
-                  "schema:recipeIngredient",
-                  "schema:recipeInstructions",
-                  "schema:suitableForDiet"
-                ]
-              }
-            },
-            {
-              "type": "RelationGroups",
-              "props": {
-                "id": "side-stories",
-                "title": {
-                  "en": "Side stories",
-                  "zh-Hant": "外傳",
-                  "zh-Hans": "外传",
-                  "ja": "外伝",
-                  "ko": "외전",
-                  "de": "Nebengeschichten",
-                  "fr": "Histoires parallèles",
-                  "es": "Historias paralelas"
-                },
-                "property": "rezics:sideStoryOf",
-                "limit": 12
-              }
-            },
-            {
-              "type": "RelationGroups",
-              "props": {
-                "id": "adaptations",
-                "title": {
-                  "en": "Adaptations",
-                  "zh-Hant": "改編作品",
-                  "zh-Hans": "改编作品",
-                  "ja": "派生作品",
-                  "ko": "파생 작품",
-                  "de": "Adaptionen",
-                  "fr": "Adaptations",
-                  "es": "Adaptaciones"
-                },
-                "property": "wdt:P144",
-                "limit": 12
-              }
-            },
-            {
-              "type": "RelationGroups",
-              "props": {
-                "id": "versions",
-                "title": {
-                  "en": "Alternative versions",
-                  "zh-Hant": "其他版本",
-                  "zh-Hans": "其他版本",
-                  "ja": "別バージョン",
-                  "ko": "다른 버전",
-                  "de": "Alternative Fassungen",
-                  "fr": "Versions alternatives",
-                  "es": "Versiones alternativas"
-                },
-                "property": "rezics:alternativeVersion",
-                "limit": 12
-              }
-            },
-            {
-              "type": "RelationGroups",
-              "props": {
-                "id": "related",
-                "title": {
-                  "en": "Related",
-                  "zh-Hant": "相關作品",
-                  "zh-Hans": "相关作品",
-                  "ja": "関連作品",
-                  "ko": "관련 작품",
-                  "de": "Verwandtes",
-                  "fr": "Œuvres liées",
-                  "es": "Obras relacionadas"
-                },
-                "property": "rezics:bangumiRelatedTo",
-                "limit": 12
-              }
-            },
-            {
-              "type": "ThreadList",
-              "props": {
-                "id": "threads"
-              }
-            },
-            {
-              "type": "CollectionList",
-              "props": {
-                "id": "lists",
-                "title": {
-                  "en": "Lists",
-                  "zh-Hant": "清單",
-                  "zh-Hans": "清单",
-                  "ja": "リスト",
-                  "ko": "목록",
-                  "de": "Listen",
-                  "fr": "Listes",
-                  "es": "Listas"
-                },
-                "limit": 6
-              }
-            },
-            {
-              "type": "Sources",
-              "props": {
-                "id": "sources"
-              }
-            }
-          ]
-        },
-        "details": {
-          "root": {
-            "props": {}
-          },
-          "content": [
-            {
-              "type": "MoreStatements",
-              "props": {
-                "id": "more-statements"
-              }
-            },
-            {
-              "type": "Sources",
-              "props": {
-                "id": "sources"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
       "type": "skos:Concept",
       "views": {
         "overview": {
@@ -3151,7 +2975,9 @@
                 "fr": "Livres",
                 "es": "Libros"
               },
-              "types": ["schema:Book"],
+              "types": [
+                "schema:Book"
+              ],
               "sort": "collections",
               "limit": 12
             }
@@ -3170,7 +2996,10 @@
                 "fr": "Anime",
                 "es": "Anime"
               },
-              "types": ["schema:TVSeries", "schema:Movie"],
+              "types": [
+                "schema:TVSeries",
+                "schema:Movie"
+              ],
               "sort": "collections",
               "limit": 12
             }
@@ -3189,7 +3018,9 @@
                 "fr": "Visual novels",
                 "es": "Novelas visuales"
               },
-              "types": ["wd:Q689445"],
+              "types": [
+                "wd:Q689445"
+              ],
               "sort": "collections",
               "limit": 12
             }
@@ -3208,7 +3039,9 @@
                 "fr": "Recettes",
                 "es": "Recetas"
               },
-              "types": ["schema:Recipe"],
+              "types": [
+                "schema:Recipe"
+              ],
               "sort": "collections",
               "limit": 12
             }
