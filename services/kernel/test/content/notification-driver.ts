@@ -63,11 +63,12 @@ function decisionOf(value: unknown): Decision {
   };
 }
 
-function postOf(value: unknown): Post {
+function postOf(value: unknown): Post & { revisionId: string } {
   const raw = object(value, 'Post');
   return {
     id: string(raw.id, 'post.id'),
     threadId: string(raw.threadId, 'post.threadId'),
+    revisionId: string(raw.revisionId, 'post.revisionId'),
   };
 }
 
@@ -271,6 +272,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
           body: documentOf(input.body),
           licence: 'MIT',
           ...(input.parentId === undefined ? {} : { parentId: input.parentId }),
+          visibility: input.visibility,
         },
         options.key,
       );
@@ -288,6 +290,7 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
       return mapped;
     },
     async revise(input, options) {
+      const expectedHead = string(object(input.post, 'Revision post').revisionId, 'post.revisionId');
       const result = await request(
         'POST',
         `/v1/posts/${input.post.id}/revisions`,
@@ -295,8 +298,10 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
         {
           body: documentOf(input.body),
           licence: 'MIT',
+          visibility: input.visibility,
         },
         options.key,
+        { 'if-match': JSON.stringify(expectedHead) },
       );
       const mapped = resultMap(result, (body) => {
         const post = postOf(object(body, 'Post revision').post);
