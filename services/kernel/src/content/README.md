@@ -3329,9 +3329,14 @@ are their Content interfaces. Thread watch GET/PUT/DELETE and reply delivery kee
 A thread management row has revision 1 for its unique edge. Board state retains a CAS tombstone; rewatch rotates its
 identity and creation cutoff. Neither kind uses common Following. Listing/removal sends no notice.
 
-The installed factory is
+The native reader is
 `listWatches(deps: WatchDependencies, actor: Actor, accountId: string, input: {kind: WatchManagementKind; limit?: number; cursor?: string}, deadline: number): Promise<WatchManagementPage>`;
 `WatchManagementItem` is the closed available/unavailable union and `WatchManagementPage` is `{items,next}`.
+Web imports `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`;
+options are `{fetch?, headers?, session?, onSession?}`. Its installed inventory reader is
+`client.accounts({id: accountId}).watches.get({query: {kind, limit?, cursor?}})`;
+removal is `client.accounts({id: accountId}).watches({id: watchId}).delete({expectedRevision}, {query: {kind}, headers: {'idempotency-key': key}})`.
+The package exports `WatchManagementKind`, `WatchManagementItem` and `WatchManagementPage` for these consumers.
 
 Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title}`. Denied and absent resources
 both return `{id,kind,revision,createdAt,state:'unavailable'}`. They contain no title, author, place, owner, destination
