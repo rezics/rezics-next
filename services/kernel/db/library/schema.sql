@@ -3321,6 +3321,11 @@ CREATE TABLE library.progress_session (
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
     additional_measures jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT progress_session_additional_measures_check CHECK (
+CASE
+    WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
+    ELSE false
+END),
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -3328,7 +3333,6 @@ CREATE TABLE library.progress_session (
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
     CONSTRAINT progress_session_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
-    CONSTRAINT progress_session_additional_measures_check CHECK ((CASE WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb))) ELSE false END)),
     CONSTRAINT progress_session_locator_check CHECK (((locator IS NULL) OR ((char_length(locator) >= 1) AND (char_length(locator) <= 256)))),
     CONSTRAINT progress_session_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
     CONSTRAINT progress_session_position_check CHECK ((("position" IS NULL) OR ("position" >= (0)::numeric))),
