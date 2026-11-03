@@ -413,8 +413,10 @@ function CreateSubjectFormLive({
         reject(result);
         if (result.reason === 'unavailable') unresolvedDelivery.current = true;
         // Uncertain delivery and key conflicts retain the exact frozen command. Never silently create a second identity.
-        if (!unresolvedDelivery.current && result.reason !== 'unavailable' && result.reason !== 'conflict')
+        if (!unresolvedDelivery.current && result.reason !== 'unavailable' && result.reason !== 'conflict') {
           request.current = null;
+          invalidateReview();
+        }
         if (result.refreshDefinitions) {
           if (directoryMode && directoryType) {
             setDirectoryPending(true);
