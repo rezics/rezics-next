@@ -5,7 +5,9 @@ Interface evidence reconciliation, 3 November 2026. [Content's Goal](../goals/co
 [interface review rule](../development/verification.md#review) requires measured interface evidence.
 This document adopts the [detailed route, Page/Pattern inventory and owner bars](content-interface-quality-review.md),
 integrated at `1f524dcfc8d1400181614c622e46fb1e90df16e6` with continuation
-`bfd50fef349601116449aabf5ec4f197d1d4b15e`. Policy remains in the linked owner contracts.
+`bfd50fef349601116449aabf5ec4f197d1d4b15e`, and adopts its
+[historical Inbox inspection](content-interface-quality-review.md#historical-inbox-image-measurement), integrated
+at `e8127cab83e8695ef3efcfd2b5434c6cb10045f9`. Policy remains in the linked owner contracts.
 
 The inventory maps source `88a6a9c65a15ad5314f9337a2ddf4362c9df9bed`; its continuation retained
 `f85b7a81cc54a0e1fa04ff99cd3381d2bf08150a` without a rendered catalogue or interaction verdict.
@@ -21,30 +23,37 @@ The old delivered/pending lists are replaced by the proof obligations below, rat
   at `cdd872a3c3f4b5b1f47191e7d24075ef37ee86ed`, binds no current image/reviewed-source package here. It supplies
   no current verdict for desktop Patterns, other locales, queues, setup, reporter layouts or the whole journey.
 - **Source-only:** the integrated inventory names the existing routes, Page/Pattern exports and comparison bars.
-  Its continuation maps missing states/personas for all 13 route groups. Neither attempt inspected images or
-  established a visual, keyboard or native pass. A story play or successful typing does not change that status.
-- **Historical images available, inspection outstanding:** the manager has since relayed all 48 Inbox cells in
-  `/home/edge/projects/rezics/rezics-next/.temp/goal/content/handoffs/content-interface-measurement.md` and adjacent
-  `content-interface-captures.json`. The earlier report's statement that no images were supplied describes its
-  completed attempts; it is not the present availability boundary. The manifest supplies absolute image/detail
-  paths, Page IDs, URL/globals, hashes, timestamps, status/errors, source/build, producer and fixture provenance.
-  Availability and hash matches are not inspected visual results; the manifest retains captured errors.
+  Its continuation maps missing states/personas for all 13 route groups. Those inventory attempts established no
+  visual, keyboard or native pass; the later historical inspection below does not measure their retained source.
+  A story play or successful typing does not change that status.
+- **Historical images inspected:** the integrated report inspected all 48 supplied Inbox PNGs / 24 exports on
+  3 November 2026. Its [shared binding and artifact verdicts](content-interface-quality-review.md#historical-inbox-image-measurement)
+  supply paths, hashes, Page IDs, URL/globals, timestamps, producer, fixture and status/error provenance without
+  duplicating the artifact table here. Short-fixture text and metadata are legible at both widths; unavailable
+  destinations, session gates and seen failures differ visibly from empty success. These bounded observations
+  establish no visible product defect class and authorize no UI repair. Recorded errors remain capture limitations.
 - **Unmeasured:** no current-dev, dark-theme or full launch-locale Inbox package is admitted. Web's Subject
   overview/companion and catalogue review at `88a6a9c65a15ad5314f9337a2ddf4362c9df9bed` leaves all 32
   combinations unmeasured, with no admitted full provenance package supplied to Content. Accounts' Settings
   notification-region images are also not supplied. Home and other Content Pages remain unmeasured here.
 
-The 48 Inbox images bind source `b29a80a0aad38c008125fb032f5fe1af96bd6164`, Storybook `11.0.0-alpha.8`,
+The 48 Inbox PNGs / 24 exports bind source `b29a80a0aad38c008125fb032f5fe1af96bd6164`, Storybook `11.0.0-alpha.8`,
 built `2026-10-31T08:32:54.450Z`: English/light only, paired 390×844 and 1280×900 viewports, with full-page
 capture height recorded separately. Web's completeness audit produced them through public-browser observation;
 Performance relayed them. Their recorded Inbox responses and illustrative Storybook session transport are not
 native API recording acceptance. The additional `c2c7c63ffb6397f4bb6002f0b1b4a7b63f01732c` light sweep remains
-separately historical and provenance-only until its metadata/artifact pairs are inspected; diagnostic captures
-are not passes. This adoption inspects no images and does not duplicate the separate review report's writer.
+separately historical and provenance-only; its metadata/artifact pairs were not part of the inspected package.
+Diagnostic captures are not passes. This adoption carries forward the integrated inspection without another review.
+
+Six continuation images are shell-free supplied regions, not integrated Page evidence. Four session-transition
+images contain external story controls and a displaced header; that fixture composition establishes no normally
+mounted Page defect. Recovery-named captures sometimes show initial states: unseen recovery, focus, keyboard and
+native behavior receive no credit. Long/populated pages, long references/reasons, dark/full-locale Inbox and every
+current-dev route/state/persona measurement remain open. Static styling does not prove interaction or disclosure.
 
 | Surface                                           | Retained ownership and next handoff                                                                                                                                                          |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inbox                                             | Performance retains capture. The existing single screenshot continuation inspects the historical images and updates the separate review report; no second capture or audit owner is created. |
+| Inbox                                             | Performance retains capture. The integrated report completes the historical inspection; no second screenshot continuation absent newly admitted evidence or newly permitted capture.          |
 | Subject overview/companion and catalogue families | Web retains frames and their provenance handoff. Content supplies vote/review and moderation-region authority; a shell-free Pattern cannot establish frame quality.                          |
 | Settings notification region                      | Accounts retains Settings and preference authority; Content supplies mandatory-notice semantics. Obtain the existing admitted package through that owner.                                    |
 | Home and supplied Realm appearance regions        | Content retains Home capture and native vote/review and Realm appearance authority. When admitted, relay Home artifacts and full provenance to Web.                                          |
@@ -184,16 +193,17 @@ Settings frame. Current source inputs replace the earlier sole-writer next-actio
 **Boundary and next proof.** Observe a private recipient Inbox, honest unavailable destinations and safe explicit
 seen retry that preserves its original intent and cannot acknowledge later arrivals. Opening a page does not mean
 all targets were read. Count/list failure is not zero or empty; mandatory outcomes stay independent of optional
-preferences. Performance's historical light images can support only historical visual findings after inspection;
+preferences. Performance's inspected historical light images support only the bounded historical findings above;
 Accounts' missing Settings package remains explicit. Later native proof follows first publication → relay → private
 Inbox → currently readable destination → seen/count, with preference/access races and recipient erasure. Email
 remains outside scope. Static images prove neither forward-only marker semantics nor current target disclosure.
 
 ## Remaining proof and recommendation
 
-Adopt the integrated inventory as the detailed route/story reference and keep one existing screenshot continuation
-for actual image inspection. Its next useful result is a historical finding tied to the exact Inbox image/source,
-state and owner bar, or an explicit missing measurement; it must retain captured errors and fixture limits.
+Adopt the integrated inventory as the detailed route/story reference and its historical Inbox inspection at the
+exact source/build above. Retain captured errors and fixture limits; no visible product defect class or UI repair
+is established. No second screenshot continuation is warranted absent newly admitted evidence or newly permitted
+capture. The remaining work needs current-source evidence through the existing owners, not another inventory pass.
 Future admitted current Page evidence needs full revision/build, Page/export, path, viewport/theme/locale, producer
 and fixture/recording provenance. Keep the unmeasured 13-group state/persona matrix explicit rather than repeating
 old source assignments as open product defects. Brief repairs only from observed failures against existing bars.
@@ -207,4 +217,5 @@ Native API/persona, browser, keyboard and acceptance execution remain deferred b
 retention, physical-cost and erasure outcomes still require their owning [deletion](../deletion.md) evidence;
 integration, enqueue and illustrative completion states cannot close them. This documentation change affects no
 typed workspace or test file and needs no new runner or gate. The interface-review requirement of Content's six
-Done-when clauses remains unmeasured; no visual/native/keyboard pass, main promotion or Goal completion is claimed.
+Done-when clauses remains unmeasured on current dev; the historical findings establish no current visual/native/
+keyboard pass, main promotion or Goal completion.
