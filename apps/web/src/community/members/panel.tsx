@@ -10,7 +10,7 @@ const serverRevision = () => 0;
 export function RealmMembersPanel({ realmId }: { realmId: string }) {
   const client = useQueryClient();
   const session = useSession();
-  const source = useMemo(() => realmMembersLifetimeSource(client), [client]);
+  const source = useMemo(() => realmMembersLifetimeSource(client, session.subject), [client, session.subject]);
   const revision = useSyncExternalStore(source.subscribe, source.snapshot, serverRevision);
   const locale = getLocale();
   const { state, subject, csrfToken } = session;

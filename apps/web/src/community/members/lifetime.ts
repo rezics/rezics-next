@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { normalizeSessionObservation, sessionStateSnapshot, type BrowserSession } from '../../session/browser-state';
 
 /** Observe the browser's existing queries; a member visit never fetches session or exposure itself. */
-export function realmMembersLifetimeSource(client: QueryClient) {
+export function realmMembersLifetimeSource(client: QueryClient, subject: string | null | undefined) {
   let revision = 0;
   let stop: (() => void) | undefined;
   const listeners = new Set<() => void>();
@@ -16,7 +16,7 @@ export function realmMembersLifetimeSource(client: QueryClient) {
       const key = event.query.queryKey;
       if (
         !(key.length === 1 && key[0] === 'session') &&
-        !(key.length >= 2 && key[0] === 'exposure' && key[1] === 'viewer')
+        !(key[0] === 'exposure' && key[1] === 'viewer' && (key.length === 2 || (key.length >= 4 && key[2] === subject)))
       )
         return;
       revision++;

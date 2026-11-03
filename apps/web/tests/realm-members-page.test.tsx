@@ -202,7 +202,7 @@ test('browser session and incarnation-keyed exposure changes retire mounted sele
     const client = new QueryClient();
     client.setQueryData(['session'], session);
     client.setQueryData(exposureKey, { subject: session.subject, admitted: ['realm.members'] });
-    const lifetime = realmMembersLifetimeSource(client);
+    const lifetime = realmMembersLifetimeSource(client, session.subject);
     const caller = lifetime.capture(session, () => true);
     const delayed = Promise.withResolvers<Awaited<ReturnType<RealmMembersSource['readSelected']>>>();
     let pages = 0,
@@ -263,11 +263,12 @@ test('unrelated public queries leave the exact member visit and return focus cur
   const client = new QueryClient();
   const session = { state: 'signed-in' as const, subject: 'viewer', csrfToken: 'credential' };
   client.setQueryData(['session'], session);
-  const caller = realmMembersLifetimeSource(client).capture(session, () => true);
+  const caller = realmMembersLifetimeSource(client, session.subject).capture(session, () => true);
   await render(source(), 'realm', 'en', caller);
   await click(m.realm_members_inspect());
   await act(async () => {
     client.setQueryData(['public-subject', 'id'], {});
+    client.setQueryData(['exposure', 'viewer', 'retired-viewer', 6], { subject: 'retired-viewer', admitted: [] });
     await tick();
   });
   expect(host.textContent).toContain('Exact selected account');

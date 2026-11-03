@@ -31,7 +31,7 @@ observation. Returning restores keyboard focus to the still-current account butt
 Realm, caller, session/CSRF epoch, locale, exposure or source replacement retires the old visit and all deferred
 read/focus effects. The browser observes successful normalized session observations, including error/invalidation and
 same-credential replacement, and both legacy and incarnation-keyed viewer exposure queries. Every away/back transition
-retires the old visit synchronously, even when React batches it. Observer bookkeeping and unrelated queries do not
+retires the old visit synchronously, even when React batches it. Observer bookkeeping, another viewer's exposure and unrelated queries do not
 retire a visit. Cache subscriptions last only while a visit or Panel observes them; no exposure or role read is added.
 All private visit data stays in component memory, outside query
 cache, route loader data, metadata, storage and diagnostics. Native disclosure still owns all account presentation.
