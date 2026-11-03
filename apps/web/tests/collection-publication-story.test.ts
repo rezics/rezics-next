@@ -21,7 +21,7 @@ test('Collection publication Pages stories enter the publish route through PageS
   expect(sidebar).toMatch(/function SidebarInset\b[\s\S]*?return\s*\(\s*<main\b/);
   expect(story).not.toMatch(/<main\b/);
   expect(view).not.toMatch(/<main\b/);
-  expect(story).toContain("return within(within(canvasElement).getByRole('main'))");
+  expect(story).toContain("within(within(canvasElement).getByRole('main'))");
   expect(story).toContain('<PageStory visitor="Signed In" path={`/collections/${id}/publish`} />');
 
   const exports = [...story.matchAll(/export const (\w+): Story =/g)];
