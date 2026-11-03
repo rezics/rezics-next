@@ -88,7 +88,12 @@ export function HomeFeedActions({
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
   const isWork = kind === 'subject' && 'creativeWork' in item.summary && item.summary.creativeWork;
   const destination = item.destination;
-  const reaction = homeFeedReaction(item, { signedIn, origin, reactionsAsOf, hasReactionFreshness });
+  const reaction = homeFeedReaction(item, {
+    signedIn,
+    ...(origin === undefined ? {} : { origin }),
+    reactionsAsOf,
+    hasReactionFreshness,
+  });
   const target =
     destination.kind === 'thread' || destination.kind === 'subject'
       ? { kind: destination.kind, id: destination.id }
