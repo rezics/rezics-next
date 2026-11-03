@@ -16,7 +16,7 @@ test('ordinary Bangumi CLI preserves complete membership and native identity acr
     expect(r.ignoredMediaRequests).toEqual([]);
     expect(r.retainedPrivateMarkers).toEqual([]);
     expect(r.returnedProposals.length).toBeGreaterThan(0);
-    expect(r.returnedProposals.every((c) => c.source.converter_revision === 'bangumi@3')).toBe(true);
+    expect(r.returnedProposals.every((c) => c.source.converter_revision === 'bangumi@4')).toBe(true);
     expect(r.returnedCandidateIds.some((id) => r.oldCandidateIds.includes(id))).toBe(false);
     expect(r.independentSelectionAfter).toEqual(r.independentSelectionBefore);
     expect(r.unchangedWrites).toEqual([]);
