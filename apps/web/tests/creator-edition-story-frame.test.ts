@@ -1,11 +1,61 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { act, createContext, useContext, useMemo, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
+
+const PatternChildren = createContext<ReactNode>(null);
+
+function parseSearch(searchString: string): Record<string, unknown> {
+  const search = new URLSearchParams(searchString);
+  const parsed: Record<string, unknown> = Object.create(null);
+  for (const [key, value] of search) parsed[key] = value;
+  return parsed;
+}
+
+function stringifySearch(search: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(search)) if (typeof value === 'string') params.append(key, value);
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function PatternStory({
+  children,
+  visitor = 'Signed Out',
+  path = '/',
+}: {
+  children: ReactNode;
+  visitor?: 'Signed In' | 'Signed Out';
+  path?: string;
+}) {
+  const entry = path.startsWith('/') ? `/en${path}` : path;
+  start.setStoryRequestContext({ visitor, url: entry });
+  const { router, queryClient } = useMemo(() => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+    const router = createRouter({
+      routeTree: createRootRoute({ component: () => useContext(PatternChildren) }),
+      history: createMemoryHistory({ initialEntries: [entry] }),
+      parseSearch,
+      stringifySearch,
+    });
+    return { router, queryClient };
+  }, [entry]);
+  return (
+    <PatternChildren.Provider value={children}>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </PatternChildren.Provider>
+  );
+}
+
+mock.module('../src/stories/page', () => ({ PatternStory }));
 afterAll(() => mock.restore());
 
 const editionId = '019a2100-0000-7000-8000-000000000001';
@@ -37,6 +87,7 @@ async function withFrame(node: ReactNode, run: (host: HTMLElement) => Promise<vo
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    matchMedia: window.matchMedia.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
