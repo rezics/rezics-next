@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
-import { mixedDiscoveryIndexDefinition as nativeDiscoveryDefinition } from './discovery-documents.ts';
+import {
+  mixedCalendarDiscoveryIndexDefinition as nativeDiscoveryDefinition,
+  mixedDiscoveryDocumentCodec,
+  type MixedDiscoveryDocumentCodec,
+} from './discovery-documents.ts';
 import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
 import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 
@@ -120,6 +124,21 @@ export async function createDiscoveryIndex(
   });
   if (response.body.acknowledged !== true)
     throw new SearchUnavailableError('Discovery allocation was not acknowledged');
+}
+
+/** Read the codec from one physical mapping; callers bind it to their persisted UUID separately. */
+export async function readDiscoveryDocumentCodec(
+  search: OpenSearch,
+  index: string,
+): Promise<MixedDiscoveryDocumentCodec> {
+  const response = await search.request('GET', `/${index}/_mapping`);
+  const body = response.body;
+  const entry = record(body) ? body[index] : undefined;
+  const mappings = record(entry) ? entry.mappings : undefined;
+  const codec = mixedDiscoveryDocumentCodec(mappings);
+  if (response.status !== 200 || !record(body) || Object.keys(body).length !== 1 || codec === undefined)
+    throw new SearchUnavailableError('Discovery physical mapping has no supported projection codec');
+  return codec;
 }
 
 export function discoveryIndexName(prefix: string, generation: number): string {

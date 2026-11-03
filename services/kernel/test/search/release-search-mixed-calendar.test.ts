@@ -7,10 +7,12 @@ import {
 import {
   discoveryDocumentActions,
   mixedCalendarDiscoveryIndexDefinition,
+  mixedDiscoveryDocumentCodec,
   mixedDiscoveryIndexDefinition,
   validateDiscoveryDocument,
 } from '../../src/search/discovery-documents.ts';
 import { documentActions } from '../../src/search/document.ts';
+import { createDiscoveryIndex, readDiscoveryDocumentCodec } from '../../src/search/indices.ts';
 import { subjectPartition, type IndexedSubject } from '../../src/search/source.ts';
 import { routeOf } from '../../src/route/route.ts';
 
@@ -87,4 +89,25 @@ test('mixed calendar successor preserves precise facts and leaves old mapping an
   expect(nextMapping.mappings._meta.discovery_document_format).toBe(MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT);
   expect(oldMapping.mappings.properties.facts!.properties).not.toHaveProperty('time_lower');
   expect(nextMapping.mappings.properties.facts!.properties).toHaveProperty('time_lower', { type: 'keyword' });
+  expect(mixedDiscoveryDocumentCodec(oldMapping.mappings)).toBe('mixed-public-v1');
+  expect(mixedDiscoveryDocumentCodec(nextMapping.mappings)).toBe('mixed-calendar-v1');
+});
+
+test('new mixed physical generations allocate the calendar successor mapping', async () => {
+  let definition: unknown;
+  const index = 'test-discovery-g2';
+  const search = {
+    async request(method: string, _path: string, body?: unknown) {
+      if (method === 'PUT') {
+        definition = body;
+        return { status: 200, body: { acknowledged: true } };
+      }
+      return { status: 200, body: { [index]: { mappings: (definition as { mappings: unknown }).mappings } } };
+    },
+  };
+  await createDiscoveryIndex(search as never, 'test-', 2, 'incarnation-2');
+  if (!definition || typeof definition !== 'object' || !('mappings' in definition))
+    throw new Error('Expected a versioned mixed mapping');
+  expect(mixedDiscoveryDocumentCodec(definition.mappings)).toBe('mixed-calendar-v1');
+  expect(await readDiscoveryDocumentCodec(search as never, index)).toBe('mixed-calendar-v1');
 });

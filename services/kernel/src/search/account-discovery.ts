@@ -14,13 +14,14 @@ import { createNativeDiscoveryRegistry } from './discovery-hydration.ts';
 import {
   discoveryDocumentActions,
   discoveryDocumentId,
+  mixedDiscoveryDocumentCodec,
   parseDiscoveryDocumentId,
   parseDiscoveryDocumentKey,
   secondScopeDiscoveryDocumentActions,
   type AnyDiscoveryIndexAction,
   type SecondScopeDiscoveryIndexAction,
 } from './discovery-documents.ts';
-import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
+import { discoveryIndexName, discoveryIndexUuid, readDiscoveryDocumentCodec } from './indices.ts';
 import { writeDiscoveryActions, validateRefreshResponse, validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { validateObservation } from './indexer.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';
@@ -291,7 +292,8 @@ export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'
   const response = await search.request('GET', `/${index}`);
   const native = record(response.body) ? response.body[index] : undefined;
   const settings = record(native) && record(native.settings) ? native.settings.index : undefined;
-  const mappings = record(native) && record(native.mappings) ? native.mappings._meta : undefined;
+  const mapping = record(native) && record(native.mappings) ? native.mappings : undefined;
+  const mappings = record(mapping) ? mapping._meta : undefined;
   const alias = record(native) && record(native.aliases) ? native.aliases[`${index}-write`] : undefined;
   if (
     !row?.index_uuid ||
@@ -302,8 +304,7 @@ export async function readDiscoveryWriterPhysicalTarget(pool: Pick<Pool, 'query'
     settings.uuid !== row.index_uuid ||
     !record(mappings) ||
     mappings.incarnation !== row.incarnation ||
-    mappings.discovery_document_format !== 2 ||
-    mappings.comparator !== 'mixed-public-v1' ||
+    mixedDiscoveryDocumentCodec(mapping) === undefined ||
     !record(alias) ||
     alias.is_write_index !== true ||
     Object.keys(alias).length !== 1
@@ -452,6 +453,7 @@ export function createDiscoveryProjection(options: {
   const { pool, search, registry, listing, target } = options;
   const metadataProducers = options.metadataProducers ?? {};
   let metadataPopulationOwners: Promise<ReadonlySet<string>> | undefined;
+  let documentCodec: Promise<Awaited<ReturnType<typeof readDiscoveryDocumentCodec>>> | undefined;
   const accounts = registry.get('account');
   if (accounts.owner !== 'accounts') throw new TypeError('Account source is required');
   const subject = registry.entries.find((entry) => entry.owner === 'semantic');
@@ -461,6 +463,10 @@ export function createDiscoveryProjection(options: {
     chunk: readonly DiscoveryKey[],
     atLeast: bigint,
   ): Promise<DiscoveryIndexAction[]> {
+    const codec = await (documentCodec ??= readDiscoveryDocumentCodec(
+      search,
+      discoveryIndexName(target.prefix, target.generation),
+    ));
     const ids = [...new Set(chunk.map(({ id }) => id))];
     let actions: DiscoveryIndexAction[];
     if (owner === 'accounts') {
@@ -475,7 +481,7 @@ export function createDiscoveryProjection(options: {
           throw new Error('Account claim consumption advanced; resnapshot before projection');
         }
       }
-      actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, 'mixed-public-v1');
+      actions = discoveryDocumentActions(registry, { owner, snapshot }, chunk, undefined, codec);
       for (const key of chunk)
         if (!(await locateAccount(pool, target, key))) {
           await eraseDiscoveryAccount(pool, search, registry, key.id);
@@ -504,7 +510,7 @@ export function createDiscoveryProjection(options: {
         { owner, snapshot: keyedSnapshot },
         chunk,
         counts,
-        'mixed-public-v1',
+        codec,
       );
     }
     // Both owner families use the same native ICU normalizer and normalized512/missing-last rule.

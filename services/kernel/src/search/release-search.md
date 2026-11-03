@@ -62,14 +62,12 @@ do not expose a generic producer control without a separately admitted Semantic 
 ## Remaining integration
 
 Decision: mixed calendar documents use format 3, derived from the immutable mixed format-2 mapping with calendar
-fact fields; format-2 documents and physical generations retain their year-only meaning.
-
-The mixed discovery producer still needs the successor codec wired through population, replay, reconciliation,
-publication and current compilation. Do not rewrite immutable
-mappings/templates, silently admit an old generation, or broaden precise ranges into years. Replacement uses the
-existing resumable worker lifecycle. Regenerate public declarations when those integration interfaces change.
+fact fields; format-2 documents and physical generations retain their year-only meaning. New mixed physical
+generations use the format-3 mapping, and population, replay, reconciliation and continuing native writes select
+their codec from that physical mapping. Publication remains behind the existing complete population and replay
+lifecycle; old generations keep their original mapping and writer shape.
 
 The work grouping, bounded child/group continuations, active-release operand controls, mounted release page,
-eight-locale states and native all-pool growth measurements remain part of the same journey's continuation.
-There is no measured grouping seek count or native growth result from this foundation. The continuation must
-derive its seeks from real relation indexes, source caps and preparation plan before claiming a page bound.
+eight-locale states and native all-pool growth measurements remain part of the same journey. There is no measured
+grouping seek count or native growth result yet; derive its seeks from real relation indexes, source caps and
+preparation plan before claiming a page bound.

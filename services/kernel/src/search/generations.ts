@@ -21,7 +21,13 @@ import {
   type DiscoveryProjection,
   type DiscoveryTarget,
 } from './account-discovery.ts';
-import { discoveryIndexName, discoveryIndexUuid, discoveryAlias, createDiscoveryIndex } from './indices.ts';
+import {
+  discoveryIndexName,
+  discoveryIndexUuid,
+  discoveryAlias,
+  createDiscoveryIndex,
+  readDiscoveryDocumentCodec,
+} from './indices.ts';
 import {
   discoveryDocumentActions,
   parseDiscoveryHitIdentity,
@@ -741,6 +747,7 @@ async function reconcileDiscoveryPage(
   const hits = page.body.hits.hits;
   const keys = hits.map((hit) => parseDiscoveryHitIdentity(registry, hit));
   let expected: DiscoveryIndexAction[];
+  const codec = await readDiscoveryDocumentCodec(search, discoveryIndexName(target.prefix, target.generation));
   if (entry.owner === 'accounts') {
     const snapshot = validateAccountSnapshot(
       await entry.source.read(
@@ -751,7 +758,7 @@ async function reconcileDiscoveryPage(
       keys.map(({ id }) => id),
       census.position,
     );
-    expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, 'mixed-public-v1');
+    expected = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, codec);
   } else {
     const snapshot = await entry.source.read(
       partition,
@@ -768,7 +775,7 @@ async function reconcileDiscoveryPage(
       partition,
       snapshot.subjects.map(({ id }) => id),
     );
-    expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, 'mixed-public-v1');
+    expected = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, codec);
   }
   expected = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), expected);
   let mismatch = false;
@@ -1239,6 +1246,7 @@ export async function nativeGenerationActions(options: {
   }
   const keys = options.keys;
   if (!keys || keys.length !== ids.length) throw new TypeError('Native discovery keys are required');
+  const codec = await readDiscoveryDocumentCodec(search, index);
   const account = keys[0]?.owner === 'accounts';
   if (keys.some((key) => (key.owner === 'accounts') !== account)) throw new TypeError('Mixed owner key batch');
   let actions: DiscoveryIndexAction[];
@@ -1246,7 +1254,7 @@ export async function nativeGenerationActions(options: {
     const entry = registry.get('account');
     if (entry.owner !== 'accounts') throw new TypeError('Native Account producer is required');
     const snapshot = validateAccountSnapshot(await entry.source.read(partition, ids), partition, ids, obligation);
-    actions = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys);
+    actions = discoveryDocumentActions(registry, { owner: 'accounts', snapshot }, keys, undefined, codec);
   } else {
     const entry = registry.entries.find((entry) => entry.owner === 'semantic');
     if (!entry || entry.owner !== 'semantic') throw new TypeError('Native Subject producer is required');
@@ -1259,7 +1267,7 @@ export async function nativeGenerationActions(options: {
       partition,
       snapshot.subjects.map(({ id }) => id),
     );
-    actions = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts);
+    actions = discoveryDocumentActions(registry, { owner: 'semantic', snapshot }, keys, counts, codec);
     const semantic = actions.filter(
       (
         action,

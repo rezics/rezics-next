@@ -6,13 +6,18 @@ shared analyzer requirements remain under [universal search conditions](../../..
 ## Compatibility
 
 Format 1 remains the immutable legacy Subject/Account source shape and mapping. Its UUID-only receipt and parser
-semantics do not change. Format 2 is the `mixed-public-v1` source shape: it uses the strict shared mapping in
-[`discovery-mixed-v1.json`](../../db/search/indices/discovery-mixed-v1.json), tagged `_id` values of
+semantics do not change. Format 2 is the immutable `mixed-public-v1` source shape: it uses the strict shared mapping
+in [`discovery-mixed-v1.json`](../../db/search/indices/discovery-mixed-v1.json), tagged `_id` values of
 `discovery-v1:<percent-encoded-kind>:<canonical-routable-uuid>`, and an identical `_source.identity`.
 
-**Decision:** format 2 remains the sole mixed public wire format; the three second-scope kinds use its existing
-common public text and native revision fields, and a generation may publish them only with the expanded registry
-and matching mapping receipt.
+Format 3 is the calendar successor to format 2. Its strict mapping derives from format 2 and adds calendar fields
+to nested date facts. Semantic Subject and Account projections use format 3 only when their physical generation
+has that matching mapping; the generation's stored UUID and mapping determine the writer codec. Format 2 physical
+generations and their documents keep their year-only projection. The second-scope owner adapters continue to emit
+their existing format-2 shape because those records have no calendar facts.
+
+**Decision:** second-scope kinds keep format 2's common public text and native revision fields in either physical
+mapping. A generation may publish them only with the expanded registry and matching mapping receipt.
 
 Format 2 is additive by owner and kind. Subject and Account retain their existing exact field allowlists and
 validation. The second-scope kinds use only the common identity fields plus `revision`, `names`, `descriptions` and
@@ -44,9 +49,9 @@ All kinds use the existing `cjk_bigram_v2` analyzer and shared `names`, `descrip
 mapping remains `dynamic: "strict"`; its `second_scope_kinds` metadata binds Collection to Commerce and review and
 Space to Content. No per-kind engine, index or client is introduced.
 
-Format 1 readers retain their existing meaning. Format 2 readers continue to decode existing Subject and Account
-documents as before and decode a second-scope document only when its owner/kind pair and allowlisted fields match.
-The mapping metadata and expanded closed registry are generation inputs: the generation owner must build and relay
-the complete common projection, and publish only after its current registry and mapping receipts match. An old
-generation or receipt cannot establish coverage for a kind absent from its registry. This document does not assign
-the leaf adapters or generation relay to Search's document codec.
+Format 1 readers retain their existing meaning. Format 2 readers decode existing Subject and Account documents as
+before. Format 3 readers validate calendar components and interval keys against their matching mapping. Both mixed
+formats decode a second-scope document only when its owner/kind pair and allowlisted fields match. The mapping
+metadata and expanded closed registry are generation inputs: population, replay, reconciliation and continuing
+writes use the selected physical codec, and publication follows complete current coverage. An old generation or
+receipt cannot establish coverage for a kind absent from its registry.

@@ -19,10 +19,38 @@ import { SearchUnavailableError } from './opensearch.ts';
 import definition from '../../db/search/indices/discovery.json';
 import mixedDefinition from '../../db/search/indices/discovery-mixed-v1.json';
 import { MISSING_NAME } from './document.ts';
-import { calendarIndexDefinition } from './release-search-calendar.ts';
+import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
 
 const MAX_NATIVE_VERSION = 9_223_372_036_854_775_807n;
 const ID_PREFIX = 'discovery-v1:';
+
+export type MixedDiscoveryDocumentCodec = 'mixed-public-v1' | 'mixed-calendar-v1';
+
+/** Bind each physical mixed mapping to exactly one writer codec. */
+export function mixedDiscoveryDocumentCodec(mappings: unknown): MixedDiscoveryDocumentCodec | undefined {
+  if (!record(mappings) || !record(mappings._meta) || mappings._meta.comparator !== 'mixed-public-v1')
+    return undefined;
+  const metadata = mappings._meta;
+  const properties = record(mappings.properties) ? mappings.properties : undefined;
+  const facts = properties && record(properties.facts) && record(properties.facts.properties)
+    ? properties.facts.properties
+    : undefined;
+  if (!facts) return undefined;
+  if (metadata.discovery_document_format === MIXED_DISCOVERY_DOCUMENT_FORMAT) {
+    if (
+      metadata.calendar_range_format !== undefined ||
+      ['month', 'day', 'time_lower', 'time_upper'].some((field) => facts && Object.hasOwn(facts, field))
+    )
+      return undefined;
+    return 'mixed-public-v1';
+  }
+  if (
+    metadata.discovery_document_format === MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT &&
+    hasCalendarIndexFormat(mappings)
+  )
+    return 'mixed-calendar-v1';
+  return undefined;
+}
 const COMMON_FIELDS = ['identity', 'document_format', 'owner', 'kind', 'id', 'route', 'partition', 'source_position'];
 const ACCOUNT_FIELDS = [
   ...COMMON_FIELDS,

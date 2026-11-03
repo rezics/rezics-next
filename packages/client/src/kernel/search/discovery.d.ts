@@ -14,6 +14,7 @@ import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts
 export declare const DISCOVERY_DOCUMENT_FORMAT = 1;
 /** Successor requires a complete native rebuild; format 1 retains its original reader. */
 export declare const MIXED_DISCOVERY_DOCUMENT_FORMAT = 2;
+export declare const MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT = 3;
 export declare const ACCOUNT_DISCOVERY_BATCH_SIZE = 100;
 export declare const MAX_ACCOUNT_DISCOVERY_BATCH = 100;
 export type DiscoveryKey = {
@@ -266,7 +267,7 @@ export type DiscoverySnapshot = {
     snapshot: AccountSnapshot;
 };
 type DocumentIdentity = {
-    document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+    document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
     identity?: string;
     id: string;
     kind: string;
@@ -303,7 +304,7 @@ export type DiscoveryIndexDefinition = {
     settings: Record<string, unknown>;
     mappings: {
         _meta: {
-            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+            discovery_document_format: typeof DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_DISCOVERY_DOCUMENT_FORMAT | typeof MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT;
             identity?: string;
             name_sort_format: number;
             document_identity: string;

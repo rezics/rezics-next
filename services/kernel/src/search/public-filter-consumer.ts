@@ -636,6 +636,7 @@ import {
   type PublicFilterRepairWriterReceipt,
 } from './writer-guard.ts';
 import { createDiscoveryProjection, nativeDiscoveryRegistry } from './account-discovery.ts';
+import { mixedDiscoveryDocumentCodec } from './discovery-documents.ts';
 import { discoveryConsumer } from './generations.ts';
 import { subjectConsumer } from './runner.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
@@ -1164,8 +1165,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
       !record(mapping.body[target]) ||
       !record(mapping.body[target].mappings) ||
       !record(mapping.body[target].mappings._meta) ||
-      mapping.body[target].mappings._meta.discovery_document_format !== 2 ||
-      mapping.body[target].mappings._meta.comparator !== 'mixed-public-v1' ||
+      mixedDiscoveryDocumentCodec(mapping.body[target].mappings) === undefined ||
       mapping.body[target].mappings._meta.incarnation !== row.incarnation ||
       settings.status !== 200 ||
       !record(settings.body) ||

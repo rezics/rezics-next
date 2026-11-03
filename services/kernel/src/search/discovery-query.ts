@@ -7,7 +7,7 @@ import {
 import { assertCompleteSearch } from './complete-search.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { SearchSortValue } from './cursor.ts';
-import { MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
+import { MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT, MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 import { HANDLE_LOOKUP_PATTERN } from '../access/handle-policy.ts';
 
 export type DiscoveryOrder = 'id' | 'name' | 'relevance';
@@ -203,7 +203,8 @@ export function readDiscoveryEngineResult(
   return {
     hits: candidates.map(({ key, document, index, sort, matched }) => {
       if (
-        document.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT ||
+        (document.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT &&
+          document.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) ||
         (plan.sort === 'name' && sort[0] !== document.name_sort)
       )
         malformed();
