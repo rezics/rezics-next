@@ -83,7 +83,7 @@ export type LibraryExportManifestV1 = {
   expiresAt: string;
   privacy: 'private';
   completeness: 'supported-native-facts';
-  sections: LibraryExportSectionV1[];
+  sections: [...typeof exportSections];
   omissions: typeof v1Omissions;
 };
 
@@ -96,7 +96,7 @@ export type LibraryExportManifestV2 = {
   expiresAt: string;
   privacy: 'private';
   completeness: 'supported-native-facts';
-  sections: LibraryExportSectionV2[];
+  sections: [...typeof exportSectionsV2];
   omissions: typeof v2Omissions;
 };
 
@@ -106,7 +106,7 @@ export type LibraryExportManifestV3 = Omit<
 > & {
   version: 3;
   coverage: 'private-library-owner-facts-v3';
-  sections: LibraryExportSectionV3[];
+  sections: [...typeof exportSectionsV3];
   omissions: typeof v3Omissions;
 };
 export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2 | LibraryExportManifestV3;
