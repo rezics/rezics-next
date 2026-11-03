@@ -44,6 +44,50 @@ const SUBJECT_FIELDS = [
   'rating_score',
   'rating_prior_epoch',
 ];
+const SECOND_SCOPE_FIELDS = [...COMMON_FIELDS, 'revision', 'names', 'descriptions', 'name_sort'];
+const SECOND_SCOPE_BATCH_SIZE = 256;
+
+/** Local codec seam until the closed DiscoveryKey/snapshot union owns these kinds. */
+export type SecondScopeDiscoveryKey =
+  | { owner: 'commerce'; kind: 'collection'; route: number; id: string }
+  | { owner: 'content'; kind: 'review' | 'space'; route: number; id: string };
+export type DiscoveryDocumentKey = DiscoveryKey | SecondScopeDiscoveryKey;
+export type SecondScopeDiscoveryRecord = {
+  key: SecondScopeDiscoveryKey;
+  revision: bigint;
+  names: readonly string[];
+  descriptions: readonly string[];
+  nameSort: string | null;
+};
+export type SecondScopeDiscoveryObservation = {
+  owner: 'commerce' | 'content';
+  snapshot: {
+    partition: number;
+    position: bigint;
+    /** False or omitted means the native read cannot establish deletions for this keyset. */
+    complete: boolean;
+    records: readonly SecondScopeDiscoveryRecord[];
+  };
+};
+export type SecondScopeIndexedDiscoveryDocument = {
+  document_format: typeof MIXED_DISCOVERY_DOCUMENT_FORMAT;
+  identity: string;
+  owner: 'commerce' | 'content';
+  kind: 'collection' | 'review' | 'space';
+  id: string;
+  route: number;
+  partition: number;
+  source_position: string;
+  revision: string;
+  names: string[];
+  descriptions: string[];
+  name_sort: string | null;
+};
+export type SecondScopeDiscoveryIndexAction =
+  | { op: 'index'; id: string; version: bigint; document: SecondScopeIndexedDiscoveryDocument }
+  | { op: 'delete'; id: string; version: bigint };
+export type DiscoveryDocumentValue = IndexedDiscoveryDocument | SecondScopeIndexedDiscoveryDocument;
+export type AnyDiscoveryIndexAction = DiscoveryIndexAction | SecondScopeDiscoveryIndexAction;
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -65,9 +109,45 @@ function safeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
+function exactFields(value: Record<string, unknown>, fields: readonly string[]): boolean {
+  return Object.keys(value).length === fields.length && fields.every((field) => Object.hasOwn(value, field));
+}
+
+function secondScopeOwner(kind: string): 'commerce' | 'content' | undefined {
+  if (kind === 'collection') return 'commerce';
+  if (kind === 'review' || kind === 'space') return 'content';
+  return undefined;
+}
+
+function canonicalSecondScopeKey(registry: DiscoveryRegistry, value: unknown): SecondScopeDiscoveryKey {
+  if (
+    !record(value) ||
+    !exactFields(value, ['owner', 'kind', 'route', 'id']) ||
+    typeof value.kind !== 'string' ||
+    typeof value.id !== 'string' ||
+    typeof value.route !== 'number'
+  )
+    throw new TypeError('Invalid second-scope discovery key');
+  const owner = secondScopeOwner(value.kind);
+  if (owner === undefined || owner !== value.owner) throw new TypeError('Second-scope owner does not own this kind');
+  if (registry.entries.some((entry) => entry.kind === value.kind))
+    throw new TypeError('Second-scope kind collides with the closed discovery registry');
+  const route = routeOf(value.id);
+  if (route === null || route !== value.route) throw new RangeError('Invalid second-scope discovery route');
+  return value.owner === 'commerce'
+    ? { owner: 'commerce', kind: 'collection', route, id: value.id }
+    : { owner: 'content', kind: value.kind as 'review' | 'space', route, id: value.id };
+}
+
+function canonicalDocumentKey(registry: DiscoveryRegistry, value: DiscoveryDocumentKey): DiscoveryDocumentKey {
+  if (typeof value === 'object' && value !== null && secondScopeOwner((value as { kind?: string }).kind ?? '') !== undefined)
+    return canonicalSecondScopeKey(registry, value);
+  return registry.key(value as DiscoveryKey);
+}
+
 /** Canonical kind+ID key. Owner is resolved through the closed registry, never inferred from a raw UUID. */
-export function discoveryDocumentId(registry: DiscoveryRegistry, key: DiscoveryKey): string {
-  const canonical = registry.key(key);
+export function discoveryDocumentId(registry: DiscoveryRegistry, key: DiscoveryDocumentKey): string {
+  const canonical = canonicalDocumentKey(registry, key);
   const id = `${ID_PREFIX}${encodeURIComponent(canonical.kind)}:${canonical.id}`;
   if (Buffer.byteLength(id, 'utf8') > 512)
     throw new RangeError('Discovery document identity exceeds the native ID limit');
@@ -76,19 +156,122 @@ export function discoveryDocumentId(registry: DiscoveryRegistry, key: DiscoveryK
 
 /** A legacy UUID receipt is intentionally invalid here. Never pass tagged IDs to the legacy Subject parser. */
 export function parseDiscoveryDocumentId(registry: DiscoveryRegistry, id: string): DiscoveryKey {
+  return parseDiscoveryDocumentKey(registry, id) as DiscoveryKey;
+}
+
+/** Typed decoder for every registered and second-scope native key. */
+export function parseDiscoveryDocumentKey(registry: DiscoveryRegistry, id: string): DiscoveryDocumentKey {
   if (typeof id !== 'string' || !id.startsWith(ID_PREFIX)) throw new TypeError('Expected a tagged discovery identity');
-  const separator = id.lastIndexOf(':');
-  const kind = decodeURIComponent(id.slice(ID_PREFIX.length, separator));
+  const separator = id.indexOf(':', ID_PREFIX.length);
+  if (separator <= ID_PREFIX.length || separator === id.length - 1)
+    throw new TypeError('Malformed discovery identity');
+  const encodedKind = id.slice(ID_PREFIX.length, separator);
+  let kind: string;
+  try {
+    kind = decodeURIComponent(encodedKind);
+  } catch {
+    throw new TypeError('Malformed discovery identity');
+  }
   const nativeId = id.slice(separator + 1);
-  const entry = registry.get(kind);
   const route = routeOf(nativeId);
   if (route === null) throw new RangeError('Invalid native discovery ID');
-  const key: DiscoveryKey =
-    entry.owner === 'accounts'
+  const secondOwner = secondScopeOwner(kind);
+  const key: DiscoveryDocumentKey = secondOwner === undefined
+    ? registry.get(kind).owner === 'accounts'
       ? { owner: 'accounts', kind: 'account', route, id: nativeId }
-      : { owner: 'semantic', kind, route, id: nativeId };
+      : { owner: 'semantic', kind, route, id: nativeId }
+    : { owner: secondOwner, kind: kind as 'collection' | 'review' | 'space', route, id: nativeId } as SecondScopeDiscoveryKey;
   if (discoveryDocumentId(registry, key) !== id) throw new TypeError('Noncanonical discovery identity');
   return key;
+}
+
+/** One strict writer for Collection, review and Space records supplied by their owner adapters. */
+export function secondScopeDiscoveryDocumentActions(
+  registry: DiscoveryRegistry,
+  observation: SecondScopeDiscoveryObservation,
+  keys: readonly SecondScopeDiscoveryKey[],
+): SecondScopeDiscoveryIndexAction[] {
+  if (!record(observation) || !exactFields(observation, ['owner', 'snapshot']))
+    throw new TypeError('Invalid second-scope discovery observation');
+  const snapshot = observation.snapshot;
+  if (
+    !record(snapshot) ||
+    !exactFields(snapshot, ['partition', 'position', 'complete', 'records']) ||
+    !safeInteger(snapshot.partition) ||
+    snapshot.partition > 4095 ||
+    snapshot.complete !== true ||
+    !Array.isArray(snapshot.records)
+  )
+    throw new TypeError('Incomplete second-scope discovery snapshot');
+  if (observation.owner !== 'commerce' && observation.owner !== 'content')
+    throw new TypeError('Unknown second-scope discovery owner');
+  nativeVersion(snapshot.position);
+  if (!Array.isArray(keys) || keys.length > SECOND_SCOPE_BATCH_SIZE)
+    throw new RangeError('Second-scope discovery source batch exceeds its owner bound');
+
+  const requested = new Map<string, SecondScopeDiscoveryKey>();
+  for (const input of keys) {
+    const key = canonicalSecondScopeKey(registry, input);
+    if (key.owner !== observation.owner || partitionOf(key.route) !== snapshot.partition)
+      throw new RangeError('Second-scope source and requested owner/partition disagree');
+    const identity = discoveryDocumentId(registry, key);
+    if (!requested.has(identity)) requested.set(identity, key);
+  }
+  if (snapshot.records.length > requested.size) throw new TypeError('Invalid second-scope discovery source rows');
+
+  const rows = new Map<string, SecondScopeDiscoveryRecord>();
+  for (const input of snapshot.records) {
+    if (
+      !record(input) ||
+      !exactFields(input, ['key', 'revision', 'names', 'descriptions', 'nameSort']) ||
+      !Array.isArray(input.names) ||
+      !texts(input.names) ||
+      !Array.isArray(input.descriptions) ||
+      !texts(input.descriptions) ||
+      !nullableText(input.nameSort)
+    )
+      throw new TypeError('Invalid second-scope discovery source row');
+    const key = canonicalSecondScopeKey(registry, input.key);
+    if (key.owner !== observation.owner || partitionOf(key.route) !== snapshot.partition)
+      throw new TypeError('Second-scope source row has a foreign owner or partition');
+    nativeVersion(input.revision);
+    const identity = discoveryDocumentId(registry, key);
+    if (!requested.has(identity) || rows.has(identity))
+      throw new TypeError('Second-scope source returned duplicate, unrequested or foreign rows');
+    rows.set(identity, {
+      key,
+      revision: input.revision,
+      names: input.names,
+      descriptions: input.descriptions,
+      nameSort: input.nameSort,
+    });
+  }
+
+  const actions: SecondScopeDiscoveryIndexAction[] = [];
+  for (const [identity, key] of requested) {
+    const row = rows.get(identity);
+    if (row === undefined) {
+      actions.push({ op: 'delete', id: identity, version: snapshot.position });
+      continue;
+    }
+    const document: SecondScopeIndexedDiscoveryDocument = {
+      document_format: MIXED_DISCOVERY_DOCUMENT_FORMAT,
+      identity,
+      owner: key.owner,
+      kind: key.kind,
+      id: key.id,
+      route: key.route,
+      partition: snapshot.partition,
+      source_position: snapshot.position.toString(),
+      revision: row.revision.toString(),
+      names: [...row.names],
+      descriptions: [...row.descriptions],
+      name_sort: row.nameSort,
+    };
+    validateDiscoveryDocumentFormat(registry, document);
+    actions.push({ op: 'index', id: identity, version: snapshot.position, document });
+  }
+  return actions;
 }
 
 /** Pure allowlist projection from an already authorized native observation; performs no owner/profile reads. */
@@ -194,8 +377,60 @@ export function discoveryDocumentActions(
   return actions;
 }
 
-/** Strict mixed _source validation, including fields which a shared mapping alone cannot prohibit per owner. */
+function validateSecondScopeDiscoveryDocument(
+  registry: DiscoveryRegistry,
+  value: Record<string, unknown>,
+): SecondScopeIndexedDiscoveryDocument {
+  if (
+    !exactFields(value, SECOND_SCOPE_FIELDS) ||
+    value.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT ||
+    (value.owner !== 'commerce' && value.owner !== 'content') ||
+    typeof value.kind !== 'string' ||
+    typeof value.id !== 'string' ||
+    typeof value.route !== 'number'
+  )
+    throw new TypeError('Invalid second-scope discovery document identity');
+  const expectedOwner = secondScopeOwner(value.kind);
+  if (expectedOwner === undefined || expectedOwner !== value.owner)
+    throw new TypeError('Second-scope owner does not own this kind');
+  const key = canonicalSecondScopeKey(registry, {
+    owner: value.owner,
+    kind: value.kind,
+    route: value.route,
+    id: value.id,
+  });
+  if (
+    value.identity !== discoveryDocumentId(registry, key) ||
+    value.partition !== partitionOf(key.route) ||
+    !decimalVersion(value.source_position) ||
+    !decimalVersion(value.revision) ||
+    !texts(value.names) ||
+    !texts(value.descriptions) ||
+    !nullableText(value.name_sort)
+  )
+    throw new TypeError('Invalid second-scope discovery document');
+  if (
+    (key.kind === 'collection' && (value.names.length !== 1 || value.descriptions.length !== 0)) ||
+    (key.kind === 'space' && (value.names.length !== 1 || value.descriptions.length !== 1))
+  )
+    throw new TypeError('Invalid public Collection or Space metadata');
+  return value as unknown as SecondScopeIndexedDiscoveryDocument;
+}
+
+/** Typed validator for the closed format-1/format-2 family and the local second-scope seam. */
+export function validateDiscoveryDocumentFormat(registry: DiscoveryRegistry, value: unknown): DiscoveryDocumentValue {
+  if (record(value) && (value.owner === 'commerce' || value.owner === 'content'))
+    return validateSecondScopeDiscoveryDocument(registry, value);
+  return validateRegisteredDiscoveryDocument(registry, value);
+}
+
+/** Backward-compatible Subject/Account typing; validation still recognizes the strict second-scope seam. */
 export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: unknown): IndexedDiscoveryDocument {
+  return validateDiscoveryDocumentFormat(registry, value) as IndexedDiscoveryDocument;
+}
+
+/** Strict mixed _source validation, including fields which a shared mapping alone cannot prohibit per owner. */
+function validateRegisteredDiscoveryDocument(registry: DiscoveryRegistry, value: unknown): IndexedDiscoveryDocument {
   if (
     !record(value) ||
     (value.document_format !== DISCOVERY_DOCUMENT_FORMAT &&
@@ -290,12 +525,12 @@ export function validateDiscoveryDocument(registry: DiscoveryRegistry, value: un
   return value as IndexedDiscoveryDocument;
 }
 
-/** Additive parser for native mixed hits. This never changes the UUID-only Subject receipt/parser contract. */
-export function parseDiscoveryHitIdentity(registry: DiscoveryRegistry, hit: unknown): DiscoveryKey {
+/** Typed parser for native mixed hits, including the local second-scope seam. */
+export function parseDiscoveryHitKey(registry: DiscoveryRegistry, hit: unknown): DiscoveryDocumentKey {
   try {
     if (!record(hit) || typeof hit._id !== 'string') throw new TypeError('Missing discovery hit identity');
-    const key = parseDiscoveryDocumentId(registry, hit._id);
-    const document = validateDiscoveryDocument(registry, hit._source);
+    const key = parseDiscoveryDocumentKey(registry, hit._id);
+    const document = validateDiscoveryDocumentFormat(registry, hit._source);
     if (
       document.owner !== key.owner ||
       document.kind !== key.kind ||
@@ -309,6 +544,11 @@ export function parseDiscoveryHitIdentity(registry: DiscoveryRegistry, hit: unkn
   }
 }
 
+/** Additive parser for native mixed hits. This never changes the UUID-only Subject receipt/parser contract. */
+export function parseDiscoveryHitIdentity(registry: DiscoveryRegistry, hit: unknown): DiscoveryKey {
+  return parseDiscoveryHitKey(registry, hit) as DiscoveryKey;
+}
+
 /**
  * Raw native NDJSON, with exact signed-bigint external versions. The legacy bulkLines/OpenSearch.bulk path
  * serializes JS numbers and is deliberately not used for this format. No transport or generation is activated.
@@ -316,7 +556,7 @@ export function parseDiscoveryHitIdentity(registry: DiscoveryRegistry, hit: unkn
 export function discoveryBulkBody(
   registry: DiscoveryRegistry,
   index: string,
-  actions: readonly DiscoveryIndexAction[],
+  actions: readonly AnyDiscoveryIndexAction[],
   options: { writeAlias?: string; replayDeletes?: boolean } = {},
 ): string {
   if (!/^[a-z0-9][a-z0-9-]{0,47}discovery-g[1-9][0-9]*$/.test(index))
@@ -326,14 +566,15 @@ export function discoveryBulkBody(
   const lines: string[] = [];
   for (const action of actions) {
     nativeVersion(action.version);
-    const key = parseDiscoveryDocumentId(registry, action.id);
+    const key = parseDiscoveryDocumentKey(registry, action.id);
     if (action.op !== 'index' && action.op !== 'delete') throw new TypeError('Invalid discovery action');
     if (action.op === 'index') {
-      const document = validateDiscoveryDocument(registry, action.document);
+      const document = validateDiscoveryDocumentFormat(registry, action.document);
       if (
         document.owner !== key.owner ||
         document.kind !== key.kind ||
         document.id !== key.id ||
+        document.route !== key.route ||
         document.source_position !== action.version.toString()
       )
         throw new TypeError('Discovery action and document disagree');

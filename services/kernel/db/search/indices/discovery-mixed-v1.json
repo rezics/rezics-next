@@ -50,7 +50,12 @@
       "discovery_document_format": 2,
       "name_sort_format": 1,
       "document_identity": "discovery-v1:percent-encoded-kind:uuid",
-      "comparator": "mixed-public-v1"
+      "comparator": "mixed-public-v1",
+      "second_scope_kinds": {
+        "collection": "commerce",
+        "review": "content",
+        "space": "content"
+      }
     },
     "dynamic": "strict",
     "properties": {
