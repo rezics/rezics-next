@@ -58,6 +58,58 @@ export function SubjectPurchaseSlot({ context }: { context: SubjectPurchaseConte
   );
 }
 
+function CompanionLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={href}>
+      {label}
+    </a>
+  );
+}
+
+/** Additive graph / quotation / concept / music-context companions; View enum stays unchanged. */
+export function SubjectExploreSlot({
+  subjectId,
+  subjectType,
+  label,
+  locale,
+}: {
+  subjectId: string;
+  subjectType: string;
+  label: string;
+  locale: string;
+}) {
+  const address = { id: subjectId, label, locale };
+  const o = { locale: locale as never };
+  const graph = catalogueEntries.graph(address);
+  const quotations =
+    subjectType === 'wd:Q95074' || subjectType === 'schema:Quotation' || subjectType.startsWith('schema:')
+      ? catalogueEntries.quotations(address)
+      : undefined;
+  const concepts =
+    subjectType === 'skos:Concept' || subjectType === 'skos:ConceptScheme'
+      ? catalogueEntries.concepts(address)
+      : undefined;
+  const music =
+    subjectType === 'schema:Place' ||
+    subjectType === 'schema:Event' ||
+    subjectType === 'schema:MusicVenue' ||
+    subjectType === 'schema:MusicEvent' ||
+    subjectType === 'schema:AdministrativeArea' ||
+    subjectType === 'schema:MusicInstrument' ||
+    subjectType === 'wd:Q34379'
+      ? catalogueEntries.musicContext(address)
+      : undefined;
+  return (
+    <section data-slot="subject-explore" className="flex min-w-0 flex-wrap gap-2">
+      <p className="w-full text-sm font-medium">{m.graph_explore_title({}, o)}</p>
+      <CompanionLink href={graph.href} label={graph.label} />
+      {quotations && <CompanionLink href={quotations.href} label={quotations.label} />}
+      {concepts && <CompanionLink href={concepts.href} label={concepts.label} />}
+      {music && <CompanionLink href={music.href} label={music.label} />}
+    </section>
+  );
+}
+
 /** Additive Organization companion; no extra subject fetch and no View-enum widening. */
 export function OrganizationHistorySlot({
   subjectId,

@@ -27,6 +27,19 @@ export function subjectViewHref(subject: SubjectHrefInput, locale: string, view:
   return keepSearch(subjectUrlForView(subjectHref(subject, locale), view), query);
 }
 
+export const subjectCompanionNames = ['graph', 'quotations', 'concepts', 'music-context'] as const;
+export type SubjectCompanion = (typeof subjectCompanionNames)[number];
+
+/** Explicit companion routes; these never widen the shared composition View enum. */
+export function subjectCompanionHref(
+  subject: SubjectHrefInput,
+  locale: string,
+  companion: SubjectCompanion,
+  query = '',
+): string {
+  return keepSearch(`${subjectHref(subject, locale).href}/${companion}`, query);
+}
+
 /** Append the requested view to either canonical identity: catalogue subject or account. */
 export function subjectUrlForView(subject: { href: string }, view?: string): string {
   return view && view !== 'overview' ? `${subject.href}/${encodeURIComponent(view)}` : subject.href;

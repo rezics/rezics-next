@@ -1426,3 +1426,39 @@ sales. Every page requires phone390 and desktop1440 in light and dark: 56 images
 `.temp/screenshots/core/<nn>-<page>-<width>-<theme>.png`, with every resulting path listed by the task result. These
 captures are required mounted acceptance, not a substitute for growth assertions. The landing policy defers native
 acceptance and browser capture to the integration verifier; authored harnesses do not establish executed evidence.
+
+## Explore the bounded catalogue graph
+
+A subject header offers additive companion routes `/graph`, `/quotations`, `/concepts` and `/music-context`. These
+do not widen the shared composition View enum and do not replace the generic `$view` route. Ordinary finite
+relations, credits and appearance lists remain the basic catalogue journey.
+
+The graph reader consumes `GET /v1/subjects/:id/graph`, `/links` and `/counts`. Native `graph.ts` admits depth 1 or 2,
+at most eight relation properties, and a **per-expansion** neighbour page of at most 25. The producer also stops
+edge exploration at 500 edges; Web never requests more than 25 neighbours per expansion and never crawls, auto-expands
+or hydrates every node. Truncated expansions continue through the matching bounded `/relations` or `/links` page.
+Incomplete is distinct from empty. Edge direction, inverse labels, qualifier/credit slots, cycles and repeated node
+identities are preserved; duplicate edges are not. Graph reachability does not authorize access or prove identity.
+
+A keyboard-selectable diagram has a readable table equivalent. Only public anchor, relation, direction, depth and
+selected node/edge identifiers belong in the route. Locale, session epoch, read refusal, anchor replacement and a
+source-page change retire obsolete nodes, continuations and pending results. Redirects, stale cursors, concealed
+endpoints and an unavailable graph never leak previous labels.
+
+Selecting a node issues at most two explicit native reads (the selected subject, and one quotation, concept or music
+companion page). Correction uses the existing facts, relation and authored-document editors and returns to the same
+bounded exploration address.
+
+Decision: unreleased `schema:Quotation` and place/event/area/instrument types stay named unavailable until Semantic
+admits them; unknown source roles stay retained evidence.
+
+### Cost
+
+Let G be one native graph response at the chosen depth with limit 25. That limit bounds each expansion's neighbour
+page, not the catalogue and not all three of vertices, edges and work. The producer edge budget of 500 is a separate
+engine cap. Let D be the explicitly selected detail components (at most two) and L_i / B_i their installed row and
+byte caps: quotation, concept and music-context pages use 20 rows; a selected subject/document body is bounded by the
+existing document contract, retained here at 262,144 bytes for the composed detail. Web projection and retention are
+O(G + sum L_i + sum B_i), independent of catalogue N. A further user expansion pays the same formula once and replaces
+the corresponding truncated page instead of accumulating history. Missing native bounds stay unavailable. Growth
+acceptance is `apps/web/tests/subject-graph-browser.test.tsx`.

@@ -184,6 +184,26 @@ export const catalogueEntries = {
       href: `${subject({ id, label, locale })}/file`,
     };
   },
+  graph: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
+    group: 'read',
+    label: m.graph_explore_title({}, options(locale)),
+    href: `${subject({ id, label, locale })}/graph`,
+  }),
+  quotations: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
+    group: 'read',
+    label: m.quotation_title({}, options(locale)),
+    href: `${subject({ id, label, locale })}/quotations`,
+  }),
+  concepts: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
+    group: 'read',
+    label: m.concept_explore_title({}, options(locale)),
+    href: `${subject({ id, label, locale })}/concepts`,
+  }),
+  musicContext: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
+    group: 'read',
+    label: m.music_context_title({}, options(locale)),
+    href: `${subject({ id, label, locale })}/music-context`,
+  }),
 };
 
 /** Navigation may request sign-in; the native page still owns every current availability/authority decision. */

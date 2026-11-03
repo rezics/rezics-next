@@ -18,6 +18,7 @@ import {
 } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
+import { subjectHref } from '../../subject/subject-href';
 import { unitSymbols } from './statement-editor';
 import { DefinitionMeaning as Meaning } from './definition-meaning';
 import {
@@ -1335,5 +1336,40 @@ export function DefinitionGuideLink({
       {field ? m.guide_field_help({}, o) : m.guide_type_help({}, o)}
       <span className="sr-only"> · {m.guide_new_tab({}, o)}</span>
     </a>
+  );
+}
+
+/** One bounded hierarchy page for an admitted catalogue concept; absence is not a complete-scheme proof. */
+export function ConceptHierarchy({
+  locale,
+  rows,
+  empty,
+  broader,
+  narrower,
+}: {
+  locale: string;
+  rows: { id: string; label: string; lang: string | null; direction: 'broader' | 'narrower' }[];
+  empty: string;
+  broader: string;
+  narrower: string;
+}) {
+  if (!rows.length) return <p>{empty}</p>;
+  return (
+    <section className="space-y-2">
+      <h2 className="font-sans text-lg font-semibold">{broader}</h2>
+      <ul className="space-y-1">
+        {rows.map((row) => (
+          <li key={`${row.direction}:${row.id}`}>
+            <a
+              className={linkClassName}
+              href={subjectHref({ id: row.id, label: row.label }, locale).href}
+              {...(row.lang ? { lang: row.lang } : {})}
+            >
+              {row.direction === 'narrower' ? `${narrower}: ${row.label || row.id}` : row.label || row.id}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
