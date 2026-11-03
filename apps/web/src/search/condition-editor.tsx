@@ -32,6 +32,8 @@ import {
   resolveConditionPropertyChange,
 } from './condition-property-edit';
 import { conditionDraftNodeAt, createConditionEditFocus } from './condition-edit-focus';
+import { createRequestResourceConditionExtension } from './resource-condition-editor';
+import type { RequestResourceInput } from './resource-condition-model';
 import {
   conditionTreeCanSubmit,
   createConditionDraftNode,
@@ -65,8 +67,15 @@ type EditorContext = {
 /** A consumer can compose additional shared grammar leaves without a second tree editor or evaluator. */
 export type ConditionExtension = {
   choices: { label: string; value: FilterDocument }[];
-  render(value: FilterDocument, onChange: (value: FilterDocument) => void): ReactNode;
+  label?(value: FilterDocument, context?: { locale: string }): string | undefined;
+  render(
+    value: FilterDocument,
+    onChange: (value: FilterDocument) => void,
+    context?: { pointer: string; locale: string; issues: readonly ConditionIssue[] },
+  ): ReactNode;
 };
+
+const EMPTY_REQUEST_RESOURCES: RequestResourceInput = Object.freeze({});
 
 function messageOptions(locale: string): MessageOptions {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
@@ -100,6 +109,7 @@ export function ConditionEditor({
   languages,
   onLanguages,
   extension,
+  requestResources,
   embedded = false,
 }: {
   value?: FilterDocument | undefined;
@@ -112,6 +122,8 @@ export function ConditionEditor({
   languages?: string[] | undefined;
   onLanguages?(languages: string[]): void;
   extension?: ConditionExtension;
+  /** Optional native labels for request-only resource IDs; labels are display data and never resolve IDs. */
+  requestResources?: RequestResourceInput | false;
   embedded?: boolean;
 }) {
   const options = messageOptions(locale);
@@ -167,10 +179,6 @@ export function ConditionEditor({
     publish(result.value, editConditionDraftNode(session.node!, path, edit, nextKey, retainReplacement));
     return true;
   };
-  const admitsCondition = useMemo(
-    () => (metadata ? conditionTreeAdmission(metadata, extension ? { owner: true } : undefined) : undefined),
-    [metadata, extension !== undefined],
-  );
   const savedFilters = metadata ? Object.keys(metadata.filters ?? {}) : [];
   const getSavedFilterEdit = (path: ConditionTreePath, id: string, mode: SavedFilterEditMode) => {
     if (!value || !admitsCondition) return undefined;
@@ -186,6 +194,44 @@ export function ConditionEditor({
     publish(next, editConditionDraftNode(session.node!, path, edit, nextKey));
     return true;
   };
+  const requestResourceInput = embedded
+    ? undefined
+    : requestResources === undefined
+      ? !extension
+        ? EMPTY_REQUEST_RESOURCES
+        : undefined
+      : requestResources || undefined;
+  const resourceExtension = useMemo(
+    () => (requestResourceInput ? createRequestResourceConditionExtension(requestResourceInput, locale) : undefined),
+    [requestResourceInput, locale],
+  );
+  const activeExtension = useMemo(() => {
+    if (!extension) return resourceExtension;
+    if (!resourceExtension) return extension;
+    return {
+      choices: [...extension.choices, ...resourceExtension.choices],
+      label: (node: FilterDocument, detail?: { locale: string }) =>
+        resourceExtension.label?.(node, detail) ?? extension.label?.(node, detail),
+      render: (
+        node: FilterDocument,
+        change: (value: FilterDocument) => void,
+        detail?: { pointer: string; locale: string; issues: readonly ConditionIssue[] },
+      ) => resourceExtension.render(node, change, detail) ?? extension.render(node, change, detail),
+    } satisfies ConditionExtension;
+  }, [extension, resourceExtension]);
+  const admissionOptions = useMemo(
+    () =>
+      requestResourceInput
+        ? { requestResources: true, ...(extension ? { owner: true as const } : {}) }
+        : extension
+          ? { owner: true as const }
+          : undefined,
+    [requestResourceInput, extension],
+  );
+  const admitsCondition = useMemo(
+    () => (metadata ? conditionTreeAdmission(metadata, admissionOptions) : undefined),
+    [metadata, admissionOptions],
+  );
   const context: EditorContext | undefined = metadata
     ? {
         metadata,
@@ -201,7 +247,7 @@ export function ConditionEditor({
         savedFilters,
         canSelectSavedFilter,
         selectSavedFilter,
-        extension,
+        extension: activeExtension,
       }
     : undefined;
   return (
@@ -354,7 +400,8 @@ function NodeEditor({
   const groupOperator = 'and' in value ? 'and' : 'or' in value ? 'or' : undefined;
   const operator = groupOperator ?? ('not' in value ? 'not' : '');
   const group = 'and' in value ? value.and : 'or' in value ? value.or : undefined;
-  const label =
+  const extensionLabel = context.extension?.label?.(value, { locale: context.locale });
+  const label = extensionLabel ?? (
     operator === 'and'
       ? m.condition_and({}, options)
       : operator === 'or'
@@ -367,8 +414,13 @@ function NodeEditor({
               ? m.search_type({}, options)
               : 'statement' in value
                 ? m.condition_statement({}, options)
-                : m.condition_leaf({}, options);
-  const extensionLeaf = context.extension?.render(value, onChange);
+                : m.condition_leaf({}, options)
+  );
+  const extensionLeaf = context.extension?.render(value, onChange, {
+    pointer,
+    locale: context.locale,
+    issues: context.issues,
+  });
   const name = (labels: Record<string, string> | undefined, fallback: string) =>
     localizedLabel(labels ?? {}, context.locale).text || fallback;
   const property = 'statement' in value ? value.statement.property : undefined;
