@@ -25,6 +25,10 @@ test('local policy overrides individual leaves and validates configurable notifi
       width: { pageSize: 1 },
       flow: { alertEveryMs: 25 },
       lifecycle: { conflictWindowRows: 1 },
+      provider: { claudeRefreshMs: 25 },
+      manager: { messageWords: 30 },
+      routing: { implementation: { maxSteps: 5 } },
+      hourlyReport: { reportBytes: 500 },
     };
     local.integration = { hourlyReportTimeoutMs: 200001 };
     writeFileSync(h.settings.localFile, JSON.stringify(local));
@@ -43,6 +47,13 @@ test('local policy overrides individual leaves and validates configurable notifi
       width: { ...defaults.policy.width, pageSize: 1 },
       flow: { ...defaults.policy.flow, alertEveryMs: 25 },
       lifecycle: { ...defaults.policy.lifecycle, conflictWindowRows: 1 },
+      provider: { ...defaults.policy.provider, claudeRefreshMs: 25 },
+      manager: { ...defaults.policy.manager, messageWords: 30 },
+      routing: {
+        ...defaults.policy.routing,
+        implementation: { ...defaults.policy.routing.implementation, maxSteps: 5 },
+      },
+      hourlyReport: { ...defaults.policy.hourlyReport, reportBytes: 500 },
     });
     // The fixture environment normally disables delays; inspect the actual local policy without launching a worker.
     const retrySettings = settings;
@@ -79,6 +90,11 @@ test('local policy overrides individual leaves and validates configurable notifi
 test('fractional and retry-list policies reject invalid leaves and copy schedules', () => {
   for (const invalid of [
     { host: { startupLogBytes: 0 } },
+    { provider: { claudeRefreshMs: 0 } },
+    { manager: { continuationBudgetPercent: 101 } },
+    { pacing: { alertUnusedPercent: 101 } },
+    { records: { sessionRecordBytes: 1.5 } },
+    { routing: { implementation: { maxSteps: 0 } } },
     { host: { retryFailures: 1.5 } },
     { host: { maxBackoffMs: 1 } },
     { process: { exitPollMs: Number.MAX_SAFE_INTEGER + 1 } },

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import type { AttemptRecord, Profile, Tokens } from './types.ts';
 import type { WorkerTasks } from './tasks.ts';
 import { makeRecord, measureLog } from './records.ts';
+import { defaultPolicy } from './policy.ts';
 import { readRouting } from './routing.ts';
 
 export type ImportOptions = {
@@ -83,12 +84,13 @@ export function importAttempt(
   )
     throw new Error('cannot import over a running or waiting attempt');
   const measured = measureLog(readImportCapture(log), {
+    policy: tasks.settings.policy ?? defaultPolicy,
     adapter: agentAdapter(options.profile.cli),
     startedAt: options.startedAt,
     endedAt: options.endedAt,
     ...(options.baseline ? { baseline: options.baseline } : {}),
   });
-  const table = readRouting(tasks.settings.routingFile);
+  const table = readRouting(tasks.settings.routingFile, tasks.settings.policy?.routing);
   const previous = task.currentAttempt ? store.attempt({ taskId: task.id, attempt: task.currentAttempt }) : null;
   const previousConfigDirectory = previous
     ? tasks.settings.pools.find((pool) => pool.name === previous.pool)?.configDirectory

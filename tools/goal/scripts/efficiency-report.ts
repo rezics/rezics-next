@@ -52,6 +52,8 @@ async function main(args: string[]): Promise<void> {
       report,
       settings.integration.hourlyReportNotifier,
       settings.integration.hourlyReportTimeoutMs,
+      new Date(),
+      settings.policy,
     );
     const detail = delivery.detail ? ` (${delivery.detail})` : '';
     const disposition = `Delivery: ${delivery.disposition}${detail}.`;

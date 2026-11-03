@@ -517,7 +517,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath);
   if (options.tasks && options.tasks.store.db !== db)
     throw new Error('Runtime modules must share one database connection');
-  const store = options.tasks?.store ?? new WorkerStore(db);
+  const store = options.tasks?.store ?? new WorkerStore(db, settings.policy);
   const tasks = options.tasks ?? new WorkerTasks(settings, store);
   const queue = new SqliteLandingQueue(db, store);
   const inbox = new SqliteManagerInbox(db, settings.integration.inboxDirectory);
@@ -768,10 +768,17 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       const probes: Promise<void>[] = [];
       const deliver = (summary: string) =>
         inbox.deliver({ managerId: settings.integration.supermanager, kind: 'instruction', summary } as never);
-      refreshCodexSchedule(settings.stateDirectory);
+      refreshCodexSchedule(settings.stateDirectory, Date.now(), undefined, settings.policy?.pacing);
       const delivered =
         deliverDueReminders(settings.notes ?? [], settings.stateDirectory, deliver) +
-        alertUnspentAllowances(settings.pools, (pool) => tasks.reader(pool), settings.stateDirectory, deliver) +
+        alertUnspentAllowances(
+          settings.pools,
+          (pool) => tasks.reader(pool),
+          settings.stateDirectory,
+          deliver,
+          Date.now(),
+          settings.policy?.pacing,
+        ) +
         watch(
           tasks.store,
           settings.mainCheckout,
@@ -804,8 +811,9 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
             );
           },
           (task) =>
-            readRouting(settings.routingFile).classes[task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>]
-              .maxMs,
+            readRouting(settings.routingFile, settings.policy?.routing).classes[
+              task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
+            ].maxMs,
           settings.policy,
         );
       // A oneshot CLI exits after this method: persist every bounded probe before closing the runtime.

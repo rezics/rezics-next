@@ -98,7 +98,8 @@ export async function runWorkerCommand(
   const runtime =
     options.runtime ??
     (!options.store && !options.tasks && !options.landing && !options.inbox ? createRuntime({ settings }) : undefined);
-  const store = runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(databasePath));
+  const store =
+    runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(databasePath), settings.policy);
   const tasks = runtime?.tasks ?? options.tasks ?? new WorkerTasks(settings, store);
   const print = options.print ?? console.log;
   const job =

@@ -1,4 +1,5 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import defaults from '../defaults.json';
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -19,7 +20,10 @@ const FULL_ACCESS = { approvalPolicy: 'never', sandbox: 'danger-full-access' } a
 const CODEX_MANAGER_MODEL = 'gpt-6.1-sol';
 
 function codexThreadConfig(spec: Pick<ManagerSpec, 'effort' | 'compactTokens'>) {
-  return { model_reasoning_effort: spec.effort, model_auto_compact_token_limit: spec.compactTokens ?? 300000 };
+  return {
+    model_reasoning_effort: spec.effort,
+    model_auto_compact_token_limit: spec.compactTokens ?? defaults.integration.managerCompactTokens,
+  };
 }
 
 function codexTurnSettings(spec: Pick<ManagerSpec, 'effort'>) {
@@ -158,9 +162,8 @@ export function recordManagerDecision(db: Database, id: string, at = Date.now())
 }
 
 /** More `clock.sleep` calls than this in one UTC hour raise one alarm for that manager. */
-export const MANAGER_SLEEP_ALARM_PER_HOUR = 10;
-const HOUR_MS = 3_600_000;
-const FILE_CLOCK_SLACK_MS = 1_000;
+export const MANAGER_SLEEP_ALARM_PER_HOUR = defaultPolicy.manager.sleepAlarmPerHour;
+const HOUR_MS = 3_600_000; // Unit conversion; sleep alarms are bucketed by UTC hour.
 const managerSleepMigration = {
   module: 'manager-sleep',
   version: 1,
@@ -187,12 +190,14 @@ export class ManagerSessions {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private watcher: Watching;
   private closed = false;
+  private readonly policy: ControlPolicy;
   private unsubscribers: (() => void)[] = [];
   constructor(
     private readonly db: Database,
     readonly inbox: SqliteManagerInbox,
     private readonly services: ManagerServices,
   ) {
+    this.policy = services.policy ?? defaultPolicy;
     migrate(db, [
       {
         module: 'managers',
@@ -208,7 +213,7 @@ export class ManagerSessions {
           if (isManagedManager(state) && state.status === 'running')
             this.background(state.id, () => this.dispatch(state.id));
       },
-      2_000,
+      this.policy.manager.inboxPollMs,
     );
   }
   private now(): number {
@@ -361,7 +366,7 @@ export class ManagerSessions {
     };
     const connecting = this.services.connect
       ? this.services.connect(pool, onStart)
-      : connectPool(pool, onStart, undefined, (this.services.policy ?? defaultPolicy).appServer);
+      : connectPool(pool, onStart, undefined, this.policy.appServer);
     const client = connecting.then(async (server) => {
       try {
         if (server.identity) onStart(server.identity);
@@ -415,7 +420,9 @@ export class ManagerSessions {
     const hour = Math.floor(now / HOUR_MS);
     this.db
       .transaction(() => {
-        this.db.query('DELETE FROM manager_sleep_calls WHERE manager = ? AND hour < ?').run(state.id, hour - 24);
+        this.db
+          .query('DELETE FROM manager_sleep_calls WHERE manager = ? AND hour < ?')
+          .run(state.id, hour - this.policy.manager.sleepHistoryHours);
         const row = this.db
           .query(
             `INSERT INTO manager_sleep_calls(manager, hour, calls) VALUES (?, ?, 1)
@@ -423,7 +430,7 @@ export class ManagerSessions {
             RETURNING calls, alarmed`,
           )
           .get(state.id, hour) as { calls: number; alarmed: number };
-        if (row.calls <= MANAGER_SLEEP_ALARM_PER_HOUR || row.alarmed) return;
+        if (row.calls <= this.policy.manager.sleepAlarmPerHour || row.alarmed) return;
         this.db.query('UPDATE manager_sleep_calls SET alarmed = 1 WHERE manager = ? AND hour = ?').run(state.id, hour);
         this.inbox.deliver({
           managerId: state.supermanager,
@@ -449,7 +456,7 @@ export class ManagerSessions {
   /** Whether a ready brief in the Goal's backlog was written or moved there since `since`, or dispatched from it. */
   private backlogWrittenSince(spec: ManagerSpec, turnStart: number): boolean {
     // File times come from the kernel's coarse clock, which can trail the process clock by a few milliseconds.
-    const since = turnStart - FILE_CLOCK_SLACK_MS;
+    const since = turnStart - this.policy.manager.fileClockSlackMs;
     const directory = this.backlogPath(spec);
     for (const path of [directory, join(directory, '.dispatching')]) {
       let names: string[];
@@ -483,11 +490,11 @@ export class ManagerSessions {
     return (
       `${spec.brief}\n\nYou manage Goal ${spec.goal}; export GOAL_MANAGER=${spec.id} for control-plane commands. ` +
       "Synthesize your workers' reports (results, decisions, conflicts, duplicated or missing work across tasks) into decisions and the next briefs. " +
-      `Your outputs are decisions and ready briefs in ${this.backlogPath(spec)}; keep at least eight there. ` +
-      'Act on each stopped task within an hour: retry it with a rewritten brief, split it or cancel it; leave mechanical gates, retries and merges to the controller. ' +
+      `Your outputs are decisions and ready briefs in ${this.backlogPath(spec)}; keep at least ${this.policy.backlog.lowWater} there. ` +
+      `Act on each stopped task within ${this.policy.backlog.stoppedTaskLimitMs === HOUR_MS ? 'an hour' : `${this.policy.backlog.stoppedTaskLimitMs} ms`}: retry it with a rewritten brief, split it or cancel it; leave mechanical gates, retries and merges to the controller. ` +
       `Completion is a proposal the control plane verifies: ${command} manager complete ${spec.id}. ` +
-      'Send only decisions, blocking questions and handoffs, at most 60 words each. Do not write receipts, status snapshots or lists of actions not taken. ' +
-      `Read your brief and ${continuationFile ? `the continuation ${continuationFile}` : 'continuation'} once per session; keep .temp/goal/${spec.id}/CONTINUATION.md under 8,000 characters, replaced, not appended. ` +
+      `Send only decisions, blocking questions and handoffs, at most ${this.policy.manager.messageWords} words each. Do not write receipts, status snapshots or lists of actions not taken. ` +
+      `Read your brief and ${continuationFile ? `the continuation ${continuationFile}` : 'continuation'} once per session; keep .temp/goal/${spec.id}/CONTINUATION.md under ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters, replaced, not appended. ` +
       'Read and acknowledge inbox events. ' +
       (spec.engine === 'codex'
         ? 'When no decision is pending, end the turn; do not use clock.sleep or poll: the controller resumes this thread when an inbox event arrives.'
@@ -522,7 +529,7 @@ export class ManagerSessions {
       '--name',
       `${spec.goal} manager`,
       '--autocompact',
-      String(spec.compactTokens ?? 300000),
+      String(spec.compactTokens ?? defaults.integration.managerCompactTokens),
       '--settings',
       JSON.stringify(settings),
       prompt,
@@ -758,7 +765,7 @@ export class ManagerSessions {
       !state.goalState ||
       state.goalState.tokenBudget === null ||
       state.goalState.tokenBudget <= 0 ||
-      state.goalState.tokensUsed < state.goalState.tokenBudget * 0.9
+      state.goalState.tokensUsed < state.goalState.tokenBudget * (this.policy.manager.continuationBudgetPercent / 100)
     )
       return;
     this.db
@@ -770,7 +777,8 @@ export class ManagerSessions {
           !current.goalState ||
           current.goalState.tokenBudget === null ||
           current.goalState.tokenBudget <= 0 ||
-          current.goalState.tokensUsed < current.goalState.tokenBudget * 0.9
+          current.goalState.tokensUsed <
+            current.goalState.tokenBudget * (this.policy.manager.continuationBudgetPercent / 100)
         )
           return;
         current.continuationAsked = true;
@@ -778,7 +786,7 @@ export class ManagerSessions {
         this.inbox.deliver({
           managerId: current.id,
           kind: 'instruction',
-          summary: `This Goal has used at least 90% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most 8,000 characters: live task IDs, decisions in force as links to owner documents, and next actions. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
+          summary: `This Goal has used at least ${this.policy.manager.continuationBudgetPercent}% of its token budget. Replace .temp/goal/${current.id}/CONTINUATION.md with at most ${this.policy.manager.continuationCharacters.toLocaleString('en-US')} characters: live task IDs, decisions in force as links to owner documents, and next actions. Do not append to the old file. Then send ${current.supermanager} a message containing “continuation written”.`,
         });
       })
       .immediate();

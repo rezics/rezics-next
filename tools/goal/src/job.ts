@@ -678,6 +678,7 @@ export class WorkerJob implements GateOutcomeSink {
                   this.tasks.settings.mainCheckout,
                   context,
                   this.tasks.settings.stateDirectory,
+                  this.tasks.settings.policy,
                 ),
                 `The checks you started have finished or could not be found. ${message}`,
                 'Continue the same task. Do not wait or poll for these checks again. Finish with the required exit object.',
@@ -743,7 +744,7 @@ export class WorkerJob implements GateOutcomeSink {
     const ref = worker.attempt,
       store = this.tasks.store;
     const task = store.task(ref.taskId);
-    const limits = readRouting(this.tasks.settings.routingFile).classes[
+    const limits = readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing).classes[
       task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
     ];
     let watcher: Watching | undefined;
@@ -795,7 +796,10 @@ export class WorkerJob implements GateOutcomeSink {
         store.assertCurrent(ref);
         const attempt = store.attempt(ref);
         const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
-        const measurement = readMeasurement(attempt, { configDirectory: pool?.configDirectory });
+        const measurement = readMeasurement(attempt, {
+          policy: this.tasks.settings.policy ?? defaultPolicy,
+          configDirectory: pool?.configDirectory,
+        });
         const steps = Object.values(measurement.steps).reduce((a, b) => a + b, 0);
         if (
           (timeLimit || steps > limits.maxSteps) &&
@@ -1015,6 +1019,7 @@ export class WorkerJob implements GateOutcomeSink {
       let measurement: ReturnType<typeof readMeasurement>;
       try {
         measurement = readMeasurement(ended, {
+          policy: this.tasks.settings.policy ?? defaultPolicy,
           configDirectory: pool?.configDirectory,
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         });
@@ -1023,6 +1028,7 @@ export class WorkerJob implements GateOutcomeSink {
         measurement = readMeasurement(
           { ...ended, startedAt: endedAt },
           {
+            policy: this.tasks.settings.policy ?? defaultPolicy,
             configDirectory: pool?.configDirectory,
             ...(logStartOffset !== undefined ? { logStartOffset } : {}),
           },
@@ -1044,7 +1050,7 @@ export class WorkerJob implements GateOutcomeSink {
           value.escalation = 'environment';
           value.blocker = detail;
           value.result = measurement.result || `Driver exception: ${detail}`;
-          value.approaches.push(...reportedApproaches(value.result));
+          value.approaches.push(...reportedApproaches(value.result, undefined, this.tasks.settings.policy?.records));
         });
         const record = makeRecord(task, attempt, measurement, 'stopped');
         record.escalation = 'environment';
@@ -1644,6 +1650,7 @@ export class WorkerJob implements GateOutcomeSink {
       let usageLimitExhausted = false;
       if (kind === 'pool-exhausted') {
         const measurement = readMeasurement(attempt, {
+          policy: this.tasks.settings.policy ?? defaultPolicy,
           configDirectory: this.tasks.settings.pools.find((pool) => pool.name === attempt.pool)?.configDirectory,
         });
         usageLimitRefusal =
@@ -1654,7 +1661,7 @@ export class WorkerJob implements GateOutcomeSink {
           const pool = this.tasks.settings.pools.find((candidate) => candidate.name === attempt.pool);
           const now = Date.now();
           const assessment = pool
-            ? assessUsageLimitRefusal(attempt.after, attempt.before, pool, now)
+            ? assessUsageLimitRefusal(attempt.after, attempt.before, pool, now, this.tasks.settings.policy?.provider)
             : { confirmedExhaustion: true, reason: 'reading-unavailable' as const, reading: attempt.after };
           const priorRefusals = store
             .events()
@@ -2074,7 +2081,7 @@ export class WorkerJob implements GateOutcomeSink {
         store.putRecord(record);
         return;
       }
-      const limits = readRouting(this.tasks.settings.routingFile).classes[
+      const limits = readRouting(this.tasks.settings.routingFile, this.tasks.settings.policy?.routing).classes[
         task.taskClass as Exclude<typeof task.taskClass, 'mechanical'>
       ];
       // A control-plane landing checks the whole control-plane tree, beyond the task's estimated diff size. A failed

@@ -284,7 +284,7 @@ export class WorkerTasks {
   constructor(
     readonly settings: Settings,
     readonly store: WorkerStore,
-    readonly reader: PoolReader = readPool,
+    readonly reader: PoolReader = (pool) => readPool(pool, Date.now(), settings.policy?.provider),
     readonly launcher: typeof launch = launch,
     readonly proofProducer: ProofProducer = productionProofProducer(
       store,
@@ -1528,7 +1528,7 @@ export class WorkerTasks {
       const oldConfigDirectory = old
         ? pools.find((candidate) => candidate.name === old.pool)?.configDirectory
         : undefined;
-      const table = readRouting(this.settings.routingFile);
+      const table = readRouting(this.settings.routingFile, this.settings.policy?.routing);
       const pinned = nextBrief.model !== undefined;
       // A retry keeps its engine while the routing table still offers it for the class; an engine the table dropped
       // (a failing or disallowed pool) is routed afresh, so table changes reach retries at once.
@@ -1549,7 +1549,7 @@ export class WorkerTasks {
         .attempts()
         .flatMap((a) => [a.before, a.after])
         .filter((r) => r !== null);
-      const routing = readRouting(this.settings.routingFile);
+      const routing = readRouting(this.settings.routingFile, this.settings.policy?.routing);
       let fallbacks =
         options.profile || pinned || nextBrief.kind === 'verification' ? [] : retryFallbacks(routing, nextTaskClass);
       const paced = nextTaskClass === 'mechanical' || routing.classes[nextTaskClass]?.paced !== false;
@@ -1597,10 +1597,12 @@ export class WorkerTasks {
           ? undefined
           : (candidate, now) => {
               const reading = readings.find((value) => value.pool === candidate.name);
-              return reading ? pace(reading, candidate, now, schedule)?.urgency : undefined;
+              return reading
+                ? pace(reading, candidate, now, schedule, this.settings.policy?.pacing)?.urgency
+                : undefined;
             },
       );
-      const oldSession = old ? attemptSession(old) : null;
+      const oldSession = old ? attemptSession(old, this.settings.policy?.records) : null;
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
@@ -1738,6 +1740,7 @@ export class WorkerTasks {
               this.settings.mainCheckout,
               context,
               this.settings.stateDirectory,
+              this.settings.policy,
             ),
             this.settings.codex,
             resumeSession,
@@ -1786,6 +1789,7 @@ export class WorkerTasks {
               this.settings.mainCheckout,
               context,
               this.settings.stateDirectory,
+              this.settings.policy,
             );
             retryPrepared = true;
             return await this.launcher(
@@ -1869,6 +1873,7 @@ export class WorkerTasks {
           this.settings.mainCheckout,
           context,
           this.settings.stateDirectory,
+          this.settings.policy,
         );
         retryPrepared = true;
         return await this.launcher(
@@ -1894,7 +1899,10 @@ export class WorkerTasks {
           makeRecord(
             this.store.task(taskId),
             failed,
-            readMeasurement(failed, { configDirectory: pool.configDirectory }),
+            readMeasurement(failed, {
+              policy: this.settings.policy ?? defaultPolicy,
+              configDirectory: pool.configDirectory,
+            }),
             'stopped',
           ),
         );

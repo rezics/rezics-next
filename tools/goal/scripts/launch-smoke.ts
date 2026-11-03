@@ -1277,7 +1277,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     managerSocket: join(stateDirectory, 'manager.sock'),
     tmuxSocket: join(stateDirectory, 'tmux.sock'),
   };
-  const routing = readRouting(settings.routingFile);
+  const routing = readRouting(settings.routingFile, settings.policy?.routing);
   const selected = routing.classes.specification.first;
   if (selected.cli !== 'codex')
     throw new Error('the configured specification route must select Codex for real provider smoke');
@@ -1350,7 +1350,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   report('worker-check-boundary: passed');
 
   const db = openDb(join(stateDirectory, 'goal.sqlite'));
-  const store = new WorkerStore(db);
+  const store = new WorkerStore(db, settings.policy);
   const tasks = new WorkerTasks(settings, store);
   const landing = { enqueue: () => {} };
   const inbox = { deliver: () => {} };

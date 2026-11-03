@@ -121,8 +121,9 @@ type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Brief
 /** How a worker runs the tests of the test files it changed: with the landing's own commands for them. */
 const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`; paths relative to that workspace), and fix failures you caused.";
-const LONG_WAIT =
-  'Wait for a long command, even one queued for a test slot, in its open session with one yield of at least 300 seconds (Codex: `write_stdin`, `yield_time_ms: 300000`); never start a duplicate, interrupt it, poll faster, or use sleep loops, `ps` or `pgrep`.';
+function longWait(policy: ControlPolicy['guidance']): string {
+  return `Wait for a long command, even one queued for a test slot, in its open session with one yield of at least ${policy.longCommandWaitMs / 1000} seconds (Codex: \`write_stdin\`, \`yield_time_ms: ${policy.longCommandWaitMs}\`); never start a duplicate, interrupt it, poll faster, or use sleep loops, \`ps\` or \`pgrep\`.`;
+}
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
 const UNFINISHED =
   'Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.';
@@ -151,6 +152,7 @@ export function workerCheckProtocol(
   stateDirectory?: string,
   proofRun?: ProofReservation,
   authorization?: ProofAuthorization,
+  policy: ControlPolicy = defaultPolicy,
 ): string {
   if (typeof briefOrContract !== 'string' && proofProtocolAuthorized(briefOrContract, proofRun))
     return [
@@ -186,7 +188,7 @@ export function workerCheckProtocol(
             'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy.',
           ]
         : []),
-      LONG_WAIT,
+      longWait(policy.guidance),
       OWN_TESTS,
       'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
       'This policy overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks.',
@@ -212,7 +214,7 @@ export function workerCheckProtocol(
         once,
         LOCAL_PLACEMENT,
         `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`,
-        LONG_WAIT,
+        longWait(policy.guidance),
         REGRESSION,
       ].join(' ');
     return [
@@ -220,7 +222,7 @@ export function workerCheckProtocol(
       LOCAL_PLACEMENT,
       `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`,
       WRAPPER_RESULT,
-      LONG_WAIT,
+      longWait(policy.guidance),
       REGRESSION,
     ].join(' ');
   }
@@ -231,14 +233,14 @@ export function workerCheckProtocol(
         ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
         : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
       ...(workerOwnedAcceptance ? ['Do not report success unless the chosen validation actually exits zero.'] : []),
-      LONG_WAIT,
+      longWait(policy.guidance),
       REGRESSION,
     ].join(' ');
   return [
     once,
     `Run it from the worktree root as \`${runner} -- <command...>\` with wrapper options the contract names.`,
     WRAPPER_RESULT,
-    LONG_WAIT,
+    longWait(policy.guidance),
     REGRESSION,
   ].join(' ');
 }
@@ -250,6 +252,7 @@ export function workerPrompt(
   mainCheckout: string,
   launchContext?: LaunchContext,
   stateDirectory = join(mainCheckout, '.temp', 'goal'),
+  policy: ControlPolicy = defaultPolicy,
 ): string {
   const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
   const contractMarkdown = launchContext
@@ -289,6 +292,7 @@ export function workerPrompt(
         stateDirectory,
         task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
         task.proofAuthorization,
+        policy,
       ),
     ].join('\n\n');
   const devProduct = devProductBrief(task.brief);
@@ -315,7 +319,7 @@ export function workerPrompt(
         ? `, record it in one line in your summary${research ? '' : ' and the owning document'}, send it with \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
         : ', record it in one line in your summary, and continue.'
     }`,
-    `A blocker is only two requirements in existing specs or tests that cannot both hold (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after two retries: a \`tool\` blocker starting with the exact error line; never weaken a check instead.${devProductBrief(task.brief) ? ' On dev, when your change is complete and committed and only the shared check infrastructure fails, that is not a blocker: report success and name each check that could not run with its error line; dev is verified after the merge.' : ''} Code another Goal has not delivered is not a blocker: build against its documented contract or a minimal seam, and name it.${
+    `A blocker is only two requirements in existing specs or tests that cannot both hold (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after ${['zero', 'one', 'two'][policy.guidance.toolFailureRetries] ?? String(policy.guidance.toolFailureRetries)} retries: a \`tool\` blocker starting with the exact error line; never weaken a check instead.${devProductBrief(task.brief) ? ' On dev, when your change is complete and committed and only the shared check infrastructure fails, that is not a blocker: report success and name each check that could not run with its error line; dev is verified after the merge.' : ''} Code another Goal has not delivered is not a blocker: build against its documented contract or a minimal seam, and name it.${
       research
         ? ''
         : ` A question needing a large survey of products or sources is a \`spec-conflict\` blocker starting "Research needed:"; research the rest yourself in owner documents, primary sources and ${mainCheckout}/.reference/ (INDEX.md), read any reference source the contract names before designing, and list what you read.`
@@ -327,7 +331,7 @@ export function workerPrompt(
     continuesItself(task)
       ? `If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at \`${CONTINUATION_DIRECTORY}/<short-name>.md\` by copying your contract's front matter and changing only paths, acceptance and estimate (goal ${task.brief.goal}, manager ${manager}), followed by the remaining outcome in user terms. Unfinished work is not a blocker: return success and name the continuation.`
       : UNFINISHED,
-    'Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches. Summary at most 120 words: what changed, decisions, files outside declared paths, what was not run. Blocker detail at most 80 words. Commit no evidence or audit files.',
+    `Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches. Summary at most ${policy.guidance.summaryWords} words: what changed, decisions, files outside declared paths, what was not run. Blocker detail at most ${policy.guidance.blockerWords} words. Commit no evidence or audit files.`,
     task.brief.kind === 'bulk-text'
       ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.'
       : '',
@@ -348,7 +352,7 @@ export function workerPrompt(
     resolutionFiles.length
       ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
       : '',
-    workerCheckProtocol(task.worktree, task.brief, stateDirectory),
+    workerCheckProtocol(task.worktree, task.brief, stateDirectory, undefined, undefined, policy),
   ]
     .filter(Boolean)
     .join('\n\n');

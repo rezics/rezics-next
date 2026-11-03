@@ -104,6 +104,7 @@ export async function settle(
     const currentAttempt = store.attempt(ref);
     const poolForAttempt = tasks.settings.pools.find((p) => p.name === ref.pool);
     const pendingChecks = readMeasurement(currentAttempt, {
+      policy,
       configDirectory: poolForAttempt?.configDirectory,
       maxLogBytes: policy.worker.logTailBytes,
       ...(logStartOffset !== undefined ? { logStartOffset } : {}),
@@ -158,6 +159,7 @@ export async function settle(
       const measurement = readMeasurement(
         { ...current, endedAt },
         {
+          policy,
           configDirectory: pool?.configDirectory,
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         },
@@ -268,13 +270,14 @@ export async function settle(
       });
       exited = true;
       const finalMeasurement = readMeasurement(attempt, {
+        policy,
         configDirectory: pool?.configDirectory,
         maxLogBytes: policy.worker.logTailBytes,
         ...(logStartOffset !== undefined ? { logStartOffset } : {}),
       });
       if (pool)
         try {
-          agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath));
+          agentAdapter(pool.cli).afterExit(pool, readLogTail(attempt.logPath, policy.worker.logTailBytes));
         } catch {
           /* No log to read. */
         }
@@ -308,7 +311,9 @@ export async function settle(
         a.result = finalMeasurement.result;
         a.blocker = finalMeasurement.blocker;
         a.failureKind = finalMeasurement.failureKind;
-        a.approaches.push(...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli)));
+        a.approaches.push(
+          ...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli), policy.records),
+        );
       });
       store.putRecord(makeRecord(task, attempt, finalMeasurement));
       bundle = true;

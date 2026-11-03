@@ -48,6 +48,11 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
     );
   }
   const policy = merge(defaultPolicy, value, 'policy') as ControlPolicy;
+  for (const [label, percent] of [
+    ['manager.continuationBudgetPercent', policy.manager.continuationBudgetPercent],
+    ['pacing.alertUnusedPercent', policy.pacing.alertUnusedPercent],
+  ] as const)
+    if (percent > 100) throw new Error(`invalid policy.${label}`);
   if (policy.host.maxBackoffMs < policy.host.minBackoffMs)
     throw new Error('policy.host.maxBackoffMs must be at least policy.host.minBackoffMs');
   return policy;

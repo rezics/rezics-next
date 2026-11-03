@@ -300,6 +300,92 @@
     },
     "lifecycle": {
       "conflictWindowRows": 1000
+    },
+    "provider": {
+      "claudeRefreshMs": 120000,
+      "claudeStaleMs": 1200000,
+      "claudeRequestTimeoutSeconds": 10,
+      "codexAllowanceTailBytes": 1048576,
+      "usageContextObjects": 24,
+      "observationClockSkewMs": 60000
+    },
+    "pacing": {
+      "scheduleRefreshMs": 1800000,
+      "scheduleRequestTimeoutSeconds": 15,
+      "minimumResetMs": 900000,
+      "alertPercentPerHour": 2,
+      "alertUnusedPercent": 20,
+      "alertResetHours": 24,
+      "alertEveryMs": 10800000
+    },
+    "manager": {
+      "sleepAlarmPerHour": 10,
+      "sleepHistoryHours": 24,
+      "inboxPollMs": 2000,
+      "fileClockSlackMs": 1000,
+      "continuationBudgetPercent": 90,
+      "continuationCharacters": 8000,
+      "messageWords": 60
+    },
+    "guidance": {
+      "longCommandWaitMs": 300000,
+      "summaryWords": 120,
+      "blockerWords": 80,
+      "toolFailureRetries": 2
+    },
+    "routing": {
+      "implementation": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "interface": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "bulk-text": {
+        "maxSteps": 500,
+        "maxMs": 7200000
+      },
+      "claim": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "specification": {
+        "maxSteps": 200,
+        "maxMs": 3600000
+      },
+      "critical-path": {
+        "maxSteps": 300,
+        "maxMs": 7200000
+      },
+      "research": {
+        "maxSteps": 200,
+        "maxMs": 3600000
+      }
+    },
+    "records": {
+      "sessionHeadBytes": 65536,
+      "sessionReadBufferBytes": 65536,
+      "sessionRecordBytes": 1048576,
+      "legacyApproachCharacters": 1000,
+      "legacyResultCharacters": 2000
+    },
+    "consultation": {
+      "timeoutMs": 120000,
+      "causeCharacters": 1000
+    },
+    "hourlyReport": {
+      "fieldCharacters": 160,
+      "goalRows": 8,
+      "landingRows": 8,
+      "launchRows": 8,
+      "waitRows": 5,
+      "incidentRows": 5,
+      "incidentTaskExamples": 5,
+      "reportBytes": 32000,
+      "notifierOutputBytes": 4096,
+      "interruptedSendGraceMs": 5000,
+      "notifierTerminationGraceMs": 250
     }
   }
 }

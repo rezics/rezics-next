@@ -1,5 +1,6 @@
 import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './verification.ts';
 import type { Database } from 'bun:sqlite';
+import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers, sameProcess } from './process.ts';
@@ -155,7 +156,10 @@ export class WorkerStore implements AttemptFence {
   private decodedAttemptRows = 0;
   private decodedTaskBytes = 0;
   private decodedAttemptBytes = 0;
-  constructor(readonly db: Database) {
+  constructor(
+    readonly db: Database,
+    private readonly policy = defaultPolicy,
+  ) {
     migrate(db, workerMigrations);
     ensureFlow(db);
     this.checkResults = new CheckResults(db);
@@ -1121,7 +1125,7 @@ export class WorkerStore implements AttemptFence {
     const ref = { taskId: before.id, attempt: before.currentAttempt };
     if (!this.record(ref)) {
       const attempt = this.attempt(ref);
-      this.saveRecord(makeRecord(before, attempt, readMeasurement(attempt), 'stopped'));
+      this.saveRecord(makeRecord(before, attempt, readMeasurement(attempt, { policy: this.policy }), 'stopped'));
     }
   }
   /** Called inside the lifecycle transaction as well as before writing a submitted brief. */
@@ -1553,7 +1557,8 @@ export class WorkerStore implements AttemptFence {
         old.state = 'superseded';
         this.saveAttempt(old);
         const record =
-          this.record(ref) ?? makeRecord(task, old, readMeasurement(old, { configDirectory }), 'superseded');
+          this.record(ref) ??
+          makeRecord(task, old, readMeasurement(old, { configDirectory, policy: this.policy }), 'superseded');
         const retainedProof = record.taskKind === 'verification';
         if (record.outcome === 'pending-gate' && !retainedProof) {
           record.outcome = 'superseded';
@@ -1589,7 +1594,7 @@ export class WorkerStore implements AttemptFence {
         const record = makeRecord(
           task,
           old,
-          readMeasurement(old, { configDirectory: configDirectory(old) }),
+          readMeasurement(old, { configDirectory: configDirectory(old), policy: this.policy }),
           previous?.outcome ?? 'superseded',
         );
         if (previous) {
@@ -1791,7 +1796,9 @@ export class WorkerStore implements AttemptFence {
         attempt.endedAt ??= new Date().toISOString();
         attempt.after ??= after;
         if (!this.record(ref))
-          this.saveRecord(makeRecord(task, attempt, readMeasurement(attempt, { configDirectory }), state));
+          this.saveRecord(
+            makeRecord(task, attempt, readMeasurement(attempt, { configDirectory, policy: this.policy }), state),
+          );
         if (!this.events(ref.taskId, ref.attempt).some((event) => event.kind === state))
           this.db
             .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
