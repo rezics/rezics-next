@@ -1,9 +1,5 @@
 import { expect, test } from 'bun:test';
-import type {
-  RealmClaimReviewInspection,
-  RealmClaimReviewPage,
-  RealmClaimReviewQuery,
-} from '../src/index.ts';
+import type { RealmClaimReviewInspection, RealmClaimReviewPage, RealmClaimReviewQuery } from '../src/index.ts';
 
 const requestId = '019a1b2c-3d4e-7f00-8a00-000000000001';
 const query = { inspectRequestId: requestId, limit: 20 } satisfies RealmClaimReviewQuery;
