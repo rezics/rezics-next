@@ -169,13 +169,19 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
     ): Promise<NativeProgressResponse & { body: T }> {
       const bodyText = input === undefined ? undefined : JSON.stringify(input.body);
       const commandKey = input === undefined ? undefined : JSON.stringify(crypto.randomUUID());
-      const response = await fixture.stack.kernel(path, {
-        method,
-        ...(bodyText === undefined ? {} : {
-          headers: { 'content-type': 'application/json', 'idempotency-key': commandKey! },
-          body: bodyText,
-        }),
-      }, persona);
+      const response = await fixture.stack.kernel(
+        path,
+        {
+          method,
+          ...(bodyText === undefined
+            ? {}
+            : {
+                headers: { 'content-type': 'application/json', 'idempotency-key': commandKey! },
+                body: bodyText,
+              }),
+        },
+        persona,
+      );
       // Parse a clone with the existing producer's status assertion; retain the original bytes as text.
       // Transport/setup errors and unexpected statuses propagate, including unexpected 503s.
       const body = await nativeJson<T>(response.clone(), expectedStatus);
@@ -185,16 +191,27 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
         if (value !== null) headers[name] = value;
       }
       const fact = {
-        sequence: responses.length, method, path, persona, status: response.status,
-        body, bodyText: await response.text(), headers,
-        capturedAt: new Date().toISOString(), temporal: 'current_at_capture' as const,
+        sequence: responses.length,
+        method,
+        path,
+        persona,
+        status: response.status,
+        body,
+        bodyText: await response.text(),
+        headers,
+        capturedAt: new Date().toISOString(),
+        temporal: 'current_at_capture' as const,
       };
       responses.push(fact);
-      if (input !== undefined) commands.push({
-        responseSequence: fact.sequence, method: 'POST', path, persona,
-        input: { body: JSON.parse(bodyText!), bodyText: bodyText!, commandKey: commandKey! },
-        ...(input.observed === undefined ? {} : { observedRevision: input.observed }),
-      });
+      if (input !== undefined)
+        commands.push({
+          responseSequence: fact.sequence,
+          method: 'POST',
+          path,
+          persona,
+          input: { body: JSON.parse(bodyText!), bodyText: bodyText!, commandKey: commandKey! },
+          ...(input.observed === undefined ? {} : { observedRevision: input.observed }),
+        });
       return fact;
     }
     const read = <T>(path: string, persona: Persona = 'alice', status = 200) =>
@@ -205,10 +222,12 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
       });
     const detailPath = (id: string) => `/v1/progressSessions/${encodeURIComponent(id)}?view=FULL&presentation=FULL`;
     const produced = (...facts: NativeProgressResponse[]): Produced => ({
-      availability: 'produced', responseSequences: facts.map(({ sequence }) => sequence),
+      availability: 'produced',
+      responseSequences: facts.map(({ sequence }) => sequence),
     });
     const unavailable = (missingInterface: string, ...facts: NativeProgressResponse[]): Unavailable => ({
-      availability: 'dependency_unavailable', missingInterface,
+      availability: 'dependency_unavailable',
+      missingInterface,
       observedResponseSequences: facts.map(({ sequence }) => sequence),
     });
     const started = await create(fixture.book.id, 'scalar_amount', 'page', 201, '300');
@@ -217,7 +236,8 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
     for (const amount of ['0', '125', '0']) {
       const observed = { responseSequence: current.sequence, revision: current.body.progressSession.revision };
       current = await request<SessionBody>('POST', `/v1/progressSessions/${id}:record`, 'alice', 200, {
-        body: { revision: observed.revision, amount }, observed,
+        body: { revision: observed.revision, amount },
+        observed,
       });
     }
     const zero = await read<SessionBody>(detailPath(id));
@@ -243,7 +263,8 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
       const retryPage = pages[1] ?? pages[0]!;
       const retry = await read<HistoryBody>(responses[retryPage.responseSequence]!.path);
       return {
-        addressField: list === 'changes' ? 'changes' : 'units', pages,
+        addressField: list === 'changes' ? 'changes' : 'units',
+        pages,
         reset: { intent: 'reset', responseSequence: reset.sequence },
         retry: { intent: 'retry', responseSequence: retry.sequence },
       };
@@ -255,7 +276,8 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
     if (changesCursor === null) throw new Error('Native changes history did not produce a continuation cursor');
     const crossListCursor = await read(
       `/v1/progressSessions/${id}/completedUnits?view=FULL&limit=1&cursor=${encodeURIComponent(changesCursor)}`,
-      'alice', 400,
+      'alice',
+      400,
     );
 
     const recipe = await create(fixture.recipe.id, 'scalar_amount', 'minute', 201, '90');
@@ -285,45 +307,92 @@ export async function createNativeProgressResponsesFixture(): Promise<NativeProg
     const unsupportedProfile = await create(fixture.person.id, 'scalar_amount', 'page', 422);
     const unitFacts = units.pages.map(({ responseSequence }) => responses[responseSequence]!);
     const scenarios: Record<NativeProgressScenarioName, NativeProgressScenario> = {
-      ownerIndex: produced(ownerIndex), otherIndex: produced(otherIndex), anonymousIndex: produced(anonymousIndex),
-      ownerDetail: produced(ownerDetail), zeroDetail: produced(zero), recipeDetail: produced(recipeDetail),
-      rereadDetail: produced(rereadDetail), completedDetail: produced(completedDetail),
-      otherDetail: produced(otherDetail), anonymousDetail: produced(anonymousDetail), suspendedDetail: produced(suspendedDetail),
-      terminalAccount: unavailable('Installed terminal Auth persona and its private Progress read; no account termination seam is exposed.'),
-      missingDetail: produced(missingDetail), changes: produced(...changes.pages.map(({ responseSequence }) => responses[responseSequence]!)),
-      changesReset: produced(responses[changes.reset.responseSequence]!), changesRetry: produced(responses[changes.retry.responseSequence]!),
-      otherChanges: produced(otherChanges), anonymousChanges: produced(anonymousChanges),
-      units: produced(...unitFacts), unitsReset: produced(responses[units.reset.responseSequence]!),
+      ownerIndex: produced(ownerIndex),
+      otherIndex: produced(otherIndex),
+      anonymousIndex: produced(anonymousIndex),
+      ownerDetail: produced(ownerDetail),
+      zeroDetail: produced(zero),
+      recipeDetail: produced(recipeDetail),
+      rereadDetail: produced(rereadDetail),
+      completedDetail: produced(completedDetail),
+      otherDetail: produced(otherDetail),
+      anonymousDetail: produced(anonymousDetail),
+      suspendedDetail: produced(suspendedDetail),
+      terminalAccount: unavailable(
+        'Installed terminal Auth persona and its private Progress read; no account termination seam is exposed.',
+      ),
+      missingDetail: produced(missingDetail),
+      changes: produced(...changes.pages.map(({ responseSequence }) => responses[responseSequence]!)),
+      changesReset: produced(responses[changes.reset.responseSequence]!),
+      changesRetry: produced(responses[changes.retry.responseSequence]!),
+      otherChanges: produced(otherChanges),
+      anonymousChanges: produced(anonymousChanges),
+      units: produced(...unitFacts),
+      unitsReset: produced(responses[units.reset.responseSequence]!),
       unitsRetry: produced(responses[units.retry.responseSequence]!),
-      unitsLater: unavailable('Creatable installed subject with completed_units support, native noncontiguous unit commands and an emitted completedUnits.next cursor.', unsupportedUnits, ...unitFacts),
-      otherUnits: produced(otherUnits), anonymousUnits: produced(anonymousUnits), crossListCursor: produced(crossListCursor),
-      unsupportedCursor: produced(unsupportedCursor), unsupportedUnits: produced(unsupportedUnits), unsupportedProfile: produced(unsupportedProfile),
-      noncontiguousUnits: unavailable('Installed producer accepting completed_units on a creatable subject; Book/Recipe are scalar-only and LegacyFixedProfile is abstract.', unsupportedUnits),
-      historicalUnit: unavailable('Installed producer retaining a session across accepting profile/unit retirement; current presentation cannot be labelled historic.'),
-      emptyWithContinuation: unavailable('Native history response with an empty list and a non-null next cursor; none was emitted.', ...unitFacts),
-      unavailableDetail: unavailable('Installed dependency outage producer returning a native 503 and original Retry-After through Progress; transport injection is not a native outage.'),
+      unitsLater: unavailable(
+        'Creatable installed subject with completed_units support, native noncontiguous unit commands and an emitted completedUnits.next cursor.',
+        unsupportedUnits,
+        ...unitFacts,
+      ),
+      otherUnits: produced(otherUnits),
+      anonymousUnits: produced(anonymousUnits),
+      crossListCursor: produced(crossListCursor),
+      unsupportedCursor: produced(unsupportedCursor),
+      unsupportedUnits: produced(unsupportedUnits),
+      unsupportedProfile: produced(unsupportedProfile),
+      noncontiguousUnits: unavailable(
+        'Installed producer accepting completed_units on a creatable subject; Book/Recipe are scalar-only and LegacyFixedProfile is abstract.',
+        unsupportedUnits,
+      ),
+      historicalUnit: unavailable(
+        'Installed producer retaining a session across accepting profile/unit retirement; current presentation cannot be labelled historic.',
+      ),
+      emptyWithContinuation: unavailable(
+        'Native history response with an empty list and a non-null next cursor; none was emitted.',
+        ...unitFacts,
+      ),
+      unavailableDetail: unavailable(
+        'Installed dependency outage producer returning a native 503 and original Retry-After through Progress; transport injection is not a native outage.',
+      ),
     };
     const sourceAfter = sourceIdentity();
     if (source.revision !== sourceAfter.revision || source.clean !== sourceAfter.clean)
       throw new Error('Native Progress source changed during response capture');
     const manifest: NativeProgressResponseManifest = {
       identity: {
-        source, sourceAfter,
-        runtime: { engine: 'Bun', version: Bun.version, kernelOrigin: fixture.stack.kernelOrigin, webOrigin: fixture.stack.web },
-        build: { availability: 'dependency_unavailable', missingInterface: 'NativeWebStack build/artifact identity bound to the running kernel and Web processes.' },
+        source,
+        sourceAfter,
+        runtime: {
+          engine: 'Bun',
+          version: Bun.version,
+          kernelOrigin: fixture.stack.kernelOrigin,
+          webOrigin: fixture.stack.web,
+        },
+        build: {
+          availability: 'dependency_unavailable',
+          missingInterface: 'NativeWebStack build/artifact identity bound to the running kernel and Web processes.',
+        },
         currentDevRecording: false,
       },
       producer: {
-        entryPoint: 'createNativeHoldingsHistoryFixture', progressEntryPoint: 'createNativeProgressResponsesFixture',
-        definitionsDigest: bundledDigest, subjects: [fixture.book, fixture.recipe, fixture.person],
+        entryPoint: 'createNativeHoldingsHistoryFixture',
+        progressEntryPoint: 'createNativeProgressResponsesFixture',
+        definitionsDigest: bundledDigest,
+        subjects: [fixture.book, fixture.recipe, fixture.person],
       },
-      responses, commands, scenarios, histories: { changes, units },
+      responses,
+      commands,
+      scenarios,
+      histories: { changes, units },
       reviewer: (Object.keys(PROGRESS_RESPONSE_SCENARIOS) as NativeProgressScenarioName[]).map((name) => {
         const scenario = scenarios[name];
         return {
-          ...PROGRESS_RESPONSE_SCENARIOS[name], export: `manifest.scenarios.${name}`,
+          ...PROGRESS_RESPONSE_SCENARIOS[name],
+          export: `manifest.scenarios.${name}`,
           availability: scenario.availability,
-          responseSequences: scenario.availability === 'produced' ? scenario.responseSequences : scenario.observedResponseSequences,
+          responseSequences:
+            scenario.availability === 'produced' ? scenario.responseSequences : scenario.observedResponseSequences,
         };
       }),
     };

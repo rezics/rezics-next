@@ -35,8 +35,11 @@ test('exports a closed reviewer mapping with byte-preserving native facts and ho
   for (const [name, mapping] of Object.entries(PROGRESS_RESPONSE_SCENARIOS)) {
     const scenario = manifest.scenarios[name as NativeProgressScenarioName];
     expect(manifest.reviewer.find((row) => row.export === `manifest.scenarios.${name}`)).toEqual({
-      ...mapping, export: `manifest.scenarios.${name}`, availability: scenario.availability,
-      responseSequences: scenario.availability === 'produced' ? scenario.responseSequences : scenario.observedResponseSequences,
+      ...mapping,
+      export: `manifest.scenarios.${name}`,
+      availability: scenario.availability,
+      responseSequences:
+        scenario.availability === 'produced' ? scenario.responseSequences : scenario.observedResponseSequences,
     });
   }
   expect(manifest.producer.entryPoint).toBe('createNativeHoldingsHistoryFixture');
@@ -80,16 +83,29 @@ test('keeps original command inputs, keys and observed revisions separate from r
       expect((response.body as any).progressSession.revision).toBe(command.observedRevision.revision + 1);
     } else expect(input).not.toHaveProperty('revision');
   }
-  expect(manifest.commands.filter(({ path }) => path.endsWith(':record')).map(({ input }) => input.body))
-    .toEqual([{ revision: 1, amount: '0' }, { revision: 2, amount: '125' }, { revision: 3, amount: '0' }]);
+  expect(manifest.commands.filter(({ path }) => path.endsWith(':record')).map(({ input }) => input.body)).toEqual([
+    { revision: 1, amount: '0' },
+    { revision: 2, amount: '125' },
+    { revision: 3, amount: '0' },
+  ]);
   expect(manifest.commands.length).toBe(manifest.responses.filter(({ method }) => method === 'POST').length);
 });
 
 test('retains zero, accepted scalar units and FULL meaning without deriving percentages or historic meaning', () => {
   const scalar = body('ownerDetail').progressSession;
-  expect(scalar).toMatchObject({ mode: 'scalar_amount', unit: 'page', amount: '0', total: '300', completedUnitCount: 0 });
+  expect(scalar).toMatchObject({
+    mode: 'scalar_amount',
+    unit: 'page',
+    amount: '0',
+    total: '300',
+    completedUnitCount: 0,
+  });
   expect(body('zeroDetail').progressSession).toEqual(scalar);
-  expect(scalar.presentation).toMatchObject({ meaning: 'known', structure: 'unverified', recording: { state: 'supported' } });
+  expect(scalar.presentation).toMatchObject({
+    meaning: 'known',
+    structure: 'unverified',
+    recording: { state: 'supported' },
+  });
   expect(scalar).toHaveProperty('subject');
   expect(scalar).toHaveProperty('versionSubject');
   expect(scalar).not.toHaveProperty('percentage');
@@ -101,7 +117,9 @@ test('retains zero, accepted scalar units and FULL meaning without deriving perc
   const reread = body('rereadDetail').progressSession;
   expect(reread.id).not.toBe(scalar.id);
   expect(reread).toMatchObject({ state: 'active', revision: 1, amount: null, total: null });
-  expect(new Set(body('ownerIndex').progressSessions.map((session: any) => session.id))).toEqual(new Set([scalar.id, reread.id]));
+  expect(new Set(body('ownerIndex').progressSessions.map((session: any) => session.id))).toEqual(
+    new Set([scalar.id, reread.id]),
+  );
   for (const name of ['ownerDetail', 'zeroDetail', 'recipeDetail', 'rereadDetail', 'completedDetail'] as const) {
     const fact = facts(name)[0]!;
     expect(fact.path).toEndWith('?view=FULL&presentation=FULL');
@@ -117,15 +135,21 @@ test('retains actual independent history pages, duplicate intent order, IDs and 
   const sessionId = body('ownerDetail').progressSession.id;
   expect(rows.map(({ id }) => id)).toEqual([`${sessionId}:2`, `${sessionId}:3`, `${sessionId}:4`]);
   expect(rows.map(({ revision }) => revision)).toEqual([2, 3, 4]);
-  expect(rows.every(({ createdAt }) => typeof createdAt === 'string' && Number.isFinite(Date.parse(createdAt)))).toBe(true);
+  expect(rows.every(({ createdAt }) => typeof createdAt === 'string' && Number.isFinite(Date.parse(createdAt)))).toBe(
+    true,
+  );
   for (const [list, history] of Object.entries(manifest.histories)) {
     expect(history.addressField).toBe(list);
     for (const [index, page] of history.pages.entries()) {
       const response = manifest.responses[page.responseSequence]!;
       const query = new URL(response.path, 'https://native.test').searchParams;
       expect(query.get('cursor')).toBe(page.requestedCursor);
-      expect(page.requestedCursor).toBe(index === 0 ? null : (manifest.responses[history.pages[index - 1]!.responseSequence]!.body as any).next);
-      expect(Object.keys(response.body as object).sort()).toEqual([list === 'changes' ? 'changes' : 'completedUnits', 'next'].sort());
+      expect(page.requestedCursor).toBe(
+        index === 0 ? null : (manifest.responses[history.pages[index - 1]!.responseSequence]!.body as any).next,
+      );
+      expect(Object.keys(response.body as object).sort()).toEqual(
+        [list === 'changes' ? 'changes' : 'completedUnits', 'next'].sort(),
+      );
     }
     expect((manifest.responses[history.pages.at(-1)!.responseSequence]!.body as any).next).toBeNull();
     const first = manifest.responses[history.pages[0]!.responseSequence]!;
@@ -141,14 +165,22 @@ test('retains actual independent history pages, duplicate intent order, IDs and 
   expect(manifest.histories.units.pages).toHaveLength(1);
   expect(facts('crossListCursor')[0]!.status).toBe(400);
   expect(body('crossListCursor').code).toBe('invalid_cursor');
-  expect(new URL(facts('crossListCursor')[0]!.path, 'https://native.test').searchParams.get('cursor')).toBe((changes[0]!.body as any).next);
+  expect(new URL(facts('crossListCursor')[0]!.path, 'https://native.test').searchParams.get('cursor')).toBe(
+    (changes[0]!.body as any).next,
+  );
 });
 
 test('actual other, anonymous and suspended reads never disclose the private owner session or history', () => {
   expect(body('otherIndex')).toEqual({ progressSessions: [], next: null });
   for (const [name, status] of [
-    ['otherDetail', 404], ['otherChanges', 404], ['otherUnits', 404], ['missingDetail', 404],
-    ['anonymousIndex', 401], ['anonymousDetail', 401], ['anonymousChanges', 401], ['anonymousUnits', 401],
+    ['otherDetail', 404],
+    ['otherChanges', 404],
+    ['otherUnits', 404],
+    ['missingDetail', 404],
+    ['anonymousIndex', 401],
+    ['anonymousDetail', 401],
+    ['anonymousChanges', 401],
+    ['anonymousUnits', 401],
     ['suspendedDetail', 401],
   ] as const) {
     const fact = facts(name)[0]!;
@@ -166,11 +198,19 @@ test('absent mode, history, outage and terminal producers remain explicit depend
     expect(facts(name)[0]!.status).toBe(422);
     expect(body(name).code).toBe('unsupported_library_profile');
   }
-  for (const name of ['unitsLater', 'noncontiguousUnits', 'historicalUnit', 'emptyWithContinuation', 'unavailableDetail', 'terminalAccount'] as const) {
+  for (const name of [
+    'unitsLater',
+    'noncontiguousUnits',
+    'historicalUnit',
+    'emptyWithContinuation',
+    'unavailableDetail',
+    'terminalAccount',
+  ] as const) {
     const scenario = manifest.scenarios[name];
     expect(scenario.availability).toBe('dependency_unavailable');
     expect(scenario).not.toHaveProperty('responseSequences');
-    if (scenario.availability === 'dependency_unavailable') expect(scenario.missingInterface.length).toBeGreaterThan(20);
+    if (scenario.availability === 'dependency_unavailable')
+      expect(scenario.missingInterface.length).toBeGreaterThan(20);
   }
   expect(manifest.responses.some(({ status }) => status === 503)).toBe(false);
   expect(manifest.responses.some(({ body }) => (body as any).progressSession?.mode === 'completed_units')).toBe(false);
