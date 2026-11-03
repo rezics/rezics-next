@@ -2,29 +2,6 @@ import { expect, test } from 'bun:test';
 import type { LandingRequest, ManagerEvent } from './contracts.ts';
 import { WorkerJob } from './job.ts';
 import { harness } from './test-support.ts';
-import { settle } from './settle.ts';
-import { readControlPolicy } from './policy.ts';
-
-test('settlement contention uses the configured retry schedule and stops at its bound', async () => {
-  const h = harness();
-  const write = h.store.write;
-  let calls = 0;
-  try {
-    h.settings.policy = readControlPolicy({ worker: { settlementBackoffMs: [1] } });
-    const task = h.tasks.dispatch(h.briefFile),
-      worker = await h.tasks.retry(task.id);
-    await worker.exited;
-    h.store.write = () => {
-      calls++;
-      throw new Error('SQLITE_BUSY: database is locked');
-    };
-    await expect(settle(h.tasks, worker, { enqueue() {} })).rejects.toThrow('SQLITE_BUSY');
-    expect(calls).toBe(2);
-  } finally {
-    h.store.write = write;
-    await h.disposeAsync();
-  }
-});
 
 // A successful worker whose exit coincides with another process holding the store's write lock for 1.5 seconds.
 const lockingWorker = `#!/usr/bin/env bun

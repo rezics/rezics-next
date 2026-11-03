@@ -1,5 +1,4 @@
 import { agentAdapter } from './agents.ts';
-import { defaultPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -15,7 +14,7 @@ import type { Pool, PoolReading } from './types.ts';
 export type CodexSchedule = { scheduledAt: string | null; latestResetAt: string | null; fetchedAt: string };
 
 const SCHEDULE_FILE = 'codex-schedule.json';
-const HOUR_MS = 3_600_000; // Unit conversion for provider reset timestamps.
+const SCHEDULE_REFRESH_MS = 30 * 60_000;
 
 function optionalTimestamp(value: unknown): string | null | undefined {
   if (value === null) return null;
@@ -32,11 +31,11 @@ function asCodexSchedule(value: unknown): CodexSchedule | undefined {
   return { scheduledAt, latestResetAt, fetchedAt };
 }
 
-function isFresh(schedule: CodexSchedule, now: number, refreshMs: number): boolean {
+function isFresh(schedule: CodexSchedule, now: number): boolean {
   const fetchedAt = Date.parse(schedule.fetchedAt);
   if (!Number.isFinite(fetchedAt)) return false;
   const age = now - fetchedAt;
-  return age >= 0 && age < refreshMs;
+  return age >= 0 && age < SCHEDULE_REFRESH_MS;
 }
 
 export function readCodexSchedule(stateDirectory: string): CodexSchedule | undefined {
@@ -65,8 +64,8 @@ export function publishCodexSchedule(stateDirectory: string, schedule: CodexSche
   }
 }
 
-function fetchCodexStatus(timeoutSeconds: number): string | undefined {
-  const response = spawnSync('curl', ['-sf', '-m', String(timeoutSeconds), 'https://codex-resets.com/api/v1/status'], {
+function fetchCodexStatus(): string | undefined {
+  const response = spawnSync('curl', ['-sf', '-m', '15', 'https://codex-resets.com/api/v1/status'], {
     encoding: 'utf8',
   });
   return response.status === 0 ? response.stdout : undefined;
@@ -102,16 +101,15 @@ export function parseCodexStatus(body: string, now: number): CodexSchedule {
   };
 }
 
-/** Refresh the announced Codex schedule on the configured cadence; returns the schedule now known. */
+/** Refresh the announced Codex schedule at most every half hour; returns the schedule now known. */
 export function refreshCodexSchedule(
   stateDirectory: string,
   now = Date.now(),
-  fetchStatus?: () => string | undefined,
-  policy = defaultPolicy.pacing,
+  fetchStatus: () => string | undefined = fetchCodexStatus,
 ): CodexSchedule | undefined {
   const current = readCodexSchedule(stateDirectory);
-  if (current && isFresh(current, now, policy.scheduleRefreshMs)) return current;
-  const body = fetchStatus ? fetchStatus() : fetchCodexStatus(policy.scheduleRequestTimeoutSeconds);
+  if (current && isFresh(current, now)) return current;
+  const body = fetchStatus();
   if (body === undefined) return current;
   try {
     const schedule = parseCodexStatus(body, now);
@@ -137,32 +135,31 @@ export type Pace = { allowanceKey: string; unusedPercent: number; hoursToReset: 
  * Percent of the allowance per hour that must be spent to use it before it resets. An announced Codex reset that comes
  * before the window's own reset shortens the time. Undefined without a reading or a reset time.
  */
-export function pace(
-  reading: PoolReading,
-  pool: Pool,
-  now: number,
-  schedule?: CodexSchedule,
-  policy = defaultPolicy.pacing,
-): Pace | undefined {
+export function pace(reading: PoolReading, pool: Pool, now: number, schedule?: CodexSchedule): Pace | undefined {
   const window = longestWindow(reading);
   if (!window || window.resetsAt === null || !reading.observedAt) return undefined;
   let resetAt = window.resetsAt;
   const announced =
     agentAdapter(pool.cli).announcedReset && schedule?.scheduledAt ? Date.parse(schedule.scheduledAt) : NaN;
   if (Number.isFinite(announced) && announced > now && announced < resetAt) resetAt = announced;
-  const hoursToReset = Math.max(resetAt - now, policy.minimumResetMs) / HOUR_MS;
+  const hoursToReset = Math.max((resetAt - now) / 3_600_000, 0.25);
   const unusedPercent = Math.max(0, 100 - effectiveReserve(pool, window, now) - window.usedPercent);
   return { allowanceKey: pool.allowanceKey, unusedPercent, hoursToReset, urgency: unusedPercent / hoursToReset };
 }
 
-/** Tell the supermanager which allowances will expire unused, on the configured alert cadence. */
+// A person would act when using up an allowance needs more than two percent of it an hour, or when a day or less is
+// left with a fifth of it unused.
+const ALERT_PERCENT_PER_HOUR = 2;
+const ALERT_LAST_DAY_PERCENT = 20;
+const ALERT_EVERY_MS = 3 * 3_600_000;
+
+/** Tell the supermanager, at most every three hours per allowance, which allowances will expire unused. */
 export function alertUnspentAllowances(
   pools: readonly Pool[],
   read: (pool: Pool) => PoolReading,
   stateDirectory: string,
   deliver: (summary: string) => void,
   now = Date.now(),
-  policy = defaultPolicy.pacing,
 ): number {
   const path = join(stateDirectory, 'pacing-alerts.json');
   let sent: Record<string, string> = {};
@@ -180,13 +177,13 @@ export function alertUnspentAllowances(
   )) {
     if (seen.has(pool.allowanceKey)) continue;
     seen.add(pool.allowanceKey);
-    const current = pace(read(pool), pool, now, schedule, policy);
+    const current = pace(read(pool), pool, now, schedule);
     if (!current) continue;
     const atRisk =
-      current.urgency > policy.alertPercentPerHour ||
-      (current.hoursToReset <= policy.alertResetHours && current.unusedPercent >= policy.alertUnusedPercent);
+      current.urgency > ALERT_PERCENT_PER_HOUR ||
+      (current.hoursToReset <= 24 && current.unusedPercent >= ALERT_LAST_DAY_PERCENT);
     const last = sent[pool.allowanceKey] ? Date.parse(sent[pool.allowanceKey]!) : 0;
-    if (!atRisk || now - last < policy.alertEveryMs) continue;
+    if (!atRisk || now - last < ALERT_EVERY_MS) continue;
     deliver(
       `Allowance pacing: ${pool.allowanceKey} has ${current.unusedPercent.toFixed(0)}% unused above its reserve and resets in ` +
         `${current.hoursToReset.toFixed(1)} h, so it needs ${current.urgency.toFixed(1)}% an hour to be used. Route more work to it ` +

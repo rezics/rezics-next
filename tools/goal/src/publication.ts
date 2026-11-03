@@ -1,7 +1,6 @@
-import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   closeSync,
   existsSync,
@@ -27,10 +26,10 @@ import { checkPinnedBunInstallation } from './check-compatibility.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { InboxDocumentReference, ManagerEvent } from './contracts.ts';
 import { PublicationLegacyReconciliation } from './publication-legacy.ts';
-import { publicationCommands, publicationInventoryFresh, publicationWorkflowCommand } from './publication-policy.ts';
 
-// UTC cadence and date slicing are protocol conversions, not operator limits.
 const HOUR_MS = 60 * 60 * 1000;
+const WORKFLOW_DEADLINE_SECONDS = 1800;
+const WORKFLOW_GRACE_SECONDS = 30;
 const WORKFLOW_BLOBS = [
   { path: 'apps/web/scripts/storybook-deploy.ts', blob: '1f3f1ed73e874b046747870435a668f3861f82cd' },
   { path: 'apps/web/scripts/storybook-build.ts', blob: '80ac41d76f350cda8f1bf33be6d3ac4e44eab292' },
@@ -143,7 +142,6 @@ export type PreparedPublicationDependencies = {
   bunExecutable: string;
 };
 export type PublicationControllerOptions = {
-  policy?: ControlPolicy | undefined;
   db: Database;
   mainCheckout: string;
   stateDirectory: string;
@@ -378,6 +376,50 @@ function managerHasSession(db: Database, managerId: string, sessionId: string): 
   }
 }
 
+function gitEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of Object.keys(env)) if (name.startsWith('GIT_')) delete env[name];
+  return env;
+}
+
+type CommandResult = { code: number | null; stdout: string; stderr: string; error?: string };
+function runSync(command: string, args: string[], cwd: string): CommandResult {
+  const result = spawnSync(command, args, {
+    cwd,
+    env: gitEnv(),
+    encoding: 'utf8',
+    timeout: 30_000,
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  return {
+    code: result.status,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+    ...(result.error ? { error: result.error.message } : {}),
+  };
+}
+
+function git(root: string, args: string[]): CommandResult {
+  return runSync('git', args, root);
+}
+
+function gitValue(root: string, args: string[], label: string): string {
+  const result = git(root, args);
+  if (result.code !== 0 || result.error)
+    throw new Error(`${label}: ${result.error ?? (result.stderr.trim() || `git exited ${result.code}`)}`);
+  return result.stdout.trim();
+}
+
+function requireCommit(root: string, value: string, label: string): string {
+  if (!/^[0-9a-f]{40}$/i.test(value) || git(root, ['cat-file', '-e', `${value}^{commit}`]).code !== 0)
+    throw new Error(`${label} is not an available full Git commit`);
+  return value.toLowerCase();
+}
+
+function isAncestor(root: string, ancestor: string, commit: string): boolean {
+  return git(root, ['merge-base', '--is-ancestor', ancestor, commit]).code === 0;
+}
+
 function currentHour(now: number): number {
   return Math.floor(now / HOUR_MS) * HOUR_MS;
 }
@@ -446,7 +488,6 @@ function validateCancelledDuplicate(body: Record<string, unknown>): ProcessIdent
     typeof observedFields.cwd !== 'string' ||
     !observedFields.cwd.endsWith('/apps/web') ||
     typeof observedFields.cmd !== 'string' ||
-    // This command identifies a retained historical cancellation; new invocation policy cannot rewrite it.
     !observedFields.cmd.startsWith('timeout --signal=TERM --kill-after=30s 1800s ') ||
     firstPublisher.boot !== observed.boot ||
     BigInt(firstPublisher.start) >= BigInt(observed.start) ||
@@ -547,20 +588,14 @@ export class PublicationController {
   readonly process: PublicationProcessObservation;
   readonly legacy: PublicationLegacyReconciliation;
   private readonly now: () => number;
-  private readonly commands: ReturnType<typeof publicationCommands>;
-  private get policy() {
-    return this.options.policy ?? defaultPolicy;
-  }
   private readonly inbox: SqliteManagerInbox;
 
   constructor(options: PublicationControllerOptions) {
     this.options = options;
-    this.commands = publicationCommands(options.policy?.publication);
     this.db = options.db;
     this.process = options.process ?? nativeProcess;
     this.now = options.now ?? Date.now;
-    this.inbox =
-      options.inbox ?? new SqliteManagerInbox(options.db, options.stateDirectory, undefined, options.policy?.inbox);
+    this.inbox = options.inbox ?? new SqliteManagerInbox(options.db, options.stateDirectory);
     migrate(this.db, publicationMigrations);
     this.legacy = new PublicationLegacyReconciliation({ ...options, process: this.process }, (path, body) => {
       if (body.toolExit === undefined) return null;
@@ -571,10 +606,7 @@ export class PublicationController {
   }
 
   private lease(): DirectoryLease {
-    return acquireDirectoryLease(
-      join(this.options.stateDirectory, 'publication', 'custody.lease'),
-      this.options.policy?.leases,
-    );
+    return acquireDirectoryLease(join(this.options.stateDirectory, 'publication', 'custody.lease'));
   }
 
   receive(messageId: number, actor: PublicationActor): { id: string; slotUtc: string; state: string; replay: boolean } {
@@ -716,8 +748,8 @@ export class PublicationController {
       const historicalStart = this.assertRequiredBootstrapHistory(historyEvidence);
       const observedAt = new Date(Date.parse(input.observedAt)).toISOString();
       const observedAtMs = Date.parse(observedAt);
-      if (!publicationInventoryFresh(observedAtMs, this.now(), this.policy.publication))
-        throw new Error('publication host inventory snapshot exceeds its configured freshness or clock-skew bound');
+      if (observedAtMs > this.now() + 30_000 || this.now() - observedAtMs > 5 * 60_000)
+        throw new Error('publication host inventory snapshot must be no more than five minutes old');
       const existing = this.db
         .query('SELECT digest, body, observed_at FROM publication_inventory WHERE singleton=1')
         .get() as { digest: string; body: string; observed_at: string } | null;
@@ -1142,7 +1174,7 @@ export class PublicationController {
               `refs/heads/${this.options.integrationBranch}`,
               source,
               worktree,
-              this.policy.publication.workflowDeadlineSeconds,
+              WORKFLOW_DEADLINE_SECONDS,
               paths.logPath,
               paths.receiptPath,
               stamp,
@@ -1174,7 +1206,16 @@ export class PublicationController {
       this.assertWorkflowBlobs(source);
       const appDirectory = join(invocation.worktree, 'apps/web');
       const bunExecutable = prepared.bunExecutable;
-      const argv = publicationWorkflowCommand(bunExecutable, this.policy.publication);
+      const argv = [
+        'timeout',
+        '--signal=TERM',
+        `--kill-after=${WORKFLOW_GRACE_SECONDS}s`,
+        `${WORKFLOW_DEADLINE_SECONDS}s`,
+        bunExecutable,
+        'run',
+        'storybook:deploy',
+        '--force',
+      ];
       const cwd = appDirectory;
       this.updatePrepared(invocationId, prepared, argv, cwd);
       this.options.beforeSpawn?.(invocationId);
@@ -1198,20 +1239,19 @@ export class PublicationController {
 
   private prepare(invocation: InvocationRow, source: string): PreparedPublicationDependencies {
     const existingPath = existsSync(invocation.worktree);
-    const pathRegistered = this.commands
-      .git(this.options.mainCheckout, ['worktree', 'list', '--porcelain'])
+    const pathRegistered = git(this.options.mainCheckout, ['worktree', 'list', '--porcelain'])
       .stdout.split('\n')
       .some((line) => line === `worktree ${invocation.worktree}`);
     if (existingPath || pathRegistered) {
       if (!existingPath || !pathRegistered)
         throw new Error('publication worktree path exists without matching Git worktree custody');
-      const head = this.commands.gitValue(
+      const head = gitValue(
         invocation.worktree,
         ['rev-parse', '--verify', 'HEAD'],
         'reading retained publication worktree HEAD',
       );
       if (head !== source) throw new Error('retained publication worktree does not match its immutable source commit');
-      const status = this.commands.gitValue(
+      const status = gitValue(
         invocation.worktree,
         ['status', '--porcelain'],
         'checking retained publication source cleanliness',
@@ -1219,18 +1259,12 @@ export class PublicationController {
       if (status) throw new Error('retained publication worktree is dirty; it will not be reset or repaired');
     } else {
       mkdirSync(dirname(invocation.worktree), { recursive: true });
-      const added = this.commands.git(this.options.mainCheckout, [
-        'worktree',
-        'add',
-        '--detach',
-        invocation.worktree,
-        source,
-      ]);
+      const added = git(this.options.mainCheckout, ['worktree', 'add', '--detach', invocation.worktree, source]);
       if (added.code !== 0 || added.error)
         throw new Error(`could not create isolated publication source worktree: ${added.error ?? added.stderr.trim()}`);
     }
     this.assertWorkflowBlobs(source);
-    const statusBefore = this.commands.gitValue(
+    const statusBefore = gitValue(
       invocation.worktree,
       ['status', '--porcelain'],
       'checking immutable publication source',
@@ -1238,13 +1272,8 @@ export class PublicationController {
     if (statusBefore) throw new Error('eligible publication source worktree is not clean');
     const prepared = this.options.prepareDependencies
       ? this.options.prepareDependencies(this.options.mainCheckout, invocation.worktree, this.options.worktreeRoot)
-      : prepareExactDependencies(
-          this.options.mainCheckout,
-          invocation.worktree,
-          this.options.worktreeRoot,
-          this.options.policy,
-        );
-    const statusAfter = this.commands.gitValue(
+      : prepareExactDependencies(this.options.mainCheckout, invocation.worktree, this.options.worktreeRoot);
+    const statusAfter = gitValue(
       invocation.worktree,
       ['status', '--porcelain'],
       'checking prepared publication source',
@@ -1263,28 +1292,28 @@ export class PublicationController {
 
   private eligibleSource(authority: Authority): string {
     const main = resolve(this.options.mainCheckout);
-    const source = this.commands.requireCommit(
+    const source = requireCommit(
       main,
-      this.commands.gitValue(
+      gitValue(
         main,
         ['rev-parse', `refs/heads/${this.options.integrationBranch}`],
         'reading current integration source',
       ),
       'current integration source',
     );
-    const observed = this.commands.requireCommit(main, String(authority.observedDev), 'authorized observed dev source');
-    if (source === observed || !this.commands.isAncestor(main, observed, source))
+    const observed = requireCommit(main, String(authority.observedDev), 'authorized observed dev source');
+    if (source === observed || !isAncestor(main, observed, source))
       throw new Error('current integration source is not newer than and descended from the authorized dev observation');
     for (const commit of requiredIntegratedCommits(authority)) {
-      this.commands.requireCommit(main, commit, 'required integrated source');
-      if (!this.commands.isAncestor(main, commit, source))
+      requireCommit(main, commit, 'required integrated source');
+      if (!isAncestor(main, commit, source))
         throw new Error(`eligible dev source is missing required integrated commit ${commit}`);
     }
     return source;
   }
 
   private ensureSourceRefStillCurrent(ref: string, expected: string): void {
-    const current = this.commands.gitValue(
+    const current = gitValue(
       this.options.mainCheckout,
       ['rev-parse', '--verify', ref],
       'rechecking publication source ref',
@@ -1295,7 +1324,7 @@ export class PublicationController {
   private assertWorkflowBlobs(source: string): void {
     const expected = this.options.workflowBlobs ?? WORKFLOW_BLOBS;
     for (const entry of expected) {
-      const actual = this.commands.gitValue(
+      const actual = gitValue(
         this.options.mainCheckout,
         ['rev-parse', `${source}:${entry.path}`],
         `reading retained workflow blob ${entry.path}`,
@@ -1361,11 +1390,7 @@ export class PublicationController {
     )
       throw new Error('native publisher/capture inventory is incomplete or malformed');
     const age = this.now() - Date.parse(inventory.observed_at);
-    if (
-      !Number.isFinite(age) ||
-      age < -this.policy.publication.observationClockSkewMs ||
-      age > this.policy.publication.inventoryMaxAgeMs
-    )
+    if (!Number.isFinite(age) || age < -30_000 || age > 5 * 60_000)
       throw new Error(
         'native publisher/capture inventory is stale; refresh the authenticated host census before publication',
       );
@@ -1595,7 +1620,7 @@ export class PublicationController {
         this.recordSpawnedIdentity(invocation.id, identity);
         this.options.afterIdentityRecorded?.(invocation.id, identity);
         observe();
-        monitor = setInterval(observe, this.policy.publication.processPollMs);
+        monitor = setInterval(observe, 100);
         monitor.unref();
       });
       child.once('error', (error) => {
@@ -2138,8 +2163,8 @@ function safeError(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
-function pinnedBunVersion(root: string, executable: string, policy = defaultPolicy.publication): string {
-  const result = publicationCommands(policy).runSync(executable, ['--version'], root);
+function pinnedBunVersion(root: string, executable: string): string {
+  const result = runSync(executable, ['--version'], root);
   if (result.code !== 0 || result.error)
     throw new Error(`pinned Bun executable unavailable: ${result.error ?? result.stderr.trim()}`);
   const version = result.stdout.trim();
@@ -2151,16 +2176,15 @@ function prepareExactDependencies(
   mainCheckout: string,
   sourceTree: string,
   worktreeRoot: string,
-  policy = defaultPolicy,
 ): PreparedPublicationDependencies {
   const pinnedFromMain = join(mainCheckout, 'node_modules/.bin/bun');
   if (!existsSync(pinnedFromMain))
     throw new Error('pinned Bun artifact is unavailable in the configured source checkout');
-  const mainCompatibility = checkPinnedBunInstallation(mainCheckout, policy.nativeCommands);
+  const mainCompatibility = checkPinnedBunInstallation(mainCheckout);
   if (mainCompatibility.some((check) => check.status !== 'compatible'))
     throw new Error('configured source checkout does not have the exact pinned Bun artifact');
-  const expectedVersion = pinnedBunVersion(mainCheckout, pinnedFromMain, policy.publication);
-  const systemVersionResult = publicationCommands(policy.publication).runSync('bun', ['--version'], mainCheckout);
+  const expectedVersion = pinnedBunVersion(mainCheckout, pinnedFromMain);
+  const systemVersionResult = runSync('bun', ['--version'], mainCheckout);
   if (
     systemVersionResult.code !== 0 ||
     systemVersionResult.error ||
@@ -2175,15 +2199,15 @@ function prepareExactDependencies(
   const worktreeNodeModules = join(sourceTree, 'node_modules');
   if (existsSync(worktreeNodeModules) && !dependencyInstallationMatches(sourceTree))
     throw new Error('publication worktree already has mismatched dependencies; it will not be reset');
-  installShared(sourceTree, storeRoot, undefined, policy);
+  installShared(sourceTree, storeRoot);
   if (!dependencyInstallationMatches(sourceTree))
     throw new Error('prepared publication worktree does not match its exact dependency store');
   const bunExecutable = join(sourceTree, 'node_modules/.bin/bun');
   if (!existsSync(bunExecutable)) throw new Error('shared dependency store did not provide its pinned Bun executable');
-  const compatibility = checkPinnedBunInstallation(sourceTree, policy.nativeCommands);
+  const compatibility = checkPinnedBunInstallation(sourceTree);
   if (compatibility.some((check) => check.status !== 'compatible'))
     throw new Error('publication worktree pinned Bun artifact validation failed');
-  const bunVersion = pinnedBunVersion(sourceTree, bunExecutable, policy.publication);
+  const bunVersion = pinnedBunVersion(sourceTree, bunExecutable);
   if (bunVersion !== expectedVersion)
     throw new Error('publication worktree Bun version differs from the configured pinned artifact');
   return { key, store, bunVersion, bunExecutable };

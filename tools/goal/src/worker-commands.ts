@@ -98,11 +98,7 @@ export async function runWorkerCommand(
   const runtime =
     options.runtime ??
     (!options.store && !options.tasks && !options.landing && !options.inbox ? createRuntime({ settings }) : undefined);
-  const store =
-    runtime?.store ??
-    options.store ??
-    options.tasks?.store ??
-    new WorkerStore(openDb(databasePath, settings.policy?.storage), settings.policy);
+  const store = runtime?.store ?? options.store ?? options.tasks?.store ?? new WorkerStore(openDb(databasePath));
   const tasks = runtime?.tasks ?? options.tasks ?? new WorkerTasks(settings, store);
   const print = options.print ?? console.log;
   const job =
@@ -117,18 +113,11 @@ export async function runWorkerCommand(
       store.assertCurrent({ taskId: env.GOAL_TASK_ID, attempt: Number(env.GOAL_ATTEMPT) });
     }
     if (parsedArguments.command === 'dispatch') {
-      const task = tasks.dispatch(parsedArguments.brief, priorityActor, parsedArguments.urgent);
+      const task = tasks.dispatch(parsedArguments.brief, priorityActor);
       print(task.id);
       if (task.state === 'held') return 0;
       // The first start only: if the host already started the task, this command leaves it alone.
       await job.start(task.id, { expectedAttempt: 0 });
-    } else if (parsedArguments.command === 'urgent') {
-      const actor = authenticatedManager(store.db, env);
-      if (!actor) throw new Error('urgent grants require an authenticated manager session');
-      tasks.setUrgentGrant(parsedArguments.managerId, parsedArguments.action === 'grant', actor);
-      print(
-        `Urgent grant ${parsedArguments.action === 'grant' ? 'enabled' : 'revoked'} for ${parsedArguments.managerId}.`,
-      );
     } else if (parsedArguments.command === 'amend') {
       print(
         JSON.stringify(
@@ -167,14 +156,12 @@ export async function runWorkerCommand(
                 (id) => (dependencies.find((dependency) => dependency.id === id)?.ready ? 'merged' : undefined),
                 Date.now(),
                 settings.stateDirectory,
-                settings.policy,
               ) ?? {
                 reason: 'start',
               })
             : undefined;
         return {
           ...task,
-          urgent: task.brief.urgent === true,
           ...(terminationRequest ? { terminationRequest } : {}),
           ...(task.state === 'held'
             ? {
@@ -251,7 +238,7 @@ export async function runWorkerCommand(
       const { flow, since, json } = parsedArguments;
       if (flow) {
         const now = new Date();
-        const metrics = lifecycleMetrics(store.db, now, settings.policy);
+        const metrics = lifecycleMetrics(store.db, now);
         const result = {
           ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
           lifecycle: metrics,
@@ -263,7 +250,6 @@ export async function runWorkerCommand(
               `Flow efficiency: ${result.flowEfficiency === null ? 'unknown' : `${(result.flowEfficiency * 100).toFixed(1)}%`}`,
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
-              `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.integrated} integrated (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,
               ...result.stages.map((s) => `${s.stage}: total ${s.totalMs}ms, p50 ${s.p50Ms}ms, p90 ${s.p90Ms}ms`),
               ...result.queues.map(
                 (q) => `Queue ${q.stage}: ${q.length}, oldest ${Math.round(q.oldestAgeMs / 60000)}m`,
@@ -281,7 +267,6 @@ export async function runWorkerCommand(
         print(
           [
             `Attempts: ${result.attempts}; tasks: ${result.tasks}; passed: ${result.passedTasks}.`,
-            `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.attempts} attempts; ${result.urgent.passedTasks} passed (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,
             `Attempts per passed task: ${result.attemptsPerPassedTask?.toFixed(2) ?? 'n/a'}; first-attempt pass rate: ${rate(result.firstAttemptPassRate)}.`,
             `Consult hit rate: ${rate(result.consultHitRate)}; early-stop rate: ${rate(result.earlyStopRate)}.`,
             `Wall clock to pass p50/p90: critical path ${duration(result.wallClockToPassMs.criticalPath.p50)}/${duration(result.wallClockToPassMs.criticalPath.p90)}; other ${duration(result.wallClockToPassMs.other.p50)}/${duration(result.wallClockToPassMs.other.p90)}.`,

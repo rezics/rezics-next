@@ -16,8 +16,7 @@ export type ImportAttemptFlags = {
 };
 
 export type ParsedWorkerCommandArguments =
-  | { command: 'dispatch'; brief: string; urgent?: true }
-  | { command: 'urgent'; action: 'grant' | 'revoke'; managerId: string }
+  | { command: 'dispatch'; brief: string }
   | { command: 'amend'; taskId: string; expectedAttempt: 0; brief: string }
   | { command: 'status'; taskId?: string }
   | ({ command: 'attempts' } & AttemptsArguments)
@@ -90,17 +89,9 @@ function parseAttemptsArguments(argv: string[]): AttemptsArguments {
 export function parseWorkerCommandArguments(command: string, argv: string[]): ParsedWorkerCommandArguments {
   const [arg] = argv;
   switch (command) {
-    case 'dispatch': {
-      const urgent = argv.includes('--urgent');
-      const briefs = argv.filter((value) => value !== '--urgent');
-      if (briefs.length !== 1 || briefs[0]!.startsWith('--') || argv.length !== (urgent ? 2 : 1))
-        throw new Error('usage: dispatch [--urgent] <brief>');
-      return { command, brief: briefs[0]!, ...(urgent ? { urgent: true as const } : {}) };
-    }
-    case 'urgent':
-      if (!['grant', 'revoke'].includes(arg!) || !argv[1] || argv.length !== 2)
-        throw new Error('usage: urgent grant|revoke <manager>');
-      return { command, action: arg as 'grant' | 'revoke', managerId: argv[1] };
+    case 'dispatch':
+      if (!arg || argv.length !== 1) throw new Error('usage: dispatch <brief>');
+      return { command, brief: arg };
     case 'amend': {
       let brief: string | undefined;
       let expectedAttempt: 0 | undefined;

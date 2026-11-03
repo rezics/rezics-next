@@ -2,7 +2,6 @@ import { unknownReading, tokens, textSignals, parseExitObject } from './shared.t
 import { existsSync, readFileSync, readdirSync, openSync, closeSync, readSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import defaults from '../../defaults.json';
-import { defaultPolicy } from '../policy.ts';
 import type {
   AgentAdapter,
   AgentLaunchOptions,
@@ -17,14 +16,13 @@ export function parseCodexSessionUsage(
   events: Iterable<Record<string, any>>,
   start: number,
   end: number,
-  policy = defaultPolicy.provider,
 ): { tokens: Tokens; usage: SessionUsage; source: 'codex-session' } | null {
-  const accumulator = codexUsageAccumulator(start, end, policy);
+  const accumulator = codexUsageAccumulator(start, end);
   for (const event of events) accumulator.add(event);
   return accumulator.finish() as { tokens: Tokens; usage: SessionUsage; source: 'codex-session' } | null;
 }
 
-function codexUsageAccumulator(start: number, end: number, policy = defaultPolicy.provider): AgentUsageAccumulator {
+function codexUsageAccumulator(start: number, end: number): AgentUsageAccumulator {
   const totals: Tokens = { input: 0, cached: 0, output: 0 };
   const seen = new Set<string>();
   const usage: SessionUsage = { model: null, effort: null, serviceTier: null, reasoning: 0, compactions: 0 };
@@ -42,7 +40,7 @@ function codexUsageAccumulator(start: number, end: number, policy = defaultPolic
     const result: Record<string, any>[] = [];
     const queue: Record<string, any>[] = [event];
     const keys = ['payload', 'info', 'settings', 'thread_settings', 'turn_context', 'context', 'config', 'model_info'];
-    while (queue.length && result.length < policy.usageContextObjects) {
+    while (queue.length && result.length < 24) {
       const value = queue.shift()!;
       result.push(value);
       for (const key of keys)
@@ -163,11 +161,11 @@ export const codexAdapter: AgentAdapter = {
     return { ...env, CODEX_HOME: pool.configDirectory };
   },
   afterExit() {},
-  parseUsage(events, start, end, policy) {
-    return parseCodexSessionUsage(events, start, end, policy);
+  parseUsage(events, start, end) {
+    return parseCodexSessionUsage(events, start, end);
   },
-  createUsageAccumulator(start, end, policy) {
-    return codexUsageAccumulator(start, end, policy);
+  createUsageAccumulator(start, end) {
+    return codexUsageAccumulator(start, end);
   },
   failure(event) {
     return event.type === 'turn.failed' || event.type === 'error'
@@ -291,18 +289,18 @@ export function parseCodexAllowance(text: string, pool: Pool, now = Date.now()):
   }
   return unknownReading(pool, now);
 }
-function tail(file: string, maxBytes: number): string {
+function tail(file: string): string {
   const fd = openSync(file, 'r');
   try {
     const size = statSync(file).size,
-      buffer = Buffer.alloc(Math.min(size, maxBytes));
+      buffer = Buffer.alloc(Math.min(size, 1024 * 1024));
     readSync(fd, buffer, 0, buffer.length, size - buffer.length);
     return buffer.toString('utf8');
   } finally {
     closeSync(fd);
   }
 }
-function readCodexAllowance(pool: Pool, now: number, policy = defaultPolicy.provider): PoolReading {
+function readCodexAllowance(pool: Pool, now: number): PoolReading {
   const sessions = join(pool.configDirectory, 'sessions');
   if (!existsSync(sessions)) return unknownReading(pool, now);
   const files = readdirSync(sessions, { recursive: true })
@@ -311,7 +309,7 @@ function readCodexAllowance(pool: Pool, now: number, policy = defaultPolicy.prov
     .map((file) => ({ file, modified: statSync(file).mtimeMs }))
     .sort((a, b) => b.modified - a.modified);
   for (const file of files) {
-    const reading = parseCodexAllowance(tail(file.file, policy.codexAllowanceTailBytes), pool, now);
+    const reading = parseCodexAllowance(tail(file.file), pool, now);
     if (reading.windows.length) return reading;
   }
   return unknownReading(pool, now);

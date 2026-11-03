@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Runs a command against a copy of a workspace on a development check host, so the check's containers and test lanes
-// run inside an admitted, resource-bounded check run, including loopback placement.
+// stay off the machine the agents run on.
 // Runs share the host package cache through hardlinks. An in-place write into an installed package fails the run and
 // removes its cache entry; patch dependencies through patchedDependencies in package.json, never at run time.
 //
@@ -22,7 +22,7 @@
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--max-ms <n>] [--gate] <workspace> -- <command...>
 //
-// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot, performance: true }] }.
+// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
@@ -72,8 +72,7 @@ import {
   CHECK_HOST_SUPERVISOR_MARKER_SCHEMA,
   checkHostRunSliceUnitName,
   checkHostScopeUnitStem,
-  CHECK_HOST_NAME_PATTERN,
-  performanceHosts,
+  PERFORMANCE_HOST_NAMES,
 } from './check-placement.ts';
 
 /** Exact root-relative files owned by the remote-check producer lifecycle. */
@@ -228,15 +227,12 @@ export type Host = {
   cpuQuotaPercent: number;
   slots: number;
   fallback?: boolean;
-  performance?: boolean;
   processorsPerSlot: number;
 };
 
-export type PinnedBun = { binary: string; version: string; revision: string };
-
 export type RemoteCheck = {
   hosts: Host[];
-  /** An optional narrowing of the configured performance pool. */
+  /** Heavy checks are limited to the two performance-approved hosts. */
   allowedHosts?: string[];
   workspace: string;
   cwd?: string;
@@ -303,13 +299,6 @@ export type RemoteCheck = {
    * the run directory is removed. A path that is not on the host is skipped.
    */
   returns?: string[];
-  /**
-   * Installed bun artifact root when `workspace` is a frozen snapshot without `node_modules`.
-   * Pin identity still comes from the candidate workspace package.json.
-   */
-  runtimeProducer?: string;
-  /** Admitted candidate runtime; when set, it must match the candidate pin and producer artifact. */
-  runtime?: PinnedBun;
 };
 
 export type RemotePreparedInputsEvidence = {
@@ -578,29 +567,23 @@ export function parseCommandPhases(contents: string): { durations: Record<string
   for (const phase of open.keys()) problems.push(`unmatched start for ${phase}`);
   return { durations, problems };
 }
-const pinnedBunByIdentity = new Map<string, PinnedBun>();
+let pinnedBun: { version: string; revision: string } | undefined;
 
-function candidateBunPin(manifest: string): string {
+/** Resolve an installed pinned package through normal ancestor lookup, without installing into frozen source. */
+export function repositoryBun(root: string): { binary: string; version: string; revision: string } {
+  const manifest = join(root, 'package.json');
   const pin = JSON.parse(readFileSync(manifest, 'utf8')).packageManager as unknown;
   if (typeof pin !== 'string' || !/^bun@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(pin))
     throw new Error(`pinned Bun: ${manifest} packageManager must pin an exact Bun version`);
-  return pin;
-}
-
-/** Resolve an installed pinned package from the candidate or an explicit producer, without ancestor lookup. */
-export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBun {
-  const manifest = join(resolve(pinRoot), 'package.json');
-  const pin = candidateBunPin(manifest);
   const version = pin.slice(4);
-  const producer = resolve(artifactRoot);
-  const packagePath = join(producer, 'node_modules/bun/package.json');
-  const key = `${pin}\0${packagePath}`;
-  const cached = pinnedBunByIdentity.get(key);
-  if (cached) return cached;
-  if (!existsSync(packagePath))
+  let packagePath: string;
+  try {
+    packagePath = Bun.resolveSync('bun/package.json', root);
+  } catch {
     throw new Error(
-      `pinned Bun: absent installed package for ${pin}; producer=${producer}; install dependencies in the candidate or its producer, not the frozen source`,
+      `pinned Bun: absent installed package for ${pin}; producer=${root}; install dependencies in the launch checkout, not the frozen source`,
     );
+  }
   const installed = JSON.parse(readFileSync(packagePath, 'utf8')) as { version?: string };
   // npm adds build metadata to canary package versions; packageManager may omit that metadata.
   if (installed.version !== version && !(!version.includes('+') && installed.version?.split('+')[0] === version))
@@ -608,8 +591,7 @@ export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBu
       `pinned Bun: package identity mismatch for ${pin}; package=${packagePath}; installed=${installed.version}`,
     );
   const binary = join(dirname(packagePath), 'bin/bun.exe');
-  if (!existsSync(binary))
-    throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${producer}`);
+  if (!existsSync(binary)) throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${root}`);
   let output: string;
   try {
     const result = Bun.spawnSync(
@@ -626,7 +608,7 @@ export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBu
     output = result.stdout.toString().trim();
   } catch (error) {
     throw new Error(
-      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${producer}; ${error instanceof Error ? error.message : error}`,
+      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${root}; ${error instanceof Error ? error.message : error}`,
     );
   }
   let identity: { version?: unknown; revision?: unknown };
@@ -650,22 +632,14 @@ export function repositoryBun(pinRoot: string, artifactRoot = pinRoot): PinnedBu
     throw new Error(
       `pinned Bun: runtime identity mismatch for ${pin}; binary=${binary}; version=${identity.version}; revision=${identity.revision}`,
     );
-  const resolved = { binary, version, revision: identity.revision as string };
-  pinnedBunByIdentity.set(key, resolved);
-  return resolved;
+  return { binary, version, revision: identity.revision as string };
 }
 
-/** Candidate pin and producer artifact, before placement, upload, or a held host slot. */
-function admitRemoteRuntime(options: Pick<RemoteCheck, 'workspace' | 'runtimeProducer' | 'runtime'>): PinnedBun {
-  const admitted = repositoryBun(options.workspace, options.runtimeProducer ?? options.workspace);
-  if (
-    options.runtime &&
-    (options.runtime.version !== admitted.version || options.runtime.revision !== admitted.revision)
-  )
-    throw new Error(
-      `pinned Bun: supplied runtime does not match the candidate pin; supplied=${options.runtime.version}/${options.runtime.revision}; admitted=${admitted.version}/${admitted.revision}`,
-    );
-  return admitted;
+/** Resolve the repository-pinned Bun only when a remote run is actually generated. */
+function getPinnedBun(): { version: string; revision: string } {
+  if (pinnedBun) return pinnedBun;
+  pinnedBun = repositoryBun(resolve(import.meta.dir, '..'));
+  return pinnedBun;
 }
 
 /** Transport discriminator only. Source/binding admission and the child's full schema remain authoritative. */
@@ -701,7 +675,8 @@ export async function transportLifecycleControl(
   run: string,
   request: LifecycleHostControl,
 ): Promise<string> {
-  if (performanceHosts([host]).length === 0) throw new Error('lifecycle: unapproved control host');
+  if (!(PERFORMANCE_HOST_NAMES as readonly string[]).includes(host.name))
+    throw new Error('lifecycle: unapproved control host');
   const script = await lifecycleControlScript(run, request);
   const connection = randomUUID();
   try {
@@ -917,19 +892,17 @@ export function readHosts(file: string): Host[] {
   const parsed = JSON.parse(readFileSync(file, 'utf8')) as { hosts?: unknown };
   if (!Array.isArray(parsed.hosts) || parsed.hosts.length === 0) throw new Error(`${file} lists no hosts`);
   return parsed.hosts.map((entry: Record<string, unknown>, index) => {
-    const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback, performance } = entry;
+    const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback } = entry;
     const processorsPerSlot = entry.processorsPerSlot === undefined ? CHECK_SLOT_PROCESSORS : entry.processorsPerSlot;
     // An address starting with a dash would be read as an ssh option.
     if (typeof address !== 'string' || !/^[\w.-]+@[\w.:-]+$/.test(address))
       throw new Error(`host ${index}: bad address`);
-    if (typeof name !== 'string' || !new RegExp(CHECK_HOST_NAME_PATTERN).test(name))
-      throw new Error(`host ${index}: name is required`);
+    if (typeof name !== 'string' || !name) throw new Error(`host ${index}: name is required`);
     if (typeof identity !== 'string' || !identity) throw new Error(`host ${name}: identity is required`);
     if (typeof memoryMaxGiB !== 'number' || !(memoryMaxGiB > 0)) throw new Error(`host ${name}: bad memoryMaxGiB`);
     if (typeof cpuQuotaPercent !== 'number' || !(cpuQuotaPercent > 0))
       throw new Error(`host ${name}: bad cpuQuotaPercent`);
     if (!Number.isInteger(slots) || (slots as number) < 1) throw new Error(`host ${name}: bad slots`);
-    if (performance !== undefined && typeof performance !== 'boolean') throw new Error(`host ${name}: bad performance`);
     if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
     if (typeof processorsPerSlot !== 'number' || !Number.isFinite(processorsPerSlot) || processorsPerSlot <= 0)
       throw new Error(`host ${name}: bad processorsPerSlot`);
@@ -941,7 +914,6 @@ export function readHosts(file: string): Host[] {
       cpuQuotaPercent,
       slots: slots as number,
       ...(fallback ? { fallback: true } : {}),
-      ...(performance === undefined ? {} : { performance }),
       processorsPerSlot,
     };
   });
@@ -1547,10 +1519,7 @@ echo "SLOTS ${count}"
 run_id=
 run_directory=
 run_slice=
-while IFS= read -r run_id; do
-  [ -n "$run_id" ] && break
-done
-if [ -n "$run_id" ]; then
+if IFS= read -r run_id; then
   case "$run_id" in ''|*[!a-zA-Z0-9-]*) run_id= ;; esac
   if [ -n "$run_id" ]; then
     run_directory=${ROOT}/runs/$run_id
@@ -1687,7 +1656,7 @@ def validate_cache_tree(root,name):
     return True
 
 def validate_producer_controls(root,run,host,stage):
-    if not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'],run) or not isinstance(host,str) or not re.fullmatch(SUPERVISOR_SCHEMA['hostNamePattern'],host):
+    if not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'],run) or not isinstance(host,str) or host not in SUPERVISOR_SCHEMA['hosts']:
         raise SystemExit('producer control run identity is invalid')
     try: root_info=os.lstat(root)
     except OSError: raise SystemExit('producer control workspace is unavailable')
@@ -1717,7 +1686,14 @@ def validate_producer_controls(root,run,host,stage):
     if slot_value<1 or slot_value>50000 or not re.fullmatch(r'[1-9][0-9]{0,4}\n?',slot_text):
         raise SystemExit('producer slot identity is malformed')
 
-    if stage=='prepared' or os.path.lexists(root/'.preparation-started'):
+    if stage=='source':
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor','bun-runtime-transpiler-cache'}
+    elif stage=='prepared':
+        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
+                 '.bun-install-complete','.preparation-started','preparation-install.json',
+                 'bun-runtime-transpiler-cache'}
+        if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
+            raise SystemExit('producer install completion is missing')
         preparation=read_control_json(root,'.preparation-started')
         if set(preparation)!={'schema','host','run','deadline','limitMs'}:
             raise SystemExit('producer preparation identity has an invalid shape')
@@ -1725,16 +1701,6 @@ def validate_producer_controls(root,run,host,stage):
                 type(preparation.get('deadline')) not in (int,float) or not math.isfinite(preparation['deadline']) or
                 type(preparation.get('limitMs')) is not int or not 1<=preparation['limitMs']<=7200000):
             raise SystemExit('producer preparation identity is foreign or malformed')
-
-    if stage=='source':
-        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
-                 '.preparation-started','bun-runtime-transpiler-cache'}
-    elif stage=='prepared':
-        allowed={'.alive','.remote-check-slot-count','.remote-check-supervisor',
-                 '.bun-install-complete','.preparation-started','preparation-install.json',
-                 'bun-runtime-transpiler-cache'}
-        if control_info(root,'.bun-install-complete',0,required=True,empty=True) is None:
-            raise SystemExit('producer install completion is missing')
         installed=read_control_json(root,'preparation-install.json')
         if set(installed)!={'schema','host','run','cache','nativeCache','key','packages','nativeChecks'}:
             raise SystemExit('producer install receipt has an invalid shape')
@@ -1882,8 +1848,6 @@ def copy_entries(source, destination, entries):
 
 def verified(entry, key, allocated=None):
     try:
-        if retirement_marker(entry).exists():
-            return None
         manifest = json.loads((entry / 'manifest.json').read_text())
         if manifest['key'] != key or manifest['schema'] != 2:
             return None
@@ -1965,31 +1929,26 @@ def native_entries(root, entries):
     return selected
 
 
+def artifact_bytes(entry):
+    # Unknown legacy sizes stay unknown. Publication never accounts for any other artifact.
+    try:
+        with (entry / '.cache-bytes').open() as record:
+            value = record.read(65)
+        value = value.strip() if len(value) <= 64 else ''
+        return int(value) if re.fullmatch(r'[0-9]{1,30}', value) else None
+    except (OSError, UnicodeError):
+        return None
+
+
 def touch_artifacts(entry):
     os.utime(entry, None)
 
 
-# Credit belongs to one maintenance ownership interval. A new process always starts at zero.
-# Foreground publishers have no credit and never scan old entries to obtain any.
-RECLAIM_CREDIT = 0
-RECLAIM_LIMIT = 64 * 1024 * 1024
-MAINTENANCE_STOP = False
-MAINTENANCE_STATUS = {}
-LAST_REPORT = 0
-
-
-def detach_artifacts(cache, entry, measured=None):
-    global RECLAIM_CREDIT
-    # Caller holds the stable per-key lock and has revalidated the measured inode/mtime.
-    # Debit before rename: interruption can lose credit, never invent it. Only the singleton owns credit.
-    if measured is None or measured > RECLAIM_CREDIT:
-        return False
-    RECLAIM_CREDIT -= measured
+def detach_artifacts(cache, entry):
+    # Caller holds the stable per-key lock. Never unlink that lock or recursively remove its entry here.
     garbage = cache / '.garbage'
     garbage.mkdir(exist_ok=True)
     entry.rename(garbage / uuid.uuid4().hex)
-    MAINTENANCE_STATUS['admittedBytes'] = MAINTENANCE_STATUS.get('admittedBytes', 0) + measured
-    return True
 
 
 # Linux directory cookies let a bounded scan resume without re-listing an arbitrarily large namespace.
@@ -2030,411 +1989,146 @@ def directory_entries(namespace, cookie):
         libc.closedir(stream)
 
 
-def tree_nodes(root):
-    # Postorder without Python recursion, a wide in-memory list or one open fd per depth.
-    # Linux directory cookies resume each parent after descent; no symlink is followed.
-    parents = []
-    path, cookie = root, 0
-    while not MAINTENANCE_STOP:
-        with contextlib.closing(directory_entries(path, cookie)) as stream:
-            descended = False
-            for name, cookie in stream:
-                if MAINTENANCE_STOP:
-                    return
-                if name is None:
-                    break
-                if name in ('.', '..'):
-                    continue
-                child = path / name
-                info = child.lstat()
-                if stat.S_ISDIR(info.st_mode):
-                    parents.append((path, cookie))
-                    path, cookie = child, 0
-                    descended = True
-                    break
-                yield child, info
-            if descended:
-                continue
-        yield path, path.lstat()
-        if not parents:
-            return
-        path, cookie = parents.pop()
-
-
-def maintenance_report(cache, force=False, **values):
-    global LAST_REPORT
-    MAINTENANCE_STATUS.update(values)
-    now = time.monotonic()
-    if not force and now - LAST_REPORT < 5:
+def clean_garbage(cache, deadline):
+    garbage = cache / '.garbage'
+    if not garbage.exists():
         return
-    LAST_REPORT = now
-    MAINTENANCE_STATUS.update(host=platform.node(), cache=str(cache), updatedAt=time.time(),
-                              creditBytes=RECLAIM_CREDIT, accountingWindow='current singleton process')
-    snapshot = dict(MAINTENANCE_STATUS)
-    try:
-        temporary = cache / '.maintenance-status.pending'
-        temporary.write_text(json.dumps(snapshot, sort_keys=True))
-        temporary.replace(cache / '.maintenance-status.json')
-    except OSError as error:
-        print('remote-check: cache diagnostics write failed: ' + str(error), file=sys.stderr, flush=True)
-    print('remote-check: cache maintenance ' + json.dumps(snapshot, sort_keys=True), file=sys.stderr, flush=True)
-
-
-def measure_tree(cache, entry):
-    size = 0
-    for _, info in tree_nodes(entry):
-        size += info.st_blocks * 512
-        maintenance_report(cache, state='measuring')
-    if MAINTENANCE_STOP:
-        raise InterruptedError('cache measurement interrupted')
-    return size
-
-
-def observe_garbage(cache):
-    # Only the maintenance owner traverses garbage. A failed/incomplete observation cannot clear an alarm.
-    maintenance_report(cache, force=True, state='measuring', measurementValid=False)
-    garbage = cache / '.garbage'
-    size = measure_tree(cache, garbage) - garbage.lstat().st_blocks * 512 if garbage.exists() else 0
-    for namespace in [cache, cache / 'native']:
-        with contextlib.closing(directory_entries(namespace, 0)) as stream:
-            for name, _ in stream:
-                if name is None:
-                    break
-                if re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
-                    entry = namespace / name[:-9]
-                    if entry.exists():
-                        size += measure_tree(cache, entry)
-    total = shutil.disk_usage(cache).total
-    if total <= 0:
-        raise OSError('filesystem capacity unavailable')
-    alarm = size > total * .05 or (size == total * .05 and MAINTENANCE_STATUS.get('alarm', False))
-    maintenance_report(cache, force=True, state='observed', measurementValid=True,
-        garbageBytes=size, totalBytes=total, thresholdBytes=total * .05, garbageFraction=size / total,
-        alarm=alarm, observedAt=time.time())
-    if alarm:
-        print('remote-check: ALARM garbage exceeds 5% host=' + platform.node() + ' cache=' + str(cache) +
-              ' measuredBytes=' + str(size) + ' totalBytes=' + str(total) + ' thresholdBytes=' +
-              str(total * .05), file=sys.stderr, flush=True)
-    return size
-
-
-def delete_tree(cache, root, keep_root=False):
-    global RECLAIM_CREDIT
-    for path, info in tree_nodes(root):
-        if keep_root and path == root:
-            continue
-        parent = path.parent
-        if stat.S_ISDIR(info.st_mode):
-            path.rmdir()
-        else:
-            os.unlink(path)
-        # Make removal durable before admitting more garbage. A crash before this point loses credit.
-        # Hardlinked legacy files earn nothing until their final link is removed.
-        descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+    # A separate deletion owner survives per-key replacement. No global or per-key lock is held during deletion.
+    with contextlib.ExitStack() as cleanup:
+        descriptor = os.open(garbage, os.O_RDONLY)
+        cleanup.callback(os.close, descriptor)
         try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        freed = info.st_blocks * 512 if stat.S_ISDIR(info.st_mode) or info.st_nlink == 1 else 0
-        RECLAIM_CREDIT = min(RECLAIM_LIMIT, RECLAIM_CREDIT + freed)
-        MAINTENANCE_STATUS['deletedBytes'] = MAINTENANCE_STATUS.get('deletedBytes', 0) + freed
-        MAINTENANCE_STATUS['deletedNodes'] = MAINTENANCE_STATUS.get('deletedNodes', 0) + 1
-        # Progress is not a new measurement and cannot clear the last observed alarm.
-        maintenance_report(cache, state='deleting', measurementValid=False)
-
-
-def clean_garbage(cache):
-    garbage = cache / '.garbage'
-    if garbage.exists():
-        delete_tree(cache, garbage, keep_root=True)
-
-
-def retirement_marker(entry):
-    return entry.parent / (entry.name + '.retiring')
-
-
-def finish_retirement(entry):
-    with (entry.parent / (entry.name + '.lock')).open('a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
-        retirement_marker(entry).unlink(missing_ok=True)
-
-
-def retire_in_place(cache, entry, identity):
-    # Bootstrap/oversized legacy admission: one unavailable attached entry is reclaimed in place,
-    # rather than renaming unmeasured bytes into garbage. All users consult its durable tombstone.
-    # No recursive work holds a preparation lock. A crash leaves the tombstone for the next owner.
-    marker = retirement_marker(entry)
-    with (entry.parent / (entry.name + '.lock')).open('a') as lock:
+        cursor = cache / '.garbage-cursor'
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
-        if entry.exists():
-            info = entry.lstat()
-            if [info.st_mtime_ns, info.st_dev, info.st_ino] != identity:
-                return
-            with marker.open('w') as record:
-                record.write(json.dumps(identity))
-                record.flush()
-                os.fsync(record.fileno())
-            descriptor = os.open(entry.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-    maintenance_report(cache, force=True, retiringEntry=str(entry), measurementValid=False)
-    observe_garbage(cache)
-    delete_tree(cache, entry)
-    if not MAINTENANCE_STOP:
-        finish_retirement(entry)
-        maintenance_report(cache, force=True, retiringEntry=None)
-        observe_garbage(cache)
-
-
-def resume_retirements(cache):
-    for namespace in [cache, cache / 'native']:
-        with contextlib.closing(directory_entries(namespace, 0)) as stream:
-            for name, _ in stream:
-                if name is None or MAINTENANCE_STOP:
-                    break
-                if not re.fullmatch(r'[a-f0-9]{64}\.retiring', name):
-                    continue
-                entry = namespace / name[:-9]
-                # Revalidate identity under its stable lock, but never retain that lock while deleting.
-                with (namespace / (entry.name + '.lock')).open('a') as lock:
-                    try:
-                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    except BlockingIOError:
-                        continue
-                    marker = namespace / name
-                    identity = json.loads(marker.read_text())
-                    if entry.exists():
-                        info = entry.lstat()
-                        if [info.st_dev, info.st_ino] != identity[1:]:
-                            raise RuntimeError('retirement inode changed: ' + str(entry))
-                    else:
-                        (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
-                        marker.unlink()
-                        continue
-                maintenance_report(cache, force=True, retiringEntry=str(entry), measurementValid=False)
-                delete_tree(cache, entry)
-                if not MAINTENANCE_STOP:
-                    finish_retirement(entry)
-                    maintenance_report(cache, force=True, retiringEntry=None)
+            relative = cursor.read_text()
+            path = garbage / relative
+            if '..' in Path(relative).parts or Path(relative).is_absolute() or path.resolve() != path or not path.is_dir():
+                path = garbage
+        except (OSError, UnicodeError):
+            path = garbage
+        for _ in range(128):
+            if time.monotonic() >= deadline:
+                break
+            with os.scandir(path) as stream:
+                item = next(stream, None)
+            if item is None:
+                if path == garbage:
+                    break  # Keep the deletion lock's directory inode stable.
+                path.rmdir()
+                path = path.parent
+            elif item.is_dir(follow_symlinks=False):
+                path = Path(item.path)
+            else:
+                os.unlink(item.path)
+        # Resume deep trees too: repeated descent must not consume every later tick's entire step budget.
+        cursor.write_text(str(path.relative_to(garbage)))
 
 
 def evict_artifacts(cache):
-    # Bounded namespace discovery; physical measurement and reclamation run outside all preparation locks.
-    fresh = {'namespace': 0, 'cookie': 0, 'bytes': 0, 'known': []}
-    state_file = cache / '.sweep-state.json'
-    try:
-        state = json.loads(state_file.read_text())
-        if state.get('schema') != 3:
-            raise ValueError('old sweep state')
-    except (OSError, ValueError):
-        state = dict(fresh, known=[])
-    remaining = 128
-    while remaining and state['namespace'] < 2 and not MAINTENANCE_STOP:
-        namespace = cache if state['namespace'] == 0 else cache / 'native'
-        with contextlib.closing(directory_entries(namespace, state['cookie'])) as stream:
-            for name, cookie in stream:
-                if not remaining or MAINTENANCE_STOP:
-                    break
-                remaining -= 1
-                state['cookie'] = cookie
-                if name is None:
-                    state['namespace'] += 1
-                    break
-                if not re.fullmatch(r'[a-f0-9]{64}', name):
-                    continue
-                entry = namespace / name
-                try:
-                    info = entry.lstat()
-                    if not stat.S_ISDIR(info.st_mode) or retirement_marker(entry).exists():
+    # Maintenance only: two seconds, 128 directory records, eight detachments and 128 deletion steps per tick.
+    deadline = time.monotonic() + 2
+    fresh = {'namespace': 0, 'cookie': 0, 'bytes': 0, 'unknown': 0, 'known': [], 'legacy': []}
+    with contextlib.ExitStack() as cleanup:
+        descriptor = os.open(cache, os.O_RDONLY)
+        cleanup.callback(os.close, descriptor)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        state_file = cache / '.sweep-state.json'
+        try:
+            state = json.loads(state_file.read_text())
+        except (OSError, ValueError):
+            state = dict(fresh, known=[], legacy=[])
+        remaining = 128
+        while remaining and state['namespace'] < 2 and time.monotonic() < deadline - 1:
+            namespace = cache if state['namespace'] == 0 else cache / 'native'
+            with contextlib.closing(directory_entries(namespace, state['cookie'])) as stream:
+                for name, cookie in stream:
+                    if not remaining or time.monotonic() >= deadline - 1:
+                        break
+                    remaining -= 1
+                    state['cookie'] = cookie
+                    if name is None:
+                        state['namespace'] += 1
+                        break
+                    if not re.fullmatch(r'[a-f0-9]{64}', name):
                         continue
-                    identity = [info.st_mtime_ns, info.st_dev, info.st_ino]
-                    size = measure_tree(cache, entry)
-                    current = entry.lstat()
-                    if [current.st_mtime_ns, current.st_dev, current.st_ino] != identity:
-                        continue
-                    state['bytes'] += size
-                    invalid = (entry.parent / (entry.name + '.invalid')).exists()
-                    with (namespace / (name + '.lock')).open('a') as lock:
-                        try:
-                            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                        except BlockingIOError:
+                    entry = namespace / name
+                    try:
+                        info = entry.lstat()
+                        if not stat.S_ISDIR(info.st_mode):
                             continue
-                    state['known'].append([*identity, str(entry.relative_to(cache)), size, invalid])
-                    state['known'].sort(key=lambda item: (not item[5], item[0]))
-                    del state['known'][32:]
-                except FileNotFoundError:
+                        size = artifact_bytes(entry)
+                        state['bytes'] += size if size is not None else 0
+                        state['unknown'] += size is None
+                        with (namespace / (name + '.lock')).open('a') as lock:
+                            try:
+                                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            except BlockingIOError:
+                                continue
+                            bucket = state['legacy' if size is None else 'known']
+                            bucket.append([info.st_mtime_ns, info.st_dev, info.st_ino,
+                                           str(entry.relative_to(cache)), size])
+                            bucket.sort()
+                            del bucket[32:]
+                    except FileNotFoundError:
+                        continue
+        if state['namespace'] == 2:
+            disk = shutil.disk_usage(cache)
+            bound = max(0, min(disk.total // 10, state['bytes'] + disk.free - disk.total // 10))
+            candidates = sorted(state['known'] + state['legacy'], key=lambda item: item[0]) if state['bytes'] > bound else state['legacy']
+            for last_use, device, inode, name, size in candidates[:8]:
+                if time.monotonic() >= deadline - 1:
+                    break
+                if size is not None and state['bytes'] <= bound:
                     continue
-    if state['namespace'] == 2 and not MAINTENANCE_STOP:
-        disk = shutil.disk_usage(cache)
-        garbage = observe_garbage(cache)
-        bound = max(0, min(disk.total // 10, state['bytes'] + garbage + disk.free - disk.total // 10))
-        for last_use, device, inode, name, old_size, invalid in state['known']:
-            if (state['bytes'] + garbage <= bound and not invalid) or MAINTENANCE_STOP:
-                break
-            entry = cache / name
-            try:
-                # Measure again outside locks; timestamps and inode are revalidated under the key lock.
-                size = measure_tree(cache, entry)
+                entry = cache / name
                 with (entry.parent / (entry.name + '.lock')).open('a') as lock:
                     try:
                         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    except BlockingIOError:
+                        info = entry.lstat()
+                        if (info.st_mtime_ns, info.st_dev, info.st_ino) != (last_use, device, inode):
+                            continue
+                        detach_artifacts(cache, entry)
+                        state['bytes'] -= size if size is not None else 0
+                        state['unknown'] -= size is None
+                    except (BlockingIOError, FileNotFoundError):
                         continue
-                    info = entry.lstat()
-                    identity = [last_use, device, inode]
-                    if [info.st_mtime_ns, info.st_dev, info.st_ino] != identity:
-                        continue
-                    detached = detach_artifacts(cache, entry, size)
-                if detached:
-                    (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
-                    state['bytes'] -= old_size
-                    garbage += size
-                    # Drain before selecting the next producer; no detachment can outrun earned credit.
-                    clean_garbage(cache)
-                    garbage = observe_garbage(cache)
-                elif garbage == 0:
-                    retire_in_place(cache, entry, identity)
-                    if not entry.exists():
-                        state['bytes'] -= old_size
-            except FileNotFoundError:
-                continue
-        maintenance_report(cache, force=True, attachedBytes=state['bytes'], attachedObservedAt=time.time(),
-                           totalMeasuredCacheBytes=state['bytes'] + garbage, boundBytes=bound)
-        state = dict(fresh, known=[])
-    state['schema'] = 3
-    temporary = state_file.with_suffix('.pending')
-    temporary.write_text(json.dumps(state))
-    temporary.replace(state_file)
-
-
-def maintain(cache, continuous=False):
-    global RECLAIM_CREDIT, MAINTENANCE_STOP
-    cache.mkdir(parents=True, exist_ok=True)
-    # Stable across service replacement and independent of run scopes. A competing registration exits harmlessly.
-    with (cache / '.maintenance.lock').open('a') as owner:
-        try:
-            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return 0
-        RECLAIM_CREDIT = 0
-        try:
-            previous = json.loads((cache / '.maintenance-status.json').read_text())
-            if previous.get('cache') == str(cache):
-                MAINTENANCE_STATUS.update(previous)
-        except FileNotFoundError:
-            pass
-        except (OSError, ValueError, TypeError) as error:
-            maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
-        MAINTENANCE_STATUS.update(windowStartedAt=time.time(), pid=os.getpid(),
-                                  deletedBytes=0, deletedNodes=0, admittedBytes=0, measurementValid=False)
-        for number in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP]:
-            signal.signal(number, lambda *_: globals().__setitem__('MAINTENANCE_STOP', True))
-        while not MAINTENANCE_STOP:
-            try:
-                observe_garbage(cache)
-                clean_garbage(cache)
-                resume_retirements(cache)
-                if not MAINTENANCE_STOP:
-                    observe_garbage(cache)
-                    evict_artifacts(cache)
-                    observe_garbage(cache)
-                    maintenance_report(cache, force=True, state='idle', error=None)
-            except Exception as error:
-                maintenance_report(cache, force=True, state='error', measurementValid=False, error=str(error))
-                if not continuous:
-                    raise
-            if not continuous:
-                return 0
-            # Idle checks are unnecessary: systemd retains this process between checks and restarts failures.
-            for _ in range(30):
-                if MAINTENANCE_STOP:
-                    break
-                time.sleep(1)
-        maintenance_report(cache, force=True, state='stopped', measurementValid=False)
-    return 0
-
-
-def captured_maintenance(source):
-    import base64, zlib
-    encoded = base64.b64encode(zlib.compress(source)).decode('ascii')
-    # ExecStart expands dollars and percent specifiers; transfer only inert compressed source.
-    return 'import base64,zlib;MAINTENANCE_SOURCE=zlib.decompress(base64.b64decode(' + repr(encoded) + '));exec(MAINTENANCE_SOURCE)'
-
-
-def register_maintenance(cache):
-    # Reconciliation itself is systemd-owned: no check waits for stop/restart or a stale captured program.
-    # A stable file lock also protects simultaneous registrations from different completed checks.
-    cache.mkdir(parents=True, exist_ok=True)
-    with (cache / '.maintenance-registration.lock').open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        unit = 'rezics-check-cache-maintenance'
-        source = globals().get('MAINTENANCE_SOURCE')
-        if source is None:
-            source = Path(__file__).read_bytes()
-        generation = hashlib.sha256(source).hexdigest()
-        def control(*args):
-            return subprocess.run(['systemctl', *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                  text=True, timeout=30)
-        # The previous timer can otherwise continue running its old three-second program.
-        stopped = control('stop', unit + '.timer')
-        if stopped.returncode and 'not loaded' not in stopped.stderr and 'not found' not in stopped.stderr:
-            raise RuntimeError(stopped.stderr.strip() or 'cannot stop legacy maintenance timer')
-        current = control('show', unit + '.service', '--property=ExecStart', '--value')
-        if current.returncode == 0 and generation in current.stdout:
-            started = control('start', unit + '.service')
-            if started.returncode:
-                raise RuntimeError(started.stderr.strip() or 'cannot start cache maintenance')
-            return 0
-        stopped = control('stop', unit + '.service')
-        if stopped.returncode and 'not loaded' not in stopped.stderr and 'not found' not in stopped.stderr:
-            raise RuntimeError(stopped.stderr.strip() or 'cannot stop stale cache maintenance')
-        control('reset-failed', unit + '.service')
-        result = subprocess.run(['systemd-run', '--unit=' + unit, '--collect', '--no-block',
-            '-p', 'Restart=always', '-p', 'RestartSec=5s',
-            '-p', 'TimeoutStopSec=15s', '-p', 'KillMode=control-group',
-            '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
-            '-p', 'IOWeight=1', '-p', 'Nice=19',
-            'python3', '-c', captured_maintenance(source), 'maintain', str(cache), generation],
-            timeout=30)
-        if result.returncode:
-            raise RuntimeError('maintenance service registration failed: ' + str(result.returncode))
-    return 0
+            print('remote-check: dependency artifacts attached measured bytes=' + str(state['bytes']) +
+                  ' unknown=' + str(state['unknown']) + ' bound=' + str(bound), file=sys.stderr, flush=True)
+            state = fresh
+        temporary = state_file.with_suffix('.pending')
+        temporary.write_text(json.dumps(state))
+        temporary.replace(state_file)
+    clean_garbage(cache, deadline)
 
 
 def schedule_maintenance(root, source):
-    # --no-block only registers a reconciler outside the run. Its retries and replacement cannot delay the result.
+    # systemd owns a singleton timer/service outside the completed run's scope. Its program is independent of run files.
+    # --no-block waits only for registration, never a sweep; failure cannot change the command's status.
     try:
-        result = subprocess.run(['systemd-run', '--unit=rezics-check-cache-registration', '--collect', '--no-block',
-            '-p', 'Restart=on-failure', '-p', 'RestartSec=5s', '-p', 'TimeoutStopSec=15s',
+        import base64, zlib
+        encoded = base64.b64encode(zlib.compress(source)).decode('ascii')
+        # ExecStart expands dollars and percent specifiers; carry source as inert encoded bytes instead.
+        program = 'import base64,zlib;exec(zlib.decompress(base64.b64decode(' + repr(encoded) + ')))'
+        subprocess.run(['systemd-run', '--unit=rezics-check-cache-maintenance', '--collect', '--no-block',
+            '--on-active=1s', '--on-unit-inactive=60s', '--timer-property=RemainAfterElapse=no',
+            '-p', 'RuntimeMaxSec=3s', '-p', 'TimeoutStopSec=1s', '-p', 'KillMode=control-group',
             '-p', 'MemoryMax=256M', '-p', 'CPUQuota=20%', '-p', 'IOSchedulingClass=idle',
-            'python3', '-c', captured_maintenance(source), 'register', str(root.parent.parent / 'dependency-artifacts')],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=1, cwd=root)
-        if result.returncode:
-            # An existing registration owns reconciliation. Other errors remain in the host diagnostics.
-            print('remote-check: cache registration: ' + result.stderr.decode(errors='replace').strip(),
-                  file=sys.stderr, flush=True)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        print('remote-check: cache registration unavailable: ' + str(error), file=sys.stderr, flush=True)
+            'python3', '-c', program, 'sweep', str(root.parent.parent / 'dependency-artifacts')],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1, cwd=root)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def publish_artifacts(root, entry, manifest):
     cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
     stage = None
     try:
-        if entry.exists() or retirement_marker(entry).exists():
-            (entry.parent / (entry.name + '.invalid')).touch()
-            print('remote-check: dependency artifacts replacement publication skipped: awaiting background reclamation',
-                  file=sys.stderr, flush=True)
-            return
         stage = Path(tempfile.mkdtemp(prefix='artifacts-', dir=root / '.temp/check-host'))
         (stage / 'payload').mkdir()
         copy_entries(root, stage / 'payload', manifest['entries'])
@@ -2447,11 +2141,14 @@ def publish_artifacts(root, entry, manifest):
         size = allocated[0] + sum(path.lstat().st_blocks * 512 for path in
             [stage, stage / 'payload', stage / 'manifest.json', stage / '.cache-bytes'])
         (stage / '.cache-bytes').write_text(str(size))
+        if entry.exists():
+            detach_artifacts(cache, entry)
         stage.rename(entry)
         touch_artifacts(entry)
     except OSError as error:
-        reason = 'ENOSPC' if error.errno == errno.ENOSPC else str(error)
-        print('remote-check: dependency artifacts publication skipped after ' + reason, file=sys.stderr, flush=True)
+        if error.errno != errno.ENOSPC:
+            raise
+        print('remote-check: dependency artifacts publication skipped after ENOSPC', file=sys.stderr, flush=True)
     # Partial staging stays private inside the owned run for normal post-command cleanup.
 
 
@@ -2951,7 +2648,7 @@ def lifetime():
     limit_ms = int(limit_ms)
     if not 0 < limit_ms <= 7200000:
         raise RuntimeError('invalid host lifetime')
-    if not re.fullmatch(SUPERVISOR_SCHEMA['hostNamePattern'],host) or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
+    if host not in SUPERVISOR_SCHEMA['hosts'] or not re.fullmatch(SUPERVISOR_SCHEMA['runIdPattern'], run):
         raise RuntimeError('invalid host lifetime identity')
     root = Path(directory)
     # Capture producer code before the command can modify its private wrapper files.
@@ -3100,7 +2797,7 @@ if sys.argv[1] == 'phase':
     preparation_progress(Path(sys.argv[2]), sys.argv[3])
     sys.exit(0)
 try:
-    sys.exit(maintain(Path(sys.argv[2]), sys.argv[1] == 'maintain') if sys.argv[1] in ['sweep', 'maintain'] else register_maintenance(Path(sys.argv[2])) if sys.argv[1] == 'register' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
+    sys.exit(evict_artifacts(Path(sys.argv[2])) if sys.argv[1] == 'sweep' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
 except Exception as error:
     stop_owned(signal.SIGKILL)
     while True:
@@ -3250,9 +2947,7 @@ for current,dirs,files in os.walk(root,followlinks=False):
         if rel in CONTROL_ROOT_FILES: continue
         add_actual_path(rel)
 if actual_paths!=expected_paths:
-    raise SystemExit('uploaded source file set does not match the frozen candidate\nmissing: '+
-                     repr(sorted(expected_paths-actual_paths)[:10])+'\nunexpected: '+
-                     repr(sorted(actual_paths-expected_paths)[:10]))
+    raise SystemExit('uploaded source file set does not match the frozen candidate')
 `;
 
 export const preparedInputEvidenceProgram = String.raw`import hashlib,json,os,stat,sys
@@ -3372,7 +3067,6 @@ export function runScript(
   cwd: string,
   command: string[],
   hostName: string,
-  runtime: Pick<PinnedBun, 'version' | 'revision'>,
   progressIntervalMs = DEFAULT_LIVENESS_INTERVAL_MS,
   priorityClass = 'ordinary',
   preparationTimeoutMs = configuredTimeout(
@@ -3388,7 +3082,7 @@ export function runScript(
   expectedSourceSha256?: string,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
-  const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
+  const { version: pinnedBunVersion, revision: pinnedBunRevision } = getPinnedBun();
   const wrapperDirectory = `${directory}/.temp/check-host`;
   const statusFile = `${directory}/exit-status`;
   const gitManifestPath =
@@ -3446,11 +3140,7 @@ export function runScript(
       fi
     fi`
     : '';
-  const systemdScript = `mkdir -p ${quote(`${directory}/.temp/tmp`)}
-export TMPDIR=${quote(`${directory}/.temp/tmp`)} TMP=${quote(`${directory}/.temp/tmp`)} TEMP=${quote(`${directory}/.temp/tmp`)}
-export NODE_DISABLE_COMPILE_CACHE=1
-unset NODE_COMPILE_CACHE
-preparation_phase() {
+  const systemdScript = `preparation_phase() {
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} "$1"
 }
 preparation_phase base-refresh
@@ -3508,6 +3198,8 @@ host=$REMOTE_CHECK_HOST
     ${gitRestore}
     preparation_phase source-verification
     ${sourceVerification}
+    mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
+    export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
     real_bun=$bun
     if [ -n "\${REMOTE_CHECK_PREPARER_BIN:-}" ]; then
       export REMOTE_CHECK_REAL_BUN="$bun" REMOTE_CHECK_PREPARATION_REVISION="$expected_revision" REMOTE_CHECK_PREPARATION_BUILD="$build" REMOTE_CHECK_PREPARATION_VERSION="$expected_bun"
@@ -3789,7 +3481,7 @@ export function workspaceFiles(workspace: string): string[] {
     const parts = file.split('/');
     if (
       parts[0] === '.git' ||
-      parts.includes('.temp') ||
+      parts[0] === '.temp' ||
       parts.includes('node_modules') ||
       parts.some((part) =>
         ['build', 'dist', 'out', 'coverage', '.next', '.turbo', 'playwright-report', 'test-results'].includes(part),
@@ -3923,9 +3615,7 @@ type RankedHost = {
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
-  const processorSlots = Math.floor(
-    Math.min(probe.sliceProcessors, host.cpuQuotaPercent / 100) / host.processorsPerSlot,
-  );
+  const processorSlots = Math.floor(probe.sliceProcessors / host.processorsPerSlot);
   return Math.min(host.slots, processorSlots);
 }
 
@@ -4467,17 +4157,17 @@ type HostProvider = () => Host[];
 type Placement = Pick<Host, 'name' | 'address' | 'identity'>;
 
 /** Reads once per admission round and keeps the last complete valid configuration through partial rewrites. */
-function liveHosts(initial: Host[], file?: string, requested?: readonly string[]): HostProvider {
-  const allowed = requested === undefined ? undefined : new Set(requested);
-  const eligible = (hosts: Host[]) => performanceHosts(hosts).filter(({ name }) => !allowed || allowed.has(name));
+function liveHosts(
+  initial: Host[],
+  file?: string,
+  requested: readonly string[] = PERFORMANCE_HOST_NAMES,
+): HostProvider {
+  const allowed = new Set(requested.filter((name) => (PERFORMANCE_HOST_NAMES as readonly string[]).includes(name)));
+  const eligible = (hosts: Host[]) => hosts.filter(({ name }) => allowed.has(name));
   let lastValid = eligible(initial);
   let reportedInvalidRewrite = false;
-  const available = () => {
-    if (lastValid.length === 0) throw new Error('remote-check: no performance-approved host is configured');
-    return lastValid;
-  };
   return () => {
-    if (!file) return available();
+    if (!file) return lastValid;
     try {
       lastValid = eligible(readHosts(file));
     } catch (error) {
@@ -4487,7 +4177,7 @@ function liveHosts(initial: Host[], file?: string, requested?: readonly string[]
         reportedInvalidRewrite = true;
       }
     }
-    return available();
+    return lastValid;
   };
 }
 
@@ -6075,11 +5765,11 @@ export async function reconcileRemoteRun(
   signal: AbortSignal = new AbortController().signal,
 ): Promise<RemoteCheckSettlement> {
   const { host: hostName, run: runId } = options.physical;
-  if (!new RegExp(CHECK_HOST_NAME_PATTERN).test(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
+  if (!(PERFORMANCE_HOST_NAMES as readonly string[]).includes(hostName) || !/^[a-zA-Z0-9-]{1,96}$/.test(runId))
     throw new Error('remote-check: reconciliation requires a known original host and run identity');
   if (options.allowedHosts && !options.allowedHosts.includes(hostName))
     throw new Error('remote-check: reconciliation host is outside the approved host set');
-  const host = performanceHosts(options.hosts).find(({ name }) => name === hostName);
+  const host = options.hosts.find(({ name }) => name === hostName);
   if (!host) throw new Error(`remote-check: original host ${hostName} is unavailable for reconciliation`);
   const prepared: PreparedRun = {
     host,
@@ -6308,7 +5998,6 @@ async function runLeased(
         options.cwd ?? '.',
         options.command,
         host.name,
-        admitRemoteRuntime(options),
         options.progressIntervalMs,
         options.gate ? 'gate' : (options.priority ?? ((options.slots ?? 1) > 1 ? 'multi-slot' : 'ordinary')),
         configuredTimeout(
@@ -6571,7 +6260,7 @@ export async function remoteCheck(options: RemoteCheck, signal: AbortSignal): Pr
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  admitRemoteRuntime(options); // Local runtime verification precedes placement/upload/admission, never a held host slot.
+  getPinnedBun(); // Local runtime verification precedes placement/upload/admission, never a held host slot.
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) =>
@@ -6717,7 +6406,7 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  admitRemoteRuntime(options);
+  getPinnedBun();
   const files = workspaceFiles(options.workspace);
   const result = await withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) =>
@@ -6730,7 +6419,6 @@ export async function remoteCheckUnlessUnreachable(options: RemoteCheck, signal:
 
 /** Tries each available host once without waiting for a slot. */
 export async function tryRemoteCheck(options: RemoteCheck, signal: AbortSignal): Promise<TryOnce> {
-  admitRemoteRuntime(options);
   return withExecutionCancellation(options, signal, (ownedSignal) =>
     withCheckGitTransfer(options, (transfer) => tryRemoteCheckOwned(options, ownedSignal, transfer)),
   );
@@ -6744,7 +6432,7 @@ async function tryRemoteCheckOwned(
   options = await withOutputTreeSource(options);
   effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
   assertExecutionAllowed(options, signal);
-  admitRemoteRuntime(options);
+  getPinnedBun();
   validateMemoryGiB(options.memoryGiB);
   const slots = options.slots ?? 1;
   const memoryReservationBytes =
@@ -6836,7 +6524,7 @@ function parse(argv: string[]): RemoteCheck {
   let maxMs: number | undefined;
   let gate = false;
   let returns: string[] | undefined;
-  let allowedHosts: string[] | undefined;
+  let allowedHosts: string[] = [...PERFORMANCE_HOST_NAMES];
   const rest = [...argv];
   while (rest[0]?.startsWith('--') && rest[0] !== '--') {
     const flag = rest.shift();
@@ -6854,10 +6542,13 @@ function parse(argv: string[]): RemoteCheck {
     }
     if (flag === '--allowed-hosts') {
       const value = rest.shift();
-      if (!value) throw new Error('--allowed-hosts needs a comma-separated host list');
+      if (!value) throw new Error('--allowed-hosts needs a comma-separated a/b host list');
       allowedHosts = value.split(',');
-      if (allowedHosts.length === 0 || allowedHosts.some((name) => !new RegExp(CHECK_HOST_NAME_PATTERN).test(name)))
-        throw new Error('--allowed-hosts contains an invalid host name');
+      if (
+        allowedHosts.length === 0 ||
+        allowedHosts.some((name) => !(PERFORMANCE_HOST_NAMES as readonly string[]).includes(name))
+      )
+        throw new Error('--allowed-hosts may contain only a and b');
       continue;
     }
     if (flag === '--gate') {
@@ -6911,7 +6602,7 @@ function parse(argv: string[]): RemoteCheck {
   const cancellation = executionCancellationFromEnvironment();
   return {
     hosts: readHosts(hostsFile),
-    ...(allowedHosts === undefined ? {} : { allowedHosts }),
+    allowedHosts,
     ...(cancellation === undefined ? {} : { cancellation }),
     completed: cliPhysicalReceipt,
     workspace,
