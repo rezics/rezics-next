@@ -55,8 +55,18 @@ async function withHost(run: (host: HTMLElement, render: (node: ReactNode) => Pr
   const host = window.document.createElement('main') as HTMLElement;
   window.document.body.append(host);
   const root = createRoot(host);
+  let generation = 0;
   const render = async (node: ReactNode) => {
-    await act(async () => root.render(h(QueryClientProvider, { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }, node)));
+    generation += 1;
+    await act(async () =>
+      root.render(
+        h(
+          QueryClientProvider,
+          { key: generation, client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+          node,
+        ),
+      ),
+    );
   };
   try {
     await run(host, render);
