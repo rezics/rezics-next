@@ -2683,18 +2683,21 @@ export class MergeTrain {
             `Retained-source acceptance task=${request.taskId} attempt=${request.attempt} source=${workerCommit}: ${request.gate.join(' ')}\n`,
           );
           try {
+            // The source is already represented on the target. A direct dev landing skips its checks, and a
+            // worker-owned acceptance has no command, so neither reruns it: run serially in the train, these reruns
+            // held every other landing for 10 to 17 minutes each (2026-11-03).
+            const rerun = request.gate.length > 0 && !(integratesIntoDev && !stabilize);
             if (
+              rerun &&
               !existsSync(join(trainTree, 'node_modules')) &&
               existsSync(join(trainTree, 'bun.lock')) &&
               existsSync(join(trainTree, 'package.json'))
             )
               installShared(trainTree);
-            // A worker-owned acceptance leaves the brief without a command. Nothing can be rerun, and the source is
-            // already represented on the target, so it stands as a direct dev landing does without its checks.
-            const checked = request.gate.length
+            const checked = rerun
               ? await runGate(request.gate, trainTree, logPath)
               : { passed: true, output: '', timedOut: false };
-            retainedSourceAcceptance.status = !request.gate.length
+            retainedSourceAcceptance.status = !rerun
               ? 'unavailable'
               : checked.passed
                 ? 'passed'

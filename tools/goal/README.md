@@ -492,8 +492,17 @@ waiting for the periodic worker/memory poll.
 - **Touches:** One SQLite statement and the state-index entries for running attempts; no attempt bodies are returned.
 - **Bound:** One indexed count per capacity check, with work proportional to the number of running entries and no scan
   of non-running attempt history.
-- **Growth check:** `capacity-wait.test.ts` seeds 10, 100 and 1,000 attempts, verifies the indexed query plan and
-  checks the running count at each scale.
+- **Growth check:** `capacity-wait.test.ts`, `a start waiting for host capacity counts running attempts with one
+  indexed query, without reading every attempt body`, holds running entries at 0/1/10/100 while independently
+  crossing settled histories of 10/100/1,000 entries with 128/1,024/8,192-byte payloads. It captures the store's
+  actual statement execution and aggregate result, checks zero body decoding and the nonpartial state-index schema
+  and query plan, and replays that captured SQL with native `sqlite3` against the same fixture. Each replay executes
+  once with zero fullscan steps and at most `5 * running entries + 20` VM steps, identical across history/payload
+  scales for each running set. Zero running entries also leave host capacity available.
+- **Measurement decision:** Use required native `sqlite3` statement statistics for the captured-SQL replay because
+  Bun exposes no statement-status counters. VM steps measure executed opcodes; fullscan steps exclude indexed visits.
+  Indexed rows examined and physical page/byte work remain unavailable; the returned aggregate is not examined work.
+  Delivery's owning runner submits the integrated check through shared admission and reuses its exact successful result.
 
 ### Manager-host database reads
 
@@ -510,6 +519,54 @@ those bodies (about 62.5 MB, plus active rows); after the change it decodes only
 attempt bodies (under 50 KB each in the fixture), about 77.5 KB total. Task-id and dependency-state request lookups,
 including the inbox-send path, decode zero task bodies. Repeated reads add no decoded bytes until an external
 connection changes `data_version` or this store writes a task or attempt.
+
+#### Cost: active reads, snapshots and orphan recovery
+
+Let T, R and H be independently seeded task, attempt and event histories; A and B are active task/attempt
+counts, C is the running/held task candidate range before current-attempt filtering, and E is the selected
+attempt's event count. Index seeks cost logarithmic work in the corresponding history. These bounds concern
+these database operations, not every optional proof-reader, filesystem or process observation in a host sweep.
+
+| Operation / anchors                                                                                         | Derived examined work and expansion                                                                                                                                                                                                                                                                               | Exact owning check                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `activeTasks` / five task-state ranges                                                                      | Five seeks plus A entries/bodies; sequence sorting at most A log A, decoding at most A bodies per snapshot.                                                                                                                                                                                                       | `host-db-reads.test.ts`: `host sweep decodes only active tasks and attempts from a large settled history`                                                                                                       |
+| `activeAttempts` / four attempt-state ranges                                                                | Four seeks plus B entries/bodies; key sorting at most B log B, decoding at most B bodies per snapshot.                                                                                                                                                                                                            | Same host-sweep check; `empty active sets stay bounded across settled histories and repeated sweeps`                                                                                                            |
+| Per-attempt events / `(task_id, attempt, sequence)`                                                         | One full-prefix seek plus E events. The backlog latest-activity SQL walks the same prefix backwards with `LIMIT 1`, returning at most one event; neither visits unrelated task/attempt histories.                                                                                                                 | Host-sweep check executes `store.events` and the exact latest-activity SQL from `backlog.ts`; orphan growth check executes recovery's event read.                                                               |
+| Snapshot reuse / connection `data_version`, task id, attempt key                                            | One version read per access; cached keyed body reads avoid SQL body fetches, while active-list SQL still returns active bodies. External commits clear both caches; subsequent reads re-decode only selected bodies. Own writes invalidate through the existing store path.                                       | `host-db-reads.test.ts`: `repeated store reads reuse the decoded snapshot and external writes invalidate it`                                                                                                    |
+| Command/host orphan recovery / running or held task states, current-attempt primary key, per-attempt events | State seeks plus C task/attempt probes, then selected E events and at most one lease per surviving candidate per sweep. Reconciled terminal tasks leave this range; replay acquires no replacement lease and enqueues no duplicate landing. Other active task recovery remains proportional to its active ranges. | `orphan-sweep-growth.test.ts`: `command and host sweeps read and lease a constant live candidate set as settled history grows`; `the next command settles an exited attempt that remains current and unsettled` |
+
+The two-file owning group is `bun test tools/goal/src/host-db-reads.test.ts tools/goal/src/orphan-sweep-growth.test.ts`,
+submitted through normal shared admission. Host fixtures independently seed T/R/H = 100/200/300,
+1000/2000/3000 and 3000/5000/9000 with five active task/attempt bodies (or zero); the largest retains the
+original under-50-KB ceiling for each decoded body kind. Event history includes other attempts of the selected task.
+Orphan fixtures seed 100/1000/5000 terminal tasks,
+twice as many historical attempts and three times as many unrelated events with one fixed candidate, then repeat
+both command/host modes and empty sweeps. The real worker fixture verifies settlement and replay at all three
+scales in both modes, retaining the current attempt, events and replacement/lease counts on replay.
+
+Decision: settled-history fixtures use terminal task states; held, ready, stopped and landing tasks belong to the
+active-work axis and cannot be counted as unrelated settled history.
+
+`sqlite-work.test-support.ts` builds a fixture-only extension under `.temp` using `cc` and SQLite development headers.
+Through the hosting engine's extension API it reads [SQLite statement counters](https://sqlite.org/c3ref/stmt_status.html)
+on the actual Bun statements: native runs, VM instructions, full-table-scan steps and sorts. Each mapped read
+execution must run once, use 1–1000 VM instructions and zero full-table-scan steps at these fixed live sizes;
+active lists may sort their bounded result. Nonempty host and orphan candidate/event captures also compare exactly
+across scales. This fixture ceiling follows fixed state probes and at most five body/event expansions; it is not a
+production limit on active tasks or selected event history. VM instructions measure executed engine work, not
+examined index rows or physical B-tree page visits. Index-row counters are unavailable through this extension API
+and are reported as null, never replaced by decoded bytes, returned rows or EQP. Entire observed read traces,
+source revision, engine version/source and operation labels are printed as raw diagnostics; the orphan assertions select only the
+mapped candidate/event operations. Compiler/extension failures fail the group rather than skipping native evidence.
+The implementation follows [Bun's extension API](https://bun.com/docs/runtime/sqlite#loadextension) and
+[SQLite's extension contract](https://sqlite.org/loadext.html). Successful revision-bound acceptance remains the
+shared runner's responsibility; adding this mapping does not claim that acceptance has run.
+
+The raw host-mode trace also exposes existing work outside the mapped candidate/event reads: a
+`SELECT id, body FROM worker_tasks ORDER BY sequence` scan and one `worker_worktree_cleanup` lookup per settled
+task. At 100/1000/5000 settled tasks that scan executes 513/5013/25013 VM instructions and 100/1000/5000 fullscan
+steps. This is an outstanding Delivery-owned host maintenance bound, not constant-work evidence for the complete
+host sweep; the two-file group retains those diagnostics without changing runtime reconciliation ownership.
 
 | Environment variable      | Override                                                        |
 | ------------------------- | --------------------------------------------------------------- |
@@ -1041,9 +1098,10 @@ Removal errors are logged and do not prevent attempt settlement; containers with
 
 ### Worker container cleanup
 
-- Touches: one label-filtered Docker listing and removal of that attempt's returned container IDs.
-- Bound: only containers created by the exact task attempt are examined or removed; the work grows with that attempt's containers.
-- Growth check: `bun test tools/goal/src/worker-containers.test.ts` records wrapper arguments and attempt cleanup.
+- Decision: Measure observable Docker CLI calls and returned or removed IDs; daemon-internal examined work is unavailable and is not inferred from those observations.
+- Touches: one Docker listing filtered by the exact task/attempt label and zero or one removal invocation for its returned IDs.
+- Bound: only the exact attempt's returned IDs can be removed, and removals grow with those IDs. Docker daemon candidate work for label filtering is unavailable; no index or constant-scan claim is made.
+- Growth check: `bun test tools/goal/src/worker-containers.test.ts tools/goal/src/worker-containers-native-growth.test.ts` preserves wrapper/label assertions and records native listing/removal calls, returned IDs and removal outcomes with foreign-attempt populations of 1/10/100, selected counts of 1/4/16, empty and replayed cleanup, and interrupted cleanup resumed by the same attempt. The native scenario is unavailable when the wrapper, daemon or cached `busybox:latest` image is missing; capability acceptance requires zero skips.
 
 Each attempt's evidence directory contains `contract.md`, `diff.patch`, `failure.json` and `approaches.json`. Diffs
 include commits, tracked edits and untracked files. Raw session logs stay in the runs directory and never enter the
@@ -1483,6 +1541,7 @@ directories. The run's one-line JSON results are appended to `<state>/backlog-ru
   latest-event lookup each, the running manager rows, and the backlog directories' entries.
 - **Bound:** at most four dispatches and 20 cancellations per Goal per run, outside the host process; the stopped scan
   is proportional to stopped tasks, not task history.
+- **Growth check:** `tools/goal/src/backlog-growth.test.ts`: `backlog growth tracks indexed history, input-proportional directory entries, and dispatch/cancellation caps`. It scales settled task/event history with fixed selected work, stopped tasks, and ready entries independently; it records SQLite executions and returned rows, JSON-decoded bytes, and actual backlog-directory enumerations and returned entries. Query plans and returned rows are not physical scan counts. The scenario includes empty backlog and cap continuation; `backlog.test.ts` covers interrupted uncommitted claims and replay after committed dispatch.
 
 ### Check result reuse
 
