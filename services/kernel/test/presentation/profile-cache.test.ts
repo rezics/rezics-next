@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { PROFILE_FORMAT, profileDigest, type PresentationProfile } from '@rezics/composition';
+import '../../src/commerce/catalogue.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { readProfile } from '../../src/presentation/profiles.ts';
 

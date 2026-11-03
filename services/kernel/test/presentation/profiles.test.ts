@@ -28,10 +28,12 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
+configureTestReceiptKeys(pool);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 afterAll(async () => {
   await pool.end();
@@ -363,6 +365,7 @@ test('real Global grants, receipts, sessions and active CAS survive hot reads an
     access: access.access,
     requestDeadlineMs: 30_000,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) },
+    receiptKeys: testReceiptKeys(),
     routeKey: new Uint8Array(32).fill(8),
     writeRate: access.writeRate,
   });

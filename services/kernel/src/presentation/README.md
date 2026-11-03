@@ -165,6 +165,8 @@ and page limits, and each dispatched route's own Cost bound. These are source-de
   `test/presentation/profile-cache.test.ts` and the additional cases in `test/presentation/profiles.test.ts` prove LRU
   reuse, concurrent reads, pool snapshot existence, cold/hot malformed-body refusal, error cleanup, owned immutability
   and exact canonical accounting, including four valid 1 MiB multibyte bodies retaining exactly 4 MiB.
+  Publication cases bind the dedicated receipt-key fixture; the cache file evaluates the commerce catalogue before
+  presentation so the well-known Global Context id is initialized.
 
 ### Active profile lookup
 
