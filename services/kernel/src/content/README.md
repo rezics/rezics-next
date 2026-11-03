@@ -1110,8 +1110,15 @@ This API handoff does not establish rendered acceptance or the all-pool physical
   selection, delegated principal suspension/assignment revocation, exact-author erasure with a pending appeal and
   sparse retained provenance with an erased decider before/after statement expiry. Delegation setup uses the native
   assignment command with the installed self-management action because assignment creation has no mounted route.
-  Full-prefix/residual-join plans and independent 256/1024/4096 decision versus retained target/appeal/identity/authority
-  histories, every pool/registered runner phase and empty/denied/revoked/retry accounting remain continuation work.
+  `test/content/decision-page-growth.test.ts` independently grows unrelated decisions, selected-target decisions,
+  appeals (with a fixed 4,096-decision baseline), routed identities and exact-target expired authority at 256/1024/4096.
+  It holds selected IDs and route homes, source payloads and authority depth fixed while reading author thread/post,
+  nested moderator, empty, denied, revoked and withheld paths through mounted native HTTP. Captures include backend
+  SQL UTF-8 request/response bytes, examined rows and blocks, transaction controls, logical HTTP UTF-8 request and
+  serialized response bytes, JSON stringify/parse counts and bytes, cold-backend discards and registered runner
+  phases. Physical plans require full `(route, id)` lookup conditions; source-predicate assertions retain the
+  target-kind residual joins, while measured rows and sequential scans verify physical work. The read path dispatches
+  no registered effect.
 
 Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
 deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,
