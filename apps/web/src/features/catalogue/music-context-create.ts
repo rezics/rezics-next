@@ -400,7 +400,9 @@ function nestedControl(
     .replace(/^\/references\/(?:0|[1-9]\d*)\/parts\/(?:0|[1-9]\d*)/, '');
   if (release.properties[part.property.id]?.datatype === 'wikibase-item') {
     if (path !== '/value/content' && path !== '/value' && path !== '') return;
-    return { id: controlId(id, address, 'value'), label: [label, section].filter(Boolean).join(' · ') };
+    const key = part === row.statement ? undefined : statementHolderKey(part);
+    const controlAddress = key === undefined ? address : `part-${key}`;
+    return { id: controlId(id, controlAddress, 'value'), label: [label, section].filter(Boolean).join(' · ') };
   }
   const presented = presentStatementViolations(
     [{ pointer: `/statement${suffix}`, code: 'invalid_format' }],
@@ -414,7 +416,7 @@ function nestedControl(
     const key = statementHolderKey(part);
     if (key !== undefined) {
       const field = (
-        ['state', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const
+        ['state', 'property', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const
       ).find(
         (candidate) =>
           presented.target === controlId(id, address, candidate) || presented.target.endsWith(`-${candidate}`),
