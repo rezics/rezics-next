@@ -91,6 +91,7 @@ export type Settings = {
   sharedWebModules?: Record<string, string[]>;
   notes?: readonly import('./notes.ts').Note[];
   flowThresholds?: import('./flow.ts').FlowThresholds;
+  policy?: import('./policy.ts').ControlPolicy;
   mainBranch: string;
   integrationBranch: string;
   stabilizeBranch: string;

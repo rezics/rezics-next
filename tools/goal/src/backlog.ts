@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import type { Database } from 'bun:sqlite';
@@ -10,19 +11,15 @@ import { readBriefContinuation } from './briefs.ts';
 import type { BriefContinuation } from './types.ts';
 
 /** A manager is woken when its Goal has fewer ready briefs than this. */
-export const BACKLOG_LOW_WATER = 8;
+export const BACKLOG_LOW_WATER = defaultPolicy.backlog.lowWater;
 /** At most one low-backlog wake per Goal in this interval. */
-export const BACKLOG_WAKE_INTERVAL_MS = 60 * 60_000;
+export const BACKLOG_WAKE_INTERVAL_MS = defaultPolicy.backlog.wakeIntervalMs;
 /** A product task stopped this long without a manager action is cancelled into its Goal's failed backlog. */
-export const STOPPED_TASK_LIMIT_MS = 60 * 60_000;
+export const STOPPED_TASK_LIMIT_MS = defaultPolicy.backlog.stoppedTaskLimitMs;
 /** At most this many stopped tasks per Goal are cancelled in one run, oldest first, so owners get them in batches. */
-export const STOPPED_TASKS_PER_GOAL_PER_RUN = 20;
+export const STOPPED_TASKS_PER_GOAL_PER_RUN = defaultPolicy.backlog.stoppedTasksPerGoalPerRun;
 /** Dispatch runs synchronous Git and install work, so one run dispatches only a few briefs and the next run continues. */
-export const BACKLOG_DISPATCHES_PER_SWEEP = 4;
-/** The same default worker cap as host-capacity admission when `<state>/capacity.json` sets none. */
-const DEFAULT_WORKER_CAP = 32;
-/** A brief changed this recently may still be being written. */
-const SETTLE_MS = 10_000;
+export const BACKLOG_DISPATCHES_PER_SWEEP = defaultPolicy.backlog.dispatchesPerSweep;
 const CLAIM_DIRECTORY = '.dispatching';
 const DISPATCHED_DIRECTORY = 'dispatched';
 const FAILED_DIRECTORY = 'failed';
@@ -53,6 +50,7 @@ export type BacklogRuntime = {
   /** The `goal cancel` path. */
   cancel(taskId: string): Promise<void>;
   now?: () => number;
+  policy?: ControlPolicy;
   /** Active-task cap; defaults to `maxWorkers` in `<state>/capacity.json`, else 32. */
   workerCap?: number;
   perSweep?: number;
@@ -133,7 +131,7 @@ export function formatBacklogStatus(rows: BacklogGoalCounts[]): string {
   ].join('\n');
 }
 
-export function backlogWorkerCap(stateDirectory: string): number {
+export function backlogWorkerCap(stateDirectory: string, fallback = defaultPolicy.capacity.maxWorkers): number {
   try {
     const value = (JSON.parse(readFileSync(join(stateDirectory, 'capacity.json'), 'utf8')) as { maxWorkers?: unknown })
       .maxWorkers;
@@ -141,7 +139,7 @@ export function backlogWorkerCap(stateDirectory: string): number {
   } catch {
     // Absent or unreadable capacity policy: the admission default.
   }
-  return DEFAULT_WORKER_CAP;
+  return fallback;
 }
 
 /** Tasks that hold or are about to take a worker slot. */
@@ -187,6 +185,7 @@ function recordGoalDispatch(runtime: BacklogRuntime, goal: string, writtenMs: nu
 function failedBriefName(file: string, sequence: number): string {
   if (sequence === 1) return basename(file);
   const suffix = `-${sequence}`;
+  // POSIX filename components are bounded in bytes, independently of control-plane policy.
   const maxStemBytes = 255 - Buffer.byteLength(`${suffix}.md`);
   let name = '';
   for (const character of stem(file)) {
@@ -310,17 +309,23 @@ function notifyRefusals(runtime: BacklogRuntime, goal: string, refused: { brief:
   if (!refused.length) return;
   const directory = backlogDirectory(runtime.stateDirectory, goal);
   const listed = refused
-    .slice(0, 4)
-    .map((entry) => `${entry.brief} (${oneLine(entry.reason, 160)})`)
+    .slice(0, (runtime.policy ?? defaultPolicy).backlog.refusalBriefs)
+    .map(
+      (entry) =>
+        `${entry.brief} (${oneLine(entry.reason, (runtime.policy ?? defaultPolicy).backlog.refusalReasonCharacters)})`,
+    )
     .join('; ');
-  const more = refused.length > 4 ? `; and ${refused.length - 4} more` : '';
+  const more =
+    refused.length > (runtime.policy ?? defaultPolicy).backlog.refusalBriefs
+      ? `; and ${refused.length - (runtime.policy ?? defaultPolicy).backlog.refusalBriefs} more`
+      : '';
   runtime.inbox.deliver({
     managerId: goal,
     goalId: goal,
     kind: 'instruction',
     summary: oneLine(
       `Backlog dispatch refused ${refused.length} brief(s): ${listed}${more}. The briefs and their .reason files are in ${join(directory, FAILED_DIRECTORY)}; fix each and move it back to ${directory}.`,
-      1000,
+      (runtime.policy ?? defaultPolicy).backlog.refusalSummaryCharacters,
     ),
   });
 }
@@ -390,7 +395,13 @@ function pickBriefs(runtime: BacklogRuntime, goals: string[], need: number, now:
   );
   // The Goal served longest ago goes first, so a run with one free slot does not always serve the same Goal.
   const queues = goals
-    .map((goal) => ({ goal, files: briefs(backlogDirectory(runtime.stateDirectory, goal), now - SETTLE_MS) }))
+    .map((goal) => ({
+      goal,
+      files: briefs(
+        backlogDirectory(runtime.stateDirectory, goal),
+        now - (runtime.policy ?? defaultPolicy).backlog.settleMs,
+      ),
+    }))
     .filter((queue) => queue.files.length)
     .sort((a, b) => (order.get(a.goal) ?? 0) - (order.get(b.goal) ?? 0) || a.goal.localeCompare(b.goal));
   const picks: BriefPick[] = [];
@@ -428,8 +439,10 @@ async function dispatchReady(
     for (const entry of recovered.refused) refuse(goal, entry.brief, entry.reason);
   }
 
-  const cap = runtime.workerCap ?? backlogWorkerCap(runtime.stateDirectory);
-  const perSweep = runtime.perSweep ?? BACKLOG_DISPATCHES_PER_SWEEP;
+  const cap =
+    runtime.workerCap ??
+    backlogWorkerCap(runtime.stateDirectory, (runtime.policy ?? defaultPolicy).capacity.maxWorkers);
+  const perSweep = runtime.perSweep ?? (runtime.policy ?? defaultPolicy).backlog.dispatchesPerSweep;
   const need = Math.min(cap - activeTaskCount(runtime.db), perSweep);
   for (const pick of pickBriefs(runtime, goals, need, now)) {
     const goalDirectory = join(root, pick.goal);
@@ -568,13 +581,13 @@ async function expireStoppedTasks(runtime: BacklogRuntime, now: number): Promise
     if (task.brief?.kind === 'verification') continue;
     if (hasPendingRetry(db, task.id, row.current_attempt)) continue;
     const since = lastActivity(db, task, row.current_attempt);
-    if (since === null || now - since <= STOPPED_TASK_LIMIT_MS) continue;
+    if (since === null || now - since <= (runtime.policy ?? defaultPolicy).backlog.stoppedTaskLimitMs) continue;
     candidates.push({ row, task, goal, manager, since });
   }
   const perGoal = new Map<string, number>();
   for (const { row, task, goal, manager, since } of candidates.sort((a, b) => a.since - b.since)) {
     const count = perGoal.get(goal) ?? 0;
-    if (count >= STOPPED_TASKS_PER_GOAL_PER_RUN) continue;
+    if (count >= (runtime.policy ?? defaultPolicy).backlog.stoppedTasksPerGoalPerRun) continue;
     perGoal.set(goal, count + 1);
     const failed = join(backlogDirectory(runtime.stateDirectory, goal), FAILED_DIRECTORY);
     const brief = join(failed, `${task.id}.md`);
@@ -637,13 +650,17 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
     const goal = state.goal;
     const directory = backlogDirectory(runtime.stateDirectory, goal);
     const ready = briefs(directory).length;
-    if (ready >= BACKLOG_LOW_WATER) continue;
+    if (ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater) continue;
     const delivered = db
       .transaction(() => {
         const last = db.query('SELECT low_wake_at FROM backlog_goals WHERE goal=?').get(goal) as {
           low_wake_at: number | null;
         } | null;
-        if (last?.low_wake_at != null && now - last.low_wake_at < BACKLOG_WAKE_INTERVAL_MS) return false;
+        if (
+          last?.low_wake_at != null &&
+          now - last.low_wake_at < (runtime.policy ?? defaultPolicy).backlog.wakeIntervalMs
+        )
+          return false;
         db.query(
           `INSERT INTO backlog_goals(goal, low_wake_at) VALUES (?, ?)
           ON CONFLICT(goal) DO UPDATE SET low_wake_at = excluded.low_wake_at`,
@@ -653,7 +670,7 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
           goalId: goal,
           kind: 'instruction',
           summary:
-            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep at least ${BACKLOG_LOW_WATER}; ` +
+            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep at least ${(runtime.policy ?? defaultPolicy).backlog.lowWater}; ` +
             'the controller dispatches the oldest whenever worker slots are free.',
         });
         return true;

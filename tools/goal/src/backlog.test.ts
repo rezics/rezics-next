@@ -21,6 +21,7 @@ import {
   type BacklogRuntime,
 } from './backlog.ts';
 import { openDb } from './db.ts';
+import { readControlPolicy } from './config.ts';
 import { createRuntime } from './config.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration } from './integration-cli.ts';
@@ -567,4 +568,23 @@ test('a run is single-flight: while another holds the backlog lease it does noth
     last_written_at: number;
   };
   expect(row.last_written_at).toBe(NOW - 60_000);
+});
+
+test('configured backlog limits govern settling, dispatch width and manager wakeups', async () => {
+  const f = fixture();
+  delete f.runtime.workerCap;
+  f.runtime.policy = readControlPolicy({
+    backlog: { settleMs: 100, dispatchesPerSweep: 1, lowWater: 2, wakeIntervalMs: 200 },
+    capacity: { maxWorkers: 1 },
+  });
+  manager(f.db, 'web', { kind: 'managed', status: 'running', goal: 'web' });
+  brief(f.state, 'web', 'ready.md', 101);
+  brief(f.state, 'web', 'still-writing.md', 100);
+  expect((await sweepBacklog(f.runtime)).dispatched.map((entry) => entry.brief)).toEqual(['ready.md']);
+  expect(f.inbox.pending('web')[0]!.event.summary).toContain('keep at least 2');
+  f.runtime.workerCap = 0;
+  f.clock.now += 199;
+  expect((await sweepBacklog(f.runtime)).woken).toEqual([]);
+  f.clock.now += 1;
+  expect((await sweepBacklog(f.runtime)).woken).toEqual(['web']);
 });

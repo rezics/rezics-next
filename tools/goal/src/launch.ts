@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import {
   proofProtocolAuthorized,
   proofSourceUnchanged,
@@ -483,22 +484,27 @@ os.rename(exit_path+'.tmp',exit_path)
 `;
 export type HostCapacity = { maxWorkers: number; minAvailableMiB: number };
 export type CapacityRelease = () => void;
-const DEFAULT_CAPACITY: HostCapacity = { maxWorkers: 32, minAvailableMiB: 6144 };
+
 /** Whether one more worker may start: below the worker cap and above the memory floor. */
 export function hasCapacity(running: number, availableMiB: number, capacity: HostCapacity): boolean {
   return running < capacity.maxWorkers && availableMiB >= capacity.minAvailableMiB;
 }
 function availableMiB(): number {
   const match = /^MemAvailable:\s+(\d+) kB/m.exec(readFileSync('/proc/meminfo', 'utf8'));
+  // Linux reports kB; admission settings use MiB.
   return match ? Number(match[1]) / 1024 : Number.POSITIVE_INFINITY;
 }
 /** Whether an ordinary start could begin now, without waiting; a host without capacity.json always has room. */
-export function capacityAvailable(store: WorkerStore, stateDirectory: string): boolean {
+export function capacityAvailable(
+  store: WorkerStore,
+  stateDirectory: string,
+  policy = defaultPolicy.capacity,
+): boolean {
   const file = join(stateDirectory, 'capacity.json');
   if (!existsSync(file)) return true;
-  let capacity = DEFAULT_CAPACITY;
+  let capacity = policy;
   try {
-    capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
+    capacity = { ...policy, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
   } catch {
     /* Defaults. */
   }
@@ -514,15 +520,15 @@ export function startsFirst(task: Pick<Task, 'taskClass' | 'brief'>): boolean {
  * available. Otherwise it waits; it is never refused. Fifty-two workers on this host exhausted memory and swap and
  * killed unrelated processes (2026-10-27). `<state>/capacity.json` overrides the defaults and is read on every check.
  */
-const CRITICAL_HEAD_START_MS = 30 * 60_000;
 export async function awaitHostCapacity(
   store: WorkerStore,
   stateDirectory: string,
   first = false,
   taskId?: string,
   targetAttempt?: number,
-  options: { pollIntervalMs?: number; now?: () => number } = {},
+  options: { pollIntervalMs?: number; now?: () => number; policy?: ControlPolicy['capacity'] } = {},
 ): Promise<CapacityRelease> {
+  const policy = options.policy ?? defaultPolicy.capacity;
   // A host opts in with <state>/capacity.json; without it nothing waits (tests, and hosts that pace by other means).
   const file = join(stateDirectory, 'capacity.json');
   if (!existsSync(file)) return () => {};
@@ -532,7 +538,7 @@ export async function awaitHostCapacity(
   // the cap and the queue; with most backend tasks critical path the running count stayed above the cap and ordinary
   // starts (most web tasks) waited for days (2026-10-29). Every start now respects the cap; critical path only dates
   // its ticket half an hour earlier, so it goes ahead of recent waiters without starving older ones.
-  const ticket = `${String((options.now?.() ?? Date.now()) - (first ? CRITICAL_HEAD_START_MS : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
+  const ticket = `${String((options.now?.() ?? Date.now()) - (first ? policy.criticalHeadStartMs : 0)).padStart(15, '0')}-${process.pid}-${taskId ?? crypto.randomUUID()}`;
   mkdirSync(queue, { recursive: true });
   const owner = processIdentity();
   if (!owner) throw new Error('Cannot identify capacity ticket owner');
@@ -557,14 +563,14 @@ export async function awaitHostCapacity(
         admissionLease = acquireDirectoryLease(join(stateDirectory, 'capacity-admission-lock'));
       } catch (error) {
         if (!(error instanceof LeaseHeldError)) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, policy.admissionRetryMs));
         continue;
       }
       try {
         if (!existsSync(file)) return () => {};
-        let capacity = DEFAULT_CAPACITY;
+        let capacity = policy;
         try {
-          capacity = { ...DEFAULT_CAPACITY, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
+          capacity = { ...policy, ...(JSON.parse(readFileSync(file, 'utf8')) as Partial<HostCapacity>) };
         } catch {
           /* Defaults. */
         }
@@ -574,7 +580,7 @@ export async function awaitHostCapacity(
         if (hasCapacity(running + admitted + ahead, availableMiB(), capacity)) {
           const reservation = join(queue, `${ticket}.admitted`);
           renameSync(join(queue, ticket), reservation);
-          return releaseWhenStarted(store, reservation, taskId, targetAttempt);
+          return releaseWhenStarted(store, reservation, taskId, targetAttempt, policy.reservationPollMs);
         }
         if (!reported)
           console.error(
@@ -587,7 +593,7 @@ export async function awaitHostCapacity(
       await Promise.race([
         changed,
         new Promise<void>((resolve) => {
-          pollTimer = setTimeout(resolve, Math.max(1, options.pollIntervalMs ?? 15_000));
+          pollTimer = setTimeout(resolve, Math.max(1, options.pollIntervalMs ?? policy.pollIntervalMs));
         }),
       ]);
       clearTimeout(pollTimer);
@@ -647,8 +653,9 @@ function liveTicket(queue: string, name: string): boolean {
 function releaseWhenStarted(
   store: WorkerStore,
   reservation: string,
-  taskId?: string,
-  targetAttempt?: number,
+  taskId: string | undefined,
+  targetAttempt: number | undefined,
+  pollIntervalMs: number,
 ): CapacityRelease {
   const [, rawPid] = reservation.split('-');
   const identity = processIdentity(Number(rawPid));
@@ -676,7 +683,7 @@ function releaseWhenStarted(
     } catch {
       // Callers release explicitly when preparation fails; transient store errors must not admit another start early.
     }
-  }, 250);
+  }, pollIntervalMs);
   timer.unref();
   return release;
 }
