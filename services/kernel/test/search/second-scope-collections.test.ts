@@ -11,7 +11,13 @@ const id = '00000000-0000-4000-8000-000000000010';
 const otherId = '00000000-0000-4000-8000-000000000011';
 const route = routeOf(id)!;
 const partition = partitionOf(route);
-const publicRow = { id, visibility: 'public' as const, revision: 7n, title: 'Public recipes', description: 'A public set' };
+const publicRow = {
+  id,
+  visibility: 'public' as const,
+  revision: 7n,
+  title: 'Public recipes',
+  description: 'A public set',
+};
 
 function readyAdapter(sourceOverrides: Partial<PublicCollectionDiscoverySource> = {}) {
   const source: PublicCollectionDiscoverySource = {
@@ -36,7 +42,18 @@ function readyAdapter(sourceOverrides: Partial<PublicCollectionDiscoverySource> 
     async readSummaries(ids) {
       return new Map(
         ids.includes(id)
-          ? [[id, { id, title: 'Current public title', description: null, destination: `/collections/${id}`, privateRules: ['hidden'] } as never]]
+          ? [
+              [
+                id,
+                {
+                  id,
+                  title: 'Current public title',
+                  description: null,
+                  destination: `/collections/${id}`,
+                  privateRules: ['hidden'],
+                } as never,
+              ],
+            ]
           : [],
       );
     },
@@ -68,9 +85,12 @@ test('ready adapter bounds full-key reads and returns current authorized summari
     complete: true,
     next: null,
   });
-  await expect(adapter.source.read(partition, Array.from({ length: COLLECTION_DISCOVERY_BATCH_SIZE + 1 }, () => id))).rejects.toThrow(
-    'batch exceeds its bound',
-  );
+  await expect(
+    adapter.source.read(
+      partition,
+      Array.from({ length: COLLECTION_DISCOVERY_BATCH_SIZE + 1 }, () => id),
+    ),
+  ).rejects.toThrow('batch exceeds its bound');
 
   const context = { actor: 'current viewer' };
   expect(await adapter.hydrate([id], context)).toEqual(
@@ -80,7 +100,11 @@ test('ready adapter bounds full-key reads and returns current authorized summari
 
 test('rejects wrong keys, private rows, and revisions beyond their native snapshot', async () => {
   const wrongRead = readyAdapter({
-    read: async (requestedPartition) => ({ partition: requestedPartition, position: 8n, collections: [{ ...publicRow, id: otherId }] }),
+    read: async (requestedPartition) => ({
+      partition: requestedPartition,
+      position: 8n,
+      collections: [{ ...publicRow, id: otherId }],
+    }),
   });
   if (wrongRead.status !== 'ready') throw new Error('Expected a ready adapter');
   await expect(wrongRead.source.read(partition, [id])).rejects.toThrow('wrong full key');
