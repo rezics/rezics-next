@@ -4,6 +4,8 @@ import { parseStrictJson } from './strict-json.ts';
 
 export const DEFAULT_BODY_LIMIT = 1_048_576;
 export const MAX_BODY_LIMIT = RELEASE_LIMITS.bytes + 65_536;
+// The owner-private native archive consumer accepts a capped 34 MiB document as base64 JSON.
+export const MAX_HTTP_BODY_LIMIT = Math.max(MAX_BODY_LIMIT, 48 * 1024 * 1024);
 export type BodyMode = 'json' | 'raw';
 type OwnedBody = Readonly<{ bytes: Uint8Array; wireBytes: number }>;
 const bodies = new WeakMap<Request, OwnedBody>();

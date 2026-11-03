@@ -63,6 +63,7 @@ export const OWNED_PHASES = [
   'bangumi_upload',
   'list_import_mal',
   'library_export',
+  'collection_archive_recovery',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -94,7 +95,8 @@ type Kind =
   | 'collectionLocal'
   | 'bangumi_upload'
   | 'list_import_mal'
-  | 'library_export';
+  | 'library_export'
+  | 'collection_archive_recovery';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -180,6 +182,40 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
               data: { accountId, kind, removed },
             },
           ],
+        };
+      }
+      if (kind === 'collection_archive_recovery') {
+        const evidence = await tx.query(
+          `WITH keys AS MATERIALIZED (
+             SELECT upload_id,record_kind,collection_id,source_id
+             FROM library.collection_archive_recovery_record
+             WHERE route=$1 AND account_id=$2 ORDER BY upload_id,record_kind,collection_id,source_id LIMIT 100
+           )
+           DELETE FROM library.collection_archive_recovery_record r USING keys k
+           WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=k.upload_id
+             AND r.record_kind=k.record_kind AND r.collection_id=k.collection_id AND r.source_id=k.source_id`,
+          [route, accountId],
+        );
+        const roots = await tx.query(
+          `WITH keys AS MATERIALIZED (
+             SELECT upload_id FROM library.collection_archive_recovery r
+             WHERE route=$1 AND account_id=$2 AND NOT EXISTS (
+               SELECT 1 FROM library.collection_archive_recovery_record x
+               WHERE x.route=r.route AND x.account_id=r.account_id AND x.upload_id=r.upload_id
+             ) ORDER BY upload_id LIMIT $3
+           )
+           DELETE FROM library.collection_archive_recovery r USING keys k
+           WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=k.upload_id`,
+          [route, accountId, 100 - (evidence.rowCount ?? 0)],
+        );
+        const removed = (evidence.rowCount ?? 0) + (roots.rowCount ?? 0);
+        return {
+          value: { kind, removed, parent: null, retain: false, blocked: false },
+          events: [{
+            type: 'com.rezics.library.account-graph.purged.v1',
+            subject: accountId,
+            data: { accountId, kind, removed },
+          }],
         };
       }
       if (kind === 'bangumi_upload') {

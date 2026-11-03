@@ -14,6 +14,16 @@ export const LIBRARY_ARCHIVE_LIMITS = {
   depth: 32,
   sections: exportSections.length,
 } as const;
+/** Installed private Collection recovery bounds; these are independent of each native command's own cap. */
+export const LIBRARY_ARCHIVE_RECOVERY_LIMITS = {
+  retainedUploadsPerOwner: 2,
+  lifetimeMs: 24 * 60 * 60 * 1000,
+  selectedCollections: 1,
+  selectedOccurrences: 1_000,
+  previewPage: 50,
+  applyCommands: 25,
+  cleanupRows: 100,
+} as const;
 export const archiveMergeSections = ['entries', 'labels', 'assignments'] as const;
 type MergeSection = (typeof archiveMergeSections)[number];
 type ObjectValue = Record<string, unknown>;

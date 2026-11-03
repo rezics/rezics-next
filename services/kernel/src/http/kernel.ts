@@ -57,6 +57,7 @@ import type { ContentRuntime } from '../content/runtime.ts';
 import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
 import { malImportRoutes } from '../library/list-import-mal-routes.ts';
 import { libraryExportRoutes } from '../library/library-export-routes.ts';
+import { libraryArchiveCollectionRecoveryRoutes } from '../library/library-archive-collection-recovery-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
@@ -613,6 +614,13 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     workClient,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
+  libraryArchiveCollectionRecoveryRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
   const bangumi = bangumiImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -784,6 +792,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof bangumiImportRoutes> &
   ReturnType<typeof malImportRoutes> &
   ReturnType<typeof libraryExportRoutes> &
+  ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &
