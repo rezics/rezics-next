@@ -187,7 +187,7 @@ Converters already return `{ pointer, code }` diagnostics on `ConvertedRecord`. 
 vector with the exact source, generation, record, digest, converter revision and phase it describes, then offers a
 read-only `diagnostics` CLI command. Journal rows are not native publication, request acknowledgement or candidate
 selection. API47 keeps generation/pending-envelope/cover inspection; this command owns a separate read model and does
-not take a writer lease.
+not take a writer lease. Decision: inspect, preview and diagnostics remain separate CLI subcommands.
 
 Phases are `staging` for dump conversion and `application` for dependency-driven reconversion. A recognized empty
 vector is stored; missing journal rows on a generation are unavailable historical evidence. Resume of the same
