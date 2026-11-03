@@ -34,12 +34,12 @@ async function render(page: ReactElement) {
 
 test('A later empty creator statement page keeps the actual route, first-page recovery and no-visible wording', async () => {
   expect(story).toContain('<PageStory visitor="Signed In" path="/creator/statements" />');
-  expect(story).toContain("export const InspectAndBack: Story =");
+  expect(story).toContain('export const InspectAndBack: Story =');
   expect(story).toContain("render: () => render('later-empty')");
   expect(story).toContain("click(view.getByRole('link', { name: m.statements_next() }))");
   expect(story).toContain('m.statements_page_empty()');
   expect(story).toContain('m.statements_empty()');
-  expect(story).toContain("click(restart)");
+  expect(story).toContain('click(restart)');
   expect(story).toContain('constructed presentation responses');
   expect(story).toContain('do not establish native authorization');
 
