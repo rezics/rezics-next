@@ -16,11 +16,10 @@ const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 test('public review discovery refreshes the same thread and omits protected or removed reviews', async () => {
   const author = (await fixture.context()).actor;
   const subjectId = newId(0x6b30);
-  const protectedSubjectId = newId(0x6b31);
   await fixture.reader.query(
     `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
-     VALUES ($1,$2,'schema:Book',$2,'visible',1),($3,$4,'schema:Book',$4,'visible',1)`,
-    [routeOf(subjectId), subjectId, routeOf(protectedSubjectId), protectedSubjectId],
+     VALUES ($1,$2,'schema:Book',$2,'visible',1)`,
+    [routeOf(subjectId), subjectId],
   );
   const board = (
     await fixture.reader.query<{ route: number; board_id: string }>(
@@ -29,7 +28,7 @@ test('public review discovery refreshes the same thread and omits protected or r
   ).rows[0]!;
   await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
 
-  const create = (reviewAuthor: typeof author, target: string, visibility: 'published' | 'protected', body: string) =>
+  const create = (reviewAuthor: typeof author, target: string, body: string) =>
     createThread(
       { pool: fixture.pool, access: fixture.access, routeKey },
       reviewAuthor,
@@ -40,19 +39,18 @@ test('public review discovery refreshes the same thread and omits protected or r
         licence: 'MIT',
         subjectIds: [target],
         boardId: board.board_id,
-        visibility,
+        visibility: 'published',
       },
       request(),
     );
-  const published = await create(author, subjectId, 'published', 'Current review excerpt.');
-  const protectedReview = await create(author, protectedSubjectId, 'protected', 'Protected review excerpt.');
+  const published = await create(author, subjectId, 'Current review excerpt.');
   const partition = partitionOf(routeOf(published.value.threadId)!);
   const source = createReviewDiscoverySource(
     { pool: fixture.pool, access: fixture.access, tokens },
     () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
   );
 
-  const first = await source.read(partition, [published.value.threadId, protectedReview.value.threadId]);
+  const first = await source.read(partition, [published.value.threadId]);
   expect(first.reviews.map((item) => item.id)).toEqual([published.value.threadId]);
   expect(first.reviews[0]).toMatchObject({ subjectId, title: 'A public review title', excerpt: 'Current review excerpt.' });
   expect((await source.hydrate(partition, [published.value.threadId])).reviews[0]).toMatchObject({
@@ -60,6 +58,16 @@ test('public review discovery refreshes the same thread and omits protected or r
     excerpt: 'Current review excerpt.',
   });
   expect(await source.count(partition)).toMatchObject({ partition, position: first.position, unavailable: true });
+
+  await fixture.reader.query(
+    "UPDATE content.board SET visibility='protected', security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+    [board.route, board.board_id],
+  );
+  expect((await source.read(partition, [published.value.threadId])).reviews).toEqual([]);
+  await fixture.reader.query(
+    "UPDATE content.board SET visibility='published', security_revision=security_revision+1 WHERE route=$1 AND board_id=$2",
+    [board.route, board.board_id],
+  );
 
   const hiddenAuthor = (await fixture.context()).actor;
   await fixture.grant(hiddenAuthor.accountId, 'thread:create', { route: board.route, id: board.board_id });
@@ -70,7 +78,7 @@ test('public review discovery refreshes the same thread and omits protected or r
        VALUES ($1,$2,'schema:Book',$2,'hidden',1)`,
       [routeOf(hiddenSubject), hiddenSubject],
     );
-    await create(hiddenAuthor, hiddenSubject, 'published', `Hidden target ${ordinal}`);
+    await create(hiddenAuthor, hiddenSubject, `Hidden target ${ordinal}`);
   }
   const hiddenPartition = partitionOf(routeOf(hiddenAuthor.accountId)!);
   const sparse = await source.page(hiddenPartition, null, 1);
