@@ -3,6 +3,7 @@ import { derivedId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { seed, placement, type Population } from '../support/growth.ts';
 import { createGrowthLedgerPopulation } from './growth-ledger-population.ts';
+import { createSubjectHistoryPopulation } from './growth-subject-history.ts';
 import type { Source } from '../../../../specs/imports-api-driver.ts';
 import type { ApiRuntime } from './api-runtime.ts';
 
@@ -102,6 +103,7 @@ export function createApiPopulation(runtime: ApiRuntime) {
   ];
   return {
     population,
+    seedSubjects: createSubjectHistoryPopulation(runtime.database),
     async seed(input: { catalogueRecords: number; historyRows: number }, ledgerSource = 'bangumi') {
       return runtime.time(`seed: ${input.catalogueRecords}/${input.historyRows}`, async () => {
         // Repeated growth checks start at their first scale again. Remove only

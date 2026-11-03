@@ -1288,6 +1288,29 @@ export async function openImportGrowthFixture(): Promise<ImportGrowthDriver> {
       }
       fixture.partitions = [...new Set([...fixture.partitions, ...fixturePartitions])];
       await warmScenario(options, fixture);
+      // Seed after the real baseline resolves native subjects, outside capture.
+      // Same-route neighbours alone cannot exercise a subject's revision history.
+      const keys =
+        options.scenario === 'vanished-page'
+          ? state.vanished
+          : options.scenario === 'bulk'
+            ? Array.from({ length: options.fields }, (_, index) => String(10000 + index))
+            : ['1'];
+      const owners = keys.map((external_id) => ({ source: ownedSource, external_id }));
+      if (options.scenario === 'bulk' && options.fields === 64)
+        owners.push(
+          ...Array.from({ length: 3 }, (_, index) => ({
+            source: state!.privateSource,
+            external_id: String(200000 + index),
+          })),
+        );
+      const subjects = owners.flatMap((owner) => {
+        const claim = bindings.claim(owner);
+        if (claim?.state !== 'bound' && options.scenario !== 'new')
+          throw new Error(`Selected growth history has no subject for ${owner.source}/${owner.external_id}`);
+        return claim?.state === 'bound' ? [claim.subject] : [];
+      });
+      await population.seedSubjects(subjects, options.history);
       return fixture;
     },
     async measure<T>(operation: () => Promise<T>): Promise<{ value: T; counters: Counters }> {

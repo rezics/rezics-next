@@ -647,6 +647,8 @@ bounds belong to the linked owners; conversion itself has no purge work.
 
 ### Measurement units and evidence
 
+Composed growth setup appends immutable PostgreSQL revisions to the actual selected subjects after native baseline binding; a smaller history target starts a new appended range without rewriting earlier revisions. Same-source SQLite run history and same-route unrelated subjects remain separate growth populations.
+
 The [remaining measurement inventory](https://github.com/rezics/rezics-next/blob/472aa311ffe270eca9f01f7d7bf633281c76f14d/docs/research/imports-audit/remaining-cost-unit-ports.md)
 and [VNDB binding inventory](https://github.com/rezics/rezics-next/blob/14659f678751fc153ab67752628b9d9efc32c15d/docs/research/imports-audit/vndb-tables-binding-seams.md)
 are dated source evidence, not passing executions or authority to amend frozen acceptance.
