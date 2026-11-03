@@ -45,6 +45,7 @@ export type RealmRankPage = Readonly<{
   candidates: readonly RealmRankCandidate[];
   next: string | null;
 }>;
+/** Scored-only compatibility port; it is not Search's complete Realm order provider. */
 export interface RealmRankSource {
   page(actor: Actor, request: RealmRankRequest, context: { deadline: number }): Promise<RealmRankPage>;
 }
