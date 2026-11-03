@@ -80,10 +80,10 @@ const canonical = (value: unknown): string =>
 /** Only native admission captures the population. Recovery reads one stored page and never renews a command. */
 export class FilteredOccurrenceRemoval {
   state: RemovalState = { phase: 'review' };
-  private manifest?: Manifest;
-  private previewCall?: RemovalCall;
-  private confirmCall?: RemovalCall & Readonly<{ operationId: string }>;
-  private credential?: string;
+  private manifest: Manifest | undefined;
+  private previewCall: RemovalCall | undefined;
+  private confirmCall: (RemovalCall & Readonly<{ operationId: string }>) | undefined;
+  private credential: string | undefined;
   constructor(
     manifest: Manifest,
     private admission: Admission,
