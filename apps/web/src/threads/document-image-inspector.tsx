@@ -11,10 +11,7 @@ import {
 import { m } from '../paraglide/messages.js';
 import type { DocumentImagePresentation } from './document-media';
 import { DocumentImageInspectionControls } from './document-image-inspection-controls';
-import {
-  selectDocumentImageInspectionVariant,
-  type DocumentImageInspectionMode,
-} from './document-image-inspection';
+import { selectDocumentImageInspectionVariant, type DocumentImageInspectionMode } from './document-image-inspection';
 
 export function DocumentImageInspector({
   image,
@@ -33,10 +30,7 @@ export function DocumentImageInspector({
   const openRef = useRef(false);
   const visitRef = useRef(0);
   // Variant work is paid only by the selected image while its one inspector is open.
-  const variant = useMemo(
-    () => (open ? selectDocumentImageInspectionVariant(image) : null),
-    [image, open],
-  );
+  const variant = useMemo(() => (open ? selectDocumentImageInspectionVariant(image) : null), [image, open]);
 
   const changeOpen = (next: boolean) => {
     if (next) {
@@ -83,12 +77,7 @@ export function DocumentImageInspector({
                   · {m.document_image_inspection_size({ width: variant.width, height: variant.height }, options)}
                 </DialogDescription>
               </div>
-              <DocumentImageInspectionControls
-                mode={mode}
-                variant={variant}
-                locale={locale}
-                onModeChange={setMode}
-              />
+              <DocumentImageInspectionControls mode={mode} variant={variant} locale={locale} onModeChange={setMode} />
             </div>
             <DialogClose
               render={

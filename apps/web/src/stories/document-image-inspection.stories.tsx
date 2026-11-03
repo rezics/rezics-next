@@ -47,12 +47,7 @@ function InspectionReader({ failure = false }: { failure?: boolean }) {
           Inspect the illustration and return to the same prepared post. The reader retains its existing retry control
           if the admitted derivative is unavailable.
         </p>
-        <ThreadPostReadingBody
-          post={visit.post}
-          documentMedia={visit.documentMedia}
-          mentions={{}}
-          locale={locale}
-        />
+        <ThreadPostReadingBody post={visit.post} documentMedia={visit.documentMedia} mentions={{}} locale={locale} />
       </main>
     </PatternStory>
   );
@@ -87,7 +82,10 @@ async function inspectAndReturn({ canvasElement }: { canvasElement: HTMLElement 
     m.document_image_inspection_size({ width: delivered.width, height: delivered.height }),
   );
   await userEvent.click(within(dialog).getByRole('button', { name: m.document_image_inspection_actual() }));
-  await expect(dialog.querySelector('[data-slot="document-image-inspection-stage"]')).toHaveAttribute('data-scale', 'actual');
+  await expect(dialog.querySelector('[data-slot="document-image-inspection-stage"]')).toHaveAttribute(
+    'data-scale',
+    'actual',
+  );
   await userEvent.click(within(dialog).getByRole('button', { name: m.document_image_inspection_close() }));
   await expect(canvas.getByRole('button', { name: m.document_image_inspect() })).toBeVisible();
 }

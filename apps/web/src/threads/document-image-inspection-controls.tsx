@@ -13,9 +13,10 @@ export function DocumentImageInspectionControls({
   onModeChange: (mode: DocumentImageInspectionMode) => void;
 }) {
   const options = { locale: locale as never };
-  const state = mode === 'fit'
-    ? m.document_image_inspection_fit_state({}, options)
-    : m.document_image_inspection_actual_state({}, options);
+  const state =
+    mode === 'fit'
+      ? m.document_image_inspection_fit_state({}, options)
+      : m.document_image_inspection_actual_state({}, options);
   return (
     <div className="min-w-0 space-y-1">
       <div role="group" aria-label={m.document_image_inspection_title({}, options)} className="flex flex-wrap gap-2">

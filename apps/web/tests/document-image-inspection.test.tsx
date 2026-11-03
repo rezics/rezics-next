@@ -139,7 +139,9 @@ test('disclosure, inspection, retry and reader replacement stay in one current i
     expect(dialog.textContent).toContain(longRightsHolder);
     expect(dialog.textContent).toContain(image.credit!.via.name);
     expect(dialog.querySelector(`[href="${image.credit!.via.url}"]`)).not.toBeNull();
-    expect(dialog.querySelector('[data-slot="document-image-inspection-stage"]')!.getAttribute('data-scale')).toBe('fit');
+    expect(dialog.querySelector('[data-slot="document-image-inspection-stage"]')!.getAttribute('data-scale')).toBe(
+      'fit',
+    );
 
     await act(async () => user.click(button(dialog, m.document_image_inspection_actual())!));
     const stage = dialog.querySelector<HTMLElement>('[data-slot="document-image-inspection-stage"]')!;
@@ -178,7 +180,9 @@ test('disclosure, inspection, retry and reader replacement stay in one current i
     const reopened = button(host, inspectLabel)!;
     await act(async () => user.click(reopened));
     const retiredDialog = window.document.body.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
-    const retiredSurface = retiredDialog.querySelector<HTMLImageElement>('[data-slot="document-image-inspection-stage"] img')!;
+    const retiredSurface = retiredDialog.querySelector<HTMLImageElement>(
+      '[data-slot="document-image-inspection-stage"] img',
+    )!;
     const revisedPost = { ...post, revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000099', sha256: '1'.repeat(64) };
     const revisedMedia = {
       ...media,
@@ -202,7 +206,9 @@ test('disclosure, inspection, retry and reader replacement stay in one current i
     const revisedTrigger = button(host, inspectLabel)!;
     await act(async () => user.click(revisedTrigger));
     const viewerDialog = window.document.body.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
-    const viewerSurface = viewerDialog.querySelector<HTMLImageElement>('[data-slot="document-image-inspection-stage"] img')!;
+    const viewerSurface = viewerDialog.querySelector<HTMLImageElement>(
+      '[data-slot="document-image-inspection-stage"] img',
+    )!;
     const readerReplacement = { readerKey: 'reader-b', post: revisedPost, media: revisedMedia };
     await act(async () => replace(readerReplacement));
     expect(window.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull();
@@ -272,13 +278,14 @@ test('1, 8 and 32 images mount one selected derivative surface and retain lazy i
     height: 1024,
     variants: Array.from({ length: 12 }, (_, variant) => {
       const width = index % 4 === 0 ? 8 + variant : widths[variant]!;
-      const height = index % 4 === 0
-        ? 4 + variant
-        : index % 4 === 1
-          ? width * 2
-          : index % 4 === 2
-            ? Math.max(1, Math.round(width / 2))
-            : width * 1000;
+      const height =
+        index % 4 === 0
+          ? 4 + variant
+          : index % 4 === 1
+            ? width * 2
+            : index % 4 === 2
+              ? Math.max(1, Math.round(width / 2))
+              : width * 1000;
       return { format: variant % 2 ? 'webp' : 'avif', width, height };
     }),
     placeholder: null,
@@ -308,7 +315,9 @@ test('1, 8 and 32 images mount one selected derivative surface and retain lazy i
         for (const image of inline) image.dispatchEvent(new window.Event('load'));
       });
       const chosen = Math.floor(count / 2);
-      const triggers = [...host.querySelectorAll('button')].filter((button) => button.textContent?.trim() === inspectLabel);
+      const triggers = [...host.querySelectorAll('button')].filter(
+        (button) => button.textContent?.trim() === inspectLabel,
+      );
       expect(triggers).toHaveLength(count);
       await act(async () => user.click(triggers[chosen]!));
       const dialog = window.document.body.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
@@ -319,11 +328,15 @@ test('1, 8 and 32 images mount one selected derivative surface and retain lazy i
       expect(active[0]!.getAttribute('src')).toBe(largest.src);
       expect(inline.every((image) => image.loading === 'lazy')).toBe(true);
       expect(dialog.querySelectorAll('img')).toHaveLength(1);
-      await act(async () => user.click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === closeLabel)!));
+      await act(async () =>
+        user.click([...dialog.querySelectorAll('button')].find((button) => button.textContent?.trim() === closeLabel)!),
+      );
       expect(window.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull();
     }
     for (const index of [0, 1, 2, 3]) {
-      const trigger = [...host.querySelectorAll('button')].filter((button) => button.textContent?.trim() === inspectLabel)[index]!;
+      const trigger = [...host.querySelectorAll('button')].filter(
+        (button) => button.textContent?.trim() === inspectLabel,
+      )[index]!;
       await act(async () => user.click(trigger));
       const dialog = window.document.body.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
       const stage = dialog.querySelector<HTMLElement>('[data-slot="document-image-inspection-stage"]')!;
