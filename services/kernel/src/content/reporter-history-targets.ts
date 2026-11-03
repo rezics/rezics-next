@@ -19,7 +19,8 @@ type TargetRead = Readonly<{
   verify(): Promise<boolean>;
 }>;
 type CommunityTarget = Extract<ReportTarget, { kind: 'realm' | 'space' }>;
-type CommunitySource = Readonly<{ epoch: number; fingerprint: string | null }>;
+type CommunityCheck = Awaited<ReturnType<typeof communityReportReadCheck>>;
+type CommunitySource = Readonly<{ epoch: number; allowed: boolean; fingerprint: string | null }>;
 
 /** Native producers own Access, container checks and display facts. A report or
  * its original revision is never used as current target disclosure evidence. */
@@ -30,11 +31,17 @@ export async function readReporterHistoryTargets(
 ): Promise<TargetRead> {
   if (targets.length > 21) throw new RangeError('At most 21 report targets');
   const unique = [...new Map(targets.map((target) => [key(target), target])).values()];
-  const initial = await observeTargets(dependencies, unique, context);
+  const communityTargets = unique.filter((target): target is CommunityTarget =>
+    target.kind === 'realm' || target.kind === 'space',
+  );
+  const communityChecks = new Map<string, CommunityCheck>();
+  for (const target of communityTargets)
+    communityChecks.set(key(target), await communityReportReadCheck(dependencies, target, context));
+  const initial = await observeTargets(dependencies, unique, communityTargets, communityChecks, context);
   return {
     summaries: initial.summaries,
     async verify() {
-      const current = await observeTargets(dependencies, unique, context);
+      const current = await observeTargets(dependencies, unique, communityTargets, communityChecks, context);
       return sameMap(initial.summaries, current.summaries) && sameMap(initial.communitySources, current.communitySources);
     },
   };
@@ -43,16 +50,14 @@ export async function readReporterHistoryTargets(
 async function observeTargets(
   dependencies: ReportDependencies,
   unique: readonly ReportTarget[],
+  communityTargets: readonly CommunityTarget[],
+  communityChecks: ReadonlyMap<string, CommunityCheck>,
   context: Context,
 ): Promise<Readonly<{
   summaries: Map<string, ReporterTargetSummary>;
   communitySources: Map<string, CommunitySource>;
 }>> {
   const output = new Map<string, ReporterTargetSummary>(unique.map((target) => [key(target), unavailable]));
-  const communityTargets = unique.filter((target): target is CommunityTarget =>
-    target.kind === 'realm' || target.kind === 'space',
-  );
-  const communitySources = await readCommunitySources(dependencies, communityTargets, context);
   const readers = {
     pool: dependencies.pool,
     access: dependencies.access,
@@ -150,24 +155,26 @@ async function observeTargets(
   }
   const at = (dependencies.clock?.() ?? new Date()).toISOString();
   for (const target of communityTargets) {
-    if (!communitySources.get(key(target))?.fingerprint) continue;
     if (target.kind === 'realm') {
       const realm = await readRealm(dependencies, context.actor, target.id, context);
       if (realm?.state === 'active')
         output.set(key(target), { state: 'available', label: realm.title, href: `/v1/realms/${target.id}` });
     } else {
-      const check = await communityReportReadCheck(dependencies, target, context);
+      const check = communityChecks.get(key(target));
+      if (!check) continue;
       const space = await readSpaceForViewer(dependencies, context.actor, target.id, at, context, check);
       if (space?.state === 'active')
         output.set(key(target), { state: 'available', label: space.title, href: `/v1/spaces/${target.id}` });
     }
   }
+  const communitySources = await readCommunitySources(dependencies, communityTargets, communityChecks, context);
   return { summaries: output, communitySources };
 }
 
 async function readCommunitySources(
   dependencies: ReportDependencies,
   targets: readonly CommunityTarget[],
+  checks: ReadonlyMap<string, CommunityCheck>,
   context: Context,
 ): Promise<Map<string, CommunitySource>> {
   const homes = new Map<number, CommunityTarget[]>();
@@ -180,15 +187,17 @@ async function readCommunitySources(
   const sources = new Map<string, CommunitySource>();
   for (const group of homes.values()) {
     const observed = await snapshot(dependencies, group[0]!.id, context, async (client) => {
-      const result = new Map<string, string | null>();
+      const result = new Map<string, Omit<CommunitySource, 'epoch'>>();
       for (const target of group) {
-        const facts = await communityReportTargetFacts(client, target);
-        result.set(key(target), facts?.fingerprint ?? null);
+        const check = checks.get(key(target));
+        const allowed = check ? await check(client) : false;
+        const facts = allowed ? await communityReportTargetFacts(client, target) : null;
+        result.set(key(target), { allowed, fingerprint: facts?.fingerprint ?? null });
       }
       return result;
     });
-    for (const [targetKey, fingerprint] of observed.value)
-      sources.set(targetKey, { epoch: observed.anchor.epoch, fingerprint });
+    for (const [targetKey, source] of observed.value)
+      sources.set(targetKey, { epoch: observed.anchor.epoch, ...source });
   }
   return sources;
 }
