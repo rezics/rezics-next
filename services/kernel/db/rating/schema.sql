@@ -473,7 +473,7 @@ CREATE TABLE rating.realm_rank_delivery (
     revision integer NOT NULL,
     CONSTRAINT realm_rank_delivery_consumer_check CHECK ((consumer = ANY (ARRAY['membership'::text, 'eligibility'::text, 'aggregate'::text]))),
     CONSTRAINT realm_rank_delivery_epoch_check CHECK ((epoch > 0)),
-    CONSTRAINT realm_rank_delivery_key_check CHECK (((cardinality(key) >= 1) AND (cardinality(key) <= 4) AND (array_position(key, NULL::uuid) IS NULL))),
+    CONSTRAINT realm_rank_delivery_key_check CHECK ((((cardinality(key) >= 1) AND (cardinality(key) <= 4)) AND (array_position(key, NULL::uuid) IS NULL))),
     CONSTRAINT realm_rank_delivery_position_check CHECK (("position" > 0)),
     CONSTRAINT realm_rank_delivery_revision_check CHECK ((revision >= 0)),
     CONSTRAINT realm_rank_delivery_route_check CHECK (((route >= 0) AND (route <= 65535)))
