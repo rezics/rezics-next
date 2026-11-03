@@ -1,9 +1,10 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import { shelfHref, shelfSort, validateShelfSearch } from '../src/library/shelf-params';
+import type { ComponentProps } from 'react';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -11,6 +12,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 afterAll(() => mock.restore());
 const { readEntryPage } = await import('../src/library/entries-read');
 const { ShelfScoreUnavailable } = await import('../src/library/shelf-view');
+const { SortControls } = await import('../src/library/entries-current');
 const { resolveShelfPresentation, unsupportedShelfSorts, shelfOrderFromLibrary } =
   await import('../src/library/shelf-preferences');
 
@@ -38,6 +40,124 @@ test('score addresses survive reload while unsupported saved scores never select
     const address = new URL(shelfHref('en', search), 'https://site.test');
     expect(validateShelfSearch(Object.fromEntries(address.searchParams))).toEqual(search);
     expect(shelfOrderFromLibrary(resolved.sort)).toEqual({ field: 'rating', direction });
+  }
+});
+
+test('mounted sort form retains score addresses until date selection and replaces pending edits with its address', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/library?cursor=obsolete' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    FormData: window.FormData,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createRootRoute, createMemoryHistory, createRouter, RouterContextProvider } =
+    await import('@tanstack/react-router');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['session'], { state: 'signed-in', subject: 'A', csrfToken: 'csrf-A' });
+  client.setQueryData(['exposure', 'viewer'], ['personal_library', 'reading_progress']);
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: ['/en/library?cursor=obsolete'] }),
+  });
+  await router.load();
+  const navigate = spyOn(router, 'navigate').mockResolvedValue(undefined);
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let current = true;
+  const render = async (direction: 'asc' | 'desc') => {
+    const props: ComponentProps<typeof SortControls> = {
+      locale: 'en',
+      state: 'completed',
+      type: 'schema:Book',
+      display: { layout: 'table', size: 'l', columns: 'title,status' },
+      sort: { orderBy: 'personalScore', direction },
+      isCurrent: () => current,
+    };
+    await act(async () =>
+      root.render(
+        createElement(QueryClientProvider, {
+          client,
+          children: createElement(RouterContextProvider, { router, children: createElement(SortControls, props) }),
+        }),
+      ),
+    );
+  };
+  const form = () => host.querySelector('form')!;
+  const submitted = () => Object.fromEntries(new window.FormData(form()));
+  const select = (name: string) => host.querySelector(`select[name="${name}"]`)! as HTMLSelectElement;
+  const choose = async (name: string, value: string) => {
+    await act(async () => {
+      select(name).value = value;
+      select(name).dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+  };
+  const submit = async () => {
+    await act(async () => form().dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true })));
+  };
+  const retained = { state: 'completed', type: 'schema:Book', layout: 'table', size: 'l', columns: 'title,status' };
+  try {
+    for (const direction of ['asc', 'desc'] as const) {
+      await render(direction);
+      const order = select('orderBy');
+      order.focus();
+      expect(order.value).toBe('personalScore');
+      expect(order.querySelector('option[value="personalScore"]')?.hasAttribute('disabled')).toBe(true);
+      expect(select('direction').disabled).toBe(true);
+      expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction });
+      await submit();
+      expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
+        to: '/library',
+        search: { ...retained, orderBy: 'personalScore', direction },
+      });
+      await choose('orderBy', 'createdAt');
+      expect(window.document.activeElement).toBe(order);
+      expect(select('direction').disabled).toBe(false);
+      const changedDirection = direction === 'asc' ? 'desc' : 'asc';
+      await choose('direction', changedDirection);
+      expect(submitted()).toEqual({ ...retained, orderBy: 'createdAt', direction: changedDirection });
+      await submit();
+      expect(navigate.mock.calls.at(-1)?.[0]).toEqual({
+        to: '/library',
+        search: { ...retained, orderBy: 'createdAt', direction: changedDirection },
+      });
+      // Back/Forward replaces the address without remounting the form or losing its focused control.
+      await render(changedDirection);
+      expect(window.document.activeElement).toBe(order);
+      expect(order.value).toBe('personalScore');
+      expect(select('direction').value).toBe(changedDirection);
+      expect(submitted()).toEqual({ ...retained, orderBy: 'personalScore', direction: changedDirection });
+      current = false;
+      const before = submitted();
+      const calls = navigate.mock.calls.length;
+      await choose('orderBy', 'finishedAt');
+      await submit();
+      expect(navigate).toHaveBeenCalledTimes(calls);
+      expect(submitted()).toEqual(before);
+      current = true;
+      // Leave a pending edit for the next address replacement.
+      await choose('orderBy', 'lastActivity');
+    }
+  } finally {
+    await act(async () => root.unmount());
+    navigate.mockRestore();
+    client.clear();
+    window.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
   }
 });
 
