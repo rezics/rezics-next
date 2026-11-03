@@ -143,10 +143,7 @@ test('delete requires review and retries the same revisioned request before retu
 });
 
 test('a built-in or another owner cannot enter saved-query management', async () => {
-  for (const current of [
-    ownerPage({ builtinKind: 'everything' }),
-    ownerPage({ curatorAccountId: 'bob' }),
-  ]) {
+  for (const current of [ownerPage({ builtinKind: 'everything' }), ownerPage({ curatorAccountId: 'bob' })]) {
     const controller = makeController({ current });
     await controller.open();
     expect(controller.getSnapshot().phase).toBe('denied');

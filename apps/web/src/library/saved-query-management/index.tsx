@@ -65,7 +65,9 @@ export function SavedQueryManagement({
   const canUpdate = current('collection.update');
   const canDelete = current('collection.delete');
   const unavailable =
-    page.viewerActions?.state === 'unavailable' || page.visibility === undefined || !Number.isSafeInteger(page.revision);
+    page.viewerActions?.state === 'unavailable' ||
+    page.visibility === undefined ||
+    !Number.isSafeInteger(page.revision);
   const accessState: 'ready' | 'preparing' | 'denied' | 'unavailable' = !admission.observed()
     ? 'preparing'
     : unavailable
@@ -150,8 +152,7 @@ function SavedQueryManagementLifetime({
 
   useEffect(() => {
     if (previousPhase.current === 'reading' && state.phase === 'ready') {
-      if (controller.can('collection.update'))
-        document.getElementById('collection-edit-title')?.focus();
+      if (controller.can('collection.update')) document.getElementById('collection-edit-title')?.focus();
       else close.current?.focus();
     }
     if (previousPhase.current === 'ready' && state.phase === 'closed') trigger.current?.focus();
@@ -270,10 +271,14 @@ function SavedQueryManagementLifetime({
           {state.intent ? (
             <dl className="grid min-w-0 gap-2 rounded-lg border border-border p-3 text-sm">
               <dt className="font-medium">{m.library_collection_title()}</dt>
-              <dd className="break-words">{state.intent.operation === 'collection.update' ? state.title : state.snapshot.title}</dd>
+              <dd className="break-words">
+                {state.intent.operation === 'collection.update' ? state.title : state.snapshot.title}
+              </dd>
               <dt className="font-medium">{m.library_saved_query_management_collection_id()}</dt>
               <dd className="break-all font-mono">{state.snapshot.id}</dd>
-              <dt className="font-medium">{m.library_rule_collection_revision({ revision: state.snapshot.revision ?? 0 })}</dt>
+              <dt className="font-medium">
+                {m.library_rule_collection_revision({ revision: state.snapshot.revision ?? 0 })}
+              </dt>
               <dd>{state.snapshot.revision ?? 0}</dd>
             </dl>
           ) : canUpdate ? (
@@ -362,7 +367,9 @@ function SavedQueryManagementLifetime({
               <dd className="break-words">{state.snapshot.title}</dd>
               <dt className="font-medium">{m.library_saved_query_management_collection_id()}</dt>
               <dd className="break-all font-mono">{state.snapshot.id}</dd>
-              <dt className="font-medium">{m.library_rule_collection_revision({ revision: state.snapshot.revision ?? 0 })}</dt>
+              <dt className="font-medium">
+                {m.library_rule_collection_revision({ revision: state.snapshot.revision ?? 0 })}
+              </dt>
             </dl>
           ) : null}
           <AlertDialogFooter>

@@ -119,9 +119,9 @@ export class SavedQueryManagementController {
     const page = this.state.snapshot;
     return Boolean(
       page &&
-        ordinaryOwnerPage(page, this.ports.collectionId, this.ports.viewerId) &&
-        nativeAllows(page, operation) &&
-        this.ports.isCurrent(operation, page),
+      ordinaryOwnerPage(page, this.ports.collectionId, this.ports.viewerId) &&
+      nativeAllows(page, operation) &&
+      this.ports.isCurrent(operation, page),
     );
   }
 
@@ -149,8 +149,7 @@ export class SavedQueryManagementController {
       this.publish({ ...emptyState(), phase: 'unavailable', confirmedNotice });
       return;
     }
-    const hasAnOwnerCommand =
-      nativeAllows(page, 'collection.update') || nativeAllows(page, 'collection.delete');
+    const hasAnOwnerCommand = nativeAllows(page, 'collection.update') || nativeAllows(page, 'collection.delete');
     if (!hasAnOwnerCommand) {
       this.publish({ ...emptyState(), phase: 'denied', confirmedNotice });
       return;
@@ -187,7 +186,9 @@ export class SavedQueryManagementController {
 
   get dirty(): boolean {
     const snapshot = this.state.snapshot;
-    return Boolean(snapshot && (this.state.title !== snapshot.title || this.state.description !== (snapshot.description ?? '')));
+    return Boolean(
+      snapshot && (this.state.title !== snapshot.title || this.state.description !== (snapshot.description ?? '')),
+    );
   }
 
   async save() {
@@ -197,10 +198,7 @@ export class SavedQueryManagementController {
       return;
     }
     if (this.state.phase !== 'ready' || !snapshot || this.state.busy || !this.can('collection.update')) return;
-    if (
-      collectionTextIssue('title', this.state.title) ||
-      collectionTextIssue('description', this.state.description)
-    ) {
+    if (collectionTextIssue('title', this.state.title) || collectionTextIssue('description', this.state.description)) {
       this.patch({ textSubmitted: true });
       return;
     }
