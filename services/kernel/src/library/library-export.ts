@@ -1,47 +1,29 @@
-import type { Pool } from "pg";
-import { bundledRelease } from "@rezics/definitions/bundled";
-import { readAccount } from "../access/account-data.ts";
-import { admitGroup } from "../access/gates/admission.ts";
-import { LifecycleDeniedError } from "../access/lifecycle-20261025094010-command.ts";
-import {
-  authoritativeTimeValue,
-  commandTime,
-  principalCommandIdentity,
-} from "../command/command.ts";
-import {
-  runOperationalTransaction,
-  type OperationalTransaction,
-} from "../command/operational.ts";
-import { systemClock, type KernelClock } from "../clock.ts";
-import { ProblemError } from "../http/problem.ts";
-import {
-  accessCommandAuthorization,
-  AuthenticationError,
-  type Access,
-  type Actor,
-} from "../request/access.ts";
-import { deadlineFor } from "../request/deadline.ts";
-import { derivedId, partitionOf, routeOf } from "../route/route.ts";
-import { decodeCursor, encodeCursor } from "../tokens/cursor.ts";
-import type { KeyRing } from "../tokens/seal.ts";
-import type { WorkClient } from "../work/client.ts";
-import { createLibraryCommandRunner } from "./command-support.ts";
-import {
-  exportSections,
-  initialExportSeek,
-  readExportSourcePage,
-  type ExportSeek,
-} from "./library-export-source.ts";
+import type { Pool } from 'pg';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { readAccount } from '../access/account-data.ts';
+import { admitGroup } from '../access/gates/admission.ts';
+import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { authoritativeTimeValue, commandTime, principalCommandIdentity } from '../command/command.ts';
+import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
+import { ProblemError } from '../http/problem.ts';
+import { accessCommandAuthorization, AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { derivedId, partitionOf, routeOf } from '../route/route.ts';
+import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { exportSections, initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
 
 export type LibraryExportDependencies = {
   pool: Pool;
   access: Access;
   tokens: KeyRing;
-  workClient: WorkClient;
+  workClient: WorkClient | (() => Promise<WorkClient>);
   clock?: KernelClock;
 };
-type State =
-  "collecting" | "ready" | "stale" | "cancelled" | "expired" | "limit";
+type State = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
 type Capture = {
   export_id: string;
   generation: string;
@@ -50,32 +32,29 @@ type Capture = {
   state: State;
 };
 const ACTIONS = [
-  "library_entry:list",
-  "library_entry:read",
-  "copy:list",
-  "progress_session:list",
-  "progress_session:read",
-  "collection:read",
+  'library_entry:list',
+  'library_entry:read',
+  'copy:list',
+  'progress_session:list',
+  'progress_session:read',
+  'collection:read',
 ] as const;
 const groups = [
-  ["personal_library", "library_entry:list"],
-  ["reading_progress", "progress_session:list"],
-  ["collections", "collection:read"],
+  ['personal_library', 'library_entry:list'],
+  ['reading_progress', 'progress_session:list'],
+  ['collections', 'collection:read'],
 ] as const;
 export const exportAuthorityTypes = Object.keys(bundledRelease.types);
 
 function owner(actor: Actor) {
-  if (actor.kind !== "account") throw new AuthenticationError(401, "Bearer");
-  if (
-    routeOf(actor.accountId) === null ||
-    ACTIONS.some((action) => !actor.scopes.includes(action))
-  )
-    throw new ProblemError("forbidden");
+  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  if (routeOf(actor.accountId) === null || ACTIONS.some((action) => !actor.scopes.includes(action)))
+    throw new ProblemError('forbidden');
   return actor;
 }
 function binding(accountId: string, capture: Capture) {
   return {
-    operation: "library_export.page",
+    operation: 'library_export.page',
     parameters: {
       accountId,
       exportId: capture.export_id,
@@ -83,12 +62,7 @@ function binding(accountId: string, capture: Capture) {
     },
   };
 }
-function cursor(
-  deps: LibraryExportDependencies,
-  accountId: string,
-  capture: Capture,
-  seek: ExportSeek,
-) {
+function cursor(deps: LibraryExportDependencies, accountId: string, capture: Capture, seek: ExportSeek) {
   return encodeCursor(
     deps.tokens,
     binding(accountId, capture),
@@ -106,66 +80,52 @@ function seekOf(
   token: string,
   now: number,
 ): ExportSeek {
-  const result = decodeCursor(
-    deps.tokens,
-    binding(accountId, capture),
-    token,
-    now,
-  );
-  if (!result.ok) throw new ProblemError("invalid_cursor");
+  const result = decodeCursor(deps.tokens, binding(accountId, capture), token, now);
+  if (!result.ok) throw new ProblemError('invalid_cursor');
   const [section, parent, after, rows, bytes] = result.after;
   if (
     result.epoch !== 1 ||
     result.after.length !== 5 ||
-    typeof section !== "number" ||
+    typeof section !== 'number' ||
     section < 0 ||
     section >= exportSections.length ||
-    typeof parent !== "string" ||
-    typeof after !== "string" ||
-    typeof rows !== "number" ||
+    typeof parent !== 'string' ||
+    typeof after !== 'string' ||
+    typeof rows !== 'number' ||
     rows < 0 ||
-    typeof bytes !== "number" ||
+    typeof bytes !== 'number' ||
     bytes < 0
   )
-    throw new ProblemError("invalid_cursor");
+    throw new ProblemError('invalid_cursor');
   return { section, parent, after, rows, bytes };
 }
 function manifest(capture: Capture) {
   return {
-    format: "https://rezics.com/formats/library-export",
+    format: 'https://rezics.com/formats/library-export',
     version: 1,
     exportId: capture.export_id,
     capturedAt: capture.created_at,
     expiresAt: capture.expires_at,
-    privacy: "private",
-    completeness: "supported-native-facts",
-    sections: exportSections,
+    privacy: 'private',
+    completeness: 'supported-native-facts',
+    sections: [...exportSections],
     omissions: {
-      trash: "excluded; current live facts and retained session history only",
-      providerIdentifiers:
-        "unavailable in the native owner Library store; no identifiers inferred",
-      personalImportEvidence:
-        "unavailable; no installed native personal import evidence store",
-      commerce:
-        "excluded; orders and financial evidence use Commerce retention/export policy",
-      publication:
-        "excluded; stored rules only, no dynamic evaluation or working publication output",
-      reimport:
-        "unavailable; this format does not promise an installed re-import endpoint",
+      trash: 'excluded; current live facts and retained session history only',
+      providerIdentifiers: 'unavailable in the native owner Library store; no identifiers inferred',
+      personalImportEvidence: 'unavailable; no installed native personal import evidence store',
+      commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
+      publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
+      reimport: 'unavailable; this format does not promise an installed re-import endpoint',
     },
   } as const;
 }
-function status(
-  deps: LibraryExportDependencies,
-  accountId: string,
-  capture: Capture,
-) {
+function status(deps: LibraryExportDependencies, accountId: string, capture: Capture) {
   return {
     ...manifest(capture),
     state: capture.state,
-    fullExport: false,
+    fullExport: false as const,
     first:
-      capture.state === "collecting" || capture.state === "ready"
+      capture.state === 'collecting' || capture.state === 'ready'
         ? cursor(deps, accountId, capture, initialExportSeek())
         : null,
   };
@@ -188,11 +148,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
       });
     return account;
   }
-  async function generation(
-    tx: Pick<OperationalTransaction, "query">,
-    route: number,
-    accountId: string,
-  ) {
+  async function generation(tx: Pick<OperationalTransaction, 'query'>, route: number, accountId: string) {
     await tx.query(
       `INSERT INTO library.native_source_fence(route,kind,owner_id,generation,account_id)
       VALUES($1,'account',$2,0,$2) ON CONFLICT DO NOTHING`,
@@ -210,33 +166,28 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
   async function operation<T>(
     actor: Actor,
     signal: AbortSignal | undefined,
-    body: (
-      tx: OperationalTransaction,
-      route: number,
-      accountId: string,
-      now: number,
-    ) => Promise<T>,
+    body: (tx: OperationalTransaction, route: number, accountId: string, now: number) => Promise<T>,
   ): Promise<T> {
     const account = await admit(actor);
     const route = routeOf(account.accountId)!;
     const authorization = await accessCommandAuthorization(
       deps.access,
       account,
-      "library_entry:list",
+      'library_entry:list',
       { route, id: account.accountId },
       { pool: deps.pool, deadline: deadlineFor(5000) },
-      () => new ProblemError("forbidden"),
+      () => new ProblemError('forbidden'),
     );
     try {
       return await runOperationalTransaction(
         deps.pool,
         {
-          mode: "request",
+          mode: 'request',
           ...principalCommandIdentity(account),
           partition: partitionOf(route),
-          kind: "library.export",
+          kind: 'library.export',
           accounts: [account.accountId],
-          workClient: deps.workClient,
+          workClient: typeof deps.workClient === 'function' ? await deps.workClient() : deps.workClient,
           authorization,
           clock,
           deadline: deadlineFor(5000),
@@ -246,39 +197,27 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           const current = await readAccount(tx, route, account.accountId);
           if (
             !current ||
-            current.kind !== "actor" ||
-            current.state !== "active" ||
+            current.kind !== 'actor' ||
+            current.state !== 'active' ||
             current.fenced ||
             !Number.isSafeInteger(account.authnEpoch) ||
             account.authnEpoch < 1 ||
             current.minimumAuthnEpoch > BigInt(account.authnEpoch)
           )
-            throw new ProblemError("forbidden");
+            throw new ProblemError('forbidden');
           const time = commandTime(tx);
-          if (!time) throw new ProblemError("dependency_unavailable");
-          const result = await body(
-            tx,
-            route,
-            account.accountId,
-            authoritativeTimeValue(time),
-          );
+          if (!time) throw new ProblemError('dependency_unavailable');
+          const result = await body(tx, route, account.accountId, Date.parse(authoritativeTimeValue(time)));
           signal?.throwIfAborted();
           return result;
         },
       );
     } catch (error) {
-      if (error instanceof LifecycleDeniedError)
-        throw new ProblemError("forbidden");
+      if (error instanceof LifecycleDeniedError) throw new ProblemError('forbidden');
       throw error;
     }
   }
-  async function current(
-    tx: OperationalTransaction,
-    route: number,
-    accountId: string,
-    id: string,
-    now: number,
-  ) {
+  async function current(tx: OperationalTransaction, route: number, accountId: string, id: string, now: number) {
     const capture = (
       await tx.query<Capture>(
         `SELECT export_id,generation::text,created_at::text,expires_at::text,state
@@ -286,20 +225,20 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
         [route, accountId, id],
       )
     ).rows[0];
-    if (!capture) throw new ProblemError("not_found");
+    if (!capture) throw new ProblemError('not_found');
     const source = await generation(tx, route, accountId);
     const state =
       now >= Date.parse(capture.expires_at)
-        ? "expired"
-        : (capture.state === "collecting" || capture.state === "ready") &&
-            source !== capture.generation
-          ? "stale"
+        ? 'expired'
+        : (capture.state === 'collecting' || capture.state === 'ready') && source !== capture.generation
+          ? 'stale'
           : capture.state;
     if (state !== capture.state) {
-      await tx.query(
-        `UPDATE library.library_export SET state=$3 WHERE route=$1 AND account_id=$2`,
-        [route, accountId, state],
-      );
+      await tx.query(`UPDATE library.library_export SET state=$3 WHERE route=$1 AND account_id=$2`, [
+        route,
+        accountId,
+        state,
+      ]);
       capture.state = state;
     }
     return capture;
@@ -312,8 +251,8 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
       const result = await createLibraryCommandRunner(deps).ownAccount(
         account,
         {
-          action: "library_entry:list",
-          kind: "library.export.capture",
+          action: 'library_entry:list',
+          kind: 'library.export.capture',
           requestKey,
           input: {},
         },
@@ -323,28 +262,14 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
             await tx.query<{ state: State; expired: boolean }>(
               `SELECT state,expires_at<=$3::timestamptz AS expired
           FROM library.library_export WHERE route=$1 AND account_id=$2 FOR UPDATE`,
-              [
-                route,
-                account.accountId,
-                new Date(authoritativeTimeValue(command.time)).toISOString(),
-              ],
+              [route, account.accountId, new Date(authoritativeTimeValue(command.time)).toISOString()],
             )
           ).rows[0];
-          if (
-            old &&
-            !old.expired &&
-            (old.state === "collecting" || old.state === "ready")
-          )
-            throw new ProblemError("conflict");
-          const id = derivedId(
-            account.accountId,
-            `library-export:${requestKey}`,
-            route,
-          );
+          if (old && !old.expired && (old.state === 'collecting' || old.state === 'ready'))
+            throw new ProblemError('conflict');
+          const id = derivedId(account.accountId, `library-export:${requestKey}`, route);
           const source = await generation(tx, route, account.accountId);
-          const at = new Date(
-            authoritativeTimeValue(command.time),
-          ).toISOString();
+          const at = new Date(authoritativeTimeValue(command.time)).toISOString();
           await tx.query(
             `INSERT INTO library.library_export(route,account_id,export_id,generation,created_at,expires_at,state)
           VALUES($1,$2,$3,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
@@ -357,7 +282,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
             value: { id },
             events: [
               {
-                type: "com.rezics.library.export.requested.v1",
+                type: 'com.rezics.library.export.requested.v1',
                 subject: account.accountId,
                 data: { exportId: id },
               },
@@ -375,7 +300,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
     async page(actor: Actor, id: string, token: string, signal?: AbortSignal) {
       return operation(actor, signal, async (tx, route, accountId, now) => {
         const capture = await current(tx, route, accountId, id, now);
-        if (capture.state !== "collecting" && capture.state !== "ready")
+        if (capture.state !== 'collecting' && capture.state !== 'ready')
           return {
             exportId: id,
             state: capture.state,
@@ -385,37 +310,33 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           };
         const seek = seekOf(deps, accountId, capture, token, now);
         const page = await readExportSourcePage(tx, route, accountId, seek);
-        if (
-          page.oversized ||
-          page.seek.rows > 100_000 ||
-          page.seek.bytes > 32 * 1024 * 1024
-        ) {
-          await tx.query(
-            `UPDATE library.library_export SET state='limit' WHERE route=$1 AND account_id=$2`,
-            [route, accountId],
-          );
+        if (page.oversized || page.seek.rows > 100_000 || page.seek.bytes > 32 * 1024 * 1024) {
+          await tx.query(`UPDATE library.library_export SET state='limit' WHERE route=$1 AND account_id=$2`, [
+            route,
+            accountId,
+          ]);
           return {
             exportId: id,
-            state: "limit" as const,
+            state: 'limit' as const,
             records: [],
             next: null,
             manifest: null,
           };
         }
-        if (page.done && capture.state !== "ready")
-          await tx.query(
-            `UPDATE library.library_export SET state='ready' WHERE route=$1 AND account_id=$2`,
-            [route, accountId],
-          );
+        if (page.done && capture.state !== 'ready')
+          await tx.query(`UPDATE library.library_export SET state='ready' WHERE route=$1 AND account_id=$2`, [
+            route,
+            accountId,
+          ]);
         return {
           exportId: id,
-          state: page.done ? ("ready" as const) : ("collecting" as const),
+          state: page.done ? ('ready' as const) : ('collecting' as const),
           records: page.records,
           next: page.done ? null : cursor(deps, accountId, capture, page.seek),
           manifest: page.done
             ? {
                 ...manifest(capture),
-                fullExport: false,
+                fullExport: false as const,
                 rows: page.seek.rows,
                 recordBytes: page.seek.bytes,
               }
@@ -426,12 +347,12 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
     async cancel(actor: Actor, id: string, signal?: AbortSignal) {
       return operation(actor, signal, async (tx, route, accountId, now) => {
         const capture = await current(tx, route, accountId, id, now);
-        if (capture.state !== "expired") {
-          await tx.query(
-            `UPDATE library.library_export SET state='cancelled' WHERE route=$1 AND account_id=$2`,
-            [route, accountId],
-          );
-          capture.state = "cancelled";
+        if (capture.state !== 'expired') {
+          await tx.query(`UPDATE library.library_export SET state='cancelled' WHERE route=$1 AND account_id=$2`, [
+            route,
+            accountId,
+          ]);
+          capture.state = 'cancelled';
         }
         return status(deps, accountId, capture);
       });

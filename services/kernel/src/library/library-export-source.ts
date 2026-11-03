@@ -1,4 +1,4 @@
-import type { PoolClient } from "pg";
+import type { PoolClient } from 'pg';
 
 /** Fixed owner projections. No transaction, custody, output or capability columns enter this format. */
 const queries = {
@@ -35,12 +35,7 @@ const queries = {
   collectionPins: `SELECT account_id::text AS key,collection_ids,revision::text FROM library.collection_pins
     WHERE route=$1 AND account_id=$2 AND account_id>$3::uuid ORDER BY account_id LIMIT 1`,
 } as const;
-export const exportSections = [
-  ...Object.keys(queries),
-  "units",
-  "history",
-  "occurrences",
-] as const;
+export const exportSections = [...Object.keys(queries), 'units', 'history', 'occurrences'] as const;
 export type ExportRecord = Record<string, unknown>;
 export type ExportSeek = {
   section: number;
@@ -49,11 +44,11 @@ export type ExportSeek = {
   rows: number;
   bytes: number;
 };
-const ZERO = "00000000-0000-0000-0000-000000000000";
+const ZERO = '00000000-0000-0000-0000-000000000000';
 export const initialExportSeek = (): ExportSeek => ({
   section: 0,
-  parent: "",
-  after: "",
+  parent: '',
+  after: '',
   rows: 0,
   bytes: 0,
 });
@@ -65,11 +60,7 @@ export type ExportSourcePage = {
 };
 
 /** A materialized row count and SQL-side encoded-size guard bound both wire bytes and JS memory. */
-async function bounded(
-  client: Pick<PoolClient, "query">,
-  sql: string,
-  args: unknown[],
-) {
+async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unknown[]) {
   return (
     await client.query<{ value: ExportRecord | null }>(
       `WITH page AS MATERIALIZED (${sql}) SELECT CASE WHEN octet_length(to_jsonb(page)::text)<=65536
@@ -80,7 +71,7 @@ async function bounded(
 }
 
 export async function readExportSourcePage(
-  client: Pick<PoolClient, "query">,
+  client: Pick<PoolClient, 'query'>,
   route: number,
   accountId: string,
   input: ExportSeek,
@@ -90,26 +81,18 @@ export async function readExportSourcePage(
   let rows: Awaited<ReturnType<typeof bounded>>;
   if (seek.section < Object.keys(queries).length) {
     const sql = queries[section as keyof typeof queries];
-    const after =
-      seek.after || (section === "assignments" ? `${ZERO}/${ZERO}` : ZERO);
+    const after = seek.after || (section === 'assignments' ? `${ZERO}/${ZERO}` : ZERO);
     rows = await bounded(client, sql, [route, accountId, after]);
   } else {
-    const occurrences = section === "occurrences";
+    const occurrences = section === 'occurrences';
     if (!seek.parent) {
       const sql = occurrences
         ? `SELECT collection_id AS id FROM library.collection WHERE route=$1 AND curator_account_id=$2
              AND state='active' AND membership_kind='curated' AND collection_id>$3::uuid ORDER BY collection_id LIMIT 1`
         : `SELECT session_id AS id FROM library.progress_session WHERE route=$1 AND account_id=$2
              AND session_id>$3::uuid ORDER BY session_id LIMIT 1`;
-      seek.parent =
-        (
-          await client.query<{ id: string }>(sql, [
-            route,
-            accountId,
-            seek.after || ZERO,
-          ])
-        ).rows[0]?.id ?? "";
-      seek.after = "";
+      seek.parent = (await client.query<{ id: string }>(sql, [route, accountId, seek.after || ZERO])).rows[0]?.id ?? '';
+      seek.after = '';
       if (!seek.parent) {
         seek.section++;
         return {
@@ -121,10 +104,10 @@ export async function readExportSourcePage(
       }
     }
     const sql =
-      section === "units"
+      section === 'units'
         ? `SELECT unit_id AS key,session_id,unit_id,added_at::text FROM library.progress_unit
            WHERE route=$1 AND session_id=$2 AND unit_id COLLATE "C">$3 COLLATE "C" ORDER BY unit_id COLLATE "C" LIMIT 16`
-        : section === "history"
+        : section === 'history'
           ? `SELECT change_no::text AS key,session_id,change_no,intent,recorded_at::text FROM library.progress_change
              WHERE route=$1 AND session_id=$2 AND change_no>$3::integer ORDER BY change_no LIMIT 16`
           : `SELECT member_id::text AS key,member_id,collection_id,subject_id,note,ordinal_key,member_revision::text,added_at::text
@@ -134,7 +117,7 @@ export async function readExportSourcePage(
     rows = await bounded(client, sql, [
       route,
       seek.parent,
-      seek.after || (section === "history" ? "0" : occurrences ? ZERO : ""),
+      seek.after || (section === 'history' ? '0' : occurrences ? ZERO : ''),
     ]);
   }
   const records: ExportRecord[] = [];
@@ -146,20 +129,16 @@ export async function readExportSourcePage(
       break;
     }
     const { key, ...data } = row.value;
-    for (const field of [
-      "subject_id",
-      "requested_subject_id",
-      "version_subject_id",
-    ]) {
+    for (const field of ['subject_id', 'requested_subject_id', 'version_subject_id']) {
       const value = data[field];
-      if (typeof value === "string")
+      if (typeof value === 'string')
         data[`${field}_reference`] = {
           id: value,
           href: `https://rezics.com/subjects/${value}`,
         };
     }
     const record = { section, ...data };
-    const bytes = Buffer.byteLength(JSON.stringify(record), "utf8");
+    const bytes = Buffer.byteLength(JSON.stringify(record), 'utf8');
     if (pageBytes + bytes > 120_000 && records.length) break;
     if (bytes > 120_000) {
       oversized = true;
@@ -172,10 +151,10 @@ export async function readExportSourcePage(
   if (records.length === rows.length && rows.length < 16) {
     if (seek.section < Object.keys(queries).length) {
       seek.section++;
-      seek.after = "";
+      seek.after = '';
     } else {
       seek.after = seek.parent;
-      seek.parent = "";
+      seek.parent = '';
     }
   }
   seek.rows += records.length;
