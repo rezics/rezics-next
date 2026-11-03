@@ -9,6 +9,7 @@ import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { threadTarget } from './commands.ts';
 import { readDocumentMediaPresentations } from './media-presentation.ts';
+import { readOwnMediaInventory, recordOwnMediaReservation } from './own-media.ts';
 import { mutateContentPoint } from './erase-post.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
@@ -30,6 +31,8 @@ import {
   MediaDownloadResponseSchema,
   DocumentMediaInputSchema,
   DocumentMediaPageSchema,
+  OwnMediaInventoryQuerySchema,
+  OwnMediaInventoryPageSchema,
   strictContentSchema,
 } from './schemas.ts';
 
@@ -106,6 +109,27 @@ function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>
 
 export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   return app
+    .get(
+      '/v1/media',
+      {
+        query: strictContentSchema(OwnMediaInventoryQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(OwnMediaInventoryPageSchema), sessionHeader),
+          ...readFailures,
+        },
+        detail: {
+          operationId: 'media.own',
+          'x-exposure': 'private',
+          'x-action': 'media:read_reservation',
+          security: secured,
+        },
+      },
+      async ({ actor, query, admission, job, set }) =>
+        admission.run('normal', job, async () => {
+          set.headers['cache-control'] = 'private, no-store';
+          return readOwnMediaInventory(dependencies, actor, query, job.deadline);
+        }),
+    )
     .post(
       '/v1/media/presentations',
       {
@@ -164,6 +188,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
                   }
                 : undefined;
             const result = await reserveMedia(dependencies, actor, body, context(request, job.deadline), target);
+            await recordOwnMediaReservation(dependencies.pool, actor, result.value.mediaId);
             session.record(result);
             const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
             if (!media) throw new ProblemError('not_found');
@@ -206,6 +231,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
               { ...body, containerId: id },
               context(request, job.deadline),
             );
+            await recordOwnMediaReservation(dependencies.pool, actor, result.value.mediaId);
             session.record(result);
             const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
             if (!media) throw new ProblemError('not_found');

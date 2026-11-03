@@ -1497,6 +1497,51 @@ in the account's partition. `readAvatarSummaries(client, ids)` accepts 1–256 i
 returns a map with one statement per media partition. Each available avatar has the cover summary shape with
 `credit: null`; unknown, unavailable and non-avatar ids map to null. An account upload has no source credit.
 
+## Private uploader inventory
+
+Authenticated `GET /v1/media?cursor=...` returns the current account's own bounded history. The person identity
+comes only from the verified account actor. There is no account selector, organization impersonation or library
+count. A successful page with no entries and `nextCursor: null` means that the current actor home has no remaining
+raw locators; sparse withheld entries can produce an empty page with a next cursor. If the account home or a selected
+object home is unavailable, the endpoint returns 503 rather than an empty terminal page. Responses are `private, no-store`.
+
+The page advances over at most 20 raw `content.account_upload` media keys in UUID order, then batches the selected
+objects by native partition. A signed cursor binds the actor, authentication epoch, client, requested-by binding,
+filter and raw UUID frontier. Sparse missing, erased-by-retention or currently withheld objects do not consume a
+replacement slot; the next cursor advances over the raw page, and an operational home failure returns the same
+input cursor frontier on retry. The actor-home table is the existing account-erasure locator and its registered
+`content_account_upload_index` event effect remains the repair path. Browser reservation also upserts that same
+locator in a separate actor-home command after the media reservation commits, so a lost HTTP response can be
+replayed with the same reservation intent without making a second object.
+
+Each visible entry contains the routed media ID, purpose, current native state, declared type/size, measured size
+where present, creation and claim times, current admissible container ID/kind, collection/takedown flags and action
+descriptors. Actual media type is null because the native media row stores the declared type and measured size, not
+a separately sniffed type. A read action names `media.authorize_download` and only lists stored `original` or actual
+variant slots; `recheckAtUse` is true because the existing transport repeats current media, container, source and
+Access checks before returning any storage key. Remove names the existing `media.erase` command only when its
+current owner authority is allowed. Resume appears only for reserved or uploaded post images, retains the original
+reservation and requires the original file for the current Web transport. A rejected image stays rejected and only
+offers `media.create` as its retry action with `choose-new-file` guidance. No rejection reason, reservation request
+identity, storage key, signed credential, guessed URL or private imported provenance is included.
+
+Avatar reads list only actual derivatives. Realm asset actions use the current Realm/Space/media authority and the
+actual stored derivative ladder in batches of at most two. Imported covers stay role-only in uploader history; the
+inventory never exposes their source provenance or browser resume action. This page does not authorize a public
+download and does not replace the document-media presentation or image transport owners.
+
+### Cost: uploader locator maintenance
+
+- Touches: one actor-home command, the exact account erasure fence read/lock and one idempotent insert into the existing `(route, account_id, phase, id)` primary key.
+- Bound: one locator row and a fixed number of statements per reservation; indexed work is O(log U), with U the selected account's locator rows, and no source-home write or history scan.
+- Growth check: `test/content/own-media-http.test.ts` proves initial population and exact reservation replay; controller growth acceptance must add unrelated actors and the selected actor's retained lifecycle rows at 256, 1024 and 4096.
+
+### Cost: uploader inventory page
+
+- Touches: one account-home raw page; at most 20 exact media keys grouped into at most 20 object partitions; exact post, head-revision and thread context probes; at most twelve stored derivative rows per selected object; three media Access decisions and up to two container Access decisions per participating object home. Realm entries add at most 20 current Realm groups and 20 existing Realm-media batches, each selecting at most two images.
+- Bound: 20 raw locators and returned entries; at most 20 media rows, 60 post/revision/thread context rows, 240 variant rows, and a maximum 13 safe variant names per returned post image. Statements and bytes are page-bounded; indexed blocks grow logarithmically in account locators, selected home rows and nested Access authority. No exact total, unrelated account enumeration, SQL join across homes, per-row HTTP fetch or refill.
+- Growth check: `test/content/own-media-http.test.ts` covers reserved, uploaded, available, rejected, claimed post, selected read, replay, erase and uploader privacy. Controller native growth acceptance must hold the selected actor/page fixed while unrelated objects, uploaders, retired objects and lifecycle history grow at 256, 1024 and 4096, capture every participating pool and runner, and prove strict uploader/object prefixes and empty, denied and stale branches.
+
 ## Source fences
 
 `content.source_fences` retains one stable `(route, source, external_id, field_group)` tuple independently of
