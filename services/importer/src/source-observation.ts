@@ -7,19 +7,11 @@ export const SOURCE_OBSERVATION_PAGE_MAX = 20;
 export const DIGEST = /^[0-9a-f]{64}$/;
 
 export type ObservationKind = 'write' | 'clear';
-export type AggregateOperationStatus =
-  | 'prepared'
-  | 'uncertain'
-  | 'conflict'
-  | 'refused'
-  | 'delivered'
-  | 'superseded';
+export type AggregateOperationStatus = 'prepared' | 'uncertain' | 'conflict' | 'refused' | 'delivered' | 'superseded';
 
 export type IntendedWrite = Omit<ImportSourceStatistic, 'source' | 'expectedObservation'>;
 export type IntendedClear = Omit<ImportSourceStatisticClear, 'source' | 'expectedObservation'>;
-export type IntendedObservation =
-  | (IntendedWrite & { kind: 'write' })
-  | (IntendedClear & { kind: 'clear' });
+export type IntendedObservation = (IntendedWrite & { kind: 'write' }) | (IntendedClear & { kind: 'clear' });
 
 export type RetainedObservationHead = Readonly<{
   provider: typeof SOURCE_OBSERVATION_PROVIDER;
@@ -124,9 +116,7 @@ export function effectiveAlias(sourceAlias: string | undefined): string {
 }
 
 export function sameBinding(intended: IntendedObservation, head: RetainedObservationHead): boolean {
-  return (
-    effectiveAlias(intended.sourceAlias) === head.sourceAlias && intended.sourceRecordId === head.sourceRecordId
-  );
+  return effectiveAlias(intended.sourceAlias) === head.sourceAlias && intended.sourceRecordId === head.sourceRecordId;
 }
 
 export function classifyObservation(
@@ -143,8 +133,7 @@ export function classifyObservation(
   if (rebound)
     return {
       action: 'conflict',
-      reason:
-        effectiveAlias(intended.sourceAlias) === head.head.sourceAlias ? 'record-rebinding' : 'alias-rebinding',
+      reason: effectiveAlias(intended.sourceAlias) === head.head.sourceAlias ? 'record-rebinding' : 'alias-rebinding',
     };
   if (intended.asOf === head.head.asOf) return { action: 'conflict', reason: 'equal-date-correction' };
   return { action: 'automatic' };

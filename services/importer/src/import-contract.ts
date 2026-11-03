@@ -30,7 +30,9 @@ export type ImportSourceStatisticClearValue = GeneratedClearValue & ImportObserv
 export type ImportSourceStatisticClear = ImportSourceStatisticClearValue & Readonly<{ source: 'vndb' }>;
 export type ImportSourceStatisticFigure = GeneratedStatisticList[number] &
   Readonly<{ observation?: { kind: 'unversioned'; digest: string } }>;
-export type ImportPublicFigure = GeneratedPublicFigure extends { figure: infer Figure } ? Figure : GeneratedPublicFigure;
+export type ImportPublicFigure = GeneratedPublicFigure extends { figure: infer Figure }
+  ? Figure
+  : GeneratedPublicFigure;
 
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;
@@ -65,10 +67,7 @@ export interface ImportTransport {
     input: { subjectId: string },
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]>;
-  readPublicFigure?(
-    input: { subjectId: string },
-    signal?: AbortSignal,
-  ): Promise<ImportPublicFigure>;
+  readPublicFigure?(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure>;
 }
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };

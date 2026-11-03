@@ -762,7 +762,15 @@ export class Importer {
       }
       const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
       const head =
-        intended.kind === 'clear' ? headFromClear(subjectId, intended) : (confirmed.head ?? headFromStatistic(subjectId, { source: 'vndb', ...intended, licence: 'ODbL-1.0', attribution: 'VNDB' } as never));
+        intended.kind === 'clear'
+          ? headFromClear(subjectId, intended)
+          : (confirmed.head ??
+            headFromStatistic(subjectId, {
+              source: 'vndb',
+              ...intended,
+              licence: 'ODbL-1.0',
+              attribution: 'VNDB',
+            } as never));
       store.retainAggregateHead(owner.source, { ...head, subjectId });
       store.markAggregate(run, existing.operationId, {
         status: 'delivered',
@@ -773,13 +781,14 @@ export class Importer {
       return true;
     }
     if (existing?.status === 'conflict' || existing?.status === 'refused') {
-      const reason = parseObservationReason(existing.nativeReason) ?? (existing.status === 'refused' ? 'older-date' : 'cas-mismatch');
+      const reason =
+        parseObservationReason(existing.nativeReason) ??
+        (existing.status === 'refused' ? 'older-date' : 'cas-mismatch');
       if (existing.status === 'refused') throw new ObservationRefusedError(existing.operationId, reason);
       throw new ObservationConflictError(existing.operationId, reason);
     }
     const head = await this.readObservationHead(owner, subjectId, signal, write);
-    if (head.kind === 'unavailable')
-      throw new ImportTransportError(head.status, undefined, head.code);
+    if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
     const decision = classifyObservation(intended, subjectId, head);
     if (decision.action === 'identical') return true;
     const reviewed = head.kind === 'head' ? head.head : null;
@@ -877,8 +886,7 @@ export class Importer {
       if (!prior) return { status: 'unknown', operationId };
       if (prior.status === 'delivered' || prior.status === 'superseded')
         return { status: 'delivered', operationId: prior.operationId };
-      if (prior.status === 'uncertain' || prior.status === 'prepared')
-        return { status: 'resume', operationId };
+      if (prior.status === 'uncertain' || prior.status === 'prepared') return { status: 'resume', operationId };
       if (prior.status === 'refused' || parseObservationReason(prior.nativeReason) === 'older-date')
         return { status: 'refused', operationId };
       if (prior.reviewedHead?.digest !== reviewedObservation) return { status: 'conflict', operationId };
@@ -899,7 +907,10 @@ export class Importer {
       }
       const decision = classifyObservation(prior.intended, prior.subjectId, head);
       if (decision.action === 'identical') {
-        this.session.store.markAggregate(run, operationId, { status: 'delivered', reviewedHead: head.kind === 'head' ? head.head : prior.reviewedHead });
+        this.session.store.markAggregate(run, operationId, {
+          status: 'delivered',
+          reviewedHead: head.kind === 'head' ? head.head : prior.reviewedHead,
+        });
         return { status: 'delivered', operationId };
       }
       if (decision.action === 'refused') {

@@ -885,19 +885,22 @@ export class RunStore<Projection = BatchStatement[]> {
       outcome: row.outcome_json ? JSON.parse(row.outcome_json) : null,
     };
   }
-  prepareAggregate(run: Run, input: {
-    operationId: string;
-    recordKey: string;
-    subjectId: string;
-    sourceAlias: string;
-    intended: IntendedObservation;
-    commandKey: string;
-    requestBytes: string;
-    reviewedHead: RetainedObservationHead | null;
-    expectedObservation?: string | null;
-    status: AggregateOperationStatus;
-    nativeReason?: string | null;
-  }): AggregateOperation {
+  prepareAggregate(
+    run: Run,
+    input: {
+      operationId: string;
+      recordKey: string;
+      subjectId: string;
+      sourceAlias: string;
+      intended: IntendedObservation;
+      commandKey: string;
+      requestBytes: string;
+      reviewedHead: RetainedObservationHead | null;
+      expectedObservation?: string | null;
+      status: AggregateOperationStatus;
+      nativeReason?: string | null;
+    },
+  ): AggregateOperation {
     validateRun(run);
     identifier(input.operationId, 64, /^[0-9a-f]{64}$/u);
     keyId(input.recordKey);

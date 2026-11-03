@@ -58,7 +58,10 @@ test('32/64/128 VNDB observation intents stay O(N+A+R) with indexed pages and fi
               return {
                 key: command.key,
                 status: 201,
-                value: { candidate: `00000000-0000-4000-8000-${sequence.value.toString().padStart(12, '0')}`, revision: 1 },
+                value: {
+                  candidate: `00000000-0000-4000-8000-${sequence.value.toString().padStart(12, '0')}`,
+                  revision: 1,
+                },
               };
             return { key: command.key, status: 200, value: { revision: 1 } };
           }),

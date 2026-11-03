@@ -316,7 +316,12 @@ test('same-revision statistic refresh waits for explicit resolution and retains 
     expect(f.writes).toHaveLength(1);
     const pending = await f.importer.pageObservationConflicts('vndb');
     expect(pending.operations).toHaveLength(1);
-    expect(() => f.importer.session.store.acknowledgeStatisticRefresh(pending.operations[0] ? f.importer.session.store.activeRun('vndb')! : f.statisticRuns[0]!, 'v123')).toThrow();
+    expect(() =>
+      f.importer.session.store.acknowledgeStatisticRefresh(
+        pending.operations[0] ? f.importer.session.store.activeRun('vndb')! : f.statisticRuns[0]!,
+        'v123',
+      ),
+    ).toThrow();
     const resolved = await f.importer.resolveObservation(
       'vndb',
       pending.operations[0]!.operationId,

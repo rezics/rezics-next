@@ -15,7 +15,7 @@ const value = {
 
 test('importer observation digests are the mounted sourceObservation helper', () => {
   expect(observationDigest(subjectId, value)).toBe(sourceObservation(subjectId, 'vndb', value).digest);
-  expect(
-    observationDigest(subjectId, { ...value, expectedObservation: 'a'.repeat(64) } as typeof value),
-  ).toBe(sourceObservation(subjectId, 'vndb', { ...value, expectedObservation: 'a'.repeat(64) }).digest);
+  expect(observationDigest(subjectId, { ...value, expectedObservation: 'a'.repeat(64) } as typeof value)).toBe(
+    sourceObservation(subjectId, 'vndb', { ...value, expectedObservation: 'a'.repeat(64) }).digest,
+  );
 });

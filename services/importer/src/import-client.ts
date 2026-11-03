@@ -364,32 +364,36 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(isImportSourceRecordMetadataResult(reply.body));
     return reply.body;
   }
-function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceStatisticValue): ImportSourceStatisticFigure {
-  const value = snapshot(body, RESPONSE_BYTES);
-  ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
-  const { expectedObservation: _echo, ...row } = value as Record<string, unknown>;
-  const observation = row.observation;
-  const { expectedObservation: _expected, ...fields } = request as ImportSourceStatisticValue & {
-    expectedObservation?: string | null;
-  };
-  const expected = JSON.parse(JSON.stringify({ source, ...fields })) as Record<string, unknown>;
-  delete expected.expectedObservation;
-  if (expected.sourceAlias === source) delete expected.sourceAlias;
-  if (observation !== undefined) {
-    ensure(
-      typeof observation === 'object' &&
-        observation !== null &&
-        !Array.isArray(observation) &&
-        Object.keys(observation).sort().join(',') === 'digest,kind' &&
-        (observation as { kind: unknown }).kind === 'unversioned' &&
-        typeof (observation as { digest: unknown }).digest === 'string' &&
-        /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
-    );
-    expected.observation = observation;
+  function statisticFigure(
+    body: unknown,
+    source: 'vndb',
+    request: ImportSourceStatisticValue,
+  ): ImportSourceStatisticFigure {
+    const value = snapshot(body, RESPONSE_BYTES);
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+    const { expectedObservation: _echo, ...row } = value as Record<string, unknown>;
+    const observation = row.observation;
+    const { expectedObservation: _expected, ...fields } = request as ImportSourceStatisticValue & {
+      expectedObservation?: string | null;
+    };
+    const expected = JSON.parse(JSON.stringify({ source, ...fields })) as Record<string, unknown>;
+    delete expected.expectedObservation;
+    if (expected.sourceAlias === source) delete expected.sourceAlias;
+    if (observation !== undefined) {
+      ensure(
+        typeof observation === 'object' &&
+          observation !== null &&
+          !Array.isArray(observation) &&
+          Object.keys(observation).sort().join(',') === 'digest,kind' &&
+          (observation as { kind: unknown }).kind === 'unversioned' &&
+          typeof (observation as { digest: unknown }).digest === 'string' &&
+          /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
+      );
+      expected.observation = observation;
+    }
+    ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(row)), expected));
+    return row as ImportSourceStatisticFigure;
   }
-  ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(row)), expected));
-  return row as ImportSourceStatisticFigure;
-}
 
   async function writeSourceStatistic(
     input: {
@@ -691,7 +695,9 @@ function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceSta
             /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
         );
       }
-      ensure(typeof value.sourceRecordId === 'string' && typeof value.asOf === 'string' && typeof value.count === 'number');
+      ensure(
+        typeof value.sourceRecordId === 'string' && typeof value.asOf === 'string' && typeof value.count === 'number',
+      );
       return value as ImportSourceStatisticFigure;
     });
   }

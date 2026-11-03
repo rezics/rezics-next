@@ -117,7 +117,8 @@ export function parseObservationArgs(argv: readonly string[]): ObservationArgs {
   const operation = values.get('--operation');
   if (operation !== undefined && !DIGEST.test(operation))
     throw new InputFailure('--operation must be a 64-hex operation id.');
-  if (after !== undefined && operation !== undefined) throw new InputFailure('--after cannot be combined with --operation.');
+  if (after !== undefined && operation !== undefined)
+    throw new InputFailure('--after cannot be combined with --operation.');
   const reviewed = values.get('--reviewed-observation');
   if (reviewed !== undefined && !DIGEST.test(reviewed))
     throw new InputFailure('--reviewed-observation must be the 64-hex head shown in the reviewed detail.');
@@ -168,7 +169,8 @@ function origin(value: string, testOrigin?: string): string {
     throw new InputFailure();
   if (testOrigin) {
     const test = new URL(testOrigin);
-    if (test.protocol !== 'http:' || test.hostname !== '127.0.0.1' || url.origin !== test.origin) throw new InputFailure();
+    if (test.protocol !== 'http:' || test.hostname !== '127.0.0.1' || url.origin !== test.origin)
+      throw new InputFailure();
     return url.origin;
   }
   if (url.protocol !== 'https:') throw new InputFailure();
@@ -255,7 +257,9 @@ export async function runObservationsCli(
       ...page.operations.map(
         (operation) =>
           `${operation.operationId}  ${operation.recordKey}  ${operation.intended.asOf}  ${operation.intended.kind}  ${operation.status}${
-            operation.nativeReason ? `  ${nativeReason(parseObservationReason(operation.nativeReason) ?? 'cas-mismatch')}` : ''
+            operation.nativeReason
+              ? `  ${nativeReason(parseObservationReason(operation.nativeReason) ?? 'cas-mismatch')}`
+              : ''
           }`,
       ),
       page.next ? `next --after ${page.next}` : 'end of page',
@@ -301,7 +305,10 @@ async function runResolve(
       transport: {
         batchWrite: (request) => transport.batch(request, signal),
         readFence: (tuple) =>
-          transport.fence({ source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group }, signal),
+          transport.fence(
+            { source: tuple.source, externalId: tuple.external_id, fieldGroup: tuple.field_group },
+            signal,
+          ),
         writeSourceStatistic: (input) => transport.writeSourceStatistic(input, signal),
         clearSourceStatistic: (input) => transport.clearSourceStatistic(input, signal),
         readSourceStatistics: (input) => transport.readSourceStatistics(input, signal),
@@ -309,7 +316,12 @@ async function runResolve(
       },
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
     });
-    const result = await importer.resolveObservation(parsed.source, parsed.operation!, parsed.reviewedObservation!, signal);
+    const result = await importer.resolveObservation(
+      parsed.source,
+      parsed.operation!,
+      parsed.reviewedObservation!,
+      signal,
+    );
     if (result.status === 'busy')
       return { code: 5, stdout: '', stderr: 'This source already has an active import.\n', openHandles: 0 };
     if (result.status === 'resume')
@@ -350,7 +362,12 @@ async function runResolve(
   } catch (error) {
     if (error instanceof CredentialInputError)
       return { code: 2, stdout: '', stderr: 'Input or account key is unavailable or invalid.\n', openHandles: 0 };
-    return { code: 1, stdout: '', stderr: 'Observation resolution failed; durable state is retained.\n', openHandles: 0 };
+    return {
+      code: 1,
+      stdout: '',
+      stderr: 'Observation resolution failed; durable state is retained.\n',
+      openHandles: 0,
+    };
   } finally {
     await importer?.close();
   }

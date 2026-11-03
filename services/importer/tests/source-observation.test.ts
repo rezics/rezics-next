@@ -122,11 +122,7 @@ async function observationFixture() {
       if (!row || row.cleared) return { count: 0, state: 'insufficient_data', mean: null };
       return { count: row.count as number, state: 'ready', mean: row.mean as number };
     },
-    async writeSourceStatistic(input: {
-      subjectId: string;
-      value: Record<string, unknown>;
-      idempotencyKey: string;
-    }) {
+    async writeSourceStatistic(input: { subjectId: string; value: Record<string, unknown>; idempotencyKey: string }) {
       writes.push({
         method: 'PUT',
         path: `/v1/subjects/${input.subjectId}/source-statistics/vndb`,
@@ -142,11 +138,7 @@ async function observationFixture() {
         observation: { kind: 'unversioned', digest: observationDigest(input.subjectId, value as never) },
       };
     },
-    async clearSourceStatistic(input: {
-      subjectId: string;
-      value: Record<string, unknown>;
-      idempotencyKey: string;
-    }) {
+    async clearSourceStatistic(input: { subjectId: string; value: Record<string, unknown>; idempotencyKey: string }) {
       writes.push({
         method: 'POST',
         path: `/v1/subjects/${input.subjectId}/source-statistics/vndb:clear`,
@@ -208,9 +200,10 @@ test('newer refresh is automatic; equal-date waits; stale resolve is rejected; c
     expect(listed.stdout).toContain(page.operations[0]!.operationId);
     const inspected = page.operations[0]!;
     f.stored.set(subjectId, { ...f.stored.get(subjectId)!, mean: 6.5 });
-    expect(
-      await f.importer.resolveObservation('vndb', inspected.operationId, inspected.reviewedHead!.digest),
-    ).toEqual({ status: 'conflict', operationId: inspected.operationId });
+    expect(await f.importer.resolveObservation('vndb', inspected.operationId, inspected.reviewedHead!.digest)).toEqual({
+      status: 'conflict',
+      operationId: inspected.operationId,
+    });
     const current = (await f.importer.pageObservationConflicts('vndb')).operations[0]!;
     const resolved = await f.importer.resolveObservation('vndb', current.operationId, current.reviewedHead!.digest);
     expect(resolved.status).toBe('delivered');
@@ -237,9 +230,10 @@ test('interrupted delivery resumes the sealed body and key; older dates stay ref
     expect((await f.run(vn(800, 20))).status).toBe('observation-conflict');
     const refused = (await f.importer.pageObservationConflicts('vndb')).operations[0]!;
     expect(refused.status).toBe('refused');
-    expect(
-      await f.importer.resolveObservation('vndb', refused.operationId, refused.reviewedHead!.digest),
-    ).toEqual({ status: 'refused', operationId: refused.operationId });
+    expect(await f.importer.resolveObservation('vndb', refused.operationId, refused.reviewedHead!.digest)).toEqual({
+      status: 'refused',
+      operationId: refused.operationId,
+    });
   } finally {
     await f.close();
   }
@@ -251,7 +245,9 @@ test('aggregate journal migrates beside existing commands', () => {
     for (const table of ['run_aggregate_operations', 'run_aggregate_heads'] as const)
       expect(RUN_TABLES).toContain(table);
     const tables = store.database
-      .query(`SELECT name FROM sqlite_master WHERE type='table' AND name IN ('run_commands','run_aggregate_operations')`)
+      .query(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('run_commands','run_aggregate_operations')`,
+      )
       .all() as { name: string }[];
     expect(tables.map((row) => row.name).sort()).toEqual(['run_aggregate_operations', 'run_commands']);
   } finally {
