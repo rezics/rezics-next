@@ -122,6 +122,7 @@ function validateSnapshot(
   )
     throw new TypeError('Invalid native Collection discovery snapshot');
 
+  const position = value.position;
   const ids = new Set<string>();
   const collections = value.collections.map((candidate): PublicCollectionDiscoveryRow => {
     if (
@@ -130,7 +131,7 @@ function validateSnapshot(
       typeof candidate.id !== 'string' ||
       typeof candidate.revision !== 'bigint' ||
       candidate.revision < 0n ||
-      candidate.revision > value.position ||
+      candidate.revision > position ||
       typeof candidate.title !== 'string' ||
       candidate.title.trim().length === 0 ||
       (candidate.description !== null && typeof candidate.description !== 'string')
@@ -151,7 +152,7 @@ function validateSnapshot(
     };
   });
 
-  return { partition, position: value.position, collections };
+  return { partition, position, collections };
 }
 
 function validateCount(value: unknown, partition: number) {
