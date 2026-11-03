@@ -441,7 +441,7 @@ registration, source reader or hydration implementation are added here.
 `spaceDiscoverySource().dependencies()` exposes explicit preparation/capability state for registration;
 `readSpaceDiscoveryFrontier` reports native acknowledgement and exact decimal progress independently of relay delivery.
 
-Decision: expose tuple-fence readiness only after Search registers an explicit source generation/cut and publishes an
+Decision: expose tuple-fence readiness only after an owner registers an explicit source generation/cut and publishes an
 exact current witness for every retained Space; an empty Search page never proves that a Space has no source tuples.
 Realm icons still do not carry imported provenance.
 
@@ -481,6 +481,23 @@ the whole tuple witness. Search must apply this before publishing and during fin
 adapter still needs an owner method such as `currentSourceTupleWitnesses(spaceKeys)` that returns the authoritative
 current Space/Realm revisions, tuple list, producer generation/epoch/source position and an explicit complete bit;
 eligibility pages cannot supply those facts.
+
+Decision: the default publisher proves empty provenance only for the current native authored Space/Realm revision types; it preserves any separately registered imported relationship producer.
+
+`space-discovery-publisher.ts` installs the authored-head capability and publishes one retained native owner per
+maintenance step. It reads both exact current revisions and the real partition epoch/position from one released
+snapshot, then rechecks that placement/position and the heads inside the publication command. Missing revision
+rows and changed owner cuts withhold publication. Native authored revision schemas accept no imported provenance;
+their explicit empty tuple set is independent of protected, removed or filtered public results. This capability
+does not infer absence for imported relationship producers. A separately registered producer retains its generation,
+cut and explicit tuple inventory.
+
+The existing minute recovery workflow first repairs tuple edges and initializes dependency inventory, then runs at
+most twenty native witness steps before continuing. The pending-witness index supplies one locator; each step adds
+one producer point read/registration, one locator seek, one placement read and one exact Space/Realm head query,
+plus the existing bounded publication transaction. No source pages, member census or individual card hydration are
+used. Only the existing final owner/fence reader grants `complete: true`; publication acknowledgement remains
+provisional. Focused native outcomes are in `test/community/space-discovery-publisher.test.ts`.
 
 Decision: a current Space tuple read certifies `complete: true` only after native placement equality and exact expected/reference tuple coverage; missing tuples never stand in for complete provenance.
 

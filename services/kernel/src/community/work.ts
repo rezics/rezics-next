@@ -1,5 +1,6 @@
 import { registerDiscoveryWork } from './discovery-register.ts';
 import { createSpaceDiscoveryEffect } from './space-discovery.ts';
+import { publishNativeSpaceDiscoveryWitness } from './space-discovery-publisher.ts';
 import {
   initializeSpaceDiscoveryDependencies,
   nextSpaceDiscoveryDependencyInstall,
@@ -225,6 +226,10 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
     name: 'community.space-dependencies.recover',
     ...COMMAND_STEP_RETRIES,
   });
+  const publishNativeWitness = DBOS.registerStep(() => publishNativeSpaceDiscoveryWitness(context.pool), {
+    name: 'community.space-dependencies.publish-native-witness',
+    ...COMMAND_STEP_RETRIES,
+  });
   const continueInitialization = DBOS.registerStep(
     async () => {
       await context.client.enqueue({
@@ -241,6 +246,7 @@ async function registerSpaceDiscoveryDependencies(context: WorkContext): Promise
       for (let page = 0; page < 20; page++) {
         if (await repairTupleWitness()) continue;
         if (!(await initialize())) {
+          if (await publishNativeWitness()) continue;
           for (const key of await recover()) await enqueue(key);
           return;
         }
