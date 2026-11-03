@@ -31,6 +31,8 @@ export type NativeKernelRequest = {
   url: string;
   authorization: string | null;
   idempotencyKey: string | null;
+  ifMatch: string | null;
+  session: string | null;
   body?: string;
   responseStatus?: number;
   /** Direct fixture API traffic is excluded from browser/BFF transport observations. */
@@ -874,10 +876,14 @@ async function startStack(): Promise<
           url: `${url.pathname}${url.search}`,
           authorization: request.headers.get('authorization'),
           idempotencyKey: request.headers.get('idempotency-key'),
+          ifMatch: request.headers.get('if-match'),
+          session: request.headers.get('rezics-session-token'),
           fixtureRequest: request.headers.get('x-native-fixture-request') === '1',
           ...(request.method === 'POST' && ['/v1/copies', '/v1/subjects'].includes(url.pathname)
             ? { body: await request.clone().text() }
-            : {}),
+            : request.method === 'PATCH'
+              ? { body: await request.clone().text() }
+              : {}),
         };
         requests.push(observed);
         const createdReadFailure = request.method === 'GET' ? createdSubjectReadFailures.get(url.pathname) : undefined;

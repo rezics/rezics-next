@@ -27,9 +27,10 @@ Navigation is dirty only when the effective patch changes stored terms; staying 
 selected language, and the existing pending-send warning says an unresolved request may finish and is not cancelled by
 leaving.
 
-The session BFF preserves identity, CSRF, concurrency, idempotency and native session headers. Uncertain delivery
-freezes the payload, ETag and key for retry. Stale revisions or conflicting keys require reload, comparison and an
-explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read
+The session BFF preserves identity, CSRF, concurrency, idempotency and native session headers. Native website proof
+provisions subjects through ordinary `POST /v1/subjects`; imported field support remains the kernel terms command
+that BFF already calls. Uncertain delivery freezes the payload, ETag and key for retry. Stale revisions or
+conflicting keys require reload, comparison and an explicit new confirmation. A successful write is followed by a native read of the same returned ID; only that read
 supplies current terms and the canonical reader address. Failed or concealed rereads never publish a local preview.
 The generated client supplies the PATCH body type. A successful response must contain exactly the requested Subject
 and positive revision with its matching strong ETag; its returned Session is passed to the immediate current read.
