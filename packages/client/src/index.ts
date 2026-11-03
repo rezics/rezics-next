@@ -29,6 +29,16 @@ export type {
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
+export type {
+  RealmClaimReviewApprovalAdvice,
+  RealmClaimReviewClaimant,
+  RealmClaimReviewInspection,
+  RealmClaimReviewItem,
+  RealmClaimReviewOperation,
+  RealmClaimReviewPage,
+  RealmClaimReviewPresentation,
+  RealmClaimReviewQuery,
+} from './kernel/community/claim-review-page';
 
 type Routes = KernelType['~Routes']['v1'];
 type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['labels']['get']['response'][200];
