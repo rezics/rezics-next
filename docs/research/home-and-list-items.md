@@ -2,8 +2,9 @@
 
 Research date: 2026-11-01. The inventory remains historical supporting evidence. The migration and waiting
 contracts below follow the [owning Web requirements](../goals/web.md#adopted-quality-round-three-requirements),
-including the adopted [quality round three findings](quality-round3-backlog.md); they do not create another
-product authority.
+including the adopted [quality round three findings](quality-round3-backlog.md) and [core-page experience
+requirements](../goals/web.md#adopted-core-page-experience-requirements); they do not create another product
+authority.
 
 ## Recommendation
 

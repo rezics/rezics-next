@@ -30,6 +30,8 @@ export type FeedActionBarProps = {
   href?: string | undefined;
   signedIn: boolean;
   reaction?: FeedReaction | undefined;
+  /** Existing reaction engine presentation; feed cards keep their vote layout unless a caller opts in. */
+  reactionPresentation?: 'chips' | 'vote' | 'vote-plain' | undefined;
   plain?: boolean | undefined;
   /** Detail pages retain the existing reply-intent owner. */
   reply?: { onReply(): void; disabled?: boolean } | { href: string } | undefined;
@@ -149,6 +151,7 @@ function ActionVisit({
   title,
   signedIn,
   reaction,
+  reactionPresentation,
   plain,
   reply,
   library,
@@ -325,7 +328,14 @@ function ActionVisit({
       className={`relative z-10 flex min-w-0 max-w-full flex-wrap items-center gap-1 ${layout === 'detail' ? 'justify-end' : ''}`}
     >
       <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1" data-slot="feed-reaction-cluster">
-        <VoteControl reaction={reaction} signedIn={signedIn} href={href} locale={locale} plain={plain} />
+        <VoteControl
+          reaction={reaction}
+          signedIn={signedIn}
+          href={href}
+          locale={locale}
+          plain={plain}
+          presentation={reactionPresentation}
+        />
         {layout === 'detail'
           ? (activeOverflow ?? (
               <Menu

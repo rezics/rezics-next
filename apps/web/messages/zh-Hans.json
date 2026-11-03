@@ -2018,6 +2018,8 @@
   "subject_community_review": "在此版块写评论",
   "subject_community_discuss": "在此版块发起讨论",
   "subject_community_more": "更多帖子",
+  "subject_community_citation_unavailable": "暂时无法获取这条评价的引用信息。",
+  "subject_community_viewer_reaction_unavailable": "暂时无法获取你的回应状态。",
   "settings_profile_edit_denied": "当前登录身份无法编辑此资料。",
   "settings_profile_review_needed": "请对照最新资料检查草稿，然后重新保存。",
   "settings_profile_self_unavailable": "暂时无法获取当前账号的可编辑资料，请重新加载。部分没有公开用户名的账号尚不支持编辑资料。",

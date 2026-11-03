@@ -12,12 +12,14 @@ export function VoteControl({
   href,
   locale,
   plain = false,
+  presentation,
 }: {
   reaction?: FeedReaction | undefined;
   signedIn: boolean;
   href?: string | undefined;
   locale: string;
   plain?: boolean | undefined;
+  presentation?: ThreadReactionsProps['presentation'];
 }) {
   const options = { locale: locale as Locale };
   if (reaction && href)
@@ -27,7 +29,7 @@ export function VoteControl({
         signedIn={signedIn}
         returnTo={href}
         locale={locale}
-        presentation={plain ? 'vote-plain' : 'vote'}
+        presentation={presentation ?? (plain ? 'vote-plain' : 'vote')}
         settleWithRead={reaction.settleWithRead ?? true}
       />
     );

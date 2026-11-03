@@ -96,11 +96,14 @@ independent rather than making shared files or unfinished producer delivery into
   `KernelClient.boards({ id }).slowMode` GET/PUT when generated, and otherwise shows unavailable. Edits, mute/block,
   penalties and watch stay out of this slice. Details: [board slow mode](../../apps/web/src/threads/slow-mode.md).
 - **Watch.** The default thread route shows the current confirmed watch state beside its title and offers one explicit
-  watch or stop action to the current signed-in reader. Private reads stay in the mounted client and outside SSR/shared
-  caches; target, access or session replacement retires the result. Unknown commands retain their immutable identity
-  for exact retry, while refusal requires a fresh status read. Watching grants no read access or email delivery;
-  existing notification preferences still govern in-app notices. Content's generated watch read/command API remains
-  the named missing producer behind the installed unavailable seam. Board-wide watching is a later extension.
+  watch or stop action to the current signed-in reader. Bind generated `GET /v1/threads/:id/watch` returning
+  `{watching}`, `PUT` and `DELETE` returning 204. No revision, command-key receipt or version lock is defined.
+  Private reads stay in the mounted client and outside SSR/shared caches; target, access or session replacement retires
+  the result. Unknown commands retain their immutable requested state for exact retry; a fresh status read reports
+  current state but does not prove that an earlier unknown write applied. Watching grants no read access or email
+  delivery; existing notification preferences still govern in-app notices. Performance owns Settings watch
+  inventory/removal and Inbox notice decoding/destinations; Web owns the thread-page entry point. Board-wide watching
+  is a later extension.
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter
   and exact `kind` selection. Following Collections are delivered: title, description and `/collections/{id}` are
   used as supplied. Membership, rules, covers, authors and ratings stay omitted when absent. Public discovery
@@ -292,6 +295,69 @@ History, erasure, Library bulk/preparation and private SSR retain their producer
 Accounts alone may reconcile its lifecycle transport fixture to delivered private review/readback ports; preserve
 all security, current credential/key, uncertainty, `not_applied`, effect-count and first native lifetime-cleanup
 assertions. No Web retry or competing lifecycle writer follows from this adoption.
+
+### Adopted core-page experience requirements
+
+The [page-needs API/render audit](../research/page-needs-api-render-audit.md) is adopted as supporting evidence for the
+requirements below. It inspected mounted routes, schemas, default adapters and production consumers at its stated
+source revision. Its source findings establish neither current native execution nor rendered, accessibility or
+publication success. Earlier REZICS apps and reference-platform comparisons establish the minimum useful experience;
+their transports and authority models do not carry over. Missing producers, dropped admitted fields and deliberately
+withheld fields require different remedies.
+
+A person must recognize an item, understand its context and applicable actions, act deliberately and recover
+truthfully. Existing shared controls do not complete that experience when a page supplies no interaction state. Page
+owners assemble bounded current disclosure, viewer state and applicable actions together, with public responses and
+private overlays kept distinct. They do not substitute per-row point reads, invented zeros, synthetic revisions,
+browser registries or client-side candidate scans for missing page capabilities.
+
+| Finding | Required outcome and owner |
+| --- | --- |
+| A01, P1 | Content supplies Home's bounded actual reaction targets, counts, viewer selection and freshness; Web binds the existing shared action engine. Board's supplied projection does not establish Home delivery. |
+| A02, P1 | Content supplies review target/Subject context, cited score and reply-parent context in Home summaries. Web composes them with the card. A historical review citation is independent of its author's current vote. |
+| A05, P1 | Library supplies bounded current private entry/own-score overlays for admitted Search and Collection identities and supports deliberate own-score shelf ordering; Content owns rating facts. Search owns its results, Web the Library/Collection callers. Point reads and public-cache personalization are insufficient. |
+| A07, P1 | Content supplies the caller's bounded watch inventory, continuation and owned removal identity, including safe removal after access loss. Performance owns Settings management; Web retains only the thread-page entry point. |
+| A03, P2 | Content, Search and Library deliver public Collection/review/Space registration, default discovery and the closed transport union together. Existing Following Collections remain delivered independently. Web consumes real returned variants; local adapter types are insufficient. |
+| A08, P2 | Content defines and supplies authoritative reply count and last conversation activity to the relevant page projections. Loaded reply length and first-post edit time cannot stand for those facts. Optional consumer properties do not establish schema support. |
+| A06, P2 | Search supplies type-aware descriptive/creator/release/public-figure context in mixed results; Library supplies admitted disambiguation facts in its shelves and Collection members, with Semantic as fact authority. Existing rich Subject search remains intact. Missing or withheld facts remain distinct. |
+| A04, P2 | Content, with Accounts public identity support, assembles bounded current notice target/actor context or exposes an owned bounded composition. Inbox already resolves useful text and batches names; Performance replaces remaining per-target composition under its existing ownership. Do not persist privileged display text past current admission. |
+| A10, P2 | Content adds an owned idempotent individual-notice acknowledgement with badge consequences, retaining existing through-boundary marking. Performance binds it; selecting one notice cannot mark all earlier notices. |
+| A09, P2 | Semantic admits sourced work-specific Character identity/main-character linkage in an active Definition before Web presents it. Appearance role is not that identity; generic relation transport does not admit new vocabulary. |
+| I01, P1 | Web's shared Subject community projection preserves admitted first-post review citation and supplied reaction/viewer fields. Works, Characters, People and Organizations share the same reader, existing reaction engine and contribution destinations. Absent activity fields remain A08, not zero. |
+| I02, P1 | Performance binds actual `thread_watch` notice decoding and current safe destinations in its Inbox. The unavailable decoder currently rejects the whole page; do not silently discard unknown or malformed rows. No second Web Inbox writer. |
+| I03, P1 | Web binds the mounted thread watch contract: GET returns `{watching}`, PUT and DELETE return 204. There is no watch revision or receipt-key contract. Remove incompatible local revision requirements, preserve naturally idempotent requested-state retries and current credential/lifetime fences, and distinguish fresh state from proof that an uncertain request applied. Performance owns Settings management and Inbox decoding/destinations. |
+| I04, P2 | Web adds a visible full-catalogue and scoped-ranking handoff from Realm/Space entry to Search's existing Realm population/facet/rating controls. Search remains sole Search-page owner. Published items are not the Realm population. |
+| I05, P2 | Web exposes the personal shelf table's admitted active-progress column through the existing column mechanism; no extra progress read. Keep native units and unknown historical meaning. |
+| I06, P2 | Web connects native account shelf preferences to Settings and Library defaults. Explicit valid URL choices override saved defaults. Only executable Library sorts and admitted columns are offered; unsupported stored preferences retain their meaning without pretending a rating sort executes. Accounts retains preference versioning and writes. |
+| I07, P2 | Web adds supported per-sale work/offer destinations within the next complete creator-sales journey, using already supplied targetSubjectId/offerId. No buyer-private order destination or standalone link-repair task. |
+
+Decision: Subject-community cards show the admitted first-post citation as immutable score context and mount reactions only when native counts and an explicit viewer slot are both present.
+
+The existing mixed Search journey receives the closed wire/client variants, bounded descriptive facts and private
+Library overlays under final currentness. The existing publication journey separately owns actual default
+registration, and Library supplies the authentic private overlay producer. Assignment does not establish delivery:
+absent typed capabilities remain unavailable. Web retains the Realm/Space catalogue handoff and Search retains its
+controls.
+
+These requirements enter existing owner journeys. The Home action/reconciliation owner stays singular; Search retains
+query/facet/scope/rating controls; Performance retains Settings watches and Inbox; Content retains native
+feed/board/watch/notice authority; Imports retains native catalogue/provider journeys. Subject assessment ballots
+and independent source statistics remain their reserved separate journey, not community reactions. New engine paths
+carry their derived cost and three-scale growth checks in the same product acceptance.
+
+Already source-covered catalogue facts, Realm identity and publications, Search scopes/facets, Library history and
+Collection lifecycle, board pins, reply branches, Settings security and creator statements do not become new repair
+campaigns. The audit establishes no additional checkout gap: captured terms, order ownership, pending payment,
+settlement and entitlement remain separate. After landing, inspect the actual default journey before calling the
+experience complete; prepared stories, source review and publication are separately qualified evidence.
+
+The native conversation-activity producer reuses the existing activity authority; Home remains the sole feed
+assembler. Board, thread and Subject readers consume exact installed count-kind/cohort/contribution-time/freshness
+fields in their existing bounded page, distinguishing exact, lower-bound, zero and withheld data. The
+source-classification mounted transport likewise extends the existing Subject assessment/provenance owner,
+independently of native ballots, provider SourceStatistics and enjoyment. Internal factories do not establish usable
+transport. Require delivered generated types and reached native outcomes before readiness, followed by inspection of
+the existing interface; no additional frontend owner.
 
 ### Shared navigation and subject purchase entry
 

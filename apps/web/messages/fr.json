@@ -2018,6 +2018,8 @@
   "subject_community_review": "Écrire une critique dans ce forum",
   "subject_community_discuss": "Lancer une discussion dans ce forum",
   "subject_community_more": "Plus de publications",
+  "subject_community_citation_unavailable": "La citation de la critique est indisponible.",
+  "subject_community_viewer_reaction_unavailable": "L’état de votre réaction est indisponible.",
   "settings_profile_edit_denied": "Votre connexion actuelle ne permet pas de modifier ce profil.",
   "settings_profile_review_needed": "Comparez votre brouillon au profil actuel avant de l’enregistrer à nouveau.",
   "settings_profile_self_unavailable": "Le profil modifiable de ce compte est indisponible. Rechargez-le pour réessayer. Certains comptes sans identifiant public ne permettent pas encore la modification du profil.",

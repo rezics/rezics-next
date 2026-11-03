@@ -11,6 +11,7 @@ import { isRecord } from './languages';
 import { subjectSourcesPage } from './subject-sources';
 
 export const communitySubject = { id: '01a17a3b-0884-721b-91ef-d7ffd7bb58e4', label: 'The Little Prince' };
+export const communityCharacter = { id: '01a17a3b-0884-721b-91ef-d7ffd7bb58e5', label: 'The fox' };
 
 export function isCommunityPageTarget(target: unknown): boolean {
   return (
@@ -35,7 +36,11 @@ export const communityAuthor = {
 } as const;
 const id = (suffix: string) => `01a1a000-0000-7000-8000-0000000000${suffix}`;
 
-export function communityThread(kind: CommunityKind, later = false): NativeCommunityThread {
+export function communityThread(
+  kind: CommunityKind,
+  later = false,
+  subject: typeof communitySubject = communitySubject,
+): NativeCommunityThread {
   const threadId = id(kind === 'review' ? (later ? '84' : '81') : later ? '94' : '91');
   const boardId = id(kind === 'review' ? '80' : '90');
   const createdAt = '2026-10-24T00:00:00.000Z';
@@ -53,7 +58,7 @@ export function communityThread(kind: CommunityKind, later = false): NativeCommu
         : later
           ? 'The final meeting'
           : 'What does the fox teach the prince?',
-    subjectIds: [communitySubject.id],
+    subjectIds: [subject.id],
     licence: 'MIT',
     visibility: 'published',
     securityRevision: '1',
@@ -67,13 +72,14 @@ export function communityThread(kind: CommunityKind, later = false): NativeCommu
       boardId,
       parentId: null,
       licence: 'MIT',
-      subjectIds: [],
+      subjectIds: [subject.id],
       visibility: 'published',
       securityRevision: '1',
       createdAt,
       revisedAt: null,
       mediaIds: [],
-      voteCitation: null,
+      voteCitation:
+        kind === 'review' ? { questionId: id('85'), units: 14, revision: 2 } : null,
       revisionId: id(kind === 'review' ? '83' : '93'),
       body: fromPlainText(
         kind === 'review'
@@ -84,6 +90,8 @@ export function communityThread(kind: CommunityKind, later = false): NativeCommu
       sha256: 'a'.repeat(64),
       availability: 'available',
     },
+    reactions: { upvote: 3, like: 2, insightful: 1 },
+    viewerReaction: 'like',
   };
 }
 
@@ -105,12 +113,17 @@ export function communityBoard(kind: CommunityKind): Board {
 
 const subjectThreads: FakeRoute['story'] = ({ request, match }) => {
   const query = new URL(request.url).searchParams;
-  if (match?.[1] !== communitySubject.id || query.get('place') !== GLOBAL) return;
+  const subject = [communitySubject, communityCharacter].find(({ id }) => id === match?.[1]);
+  if (!subject || query.get('place') !== GLOBAL) return;
   const kind = query.get('kind');
   if (kind !== 'review' && kind !== 'discussion') return;
   const cursor = query.get('cursor');
   if (cursor !== null && cursor !== 'community-next') return { status: 400 };
-  return { status: 200, threads: [communityThread(kind, cursor !== null)], next: cursor ? null : 'community-next' };
+  return {
+    status: 200,
+    threads: [communityThread(kind, cursor !== null, subject)],
+    next: cursor ? null : 'community-next',
+  };
 };
 const boardRead: FakeRoute['story'] = ({ match }) => {
   for (const kind of ['review', 'discussion'] as const) {

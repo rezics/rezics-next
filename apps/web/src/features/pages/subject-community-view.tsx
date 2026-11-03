@@ -5,8 +5,11 @@ import { m } from '../../paraglide/messages.js';
 import { Byline } from '../../threads/byline';
 import { threadLocation } from '../../threads/thread-href';
 import { reviewThreadHref } from '../../threads/review-policy';
+import type { ThreadReactionsProps } from '../../threads/thread-reactions';
 import { boardContribution, boardDirectoryHref, boardDirectoryRequest } from '../../threads/board-directory';
 import type { CommunityKind, CommunityRegion, SubjectCommunity } from './subject-community';
+import { SubjectCommunityInteractions } from './subject-community-interactions';
+import { SubjectCommunityPreview } from './subject-community-preview';
 import { linkClass, linkColor } from './shared';
 import { StreamHeading } from './view-heading';
 
@@ -27,6 +30,7 @@ export function SubjectCommunityRegion({
   href,
   paged = false,
   node,
+  preparedTransport,
 }: {
   id: string;
   kind: CommunityKind;
@@ -38,8 +42,10 @@ export function SubjectCommunityRegion({
   href: string;
   paged?: boolean;
   node?: string;
+  preparedTransport?: ThreadReactionsProps['preparedTransport'];
 }) {
   const options = { locale: locale as never };
+  const community = useContext(SubjectCommunityContext);
   const review = kind === 'review';
   const title = review ? m.subject_reviews({}, options) : m.subject_discussion({}, options);
   const threads = region.state === 'ready' ? region.threads : [];
@@ -119,8 +125,13 @@ export function SubjectCommunityRegion({
       )}
       {threads.length > 0 && (
         <ul className="min-w-0">
-          {threads.map((thread) => (
-            <li key={thread.id} className="min-w-0">
+          {threads.map((thread) => {
+            const threadHref = threadLocation(locale, thread);
+            const reader = community?.reader ?? null;
+            const interactionReady =
+              reader !== null && thread.reactions !== undefined && thread.viewerReaction !== undefined;
+            return (
+              <li key={thread.id} className="min-w-0">
               <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
                 <ContentItemHeading
                   level={3}
@@ -128,7 +139,7 @@ export function SubjectCommunityRegion({
                 >
                   <ContentItemTitleLink
                     className={`${linkClass} block min-h-11 content-center rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
-                    href={threadLocation(locale, thread)}
+                    href={threadHref}
                   >
                     {thread.title || m.threads_untitled({}, options)}
                   </ContentItemTitleLink>
@@ -153,6 +164,14 @@ export function SubjectCommunityRegion({
                     {thread.summary}
                   </p>
                 )}
+                <SubjectCommunityPreview
+                  kind={kind}
+                  thread={thread}
+                  subject={subject}
+                  locale={locale}
+                  reader={reader}
+                  interactionReady={interactionReady}
+                />
                 <ListRowControl
                   data-content-item-slot="actions"
                   className="flex flex-wrap gap-x-4 gap-y-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a]:px-2 [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
@@ -170,10 +189,23 @@ export function SubjectCommunityRegion({
                   >
                     {review ? m.subject_community_review({}, options) : m.subject_community_discuss({}, options)}
                   </a>
+                  {community ? (
+                    <SubjectCommunityInteractions
+                      thread={thread}
+                      subject={subject}
+                      locale={locale}
+                      href={threadHref}
+                      contextId={community.contextId ?? null}
+                      reader={reader}
+                      source={community.sourceKey ?? community.now}
+                      preparedTransport={preparedTransport}
+                    />
+                  ) : null}
                 </ListRowControl>
               </ContentItemFrame>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       {next && (
@@ -188,5 +220,14 @@ export function SubjectCommunityRegion({
 export function useSubjectCommunity(kind: CommunityKind, node?: string) {
   const data = useContext(SubjectCommunityContext);
   const region = node && data?.nodes ? data.nodes[node] : data?.regions[kind];
-  return data && region ? { region, authors: data.authors, now: data.now } : undefined;
+  return data && region
+    ? {
+        region,
+        authors: data.authors,
+        now: data.now,
+        reader: data.reader ?? null,
+        contextId: data.contextId ?? null,
+        sourceKey: data.sourceKey ?? data.now,
+      }
+    : undefined;
 }

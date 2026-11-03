@@ -68,6 +68,14 @@ test('Subject discussion and review summaries share semantic rows with exact ind
       authorId: 'mira',
       createdAt: '2026-11-02T11:00:00.000Z',
       summary: longSummary,
+      licence: 'MIT',
+      voteCitation: {
+        questionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58e5',
+        units: 14,
+        revision: 2,
+      },
+      reactions: { upvote: 4, like: 2 },
+      viewerReaction: 'like',
     },
     {
       id: 'second',
@@ -76,6 +84,9 @@ test('Subject discussion and review summaries share semantic rows with exact ind
       authorId: 'missing',
       createdAt: '2026-11-02T11:30:00.000Z',
       summary: '',
+      licence: 'MIT',
+      voteCitation: null,
+      reactions: {},
     },
     {
       id: 'third',
@@ -84,6 +95,7 @@ test('Subject discussion and review summaries share semantic rows with exact ind
       authorId: 'handle-only',
       createdAt: '2026-10-24T00:00:00.000Z',
       summary: 'The final supplied row.',
+      licence: 'MIT',
     },
   ];
   const authors: SubjectCommunity['authors'] = {
@@ -228,6 +240,21 @@ test('Subject discussion and review summaries share semantic rows with exact ind
         expect(preview.textContent).toBe(longSummary);
         expect(preview.className).toContain('[overflow-wrap:anywhere]');
         expect(preview.className).not.toMatch(/truncate|line-clamp|text-left|text-right/);
+        if (kind === 'review') {
+          const citation = first.querySelector<HTMLElement>('[data-slot="review-citation"]')!;
+          expect(citation.dataset.state).toBe('cited');
+          expect(citation.textContent).toContain(m.thread_provenance_rating({}, options));
+          expect(citation.textContent).toContain(m.discussion_provenance_details_rating_units({ units: '14' }, options));
+          expect(citation.textContent).not.toContain(m.thread_provenance_current_vote({}, options));
+          expect(citation.querySelector('details')?.textContent).toContain('01a17a3b-0884-721b-91ef-d7ffd7bb58e5');
+          expect(first.querySelector('[data-slot="community-reaction-summary"]')?.textContent).toContain(
+            m.board_feed_reactions({ count: '6' }, options),
+          );
+          expect(rows()[1]!.querySelector('[data-slot="review-citation"]')?.getAttribute('data-state')).toBe(
+            'unscored',
+          );
+          expect(rows()[2]!.textContent).toContain(m.subject_community_citation_unavailable({}, options));
+        }
         expect(rows()[1]!.querySelector('[data-content-item-slot="preview"]')).toBeNull();
         expect(rows()[1]!.textContent).toContain(m.thread_author_unknown({}, options));
         expect(within(rows()[2]!).getByRole('link', { name: '@lecteur' }).getAttribute('href')).toBe('/fr/@lecteur');

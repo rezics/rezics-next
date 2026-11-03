@@ -3,6 +3,7 @@ import type { KernelClient } from '@rezics/client';
 import { checkDocument, documentText } from '@rezics/document';
 import { readPageAuthors, type PageAuthors } from '../../identity/read';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
+import type { ReactionKind } from '../../threads/reaction-request';
 import { GLOBAL } from './subject-ratings';
 import { pageContext, type SubjectPageData, type SubjectPageLoad } from './subject';
 import { isRecord } from './shared';
@@ -10,8 +11,14 @@ import { isRecord } from './shared';
 export type CommunityKind = 'review' | 'discussion';
 type NativePage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['threads']['get']>>['data']>;
 export type NativeCommunityThread = NativePage['threads'][number];
+export type CommunityVoteCitation = { questionId: string; units: number; revision: number };
+export type CommunityReactionCounts = Partial<Record<ReactionKind, number>>;
 export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'authorId' | 'boardId' | 'createdAt'> & {
   summary: string;
+  licence: string;
+  voteCitation?: CommunityVoteCitation | null;
+  reactions?: CommunityReactionCounts;
+  viewerReaction?: ReactionKind | null;
 };
 export type CommunityRegion = (
   | { state: 'loading' | 'unavailable' | 'closed' }
@@ -22,6 +29,9 @@ export type SubjectCommunity = {
   nodes?: Record<string, CommunityRegion>;
   authors: PageAuthors;
   now: string;
+  reader?: string | null;
+  contextId?: string | null;
+  sourceKey?: string;
 };
 
 export const COMMUNITY_PREVIEW_LIMIT = 5;
@@ -45,9 +55,35 @@ export function communityKinds(nodes: readonly unknown[]): CommunityKind[] {
 type CommunityRequest = Extract<PageRead, { kind: 'subjectThreads' }>;
 const nativeId = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+const reactionKinds = new Set<ReactionKind>(['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad']);
+
+function communityCitation(value: unknown): value is CommunityVoteCitation {
+  return (
+    isRecord(value) &&
+    nativeId(value.questionId) &&
+    Number.isSafeInteger(value.units) &&
+    (value.units as number) >= 0 &&
+    (value.units as number) <= 4096 &&
+    Number.isSafeInteger(value.revision) &&
+    (value.revision as number) >= 1 &&
+    (value.revision as number) <= 2_147_483_647 &&
+    Object.keys(value).every((key) => key === 'questionId' || key === 'units' || key === 'revision')
+  );
+}
+
+function communityReactionCounts(value: unknown): CommunityReactionCounts | null {
+  if (!isRecord(value)) return null;
+  const counts: CommunityReactionCounts = {};
+  for (const [kind, count] of Object.entries(value)) {
+    if (!reactionKinds.has(kind as ReactionKind) || !Number.isSafeInteger(count) || (count as number) < 1)
+      return null;
+    counts[kind as ReactionKind] = count as number;
+  }
+  return counts;
+}
 
 /** Validate only native identity, disclosure and projected fields; never hydrate a missing row. */
-function project(thread: unknown, expected: CommunityRequest): CommunityThread | null {
+function project(thread: unknown, expected: CommunityRequest, admitViewer: boolean): CommunityThread | null {
   if (
     !isRecord(thread) ||
     !nativeId(thread.id) ||
@@ -75,6 +111,20 @@ function project(thread: unknown, expected: CommunityRequest): CommunityThread |
     !checkDocument(post.body)
   )
     return null;
+  if (typeof post.licence !== 'string' || post.licence.length < 1 || post.licence.length > 128) return null;
+  const citationPresent = Object.hasOwn(post, 'voteCitation');
+  if (citationPresent && post.voteCitation !== null && !communityCitation(post.voteCitation)) return null;
+  const reactionsPresent = Object.hasOwn(thread, 'reactions');
+  const reactions = reactionsPresent ? communityReactionCounts(thread.reactions) : undefined;
+  if (reactionsPresent && reactions === null) return null;
+  const viewerPresent = Object.hasOwn(thread, 'viewerReaction');
+  if (
+    admitViewer &&
+    viewerPresent &&
+    thread.viewerReaction !== null &&
+    !reactionKinds.has(thread.viewerReaction as ReactionKind)
+  )
+    return null;
   // The native DTO has no place field. Board-to-place authority stays with the supplied native read.
   return {
     id: thread.id,
@@ -83,6 +133,10 @@ function project(thread: unknown, expected: CommunityRequest): CommunityThread |
     boardId: thread.boardId,
     createdAt: thread.createdAt,
     summary: documentText(post.body).replace(/\s+/g, ' ').trim().slice(0, 280),
+    licence: post.licence,
+    ...(citationPresent ? { voteCitation: post.voteCitation as CommunityVoteCitation | null } : {}),
+    ...(reactionsPresent ? { reactions: reactions! } : {}),
+    ...(admitViewer && viewerPresent ? { viewerReaction: thread.viewerReaction as ReactionKind | null } : {}),
   };
 }
 
@@ -93,6 +147,7 @@ export async function readSubjectCommunity(
   kinds: readonly CommunityKind[],
   paged = false,
   cursor?: string,
+  requestedReader?: string | null,
 ): Promise<SubjectCommunity> {
   const limit = paged ? COMMUNITY_PAGE_LIMIT : COMMUNITY_PREVIEW_LIMIT;
   const entries = await Promise.all(
@@ -107,6 +162,7 @@ export async function readSubjectCommunity(
         const region = composedCommunityRegion(
           { status: result.status, body: result.data },
           { kind: 'subjectThreads', id: subjectId, place: GLOBAL, threadKind: kind, limit },
+          typeof requestedReader === 'string',
         );
         if (region.state === 'ready') region.contributionScope = 'global';
         return [kind, region];
@@ -122,13 +178,37 @@ export async function readSubjectCommunity(
     regions: Object.fromEntries(entries),
     authors: await readPageAuthors(client, authorIds),
     now: new Date().toISOString(),
+    reader: requestedReader ?? null,
   };
+}
+
+function stripViewerReaction(row: unknown): unknown {
+  if (!isRecord(row)) return row;
+  const { viewerReaction: _viewerReaction, ...thread } = row;
+  if (!isRecord(thread.firstPost)) return thread;
+  const { viewerReaction: _firstPostViewerReaction, ...firstPost } = thread.firstPost;
+  return { ...thread, firstPost };
+}
+
+function stripSubjectThreadViewerSlots(
+  reads: SubjectPageData['reads'],
+  plan: ReturnType<typeof planReads>,
+): SubjectPageData['reads'] {
+  const next = { ...reads };
+  for (const [key, descriptor] of Object.entries(plan.reads)) {
+    if (descriptor.kind !== 'subjectThreads') continue;
+    const read = next[key];
+    if (!read || !isRecord(read.body) || !Array.isArray(read.body.threads)) continue;
+    next[key] = { ...read, body: { ...read.body, threads: read.body.threads.map(stripViewerReaction) } };
+  }
+  return next;
 }
 
 /** Decode only the existing native DTO. A failed/unrequested read cannot become an empty invitation. */
 export function composedCommunityRegion(
   read: { status: number; body: unknown } | undefined,
   expected?: CommunityRequest,
+  admitViewer = false,
 ): CommunityRegion {
   if (!read) return { state: 'unavailable' };
   if (isPlatformClosedProblem(read.status, read.body)) return { state: 'closed' };
@@ -148,7 +228,7 @@ export function composedCommunityRegion(
     const threads: CommunityThread[] = [];
     const seen = new Set<string>();
     for (const row of read.body.threads) {
-      const thread = project(row, expected);
+      const thread = project(row, expected, admitViewer);
       if (!thread || seen.has(thread.id)) return { state: 'unavailable' };
       seen.add(thread.id);
       threads.push(thread);
@@ -163,12 +243,14 @@ export function composedCommunityRegion(
 export async function withComposedCommunity(client: KernelClient, loaded: SubjectPageLoad): Promise<SubjectPageLoad> {
   if (loaded.kind !== 'page' || !loaded.page.subject || loaded.page.account) return loaded;
   const plan = planReads(platformRegistry, loaded.page.document as CompositionDocument, pageContext(loaded.page));
+  const reader = loaded.page.requestedReader ?? null;
+  const reads = reader === null ? stripSubjectThreadViewerSlots(loaded.page.reads, plan) : loaded.page.reads;
   const nodes: Record<string, CommunityRegion> = {};
   const regions: SubjectCommunity['regions'] = {};
   for (const [node, key] of Object.entries(plan.nodes)) {
     const descriptor = plan.reads[key];
     if (descriptor?.kind !== 'subjectThreads') continue;
-    const region = composedCommunityRegion(loaded.page.reads[key], descriptor);
+    const region = composedCommunityRegion(reads[key], descriptor, reader !== null);
     // An omitted Context is the native ordinary Global page. A Realm selector, including a native
     // publication fallback, must never turn into an invitation to a Global destination.
     const population = loaded.page.context?.population;
@@ -187,7 +269,16 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
     ...loaded,
     page: {
       ...loaded.page,
-      community: { nodes, regions, authors: await readPageAuthors(client, authorIds), now: new Date().toISOString() },
+      reads,
+      community: {
+        nodes,
+        regions,
+        authors: await readPageAuthors(client, authorIds),
+        now: new Date().toISOString(),
+        reader,
+        contextId: loaded.page.context?.id ?? null,
+        sourceKey: JSON.stringify([loaded.page.subject, loaded.page.context?.id ?? null, loaded.page.requestedRealm ?? null]),
+      },
     },
   };
 }
@@ -209,6 +300,15 @@ export async function withSubjectCommunity(
     return loaded;
   const kinds = communityKinds(loaded.page.document.content);
   if (!kinds.length) return loaded;
-  const community = await readSubjectCommunity(client, loaded.page.subject, kinds, view !== undefined, cursor);
+  const community = await readSubjectCommunity(
+    client,
+    loaded.page.subject,
+    kinds,
+    view !== undefined,
+    cursor,
+    loaded.page.requestedReader ?? null,
+  );
+  community.contextId = loaded.page.context?.id ?? null;
+  community.sourceKey = JSON.stringify([loaded.page.subject, loaded.page.context?.id ?? null, loaded.page.requestedRealm ?? null]);
   return { ...loaded, page: { ...loaded.page, community } };
 }

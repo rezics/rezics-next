@@ -2018,6 +2018,8 @@
   "subject_community_review": "在此看板撰寫評論",
   "subject_community_discuss": "在此看板發起討論",
   "subject_community_more": "更多貼文",
+  "subject_community_citation_unavailable": "目前無法取得這則評價的引用資料。",
+  "subject_community_viewer_reaction_unavailable": "目前無法取得你的表態狀態。",
   "settings_profile_edit_denied": "目前的登入身分無法編輯這份個人資料。",
   "settings_profile_review_needed": "請對照最新資料檢查草稿，再重新儲存。",
   "settings_profile_self_unavailable": "暫時無法取得目前帳號的可編輯資料，請重新載入。部分沒有公開使用者名稱的帳號尚不支援編輯資料。",

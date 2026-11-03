@@ -2018,6 +2018,8 @@
   "subject_community_review": "In diesem Forum eine Rezension schreiben",
   "subject_community_discuss": "In diesem Forum eine Diskussion beginnen",
   "subject_community_more": "Weitere Beiträge",
+  "subject_community_citation_unavailable": "Die Bewertungsreferenz ist nicht verfügbar.",
+  "subject_community_viewer_reaction_unavailable": "Dein Reaktionsstatus ist nicht verfügbar.",
   "settings_profile_edit_denied": "Mit deiner aktuellen Anmeldung kannst du dieses Profil nicht bearbeiten.",
   "settings_profile_review_needed": "Vergleiche deinen Entwurf mit dem aktuellen Profil, bevor du erneut speicherst.",
   "settings_profile_self_unavailable": "Das bearbeitbare Profil dieses Kontos ist nicht verfügbar. Lade es erneut. Einige Konten ohne öffentlichen Nutzernamen unterstützen die Profilbearbeitung noch nicht.",
