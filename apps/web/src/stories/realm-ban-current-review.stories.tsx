@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { RealmBansControl } from '../community/realm-bans-control';
 import type { BanReadState } from '../community/realm-bans';
 import { PatternStory } from './page';
@@ -48,4 +50,18 @@ export const ErasedModeratorKeepsBanVisible: Story = {
       </AppShell>
     </PatternStory>
   ),
+};
+
+export const UnavailableInspection: Story = {
+  ...ErasedModeratorKeepsBanVisible,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.type(
+      canvas.getByRole('textbox', { name: m.realm_bans_inspect_account() }),
+      '01a17a3b-70ea-712a-9ff7-81fc6a938199',
+    );
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_bans_inspect_action() }));
+    await expect(canvas.getByText(m.realm_bans_inspect_unavailable())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.realm_bans_inspect_retry() })).toBeEnabled();
+  },
 };

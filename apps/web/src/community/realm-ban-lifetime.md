@@ -90,10 +90,20 @@ authority and reauthorizes every mutation.
 
 Decision: until Content installs the composed identity fields, use the native target and actor account IDs as fallbacks; render native `actor: null` as an erased moderator identity, never as anonymous.
 
-The new composed current-ban reader remains unbound until Content publishes its generated methods,
-response types and native examples. Decision: the future exact selected-account review accepts an account ID independently of authoring handle lookup without moving the list frontier.
+The composed current-ban reader remains unbound: the installed generated declaration still accepts only
+`limit` and `cursor` and returns the four original row fields. Content's native owner describes the expanded
+selection and identity composition, but source declarations do not install that contract in Web.
 
-The selected inspection will retain the list frontier, bind the
+Decision: expose exact account selection through the failure-only `unavailableRealmBanCurrent` seam until the generated composition is installed; retain selection for explicit retry without reading or moving the list frontier.
+
+`RealmBanCurrentControl` accepts one account ID separately from authoring handle lookup. Its default source
+returns unavailable without network work and never claims absence, identity disclosure or mutation advice.
+Retry uses the same Realm/account; editing or clearing retires the previous selection. It shares caller
+admission and the Stay/Leave boundary with the existing writer. Page replacement unmounts selection;
+caller/source replacement fences queued and late inspection results. Inspection never changes a draft ban,
+an uncertain command or its definitive receipt. All eight locales provide the unavailable explanation.
+
+The installed positive selected inspection still needs to retain the list frontier, bind the
 Realm/account/current episode, and keep absent, denied and unavailable outcomes distinct only where
 the native response admits them. An unavailable inspection retains selection for explicit retry; it
 does not certify absence. A definitive unban receipt stays independent from readback, and neither
@@ -112,6 +122,13 @@ sparse cursor restart, native denials, exact uncertain retry and duplicate exclu
 **UNRUN** in this implementation placement. Existing acceptance/native/bound/growth/browser/Storybook/root
 and stack verification are also deferred to integration; Web workspace typing is the permitted local check.
 Typing cannot establish those outcomes or whole-feature completion.
+
+`tests/realm-ban-current-boundary.test.tsx` exercises 1/10/20 original native-shaped rows through the actual
+generated HTTP client, adapter, default Panel/Control and QueryClient. It checks one page request, bounded
+serialized fixture bytes and retained rows, zero inspection/identity/permission requests through the unavailable
+seam, stable continuation, explicit inspection retry, sparse continuation and retirement. The server-function
+transport is bridged to the original adapter; these authored responses prove no native authority. Composed
+identity/episode/unban/reban growth, positive readback and rendered review remain continuation work.
 
 Existing affected stories remain unchanged:
 

@@ -26,6 +26,8 @@ import {
 } from './realm-ban-target';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
 import { RealmBanLifetime } from './realm-ban-lifetime';
+import { RealmBanCurrentControl } from './realm-ban-current-control';
+import { unavailableRealmBanCurrent, type InspectRealmBanCurrent } from './realm-ban-current';
 import { useCommunityManagementAdmission } from './community-management';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 
@@ -36,6 +38,7 @@ export type RealmBansControlProps = {
   initial?: BanReadState;
   ready: boolean;
   resolve?: ResolveBanTarget;
+  inspect?: InspectRealmBanCurrent;
   read: (cursor?: string) => Promise<BanReadState>;
   write: (input: BanWriteInput) => Promise<BanWriteResult>;
 };
@@ -245,6 +248,7 @@ export function RealmBansControl(props: RealmBansControlProps) {
     old.props.read !== props.read ||
     old.props.write !== props.write ||
     old.props.resolve !== props.resolve ||
+    old.props.inspect !== props.inspect ||
     old.props.lifetime !== props.lifetime ||
     old.props.initial !== props.initial
   ) {
@@ -282,6 +286,7 @@ function RealmBansVisit({
   read,
   write,
   resolve = unavailableTarget,
+  inspect = unavailableRealmBanCurrent,
   gate,
 }: Omit<RealmBansControlProps, 'initial'> & { initial: BanReadState | undefined; gate: RealmBanLifetime }) {
   const id = useId();
@@ -958,6 +963,13 @@ function RealmBansVisit({
               </ContentItemFrame>
             ) : null}
           </form>
+          <RealmBanCurrentControl
+            key={renderGeneration}
+            realmId={realmId}
+            inspect={inspect}
+            gate={gate}
+            disabled={disabled}
+          />
           <h3 ref={currentListHeading} tabIndex={-1} className="font-semibold">
             {m.realm_bans_current()}
           </h3>

@@ -232,6 +232,14 @@ readback, and preserve the immutable command receipt independently. Current abse
 an accepted removal workflow remains pending until Accounts reports completion. See the
 [ban lifetime and consumer boundary](../../apps/web/src/community/realm-ban-lifetime.md).
 
+Decision: expose exact account selection through the failure-only `unavailableRealmBanCurrent` seam until the generated composition is installed; retain selection for explicit retry without reading or moving the list frontier.
+
+The default Control now supplies that unavailable selection state in all eight locales, separately from the
+authoring target. Selection shares caller retirement and Stay/Leave ownership. The 1/10/20 consumer test covers
+the installed original page adapter, default Panel and QueryClient, including sparse continuation and source
+replacement. Positive composed identity, current advice, episode binding and unban/reban readback remain owed;
+consumer fixtures do not establish native currentness, registered completion or producer growth.
+
 ### Realm claim current review boundary
 
 The existing Realm claim queue and requester receipt remain one caller each. Review consumes the generated bounded
