@@ -115,7 +115,7 @@ function spaceResource(
 
 function realmResource(
   base: ViewerActionResource,
-  expectedByRealm: ReadonlyMap<string, Snapshot>,
+  expectedByRealm: ReadonlyMap<string, LocatedSnapshot>,
 ): ViewerActionResource {
   return {
     ...base,
