@@ -9,13 +9,18 @@ import { createLibraryDriver } from './outcome-driver.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
 import { json, publish, setGate, unavailable, write } from './native-conformance.ts';
 import { createNativeShelvesGrowthFixture } from './native-shelves-growth-fixture.ts';
+import { createShelfDigestCollisionScenario } from './native-shelf-digest.ts';
 import { costOf } from '../../support/growth.ts';
 import { createNativeShelvesTypeFixture } from './native-shelves-type-fixture.ts';
 
 const timestamp = (column: string) => `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver> {
-  const world = await createLibraryDriver();
+  const digestScenario = createShelfDigestCollisionScenario();
+  const world = await createLibraryDriver({
+    shelfTypeDigest: digestScenario.digest,
+    workerShelfTypeDigest: digestScenario.workerShelfTypeDigest,
+  });
   try {
     const sources = profileSources('profile-v1');
     await publish(world, await compileCatalogue(sources));
@@ -57,7 +62,7 @@ export async function createLibraryShelvesDriver(): Promise<LibraryShelvesDriver
         await publish(world, await compileCatalogue(sources));
       },
       async forceTypeDigestCollision() {
-        return unavailable('production shelf dictionary digest injection dependency');
+        digestScenario.forceTypeDigestCollision();
       },
       async pauseTypeWork(input) {
         return unavailable(`production shelf ${input.workflow} ${input.boundary} observation latch`);

@@ -5,7 +5,11 @@ import { withConnection } from '../database/pool.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
-import { createShelfTypeKeys, createTypePreparationContinuation } from './shelf-type-keys.ts';
+import {
+  createShelfTypeKeys,
+  createTypePreparationContinuation,
+  shelfTypeDigestFromEnvironment,
+} from './shelf-type-keys.ts';
 import { observePreparationIdentity } from './preparation-source.ts';
 import type { TypePreparationEvidence, TypePreparationIntent } from './type-preparation-contract.ts';
 import recover from './type-preparation-recover.sql';
@@ -19,10 +23,11 @@ type After = readonly [number, string, string];
 /** Existing WorkModule composition only. Jobs contain native metadata locators, never source Type text. */
 export async function registerTypePreparationWork(context: WorkContext) {
   const { pool, client, clock } = context;
+  const shelfTypeDigest = shelfTypeDigestFromEnvironment(context.env);
   const ports = createTypePreparationContinuation({
     pool,
     clock,
-    keys: createShelfTypeKeys(),
+    keys: createShelfTypeKeys(shelfTypeDigest === undefined ? undefined : { digest: shelfTypeDigest }),
     observeIdentity: (id) => observePreparationIdentity({ pool }, id),
   });
   const runner = createLibraryCommandRunner({ pool, clock });

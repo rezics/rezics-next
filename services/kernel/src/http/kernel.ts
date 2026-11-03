@@ -56,6 +56,7 @@ import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
+import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
@@ -105,6 +106,8 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
   search?: SearchService;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
   shelves?: ShelfNativeReadBindings;
+  /** Per-kernel private Type dictionary digest; defaults to SHA-256. */
+  shelfTypeDigest?: ShelfTypeDigest;
 
   discovery?: import('../search/discovery-service.ts').DiscoverySearch;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
@@ -577,6 +580,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+    ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
     shelves: () => {
       const access = resolveAccess({ actions: actionCatalogue(personal), realmRoleReader });
       return createDefaultShelfReads({
@@ -584,7 +588,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         tokens,
         clock,
         access,
-        maintenance: createShelfMaintenanceOps({ pool: dependencies.pool, access, client: workClient, clock }),
+        maintenance: createShelfMaintenanceOps({
+          pool: dependencies.pool,
+          access,
+          client: workClient,
+          clock,
+          ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+        }),
+        ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
         ...dependencies.shelves,
       });
     },

@@ -5,6 +5,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { CloudEvent } from '../events/log.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { ShelfSourceStamp, ShelfTypeKeys } from './shelf-contract.ts';
+import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { TypePreparationDependencies, TypePreparationIdentity } from './type-preparation-contract.ts';
 
@@ -196,6 +197,7 @@ export interface ShelfMaintenanceDependencies {
   readonly access: Access;
   readonly clock?: KernelClock;
   readonly client?: WorkClient | (() => Promise<WorkClient>);
+  readonly shelfTypeDigest?: ShelfTypeDigest;
   /** Released source adapter only; absent identity evidence leaves the exact native frontier pending. */
   readonly sources?: Pick<TypePreparationDependencies, 'observe' | 'observeIdentity'>;
   /** The allocator owner supplies its native derived composition with the existing exact key ABI. */

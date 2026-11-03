@@ -9,6 +9,12 @@ import type { LibraryAccountHost } from './native-account-host.ts';
 import type { TracedCommand } from '../../../../../specs/library-labels-driver.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
 import type { AccountActor } from '../../../src/request/access.ts';
+import type { ShelfTypeDigest } from '../../../src/library/shelf-type-keys.ts';
+
+export type NativeConformanceOptions = Readonly<{
+  shelfTypeDigest?: ShelfTypeDigest;
+  workerShelfTypeDigest?: string;
+}>;
 
 export type NativePersona =
   | 'owner'

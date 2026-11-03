@@ -25,6 +25,31 @@ import progress from './shelf-type-key-progress.sql';
 import publish from './shelf-type-key-publish.sql';
 import finish from './shelf-type-key-finish.sql';
 
+export type ShelfTypeDigest = (bytes: Buffer) => Buffer;
+export type ShelfTypeKeysOptions = Readonly<{ digest?: ShelfTypeDigest }>;
+
+export const SHELF_TYPE_DIGEST_ENV = 'KERNEL_LIBRARY_SHELF_TYPE_DIGEST';
+
+export const sha256ShelfTypeDigest: ShelfTypeDigest = (bytes) => createHash('sha256').update(bytes).digest();
+
+export function applyShelfTypeDigest(bytes: Buffer, digest: ShelfTypeDigest = sha256ShelfTypeDigest): Buffer {
+  const result = digest(Buffer.from(bytes));
+  if (!Buffer.isBuffer(result) || result.length !== 32) throw new TypeError('A shelf type digest must be 32 bytes');
+  return Buffer.from(result);
+}
+
+/** A child worker may receive one fixed digest value as its per-world dictionary configuration. */
+export function shelfTypeDigestFromEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+): ShelfTypeDigest | undefined {
+  const encoded = env[SHELF_TYPE_DIGEST_ENV];
+  if (encoded === undefined) return undefined;
+  const bytes = Buffer.from(encoded, 'base64url');
+  if (bytes.length !== 32 || bytes.toString('base64url') !== encoded)
+    throw new TypeError('Invalid kernel library shelf type digest configuration');
+  return () => Buffer.from(bytes);
+}
+
 type Admission =
   | { kind: 'preparation'; evidence: TypePreparationEvidence }
   | { kind: 'maintenance'; page: ShelfDerivedPage; reservationId: string };
@@ -102,14 +127,15 @@ export async function withShelfDerivedTypePreparation<T>(
   }
 }
 
-export function createShelfTypeKeys(): ShelfTypeKeys {
+export function createShelfTypeKeys(options: ShelfTypeKeysOptions = {}): ShelfTypeKeys {
+  const digestType = options.digest ?? sha256ShelfTypeDigest;
   async function lookup(client: ShelfWrite['client'], route: number, accountId: string, fullType: string) {
     const args = owner(route, accountId),
       bytes = exactBytes(fullType);
     const found = await root.run(client, {
       ...args,
       full_type: fullType,
-      digest: createHash('sha256').update(bytes).digest(),
+      digest: applyShelfTypeDigest(bytes, digestType),
     });
     if (!found) return null;
     if (found.equal) return found.typeId;
@@ -183,7 +209,7 @@ export function createShelfTypeKeys(): ShelfTypeKeys {
       const native = await admission(write);
       const args = owner(write.route, write.accountId),
         bytes = exactBytes(fullType);
-      const digest = createHash('sha256').update(bytes).digest();
+      const digest = applyShelfTypeDigest(bytes, digestType);
       const found = await root.run(write.client, { ...args, digest, full_type: fullType });
       if (found?.equal) return { done: true, typeId: found.typeId };
       if (!found) {

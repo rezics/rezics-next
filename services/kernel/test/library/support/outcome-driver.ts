@@ -15,6 +15,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { insertMember } from '../../../src/library/collection-store.ts';
 import { keyBetween, respacedKeys } from '../../../src/library/ordinal.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { SHELF_TYPE_DIGEST_ENV } from '../../../src/library/shelf-type-keys.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
@@ -31,7 +32,7 @@ import {
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import type { NativeConformanceWorld } from './native-conformance.ts';
+import type { NativeConformanceOptions, NativeConformanceWorld } from './native-conformance.ts';
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 import type { Access } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
@@ -244,7 +245,7 @@ function sourceFile(statement: string): string {
   return statement.match(/\/\*\s*file=['"]([^'"]+)['"][^*]*\*\//i)?.[1] ?? 'source not embedded in statement';
 }
 
-export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
+export async function createLibraryDriver(options: NativeConformanceOptions = {}): Promise<NativeConformanceWorld> {
   const base = process.env.DATABASE_URL;
   if (!base) throw new Error('DATABASE_URL must name the migrated test database');
 
@@ -372,6 +373,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         }),
       }),
       routeKey,
+      ...(options.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: options.shelfTypeDigest }),
       tokens: cursorKeys,
       access: (config) => {
         const access = createAccess({
@@ -590,6 +592,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
             AUTH_AUDIENCE: audience,
             AUTH_JWKS_URL: `http://127.0.0.1:${authServer!.port}/.well-known/jwks.json`,
             OPENSEARCH_URL: '',
+            [SHELF_TYPE_DIGEST_ENV]: options.workerShelfTypeDigest,
           }),
         },
         stdout: 'pipe',

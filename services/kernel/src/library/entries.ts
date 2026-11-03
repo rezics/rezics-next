@@ -26,7 +26,7 @@ import {
 } from './command-support.ts';
 import { createShelfHeads } from './shelf-heads.ts';
 import { createShelfCounters } from './shelf-counters.ts';
-import { createShelfTypeKeys } from './shelf-type-keys.ts';
+import { createShelfTypeKeys, type ShelfTypeDigest } from './shelf-type-keys.ts';
 import { createTypePreparationPorts } from './type-preparation-contract.ts';
 import type { PreparedType } from './type-preparation-contract.ts';
 import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
@@ -49,7 +49,13 @@ import restoreState from './entry-restore-state.sql';
 import mutationState from './entry-mutation-state.sql';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock?: KernelClock;
+  shelfTypeDigest?: ShelfTypeDigest;
+};
 type PutEntryInput = { state: EntryState; revision?: number; incarnationId?: string };
 type ListEntryOptions = { state?: EntryState; cursor?: string; limit?: number };
 type QueryClient = Pick<PoolClient, 'query'>;
@@ -240,7 +246,9 @@ export function createEntryCommands(config: Dependencies) {
     counters = createShelfCounters();
   const types = createTypePreparationPorts({
     ...config,
-    keys: createShelfTypeKeys(),
+    keys: createShelfTypeKeys(
+      config.shelfTypeDigest === undefined ? undefined : { digest: config.shelfTypeDigest },
+    ),
     observe: (id) => observePreparationSource(config, id),
     observeIdentity: (id) => observePreparationIdentity(config, id),
   });

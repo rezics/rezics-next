@@ -20,7 +20,11 @@ import type { CloudEvent } from '../events/log.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import type { ShelfTypeKeys, ShelfTypeResolution } from './shelf-contract.ts';
-import { createShelfTypeKeys, withShelfDerivedTypePreparation } from './shelf-type-keys.ts';
+import {
+  createShelfTypeKeys,
+  shelfTypeDigestFromEnvironment,
+  withShelfDerivedTypePreparation,
+} from './shelf-type-keys.ts';
 import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
 import type { TypePreparationIdentity } from './type-preparation-contract.ts';
 import {
@@ -512,7 +516,11 @@ async function purgePage(
 export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependencies): ShelfMaintenanceOps {
   const deps: ShelfMaintenanceDependencies = {
     ...dependencies,
-    derivedKeys: dependencies.derivedKeys ?? createShelfTypeKeys(),
+    derivedKeys:
+      dependencies.derivedKeys ??
+      createShelfTypeKeys(
+        dependencies.shelfTypeDigest === undefined ? undefined : { digest: dependencies.shelfTypeDigest },
+      ),
     sources: dependencies.sources ?? {
       observe: (id) => observePreparationSource(dependencies, id),
       observeIdentity: (id) => observePreparationIdentity(dependencies, id),
@@ -1096,8 +1104,10 @@ export async function registerShelfMaintenanceWork(
   const { DBOS } = await import('@dbos-inc/dbos-sdk');
   const { COMMAND_STEP_RETRIES } = await import('../work/retries.ts');
   const { createAccess } = await import('../access/index.ts');
+  const shelfTypeDigest = shelfTypeDigestFromEnvironment(context.env);
   const ops = createShelfMaintenanceOps({
     ...context,
+    ...(shelfTypeDigest === undefined ? {} : { shelfTypeDigest }),
     access: createAccess({ actions: new Map(), clock: context.clock }),
   });
   const page = DBOS.registerStep(async (binding: ShelfMaintenanceBinding) => ops.page(binding), {

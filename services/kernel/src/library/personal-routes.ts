@@ -28,6 +28,7 @@ import type { Copy, Entry } from './entry-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
 import { admitShelfRead } from './shelf-admission.ts';
+import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { ShelfContractNotImplementedError, type ShelfEntry, type ShelfReads } from './shelf-contract.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import {
@@ -48,6 +49,7 @@ type Dependencies = {
   access: () => Access;
   clock?: KernelClock;
   shelves?: () => ShelfReads;
+  shelfTypeDigest?: ShelfTypeDigest;
 };
 const closed = { additionalProperties: false } as const;
 const id = t.String();

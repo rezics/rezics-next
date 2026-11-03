@@ -1,5 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
-import { createShelfTypeKeys as nativeShelfTypeKeys } from './shelf-type-keys.ts';
+import {
+  createShelfTypeKeys as nativeShelfTypeKeys,
+  type ShelfTypeKeysOptions,
+} from './shelf-type-keys.ts';
 import { createShelfCounters as nativeShelfCounters } from './shelf-counters.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Partition } from '../partition/partition.ts';
@@ -229,8 +232,8 @@ export interface ShelfTypeKeys {
 }
 
 /** Native factory; caller admission remains tied to the live owner transaction. */
-export function createShelfTypeKeys(): ShelfTypeKeys {
-  return nativeShelfTypeKeys();
+export function createShelfTypeKeys(options?: ShelfTypeKeysOptions): ShelfTypeKeys {
+  return nativeShelfTypeKeys(options);
 }
 
 // --- Reader ---------------------------------------------------------------------------------------------------
