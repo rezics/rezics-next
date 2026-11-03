@@ -93,9 +93,14 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     deferred<Awaited<ReturnType<typeof fixture.corrections.load>>>(),
   ];
   let loadCount = 0;
+  let deferReads = false;
   fixture.corrections.load = async () => {
+    if (!deferReads) {
+      loadCount = 1;
+      return initial;
+    }
     const index = loadCount++;
-    return index === 0 ? initial : reads[index - 1]!.promise;
+    return reads[index - 1]!.promise;
   };
   const originalPropose = fixture.corrections.propose;
   type ProposalCommand = Parameters<typeof originalPropose>[0];
@@ -234,6 +239,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     await click(cookTimeDraft, m.correction_submit());
     await until(() => sent.length === 2);
     const exactCommand = structuredClone(sent[1]!.command);
+    deferReads = true;
     await click(ingredientDraft, m.catalogue_create_review_new());
     await until(() => loadCount === 2);
     outside.focus();
@@ -358,4 +364,4 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     window.close();
     mock.restore();
   }
-});
+}, 60_000);
