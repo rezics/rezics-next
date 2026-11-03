@@ -6,7 +6,6 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { admitGroup } from '../access/gates/admission.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { systemClock, type KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,
