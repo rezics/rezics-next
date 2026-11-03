@@ -88,6 +88,7 @@ export async function containerGrowthFixture() {
     axis: Axis,
     operation: () => Promise<unknown>,
     additionalGrowth?: (scale: number, previous: number) => Promise<void>,
+    options: { prepare?: () => Promise<void>; warmup?: () => Promise<void>; requireCommunity?: boolean } = {},
   ) {
     const route = routeOf(selected.space.spaceId)!;
     const actor = owner.actor.accountId;
@@ -259,13 +260,15 @@ export async function containerGrowthFixture() {
           expect(current.rows).toEqual([{ head_revision_id: head }]);
         }
       },
+      ...(options.prepare === undefined ? {} : { prepare: async () => options.prepare!() }),
+      ...(options.warmup === undefined ? {} : { warmup: async () => options.warmup!() }),
       operation,
     });
     expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
     for (const { cost } of report.samples) {
       const community = Object.entries(cost.relations ?? {}).filter(([name]) => name.startsWith('community.'));
-      expect(community.length).toBeGreaterThan(0);
+      if (options.requireCommunity !== false) expect(community.length).toBeGreaterThan(0);
       for (const [, relation] of community) expect(relation.sequentialScans).toBe(0);
     }
     return report;
