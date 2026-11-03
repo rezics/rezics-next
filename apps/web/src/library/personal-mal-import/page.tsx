@@ -86,8 +86,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
     if (!live()) return;
     setBusy(false);
     if (response.kind === 'unknown') {
-      unknown.current = response.command;
-      setNotice(response);
+      const lost = response as MalUnknown;
+      unknown.current = lost.command;
+      setNotice(lost);
       return;
     }
     unknown.current = null;
@@ -101,7 +102,7 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       setNotice(null);
       return response;
     }
-    setNotice(response);
+    setNotice(response as MalFailure);
     return;
   }
 
