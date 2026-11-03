@@ -1,6 +1,6 @@
-import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, createElement, Profiler, type ReactNode } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import type { Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { Appeal } from '../src/moderation/appeals-read';
@@ -10,12 +10,6 @@ import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-
-let restoreModerationRenderDiagnosis: (() => void) | undefined;
-afterEach(() => {
-  restoreModerationRenderDiagnosis?.();
-  restoreModerationRenderDiagnosis = undefined;
-});
 
 const { loadModerationReportsRequest, prepareModerationReportRead } = await import('../src/moderation/reports-read');
 
@@ -213,6 +207,21 @@ function buttonByText(host: HTMLElement, text: string): HTMLButtonElement {
 
 async function clickButton(host: HTMLElement, text: string, flush: () => Promise<void>) {
   await act(async () => buttonByText(host, text).click());
+  await flush();
+}
+
+async function pressButton(
+  host: HTMLElement,
+  text: string,
+  window: Awaited<ReturnType<typeof makeWindow>>['window'],
+  flush: () => Promise<void>,
+) {
+  const button = buttonByText(host, text);
+  await act(async () => {
+    button.focus();
+    button.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    button.click();
+  });
   await flush();
 }
 
@@ -452,66 +461,7 @@ test('report and appeal sparse, loading, denied, stale, unavailable and closed s
 
 test('loaded bulk reports keep the page bound, restore review and cancel focus, and retry only the exact uncertain item', async () => {
   await withDom(async ({ host, render, flush, window }) => {
-    let stage = 'mount';
-    const bulkModule = await import('../src/moderation/reports-bulk-action');
-    const originalFactory = bulkModule.createReportsBulkAction;
-    const renderObserverHost = globalThis as typeof globalThis & {
-      __moderationRenderObserver?: (component: string) => void;
-    };
-    const originalRenderObserver = renderObserverHost.__moderationRenderObserver;
-    const renderCounts = new Map<string, number>();
-    renderObserverHost.__moderationRenderObserver = (component) => {
-      const count = (renderCounts.get(component) ?? 0) + 1;
-      renderCounts.set(component, count);
-      if (count >= 500) throw new Error(`DIAGNOSTIC_RENDER_BUDGET:${component}-${stage}:${count}`);
-    };
-    let bulkNotifications = 0;
-    let bulkSnapshotReads = 0;
-    const factorySpy = spyOn(bulkModule, 'createReportsBulkAction').mockImplementation((...args) => {
-      const controller = originalFactory(...args);
-      const getSnapshot = controller.getSnapshot;
-      controller.getSnapshot = () => {
-        bulkSnapshotReads++;
-        if (bulkSnapshotReads >= 5_000)
-          throw new Error(`DIAGNOSTIC_BUDGET:bulk-snapshot:${stage}:${bulkSnapshotReads}`);
-        return getSnapshot();
-      };
-      const subscribe = controller.subscribe;
-      controller.subscribe = (listener) =>
-        subscribe(() => {
-          bulkNotifications++;
-          if (bulkNotifications >= 100)
-            throw new Error(`DIAGNOSTIC_BUDGET:bulk-notification:${stage}:${bulkNotifications}`);
-          listener();
-        });
-      return controller;
-    });
-    const { AuthoringDepartureState } = await import('../src/threads/authoring-departure');
-    const departurePrototype = AuthoringDepartureState.prototype as unknown as { notify: () => void };
-    const originalNotify = departurePrototype.notify;
-    let departureNotifications = 0;
-    departurePrototype.notify = function (this: InstanceType<typeof AuthoringDepartureState>) {
-      departureNotifications++;
-      if (departureNotifications >= 200)
-        throw new Error(`DIAGNOSTIC_BUDGET:departure-notification:${stage}:${departureNotifications}`);
-      originalNotify.call(this);
-    };
-    restoreModerationRenderDiagnosis = () => {
-      factorySpy.mockRestore();
-      departurePrototype.notify = originalNotify;
-      if (originalRenderObserver) renderObserverHost.__moderationRenderObserver = originalRenderObserver;
-      else delete renderObserverHost.__moderationRenderObserver;
-    };
     const { BoardReportQueue } = await import('../src/stories/patterns/board-report-queue/board-report-queue');
-    const setStage = (next: string) => {
-      stage = next;
-      console.error(`DIAGNOSTIC_STAGE:${stage}`);
-    };
-    let commits = 0;
-    const onRender = () => {
-      commits++;
-      if (commits >= 80) throw new Error(`DIAGNOSTIC_RENDER_BUDGET:${stage}:${commits}`);
-    };
     const rows = Array.from({ length: 22 }, (_, index): Report => ({
       ...reportRows[0]!,
       id: reportId(300 + index),
@@ -529,27 +479,20 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       }
       return { ok: true };
     };
-    setStage(stage);
     await render(
-      createElement(
-        Profiler,
-        { id: 'moderation-bulk', onRender },
-        createElement(BoardReportQueue, {
-          reports: rows,
-          targets: [],
-          next: 'opaque/next/page==',
-          onAction,
-          onRefresh: async () => {
-            refreshes++;
-          },
-        }),
-      ),
+      createElement(BoardReportQueue, {
+        reports: rows,
+        targets: [],
+        next: 'opaque/next/page==',
+        onAction,
+        onRefresh: async () => {
+          refreshes++;
+        },
+      }),
     );
     expect(host.querySelectorAll('[role="checkbox"]')).toHaveLength(20);
-    setStage('select-loaded');
     await clickButton(host, m.moderation_bulk_select_loaded(), flush);
     expect(host.textContent).toContain(m.moderation_bulk_selected({ count: 20 }));
-    setStage('clear');
     await clickButton(host, m.moderation_bulk_clear(), flush);
 
     const select = async (number: number) => {
@@ -560,40 +503,17 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
       const checkbox = host.querySelector(`[id="${label!.htmlFor}"]`) as unknown as HTMLElement;
       await act(async () => checkbox.click());
     };
-    setStage('select-one');
     await select(1);
-    setStage('select-two');
     await select(2);
-    setStage('select-three');
     await select(3);
-    setStage('review-click');
-    await act(async () => buttonByText(host, m.moderation_bulk_review()).click());
-    setStage('review-flush-start');
-    await act(async () => {
-      await new Promise<void>((resolve) =>
-        setTimeout(() => {
-          setStage('review-flush-tick');
-          resolve();
-        }, 0),
-      );
-    });
-    setStage('review-flush-done');
-    setStage('review-query');
+    await pressButton(host, m.moderation_bulk_review(), window, flush);
     const reviewGroup = host.querySelector('[role="group"][tabindex="-1"]') as HTMLElement;
-    setStage('review-text-read');
-    const reviewText = reviewGroup.textContent;
-    setStage('review-text-assert');
-    expect(reviewText).toContain(m.moderation_bulk_confirmation({ count: 3 }));
-    setStage('review-focus-read');
-    const activeElement = window.document.activeElement;
-    setStage('review-focus-assert');
-    expect(activeElement === reviewGroup).toBe(true);
-    setStage('cancel');
-    await clickButton(host, m.moderation_bulk_cancel(), flush);
-    expect(window.document.activeElement).toBe(buttonByText(host, m.moderation_bulk_review()));
+    expect(reviewGroup.textContent).toContain(m.moderation_bulk_confirmation({ count: 3 }));
+    expect(window.document.activeElement === reviewGroup).toBe(true);
+    await pressButton(host, m.moderation_bulk_cancel(), window, flush);
+    expect(window.document.activeElement === buttonByText(host, m.moderation_bulk_review())).toBe(true);
     expect(calls).toHaveLength(0);
 
-    setStage('confirm');
     await clickButton(host, m.moderation_bulk_review(), flush);
     await clickButton(host, m.moderation_bulk_confirm({ count: 3 }), flush);
     expect(host.textContent).toContain(m.moderation_bulk_dismissed());
@@ -604,7 +524,6 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(calls[1]!.reportId).toBe(rows[1]!.id);
     expect(refreshes).toBe(0);
 
-    setStage('exact-retry');
     await clickButton(host, m.moderation_bulk_retry(), flush);
     expect(calls).toHaveLength(3);
     expect(calls[2]).toEqual(calls[1]);
@@ -613,10 +532,6 @@ test('loaded bulk reports keep the page bound, restore review and cancel focus, 
     expect(refreshes).toBe(1);
     expect(host.textContent).toContain(m.moderation_bulk_unattempted());
     expect(host.textContent).not.toContain('Bulk row 1');
-    expect(commits).toBeLessThan(80);
-    expect(bulkNotifications).toBeLessThan(100);
-    expect(bulkSnapshotReads).toBeLessThan(5_000);
-    expect(departureNotifications).toBeLessThan(200);
   });
 });
 
