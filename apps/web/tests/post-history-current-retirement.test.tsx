@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { id } from '../src/stories/exact-revision/fixture';
-import { mount, runtime, flush, selected, setLocale } from './support/post-history-current';
+import { mount, runtime, flush, selected, getLocale, setLocale } from './support/post-history-current';
 
 test('actual session/account/CSRF replacements retire disclosure and delayed responses including observed ABA', async () => {
   for (const replacement of [
@@ -43,7 +43,11 @@ test('post, thread, exposure, locale and QueryClient source replacements retire 
     try {
       await view.open();
       await view.inspect();
-      if (replacement === 'locale') setLocale('zh-Hant', { reload: false });
+      if (replacement === 'locale') {
+        window.history.replaceState(null, '', '/zh-Hant/threads/current');
+        setLocale('zh-Hant', { reload: false });
+        expect(getLocale()).toBe('zh-Hant');
+      }
       await view.render(
         replacement === 'post'
           ? { postId: id(99) }
