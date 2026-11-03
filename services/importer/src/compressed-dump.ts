@@ -1,10 +1,17 @@
 import { crc32, createInflateRaw, type InflateRaw } from 'node:zlib';
 import { DumpInputError, throwIfAborted, type DumpByteProgress } from './dump-input.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, MAX_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
+import {
+  admitZstdCompression,
+  decodeZstdDumpChunks,
+  type ZstdDumpCounters,
+  type ZstdDumpObserver,
+  type ZstdSpawn,
+} from './zstd-input.ts';
 
-/** Official Open Library and Wikidata gzip dumps only. VNDB archives stay uncompressed. */
-export type DumpCompression = 'none' | 'gzip';
-export const DUMP_COMPRESSIONS = ['none', 'gzip'] as const;
+/** Explicit `--compression` only. gzip is Open Library/Wikidata; zstd is VNDB/Wikidata. */
+export type DumpCompression = 'none' | 'gzip' | 'zstd';
+export const DUMP_COMPRESSIONS = ['none', 'gzip', 'zstd'] as const;
 export const GZIP_DUMP_SOURCES = ['openlibrary', 'wikidata'] as const;
 
 /** Zip-bomb ceiling for one streamed dump. Official Wikidata JSON dumps remain under this
@@ -62,12 +69,16 @@ export function decodeBudgetLimit(value: number | undefined): number {
 }
 
 export function parseDumpCompression(value: string): DumpCompression {
-  if (value === 'none' || value === 'gzip') return value;
-  throw new DumpInputError('Only --compression none or gzip is admitted.', 'compression-unsupported');
+  if (value === 'none' || value === 'gzip' || value === 'zstd') return value;
+  throw new DumpInputError('Only --compression none, gzip or zstd is admitted.', 'compression-unsupported');
 }
 
 export function admitDumpCompression(source: string, compression: DumpCompression): void {
   if (compression === 'none') return;
+  if (compression === 'zstd') {
+    admitZstdCompression(source);
+    return;
+  }
   if (!(GZIP_DUMP_SOURCES as readonly string[]).includes(source))
     throw new DumpInputError(
       'gzip compression is only admitted for Open Library and Wikidata streamed dumps.',
@@ -354,12 +365,31 @@ export async function* decodeDumpBytes(
     decodeBudget?: number;
     highWaterMark?: number;
     progress?: DumpByteProgress;
-    observer?: GzipDumpObserver;
-    counters?: GzipDumpCounters;
+    observer?: GzipDumpObserver | ZstdDumpObserver;
+    counters?: GzipDumpCounters | ZstdDumpCounters;
+    zstdExecutable?: string;
+    zstdSpawn?: ZstdSpawn;
+    zstdMemory?: string;
+    zstdProbe?: boolean;
   },
 ): AsyncGenerator<Uint8Array> {
   if (options.compression === 'none') {
     yield* input;
+    return;
+  }
+  if (options.compression === 'zstd') {
+    yield* decodeZstdDumpChunks(input, {
+      signal: options.signal,
+      decodeBudget: decodeBudgetLimit(options.decodeBudget),
+      ...(options.highWaterMark === undefined ? {} : { highWaterMark: options.highWaterMark }),
+      ...(options.progress === undefined ? {} : { progress: options.progress }),
+      ...(options.observer === undefined ? {} : { observer: options.observer }),
+      ...(options.counters === undefined ? {} : { counters: options.counters as ZstdDumpCounters }),
+      ...(options.zstdExecutable === undefined ? {} : { executable: options.zstdExecutable }),
+      ...(options.zstdSpawn === undefined ? {} : { spawn: options.zstdSpawn }),
+      ...(options.zstdMemory === undefined ? {} : { memory: options.zstdMemory }),
+      ...(options.zstdProbe === undefined ? {} : { probe: options.zstdProbe }),
+    });
     return;
   }
   yield* gunzipDumpChunks(input, {
@@ -368,6 +398,6 @@ export async function* decodeDumpBytes(
     ...(options.highWaterMark === undefined ? {} : { highWaterMark: options.highWaterMark }),
     ...(options.progress === undefined ? {} : { progress: options.progress }),
     ...(options.observer === undefined ? {} : { observer: options.observer }),
-    ...(options.counters === undefined ? {} : { counters: options.counters }),
+    ...(options.counters === undefined ? {} : { counters: options.counters as GzipDumpCounters }),
   });
 }

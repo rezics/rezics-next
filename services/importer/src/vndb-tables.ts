@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { DumpInputError } from './dump-input.ts';
 import { createDumpCounters, DEFAULT_DUMP_CHUNK_BYTES, dumpChunkLimit, DumpMemory } from './dumps-bytes.ts';
 
 // Decompressed native entry content only; the reader's tar framing cap is independent.
@@ -350,7 +351,7 @@ export class VndbTablesStore {
       this.db
         .query(`UPDATE vndb_table_runs SET state='ready' WHERE source=? AND run_id=? AND state='staging'`)
         .run(source, runId);
-    } catch {
+    } catch (error) {
       // No archive path, cell, ignored bytes or upstream exception is persisted or
       // exposed in diagnostics. Failure is durable even if later cleanup fails.
       this.db
@@ -358,6 +359,7 @@ export class VndbTablesStore {
         WHERE source=? AND run_id=?`)
         .run(source, runId);
       this.cleanup(source, runId);
+      if (error instanceof DumpInputError) throw error;
       throw new Error('VNDB table staging failed');
     }
   }

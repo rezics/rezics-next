@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SourceRecord } from '@rezics/conversion';
 import { convertVndb } from '@rezics/conversion/vndb';
 import { readArchive } from './archive.ts';
+import { DumpInputError } from './dump-input.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES } from './dumps-bytes.ts';
 import type { SourceRegistration } from './import-contract.ts';
 import type { Importer, ImportRunOptions } from './importer.ts';
@@ -67,7 +68,8 @@ export class VndbMaterialization {
   async stage(run: string, entries: VndbEntries): Promise<void> {
     try {
       await this.tables.stage(this.source, run, entries);
-    } catch {
+    } catch (error) {
+      if (error instanceof DumpInputError) throw error;
       throw new VndbInputError();
     }
   }

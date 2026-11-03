@@ -7,6 +7,12 @@ export type DumpInputFailureIdentity =
   | 'gzip-integrity'
   | 'gzip-truncated'
   | 'gzip-trailing-garbage'
+  | 'zstd-integrity'
+  | 'zstd-truncated'
+  | 'zstd-trailing-garbage'
+  | 'zstd-window'
+  | 'zstd-missing-executable'
+  | 'zstd-incompatible-executable'
   | 'decode-budget'
   | 'compression-unsupported'
   | 'filesystem-changed';

@@ -66,7 +66,7 @@ test('help names compression and decode-budget; gzip is refused for VNDB and Ban
   expect(help.stdout).toContain('--decode-budget');
   expect(help.openHandles).toBe(0);
   const previewHelp = await runPreviewCli(['--help']);
-  expect(previewHelp.stdout).toContain('--compression none|gzip');
+  expect(previewHelp.stdout).toContain('--compression none|gzip|zstd');
   expect(() => parsePreviewArgs(['--plan-dir', '/tmp/plan', '--compression', 'gzip'])).toThrow('dump acquisition');
 
   const directory = await mkdtemp(join(tmpdir(), 'gzip-cli-admit-'));
