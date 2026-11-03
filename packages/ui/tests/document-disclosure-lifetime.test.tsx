@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { parseDocument, serializeDocument, withDocumentIds, type DocumentSnapshot } from '@rezics/document';
 import { DocumentBody } from '../src/components/document-body.tsx';
 import { DocumentSpoiler } from '../src/components/document-spoiler.tsx';
 
@@ -9,7 +9,7 @@ test('independently serialized document snapshots keep SSR semantics and standal
   const document: DocumentSnapshot = {
     version: 'rezics-document-v1',
     profile: 'text',
-    doc: {
+    doc: withDocumentIds({
       type: 'doc',
       content: [
         {
@@ -17,7 +17,7 @@ test('independently serialized document snapshots keep SSR semantics and standal
           content: [{ type: 'text', text: 'Server rendered secret', marks: [{ type: 'spoiler' }] }],
         },
       ],
-    },
+    }),
   };
   const serialized = serializeDocument(document);
   const parsed = parseDocument(JSON.parse(serialized));

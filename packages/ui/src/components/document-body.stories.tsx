@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { act, useRef, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
-import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { parseDocument, serializeDocument, withDocumentIds, type DocumentSnapshot } from '@rezics/document';
 import { waitForFocus } from '../test/focus.ts';
 import { DocumentBody } from './document-body.tsx';
 
@@ -346,8 +346,24 @@ export const MediaImages: Story = {
   },
 };
 
+const readerAccount = '11111111-1111-4111-8111-111111111111';
+
+const wiredSnapshot = (
+  profile: 'text' | 'blocks',
+  content: DocumentSnapshot['doc']['content'],
+): DocumentSnapshot =>
+  parseDocument(
+    JSON.parse(
+      serializeDocument({
+        version: 'rezics-document-v1',
+        profile,
+        doc: withDocumentIds({ type: 'doc', content }),
+      }),
+    ),
+  );
+
 const disclosureVisitDocument = (context: string): DocumentSnapshot =>
-  snapshot('blocks', [
+  wiredSnapshot('blocks', [
     {
       type: 'paragraph',
       content: [
@@ -356,7 +372,7 @@ const disclosureVisitDocument = (context: string): DocumentSnapshot =>
         { type: 'text', text: ' and ' },
         { type: 'text', text: 'the traitor', marks: [{ type: 'spoiler' }] },
         { type: 'text', text: '. The account ' },
-        { type: 'mention', attrs: { accountId: 'reader-account' } },
+        { type: 'mention', attrs: { accountId: readerAccount } },
         { type: 'text', text: ' also read the ' },
         { type: 'text', text: 'ordinary link', marks: [{ type: 'link', attrs: { href: 'https://example.com/read' } }] },
         { type: 'text', text: '.' },
@@ -366,7 +382,7 @@ const disclosureVisitDocument = (context: string): DocumentSnapshot =>
     { type: 'image', attrs: { src: 'private-reader-media', alt: 'Reader image' } },
   ]);
 
-const disclosureWithoutSpoilers = snapshot('blocks', [
+const disclosureWithoutSpoilers = wiredSnapshot('blocks', [
   { type: 'paragraph', content: [{ type: 'text', text: 'There are no concealed passages in this visit.' }] },
   { type: 'image', attrs: { src: 'private-reader-media', alt: 'Reader image' } },
 ]);
@@ -467,7 +483,7 @@ function DisclosureReplacementReader() {
           document={document}
           className={className}
           labels={{ revealSpoiler: label }}
-          mentions={{ 'reader-account': { handle: 'reader' } }}
+          mentions={{ [readerAccount]: { handle: 'reader' } }}
           locale={locale}
           renderImage={({ alt }) => {
             const call = ++imageBoundaryCalls.current;
