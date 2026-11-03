@@ -10,13 +10,8 @@ import { continuationBoardId, continuationCursor } from '../src/kernel/fake/boar
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { BoardFeed } from '../src/threads/board-feed';
-import {
-  BOARD_PINNED_SECTION_LIMIT,
-  nativePinnedSection,
-  ordinaryBoardThreads,
-  type BoardFeedThread,
-  type CommunityBoardPage,
-} from '../src/threads/board-feed-data';
+import { nativePinnedSection, ordinaryBoardThreads, type BoardFeedThread, type CommunityBoardPage } from '../src/threads/board-feed-data';
+import { BOARD_PINNED_SECTION_LIMIT } from '../src/threads/board-pins/contract';
 import { BoardPinThreadControls } from '../src/threads/board-pins/controller';
 import {
   parseBoardPinCommandResult,
