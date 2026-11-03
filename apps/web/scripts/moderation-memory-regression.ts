@@ -34,7 +34,7 @@ const moderationFiles = [
 type TestCounts = { pass: number | null; fail: number | null; skip: number | null };
 type ProcSample = { start: string; rss: number; highWater: number };
 type ProcessPeak = { rssBytes: number; processCount: number };
-type CgroupMetrics = { peakBytes: number; oomKills: number };
+type CgroupMetrics = { peakBytes: number; oomEvents: number };
 type RunResult = {
   command: string[];
   exitCode: number | null;
@@ -153,9 +153,10 @@ function readCgroupMetrics(): CgroupMetrics | null {
   try {
     const peakBytes = Number(readFileSync(`${directory}/memory.peak`, 'utf8').trim());
     const events = readFileSync(`${directory}/memory.events`, 'utf8');
-    const oomKills = Number(events.match(/^oom_kill\s+(\d+)$/mu)?.[1] ?? 0);
-    if (!Number.isSafeInteger(peakBytes) || peakBytes < 0 || !Number.isSafeInteger(oomKills)) return null;
-    return { peakBytes, oomKills };
+    const eventCount = (name: string) => Number(events.match(new RegExp(`^${name}\\s+(\\d+)$`, 'mu'))?.[1] ?? 0);
+    const oomEvents = eventCount('oom') + eventCount('oom_kill') + eventCount('oom_group_kill');
+    if (!Number.isSafeInteger(peakBytes) || peakBytes < 0 || !Number.isSafeInteger(oomEvents)) return null;
+    return { peakBytes, oomEvents };
   } catch {
     return null;
   }
@@ -286,7 +287,7 @@ async function runCommand(
     const cgroup = readCgroupMetrics();
     if (cgroup) {
       peakCgroupBytes = Math.max(peakCgroupBytes ?? 0, cgroup.peakBytes);
-      if (initialCgroup && cgroup.oomKills > initialCgroup.oomKills) failure = 'cgroup recorded an OOM kill';
+      if (initialCgroup && cgroup.oomEvents > initialCgroup.oomEvents) failure = 'cgroup recorded an OOM event';
     }
     if (!peakRssBytes && !cgroup) failure = 'physical RSS measurement is unavailable';
     if ((peakRssBytes ?? 0) >= memoryLimitBytes) failure = `process-tree RSS reached ${memoryLimitBytes} bytes`;
@@ -306,8 +307,12 @@ async function runCommand(
   }
   result.exitCode = await exited;
   await output;
+  if (!failure && !(await waitForGroup(pid, performance.now() + terminationGraceMs))) {
+    failure = 'child process group remained alive after the test command';
+    await stopGroup(pid, exited);
+  }
   activePid = undefined;
-  result.signal = child.signalCode ?? null;
+  result.signal = child.signalCode == null ? null : String(child.signalCode);
   const finalTree = sampleTree();
   if (finalTree) peakRssBytes = Math.max(peakRssBytes ?? 0, finalTree.rssBytes);
   const finalCgroup = readCgroupMetrics();
