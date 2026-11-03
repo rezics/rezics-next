@@ -4994,6 +4994,7 @@ ALTER TABLE ONLY library.entry
     ADD CONSTRAINT entry_pkey PRIMARY KEY (route, account_id, subject_id);
 
 
+--
 -- Name: entry_source_observation entry_source_observation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6200,6 +6201,13 @@ CREATE INDEX entry_shelf_finished_type ON library.entry USING btree (route, acco
 
 
 --
+-- Name: entry_source_observation_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_source_observation_owner ON library.entry_source_observation USING btree (route, account_id, subject_id, provider, record_id);
+
+
+--
 -- Name: entry_state_change_account_subject; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -6211,11 +6219,6 @@ CREATE INDEX entry_state_change_account_subject ON library.entry_state_change US
 --
 
 CREATE INDEX entry_state_change_subject_retention ON library.entry_state_change USING btree (route, account_id, subject_id, changed_at DESC, incarnation_id, revision DESC);
-
--- Name: entry_source_observation_owner; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX entry_source_observation_owner ON library.entry_source_observation USING btree (route, account_id, subject_id, provider, record_id);
 
 
 --
@@ -6996,6 +6999,27 @@ CREATE TRIGGER entry_profile_migration_writer BEFORE INSERT OR UPDATE ON library
 
 
 --
+-- Name: entry_source_observation entry_source_observation_native_writer; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_source_observation_native_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry_source_observation FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
+-- Name: entry_source_observation entry_source_observation_source_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_source_observation_source_rows AFTER INSERT OR DELETE ON library.entry_source_observation FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
+-- Name: entry_source_observation entry_source_observation_source_update; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER entry_source_observation_source_update AFTER UPDATE ON library.entry_source_observation FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
+
+
+--
 -- Name: bangumi_upload export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -7036,24 +7060,6 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.co
 
 CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
--- Name: entry_source_observation entry_source_observation_native_writer; Type: TRIGGER; Schema: library; Owner: -
---
-
-CREATE TRIGGER entry_source_observation_native_writer AFTER INSERT OR DELETE OR UPDATE ON library.entry_source_observation FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
-
-
---
--- Name: entry_source_observation entry_source_observation_source_rows; Type: TRIGGER; Schema: library; Owner: -
---
-
-CREATE TRIGGER entry_source_observation_source_rows AFTER INSERT OR DELETE ON library.entry_source_observation FOR EACH ROW EXECUTE FUNCTION library.advance_fact_source_head();
-
-
---
--- Name: entry_source_observation entry_source_observation_source_update; Type: TRIGGER; Schema: library; Owner: -
---
-
-CREATE TRIGGER entry_source_observation_source_update AFTER UPDATE ON library.entry_source_observation FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION library.advance_fact_source_head();
 
 
 --
