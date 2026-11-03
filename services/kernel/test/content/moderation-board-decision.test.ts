@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
+import { encodeReceiptKey } from '../../src/command/receipt-key.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { checkGrowth, assertGrowthAccessPaths } from '../support/growth.ts';
 import { createGrowthAppealBoundariesFixture } from './support/growth-appeal-boundaries-fixture.ts';
 
@@ -33,7 +35,16 @@ async function source(board: string, key: string) {
      JOIN core.outbox o ON o.partition_no=r.partition_no AND o.position=r.position
        AND o.type='com.rezics.content.moderation.takedown.v1'
      WHERE d.route=$1 AND d.target_id=$2 AND r.idempotency_key=$3`,
-    [routeOf(board), board, key],
+    [
+      routeOf(board),
+      board,
+      encodeReceiptKey(
+        testReceiptKeys(),
+        'content.moderation:takedown',
+        { kind: 'account', id: f.people.decider.accountId },
+        key,
+      ),
+    ],
   );
   expect(rows).toHaveLength(1);
   const row = rows[0]!;
