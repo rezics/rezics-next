@@ -388,6 +388,27 @@ test('MAL score review records explicit native units, preserves corrections and 
       actor.bearer,
     ),
   ).toMatchObject({ units: 6 });
+  const preserve = await reviewScore(0, adopt(19));
+  const preserved = await json(
+    'POST',
+    `${base}/${id}/apply`,
+    { confirm: true, rows: [{ row: 0, version: preserve, fields: ['score'] }] },
+    randomUUID(),
+    actor.bearer,
+  );
+  expect(preserved.outcomes[0]).toMatchObject({
+    status: 'skipped',
+    score: { action: 'adopt', status: 'skipped', reason: 'preserve-current-vote' },
+  });
+  expect(
+    await json(
+      'GET',
+      `/v1/subjects/${targets[0]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+      undefined,
+      randomUUID(),
+      actor.bearer,
+    ),
+  ).toMatchObject({ units: 6 });
 
   await json(
     'POST',
