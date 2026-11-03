@@ -7481,7 +7481,7 @@
   "release_search_age_unit": "年龄分级单位",
   "release_search_developer": "开发商",
   "release_search_publisher": "发行商",
-  "release_search_subject_help": "输入对象 ID。",
+  "release_search_subject_help": "按名称搜索并选择一个条目。",
   "release_search_sort": "排序方式",
   "release_search_sort_name": "名称",
   "release_search_sort_relevance": "相关度",

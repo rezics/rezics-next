@@ -7481,7 +7481,7 @@
   "release_search_age_unit": "年齡分級單位",
   "release_search_developer": "開發商",
   "release_search_publisher": "發行商",
-  "release_search_subject_help": "輸入主題 ID。",
+  "release_search_subject_help": "輸入名稱搜尋，並選擇一筆條目。",
   "release_search_sort": "排序方式",
   "release_search_sort_name": "名稱",
   "release_search_sort_relevance": "相關度",

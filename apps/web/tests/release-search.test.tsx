@@ -296,3 +296,28 @@ test('the release page localizes controls and distinguishes loading, unavailable
     expect(terminal).toContain(m.release_search_terminal({}, { locale }));
   }
 });
+
+test('platform and producer operands use contextual selections while URLs retain their subject IDs', () => {
+  for (const locale of locales) {
+    const parsed = parseReleaseSearch({ subtype: releaseType, platform: releaseId, developer: releaseId }, bundledRelease, locale);
+    const html = renderToStaticMarkup(
+      createElement(ReleaseSearchPage, {
+        locale,
+        parsed,
+        types: [{ id: releaseType, label: 'Release' }],
+        selections: {
+          platform: { id: releaseId, label: 'Nintendo Switch', type: 'schema:GamePlatform' },
+          developer: { id: releaseId, label: 'Example Studio', type: 'schema:Organization' },
+        },
+        state: { status: 'loading' },
+      }),
+    );
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain(m.release_search_subject_help({}, { locale }));
+    expect(html).toContain('Nintendo Switch');
+    expect(html).toContain('Example Studio');
+    expect(html).toContain(`<input type="hidden" name="platform" value="${releaseId}"/>`);
+    expect(html).toContain(`<input type="hidden" name="developer" value="${releaseId}"/>`);
+    expect(html).not.toContain(`type="search" autoComplete="off" placeholder="${m.search_placeholder({}, { locale })}" value="${releaseId}"`);
+  }
+});

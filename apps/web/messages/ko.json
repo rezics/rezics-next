@@ -7481,7 +7481,7 @@
   "release_search_age_unit": "연령 등급 단위",
   "release_search_developer": "개발사",
   "release_search_publisher": "배급사",
-  "release_search_subject_help": "대상의 주제 ID를 입력하세요.",
+  "release_search_subject_help": "이름으로 검색한 뒤 항목을 선택하세요.",
   "release_search_sort": "정렬 기준",
   "release_search_sort_name": "이름",
   "release_search_sort_relevance": "관련도",

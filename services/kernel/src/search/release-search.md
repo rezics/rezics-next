@@ -80,6 +80,8 @@ admission from diverging. Existing role-specific producer operands retain their 
 
 ## Remaining integration
 
+Decision: platform, developer and publisher operands are chosen from localized public subject suggestions; URLs retain canonical subject IDs and resolve their current labels again when opened.
+
 Decision: ordered display languages and release-language operands have separate URL fields; applying a predicate
 edit drops result continuations, while navigation links preserve the complete form and ordered operands.
 

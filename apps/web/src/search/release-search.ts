@@ -30,6 +30,11 @@ export type ReleaseSearchForm = {
   condition: string;
 };
 
+export type ReleaseSearchSubjectSelection = { id: string; label?: string; type?: string };
+export type ReleaseSearchSelections = Partial<
+  Record<'platform' | 'developer' | 'publisher', ReleaseSearchSubjectSelection>
+>;
+
 export type ReleaseSearch = {
   subtype: string;
   text: string;

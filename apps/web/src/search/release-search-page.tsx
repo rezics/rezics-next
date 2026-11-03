@@ -1,23 +1,189 @@
+import { useEffect, useRef, useState } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
 import { DiscoveryResults } from './discovery-results';
 import type { DiscoveryState } from './discovery';
-import { releaseSearchHref, type ParsedReleaseSearch, type ReleaseSearchForm } from './release-search';
+import { localizedLabel } from './results';
+import { HEADER_SUGGESTION_LIMIT, loadGlobalHeaderSuggestions, readHeaderSuggestions } from './header-search/suggestions';
+import type { SuggestionResult } from './suggestions';
+import {
+  releaseSearchHref,
+  type ParsedReleaseSearch,
+  type ReleaseSearchForm,
+  type ReleaseSearchSelections,
+  type ReleaseSearchSubjectSelection,
+} from './release-search';
 
 export type ReleaseSearchType = { id: string; label: string };
 
 const fieldClass = 'h-10 rounded-md border bg-background px-3 font-normal';
 
+function ReleaseSearchSubjectPicker({
+  name,
+  label,
+  help,
+  locale,
+  invalid,
+  initial,
+}: {
+  name: 'platform' | 'developer' | 'publisher';
+  label: string;
+  help: string;
+  locale: string;
+  invalid: boolean;
+  initial?: ReleaseSearchSubjectSelection;
+}) {
+  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
+  const inputId = `release-search-${name}`;
+  const listId = `${inputId}-suggestions`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+  const [selection, setSelection] = useState(initial);
+  const [suggestions, setSuggestions] = useState<SuggestionResult>();
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'empty' | 'unavailable'>('idle');
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const active = suggestions?.subjects[activeIndex];
+
+  useEffect(() => {
+    const text = query.trim();
+    if (text.length < 2) {
+      setSuggestions(undefined);
+      setStatus('idle');
+      return;
+    }
+    const controller = new AbortController();
+    setStatus('loading');
+    void readHeaderSuggestions(loadGlobalHeaderSuggestions, text, locale, controller.signal)
+      .then((page) => {
+        setSuggestions(page);
+        setStatus(page.subjects.length ? 'ready' : 'empty');
+        setActiveIndex(-1);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        setSuggestions(undefined);
+        setStatus('unavailable');
+      });
+    return () => controller.abort();
+  }, [query, locale]);
+
+  const choose = (subject: SuggestionResult['subjects'][number]) => {
+    const text = localizedLabel(subject.labels, locale).text || subject.id;
+    setSelection({ id: subject.id, label: text, type: subject.type });
+    setQuery('');
+    setSuggestions(undefined);
+    setStatus('idle');
+    setActiveIndex(-1);
+    inputRef.current?.setCustomValidity('');
+  };
+  const statusText =
+    status === 'loading'
+      ? m.search_suggestions_loading({}, options)
+      : status === 'empty'
+        ? m.search_no_suggestions({}, options)
+        : status === 'unavailable'
+          ? m.search_suggestions_unavailable({}, options)
+          : undefined;
+
+  return (
+    <div className="grid gap-1 text-sm font-medium">
+      <label htmlFor={inputId}>{label}</label>
+      <input
+        ref={inputRef}
+        id={inputId}
+        className={fieldClass}
+        type="search"
+        autoComplete="off"
+        placeholder={m.search_placeholder({}, options)}
+        value={query}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={query.trim().length >= 2 && status !== 'idle'}
+        aria-controls={listId}
+        aria-activedescendant={active ? `${listId}-${activeIndex}` : undefined}
+        aria-invalid={invalid || undefined}
+        aria-describedby={`${inputId}-help ${inputId}-status`}
+        onChange={(event) => {
+          const text = event.currentTarget.value;
+          setSelection(undefined);
+          setQuery(text);
+          setActiveIndex(-1);
+          event.currentTarget.setCustomValidity(text.trim() ? help : '');
+        }}
+        onKeyDown={(event) => {
+          const count = suggestions?.subjects.length ?? 0;
+          if (event.key === 'ArrowDown' && count) {
+            event.preventDefault();
+            setActiveIndex((index) => Math.min(index + 1, count - 1));
+          } else if (event.key === 'ArrowUp' && count) {
+            event.preventDefault();
+            setActiveIndex((index) => Math.max(index - 1, 0));
+          } else if (event.key === 'Enter' && active) {
+            event.preventDefault();
+            choose(active);
+          } else if (event.key === 'Escape') {
+            setQuery('');
+            setActiveIndex(-1);
+            inputRef.current?.setCustomValidity('');
+          }
+        }}
+      />
+      <input type="hidden" name={name} value={selection?.id ?? ''} />
+      <span id={`${inputId}-help`} className="font-normal text-muted-foreground">
+        {help}
+      </span>
+      {selection && (
+        <div role="group" aria-label={label} className="flex flex-wrap items-center gap-2 rounded-md border p-2 font-normal">
+          <span>{selection.label ?? m.search_suggestions_unavailable({}, options)}</span>
+          {selection.type && <span className="text-muted-foreground">{selection.type}</span>}
+          <code className="text-xs text-muted-foreground">{selection.id}</code>
+          <button type="button" className="underline" onClick={() => setSelection(undefined)}>
+            {m.library_subject_clear({}, options)}
+          </button>
+        </div>
+      )}
+      <p id={`${inputId}-status`} role="status" aria-live="polite" className="font-normal text-muted-foreground">
+        {statusText}
+      </p>
+      {status === 'ready' && suggestions && (
+        <ul id={listId} role="listbox" aria-label={m.header_search_suggestions({}, options)} className="rounded-md border">
+          {suggestions.subjects.slice(0, HEADER_SUGGESTION_LIMIT).map((subject, index) => {
+            const subjectLabel = localizedLabel(subject.labels, locale);
+            const typeLabel = localizedLabel(suggestions.types[subject.type] ?? {}, locale);
+            return (
+              <li
+                key={subject.id}
+                id={`${listId}-${index}`}
+                role="option"
+                aria-selected={activeIndex === index}
+                className="cursor-pointer px-3 py-2 hover:bg-muted"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choose(subject)}
+              >
+                <span lang={subjectLabel.lang}>{subjectLabel.text || subject.id}</span>
+                <span className="text-muted-foreground"> · {typeLabel.text || subject.type}</span>
+                <code className="ml-2 text-xs text-muted-foreground">{subject.id}</code>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function ReleaseSearchFormView({
   parsed,
   types,
   locale,
+  selections,
 }: {
   parsed: ParsedReleaseSearch;
   types: ReleaseSearchType[];
   locale: string;
+  selections?: ReleaseSearchSelections;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const { form, controls, invalid } = parsed;
@@ -39,6 +205,16 @@ export function ReleaseSearchFormView({
     </label>
   );
   const subjectHelp = m.release_search_subject_help({}, options);
+  const subjectPicker = (name: 'platform' | 'developer' | 'publisher', label: string) => (
+    <ReleaseSearchSubjectPicker
+      name={name}
+      label={label}
+      help={subjectHelp}
+      locale={locale}
+      invalid={invalid.includes(name)}
+      initial={selections?.[name] ?? (form[name] ? { id: form[name] } : undefined)}
+    />
+  );
   return (
     <form
       method="get"
@@ -62,7 +238,7 @@ export function ReleaseSearchFormView({
         </select>
       </label>
       {input('q', m.release_search_text({}, options))}
-      {(controls?.platform || form.platform) && input('platform', m.release_search_platform({}, options), subjectHelp)}
+      {(controls?.platform || form.platform) && subjectPicker('platform', m.release_search_platform({}, options))}
       {(controls?.language || controls?.platform?.languageQualifier || form.releaseLanguage) &&
         input('releaseLanguage', m.release_search_languages({}, options))}
       {input('language', m.release_search_display_languages({}, options))}
@@ -101,12 +277,11 @@ export function ReleaseSearchFormView({
         (role) =>
           (controls?.producers.some((producer) => producer.role === role) || form[role]) && (
             <div key={role}>
-              {input(
+              {subjectPicker(
                 role,
                 role === 'developer'
                   ? m.release_search_developer({}, options)
                   : m.release_search_publisher({}, options),
-                subjectHelp,
               )}
             </div>
           ),
@@ -169,12 +344,14 @@ export function ReleaseSearchPage({
   locale,
   parsed,
   types = [],
+  selections,
   state,
   retryHref,
 }: {
   locale: string;
   parsed?: ParsedReleaseSearch;
   types?: ReleaseSearchType[];
+  selections?: ReleaseSearchSelections;
   state: DiscoveryState;
   retryHref?: string;
 }) {
@@ -189,7 +366,13 @@ export function ReleaseSearchPage({
       <PageHeading>{m.release_search_heading({}, options)}</PageHeading>
       <p className="text-muted-foreground">{m.release_search_intro({}, options)}</p>
       {parsed && (
-        <ReleaseSearchFormView key={JSON.stringify(parsed.form)} parsed={parsed} types={types} locale={locale} />
+        <ReleaseSearchFormView
+          key={JSON.stringify(parsed.form)}
+          parsed={parsed}
+          types={types}
+          locale={locale}
+          selections={selections}
+        />
       )}
       {pageEmpty && (
         <p role="status" className="text-sm text-muted-foreground">

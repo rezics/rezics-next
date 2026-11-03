@@ -7481,7 +7481,7 @@
   "release_search_age_unit": "年齢区分の単位",
   "release_search_developer": "開発元",
   "release_search_publisher": "発売元",
-  "release_search_subject_help": "対象のサブジェクトIDを入力してください。",
+  "release_search_subject_help": "名前で検索し、項目を選択してください。",
   "release_search_sort": "並び順",
   "release_search_sort_name": "名前",
   "release_search_sort_relevance": "関連度",

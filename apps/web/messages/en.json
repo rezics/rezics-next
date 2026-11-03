@@ -7531,7 +7531,7 @@
   "release_search_age_unit": "Age-rating unit",
   "release_search_developer": "Developer",
   "release_search_publisher": "Publisher",
-  "release_search_subject_help": "Enter the subject ID.",
+  "release_search_subject_help": "Search by name and choose a subject.",
   "release_search_sort": "Sort by",
   "release_search_sort_name": "Name",
   "release_search_sort_relevance": "Relevance",
