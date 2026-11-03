@@ -1,3 +1,4 @@
+import purgeShelfScoreHead from './erasure-owned-shelf-score-head.sql';
 import purgeMembersPreparation from './erasure-owned-members-preparation.sql';
 import purgeMembersPreparationResult from './erasure-owned-members-preparation-result.sql';
 import purgeMembersPreparationOwner from './erasure-owned-members-preparation-owner.sql';
@@ -64,6 +65,7 @@ export const ownedQueries: {
   readonly collection_pins: typeof purgeCollectionPins;
   readonly builtin_state_reference_source: typeof purgeBuiltinStateReferenceSource;
   readonly builtin_collection_reference: typeof purgeBuiltinCollectionReference;
+  readonly shelf_score_head: typeof purgeShelfScoreHead;
   readonly shelf_writer_owner: typeof purgeShelfWriterOwner;
   readonly shelf_count: typeof purgeShelfCount;
   readonly shelf_type_node: typeof purgeShelfTypeNode;
@@ -104,6 +106,7 @@ export const ownedQueries: {
   collection_pins: purgeCollectionPins,
   builtin_state_reference_source: purgeBuiltinStateReferenceSource,
   builtin_collection_reference: purgeBuiltinCollectionReference,
+  shelf_score_head: purgeShelfScoreHead,
   shelf_writer_owner: purgeShelfWriterOwner,
   shelf_count: purgeShelfCount,
   shelf_type_node: purgeShelfTypeNode,

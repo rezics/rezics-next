@@ -575,3 +575,13 @@ reference.
   - Desktop hover popup with Continue or Watch.
 - **Entry editor:** status, score, progress and dates; Completed fills progress (`_features/media/_containers/anilist-media-entry-modal.tsx`).
 - **Large grids:** off-screen cards replaced with measured skeletons above 48 items (`media-card-grid.tsx:65-231`).
+
+## Personal-score ordering contract
+
+The [native personal-score contract](../library-personal-score-order.md) now owns the server ordering extension.
+BookWyrm's owner-review rating annotation and server sort (`bookwyrm/views/shelf/shelf.py`, pinned reference)
+provide the closest score journey; Bangumi's owner/subject collection read (`internal/collections/infra/mysql_repo.go`)
+keeps the user's own rating distinct from public aggregates. The earlier REZICS
+`legacy-final:apps/web/features/library/state.ts` already exposed rating with descending as its initial direction
+and restarted cursors on sort changes. Retain these useful interactions through native whole-shelf keysets;
+no reference or legacy implementation was copied. Availability and bounds belong to the linked native contract.

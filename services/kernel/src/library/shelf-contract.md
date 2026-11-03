@@ -17,7 +17,7 @@ helper; old readable HMAC tokens are refused. `direction` and `type` without
 
 | Parameter   | Values                                            |
 | ----------- | ------------------------------------------------- |
-| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`         |
+| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore`         |
 | `direction` | `desc` (default), `asc`                           |
 | `state`     | exact validated profile state ID, optional        |
 | `type`      | exact full primary-type CURIE, optional           |
@@ -370,7 +370,7 @@ extension and same-prefix siblings; a near-release-sized identifier must finish 
 required future checks, not measured passing results. Production acceptance also runs the complete real-driver outcome
 suite after all workers land. A green no-driver red-suite verifier proves only executable specification integrity.
 
-Title/rating/release/progress sorting and bulk execution remain separate owning contracts. No semantic assertion or
+Title/release/progress sorting and bulk execution remain separate owning contracts; personal-score ordering is specified in [the score contract](../../../../docs/library-personal-score-order.md). No semantic assertion or
 existing shelf/sitemap/bulk research adoption is removed by this specification.
 
 ## Cost
@@ -460,3 +460,10 @@ pending initial-backfill intent and defers all deltas until the separate mainten
 Each counter statement targets only the locked active generation and rolls back on missing negative, negative result,
 bigint overflow or values outside the response's safe integer range. Accepted profile states outside the five shelf
 tabs still contribute to both all-entry rollups; their stored state and profile pin are preserved.
+
+## Personal score extension
+
+[Personal-score ordering](../../../../docs/library-personal-score-order.md) owns the added native question,
+indexed access path, explicit installation, identity-currentness port and cursor rules. Existing date semantics
+and defaults remain unchanged. An unbound Content identity-currentness producer returns preparing/unavailable;
+installing the score index alone does not enable a successful personal-score page.

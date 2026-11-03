@@ -57,6 +57,7 @@ export const shelfEntrySchema = embedded(
       updatedAt: text,
       lastActivityAt: text,
       finishedAt: nullable,
+      personalScore: t.Optional(t.Union([t.Integer({ minimum: 0, maximum: 4096 }), t.Null()])),
       activeProgressSession: t.Union([shelfSessionSchema, t.Null()]),
     },
     closed,
@@ -76,5 +77,27 @@ export const shelfSummarySchema = t.Object(
 );
 export const shelfTypesSchema = t.Object(
   { types: t.Array(t.Object({ type: text, count }, closed)), next: nullable },
+  closed,
+);
+
+export const shelfScoreQuestionSchema = t.Object(
+  {
+    id: text,
+    meaning: t.Union([text, t.Null()]),
+    revision,
+    grain: text,
+    minimumUnits: t.Integer(),
+    maximumUnits: t.Integer(),
+    stepUnits: t.Integer(),
+    lifecycleState: text,
+    lifecycleRevision: revision,
+  },
+  closed,
+);
+export const shelfScorePreparationSchema = t.Object(
+  {
+    installation: t.Union([t.Literal('pending'), t.Literal('installed')]),
+    prepared: t.Integer({ minimum: 0, maximum: 100 }),
+  },
   closed,
 );

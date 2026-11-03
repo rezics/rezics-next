@@ -1601,3 +1601,9 @@ ALTER TABLE ONLY rating.vote
 --
 
 
+
+-- Library consumes native vote effects in the same transaction; it never writes votes.
+CREATE TRIGGER shelf_score_vote_lock BEFORE INSERT OR DELETE OR UPDATE ON rating.vote
+    FOR EACH ROW EXECUTE FUNCTION library.shelf_score_vote_lock();
+CREATE TRIGGER shelf_score_vote_sync AFTER INSERT OR DELETE OR UPDATE ON rating.vote
+    FOR EACH ROW EXECUTE FUNCTION library.shelf_score_vote_sync();

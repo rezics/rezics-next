@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { PersonalScoreCurrentness } from '../rating/personal-score.ts';
 import { createShelfTypeKeys as nativeShelfTypeKeys, type ShelfTypeKeysOptions } from './shelf-type-keys.ts';
 import { createShelfCounters as nativeShelfCounters } from './shelf-counters.ts';
 import type { KernelClock } from '../clock.ts';
@@ -41,7 +42,7 @@ export function isLegacyEntryState(value: string): value is LegacyEntryState {
 export function isShelfEntryState(value: string): boolean {
   return /^[a-z][a-z0-9_.-]{0,63}$(?![\s\S])/.test(value);
 }
-export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt'] as const;
+export const SHELF_ORDERS = ['lastActivity', 'finishedAt', 'createdAt', 'personalScore'] as const;
 export const SHELF_DIRECTIONS = ['desc', 'asc'] as const;
 export type ShelfOrder = (typeof SHELF_ORDERS)[number];
 export type ShelfDirection = (typeof SHELF_DIRECTIONS)[number];
@@ -90,9 +91,22 @@ export type ShelfEntry = {
   lastActivityAt: string;
   finishedAt: string | null;
   activeProgressSession: ShelfSession | null;
+  /** Native standard-question units; present only for personalScore order. */
+  personalScore?: number | null;
 };
 
-export type ShelfPage = { entries: ShelfEntry[]; next: string | null };
+export type ShelfScoreQuestion = {
+  id: string;
+  meaning: string | null;
+  revision: number;
+  grain: string;
+  minimumUnits: number;
+  maximumUnits: number;
+  stepUnits: number;
+  lifecycleState: string;
+  lifecycleRevision: number;
+};
+export type ShelfPage = { entries: ShelfEntry[]; next: string | null; scoreQuestion?: ShelfScoreQuestion };
 
 export type ShelfTab = LegacyEntryState | 'all' | 'collections';
 export type ShelfTabCount = { total: number; shown: number };
@@ -291,6 +305,7 @@ export type ShelfReads = {
 };
 
 export type ShelfReadDependencies = {
+  scoreCurrentness?: PersonalScoreCurrentness;
   pool: Pool;
   access: Access;
   tokens: KeyRing;

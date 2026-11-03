@@ -619,3 +619,15 @@ acceptance remains controller-owned; source presence is not an acceptance result
 methods on the existing VNDB flow, indexed finite consent/items, native creation/assignment receipts and source
 cascade cleanup. Focused source and erasure cases accompany the implementation. Web303 integration and executed
 native64/512/4096 whole-caller growth measurements remain controller work; derived bounds alone do not close them.
+
+### Personal-score shelf order
+
+The [installed score contract](../library-personal-score-order.md) adds `personalScore` to the actual native
+query/schema/client producer, rated-first keysets in both directions, atomic Entry/Content-vote derivative
+maintenance and an explicit 100-entry installation command. `test/library/shelf-score.test.ts` covers native raw
+page traversal, both filters, zero/ties/unrated, write/clear/counted-target changes, Entry identity/removal,
+bounded installation and opaque negative/expired cursors. These are focused tests, not native growth measurements.
+Content's owner-wide identity-currentness producer is an explicit unbound port; the default public order remains
+503 unavailable even after installation. The viewer-facts overlay is independent. Whole public traversal after
+binding the native producer, complete merge/lifecycle currentness and controller native growth remain outstanding
+in `.temp/continuation/personal-score-currentness.md`. Existing date-order assertions are unchanged.
