@@ -8,8 +8,8 @@ import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { BoardId, ThreadId } from './model.ts';
-import { readBoard, readThread } from './reads.ts';
-import type { BoardView, ThreadView } from './model.ts';
+import { readBoard, readThread, type ThreadView } from './reads.ts';
+import type { BoardView } from './model.ts';
 import targets from './appeal-review-page-targets.sql';
 
 export type AppealReviewAnchor = Readonly<{ partition: number; epoch: number; position: bigint }>;
@@ -173,7 +173,10 @@ export async function readAppealReviewTargetContexts(
             target_ids: group.map((target) => target.id),
           }),
         );
-        for (const row of value) locations.set(`${row.kind}:${row.target_id}`, row);
+        for (const row of value) {
+          if (typeof row.kind !== 'string' || typeof row.target_id !== 'string') continue;
+          locations.set(`${row.kind}:${row.target_id}`, row);
+        }
       } catch {
         failedHomes.add(home);
       }
