@@ -68,15 +68,27 @@ FOR EACH ROW EXECUTE FUNCTION library.shelf_score_entry_lock();
 CREATE TRIGGER shelf_score_entry_sync AFTER INSERT OR UPDATE ON library.entry
 FOR EACH ROW EXECUTE FUNCTION library.shelf_score_entry_sync();
 
+-- Even vote-only owners serialize their first vote/Entry under SERIALIZABLE commands.
+-- Terminal cleanup must not recreate a head after Library's final erasure phase.
+CREATE FUNCTION library.shelf_score_vote_touch(owner_route integer, owner_id uuid, allow_create boolean)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE library.shelf_score_head SET revision=revision+1 WHERE route=owner_route AND account_id=owner_id;
+  IF NOT FOUND AND allow_create AND NOT EXISTS (
+    SELECT 1 FROM access.account a WHERE a.route=owner_route AND a.account_id=owner_id AND a.state='deleted'
+  ) THEN
+    INSERT INTO library.shelf_score_head(route,account_id) VALUES(owner_route,owner_id)
+    ON CONFLICT(route,account_id) DO UPDATE SET revision=library.shelf_score_head.revision+1;
+  END IF;
+END;
+$$;
 CREATE FUNCTION library.shelf_score_vote_lock() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP <> 'INSERT' AND OLD.question_id='00000000-0000-7000-8000-000000000001'::uuid THEN
-    INSERT INTO library.shelf_score_head(route,account_id) VALUES(OLD.route,OLD.voter_id)
-    ON CONFLICT(route,account_id) DO UPDATE SET revision=library.shelf_score_head.revision+1;
+    PERFORM library.shelf_score_vote_touch(OLD.route,OLD.voter_id,TG_OP<>'DELETE');
   END IF;
   IF TG_OP <> 'DELETE' AND NEW.question_id='00000000-0000-7000-8000-000000000001'::uuid THEN
-    INSERT INTO library.shelf_score_head(route,account_id) VALUES(NEW.route,NEW.voter_id)
-    ON CONFLICT(route,account_id) DO UPDATE SET revision=library.shelf_score_head.revision+1;
+    PERFORM library.shelf_score_vote_touch(NEW.route,NEW.voter_id,true);
   END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
@@ -138,6 +150,7 @@ DROP TRIGGER shelf_score_entry_lock ON library.entry;
 DROP FUNCTION library.prepare_shelf_score(integer, uuid);
 DROP FUNCTION library.shelf_score_vote_sync();
 DROP FUNCTION library.shelf_score_vote_lock();
+DROP FUNCTION library.shelf_score_vote_touch(integer, uuid, boolean);
 DROP FUNCTION library.shelf_score_entry_sync();
 DROP FUNCTION library.shelf_score_entry_lock();
 DROP FUNCTION library.shelf_score_sync(integer, uuid, uuid);

@@ -168,6 +168,22 @@ test('preparation advances at most 100 entries and cannot publish an empty ready
   ).toBe(103);
 });
 
+test('a late Content vote deletion cannot resurrect an erased installation head', async () => {
+  const accountId = newId(route),
+    target = newId(0x7b20);
+  await vote(accountId, target, 8);
+  await db.admin.query('DELETE FROM library.shelf_score_head WHERE route=$1 AND account_id=$2', [route, accountId]);
+  await db.admin.query('DELETE FROM rating.vote WHERE route=$1 AND voter_id=$2', [route, accountId]);
+  expect(
+    (
+      await db.admin.query('SELECT 1 FROM library.shelf_score_head WHERE route=$1 AND account_id=$2', [
+        route,
+        accountId,
+      ])
+    ).rows,
+  ).toEqual([]);
+});
+
 test('opaque cursors reject changed bindings, owner, question, direction, expiry and malformed score keys', async () => {
   const ring = testTokens(),
     now = new Date('2026-11-03T12:00:00Z');
