@@ -39,11 +39,22 @@ export async function retainNativeOwnerFilterPopulation(binding: OwnerFilterRead
   if (!saved) throw ownerFilterUnavailable();
   const limit = Math.min(100, work.available('candidateKeys'));
   if (limit < 1) throw ownerFilterUnavailable();
-  const rows = await withConnection(saved.dependencies.pool, (client) => ownerFilterQuery<{
-    original: string; terminal: string;
-  }>(deadlineClient(client, binding.input.deadline), work, populationQuery, {
-    route: saved.metadata.route, collection_id: saved.metadata.collectionId, limit,
-  }, { nativeRows: 8 * limit + 8, candidateKeys: limit, bytes: 128 * limit }));
+  const rows = await withConnection(saved.dependencies.pool, (client) =>
+    ownerFilterQuery<{
+      original: string;
+      terminal: string;
+    }>(
+      deadlineClient(client, binding.input.deadline),
+      work,
+      populationQuery,
+      {
+        route: saved.metadata.route,
+        collection_id: saved.metadata.collectionId,
+        limit,
+      },
+      { nativeRows: 8 * limit + 8, candidateKeys: limit, bytes: 128 * limit },
+    ),
+  );
   if (rows.length === limit) throw ownerFilterUnavailable();
   for (const row of rows) {
     if (routeOf(row.original) === null || routeOf(row.terminal) === null) throw ownerFilterUnavailable();
@@ -51,9 +62,14 @@ export async function retainNativeOwnerFilterPopulation(binding: OwnerFilterRead
     retainOwnerFilterOriginal(binding, row.terminal, row.terminal);
   }
   // A ready source generation, rather than an empty/missing join, proves structural exhaustion.
-  const state = await ownerFilterCanonical(work, (allowance) => readCanonicalSourceState(saved.dependencies.pool, {
-    route: saved.metadata.route, collectionId: saved.metadata.collectionId, deadline: binding.input.deadline, allowance,
-  }));
+  const state = await ownerFilterCanonical(work, (allowance) =>
+    readCanonicalSourceState(saved.dependencies.pool, {
+      route: saved.metadata.route,
+      collectionId: saved.metadata.collectionId,
+      deadline: binding.input.deadline,
+      allowance,
+    }),
+  );
   if (state.state !== 'ready' || state.basis.digest !== saved.observation.basis.digest) throw ownerFilterUnavailable();
 }
 

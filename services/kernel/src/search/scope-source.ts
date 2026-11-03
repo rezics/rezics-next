@@ -376,23 +376,26 @@ export function createSearchScopeSource({
     const bound = await (async () => {
       try {
         const captured = value.ordered?.state;
-        const query = captured?.queried && captured.execution ? {
-          filter: value.filter,
-          source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
-          binding: createPublicFilterSourceBinding(pool, reader.routeKey, reader.access),
-          queried: captured.queried,
-          execution: captured.execution,
-        } : undefined;
-        return await withOwnerFilterNativeRead({ actor: reader.actor, at: reader.nativeT!, work: nativeWork,
-          ...(query ? { query } : {}),
-        }, () =>
-          bindOwnerFilterRead(
-            { pool, access: reader.access, routeKey: reader.routeKey, clock },
-            reader.actor,
-            identity.collectionId,
-            admission,
-            reader.deadline,
-          ),
+        const query =
+          captured?.queried && captured.execution
+            ? {
+                filter: value.filter,
+                source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
+                binding: createPublicFilterSourceBinding(pool, reader.routeKey, reader.access),
+                queried: captured.queried,
+                execution: captured.execution,
+              }
+            : undefined;
+        return await withOwnerFilterNativeRead(
+          { actor: reader.actor, at: reader.nativeT!, work: nativeWork, ...(query ? { query } : {}) },
+          () =>
+            bindOwnerFilterRead(
+              { pool, access: reader.access, routeKey: reader.routeKey, clock },
+              reader.actor,
+              identity.collectionId,
+              admission,
+              reader.deadline,
+            ),
         );
       } finally {
         work.native(nativeWork.receipt());

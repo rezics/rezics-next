@@ -16,9 +16,13 @@ test('common members execute all five owner leaves and refuse catalogue composit
       sorted(s.labelOnly.id, s.sessionOnly.id, s.copyOnly.id, s.noEntry.id),
     );
     ownerStatus(
-      await f.native.request('alice', 'GET', f.path({
-        and: [{ type: { in: [f.type] } }, { or: [q.state, q.label, q.session, q.holding] }, { not: q.session }],
-      })),
+      await f.native.request(
+        'alice',
+        'GET',
+        f.path({
+          and: [{ type: { in: [f.type] } }, { or: [q.state, q.label, q.session, q.holding] }, { not: q.session }],
+        }),
+      ),
       503,
     );
     // Bob's completion must not exclude Alice's complete no-entry control.

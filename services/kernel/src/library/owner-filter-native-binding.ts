@@ -156,10 +156,14 @@ export async function revalidateOwnerFilterDisclosure(binding: OwnerFilterReadBi
     const current = await ownerFilterBounded(
       work,
       { nativeRows: 8192, nativePoints: 128, statements: 128, bytes: 1024 * 1024 },
-      () => resolveSubject(
-        saved.dependencies, binding.input.actor, original, binding.input.at,
-        ownerFilterAccessContext(saved.dependencies, binding.input.deadline, saved.attempt),
-      ),
+      () =>
+        resolveSubject(
+          saved.dependencies,
+          binding.input.actor,
+          original,
+          binding.input.at,
+          ownerFilterAccessContext(saved.dependencies, binding.input.deadline, saved.attempt),
+        ),
     );
     if (current?.subjectId !== terminal) throw ownerFilterUnavailable();
   }
@@ -181,28 +185,56 @@ async function revalidateQuery(binding: OwnerFilterReadBinding, work: NativeColl
     const result = await work.compose(async (allowance) => {
       const value = await read();
       const physical = value.cost as PublicFilterCost & { rows?: number; statements?: number; bytes?: number };
-      return { value, work: { reservationId: allowance.reservationId, used: {
-        ...zeroScopeWork(), candidateKeys: physical.inputKeys,
-        nativePoints: physical.accessPoints + physical.dependencyPoints,
-        nativeRows: physical.rows ?? 0, statements: physical.statements ?? 0, bytes: physical.bytes ?? 0,
-      } } };
+      return {
+        value,
+        work: {
+          reservationId: allowance.reservationId,
+          used: {
+            ...zeroScopeWork(),
+            candidateKeys: physical.inputKeys,
+            nativePoints: physical.accessPoints + physical.dependencyPoints,
+            nativeRows: physical.rows ?? 0,
+            statements: physical.statements ?? 0,
+            bytes: physical.bytes ?? 0,
+          },
+        },
+      };
     });
     return result.value;
   };
-  const joined = await charge(() => query.binding.join({ queried: query.queried, execution: query.execution }, context));
-  if (joined.status !== 'joined' || !joined.execution || joined.execution.id !== query.execution ||
-      !isDeepStrictEqual(joined.queried, query.queried) ||
-      joined.definition.meaning.digest !== saved.admission.releaseDigest) throw ownerFilterUnavailable();
+  const joined = await charge(() =>
+    query.binding.join({ queried: query.queried, execution: query.execution }, context),
+  );
+  if (
+    joined.status !== 'joined' ||
+    !joined.execution ||
+    joined.execution.id !== query.execution ||
+    !isDeepStrictEqual(joined.queried, query.queried) ||
+    joined.definition.meaning.digest !== saved.admission.releaseDigest
+  )
+    throw ownerFilterUnavailable();
   const capture = joined.definition.capture;
   if ('purpose' in capture || 'representation' in capture || !capture.filterDocument) throw ownerFilterUnavailable();
   const covered = new Set(compileCurrentOwnerFilter(capture.filterDocument).leaves.map(currentOwnerClauseKey));
   if (leaves.some((leaf) => !covered.has(currentOwnerClauseKey(leaf)))) throw ownerFilterUnavailable();
-  const observed = await charge(() => query.source.readPrivacyReductionHeads({
-    kind: 'population', queried: query.queried, start: joined.execution!.start,
-    execution: query.execution, context,
-  }));
-  if (observed.status !== 'observed' || observed.coverage !== 'all_native_homes' || !observed.routingComplete ||
-      observed.blocking.length || observed.unacknowledged.length || observed.changed.length) throw ownerFilterUnavailable();
+  const observed = await charge(() =>
+    query.source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried: query.queried,
+      start: joined.execution!.start,
+      execution: query.execution,
+      context,
+    }),
+  );
+  if (
+    observed.status !== 'observed' ||
+    observed.coverage !== 'all_native_homes' ||
+    !observed.routingComplete ||
+    observed.blocking.length ||
+    observed.unacknowledged.length ||
+    observed.changed.length
+  )
+    throw ownerFilterUnavailable();
 }
 
 export function ownerFilterAllowance(work: NativeCollectionWork): WorkAllowance {
