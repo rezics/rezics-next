@@ -19,12 +19,13 @@ async function json(response: Response, status = 200): Promise<any> {
 }
 // Inspect actual captured physical nodes, including examined/filtered tuples. Merely
 // asserting the response length or allowing small sequential scans would miss a lost prefix.
-function prefixPlans(value: unknown): void {
+function prefixPlans(value: unknown, seen: Set<string>): void {
   if (!value || typeof value !== 'object') return;
   const node = value as Record<string, any>;
   const relation = node['Relation Name'];
   if (['source_statistic', 'source_statistic_head', 'source_statistic_observation'].includes(relation) &&
       /Scan/.test(node['Node Type'] ?? '')) {
+    seen.add(relation);
     expect(node['Node Type']).toMatch(/^Index (Only )?Scan$/);
     expect(node['Index Cond']).toContain('route');
     expect(node['Index Cond']).toContain('subject_id');
@@ -33,8 +34,8 @@ function prefixPlans(value: unknown): void {
     expect((node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops']).toBeLessThanOrEqual(2);
   }
   for (const child of Object.values(node)) {
-    if (Array.isArray(child)) child.forEach(prefixPlans);
-    else if (child && typeof child === 'object') prefixPlans(child);
+    if (Array.isArray(child)) child.forEach((entry) => prefixPlans(entry, seen));
+    else if (child && typeof child === 'object') prefixPlans(child, seen);
   }
 }
 
@@ -44,6 +45,7 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
     await fixture.grantImporter(fixture.actors.importer);
     const selected = await fixture.createSubject();
     const history = await fixture.createSubject();
+    const empty = await fixture.createSubject();
     const write = (id: string, provider: string, value: unknown, key = crypto.randomUUID()) =>
       fixture.request('PUT', `${path(id)}/${provider}`, { actor: fixture.actors.importer, key, body: value });
     await json(await write(selected, 'bangumi', body));
@@ -75,6 +77,10 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
           const current = await json(await write(selected, 'bangumi', body, key));
           expect(await json(await write(selected, 'bangumi', body, key))).toEqual(current);
           await json(await write(selected, 'bangumi', { ...body, asOf: '2026-10-31' }), 409);
+          expect(await json(await fixture.request('GET', path(empty), { actor: null }))).toEqual([]);
+          await json(await fixture.request('PUT', `${path(selected)}/bangumi`, {
+            actor: fixture.actors.author, body, key: crypto.randomUUID(),
+          }), 403);
           const response = await fixture.request('GET', path(selected), { actor: null });
           expect(response.status).toBe(200);
           const text = await response.text();
@@ -85,10 +91,10 @@ test('fixed source slots and ten-bin bytes retain physical prefixes as native he
       });
       const relations = [...new Set(report.samples.flatMap((s) => s.repetitions.flatMap((r) => Object.keys(r.relations))))];
       assertGrowthAccessPaths(name, report.samples, relations);
-      let plans = 0;
+      const seen = new Set<string>();
       for (const sample of report.samples) for (const run of sample.occurrenceRepetitions)
-        for (const statement of run.statements) for (const document of statement.planDocuments) { prefixPlans(document); plans++; }
-      expect(plans).toBeGreaterThan(0);
+        for (const statement of run.statements) for (const document of statement.planDocuments) prefixPlans(document, seen);
+      expect([...seen].sort()).toEqual(['source_statistic', 'source_statistic_head', 'source_statistic_observation']);
     }
   } finally { await fixture.close(); }
 }, 1_200_000);
