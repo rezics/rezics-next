@@ -34,6 +34,8 @@ import {
   type VoteReviewRow,
   type VoteReviewEpoch,
 } from './own-votes-review.ts';
+import { STANDARD_QUESTION_ID } from './standard-question.ts';
+export { STANDARD_QUESTION_ID } from './standard-question.ts';
 export { VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
 export type { VoteReviewGuard } from './own-votes-review.ts';
 import questionRead from './question-read.sql';
@@ -44,7 +46,6 @@ import voteCountedTargetSet from './vote-counted-target-set.sql';
 import voteRead from './vote-read.sql';
 import voteUpdate from './vote-update.sql';
 
-export const STANDARD_QUESTION_ID = '00000000-0000-7000-8000-000000000001';
 export const VOTE_SCOPE = 'rating:vote';
 
 export type RatingQuestion = RatingQuestionScale & {
