@@ -101,7 +101,7 @@ export function applyIndependentOutcome(visit: IndependentVisit, outcome: Indepe
     return { ...visit, kind: 'denied', outcome, retry: null };
   }
   if (outcome.state === 'unsupported') {
-    return { ...visit, kind: 'unavailable', outcome, retry: null, seam: visit.seam };
+    return { ...visit, kind: 'unavailable', outcome, retry: null, ...(visit.seam === undefined ? {} : { seam: visit.seam }) };
   }
   return { ...visit, kind: 'ready', outcome, retry: null };
 }

@@ -45,12 +45,13 @@ import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
 import { fullDateTime } from '../threads/byline';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
-import type {
-  ProgressFailure,
-  ProgressFinishInput,
-  ProgressIndex,
-  ProgressMode,
-  ProgressStartInput,
+import {
+  applyProgressSnapshot,
+  type ProgressFailure,
+  type ProgressFinishInput,
+  type ProgressIndex,
+  type ProgressMode,
+  type ProgressStartInput,
 } from './progress-reads';
 import { progressFailureMessage, progressView } from './progress-label';
 import type { ProgressChoices } from './progress-profile';
@@ -936,7 +937,7 @@ function SessionRow({
       confirmation.current = { value: null, token: {} };
       setSession((current) =>
         result.session.id === current.id && result.session.revision >= current.revision
-          ? { ...current, ...result.session }
+          ? applyProgressSnapshot(current, result.session)
           : current,
       );
       setKey(crypto.randomUUID());

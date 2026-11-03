@@ -36,6 +36,7 @@ import {
   type ProgressFinishInput,
   type ProgressSessionView,
   type ProgressSnapshot,
+  applyProgressSnapshot,
 } from './progress-reads';
 import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
 import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
@@ -378,22 +379,7 @@ function historyExcerpt(value: string): string {
 }
 
 function mergeIndependentSnapshot(current: ProgressSessionView, snapshot: ProgressSnapshot): ProgressSessionView {
-  const measures = current.measures?.map((measure) => {
-    const next = snapshot.measures?.find((item) => item.unit === measure.unit);
-    return next ? { ...measure, amount: next.amount, total: next.total } : measure;
-  });
-  return {
-    ...current,
-    revision: snapshot.revision,
-    amount: snapshot.amount,
-    total: snapshot.total,
-    state: snapshot.state,
-    completedAt: snapshot.completedAt,
-    locator: snapshot.locator,
-    position: snapshot.position,
-    completedUnitCount: snapshot.completedUnitCount,
-    ...(measures ? { measures } : {}),
-  };
+  return applyProgressSnapshot(current, snapshot);
 }
 
 function ProgressHistoryFacts({ change, preview = false }: { change: ProgressChange; preview?: boolean }) {
@@ -888,7 +874,9 @@ function SessionEditor({
       if (captured.kind === 'finish') setConfirming(null);
       draftBaseline.current = null;
       setSession((current) =>
-        !originating || result.session.revision >= current.revision ? { ...current, ...result.session } : current,
+        !originating || result.session.revision >= current.revision
+          ? applyProgressSnapshot(current, result.session)
+          : current,
       );
       await refreshHistory(origin);
       if (!currentAttempt()) return;
@@ -1047,7 +1035,7 @@ function SessionEditor({
               void refreshHistory();
             }}
             onRefresh={() => refreshHistory()}
-            logsCursor={logsCursor}
+            {...(logsCursor === undefined ? {} : { logsCursor })}
           />
         ) : null}
         {offered && session.state === 'active' && session.mode !== 'completed_units' && !sessionHasIndependentMeasures(session) ? (

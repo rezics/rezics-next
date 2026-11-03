@@ -35,7 +35,7 @@ export type IndependentMeasuresHost = {
   onAcknowledged: (snapshot: ProgressSnapshot) => void;
   onRefresh: () => Promise<ProgressSessionPage | undefined>;
   sender?: MeasureSender;
-  logsCursor?: string;
+  logsCursor?: string | undefined;
 };
 
 export function IndependentMeasuresVisit({
@@ -129,7 +129,13 @@ export function IndependentMeasuresVisit({
     return <IndependentMeasuresRecovery kind="denied" onRetry={() => void refresh()} />;
   }
   if (visit.kind === 'unavailable') {
-    return <IndependentMeasuresRecovery kind="unavailable" seam={visit.seam} onRetry={() => void refresh()} />;
+    return (
+      <IndependentMeasuresRecovery
+        kind="unavailable"
+        {...(visit.seam === undefined ? {} : { seam: visit.seam })}
+        onRetry={() => void refresh()}
+      />
+    );
   }
   if (visit.kind === 'preparing') {
     return <IndependentMeasuresRecovery kind="preparing" />;
@@ -162,7 +168,7 @@ export function IndependentMeasuresVisit({
       )}
       <IndependentMeasuresResult
         outcome={visit.outcome}
-        onRetry={visit.retry ? () => void retry() : undefined}
+        {...(visit.retry ? { onRetry: () => void retry() } : {})}
         onRefresh={() => void refresh()}
       />
       <p>

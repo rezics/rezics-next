@@ -256,6 +256,15 @@ export type ProgressSnapshot = {
   measures?: readonly { unit: string; amount: string | null; total: string | null }[];
 };
 
+export function applyProgressSnapshot<T extends ProgressSessionCore>(current: T, snapshot: ProgressSnapshot): T {
+  const { measures: recorded, ...rest } = snapshot;
+  const measures = current.measures?.map((measure) => {
+    const next = recorded?.find((item) => item.unit === measure.unit);
+    return next ? { ...measure, amount: next.amount, total: next.total } : measure;
+  });
+  return { ...current, ...rest, ...(measures ? { measures } : {}) };
+}
+
 export type ProgressStarted = { ok: true; id: string };
 export type ProgressRecorded = { ok: true; session: ProgressSnapshot };
 
