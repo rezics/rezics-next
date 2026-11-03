@@ -28,7 +28,7 @@ function tables(episodes: Record<string, unknown>[]) {
   };
 }
 
-const baseEpisodes = [
+const baseEpisodes: Record<string, unknown>[] = [
   {
     id: 900001,
     subject_id: 81,
@@ -328,7 +328,13 @@ test('production operator imports authored Bangumi episodes through ordinary acc
     );
     const kindCandidates = (kindPage.body as { candidates: Candidate[] }).candidates.filter((item) => !item.retracted);
     expect(kindCandidates.filter((item) => item.statement.value.content === specialId).length).toBeLessThanOrEqual(1);
-    await editor.takedown(crossMediaAliases.bangumi, 'episode:900001', 'summary');
+    const fence = await editor.http('/v1/sourceFences:takedown', {
+      source: crossMediaAliases.bangumi,
+      externalId: 'episode:900001',
+      fieldGroup: 'summary',
+      reason: 'Rights complaint',
+    });
+    expect(fence.status).toBe(200);
     const restored = structuredClone(baseEpisodes);
     restored[0] = { ...restored[0]!, description: 'Restored description after fence.' };
     await importBangumiEpisodeFidelity({
