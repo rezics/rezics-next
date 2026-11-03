@@ -11,7 +11,7 @@ let owner: NativeProfileFixture['owner'];
 const path = '/v1/libraryConsumptionSummary';
 beforeAll(async () => {
   native = await createProfileEntryFixture({ projectLinks: false });
-  owner = await native.identity([...sessionScopes, 'library_entry:read', 'library_entry:update', 'copy:create']);
+  owner = await native.identity([...sessionScopes, 'library_entry:read', 'library_entry:update', 'copy:create', 'published_log:create', 'published_log:delete']);
   await native.activate(await native.publish(await compileSessionProfile()));
   expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
 }, 120_000);
@@ -31,8 +31,10 @@ function counts(value: ConsumptionSummary) {
 test('real owner history counts distinct occurrences independently of shelf, quantities, clear and replay', async () => {
   expect(counts(await summary())).toEqual(['0', '0', '0']);
   const subjectId = await native.createSubject('game');
-  const secondSubject = await native.createSubject('recipe');
-  await send('PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned' }, 201);
+  const secondSubject = await native.createSubject('game', 'A second subject');
+  await send('PUT', `/v1/libraryEntries/${subjectId}`, { state: 'completed' }, 201);
+  await send('POST', '/v1/copies', { subjectId, kind: 'physical', status: 'owned' }, 201);
+  expect(counts(await summary())).toEqual(['0', '0', '0']);
   const beforeEntry = await send('GET', `/v1/libraryEntries/${subjectId}`);
   const ids: string[] = [];
   for (const id of [subjectId, subjectId, secondSubject]) {
@@ -51,6 +53,10 @@ test('real owner history counts distinct occurrences independently of shelf, qua
   expect(counts(complete)).toEqual(['3', '2', '1']);
   expect(complete.coverage).toEqual({ nativeSessions: 'complete', otherHistory: 'unavailable', unitMeaning: 'not_evaluated' });
   expect(complete.completedOccurrencesWithUnknownProfile).toBe('0');
+  const { publishedLog } = await send('POST', '/v1/publishedLogs', { sessionId: ids[0] }, 201);
+  expect(counts(await summary())).toEqual(['3', '2', '1']);
+  await send('DELETE', `/v1/publishedLogs/${publishedLog.id}`);
+  expect(counts(await summary())).toEqual(['3', '2', '1']);
   await send('POST', `/v1/progressSessions/${ids[0]}:record`, { revision: 3, clear: true });
   const cleared = await summary();
   expect(counts(cleared)).toEqual(['3', '2', '1']);
