@@ -2,11 +2,7 @@ import type { CommandTransaction } from '../command/command.ts';
 import type { Pool } from 'pg';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { withReadTransaction } from './read.ts';
-import {
-  VoteReviewStaleError,
-  VoteReviewUnavailableError,
-  type VoteReviewEpoch,
-} from '../rating/own-votes-review.ts';
+import { VoteReviewStaleError, VoteReviewUnavailableError, type VoteReviewEpoch } from '../rating/own-votes-review.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityEpochStore } from './identity-epoch-store.ts';
 import type { IdentityEpochState } from './identity-epoch-contract.ts';
@@ -23,10 +19,14 @@ export type IdentityRatingEpochReader = (tx: CommandTransaction, home: number) =
 export async function readIdentityRatingEpochs(pool: Pool, homes: readonly number[], deadline: number) {
   const epochs: VoteReviewEpoch[] = [];
   for (const partition of [...new Set(homes)].sort((a, b) => a - b)) {
-    const state = await withReadTransaction(pool, async (client) => {
-      await partitionReadClient(client, partition);
-      return identityEpochStore.readEpoch(client, partition);
-    }, deadline);
+    const state = await withReadTransaction(
+      pool,
+      async (client) => {
+        await partitionReadClient(client, partition);
+        return identityEpochStore.readEpoch(client, partition);
+      },
+      deadline,
+    );
     if (state.state === 'pending') throw new VoteReviewUnavailableError('identity_pending');
     if (state.state !== 'published') throw new VoteReviewUnavailableError('identity_observation_unavailable');
     epochs.push({ partition, epoch: state.epoch.toString() });
@@ -35,8 +35,12 @@ export async function readIdentityRatingEpochs(pool: Pool, homes: readonly numbe
 }
 
 export function compareIdentityRatingEpochs(expected: readonly VoteReviewEpoch[], actual: readonly VoteReviewEpoch[]) {
-  if (expected.length !== actual.length || expected.some((entry, index) =>
-    entry.partition !== actual[index]?.partition || entry.epoch !== actual[index]?.epoch))
+  if (
+    expected.length !== actual.length ||
+    expected.some(
+      (entry, index) => entry.partition !== actual[index]?.partition || entry.epoch !== actual[index]?.epoch,
+    )
+  )
     throw new VoteReviewStaleError('identity_epoch_changed');
 }
 

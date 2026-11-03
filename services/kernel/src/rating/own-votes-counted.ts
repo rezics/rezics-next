@@ -15,8 +15,12 @@ import { STANDARD_QUESTION_ID, VOTE_SCOPE, VoteInvalidError } from './votes.ts';
 import countedVotes from './own-votes-counted.sql';
 import { readIdentityRatingEpochs } from '../semantic/identity-rating-admission.ts';
 import {
-  ownVoteReviewWitness, readVoteReviewSlots, VoteReviewUnavailableError,
-  type VoteReviewGuard, type VoteReviewEpoch, type VoteReviewSlot,
+  ownVoteReviewWitness,
+  readVoteReviewSlots,
+  VoteReviewUnavailableError,
+  type VoteReviewGuard,
+  type VoteReviewEpoch,
+  type VoteReviewSlot,
 } from './own-votes-review.ts';
 
 export const OWN_COUNTED_VOTE_TARGET_LIMIT = 100;
@@ -333,7 +337,12 @@ function preparationFingerprint(
     .digest('hex');
 }
 
-function readFingerprint(requestHash: string, preparationHash: string, rows: readonly OwnCountedVoteRow[], slots: readonly VoteReviewSlot[]): string {
+function readFingerprint(
+  requestHash: string,
+  preparationHash: string,
+  rows: readonly OwnCountedVoteRow[],
+  slots: readonly VoteReviewSlot[],
+): string {
   return createHash('sha256')
     .update(JSON.stringify([requestHash, preparationHash, rows, slots]))
     .digest('hex');
@@ -401,12 +410,17 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
   const epochWitnesses = new WeakMap<OwnCountedVotePreparation, readonly VoteReviewEpoch[]>();
 
   function homes(targets: readonly OwnCountedVotePreparedTarget[]) {
-    return targets.flatMap((target) => 'countingTargetId' in target
-      ? [target.requestedTargetId, target.countingTargetId].map((id) => partitionOf(routeOf(id)!)) : []);
+    return targets.flatMap((target) =>
+      'countingTargetId' in target
+        ? [target.requestedTargetId, target.countingTargetId].map((id) => partitionOf(routeOf(id)!))
+        : [],
+    );
   }
 
   function slotIds(targets: readonly OwnCountedVotePreparedTarget[]) {
-    return targets.flatMap((target) => 'countingTargetId' in target ? [target.requestedTargetId, target.countingTargetId] : []);
+    return targets.flatMap((target) =>
+      'countingTargetId' in target ? [target.requestedTargetId, target.countingTargetId] : [],
+    );
   }
 
   async function prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult> {
@@ -485,7 +499,12 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       epochs = await readIdentityRatingEpochs(deps.pool, homes(targets), deadline);
     } catch (error) {
       if (!(error instanceof VoteReviewUnavailableError)) throw error;
-      return { status: 'preparing', reason: error.reason === 'identity_pending' ? 'identity-pending' : 'identity-changed', retry: 'same-input', targets: [] };
+      return {
+        status: 'preparing',
+        reason: error.reason === 'identity_pending' ? 'identity-pending' : 'identity-changed',
+        retry: 'same-input',
+        targets: [],
+      };
     }
     const requestHash = requestFingerprint(request);
     const identityHash = identityFingerprint(last);
@@ -533,7 +552,11 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       'countingTargetId' in target ? [target.countingTargetId] : [],
     );
     const rows = await readRows(client, actor, countingTargetIds);
-    const slots = await readVoteReviewSlots(client, { ownerId: actor.accountId, questionId: STANDARD_QUESTION_ID, targetIds: slotIds(preparation.targets) });
+    const slots = await readVoteReviewSlots(client, {
+      ownerId: actor.accountId,
+      questionId: STANDARD_QUESTION_ID,
+      targetIds: slotIds(preparation.targets),
+    });
     return {
       status: 'read',
       requestFingerprint: requestHash,
@@ -567,7 +590,10 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
     if (!accountObservationsEqual(readResult.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };
-    if (readFingerprint(requestHash, preparation.preparationFingerprint, readResult.rows, readResult.slots) !== readResult.rowFingerprint)
+    if (
+      readFingerprint(requestHash, preparation.preparationFingerprint, readResult.rows, readResult.slots) !==
+      readResult.rowFingerprint
+    )
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
 
     const actor = owner(request.actor);
@@ -625,14 +651,21 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
           'countingTargetId' in target ? [target.countingTargetId] : [],
         );
         const rows = await readRows(client, actor, countingTargetIds);
-        const slots = await readVoteReviewSlots(client, { ownerId: actor.accountId, questionId: STANDARD_QUESTION_ID, targetIds: slotIds(preparation.targets) });
+        const slots = await readVoteReviewSlots(client, {
+          ownerId: actor.accountId,
+          questionId: STANDARD_QUESTION_ID,
+          targetIds: slotIds(preparation.targets),
+        });
         return { account, rows, slots };
       },
       deadline,
     );
     if (!accountObservationsEqual(current.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };
-    if (JSON.stringify(current.rows) !== JSON.stringify(readResult.rows) || JSON.stringify(current.slots) !== JSON.stringify(readResult.slots))
+    if (
+      JSON.stringify(current.rows) !== JSON.stringify(readResult.rows) ||
+      JSON.stringify(current.slots) !== JSON.stringify(readResult.slots)
+    )
       return { status: 'preparing', reason: 'vote-changed', retry: 'same-input' };
 
     const rowsByCountingTarget = new Map(current.rows.map((row) => [row.countingTargetId, row]));
@@ -642,11 +675,19 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       const row = rowsByCountingTarget.get(target.countingTargetId);
       const review: VoteReviewGuard = {
         version: 1,
-        question: { revision: preparation.question!.revision, lifecycleRevision: preparation.question!.lifecycleRevision },
-        subject: { canonicalId: target.countingTargetId, epochs: epochs.filter((epoch) => homes([target]).includes(epoch.partition)) },
+        question: {
+          revision: preparation.question!.revision,
+          lifecycleRevision: preparation.question!.lifecycleRevision,
+        },
+        subject: {
+          canonicalId: target.countingTargetId,
+          epochs: epochs.filter((epoch) => homes([target]).includes(epoch.partition)),
+        },
         ownVote: ownVoteReviewWitness({
-          ownerId: actor.accountId, questionId: STANDARD_QUESTION_ID,
-          requestedTargetId: target.requestedTargetId, canonicalId: target.countingTargetId,
+          ownerId: actor.accountId,
+          questionId: STANDARD_QUESTION_ID,
+          requestedTargetId: target.requestedTargetId,
+          canonicalId: target.countingTargetId,
           original: slotsByTarget.get(target.requestedTargetId) ?? null,
           canonical: slotsByTarget.get(target.countingTargetId) ?? null,
           effective: row ? { ...row, targetId: row.originalTargetId, countedTarget: row.countingTargetId } : null,

@@ -25,9 +25,14 @@ import {
   compareIdentityRatingEpochs,
 } from '../semantic/identity-rating-admission.ts';
 import {
-  normalizeVoteReviewGuard, ownVoteReviewWitness, readVoteReviewSlots,
-  VoteReviewStaleError, VoteReviewUnavailableError,
-  type VoteReviewGuard, type VoteReviewRow, type VoteReviewEpoch,
+  normalizeVoteReviewGuard,
+  ownVoteReviewWitness,
+  readVoteReviewSlots,
+  VoteReviewStaleError,
+  VoteReviewUnavailableError,
+  type VoteReviewGuard,
+  type VoteReviewRow,
+  type VoteReviewEpoch,
 } from './own-votes-review.ts';
 export { VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
 export type { VoteReviewGuard } from './own-votes-review.ts';
@@ -144,11 +149,17 @@ function asVote(row: VoteRow): Vote {
 }
 
 function asReviewRow(row: VoteRow | null): VoteReviewRow | null {
-  return row ? {
-    targetId: row.targetId, units: row.units === null ? null : Number(row.units),
-    revision: Number(row.revision), countedRevision: Number(row.countedRevision),
-    countedTarget: row.countedTarget, changedAt: row.changedAt!, transactionId: row.transactionId,
-  } : null;
+  return row
+    ? {
+        targetId: row.targetId,
+        units: row.units === null ? null : Number(row.units),
+        revision: Number(row.revision),
+        countedRevision: Number(row.countedRevision),
+        countedTarget: row.countedTarget,
+        changedAt: row.changedAt!,
+        transactionId: row.transactionId,
+      }
+    : null;
 }
 
 function changedVoteEvent(input: {
@@ -243,7 +254,11 @@ export function createVoteCommands(config: Dependencies) {
     pool,
     ...(clock === undefined ? {} : { clock }),
   });
-  const guardedRunner = createLibraryCommandRunner({ pool, access: config.access, ...(clock === undefined ? {} : { clock }) });
+  const guardedRunner = createLibraryCommandRunner({
+    pool,
+    access: config.access,
+    ...(clock === undefined ? {} : { clock }),
+  });
 
   async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
@@ -258,8 +273,11 @@ export function createVoteCommands(config: Dependencies) {
 
     let guard: VoteReviewGuard | undefined;
     if (input.guard !== undefined) {
-      try { guard = normalizeVoteReviewGuard(input.guard, input.targetId); }
-      catch { throw new VoteInvalidError('guard'); }
+      try {
+        guard = normalizeVoteReviewGuard(input.guard, input.targetId);
+      } catch {
+        throw new VoteInvalidError('guard');
+      }
     }
     input = { questionId: input.questionId, targetId: input.targetId, units: input.units, ...(guard ? { guard } : {}) };
     const initial = guard ? null : await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
@@ -282,14 +300,23 @@ export function createVoteCommands(config: Dependencies) {
           prepare: async (attempt) => {
             const deadline = commandAttemptDeadline(attempt);
             // Current disclosure precedes replay; business review/scale/lifecycle evidence is deferred.
-            const current = await prepareVoteTarget(config, actor, guard ? { questionId: input.questionId, targetId: input.targetId } : input, deadline);
+            const current = await prepareVoteTarget(
+              config,
+              actor,
+              guard ? { questionId: input.questionId, targetId: input.targetId } : input,
+              deadline,
+            );
             if (initial && current.target.subjectId !== initial.target.subjectId)
               throw new IdentityRatingAdmissionPendingError(input.targetId, 'source-pending');
             let epochs: readonly VoteReviewEpoch[] = [];
             let error: VoteReviewUnavailableError | null = null;
             if (guard) {
               try {
-                epochs = await readIdentityRatingEpochs(pool, [input.targetId, current.target.subjectId].map((id) => partitionOf(requireRoute(id))), deadline);
+                epochs = await readIdentityRatingEpochs(
+                  pool,
+                  [input.targetId, current.target.subjectId].map((id) => partitionOf(requireRoute(id))),
+                  deadline,
+                );
               } catch (failure) {
                 if (!(failure instanceof VoteReviewUnavailableError)) throw failure;
                 error = failure;
@@ -301,7 +328,10 @@ export function createVoteCommands(config: Dependencies) {
         async (tx, command, prepared) => {
           const { question, target: resolved } = initial ?? prepared;
           if (guard) {
-            if (question.revision !== guard.question.revision || question.lifecycleRevision !== guard.question.lifecycleRevision)
+            if (
+              question.revision !== guard.question.revision ||
+              question.lifecycleRevision !== guard.question.lifecycleRevision
+            )
               throw new VoteReviewStaleError('question_changed');
             if (resolved.subjectId !== guard.subject.canonicalId) throw new VoteReviewStaleError('subject_changed');
             if (prepared.error) throw prepared.error;
@@ -322,12 +352,15 @@ export function createVoteCommands(config: Dependencies) {
           });
           if (guard) {
             const slots = await readVoteReviewSlots(tx, {
-              ownerId: owner.accountId, questionId: question.id,
+              ownerId: owner.accountId,
+              questionId: question.id,
               targetIds: [input.targetId, resolved.subjectId],
             });
             const current = ownVoteReviewWitness({
-              ownerId: owner.accountId, questionId: question.id,
-              requestedTargetId: input.targetId, canonicalId: resolved.subjectId,
+              ownerId: owner.accountId,
+              questionId: question.id,
+              requestedTargetId: input.targetId,
+              canonicalId: resolved.subjectId,
               original: slots.find((slot) => slot.targetId === input.targetId)!.vote,
               canonical: slots.find((slot) => slot.targetId === resolved.subjectId)!.vote,
               effective: asReviewRow(countedRow),
