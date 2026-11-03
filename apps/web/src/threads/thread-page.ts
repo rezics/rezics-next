@@ -15,8 +15,19 @@ type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
-type ReadingPageResource = ThreadResource['reading-page'];
-type ReadingPage = NonNullable<Awaited<ReturnType<ReadingPageResource['get']>>['data']>;
+/** Temporary narrow seam until the complete Kernel client declarations publish this mounted route. */
+type ReadingPage = {
+  thread: Thread['thread'];
+  replies: { items: PostPage['posts']; next: PostPage['next'] };
+};
+type ReadingPageClient = ThreadResource & {
+  'reading-page': {
+    get(options: {
+      query?: { cursor?: string };
+      headers?: { authorization: string };
+    }): Promise<{ error?: unknown; status?: number; data?: ReadingPage | null }>;
+  };
+};
 export type ThreadPost = PostPage['posts'][number];
 
 type PageInput = { id: string; cursor?: string; post?: string };
@@ -115,7 +126,8 @@ export async function loadThreadPage(
       ...(cursor === undefined ? {} : { query: { cursor } }),
       ...(authorization ? { headers: { authorization } } : {}),
     };
-    return client.threads({ id: data.id })['reading-page'].get(options);
+    const threadClient = client.threads({ id: data.id }) as ReadingPageClient;
+    return threadClient['reading-page'].get(options);
   };
   let readingPageRead = data.expectedSlug === undefined ? readReadingPage() : undefined;
   if (data.expectedSlug !== undefined) {
