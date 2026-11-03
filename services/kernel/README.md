@@ -824,8 +824,9 @@ are summed and retries counted. No request body is logged. Success adds no log, 
 recording costs constant space and O(phases + retries) clock reads, with retries bounded by the deadline.
 
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client
-declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
-stale.
+declarations with `bun run client` while the development database is up. For managed compiler placement, use
+`bun run typecheck --emit-client-only`; it prepares the compiler database on an admitted host and emits declarations
+without running the full typecheck first. Tests fail while either generated contract is stale.
 
 Register AIP-136 custom methods with `customMethod(resourcePath, verb)` from `src/http/custom-method.ts`, then use
 that path with `.post(...)`. The resource path must not end in `/` and the verb must match `^[a-z][A-Za-z0-9]*$`
