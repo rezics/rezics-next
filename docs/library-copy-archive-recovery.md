@@ -1,12 +1,12 @@
 # Native personal archive recovery
 
-The installed owner admits the actual personal Library v1 artifact and privately inspects retained holdings and
+The installed owner admits the actual personal Library V1, V2 and V3 artifacts and privately inspects retained holdings and
 supported progress evidence. Holdings remain evidence-only. Progress can be explicitly reviewed and applied as a
 fresh native Session through the existing Session and episode commands. This is not account restoration.
 
 Decision: recovery is per occurrence: the owner maps the source Subject to its current canonical Subject, and each
 review creates a distinct fresh Session. Validate the installed manifest's total `rows` and `recordBytes` and exact
-section inventory; v1 has no per-section counters. The progress flow and its supported/unsupported matrix are in
+section inventory; V1 has no per-section counters. V2/V3 require exact per-section row and byte totals. The progress flow and its supported/unsupported matrix are in
 [native progress recovery](library-archive-progress-recovery.md).
 
 ## Installed interface
@@ -33,7 +33,7 @@ entry, entitlement, copy, repeat-history or publication effects. Client declarat
 routes. Web activates the adjacent recovery interface only after those installed types are available; Web319 remains
 the episode checklist, Web320 the measure editor, and Web323 the export interface.
 
-The only accepted format is `https://rezics.com/formats/library-export`, version 1, assembled as `{manifest,records}`
+The only accepted format is `https://rezics.com/formats/library-export`, versions 1, 2 and 3, assembled as `{manifest,records}`
 from the [installed export's final page](library-export.md). Unfinished pages, null manifests, missing sections,
 duplicate JSON names, invalid UTF-8, unsupported versions, inconsistent totals and malformed holdings are rejected.
 Expired export capture timestamps do not invalidate a previously completed local file. They never set command time.
@@ -44,7 +44,7 @@ holding operands are malformed; null means unstored. Native v1 uses full SQL cal
 rejected rather than widened or guessed. Old vocabulary remains raw evidence beside its original pins.
 No current identity, profile meaning or copy admission is inferred by inspection.
 
-Section coverage counts records actually present. A declared section with zero records is empty. `omissions` retains
+Section coverage counts records and encoded record bytes actually present. A declared section with zero records is empty. `omissions` retains
 the producer's explicit exclusions; it is not interpreted as an empty section. v1 cannot represent an unavailable
 installed source as a completed capture: absent expected sections are rejected. Sessions and exact unit rows are
 retained for review; History, journal/reflection, entries/labels, occurrences, Collections, annotations, provider
@@ -54,12 +54,25 @@ Every holding row returns `resolution:"unresolved"`; its page returns `effectsSu
 `fullRestoration:false`. Two copies with equal Subject, note or dates remain independent rows. There is no duplicate
 search or current-copy enumeration. Archive UUIDs, pins, timestamps and revisions never authorize native effects.
 
+Decision: the copy adapter uses the shared V2 section vocabulary for V3, with coverage
+`private-library-owner-facts-v3` and journal-local `assessment:{meaningRevision:1,units:0..20|null}`;
+V4 provider additions remain refused. This is a decoder seam, not a producer or assessment-adoption writer.
+The installed base producer emits V2; an actual V3 producer remains a separately delivered integration seam.
+
+V2/V3 require exactly the original 14 sections followed by `annotations`, `provenance`, `journals`,
+`coverage:"private-library-owner-facts-v2"` or `"private-library-owner-facts-v3"`, and `sectionTotals` with
+`{rows,recordBytes}` for every section, including empty ones. Counters must match every actual record before
+anything is persisted. Current annotation/provenance/journal envelopes are recognized but their payloads are
+discarded. Journal assessment is unsupported, has no votes or dates-to-progress effects, and enters no new store.
+Provider evidence and all other unsupported sections likewise contribute only coverage counts/bytes.
+V1 retains its original manifest and decoder, including the absence of section counters and new section claims.
+
 ## Bounds, lifetime and cleanup
 
 Admission authenticates and checks the private gate/account before decoding or parsing. Ingress limits the raw
 file to 32 MiB. A pre-parse scanner limits nesting to 16; the manifest limits total records to 100,000. At most
 4096 holdings and 32 MiB of retained manifest/row evidence are admitted, with at most 66,000 encoded bytes per record.
-Notes admit the native maximum of 1000 Unicode characters; source/location admit 200 each. Only typed holdings,
+Notes admit the native maximum of 1000 Unicode characters; source/location admit 200 each. Only typed holdings and Session/unit evidence,
 the manifest and bounded coverage counts are stored, never the raw file or unsupported section payloads.
 
 One retained upload occupies an owner's keyed slot, including cancelled and expired uploads. Read admission ends
@@ -73,10 +86,19 @@ rows per call, then the empty root. Expired evidence can still be removed by its
 ## Cost and verification boundary
 
 Validation is O(U+N) over bounded bytes/records once per upload request. Persistence uses one owner-slot insert and
-one bounded `jsonb_to_recordset` insert, with ordinary command authorization, History/receipt costs and rollback.
+one bounded `jsonb_to_recordset` insert over retained holdings and Session/unit evidence, with ordinary command authorization, History/receipt costs and rollback.
 The preliminary admission and final receipt-currentness check each use a native operational account transaction.
 These costs include account and exposure admission; the raw upload digest enters command identity without notes
 entering receipt/event payloads. Recovery evidence is not a new export section or Search input.
+
+Wire bytes U include JSON framing, whitespace and the manifest; encoded record bytes B are the sum of
+`JSON.stringify(record)` UTF-8 lengths, independently of U. A producer can emit B=32 MiB whose completed file
+exceeds the consumer's U=32 MiB ceiling; upload refuses it before native effects. No producer bound promises fit.
+Depth 16, 100,000 records, 4096 holdings, 66,000 encoded bytes per record and the retained-evidence bound are
+independent admission constraints. Ingress bytes, decoded UTF-16 text, the parsed object graph, one record's
+serialization, retained-row serialization and database-driver buffers can coexist; their sizes are additive,
+not a single 32 MiB memory claim. Unsupported payloads exist only in bounded parse buffers. No transport or
+admission reservation changes here; the mounted raw route keeps its existing payer and limit.
 
 Each page selects P+1=11 indexed rows, plus one locked owner root and current owner/exposure checks. Review addresses
 one occurrence and at most I=20 selected unit IDs, then checks one current profile/Subject anchor and one final
