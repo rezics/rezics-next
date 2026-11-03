@@ -164,7 +164,14 @@ test('Shared Collection items preserve exact occurrence editing and independent 
         `button[aria-label="${action}: ${m.library_member_occurrence({ title, position })}"]`,
       )!;
     expect(named(rows[0]!, m.library_member_move_up(), 1).disabled).toBe(true);
-    expect(named(rows[3]!, m.library_member_move_down(), 4).disabled).toBe(true);
+    expect(
+      rows[3]!.querySelector<HTMLButtonElement>(
+        `button[aria-label="${m.library_member_move_down()}: ${m.library_member_occurrence({
+          title: m.library_subject_unavailable(),
+          position: 4,
+        })}"]`,
+      )!.disabled,
+    ).toBe(true);
     for (const action of rows[1]!.querySelectorAll<HTMLElement>(
       '[data-content-item-slot="actions"] [data-slot="button"]',
     )) {
