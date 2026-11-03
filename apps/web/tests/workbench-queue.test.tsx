@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import type { WorkbenchNativeSource } from '../src/moderation/workbench-queue/read';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -26,7 +27,7 @@ const { createRoot } = await import('react-dom/client');
 const { m } = await import('../src/paraglide/messages.js');
 const { isSignedInPath } = await import('../src/session/guard');
 const { workbenchCaseHref, workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
-const { readWorkbench, type WorkbenchNativeSource } = await import('../src/moderation/workbench-queue/read');
+const { readWorkbench } = await import('../src/moderation/workbench-queue/read');
 const { WorkbenchView, WorkbenchPreparing } = await import('../src/moderation/workbench-queue/view');
 
 const reportId = '0192f3a0-6c1e-7b2a-9d4e-000000000401';
