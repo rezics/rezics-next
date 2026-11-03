@@ -45,7 +45,15 @@ test('native context rejects mismatched observations and retires a removed or hi
     const initial = await (await prepare()).finish();
     expect(initial.contexts.get('one')?.parentContext).toMatchObject({
       kind: 'reply',
-      parent: { state: 'available', id: parentId, excerpt: 'Private after removal', language: null, spoiler: false },
+      parent: {
+        state: 'available',
+        id: parentId,
+        revisionId: expect.any(String),
+        author: { id: f.author.accountId },
+        excerpt: 'Private after removal',
+        language: null,
+        spoiler: false,
+      },
     });
     expect(initial.contexts.get('two')).toEqual(initial.contexts.get('one'));
     expect(initial.contexts.get('one')?.reviewContext).toMatchObject({
