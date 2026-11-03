@@ -82,12 +82,14 @@ export async function compileLibraryOutcomeRelease(): Promise<Release> {
 }
 
 /** Real compiler output, including a child whose structural bases are not primary types. */
-export async function compileEntryRelease(version: 'original' | 'replacement', gameUnits?: readonly string[]): Promise<Release> {
+export async function compileEntryRelease(
+  version: 'original' | 'replacement',
+  gameUnits?: readonly string[],
+): Promise<Release> {
   const profiles = Object.fromEntries(
     Object.entries(entryStates).map(([vertical, state]) => {
       const profile = libraryProfile(`fixture.${vertical}`, vertical === 'record' ? 'track' : 'minute');
-      if (vertical === 'game' && gameUnits)
-        profile.progress.allowed[0].units = gameUnits.map((unit) => unitData(unit));
+      if (vertical === 'game' && gameUnits) profile.progress.allowed[0].units = gameUnits.map((unit) => unitData(unit));
       profile.entryStateSet.states.push({ id: version === 'replacement' ? `${state}_again` : state, role: 'active' });
       return [vertical, profile];
     }),

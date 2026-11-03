@@ -162,7 +162,9 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await apply([unsupported], path2)).outcomes[0].status).toBe('unsupported');
   const mangaId = mediaId + 1000000;
   const mangaUpload = await f.send(importer.bearer, 'POST', base + ':preview', {
-    upload: JSON.stringify([{ mediaId: mangaId, media: { id: mangaId, type: 'MANGA' }, progress: 0, progressVolumes: 2 }]),
+    upload: JSON.stringify([
+      { mediaId: mangaId, media: { id: mangaId, type: 'MANGA' }, progress: 0, progressVolumes: 2 },
+    ]),
   });
   expect(mangaUpload.status).toBe(200);
   const mangaPath = base + '/' + (await mangaUpload.json()).id;
@@ -187,7 +189,10 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await mangaApplied.json()).outcomes[0].progress).toMatchObject({
     occurrence: null,
     complete: true,
-    measures: [{ status: 'unsupported', unit: 'chapter' }, { status: 'unsupported', unit: 'volume' }],
+    measures: [
+      { status: 'unsupported', unit: 'chapter' },
+      { status: 'unsupported', unit: 'volume' },
+    ],
   });
   const conflicts = await f.send(importer.bearer, 'POST', base + ':preview', {
     upload: JSON.stringify([

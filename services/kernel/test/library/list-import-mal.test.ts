@@ -85,21 +85,41 @@ test('MAL adopts only an explicitly selected scalar occurrence and retries the s
   const confirmed = (row: number, version: string) =>
     json('POST', `${base}/${id}/apply`, { confirm: true, rows: [{ row, version, fields: [] }] });
   const page = await json('GET', `${base}/${id}`);
-  expect(page.rows[0].progressMeasures[0]).toMatchObject({ state: 'zero', amount: '0', unit: 'episode', unitSupported: true });
+  expect(page.rows[0].progressMeasures[0]).toMatchObject({
+    state: 'zero',
+    amount: '0',
+    unit: 'episode',
+    unitSupported: true,
+  });
   expect(page.rows[1].progressMeasures[0]).toMatchObject({ state: 'missing', unitSupported: true });
 
   const zeroReview = await select(0, { kind: 'start', primaryUnit: 'episode' });
   const zero = await confirmed(0, zeroReview);
-  expect(zero.outcomes[0].progress.measures).toMatchObject([{ status: 'applied', sourceAmount: '0', currentAmount: '0' }]);
+  expect(zero.outcomes[0].progress.measures).toMatchObject([
+    { status: 'applied', sourceAmount: '0', currentAmount: '0' },
+  ]);
   const sessionId = zero.outcomes[0].progress.occurrence.sessionId;
   let opened = await json('GET', `/v1/progressSessions/${sessionId}`);
-  expect(opened.progressSession).toMatchObject({ mode: 'scalar_amount', unit: 'episode', amount: '0', state: 'active', completedAt: null });
-  expect((await json('GET', `/v1/progressSessions/${sessionId}/journal`)).journal).toMatchObject({ startDate: null, finishDate: null });
+  expect(opened.progressSession).toMatchObject({
+    mode: 'scalar_amount',
+    unit: 'episode',
+    amount: '0',
+    state: 'active',
+    completedAt: null,
+  });
+  expect((await json('GET', `/v1/progressSessions/${sessionId}/journal`)).journal).toMatchObject({
+    startDate: null,
+    finishDate: null,
+  });
   expect((await native.inspect()).entries.some((entry) => entry.row.subject_id === target)).toBe(false);
 
   const absentReview = await select(1, { kind: 'start', primaryUnit: 'episode' });
   const absent = await confirmed(1, absentReview);
-  expect(absent.outcomes[0].progress).toMatchObject({ occurrence: null, complete: true, measures: [{ status: 'missing' }] });
+  expect(absent.outcomes[0].progress).toMatchObject({
+    occurrence: null,
+    complete: true,
+    measures: [{ status: 'missing' }],
+  });
   expect((await json('GET', `/v1/progressSessions?subjectId=${target}`)).progressSessions).toHaveLength(1);
 
   await json('POST', `/v1/progressSessions/${sessionId}:record`, { revision: 1, measureId: 'episode', amount: '4' });
@@ -114,7 +134,9 @@ test('MAL adopts only an explicitly selected scalar occurrence and retries the s
   const stale = await confirmed(3, staleReview);
   expect(stale.outcomes[0].progress.measures).toMatchObject([{ status: 'stale' }]);
   expect((await json('GET', `/v1/progressSessions/${sessionId}`)).progressSession.amount).toBe('6');
-  expect((await json('GET', `/v1/progressSessions/${sessionId}`, undefined, randomUUID(), 'other', 404)).progressSession).toBeUndefined();
+  expect(
+    (await json('GET', `/v1/progressSessions/${sessionId}`, undefined, randomUUID(), 'other', 404)).progressSession,
+  ).toBeUndefined();
 
   // A lost provider checkpoint replays both original native receipts instead of making a second occurrence.
   await native.pool.query(
@@ -123,7 +145,14 @@ test('MAL adopts only an explicitly selected scalar occurrence and retries the s
     [
       native.owner.actor.accountId,
       id,
-      JSON.stringify({ startAttempted: true, occurrence: null, lastRevision: null, steps: {}, measures: [], complete: false }),
+      JSON.stringify({
+        startAttempted: true,
+        occurrence: null,
+        lastRevision: null,
+        steps: {},
+        measures: [],
+        complete: false,
+      }),
     ],
   );
   expect((await confirmed(0, zeroReview)).outcomes[0]).toEqual(zero.outcomes[0]);
