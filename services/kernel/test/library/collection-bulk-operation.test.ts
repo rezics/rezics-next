@@ -10,6 +10,7 @@ import { executeStatusTarget } from '../../src/library/bulk-contract.ts';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { workStepDeadline } from '../../src/library/command-support.ts';
+import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
@@ -107,7 +108,11 @@ test('cancellation and expiry close pending targets without changing entries; qu
   await expect(
     bulk.preview(
       f.owner.actor,
-      { action: 'set_status', state: 'completed', selection: { kind: 'query', filter: {} } },
+      {
+        action: 'set_status',
+        state: 'completed',
+        selection: { kind: 'query', sourceId: randomUUID(), filter: '{"state":"planned"}' },
+      },
       key(),
     ),
   ).rejects.toMatchObject({ code: 'dependency_unavailable' });
@@ -131,6 +136,116 @@ test('cancellation and expiry close pending targets without changing entries; qu
     await expireCollectionBulkPage({ pool: f.pool, clock: late }, expired.value.operation.route);
   await expect(bulk.get(f.owner.actor, expired.value.operation.id)).rejects.toThrow();
 });
+
+test('filtered preview exhausts native Members pages before status confirmation', async () => {
+  const owner = await f.identity([
+    ...f.owner.actor.scopes,
+    'collection:create',
+    'collection:read',
+    'collection:update',
+  ]);
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+  const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
+  const source = (
+    await collections.createCollection(owner.actor, { title: 'Paged bulk source', visibility: 'private' }, key())
+  ).value;
+  const subjectId = await f.createSubject('game');
+  await f.commands.putEntry(owner.actor, subjectId, { state: 'planned' }, key());
+  for (let n = 0; n < 101; n++)
+    await collections.addMember(owner.actor, source.id, { subjectId, note: `occurrence-${n}` }, key());
+
+  const response = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
+    action: 'set_status',
+    state: 'completed',
+    selection: { kind: 'query', sourceId: source.id },
+  });
+  expect(response.status, await response.clone().text()).toBe(201);
+  const operation = (await response.json()).operation;
+  expect(operation.selectionSource).toMatchObject({
+    id: source.id,
+    revision: source.revision + 101,
+    scannedCandidates: 101,
+    selectedSubjects: 1,
+  });
+  expect(operation.counts.targets).toBe(1);
+
+  await f.send(owner.bearer, 'POST', `/v1/libraryOperations/${operation.id}:confirm`, {});
+  const readConsent = async () => ({
+    actorAccountId: owner.actor.accountId,
+    clientId: owner.actor.clientId,
+    scopes: owner.actor.scopes,
+  });
+  await runCollectionBulkPage({ ...dependencies(), readConsent }, {
+    route: operation.route,
+    operationId: operation.id,
+  });
+  expect((await f.commands.readEntry(owner.actor, subjectId)).state).toBe('completed');
+
+  const destination = (
+    await collections.createCollection(owner.actor, { title: 'Bulk destination', visibility: 'private' }, key())
+  ).value;
+  const addResponse = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
+    action: 'add_to_collection',
+    collectionId: destination.id,
+    selection: { kind: 'query', sourceId: source.id },
+  });
+  expect(addResponse.status, await addResponse.clone().text()).toBe(201);
+  const add = (await addResponse.json()).operation;
+  expect(add.selectionSource.selectedSubjects).toBe(1);
+  expect(add.counts.targets).toBe(1);
+  await f.send(owner.bearer, 'POST', `/v1/libraryOperations/${add.id}:confirm`, {});
+  await runCollectionBulkPage({ ...dependencies(), readConsent }, { route: add.route, operationId: add.id });
+  const destinationMembers = await f.pool.query<{ count: number }>(
+    `SELECT count(*)::integer AS count FROM library.collection_member
+     WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL`,
+    [add.route, destination.id],
+  );
+  expect(destinationMembers.rows[0]?.count).toBe(1);
+
+  const libraryRemovalResponse = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
+    action: 'remove_from_library',
+    selection: { kind: 'query', sourceId: source.id },
+  });
+  expect(libraryRemovalResponse.status, await libraryRemovalResponse.clone().text()).toBe(201);
+  const libraryRemoval = (await libraryRemovalResponse.json()).operation;
+  expect(libraryRemoval.counts.targets).toBe(1);
+  await f.send(owner.bearer, 'POST', `/v1/libraryOperations/${libraryRemoval.id}:confirm`, {});
+  await runCollectionBulkPage({ ...dependencies(), readConsent }, {
+    route: libraryRemoval.route,
+    operationId: libraryRemoval.id,
+  });
+  expect((await f.send(owner.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
+
+  const removalResponse = await f.send(owner.bearer, 'POST', '/v1/libraryOperations', {
+    action: 'remove_from_collection',
+    collectionId: source.id,
+    selection: { kind: 'query', sourceId: source.id },
+  });
+  expect(removalResponse.status, await removalResponse.clone().text()).toBe(201);
+  const removal = (await removalResponse.json()).operation;
+  expect(removal.counts).toMatchObject({ scannedCandidates: 101, selectedSubjects: 1, targets: 101 });
+  const occurrences = await f.pool.query<{ count: number; distinctMembers: number }>(
+    `SELECT count(*)::integer AS count,count(DISTINCT member_id)::integer AS "distinctMembers"
+     FROM library.bulk_target WHERE route=$1 AND operation_id=$2`,
+    [removal.route, removal.id],
+  );
+  expect(occurrences.rows[0]).toEqual({ count: 101, distinctMembers: 101 });
+  await f.send(owner.bearer, 'POST', `/v1/libraryOperations/${removal.id}:confirm`, {});
+  expect(await runCollectionBulkPage({ ...dependencies(), readConsent }, {
+    route: removal.route,
+    operationId: removal.id,
+  })).toBe(true);
+  expect(await runCollectionBulkPage({ ...dependencies(), readConsent }, {
+    route: removal.route,
+    operationId: removal.id,
+  })).toBe(false);
+  const remaining = await f.pool.query<{ count: number }>(
+    `SELECT count(*)::integer AS count FROM library.collection_member
+     WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL`,
+    [removal.route, source.id],
+  );
+  expect(remaining.rows[0]?.count).toBe(0);
+}, 300000);
 
 test('current authority loss prevents another effect and result disclosure', async () => {
   await f.setLibraryOpen(false);

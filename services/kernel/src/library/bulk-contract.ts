@@ -27,14 +27,19 @@ export { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits
 export type DecimalSequence = string; // canonical nonnegative bigint decimal, compared numerically
 export type SubjectSelection =
   | { kind: 'explicit'; targets: readonly { subjectId: string }[] }
-  | {
-      kind: 'query';
-      filter: {
-        state?: EntryState;
-        /** Raw type identifier; no per-id length cap. The shelf reader's opaque type-key codec is a dependency. */ primaryType?: string;
-      };
-    };
+  | { kind: 'query'; sourceId: string; filter?: string; sort?: 'id' };
 export type OccurrenceSelection = { kind: 'occurrences'; memberIds: readonly string[] };
+export type BulkSelectionSource = Readonly<{
+  id: string;
+  revision: number;
+  membershipKind: 'curated' | 'dynamic';
+  exposure: 'private' | 'unlisted' | 'public';
+  sourceDigest: string;
+  filter: string | null;
+  sort: 'id' | null;
+  scannedCandidates: number;
+  selectedSubjects: number;
+}>;
 export type BulkAdmission =
   | { action: 'set_status'; state: EntryState; selection: SubjectSelection }
   | { action: 'add_to_collection'; collectionId: string; selection: SubjectSelection }
@@ -91,6 +96,8 @@ export type OperationView = Readonly<{
   selectionKind: BulkAdmission['selection']['kind'];
   state: EntryState | null;
   collectionId: string | null;
+  /** Exact source/revision/filter authority used to capture a filtered selection. */
+  selectionSource: BulkSelectionSource | null;
   phase: BulkPhase;
   selectionComplete: boolean;
   occurrencesComplete: boolean;

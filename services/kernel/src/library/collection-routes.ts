@@ -399,7 +399,13 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
     return view;
   }
   const sitemapQuery = strict(SitemapQuerySchema);
-  return collectionBulkRoutes(app, dependencies)
+  return collectionBulkRoutes(app, {
+    ...dependencies,
+    reads: {
+      readCollection: (actor, id, deadline) => read().readCollection(actor, id, deadline),
+      readMembers: (actor, id, options, deadline) => read().readMembers(actor, id, options, deadline),
+    },
+  })
     .post(
       customMethod('/v1/collections/:collectionId', 'publish'),
       {

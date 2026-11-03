@@ -1,6 +1,6 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
-import { BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
+import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
 
 // HTTP shapes stand alone so routes need not load the unfinished bulk runtime.
 const closed = { additionalProperties: false } as const;
@@ -27,8 +27,10 @@ const subjectSelection = t.Union([
   t.Object(
     {
       kind: t.Literal('query'),
-      // Full type identifiers have no per-identifier cap; admission bounds the whole body.
-      filter: t.Object({ state: t.Optional(entryState), primaryType: t.Optional(t.String()) }, closed),
+      sourceId: id,
+      // The existing Members query grammar admits and canonicalizes this document.
+      filter: t.Optional(t.String({ maxLength: BULK_ADMISSION_BODY_BYTES })),
+      sort: t.Optional(t.Literal('id')),
     },
     closed,
   ),
@@ -59,7 +61,14 @@ export const bulkPreviewSchema = t.Union([
   t.Object({ action: t.Literal('set_status'), state: entryState, selection: subjectSelection }, closed),
   t.Object({ action: t.Literal('add_to_collection'), collectionId: id, selection: subjectSelection }, closed),
   t.Object({ action: t.Literal('remove_from_library'), selection: subjectSelection }, closed),
-  t.Object({ action: t.Literal('remove_from_collection'), collectionId: id, selection: occurrenceSelection }, closed),
+  t.Object(
+    {
+      action: t.Literal('remove_from_collection'),
+      collectionId: id,
+      selection: t.Union([subjectSelection, occurrenceSelection]),
+    },
+    closed,
+  ),
 ]);
 
 const phase = t.Union([
@@ -127,6 +136,23 @@ const operation = t.Object(
     selectionKind,
     state: t.Union([entryState, t.Null()]),
     collectionId: nullableId,
+    selectionSource: t.Union([
+      t.Null(),
+      t.Object(
+        {
+          id,
+          revision: t.Integer({ minimum: 0 }),
+          membershipKind: t.Union([t.Literal('curated'), t.Literal('dynamic')]),
+          exposure: t.Union([t.Literal('private'), t.Literal('unlisted'), t.Literal('public')]),
+          sourceDigest: t.String({ pattern: '^[0-9a-f]{64}$' }),
+          filter: nullableString,
+          sort: t.Union([t.Literal('id'), t.Null()]),
+          scannedCandidates: count,
+          selectedSubjects: count,
+        },
+        closed,
+      ),
+    ]),
     phase,
     selectionComplete: t.Boolean(),
     occurrencesComplete: t.Boolean(),

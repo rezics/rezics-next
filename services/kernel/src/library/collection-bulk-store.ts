@@ -6,6 +6,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { EntryState } from './entry-model.ts';
 import type {
   BulkAdmission,
+  BulkSelectionSource,
   BulkReason,
   OccurrenceTarget,
   ReceiptLocator,
@@ -21,11 +22,15 @@ type ManifestTarget<T> = T extends unknown ? Omit<T, 'operationId' | 'ordinal'> 
 export type CollectionBulkTarget =
   | Omit<SubjectTarget, 'operationId' | 'ordinal'>
   | (ManifestTarget<OccurrenceTarget> & { revision?: number });
+type StoredSelection =
+  | { kind: 'explicit' }
+  | { kind: 'occurrences' }
+  | (Extract<BulkAdmission['selection'], { kind: 'query' }> & { capture: BulkSelectionSource });
 export type CollectionBulkIntent = (
   | { action: 'set_status'; state: EntryState }
   | { action: 'add_to_collection' | 'remove_from_collection'; collectionId: string }
   | { action: 'remove_from_library' }
-) & { selection: { kind: 'explicit' | 'occurrences' } | Extract<BulkAdmission['selection'], { kind: 'query' }> };
+) & { selection: StoredSelection };
 export type CollectionBulkKey = { route: number; accountId: string; operationId: string };
 export type CollectionBulkOperation = {
   operationId: string;
@@ -147,7 +152,7 @@ export async function collectCollectionBulkTargets(
 export async function previewCollectionBulk(
   tx: CommandTransaction,
   input: CollectionBulkKey & {
-    request: BulkAdmission;
+  request: CollectionBulkIntent;
     targets: readonly CollectionBulkTarget[];
     initiator: DurableInitiatorRecord;
     creationReceipt: ReceiptLocator;

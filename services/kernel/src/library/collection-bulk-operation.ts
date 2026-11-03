@@ -36,6 +36,7 @@ import {
 } from './collection-bulk-entry-admission.ts';
 import {
   captureCollectionBulkOccurrences,
+  captureCollectionBulkOccurrencesForSubjects,
   explicitCollectionOccurrenceRemoval,
 } from './collection-bulk-occurrence-admission.ts';
 import type { BulkAdmission, BulkCounters, OperationResult, OutcomeQuery } from './bulk-contract.ts';
@@ -50,6 +51,7 @@ import {
   previewCollectionBulk,
   readCollectionBulk,
   type CollectionBulkKey,
+  type CollectionBulkIntent,
   type CollectionBulkOperation,
   type CollectionBulkTarget,
 } from './collection-bulk-store.ts';
@@ -57,11 +59,19 @@ import { pageBulkOutcomes } from './bulk-outcome-page.ts';
 import { createCollectionReads } from './collection-reads.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import creationReceipt from './collection-publication-episode-receipt.sql';
+import { captureCollectionBulkSource } from './collection-bulk-capture.ts';
 
 export const BULK_PREVIEW_COMMAND = 'library.collectionBulk.preview';
 export const BULK_CONFIRMED_EVENT = 'com.rezics.library.bulk.confirmed.v1';
 export const BULK_CHANGED_EVENT = 'com.rezics.library.bulk.changed.v1';
-export type CollectionBulkDependencies = { pool: Pool; access: Access; tokens: KeyRing; clock: KernelClock };
+type CollectionBulkReads = Pick<ReturnType<typeof createCollectionReads>, 'readCollection' | 'readMembers'>;
+export type CollectionBulkDependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock: KernelClock;
+  reads?: CollectionBulkReads;
+};
 export type CollectionBulkInput = { route: number; operationId: string };
 export const bulkHash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const validator = Compile(bulkAdmissionSchema);
@@ -190,23 +200,14 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
       AND account_id=$3 GROUP BY state,reason`,
     [key.route, key.operationId, key.accountId],
   );
+  const source = operation.request.selection.kind === 'query' ? operation.request.selection.capture : null;
+  const removesOccurrences = operation.request.action === 'remove_from_collection';
+  const occurrenceSelection = removesOccurrences && operation.request.selection.kind === 'occurrences';
   const counts: BulkCounters = {
-    scannedCandidates:
-      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
-        ? 0
-        : operation.targetCount,
-    selectedSubjects:
-      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
-        ? 0
-        : operation.targetCount,
-    scannedOccurrences:
-      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
-        ? operation.targetCount
-        : 0,
-    capturedOccurrences:
-      operation.request.action === 'remove_from_collection' && operation.request.selection.kind === 'occurrences'
-        ? operation.targetCount
-        : 0,
+    scannedCandidates: source?.scannedCandidates ?? (occurrenceSelection ? 0 : operation.targetCount),
+    selectedSubjects: source?.selectedSubjects ?? (occurrenceSelection ? 0 : operation.targetCount),
+    scannedOccurrences: removesOccurrences ? operation.targetCount : 0,
+    capturedOccurrences: removesOccurrences ? operation.targetCount : 0,
     targets: operation.targetCount,
     pending: 0,
     reconciling: 0,
@@ -234,6 +235,7 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
       selectionKind: operation.request.selection.kind,
       state: operation.request.action === 'set_status' ? operation.request.state : null,
       collectionId: 'collectionId' in operation.request ? operation.request.collectionId : null,
+      selectionSource: source,
       phase:
         cancelled && stopReason === 'execution_expired'
           ? 'expired'
@@ -327,8 +329,21 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
   }
   return {
     async preview(actor: Actor, input: BulkAdmission, requestKey: string) {
-      const parsed =
-        input.action === 'remove_from_library'
+      const querySelection = input.selection.kind === 'query' ? input.selection : null;
+      if (querySelection) {
+        if (Buffer.byteLength(JSON.stringify(input)) > BULK_ADMISSION_BODY_BYTES)
+          throw new RangeError('Bulk command exceeds 64 KiB');
+        if (!validator.Check(input)) throw new TypeError('Invalid bulk selection');
+      }
+      const parsed: BulkAdmission = querySelection
+        ? {
+            ...input,
+            ...(input.action === 'add_to_collection' || input.action === 'remove_from_collection'
+              ? { collectionId: input.collectionId.toLowerCase() }
+              : {}),
+            selection: { ...querySelection, sourceId: querySelection.sourceId.toLowerCase() },
+          }
+        : input.action === 'remove_from_library'
           ? explicitLibraryRemoval(input)
           : input.action === 'add_to_collection'
             ? explicitCollectionBulkAdd(input)
@@ -337,10 +352,6 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
               : explicitBulkStatus(input);
       const action = parsed.action === 'remove_from_library' ? 'library_entry:delete' : 'library_entry:update';
       const owner = bulkOwner(actor, action);
-      const request = {
-        ...parsed,
-        selection: { kind: parsed.action === 'remove_from_collection' ? 'occurrences' : 'explicit' },
-      };
       const route = requireRoute(owner.accountId),
         operationId = newId(route);
       const requestDigest = bulkHash([principalCommandIdentity(owner), BULK_PREVIEW_COMMAND, input]);
@@ -355,36 +366,78 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
             const context = commandAccessContext({ pool, deadline: deadlineFor(5000) }, attempt);
             await admitEntryAttempt(deps, owner, action, attempt, context.deadline);
             const capture = await captureDurableInitiator(context, owner);
-            if (parsed.action === 'remove_from_collection') {
+            const captured = querySelection
+              ? deps.reads
+                ? await captureCollectionBulkSource(deps.reads, owner, querySelection, context.deadline)
+                : (() => {
+                    throw new ProblemError('dependency_unavailable');
+                  })()
+              : null;
+            const materialized: BulkAdmission = captured
+              ? {
+                  ...parsed,
+                  selection: { kind: 'explicit', targets: captured.subjects },
+                }
+              : parsed;
+            const executable: BulkAdmission =
+              captured && parsed.action === 'remove_from_collection'
+                ? parsed
+                : captured
+                  ? parsed.action === 'remove_from_library'
+                    ? explicitLibraryRemoval(materialized)
+                    : parsed.action === 'add_to_collection'
+                      ? explicitCollectionBulkAdd(materialized)
+                      : explicitBulkStatus(materialized)
+                  : parsed;
+            const base = {
+              capture,
+              selectionSource: captured?.source ?? null,
+              input: executable,
+            };
+            if (executable.action === 'remove_from_collection') {
               try {
-                const targets = await captureCollectionBulkOccurrences(deps, owner, parsed, attempt, context.deadline);
-                return { capture, targets, action: parsed.action };
+                const targets = captured
+                  ? await captureCollectionBulkOccurrencesForSubjects(
+                      deps,
+                      owner,
+                      executable.collectionId,
+                      captured.subjects.map(({ subjectId }) => subjectId),
+                      attempt,
+                      context.deadline,
+                      captured.source.id === executable.collectionId ? captured.source.revision : undefined,
+                    )
+                  : await captureCollectionBulkOccurrences(
+                      deps,
+                      owner,
+                      explicitCollectionOccurrenceRemoval(executable),
+                      attempt,
+                      context.deadline,
+                    );
+                return { ...base, targets };
               } catch (error) {
-                return { capture, targets: [] as CollectionBulkTarget[], action: parsed.action, error };
+                return { ...base, targets: [] as CollectionBulkTarget[], error };
               }
             }
-            if (parsed.action === 'remove_from_library') {
+            if (executable.action === 'remove_from_library') {
               try {
-                const resolved = await resolveLibraryRemovalSubjects(deps, owner, parsed, attempt.time, context);
-                return { capture, resolved, action: parsed.action };
+                const resolved = await resolveLibraryRemovalSubjects(deps, owner, executable, attempt.time, context);
+                return { ...base, resolved };
               } catch (error) {
                 return {
-                  capture,
+                  ...base,
                   resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
-                  action: parsed.action,
                   error,
                 };
               }
             }
-            if (parsed.action === 'add_to_collection') {
+            if (executable.action === 'add_to_collection') {
               try {
-                const resolved = await prepareCollectionBulkAddAdmission(deps, owner, parsed, attempt.time, context);
-                return { capture, resolved, action: parsed.action };
+                const resolved = await prepareCollectionBulkAddAdmission(deps, owner, executable, attempt.time, context);
+                return { ...base, resolved };
               } catch (error) {
                 return {
-                  capture,
+                  ...base,
                   resolved: [] as { subjectId: string; requestedSubjectId: string | null }[],
-                  action: parsed.action,
                   error,
                 };
               }
@@ -392,7 +445,8 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
             const resolved: { subjectId: string; requestedSubjectId: string | null }[] = [];
             const seen = new Set<string>();
             try {
-              for (const target of parsed.selection.targets) {
+              if (executable.selection.kind !== 'explicit') throw new ProblemError('dependency_unavailable');
+              for (const target of executable.selection.targets) {
                 const subject = await resolveSubject(deps, owner, target.subjectId, attempt.time, context);
                 if (!subject) throw new LibraryNotFoundError();
                 if (!seen.has(subject.subjectId)) {
@@ -401,24 +455,24 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                 }
               }
             } catch (error) {
-              return { capture, resolved, action: parsed.action, error };
+              return { ...base, resolved, error };
             }
-            return { capture, resolved, action: parsed.action };
+            return { ...base, resolved };
           },
         },
         async (tx, command, prepared) => {
           if ('error' in prepared) throw prepared.error;
           const targets: CollectionBulkTarget[] =
-            prepared.action === 'remove_from_collection'
+            prepared.input.action === 'remove_from_collection'
               ? prepared.targets
-              : prepared.action === 'remove_from_library'
+              : prepared.input.action === 'remove_from_library'
                 ? await captureLibraryRemovalTargets(tx, owner, prepared.resolved)
-                : parsed.action === 'add_to_collection'
+                : prepared.input.action === 'add_to_collection'
                   ? await captureCollectionBulkAddTargets(
                       tx,
                       route,
                       owner.accountId,
-                      parsed.collectionId,
+                      prepared.input.collectionId,
                       prepared.resolved,
                     )
                   : await (async () => {
@@ -445,6 +499,27 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
                         };
                       });
                     })();
+          const selection: CollectionBulkIntent['selection'] = prepared.selectionSource
+            ? {
+                kind: 'query',
+                sourceId: prepared.selectionSource.id,
+                ...(prepared.selectionSource.filter === null ? {} : { filter: prepared.selectionSource.filter }),
+                ...(prepared.selectionSource.sort === null ? {} : { sort: prepared.selectionSource.sort }),
+                capture: prepared.selectionSource,
+              }
+            : {
+                kind:
+                  prepared.input.action === 'remove_from_collection' &&
+                  prepared.input.selection.kind === 'occurrences'
+                    ? 'occurrences'
+                    : 'explicit',
+              };
+          const request: CollectionBulkIntent =
+            prepared.input.action === 'set_status'
+              ? { action: prepared.input.action, state: prepared.input.state, selection }
+              : prepared.input.action === 'add_to_collection' || prepared.input.action === 'remove_from_collection'
+                ? { action: prepared.input.action, collectionId: prepared.input.collectionId, selection }
+                : { action: prepared.input.action, selection };
           const operation = { route, id: operationId, kind: BULK_PREVIEW_COMMAND, sourceId: operationId };
           const record: DurableInitiatorRecord = {
             operation,
@@ -469,7 +544,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
           const key = { route, accountId: owner.accountId, operationId };
           await previewCollectionBulk(tx, {
             ...key,
-            request: parsed,
+            request,
             targets,
             initiator: record,
             creationReceipt: {

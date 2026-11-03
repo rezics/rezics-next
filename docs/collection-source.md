@@ -322,11 +322,14 @@ native cursor restart/session/cache. Full persona/API/default/growth and unrelat
 
 ## Bulk selection capture and confirmation
 
-Commerce decision L2 supersedes the cross-home confirmation-cut protocol. An explicit selection or admitted
-indexed filter yields at most 1,000 exact targets, each written once to installed `library.bulk_target` rows.
-Read no more than the first 1,001 matching targets; a larger population refuses preview and asks the user to narrow
-the selection. The source uses its existing direct or ready-result reader and current disclosure checks. This
-adds neither a new Members preparation protocol nor public-source access.
+Commerce decision L2 supersedes the cross-home confirmation-cut protocol. An explicit selection or native Members
+query yields at most 1,000 exact effects, each written once to installed `library.bulk_target` rows. A query names
+its source Collection, canonical filter and optional native `id` sort. Capture uses the installed Collection
+descriptor and Members readers, follows every continuation, and admits at most 100 pages/10,000 returned source
+candidates before refusing an unfinished preparation. The 1,001st unique Subject or target occurrence refuses
+preview. The source descriptor, viewer authority/exposure, exact filter/order and selected population digest bind
+the preview; no browser page or cursor defines completeness. A pending Members page remains preparing, and missing
+source authority remains unavailable. This adds neither a new Members preparation protocol nor public-source access.
 
 Confirmation changes the native operation state and executes only persisted target rows. It never reruns the
 filter, validates the entire population at a common cross-home cut, or adds later arrivals. Each native effect
@@ -335,12 +338,12 @@ checks its captured entry or occurrence revision/incarnation atomically. A chang
 Current authorization remains mandatory for preview, confirmation, effects and recovered results.
 
 Decision: explicit subject targets are canonical and unique; occurrence selections preserve each selected member,
-including duplicate subjects, and retain the occurrence revision. Persist only action/filter provenance in the
-operation header; the target rows are the sole membership manifest.
+including duplicate subjects, and retain the occurrence revision. A query header stores source/filter/order, stable
+source revision/exposure, capture digest and bounded counts; the target rows remain the sole effect manifest.
 
-The [bulk owner contract](../services/kernel/src/library/bulk-contract.md) owns persistence and delivery.
-Preparation keeps its existing native implementation. Account erasure remains composed through Accounts 27af;
-this operation does not grant an alternative erasure or disclosure path.
+The [bulk owner contract](../services/kernel/src/library/bulk-contract.md) owns persistence and delivery. Existing
+action writers, operation keys, current authorization, original receipts and cleanup remain authoritative. Account
+erasure remains composed through Accounts 27af; this operation does not grant an alternative erasure or disclosure path.
 
 ## Cost
 

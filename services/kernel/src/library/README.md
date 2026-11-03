@@ -1440,18 +1440,20 @@ mounted use through shared Source/filter admission. Browser layout and page cont
 matches; admitted source/filter/order and accepted profile meanings remain bound. See the owning
 [native bulk contract](bulk-contract.md) and its [research evidence](../../../../docs/research/library-bulk-bound-selection.md).
 
-All relevant population, meaning, original/terminal identity AND captured target expectation drift before the defined
-confirmation cut stales confirmation with no dispatch. Strictly later drift yields exact target conflicts or
-appropriate source-wide authority stops, retaining earlier effects. Confirmation never re-queries the selection or
-promises rollback across independent effects. The cut includes exclusion/NOT/order/foreign/privacy dependencies and
-behind-frontier changes, not just returned positives. Discovery-time matching alone is superseded.
+Filtered selection now captures through the installed Collection descriptor and Members readers before creating a
+preview. The source ID/revision/membership/exposure, viewer authority, exact canonical filter/order and complete
+selected population digest bind the captured result. A changed source during capture refuses the preview; later
+entry or occurrence changes yield their individual stale outcomes, while accepted effects remain. Confirmation
+never re-queries the selection or promises rollback across independent effects, and no cross-home confirmation cut
+is claimed.
 
-Native confirmation is unavailable pending shared producer agreement and a complete validation-to-confirm binding
-across the participating homes. Sequential checks plus root CAS, hashes, RR snapshots or positive-ID sets do not
-supply it. Bulk factories still throw; target/effect DDL and the native outcome pager exist, but operation-header
-DDL, finite preparation attachment, seal/confirm ABI, default bulk registration/routes and the complete journey do
-not. The temporal choice is an owning contract, not installed support or proven feasibility. Existing stopped
-Source/Kind/identity producers and custody obligations retain their authority.
+`collection-bulk-capture.ts` follows every Members continuation, up to 100 pages and 10,000 candidate rows; it
+refuses the 1,001st unique Subject, while occurrence actions independently refuse the 1,001st captured target row.
+Requests are limited to 64 KiB and each operation stores at most 1,000 effects. Pending Members pages stay
+`202 {preparing:true}` and unavailable source authority stays `503 dependency_unavailable`; neither becomes a
+successful empty selection. The API now accepts query capture for status, Collection add, occurrence removal and
+Library removal through the existing common operation and action writers. Whole-caller native acceptance and
+physical cost measurements remain integration obligations.
 
 Bulk add atomically skips active subject presence and appends at most one occurrence per missing subject; ordinary
 intentional duplicates and existing capacity/respacing remain. Subject-based removal captures every matching real

@@ -15,6 +15,7 @@ import type { CollectionBulkTarget } from './collection-bulk-store.ts';
 import { LibraryNotFoundError } from './command-support.ts';
 import { readCollection } from './collection-store.ts';
 import { readableSubjects } from './subject-anchor.ts';
+import { CollectionBulkSelectionTooLarge } from './collection-bulk-store.ts';
 
 export type ExplicitCollectionOccurrenceRemoval = Extract<BulkAdmission, { action: 'remove_from_collection' }> & {
   selection: { kind: 'occurrences'; memberIds: readonly string[] };
@@ -125,6 +126,105 @@ export async function captureCollectionBulkOccurrences(
   const subjectIds = [...new Set(targets.map((target) => target.subjectId))];
   for (let offset = 0; offset < subjectIds.length; offset += 100) {
     const page = subjectIds.slice(offset, offset + 100);
+    if ((await readableSubjects(deps, actor, page, attempt.time)).length !== page.length)
+      throw new LibraryNotFoundError();
+  }
+  return targets;
+}
+
+/** Query every current occurrence for the already captured canonical Subjects. Occurrence identity and
+ * multiplicity remain native; this is the existing occurrence action admission, not a Subject-keyed rewrite.
+ */
+export async function captureCollectionBulkOccurrencesForSubjects(
+  deps: OccurrenceAdmissionDependencies,
+  actor: AccountActor,
+  collectionId: string,
+  subjectIds: readonly string[],
+  attempt: CommandAttempt,
+  deadline: number,
+  expectedCollectionRevision?: number,
+): Promise<CollectionBulkTarget[]> {
+  const route = routeOf(collectionId);
+  const subjects = [...new Set(subjectIds.map((id) => id.toLowerCase()))];
+  if (route === null || subjects.length > BULK_MAX_SELECTION_IDS || subjects.some((id) => routeOf(id) === null))
+    throw new LibraryNotFoundError();
+  const context = commandAccessContext({ pool: deps.pool, deadline }, attempt);
+  let collectionAccess: Awaited<ReturnType<typeof accessCheck>>;
+  try {
+    collectionAccess = await accessCheck(
+      deps.access,
+      actor,
+      'collection:update',
+      { route, id: collectionId },
+      context,
+    );
+  } catch (error) {
+    if (error instanceof GrantDeniedError) throw new LibraryNotFoundError();
+    throw error;
+  }
+
+  const targets = await withConnection(deps.pool, async (tx) => {
+    await tx.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const collection = await readCollection(tx, route!, collectionId);
+      if (
+        !collection ||
+        collection.state !== 'active' ||
+        collection.membershipKind !== 'curated' ||
+        !collection.curatorAccountId
+      )
+        throw new LibraryNotFoundError();
+      if (
+        expectedCollectionRevision !== undefined &&
+        collection.revision !== expectedCollectionRevision
+      )
+        throw new ProblemError('stale_cursor');
+      try {
+        if (!(await collectionAccess(tx, attempt.time))) throw new LibraryNotFoundError();
+      } catch (error) {
+        if (error instanceof GrantDeniedError) throw new LibraryNotFoundError();
+        throw error;
+      }
+      if (subjects.length === 0) {
+        await tx.query('COMMIT');
+        return [];
+      }
+      const rows = await tx.query<{
+        memberId: string;
+        subjectId: string;
+        memberRevision: string;
+        transactionId: string;
+        addedAt: string;
+      }>(
+        `SELECT member_id AS "memberId",subject_id AS "subjectId",member_revision::text AS "memberRevision",
+          transaction_id AS "transactionId",added_at::text AS "addedAt"
+         FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND subject_id=ANY($3::uuid[])
+           AND deletion_id IS NULL ORDER BY ordinal_key,member_id LIMIT $4`,
+        [route, collectionId, subjects, BULK_MAX_SELECTION_IDS + 1],
+      );
+      if (rows.rows.length > BULK_MAX_SELECTION_IDS) throw new CollectionBulkSelectionTooLarge();
+      const captured = rows.rows.map((row): CapturedOccurrenceTarget => ({
+        kind: 'occurrence',
+        collectionId,
+        memberId: row.memberId,
+        subjectId: row.subjectId,
+        expected: {
+          memberRevision: row.memberRevision,
+          transactionId: row.transactionId,
+          addedAt: row.addedAt,
+        },
+      }));
+      await tx.query('COMMIT');
+      return captured;
+    } catch (error) {
+      await tx.query('ROLLBACK');
+      throw error;
+    }
+  });
+
+  const capturedSubjects = [...new Set(targets.map((target) => target.subjectId))];
+  for (let offset = 0; offset < capturedSubjects.length; offset += 100) {
+    const page = capturedSubjects.slice(offset, offset + 100);
     if ((await readableSubjects(deps, actor, page, attempt.time)).length !== page.length)
       throw new LibraryNotFoundError();
   }

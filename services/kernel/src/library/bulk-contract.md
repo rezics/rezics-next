@@ -3,9 +3,14 @@
 ## Bounded preview and confirmation
 
 Commerce decision L2 supersedes the earlier cross-home confirmation-cut protocol and its capture/funding
-requirements. Preview explicit or admitted filtered targets once, persist the exact target rows, and confirm that
-manifest. At most 1,000 targets may belong to an operation. A larger result refuses preview with “Select at most
-1,000 targets. Narrow the selection and preview again.” Confirmation never reruns a filter or adds new matches.
+requirements. Preview explicit targets or a query against one explicit source Collection once, persist the exact
+target rows, and confirm that manifest. Query capture uses the installed Collection descriptor and Members
+readers, follows every page under stable source identity/revision/exposure and binds the caller's current viewer
+authority plus canonical filter/order and full selected population digest. It admits at most 100 pages/10,000 raw
+candidate rows and refuses the 1,001st unique Subject or occurrence effect; at most 1,000 effects may belong to an
+operation. The whole request is capped at 64 KiB. Pending source preparation remains `202 {preparing:true}` and
+missing source authority remains `503 dependency_unavailable`, never a fabricated empty result. Confirmation never
+reruns a filter or adds new matches.
 
 Use the existing occurrence selection, removal and Undo commands and UI. Preserve selected occurrence identity
 and multiplicity. Each effect compares the captured revision/incarnation in its actual native write. Record a
@@ -13,10 +18,11 @@ changed entry as `conflict/revision_mismatch`, displayed as “Changed since pre
 targets. This is a per-target outcome, not rejection of confirmation. Native authorization, command receipts,
 durable initiator capture/restoration and account lifecycle checks continue to govern every action and read.
 
-Decision: the header retains action/filter provenance without an explicit ID array; installed `bulk_target` rows
-are the sole persisted membership manifest. A new preview gets a new operation identity. Retry retains the same
-operation and per-target receipt identities. Completed effects and their outcomes must commit together on the
-same home; remote commands must reconcile their original native receipts before any further attempt.
+Decision: the header retains action and source/filter/capture provenance without a second explicit ID array;
+installed `bulk_target` rows are the sole persisted effect manifest. A new preview gets a new operation identity.
+Retry retains the same operation and per-target receipt identities. Completed effects and their outcomes must
+commit together on the same home; remote commands must reconcile their original native receipts before any further
+attempt.
 
 ## Native storage boundary
 
@@ -65,8 +71,10 @@ The mounted native API is `POST /v1/libraryOperations` (preview), `POST /v1/libr
 `POST /v1/libraryOperations/:id:cancel`. Creation returns a `preview` phase and a stable operation ID; only
 confirmation emits the Core execution intent. Reads require current `library_entry:list`; commands and restored
 status effects require current `library_entry:update`, the personal-library gate and native account lifecycle.
-The wire preview advertises `set_status`, `add_to_collection` and `remove_from_library`; query capture returns `dependency_unavailable` until the complete
-Members reader is installed. Other action executor exports remain integration seams, never successful fallbacks.
+The wire preview advertises `set_status`, `add_to_collection`, `remove_from_collection` and `remove_from_library`.
+Query selection carries `sourceId`, optional canonical `filter` and optional `sort:'id'`; the response exposes the
+source revision/exposure, digest, filter/order and bounded candidate/Subject counts. All four actions use their
+existing native admission and effect writers.
 
 Decision: explicit status changes existing tracked entries only; a missing entry is individually skipped with
 `conflict/missing_target`, and no preview or status operation creates an entry. Present targets bind the actual
@@ -103,17 +111,18 @@ per target. Ordinary Collection member addition remains duplicate-permitting.
 
 ## Collection occurrence removal preview receiving
 
-Decision: occurrence removal previews accept unique explicit member IDs from an active curated Collection; duplicate
-Subjects remain separate targets when their member IDs differ.
+Decision: occurrence removal previews accept unique explicit member IDs or a native filtered source's Subjects
+against an active curated target Collection; every matching live target row is retained by its member ID, so
+duplicate Subjects remain separate targets.
 
 Admission captures the selected native member revision, transaction ID and addedAt together with each exact Subject,
 member and Collection identity. Preview does not remove members. The persisted manifest binds that exact population
 to the durable initiator and native source. Confirmation uses only those stored targets and the installed per-target
-executor, which skips a changed occurrence individually. Query expansion remains owned by its complete capture path.
+executor, which skips a changed occurrence individually. Query expansion uses the installed Collection Members
+reader and captures all matching target occurrences before the common operation is sealed.
 
-Further actions extend the installed preview, confirmation and result API only when their native executors are
-available. Use the source's documented direct or ready-result interface for filtered capture and the existing
-Members preparation implementation where needed.
+Future actions extend the installed preview, confirmation and result API only when their native executors are
+available. Filtered capture uses the source's installed Members authority and existing preparation implementation.
 
 Native executors must retain the real entry/occurrence CAS, live authorization, native domain events and exact
 remote receipt reconciliation. Reuse the delivered occurrence removal/Undo journey. Expose durable operation URLs

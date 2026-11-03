@@ -20,6 +20,17 @@ complete-caller growth remains deferred to integration; focused results do not e
 The landing entry point is `test/library/label-consolidation.test.ts`, reusing the native outcome scenarios.
 Immutable Subject security-evidence binding and typed-client generation remain a continuation alongside growth.
 
+Commerce now installs complete filtered selection capture in the existing Library bulk operation. The preview
+names an explicit source Collection and canonical Members filter/order, exhausts the installed native reader under
+stable source revision and current viewer authority, and returns captured source operands to the operation client.
+The 64-KiB request, 100-page/10,000-candidate preparation bound and 1,000-effect bound are enforced; pending and
+unavailable sources remain typed. Status, Collection add, occurrence removal and Library removal all reuse their
+existing action admission, immutable manifest, executor and receipt behavior. Focused coverage is
+`services/kernel/test/library/collection-bulk-capture.test.ts` and the real route journey in
+`services/kernel/test/library/collection-bulk-operation.test.ts`, including multi-page duplicate membership.
+Whole native acceptance, original-replay and physical-cost evidence remain deferred to integration. Web retains
+its existing four interface owners and updates those flows against this operation contract.
+
 Personal consumption statistics now have the mounted owner-only
 `GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.
 The [statistics contract](../library-consumption-statistics.md) owns exact occurrence,
