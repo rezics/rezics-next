@@ -25,7 +25,16 @@ export type ThreadWatchProps = {
 };
 
 export type ThreadWatchView = Readonly<{
-  phase: 'checking' | 'sending' | 'confirmed' | 'read-failed' | 'unknown' | 'refused' | 'access-lost' | 'unavailable' | 'retired';
+  phase:
+    | 'checking'
+    | 'sending'
+    | 'confirmed'
+    | 'read-failed'
+    | 'unknown'
+    | 'refused'
+    | 'access-lost'
+    | 'unavailable'
+    | 'retired';
   watching?: boolean;
   confirmation?: boolean;
   /** Only an unresolved write retains an exact requested state. A read is never its receipt. */
@@ -52,12 +61,19 @@ function binding(props: ThreadWatchProps, client: QueryClient | undefined): Bind
 }
 
 function sameBinding(left: Binding, right: Binding): boolean {
-  return left.client === right.client && left.sessionData === right.sessionData &&
-    left.sessionStatus === right.sessionStatus && left.native === right.native &&
-    left.props.threadId === right.props.threadId && left.props.viewerId === right.props.viewerId &&
-    left.props.session === right.props.session && left.props.sessionKnown === right.props.sessionKnown &&
-    left.props.sessionStamp === right.props.sessionStamp && left.props.admitted === right.props.admitted &&
-    left.props.readAuthority === right.props.readAuthority;
+  return (
+    left.client === right.client &&
+    left.sessionData === right.sessionData &&
+    left.sessionStatus === right.sessionStatus &&
+    left.native === right.native &&
+    left.props.threadId === right.props.threadId &&
+    left.props.viewerId === right.props.viewerId &&
+    left.props.session === right.props.session &&
+    left.props.sessionKnown === right.props.sessionKnown &&
+    left.props.sessionStamp === right.props.sessionStamp &&
+    left.props.admitted === right.props.admitted &&
+    left.props.readAuthority === right.props.readAuthority
+  );
 }
 
 /**
@@ -78,12 +94,25 @@ export class ThreadWatchVisit {
   private readonly owner: ThreadWatchOwner;
   readonly ready: boolean;
 
-  constructor(readonly binding: Binding, private readonly latest: () => Binding) {
+  constructor(
+    readonly binding: Binding,
+    private readonly latest: () => Binding,
+  ) {
     const props = binding.props;
     const session = normalizeSessionObservation(binding.sessionData);
-    const observedReady = !binding.client || (binding.sessionStatus === 'success' &&
-      session.state === 'signed-in' && session.subject === props.viewerId && !!session.csrfToken);
-    this.ready = !!(props.sessionKnown && props.session === 'signed-in' && props.viewerId && props.admitted && observedReady);
+    const observedReady =
+      !binding.client ||
+      (binding.sessionStatus === 'success' &&
+        session.state === 'signed-in' &&
+        session.subject === props.viewerId &&
+        !!session.csrfToken);
+    this.ready = !!(
+      props.sessionKnown &&
+      props.session === 'signed-in' &&
+      props.viewerId &&
+      props.admitted &&
+      observedReady
+    );
     this.owner = Object.freeze({
       threadId: props.threadId,
       viewerId: props.viewerId ?? '',
@@ -94,12 +123,18 @@ export class ThreadWatchVisit {
     if (!props.admitted) this.view = Object.freeze({ phase: 'access-lost' });
   }
 
-  get replaceable() { return this.replacement; }
-  matches(value: Binding) { return sameBinding(this.binding, value); }
+  get replaceable() {
+    return this.replacement;
+  }
+  matches(value: Binding) {
+    return sameBinding(this.binding, value);
+  }
   snapshot = () => this.view;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   private publish(view: ThreadWatchView) {
@@ -123,8 +158,11 @@ export class ThreadWatchVisit {
     if (this.dead || this.accessLost || !this.connected || !this.ready) return false;
     const next = this.latest();
     const observed = binding(this.binding.props, this.binding.client);
-    if (!sameBinding(this.binding, next) || !sameBinding(this.binding, observed) ||
-      !(this.binding.props.isCurrent?.() ?? true)) {
+    if (
+      !sameBinding(this.binding, next) ||
+      !sameBinding(this.binding, observed) ||
+      !(this.binding.props.isCurrent?.() ?? true)
+    ) {
       this.retire();
       return false;
     }
@@ -137,7 +175,9 @@ export class ThreadWatchVisit {
     const client = this.binding.client;
     this.unsubscribe = client?.getQueryCache().subscribe((event) => {
       if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'session') return;
-      const replacement = event.type === 'added' || event.type === 'removed' ||
+      const replacement =
+        event.type === 'added' ||
+        event.type === 'removed' ||
         (event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'));
       if (!replacement) return;
       // Observe each transition synchronously. Away/back cannot restore an old visit even when React batches it.
@@ -157,8 +197,11 @@ export class ThreadWatchVisit {
   }
 
   private acceptRead(result: ThreadWatchReadResult, unresolved: ThreadWatchCommand | undefined) {
-    if (result.kind === 'confirmed' && typeof result.state?.watching === 'boolean' &&
-      Object.keys(result.state).length === 1) {
+    if (
+      result.kind === 'confirmed' &&
+      typeof result.state?.watching === 'boolean' &&
+      Object.keys(result.state).length === 1
+    ) {
       // Current status, independently observed. No claim about the earlier uncertain operation.
       this.publish({ phase: 'confirmed', watching: result.state.watching });
     } else if (result.kind === 'access-lost') {
@@ -180,22 +223,27 @@ export class ThreadWatchVisit {
     try {
       // The slot is acquired synchronously, before invoking even a prepared async adapter.
       if (!this.current()) return;
-      const result = await this.binding.native.read(Object.freeze({
-        ...this.owner,
-        fetch: Object.freeze({ cache: 'no-store' as const }),
-      }));
+      const result = await this.binding.native.read(
+        Object.freeze({
+          ...this.owner,
+          fetch: Object.freeze({ cache: 'no-store' as const }),
+        }),
+      );
       if (this.current() && this.active === ticket) this.acceptRead(result, unresolved);
     } catch {
-      if (this.current() && this.active === ticket) this.publish({
-        phase: 'read-failed', ...(unresolved ? { command: unresolved } : {}),
-      });
+      if (this.current() && this.active === ticket)
+        this.publish({
+          phase: 'read-failed',
+          ...(unresolved ? { command: unresolved } : {}),
+        });
     } finally {
       if (this.active === ticket) this.active = undefined;
     }
   };
 
   begin = () => {
-    if (!this.current() || this.active || this.view.phase !== 'confirmed' || typeof this.view.watching !== 'boolean') return;
+    if (!this.current() || this.active || this.view.phase !== 'confirmed' || typeof this.view.watching !== 'boolean')
+      return;
     const command = Object.freeze({ ...this.owner, watching: !this.view.watching });
     void this.send(command);
   };

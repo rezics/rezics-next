@@ -1,7 +1,12 @@
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { readNativeThreadWatch, setNativeThreadWatch, type ThreadWatchCommandResult, type ThreadWatchReadResult } from './thread-watch-native';
+import {
+  readNativeThreadWatch,
+  setNativeThreadWatch,
+  type ThreadWatchCommandResult,
+  type ThreadWatchReadResult,
+} from './thread-watch-native';
 
 type NativeOptions = { headers: { authorization: string }; fetch: { cache: 'no-store' } };
 
@@ -27,7 +32,11 @@ export function validateThreadWatchSet(input: unknown): ThreadWatchSetInput {
 }
 
 /** Only the caller's existing native session resolves credentials. No private thread/access probe. */
-async function options(input: ThreadWatchInput, request: Request, env: Partial<SessionEnv>): Promise<NativeOptions | null> {
+async function options(
+  input: ThreadWatchInput,
+  request: Request,
+  env: Partial<SessionEnv>,
+): Promise<NativeOptions | null> {
   await prepareSession(request, env);
   const authorization = viewerCredential(request);
   if (!authorization || sessionSubject(request) !== input.viewerId) return null;

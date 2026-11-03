@@ -186,7 +186,10 @@ test('explicit status recovery preserves an unknown requested state on failure, 
       if (reads === 2) return { kind: 'unknown' };
       return { kind: 'confirmed', state: { watching: false } };
     },
-    async set(command) { commands.push(command); return { kind: 'unknown' }; },
+    async set(command) {
+      commands.push(command);
+      return { kind: 'unknown' };
+    },
   };
   render({ ...baseline, native });
   await settle();
@@ -213,7 +216,9 @@ test('initial read failure recovers deliberately; synchronous double clicks use 
     },
     async set() {
       commands++;
-      return new Promise((resolve) => { finish = resolve; });
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
     },
   };
   render({ ...baseline, native });
@@ -238,8 +243,13 @@ test('initial read failure recovers deliberately; synchronous double clicks use 
 test('response-before-retirement clears confirmation; readiness, target and source changes retire old actions', async () => {
   const commands: ThreadWatchCommand[] = [];
   const native: ThreadWatchNative = {
-    async read() { return { kind: 'confirmed', state: { watching: false } }; },
-    async set(command) { commands.push(command); return { kind: 'confirmed' }; },
+    async read() {
+      return { kind: 'confirmed', state: { watching: false } };
+    },
+    async set(command) {
+      commands.push(command);
+      return { kind: 'confirmed' };
+    },
   };
   let current = true;
   const authority = {};

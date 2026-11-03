@@ -97,7 +97,8 @@ export function nativeThreadWatch(client: KernelClient, threadId: string): Nativ
     typeof watch.get !== 'function' ||
     typeof watch.put !== 'function' ||
     typeof watch.delete !== 'function'
-  ) return undefined;
+  )
+    return undefined;
   return watch;
 }
 
@@ -105,10 +106,11 @@ function lost(status: number) {
   return status === 401 || status === 403 || status === 404 || status === 410;
 }
 
-
 /** Generated private GET, used only after current-owner authentication. */
 export async function readNativeThreadWatch(
-  client: KernelClient, threadId: string, authorization: string,
+  client: KernelClient,
+  threadId: string,
+  authorization: string,
 ): Promise<ThreadWatchReadResult> {
   const auth: NativeOptions = { headers: { authorization }, fetch: { cache: 'no-store' } };
   const watch = nativeThreadWatch(client, threadId);
@@ -119,9 +121,14 @@ export async function readNativeThreadWatch(
     if (result.status !== 200 || result.error) return { kind: result.status >= 400 ? 'unavailable' : 'unknown' };
     const body = result.data;
     if (
-      !body || typeof body !== 'object' || Array.isArray(body) ||
-      Object.keys(body).length !== 1 || !('watching' in body) || typeof body.watching !== 'boolean'
-    ) return { kind: 'unknown' };
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      Object.keys(body).length !== 1 ||
+      !('watching' in body) ||
+      typeof body.watching !== 'boolean'
+    )
+      return { kind: 'unknown' };
     return { kind: 'confirmed', state: Object.freeze({ watching: body.watching }) };
   } catch {
     return { kind: 'unknown' };
@@ -130,7 +137,10 @@ export async function readNativeThreadWatch(
 
 /** A 204 confirms the requested operation, with no fabricated versioned read. */
 export async function setNativeThreadWatch(
-  client: KernelClient, threadId: string, watching: boolean, authorization: string,
+  client: KernelClient,
+  threadId: string,
+  watching: boolean,
+  authorization: string,
 ): Promise<ThreadWatchCommandResult> {
   const auth: NativeOptions = { headers: { authorization }, fetch: { cache: 'no-store' } };
   const watch = nativeThreadWatch(client, threadId);

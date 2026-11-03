@@ -11,14 +11,26 @@ import type { ThreadReadingPage } from '../threads/thread-reading';
 import recordedThread from '../kernel/recorded/thread.json';
 import recordedPosts from '../kernel/recorded/thread-posts.json';
 
-type Example = 'not-watching' | 'watching' | 'initial-failure' | 'pending' | 'refusal' |
-  'unknown' | 'access-lost' | 'anonymous' | 'session-replacement';
+type Example =
+  | 'not-watching'
+  | 'watching'
+  | 'initial-failure'
+  | 'pending'
+  | 'refusal'
+  | 'unknown'
+  | 'access-lost'
+  | 'anonymous'
+  | 'session-replacement';
 
 const page = {
   thread: recordedThread.thread,
   posts: recordedPosts,
-  subjects: [], provenanceSubjects: [], authors: {}, mentions: {},
-  verification: { sitekey: '', scriptUrl: '' }, now: '2026-10-24T00:00:00Z',
+  subjects: [],
+  provenanceSubjects: [],
+  authors: {},
+  mentions: {},
+  verification: { sitekey: '', scriptUrl: '' },
+  now: '2026-10-24T00:00:00Z',
 } as ThreadReadingPage;
 
 /** Prepared wire responses pass through the installed generated client and the production outcome mapping. */
@@ -26,7 +38,10 @@ function connectedExample(example: Example) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const anonymous = example === 'anonymous';
   const session = (token: string) => ({ state: 'signed-in', subject: 'reader-example', csrfToken: token });
-  client.setQueryData(['session'], anonymous ? { state: 'signed-out', subject: null, csrfToken: null } : session('A'.repeat(22)));
+  client.setQueryData(
+    ['session'],
+    anonymous ? { state: 'signed-out', subject: null, csrfToken: null } : session('A'.repeat(22)),
+  );
   let watching = example === 'watching';
   let reads = 0;
   let commands = 0;
@@ -102,7 +117,12 @@ const meta = {
         desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
       },
     },
-    docs: { description: { component: 'Connected header and browser-session examples use prepared GET {watching} and PUT/DELETE 204 responses through the generated client. Native execution is verified separately.' } },
+    docs: {
+      description: {
+        component:
+          'Connected header and browser-session examples use prepared GET {watching} and PUT/DELETE 204 responses through the generated client. Native execution is verified separately.',
+      },
+    },
   },
 } satisfies Meta<typeof ThreadWatchPageStory>;
 export default meta;
@@ -122,7 +142,9 @@ export const NotWatching: Story = {
 export const Watching: Story = {
   args: { example: 'watching' },
   globals: { locale: 'de', theme: 'dark', viewport: { value: 'desktop1280', isRotated: false } },
-  play: async ({ canvasElement }) => { await within(canvasElement).findByRole('button', { name: m.thread_watch_stop() }); },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByRole('button', { name: m.thread_watch_stop() });
+  },
 };
 export const InitialFailure: Story = {
   args: { example: 'initial-failure' },
@@ -172,16 +194,23 @@ export const SessionReplacement: Story = {
 export const AccessLost: Story = {
   args: { example: 'access-lost' },
   globals: { locale: 'ja', theme: 'light', viewport: { value: 'desktop1280', isRotated: false } },
-  play: async ({ canvasElement }) => { await within(canvasElement).findByText(m.thread_watch_access_lost()); },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText(m.thread_watch_access_lost());
+  },
 };
 export const AnonymousReader: Story = {
   args: { example: 'anonymous' },
   globals: { locale: 'es', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
-  play: async ({ canvasElement }) => { await within(canvasElement).findByText(m.thread_watch_anonymous()); },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByText(m.thread_watch_anonymous());
+  },
 };
 export const French: Story = { args: { example: 'not-watching' }, globals: { locale: 'fr', theme: 'dark' } };
 export const Korean: Story = { args: { example: 'watching' }, globals: { locale: 'ko', theme: 'light' } };
-export const SimplifiedChinese: Story = { args: { example: 'not-watching' }, globals: { locale: 'zh-Hans', theme: 'dark' } };
+export const SimplifiedChinese: Story = {
+  args: { example: 'not-watching' },
+  globals: { locale: 'zh-Hans', theme: 'dark' },
+};
 export const GermanPhone: Story = {
   args: { example: 'watching' },
   globals: { locale: 'de', theme: 'light', viewport: { value: 'phone390', isRotated: false } },

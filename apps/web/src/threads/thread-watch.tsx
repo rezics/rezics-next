@@ -6,20 +6,31 @@ import { useThreadWatchCurrent, type ThreadWatchProps, type ThreadWatchView } fr
 
 export type { ThreadWatchProps } from './thread-watch-current';
 
-const actionClass = 'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-3 py-2 text-start leading-snug [overflow-wrap:anywhere]';
+const actionClass =
+  'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-3 py-2 text-start leading-snug [overflow-wrap:anywhere]';
 
 function status(view: ThreadWatchView): string {
   switch (view.phase) {
     case 'confirmed':
-      return view.confirmation === true ? m.thread_watch_confirm_started() :
-        view.confirmation === false ? m.thread_watch_confirm_stopped() :
-          view.watching ? m.thread_watch_watching() : m.thread_watch_not_watching();
-    case 'unknown': return m.thread_watch_outcome_unknown();
-    case 'read-failed': return m.thread_watch_read_failed();
-    case 'refused': return m.thread_watch_refused();
-    case 'access-lost': return m.thread_watch_access_lost();
-    case 'unavailable': return m.thread_watch_unavailable();
-    default: return m.thread_watch_checking();
+      return view.confirmation === true
+        ? m.thread_watch_confirm_started()
+        : view.confirmation === false
+          ? m.thread_watch_confirm_stopped()
+          : view.watching
+            ? m.thread_watch_watching()
+            : m.thread_watch_not_watching();
+    case 'unknown':
+      return m.thread_watch_outcome_unknown();
+    case 'read-failed':
+      return m.thread_watch_read_failed();
+    case 'refused':
+      return m.thread_watch_refused();
+    case 'access-lost':
+      return m.thread_watch_access_lost();
+    case 'unavailable':
+      return m.thread_watch_unavailable();
+    default:
+      return m.thread_watch_checking();
   }
 }
 
@@ -30,8 +41,11 @@ export function ThreadWatch(props: ThreadWatchProps) {
   const hadFocus = useRef(false);
   const busy = view.phase === 'checking' || view.phase === 'sending';
   const signedIn = props.sessionKnown && props.session === 'signed-in';
-  const canRecover = view.phase === 'read-failed' || view.phase === 'refused' ||
-    view.phase === 'unavailable' || view.phase === 'unknown';
+  const canRecover =
+    view.phase === 'read-failed' ||
+    view.phase === 'refused' ||
+    view.phase === 'unavailable' ||
+    view.phase === 'unknown';
 
   useLayoutEffect(() => {
     const element = host.current;
@@ -46,17 +60,23 @@ export function ThreadWatch(props: ThreadWatchProps) {
       ref={host}
       className="flex min-w-0 max-w-full flex-col items-start gap-1 text-sm"
       aria-busy={visit.ready && busy}
-      onFocusCapture={() => { hadFocus.current = true; }}
+      onFocusCapture={() => {
+        hadFocus.current = true;
+      }}
       onBlurCapture={(event) => {
         if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) hadFocus.current = false;
       }}
     >
       {!props.sessionKnown || (signedIn && !props.viewerId) ? <p role="status">{m.thread_watch_checking()}</p> : null}
-      {props.sessionKnown && !signedIn ? <SignInPrompt returnTo={props.returnTo} label={m.thread_watch_anonymous()} /> : null}
+      {props.sessionKnown && !signedIn ? (
+        <SignInPrompt returnTo={props.returnTo} label={m.thread_watch_anonymous()} />
+      ) : null}
       {signedIn && !props.admitted ? <p role="status">{m.thread_watch_access_lost()}</p> : null}
       {signedIn && props.admitted && props.viewerId ? (
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-          <p role="status" aria-live="polite" aria-atomic="true">{status(view)}</p>
+          <p role="status" aria-live="polite" aria-atomic="true">
+            {status(view)}
+          </p>
           {visit.ready && view.phase === 'confirmed' ? (
             <Button type="button" size="sm" className={actionClass} onClick={visit.begin}>
               {view.watching ? m.thread_watch_stop() : m.thread_watch_watch()}
@@ -68,7 +88,14 @@ export function ThreadWatch(props: ThreadWatchProps) {
             </Button>
           ) : null}
           {visit.ready && (canRecover || (busy && !view.command)) ? (
-            <Button type="button" variant="outline" size="sm" className={actionClass} disabled={busy} onClick={() => void visit.read()}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={actionClass}
+              disabled={busy}
+              onClick={() => void visit.read()}
+            >
               {m.thread_watch_check_again()}
             </Button>
           ) : null}
