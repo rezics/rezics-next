@@ -15,6 +15,8 @@ type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
 type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
+type ReadingPageResource = ThreadResource['reading-page'];
+type ReadingPage = NonNullable<Awaited<ReturnType<ReadingPageResource['get']>>['data']>;
 export type ThreadPost = PostPage['posts'][number];
 
 type PageInput = { id: string; cursor?: string; post?: string };
@@ -90,11 +92,8 @@ export async function loadThreadPage(
       viewerId = undefined;
     }
   }
-  const threadRead = authorization
-    ? client.threads({ id: data.id }).get({ headers: { authorization } })
-    : client.threads({ id: data.id }).get();
   let linkedPostUnavailable = false;
-  const readPosts = async () => {
+  const readReadingPage = async () => {
     let cursor = data.cursor;
     if (data.post !== undefined) {
       const posts = client.threads({ id: data.id }).posts as unknown as PostLocator;
@@ -112,40 +111,50 @@ export async function loadThreadPage(
         cursor = location.cursor ?? undefined;
       }
     }
-    return authorization
-      ? client
-          .threads({ id: data.id })
-          .posts.get(cursor ? { query: { cursor }, headers: { authorization } } : { headers: { authorization } })
-      : client.threads({ id: data.id }).posts.get(cursor ? { query: { cursor } } : {});
+    const options = {
+      ...(cursor === undefined ? {} : { query: { cursor } }),
+      ...(authorization ? { headers: { authorization } } : {}),
+    };
+    return client.threads({ id: data.id })['reading-page'].get(options);
   };
-  let postsRead = data.expectedSlug === undefined ? readPosts() : undefined;
-  const threadResult = await threadRead;
-  const thread = checkRead<Thread>(threadResult, 'thread');
-  if (thread.thread.id !== data.id) throw notFound();
-  if (data.expectedSlug !== undefined && !sameThreadSlug(data.expectedSlug, thread.thread.title))
-    return { redirect: { id: thread.thread.id, title: threadTitle(thread.thread) } };
-  postsRead ??= readPosts();
+  let readingPageRead = data.expectedSlug === undefined ? readReadingPage() : undefined;
+  if (data.expectedSlug !== undefined) {
+    const threadResult = authorization
+      ? await client.threads({ id: data.id }).get({ headers: { authorization } })
+      : await client.threads({ id: data.id }).get();
+    const thread = checkRead<Thread>(threadResult, 'thread');
+    if (thread.thread.id !== data.id) throw notFound();
+    if (!sameThreadSlug(data.expectedSlug, thread.thread.title))
+      return { redirect: { id: thread.thread.id, title: threadTitle(thread.thread) } };
+  }
+  readingPageRead ??= readReadingPage();
+  const readingPageResult = await readingPageRead;
+  const readingPage = checkRead<ReadingPage>(readingPageResult, 'thread reading page');
+  const thread = readingPage.thread;
+  if (thread.id !== data.id) throw notFound();
+  if (data.expectedSlug !== undefined && !sameThreadSlug(data.expectedSlug, thread.title))
+    return { redirect: { id: thread.id, title: threadTitle(thread) } };
+  const posts: PostPage = {
+    posts: [thread.firstPost, ...readingPage.replies.items],
+    next: readingPage.replies.next,
+    rankRefreshedAt: null,
+    status: 200,
+  };
   const readContext = () =>
-    thread.thread.boardId
+    thread.boardId
       ? (authorization
-          ? client.boards({ id: thread.thread.boardId }).get({ headers: { authorization } })
-          : client.boards({ id: thread.thread.boardId }).get()
+          ? client.boards({ id: thread.boardId }).get({ headers: { authorization } })
+          : client.boards({ id: thread.boardId }).get()
         )
           .catch(() => null)
           .then(async (result) => {
             const board = result?.data?.board;
-            if (!board || board.id !== thread.thread.boardId) return {};
+            if (!board || board.id !== thread.boardId) return {};
             const realm = await readBoardRealm(client, boardRealmId(board), authorization);
             return { board, ...(realm ? { realm } : {}) };
           })
       : Promise.resolve({});
-  let context: Awaited<ReturnType<typeof readContext>>;
-  let posts: PostPage;
-  // A mismatched slug returned above before these downstream reads start. After a matching slug is confirmed,
-  // keep the page's established concurrent post and board reads.
-  const [pageContext, postsResult] = await Promise.all([readContext(), postsRead]);
-  context = pageContext;
-  posts = checkRead<PostPage>(postsResult, 'thread posts');
+  const context = await readContext();
   if (
     data.post !== undefined &&
     !posts.posts.some((post) => post.id === data.post && post.availability === 'available')
@@ -161,7 +170,7 @@ export async function loadThreadPage(
   return {
     mentions,
     documentMedia,
-    thread: thread.thread,
+    thread,
     ...context,
     posts,
     ...(viewerId ? { viewerId } : {}),
