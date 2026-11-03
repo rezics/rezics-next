@@ -36,7 +36,11 @@ function requestAt(route?: number) {
   }
 }
 
-async function original(pool: GrowthDatabase['pool'], outcome: { partition: number; position: bigint; epoch: number }, type: string) {
+async function original(
+  pool: GrowthDatabase['pool'],
+  outcome: { partition: number; position: bigint; epoch: number },
+  type: string,
+) {
   const row = (
     await pool.query<{ id: string; type: string; subject: string | null; data: unknown; recorded_at: Date }>(
       `SELECT id,type,subject,data,recorded_at FROM core.outbox
@@ -139,12 +143,21 @@ function reviewPopulation(input: { route: number; authorId: string; boardId: str
   };
 }
 
-type PlanNode = Readonly<{ 'Node Type': string; 'Index Name'?: string; 'Actual Rows'?: number; Plans?: readonly PlanNode[] }>;
+type PlanNode = Readonly<{
+  'Node Type': string;
+  'Index Name'?: string;
+  'Actual Rows'?: number;
+  Plans?: readonly PlanNode[];
+}>;
 function planNodes(node: PlanNode): PlanNode[] {
   return [node, ...(node.Plans ?? []).flatMap(planNodes)];
 }
 
-async function assertReviewWithheld(growthDb: GrowthDatabase, source: ReturnType<typeof createReviewDiscoverySource>, partition: number) {
+async function assertReviewWithheld(
+  growthDb: GrowthDatabase,
+  source: ReturnType<typeof createReviewDiscoverySource>,
+  partition: number,
+) {
   const concealed = await growthDb.admin.query<{ thread_id: string }>(
     `SELECT thread_id::text FROM content.thread
      WHERE kind='review' AND route >= $1 AND route < $2 AND review_live=false
@@ -172,10 +185,10 @@ test('Review discovery source versions and continued reads stay physically bound
   const withheldRoute = partition * 16 + 2;
   const subjectIds: string[] = [];
   const liveReviews: Array<{ id: string; itemId: string }> = [];
-  const source = createReviewDiscoverySource(
-    { pool: db.pool, access: fixture.access, tokens },
-    () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
-  );
+  const source = createReviewDiscoverySource({ pool: db.pool, access: fixture.access, tokens }, () => ({
+    actor: { kind: 'anonymous' },
+    deadline: Date.now() + 30_000,
+  }));
   async function addLiveReview(scale: number) {
     const subjectId = newId(0x6b52);
     subjectIds.push(subjectId);
@@ -272,8 +285,7 @@ test('Review discovery source versions and continued reads stay physically bound
       expect(first.next.token.length).toBeLessThan(65_536);
       const candidateStatement = trace.records.find(
         ({ statement }) =>
-          statement.includes("WHERE t.kind = 'review'") &&
-          statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
+          statement.includes("WHERE t.kind = 'review'") && statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
       );
       if (!candidateStatement) throw new Error('Native review population seek was not observed');
       const plan = await growthDb.admin.query<{ 'QUERY PLAN': Array<{ Plan: PlanNode }> }>(
@@ -316,8 +328,7 @@ test('Review discovery source versions and continued reads stay physically bound
       const controls = trace.records.filter(({ statement }) => /^(BEGIN|COMMIT|ROLLBACK|SET LOCAL)\b/i.test(statement));
       const seeks = trace.records.filter(
         ({ statement }) =>
-          statement.includes("WHERE t.kind = 'review'") &&
-          statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
+          statement.includes("WHERE t.kind = 'review'") && statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
       );
       expect(controls.length).toBeLessThan(100);
       expect(seeks.length).toBe(pages);

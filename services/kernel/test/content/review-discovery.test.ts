@@ -34,8 +34,7 @@ const request = () => ({
 function requestAt(route: number) {
   for (;;) {
     const idempotencyKey = Bun.randomUUIDv7();
-    if (anchorRoute(routeKey, idempotencyKey) === route)
-      return { ...request(), idempotencyKey };
+    if (anchorRoute(routeKey, idempotencyKey) === route) return { ...request(), idempotencyKey };
   }
 }
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
@@ -343,8 +342,7 @@ test('coherent review pages restart when a hidden lower key becomes eligible or 
   await source.pageWithCut!(partition, null, 1);
   const candidateStatement = probe.records.find(
     ({ statement }) =>
-      statement.includes("WHERE t.kind = 'review'") &&
-      statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
+      statement.includes("WHERE t.kind = 'review'") && statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
   )!.statement;
   await probe.close();
   const raceObserver = observeSql(fixture.pool);
