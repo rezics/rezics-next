@@ -164,6 +164,11 @@ export async function readWorkbench(
   if (scope.kind === 'catalogue' && search.queue === 'appeals') {
     return { ...identity, state: 'ready', ...idle };
   }
+  // Content owns the private board history reader. It is not exposed by the
+  // delivered client yet, so never synthesize a page from report or appeal lists.
+  if (scope.kind === 'board' && search.history) {
+    return { ...identity, state: 'unavailable', ...idle };
+  }
   if (scope.kind === 'catalogue') {
     const page = await source.catalogueReports(search.cursor, {
       status: search.queue === 'resolved' ? 'resolved' : 'pending',

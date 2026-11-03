@@ -4,6 +4,9 @@ export const WORKBENCH_PAGE_SIZE = 20;
 export type WorkbenchQueueKind = 'reports' | 'appeals' | 'resolved';
 export type WorkbenchSearch = ReportSelection & {
   queue: WorkbenchQueueKind;
+  history?: true;
+  historyCursor?: string;
+  historyReturn?: true;
   scope?: 'catalogue';
   realm?: string;
   board?: string;
@@ -41,6 +44,9 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const board = token(search.board, 128);
   const realmsCursor = token(search.realmsCursor, 4096);
   const boardsCursor = token(search.boardsCursor, 4096);
+  const history = search.history === true && board ? true : undefined;
+  const historyCursor = history ? token(search.historyCursor, 4096) : undefined;
+  const historyReturn = !history && board && search.historyReturn === true ? true : undefined;
   return {
     queue,
     status: queue === 'resolved' ? 'resolved' : queue === 'reports' ? 'pending' : selection.status,
@@ -48,6 +54,9 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
     order: selection.order,
     ...(realm ? { realm } : {}),
     ...(board ? { board } : {}),
+    ...(history ? { history } : {}),
+    ...(historyCursor ? { historyCursor } : {}),
+    ...(historyReturn ? { historyReturn } : {}),
     ...(cursor ? { cursor } : {}),
     ...(realmsCursor ? { realmsCursor } : {}),
     ...(boardsCursor ? { boardsCursor } : {}),
@@ -84,6 +93,9 @@ export function workbenchReadKey(search: WorkbenchSearch): string {
     search.status,
     search.targetKind,
     search.order,
+    search.history ? 'history' : '',
+    search.historyCursor ?? '',
+    search.historyReturn ? 'history-return' : '',
     search.cursor ?? '',
     search.realmsCursor ?? '',
     search.boardsCursor ?? '',

@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
+import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistoryUnavailable } from '../workbench-history';
 import {
   workbenchCaseHref,
   workbenchScope,
@@ -119,6 +121,9 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
   const next = page.next;
   const realmsNext = page.realmsNext;
   const boardsNext = page.boardsNext;
+  useEffect(() => {
+    if (search.historyReturn) document.getElementById(`workbench-queue-${search.queue}`)?.focus();
+  }, [search.historyReturn, search.queue]);
   const status =
     page.state === 'denied'
       ? m.moderation_workbench_denied()
@@ -136,7 +141,7 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
           {m.moderation_workbench_membership_hint()}
         </p>
       </header>
-      {status ? (
+      {status && !search.history ? (
         <p
           role={page.state === 'unavailable' || page.state === 'stale' ? 'alert' : 'status'}
           className="text-muted-foreground"
@@ -154,7 +159,7 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
           {m.moderation_queue_restart()}
         </Button>
       ) : null}
-      {page.state === 'ready' || page.state === 'denied' ? (
+      {page.state === 'ready' || page.state === 'denied' || search.history || search.historyReturn ? (
         <div className="flex min-w-0 flex-wrap gap-2">
           <Button
             type="button"
@@ -235,7 +240,8 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
                 key={queue}
                 type="button"
                 variant="ghost"
-                aria-current={search.queue === queue ? 'page' : undefined}
+              id={`workbench-queue-${queue}`}
+              aria-current={!search.history && search.queue === queue ? 'page' : undefined}
                 className={`${control} rounded-none border-b-2 ${search.queue === queue ? 'border-primary font-semibold' : 'border-transparent'}`}
                 onClick={() =>
                   onSearch(
@@ -254,13 +260,24 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
                     : m.moderation_workbench_queue_reports()}
               </Button>
             ))}
+            {scope.kind === 'board' ? (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-current={search.history ? 'page' : undefined}
+                className={`${control} rounded-none border-b-2 ${search.history ? 'border-primary font-semibold' : 'border-transparent'}`}
+                onClick={() => onSearch(openWorkbenchHistory(search))}
+              >
+                {m.moderation_workbench_history()}
+              </Button>
+            ) : null}
           </nav>
           {scope.kind === 'catalogue' && search.queue === 'appeals' ? (
             <p role="status" className="text-muted-foreground">
               {m.moderation_workbench_catalogue_appeals()}
             </p>
           ) : null}
-          {queueScope.kind === 'board' && search.queue !== 'appeals' ? (
+          {!search.history && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
             <fieldset className="flex min-w-0 flex-wrap items-end gap-3">
               <legend className="sr-only">{m.moderation_filter_kind()}</legend>
               <label className="min-w-0 flex-1 basis-48 space-y-1 text-sm">
@@ -298,7 +315,12 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
               </label>
             </fieldset>
           ) : null}
-          {search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
+          {search.history && scope.kind === 'board' ? (
+            <WorkbenchHistoryUnavailable
+              onReturn={() => onSearch(returnFromWorkbenchHistory(search))}
+              {...(onRetry ? { onRetry } : {})}
+            />
+          ) : search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
             <p role="status" className="text-muted-foreground">
               {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
             </p>
@@ -309,7 +331,7 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
               ))}
             </ul>
           )}
-          {next ? (
+          {!search.history && next ? (
             <Button
               type="button"
               className={control}

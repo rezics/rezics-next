@@ -109,7 +109,10 @@ independent rather than making shared files or unfinished producer delivery into
   catalogue. Submitted reports, pending appeals and resolved cases are exclusive native queues with their own
   cursor; a board moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
   existing review routes. Resolution forms stay on those pages. Catalogue has no appeal list. There is no
-  aggregate case search or platform-wide adjudication.
+  aggregate case search or platform-wide adjudication. Decision: board decision history is reachable only from a
+  selected board; the Global catalogue has no history queue. The Web entry stays explicitly unavailable until
+  Content delivers its private native history reader. It never
+  derives history from report or appeal scans.
 
 Consumer seams carry only native disclosed summaries, operation availability, revision/continuation and outcomes
 needed by that slice. Bind the generated owner API when available; otherwise keep the small boundary explicit and
