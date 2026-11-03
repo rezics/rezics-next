@@ -84,7 +84,11 @@ function validateSource(source: unknown): asserts source is string {
 
 function validateRecordKey(recordKey: unknown): asserts recordKey is string {
   requireBoundedString('recordKey', recordKey, 512);
-  if (!/^[\p{L}\p{N}][\p{L}\p{N}._:/@+-]*$/u.test(recordKey)) {
+  if (
+    !/^(?:[\p{L}\p{N}][\p{L}\p{N}._:/@+-]*|\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M|authors\/OL[1-9][0-9]*A))$/u.test(
+      recordKey,
+    )
+  ) {
     throw new TypeError('recordKey must be a source identifier');
   }
 }
@@ -126,6 +130,7 @@ export class RecordStore {
   readonly database: Database;
 
   private readonly onStatement: ((sql: string) => void) | undefined;
+  private readonly ownsDatabase: boolean;
   private readonly recordLookupStatement!: ReturnType<Database['query']>;
   private readonly previousStateStatement!: ReturnType<Database['query']>;
   private readonly upsertRecordStatement!: ReturnType<Database['query']>;
@@ -136,13 +141,14 @@ export class RecordStore {
   private readonly pageAfterKeyStatement!: ReturnType<Database['query']>;
   private closed = false;
 
-  constructor(path: string, options: RecordStoreOptions = {}) {
+  constructor(path: string | Database, options: RecordStoreOptions = {}) {
     this.onStatement = options.onStatement;
-    const database = new Database(path, { create: true, strict: true });
+    this.ownsDatabase = typeof path === 'string';
+    const database = this.ownsDatabase ? new Database(path, { create: true, strict: true }) : path;
     try {
       this.database = options.instrumentDatabase?.(database) ?? database;
     } catch (error) {
-      database.close();
+      if (this.ownsDatabase) database.close();
       throw error;
     }
 
@@ -173,7 +179,7 @@ export class RecordStore {
       this.pageAfterKeyStatement = this.database.query(PAGE_AFTER_KEY_SQL);
     } catch (error) {
       this.closed = true;
-      this.database.close();
+      if (this.ownsDatabase) this.database.close();
       throw error;
     }
   }
@@ -255,8 +261,8 @@ export class RecordStore {
 
   close(): void {
     if (this.closed) return;
-    this.database.close();
     this.closed = true;
+    if (this.ownsDatabase) this.database.close();
   }
 
   private assertOpen(): void {

@@ -15,6 +15,25 @@ export class VndbInputError extends Error {
   }
 }
 
+/** Page a ready table acquisition into source records without an importer lease. */
+export async function* iterateVndbRecords(
+  tables: VndbTablesStore,
+  source: string,
+  run: string,
+  options: { pageSize?: number; onPageRecords?(count: number): void; signal?: AbortSignal } = {},
+): AsyncGenerator<SourceRecord> {
+  let after: string | null = null;
+  for (;;) {
+    if (options.signal?.aborted) throw options.signal.reason ?? new DOMException('Import interrupted', 'AbortError');
+    const page = tables.page(source, run, { after, limit: options.pageSize ?? 16 });
+    options.onPageRecords?.(page.records.length);
+    for (const row of page.records)
+      yield { source: 'vndb', key: row.key, revision: String(row.revision), payload: row.record };
+    if (page.next === null) return;
+    after = page.next;
+  }
+}
+
 /** Validated table acquisition and ordinary publication share the importer's durable handle.
  * The only additional durable metadata links a table acquisition to RunStore's
  * completed generation. Record revisions/digests and the baseline remain owned by RunStore.
@@ -102,15 +121,10 @@ export class VndbMaterialization {
           WHERE source=? AND run_id=? AND state='ready'
           AND (materialized_generation IS NULL OR materialized_generation<>?)`)
         .run(active.id, self.source, run, self.importer.session.store.source(self.source).generation ?? '');
-      let after: string | null = null;
-      for (;;) {
-        const page = self.tables.page(self.source, run, { after, limit: self.options?.pageSize ?? 16 });
-        onPageRecords?.(page.records.length);
-        for (const row of page.records)
-          yield { source: 'vndb', key: row.key, revision: String(row.revision), payload: row.record };
-        if (page.next === null) return;
-        after = page.next;
-      }
+      yield* iterateVndbRecords(self.tables, self.source, run, {
+        pageSize: self.options?.pageSize,
+        onPageRecords,
+      });
     }
     return this.importer.runRecords(this.registration, records(), runOptions);
   }

@@ -2,6 +2,42 @@
 
 The importer owns source dump ingestion, durable SQLite run and record state, and replayable requests for platform writes through the kernel API.
 
+## Preview a source dump before importing
+
+`rezics-import preview` decodes an actual dump through the registered converters and compares it with a captured
+completed baseline. It needs the source kind and dump path; it does not need an account key, credentials, network
+access, a writer lease or the configured import state. Help is available without opening a file:
+
+```sh
+bun services/importer/src/cli.ts preview --help
+bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json
+```
+
+`--source` is one of the four launch kinds. `--source-alias` names the configured source identifier used in local
+state; the two remain distinct. `--baseline` opens an existing importer state file read-only and copies only that
+source's completed generation into a caller-owned temporary store under `os.tmpdir()` (or `--output-dir`). A live
+writer does not invent a future baseline. Without `--baseline`, the view is a first-import preview, not proof that
+the server has no existing subjects. An unavailable schema is reported precisely. Preview never migrates, takes a
+writer lease or modifies import journals.
+
+Pages default to 20 rows and accept at most 100. Use `--page new|changed|unchanged|vanished`, `--limit`, the printed
+opaque cursor, `--record` for exact-record drill-down, or `--json` for the version 1 document. Incomplete, truncated
+or duplicate input keeps a bounded error identity and withholds a vanished set. Empty input and total disappearance
+keep the production stop rule; preview never lowers the threshold. Converter diagnostics appear on the prospective
+record view. Media intents are descriptions only. Source statistics stay labelled as source statistics.
+
+`--output-dir` retains the plan for later `--plan-dir` page reads. The directory is created with owner-only access
+and is refused when it already contains a database. Plans may be discarded without touching import state.
+
+Decision: preview pages persist only in `--output-dir` or a process-owned temporary directory; `--plan-dir` reopens a
+complete plan without re-decoding. The ordinary import invocation is printed with placeholders and is not an
+executable interpolation of dump paths.
+
+```sh
+bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json --baseline .state/imports.sqlite --page changed --record Q1
+bun services/importer/src/cli.ts --source wikidata --dump <complete-input-path> --state .state/imports.sqlite --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>
+```
+
 ## Inspect retained source-dump work
 
 `rezics-import inspect` opens an existing importer state file for local read-only inspection. It needs only the state

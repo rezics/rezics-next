@@ -1,18 +1,12 @@
 import type { Database } from 'bun:sqlite';
-import { constants } from 'node:fs';
-import { open, type FileHandle } from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
 import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
-import {
-  DEFAULT_DUMP_CHUNK_BYTES,
-  DEFAULT_DUMP_RECORD_BYTES,
-  MAX_DUMP_CHUNK_BYTES,
-  observeDumpRetention,
-} from './dumps-bytes.ts';
+import { observeDumpRetention } from './dumps-bytes.ts';
 import { DEFAULT_VNDB_ARCHIVE_BYTES, type VndbTablesStore } from './vndb-tables.ts';
 import { readArchive } from './archive.ts';
 import { VndbInputError, VndbMaterialization } from './vndb-materialization.ts';
@@ -27,19 +21,23 @@ import {
   type CredentialsObserver,
 } from './credentials.ts';
 import { runInspectCli } from './inspect-cli.ts';
+import { runPreviewCli } from './preview-cli.ts';
+import {
+  DumpInputError,
+  fileChunks,
+  observedEntries,
+  openDump,
+  openLibraryMetadata,
+  ownedChunks,
+  throwIfAborted,
+  type RawVndbEntry,
+} from './dump-input.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT = /^[A-Za-z0-9._~-]{1,255}$/;
 
 type SourceKind = SourceId;
-type RawVndbEntry = {
-  path: string;
-  kind: 'file' | 'directory' | 'symlink' | 'hardlink';
-  declaredBytes: number;
-  bytes: AsyncIterable<Uint8Array>;
-  linkTarget?: string;
-};
 
 export type ImportCliObserver = {
   /** @deprecated Account-key reads are also reported here for older boundary observers. */
@@ -95,7 +93,7 @@ type Config = {
   disappearanceThreshold?: number;
 };
 
-class InputFailure extends Error {}
+class InputFailure extends DumpInputError {}
 
 function usage(): string {
   return [
@@ -215,34 +213,6 @@ function validateOrigin(api: string, testOrigin?: string): string {
   return url.origin;
 }
 
-async function openDump(path: string, handleCount: { value: number }): Promise<FileHandle | undefined> {
-  if (path === '-') return undefined;
-  let handle: FileHandle;
-  try {
-    // Reach the descriptor check even for a FIFO with no writer; regular-file reads are unchanged.
-    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch {
-    throw new InputFailure();
-  }
-  handleCount.value++;
-  try {
-    if (!(await handle.stat()).isFile()) throw new InputFailure();
-    return handle;
-  } catch (error) {
-    try {
-      await handle.close();
-    } finally {
-      handleCount.value--;
-    }
-    if (error instanceof InputFailure) throw error;
-    throw new InputFailure();
-  }
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) throw signal.reason ?? new DOMException('Import interrupted', 'AbortError');
-}
-
 async function clockSleep(
   clock: NonNullable<ImportCliOptions['clock']>,
   ms: number,
@@ -274,237 +244,6 @@ async function clockSleep(
   });
 }
 
-function inputWithSignal<T>(operation: () => T | PromiseLike<T>, signal: AbortSignal): Promise<T> {
-  throwIfAborted(signal);
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const cleanup = () => signal.removeEventListener('abort', aborted);
-    const aborted = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(signal.reason ?? new DOMException('Import interrupted', 'AbortError'));
-    };
-    signal.addEventListener('abort', aborted, { once: true });
-    Promise.resolve()
-      .then(() => {
-        throwIfAborted(signal);
-        return operation();
-      })
-      .then(
-        (value) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          resolve(value);
-        },
-        (error) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          reject(error);
-        },
-      );
-  });
-}
-
-async function closeInput<T>(iterator: AsyncIterator<T>, signal: AbortSignal, localFile = false): Promise<void> {
-  try {
-    // The owning finally requests cleanup exactly once. Source cleanup may be
-    // queued behind a pending next(), or reject after this invocation finishes.
-    const closing = Promise.resolve(iterator.return?.());
-    void closing.catch(() => {});
-    if (localFile) await closing;
-    else if (!signal.aborted) await inputWithSignal(() => closing, signal);
-  } catch {
-    // Preserve the original parser, staging or cancellation failure.
-  }
-}
-
-async function* fileChunks(handle: FileHandle, signal: AbortSignal): AsyncGenerator<Uint8Array> {
-  let position = 0;
-  for (;;) {
-    throwIfAborted(signal);
-    const buffer = new Uint8Array(DEFAULT_DUMP_CHUNK_BYTES);
-    let result: { bytesRead: number };
-    try {
-      result = await handle.read(buffer, 0, buffer.byteLength, position);
-    } catch {
-      throw new InputFailure();
-    }
-    throwIfAborted(signal);
-    if (!result.bytesRead) return;
-    position += result.bytesRead;
-    yield buffer.subarray(0, result.bytesRead);
-  }
-}
-
-async function* ownedChunks(
-  input: AsyncIterable<Uint8Array>,
-  signal: AbortSignal,
-  kind: 'dump',
-  observer: ImportCliObserver | undefined,
-  localFile = false,
-): AsyncGenerator<Uint8Array> {
-  observer?.onInputPass?.(kind);
-  const iterator = input[Symbol.asyncIterator]();
-  let ended = false;
-  try {
-    for (;;) {
-      // Owned descriptor reads settle before the descriptor is closed. Only
-      // source-controlled operations may be left pending after cancellation.
-      const next = localFile ? await iterator.next() : await inputWithSignal(() => iterator.next(), signal);
-      if (next.done) {
-        ended = true;
-        return;
-      }
-      const chunk = next.value;
-      if (!(chunk instanceof Uint8Array) || chunk.buffer.byteLength > MAX_DUMP_CHUNK_BYTES) throw new InputFailure();
-      if (!chunk.byteLength) continue;
-      for (let offset = 0; offset < chunk.byteLength; offset += DEFAULT_DUMP_CHUNK_BYTES) {
-        const size = Math.min(DEFAULT_DUMP_CHUNK_BYTES, chunk.byteLength - offset);
-        const owned = new Uint8Array(size);
-        owned.set(chunk.subarray(offset, offset + size));
-        observer?.onInputChunk?.(kind, size, owned.buffer.byteLength);
-        yield owned;
-      }
-    }
-  } finally {
-    if (!ended) await closeInput(iterator, signal, localFile);
-  }
-}
-
-/** Carry Open Library's native TSV modification date into its JSON record. */
-async function* openLibraryMetadata(input: AsyncIterable<Uint8Array>, signal: AbortSignal): AsyncGenerator<Uint8Array> {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder('utf-8', { fatal: true });
-  const lineLimit = DEFAULT_DUMP_RECORD_BYTES + 1;
-  let line = new Uint8Array(0);
-  let length = 0;
-
-  const append = (bytes: Uint8Array) => {
-    const required = length + bytes.byteLength;
-    if (required > lineLimit) throw new InputFailure();
-    if (required > line.byteLength) {
-      const capacity = Math.min(lineLimit, Math.max(required, line.byteLength ? line.byteLength * 2 : 64));
-      const next = new Uint8Array(capacity);
-      next.set(line.subarray(0, length));
-      line = next;
-    }
-    line.set(bytes, length);
-    length = required;
-  };
-
-  const metadataLine = (raw: Uint8Array): Uint8Array => {
-    let text: string;
-    try {
-      text = decoder.decode(raw);
-    } catch {
-      return raw;
-    }
-    const first = text.indexOf('\t');
-    const second = first < 0 ? -1 : text.indexOf('\t', first + 1);
-    const third = second < 0 ? -1 : text.indexOf('\t', second + 1);
-    const fourth = third < 0 ? -1 : text.indexOf('\t', third + 1);
-    if (first < 0 || second < 0 || third < 0 || fourth < 0 || text.indexOf('\t', fourth + 1) >= 0) return raw;
-    const date = text.slice(third + 1, fourth);
-    const stamp = /^\d{4}-\d{2}-\d{2}$/u.test(date)
-      ? `${date}T00:00:00Z`
-      : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z?$/u.test(date)
-        ? date
-        : undefined;
-    if (!stamp) return raw;
-    const json = text.slice(fourth + 1);
-    let payload: unknown;
-    try {
-      payload = JSON.parse(json);
-    } catch {
-      return raw;
-    }
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.hasOwn(payload, 'last_modified'))
-      return raw;
-    let close = json.length - 1;
-    while (close >= 0 && /\s/u.test(json[close]!)) close--;
-    if (json[close] !== '}') return raw;
-    const addition = `,"last_modified":{"type":"/type/datetime","value":${JSON.stringify(stamp)}}`;
-    return encoder.encode(`${text.slice(0, fourth + 1)}${json.slice(0, close)}${addition}${json.slice(close)}`);
-  };
-
-  const emit = async function* (raw: Uint8Array): AsyncGenerator<Uint8Array> {
-    const transformed = metadataLine(raw);
-    for (let offset = 0; offset < transformed.byteLength; offset += DEFAULT_DUMP_CHUNK_BYTES) {
-      throwIfAborted(signal);
-      const size = Math.min(DEFAULT_DUMP_CHUNK_BYTES, transformed.byteLength - offset);
-      const chunk = new Uint8Array(size);
-      chunk.set(transformed.subarray(offset, offset + size));
-      yield chunk;
-    }
-  };
-
-  try {
-    for await (const chunk of input) {
-      throwIfAborted(signal);
-      let start = 0;
-      for (let offset = 0; offset < chunk.byteLength; offset++) {
-        if (chunk[offset] !== 10) continue;
-        append(chunk.subarray(start, offset));
-        yield* emit(line.subarray(0, length));
-        const newline = new Uint8Array([10]);
-        yield newline;
-        length = 0;
-        start = offset + 1;
-      }
-      append(chunk.subarray(start));
-    }
-    if (length) yield* emit(line.subarray(0, length));
-  } finally {
-    line = new Uint8Array(0);
-    length = 0;
-  }
-}
-
-async function* observedEntries(
-  input: AsyncIterable<RawVndbEntry>,
-  signal: AbortSignal,
-  observer: ImportCliObserver | undefined,
-): AsyncGenerator<RawVndbEntry> {
-  observer?.onInputPass?.('vndb-entries');
-  const iterator = input[Symbol.asyncIterator]();
-  let ended = false;
-  try {
-    for (;;) {
-      const next = await inputWithSignal(() => iterator.next(), signal);
-      if (next.done) {
-        ended = true;
-        return;
-      }
-      const entry = next.value;
-      const byteIterator = entry.bytes[Symbol.asyncIterator]();
-      const bytes = (async function* (): AsyncGenerator<Uint8Array> {
-        let byteEnded = false;
-        try {
-          for (;;) {
-            const item = await inputWithSignal(() => byteIterator.next(), signal);
-            if (item.done) {
-              byteEnded = true;
-              return;
-            }
-            const chunk = item.value;
-            if (!(chunk instanceof Uint8Array)) throw new InputFailure();
-            observer?.onInputChunk?.('vndb-entries', chunk.byteLength, chunk.buffer.byteLength);
-            yield chunk;
-          }
-        } finally {
-          if (!byteEnded) await closeInput(byteIterator, signal);
-        }
-      })();
-      yield { ...entry, bytes };
-    }
-  } finally {
-    if (!ended) await closeInput(iterator, signal);
-  }
-}
-
 function converterModule(source: SourceKind): string {
   const modules: Record<SourceKind, string> = {
     bangumi: '@rezics/conversion/bangumi',
@@ -530,6 +269,13 @@ function diagnostic(
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
   if (Array.isArray(argv) && argv[0] === 'inspect')
     return runInspectCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
+  if (Array.isArray(argv) && argv[0] === 'preview')
+    return runPreviewCli(argv.slice(1), {
+      stdin: options.stdin,
+      entries: options.entries,
+      signal: options.signal,
+      fetch: options.fetch,
+    });
 
   let config: Config;
   try {
