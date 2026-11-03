@@ -315,7 +315,9 @@ Decision: Reopened bulk Library removals offer one explicit restore at a time; a
 at `/v1/libraryExports`. It preserves independent native facts and accepted pins with explicit source omissions;
 Web assembles the versioned artifact after the final manifest. Native edits require restart, and terminal deletion
 immediately denies delivery. Installed Bangumi and unexpired MAL source rows preserve personal evidence and provider identifiers;
-this slice promises neither a full account export nor a re-import endpoint.
+this is neither a full account export nor an automatic restore. The separate [archive review and merge](library-archive-merge.md)
+consumer accepts a completed file, keeps unsupported sections as private evidence and requires current explicit
+mapping before selected entry, label or assignment effects.
 
 ## Indexed filtering and disclosure
 

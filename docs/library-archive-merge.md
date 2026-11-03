@@ -6,12 +6,17 @@ there is no second archive schema. Export coverage and its integration evidence 
 
 ## Delivered validation boundary
 
-`services/kernel/src/library/library-archive.ts` exposes `decodeLibraryArchive(bytes: Uint8Array)`.
-This is an internal, inert decoder, not an authenticated upload endpoint or a native merge command. There are
-currently **no installed archive-consumer HTTP methods**. No UI completion or successful restoration is claimed.
+`services/kernel/src/library/library-archive.ts` exposes `decodeLibraryArchive(bytes: Uint8Array)`. The mounted
+private consumer is `POST /v1/libraryArchiveMerges`, owner status `GET /:id`, indexed `GET /:id/preview` and
+`GET /:id/results`, `PATCH /:id/review`, selected `POST /:id/apply`, cancellation `DELETE /:id`, and expired
+evidence pruning `POST /:id/prune`. These methods do not change the producer's export interface or claim Web UI
+completion.
 
 Decision: accept completed v1 artifacts within 34 MiB and depth 32, reject duplicate rows and exact stored label
 names, and keep expired capture timestamps as evidence rather than treating them as permission or file expiry.
+
+Decision: retain one seven-day archive per account; cap preview/result pages and review/apply batches at 100/20;
+replay uncertain effects with journaled native request keys and prune expired evidence in 100-row pages.
 
 Validation requires the producer's final manifest, all fourteen declared installed sections in producer order,
 the global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. The format
@@ -40,45 +45,53 @@ never establish current admission. In particular, unavailable old states remain 
 labels, and archive IDs do not address the receiving account's private facts. The decoder has no account access,
 does not fetch Subject URLs and does not install dates, revisions, receipts or pins.
 
-## Remaining native journey
+## Current native journey
 
-An authenticated owner must be able to upload once, inspect indexed private preview pages, resolve canonical
-Subjects through current identity/profile rules, explicitly choose current state and label IDs or validated new
-labels, review current conflicts and preserve local work by default. Selected effects must bind the reviewed
+An authenticated owner uploads once, inspects indexed private preview pages, resolves canonical Subjects through
+current identity/profile rules, explicitly chooses current state and label IDs or validated new labels, reviews
+current conflicts and preserves local work by default. Selected effects bind the reviewed
 current incarnation/revision, canonical identity and operands, and revalidate through the installed native command
 owners, including entry History. No replace-all, implicit label removal, inferred holding, progress completion,
-vote or publication belongs to this journey.
+vote or publication is supported.
 
-A bounded per-item journal must preserve original command identities across uncertain acknowledgements and
-partial success. Cancellation stops new effects while preserving acknowledged ones. Retained uploads, previews,
-reviews and results need a fixed lifetime, indexed finite pruning and the existing owned-graph account-erasure
-phase. Evidence deletion does not undo acknowledged Library effects. Another account and terminal deletion must
-deny every read, review, apply and retry. These methods, storage, admission and effect composition remain pending.
+A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
+success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results
+expire after seven days; explicit pruning and the owned-graph erasure phase delete at most 100 child rows per step.
+Evidence deletion does not undo acknowledged Library effects. Another account and terminal deletion deny reads,
+review, apply and retry. Native entry, label and assignment commands own each admitted effect and its History.
 
-The decoder is the preparatory boundary for this work; it stores no private artifact, command intent or result.
-Only the eventual authenticated private handlers may expose decoded records. Public DTOs, Search, events and
-unredacted errors must never receive them.
+The decoder remains an inert validation boundary; it stores no private artifact, command intent or result. Only the
+installed owner-scoped private handlers expose decoded records. Public DTOs, Search, events and unredacted errors
+must never receive them.
 
 ## Bounds and verification
 
 The producer admits at most 100,000 records and 32 MiB of encoded records, with at most 120,000 record bytes per
 page. The decoder checks upload bytes before text decoding or allocation of a parsed tree, checks depth before
 JSON parsing and limits each encoded record to that producer page cap. Its 34 MiB upload bound includes the record
-commas, manifest and limited formatting whitespace; excessive pretty-print whitespace may be refused. All bounds
-are static and checked before a future native upload can be admitted. Validation is O(U+N), with O(U+N) retained
-memory, and performs no database queries or native effects. This is source derivation, not an executed growth pass.
+commas, manifest and limited formatting whitespace; excessive pretty-print whitespace may be refused. The owner
+and exposure checks precede parsing; decoder limits run before any archive persistence. Validation is O(U+N), with
+O(U+N) retained memory, and performs no database queries or native effects. This is source derivation, not an
+executed growth pass.
 
-Focused decoder cases cover completed/empty sections, unavailable old vocabulary, wrong/incomplete format,
-duplicates, required references, size/depth bounds and non-reflecting failures. The existing native export HTTP
-scenario additionally decodes its actual assembled producer records, including retained unsupported sections.
-No existing export assertion is removed. Broader native acceptance, current-state merge scenarios, physical upload
-admission and the complete cost derivation remain pending. Performance must review unresolved composed bounds
-before completion; native64/512/4096 growth must separately observe upload, page traversal, effects, replay,
-stale refusal and cleanup.
+Focused consumer scenarios use an actual installed export and cover explicit conflict resolution, preserved local
+work, created and mapped labels, assignment review, stale revision/incarnation refusal, original native replay,
+cancellation, owner denial and account erasure. Existing decoder and export tests continue to cover malformed,
+incomplete, duplicate and unsupported evidence; no export assertion is removed.
+
+Derived cost is `C_upload(U,N) + C_fixed-authority + C_identity-review(R) + C_native-effects(R,K) +
+C_journal/cleanup`: upload reads at most U=34 MiB, validates O(U+N) with N≤100,000, and inserts one root plus a
+bounded bulk child statement; each request performs fixed owner/admission checks; review does indexed per-item
+current identity/profile and native fact reads for R≤20; apply delegates up to R≤20 effects to the entry, label and
+assignment command owners (including nested History); journal writes address one `(route,account,upload,ordinal)`
+row; preview/results inspect at most 101 indexed rows; prune and erasure delete at most 100 child rows per step.
+These are source-derived bounds, not observed growth results. Performance review of unresolved composed bounds is
+requested. Native64/512/4096 observations for upload, first/deep/terminal pages, selected apply, stale refusal,
+original replay and cleanup remain deferred to integration; acceptance and broader native placement are also
+controller responsibilities.
 
 ## Web ownership
 
-Web323 retains the private export interface. After the remaining native contract is installed, Commerce must send
-Web the exact mounted consumer methods and supported coverage for an adjacent explicit import/recovery allocation.
-Web must adopt that contract before any UI completion is claimed. The decoder neither changes the export producer's
-interface nor promises a mounted re-import endpoint.
+Web323 retains the private export interface. Commerce has sent the exact mounted consumer methods and supported
+coverage for an adjacent explicit import/recovery allocation. Web must adopt that contract before any UI completion
+is claimed. The decoder does not change the export producer's interface.

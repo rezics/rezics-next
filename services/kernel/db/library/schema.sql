@@ -3177,6 +3177,64 @@ CREATE TABLE library.label_assignment (
 
 
 --
+-- Name: library_archive_merge_upload; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.library_archive_merge_upload (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    manifest jsonb NOT NULL,
+    coverage jsonb NOT NULL,
+    row_count integer NOT NULL,
+    record_bytes integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    cancelled_at timestamp with time zone,
+    CONSTRAINT library_archive_merge_upload_manifest_check CHECK ((octet_length((manifest)::text) <= 131072)),
+    CONSTRAINT library_archive_merge_upload_coverage_check CHECK ((octet_length((coverage)::text) <= 8192)),
+    CONSTRAINT library_archive_merge_upload_row_count_check CHECK (((row_count >= 0) AND (row_count <= 100000))),
+    CONSTRAINT library_archive_merge_upload_record_bytes_check CHECK (((record_bytes >= 0) AND (record_bytes <= 33554432))),
+    CONSTRAINT library_archive_merge_upload_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT library_archive_merge_upload_account_route_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT library_archive_merge_upload_id_route_check CHECK ((route = ((get_byte(uuid_send(upload_id), 10) * 256) + get_byte(uuid_send(upload_id), 11))))
+);
+
+
+--
+-- Name: library_archive_merge_item; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.library_archive_merge_item (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    section text NOT NULL,
+    source_subject_id uuid,
+    source_label_id uuid,
+    record_json text NOT NULL,
+    status text NOT NULL,
+    review jsonb,
+    review_revision integer DEFAULT 0 NOT NULL,
+    native_command_kind text,
+    native_request_key text,
+    native_operands jsonb,
+    result jsonb,
+    CONSTRAINT library_archive_merge_item_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99999))),
+    CONSTRAINT library_archive_merge_item_section_check CHECK ((section = ANY (ARRAY['entries'::text, 'labels'::text, 'assignments'::text, 'sessions'::text, 'holdings'::text, 'collections'::text, 'collectionPins'::text, 'bangumiUploads'::text, 'bangumiEvidence'::text, 'malImports'::text, 'units'::text, 'history'::text, 'occurrences'::text, 'malEvidence'::text]))),
+    CONSTRAINT library_archive_merge_item_record_json_check CHECK ((octet_length(record_json) <= 120000)),
+    CONSTRAINT library_archive_merge_item_status_check CHECK ((status = ANY (ARRAY['unresolved'::text, 'unsupported'::text, 'create'::text, 'already_equal'::text, 'current_conflict'::text, 'mapped'::text, 'preserved'::text, 'applying'::text, 'acknowledged'::text]))),
+    CONSTRAINT library_archive_merge_item_review_check CHECK (((review IS NULL) OR (octet_length((review)::text) <= 16384))),
+    CONSTRAINT library_archive_merge_item_review_revision_check CHECK ((review_revision >= 0)),
+    CONSTRAINT library_archive_merge_item_native_command_kind_check CHECK (((native_command_kind IS NULL) OR (octet_length(native_command_kind) <= 64))),
+    CONSTRAINT library_archive_merge_item_native_request_key_check CHECK (((native_request_key IS NULL) OR (octet_length(native_request_key) <= 128))),
+    CONSTRAINT library_archive_merge_item_native_operands_check CHECK (((native_operands IS NULL) OR (octet_length((native_operands)::text) <= 16384))),
+    CONSTRAINT library_archive_merge_item_result_check CHECK (((result IS NULL) OR (octet_length((result)::text) <= 8192)))
+);
+
+
+--
 -- Name: library_export; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -5098,6 +5156,30 @@ ALTER TABLE ONLY library.label_assignment
 
 
 --
+-- Name: library_archive_merge_item library_archive_merge_item_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.library_archive_merge_item
+    ADD CONSTRAINT library_archive_merge_item_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
+
+
+--
+-- Name: library_archive_merge_upload library_archive_merge_upload_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.library_archive_merge_upload
+    ADD CONSTRAINT library_archive_merge_upload_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: library_archive_merge_upload library_archive_merge_upload_route_account_id_upload_id_key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.library_archive_merge_upload
+    ADD CONSTRAINT library_archive_merge_upload_route_account_id_upload_id_key UNIQUE (route, account_id, upload_id);
+
+
+--
 -- Name: library_export library_export_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6277,6 +6359,20 @@ CREATE UNIQUE INDEX label_assignment_reserved_slot ON library.label_assignment U
 --
 
 CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING btree (route, account_id, subject_id, assignment_id) INCLUDE (label_id, slot_no, revision, transaction_id) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: library_archive_merge_item_source_label; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_archive_merge_item_source_label ON library.library_archive_merge_item USING btree (route, account_id, upload_id, source_label_id) WHERE (section = 'labels'::text);
+
+
+--
+-- Name: library_archive_merge_upload_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_archive_merge_upload_expiry ON library.library_archive_merge_upload USING btree (expires_at, route, account_id);
 
 
 --
@@ -7656,6 +7752,14 @@ ALTER TABLE ONLY library.collection_source_output
 
 ALTER TABLE ONLY library.copy_archive_row
     ADD CONSTRAINT copy_archive_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.copy_archive_upload(route, account_id, upload_id);
+
+
+--
+-- Name: library_archive_merge_item library_archive_merge_item_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.library_archive_merge_item
+    ADD CONSTRAINT library_archive_merge_item_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.library_archive_merge_upload(route, account_id, upload_id);
 
 
 --
