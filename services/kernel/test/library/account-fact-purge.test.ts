@@ -25,8 +25,8 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
        command_id,command_kind,changed_at,coverage_complete)
      VALUES($1,$2,$4,$7,1,2,'planned','completed',$9,'library.entry.put',$10,false),
            ($1,$2,$5,$8,1,2,'planned','completed',$11,'library.entry.put',$10,false),
-           ($1,$3,$4,$7,1,2,'planned','completed',$12,'library.entry.put',$10,false)`,
-    [route, id(1), id(2), id(10), id(11), time, id(50), id(51), randomUUID(), time, randomUUID(), randomUUID()],
+           ($1,$2,$3,$4,1,2,'planned','completed',$5,'library.entry.put',$6,false)`,
+    [route, id(2), id(10), id(50), randomUUID(), time],
   );
   await pool.query(
     `INSERT INTO library.entry_personal_fact(route,account_id,subject_id,fact_id,annotation_revision,note,priority,
