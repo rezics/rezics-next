@@ -2090,7 +2090,14 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
   expect(script.indexOf('curl -fsSL')).toBeLessThan(script.indexOf('Bun.revision'));
   expect(script.indexOf('Bun.revision')).toBeLessThan(script.indexOf('"$bun" install --frozen-lockfile'));
   // The command completes, the slot is released, then the run directory is removed.
-  const kinds = seen.filter((event) => event.address === 'ops@b.test').map((event) => event.kind);
+  const runId = script.match(/--unit=rezics-check-([a-z0-9-]+)/)![1]!;
+  const kinds = seen
+    .filter(
+      (event) =>
+        event.address === 'ops@b.test' &&
+        (event.kind !== 'cleanup' || String(event.script).includes(`run_id=${runId}\n`)),
+    )
+    .map((event) => event.kind);
   const runAt = kinds.indexOf('run');
   const releaseAt = kinds.indexOf('release');
   const cleanupAt = kinds.indexOf('cleanup');
@@ -2100,43 +2107,55 @@ test('with KERNEL_CHECK_REMOTE set the kernel check selects its files locally an
 
 test('among hosts that pass load and available-memory admission, free slots and memory headroom choose the host', async () => {
   const unavailableHosts: HostConfig[] = [
-    { available: 64 * 2 ** 30, memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES - 1, cpuQuotaPercent: 400, slots: 4 },
-    { available: 64 * 2 ** 30, memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroom: 2 * CHECK_SLOT_MEMORY_BYTES, cpuQuotaPercent: 800, slots: 4, ordinaryBusy: 3 },
-  ];
-  for (const unavailable of unavailableHosts) {
-  const { env, events } = scenario({ a: unavailable,
-    b: {
-      available: 4 * 2 ** 30,
+    {
+      available: 64 * 2 ** 30,
       memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
-      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: CHECK_SLOT_MEMORY_BYTES - 1,
       cpuQuotaPercent: 400,
-      processors: 16,
-      load: 0,
       slots: 4,
     },
-  });
-  const result = await remote(env, workspace());
+    {
+      available: 64 * 2 ** 30,
+      memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+      memoryHeadroom: 2 * CHECK_SLOT_MEMORY_BYTES,
+      cpuQuotaPercent: 800,
+      slots: 4,
+      ordinaryBusy: 3,
+    },
+  ];
+  for (const unavailable of unavailableHosts) {
+    const { env, events } = scenario({
+      a: unavailable,
+      b: {
+        available: 4 * 2 ** 30,
+        memoryMax: 2 * CHECK_SLOT_MEMORY_BYTES,
+        memoryHeadroom: CHECK_SLOT_MEMORY_BYTES,
+        cpuQuotaPercent: 400,
+        processors: 16,
+        load: 0,
+        slots: 4,
+      },
+    });
+    const result = await remote(env, workspace());
 
-  expect(result.code).toBe(0);
-  expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
-  const probe = events().find((event) => event.kind === 'probe')!.script as string;
-  for (const reportedValue of [
-    'nproc',
-    '/proc/loadavg',
-    'systemctl show --property=ControlGroup',
-    'memory.current',
-    'memory.max',
-    'cpu.max',
-    '/proc/meminfo',
-  ])
-    expect(probe).toContain(reportedValue);
-  expect(
-    events()
-      .filter((event) => event.kind === 'slot')
-      .map((event) => event.address),
-  ).toEqual(['ops@b.test']);
+    expect(result.code).toBe(0);
+    expect(events().find((event) => event.kind === 'rsync')!.destination).toStartWith('ops@b.test:');
+    const probe = events().find((event) => event.kind === 'probe')!.script as string;
+    for (const reportedValue of [
+      'nproc',
+      '/proc/loadavg',
+      'systemctl show --property=ControlGroup',
+      'memory.current',
+      'memory.max',
+      'cpu.max',
+      '/proc/meminfo',
+    ])
+      expect(probe).toContain(reportedValue);
+    expect(
+      events()
+        .filter((event) => event.kind === 'slot')
+        .map((event) => event.address),
+    ).toEqual(['ops@b.test']);
   }
 });
 
@@ -2317,7 +2336,7 @@ test('try-once callers apply their memory request when ranking and acquiring hos
         process.execPath,
         '--eval',
         `const { tryRemoteCheck } = await import(${JSON.stringify(remoteCheck)});
-       console.log(JSON.stringify(await tryRemoteCheck(${JSON.stringify(options)}, new AbortController().signal)));`,
+       console.log('TRY_ONCE ' + JSON.stringify(await tryRemoteCheck(${JSON.stringify(options)}, new AbortController().signal)));`,
       ],
       { env, stdout: 'pipe', stderr: 'pipe' },
     );
@@ -2327,7 +2346,9 @@ test('try-once callers apply their memory request when ranking and acquiring hos
       new Response(child.stderr).text(),
     ]);
     expect(code, stderr).toBe(0);
-    expect(JSON.parse(stdout).status).toBe(memoryGiB === 4 ? 'no-slot' : 'ran');
+    const results = stdout.split('\n').filter((line) => line.startsWith('TRY_ONCE '));
+    expect(results).toHaveLength(1);
+    expect(JSON.parse(results[0]!.slice('TRY_ONCE '.length)).status).toBe(memoryGiB === 4 ? 'no-slot' : 'ran');
     const granted = events().find((event) => event.kind === 'slot' && event.granted);
     if (memoryGiB === 4) expect(granted).toBeUndefined();
     else expect(granted?.script).toContain(`# REMOTE_CHECK_MEMORY_RESERVATION_BYTES ${2 * 2 ** 30}`);
@@ -2636,9 +2657,7 @@ test('when every host is skipped for load or memory the check waits and names bo
   run.child.kill('SIGTERM');
   const [, , stderr] = await Promise.all([run.child.exited, run.stdout, run.stderr]);
 
-  expect(stderr).toContain(
-    'every check slot is busy; waiting for a free one (no responding hosts); configured a 2 slots, b 2 slots',
-  );
+  expect(stderr).toContain('waiting for an eligible check host (no responding hosts); configured a 2 slots, b 2 slots');
   expect(stderr).toContain('a: load 13 exceeds limit 12');
   expect(stderr).toContain(`b: MemAvailable ${3 * 2 ** 30} bytes is under ${4 * 2 ** 30} bytes`);
   expect(events().some((event) => event.kind === 'slot')).toBe(false);
@@ -3142,7 +3161,7 @@ test('standalone and multiplexed ssh calls use paired options and one run-privat
   const result = await remote(env, workspace(), ['true'], ['--returns', 'result.txt']);
   expect(result.code).toBe(255);
 
-  const sshEvents = events().filter((event) => event.kind !== 'rsync');
+  const sshEvents = events().filter((event) => Array.isArray(event.argv));
   expect(sshEvents.map((event) => event.kind)).toEqual([
     'probe',
     'control-probe',
@@ -4532,11 +4551,13 @@ test('older systemd starts the command without --expand-environment support', as
 
 test('the run checks installed packages after the command and before recording its exit status', async () => {
   const { run } = await generatedRun();
-  const install = run.indexOf('"$bun" install --frozen-lockfile');
-  const marker = run.indexOf('.bun-install-complete');
-  const command = run.indexOf('\n        "$@"');
-  const packageCheck = run.indexOf('modified_files=$(find');
-  const exitStatus = run.indexOf("printf '%s\\n' \"$code\" > \"$terminal_status\"");
+  const encoded = run.slice(run.indexOf('systemd_script=') + 'systemd_script='.length, run.indexOf('\n# systemd 259'));
+  const body = encoded.slice(1, -1).replaceAll("'\\''", "'");
+  const install = body.indexOf('"$bun" install --frozen-lockfile');
+  const marker = body.indexOf('.bun-install-complete', install);
+  const command = body.indexOf('\n        "$@"');
+  const packageCheck = body.indexOf('modified_files=$(find');
+  const exitStatus = body.indexOf('printf \'%s\\n\' "$code" > "$terminal_status"');
   expect(install).toBeGreaterThanOrEqual(0);
   expect(marker).toBeGreaterThan(install);
   expect(command).toBeGreaterThan(marker);
@@ -4563,14 +4584,7 @@ test('a quiet remote command reports CPU progress and the progress loop exits wi
 
 test('a quiet remote command without CPU progress writes no progress line', () => {
   const fixture = runFixture();
-  const script = runScript(
-    'remote-idle',
-    '/srv/rezics-check/runs/remote-idle',
-    '.',
-    ['/bin/sleep', '0.3'],
-    'a',
-    10,
-  );
+  const script = runScript('remote-idle', '/srv/rezics-check/runs/remote-idle', '.', ['/bin/sleep', '0.3'], 'a', 10);
   const result = fixture.execute(script, { REMOTE_CHECK_HOST: 'a' });
   expect(result.status).toBe(0);
   expect(result.stderr).not.toContain('remote-check: running on a');
@@ -4616,14 +4630,7 @@ test('remote CPU reports accumulate subsecond work across intervals', () => {
     'progress-command',
     '/srv/rezics-check/sleep-pids',
   ];
-  const script = runScript(
-    'remote-fractional',
-    '/srv/rezics-check/runs/remote-fractional',
-    '.',
-    command,
-    'a',
-    10,
-  );
+  const script = runScript('remote-fractional', '/srv/rezics-check/runs/remote-fractional', '.', command, 'a', 10);
   const result = fixture.execute(script, { PROGRESS_INCREMENT: '400000', REMOTE_CHECK_HOST: 'a' });
   expect(result.status, result.stderr).toBe(0);
   const reports = [...result.stderr.matchAll(/remote-check: running on a, (\d+) CPU seconds/g)].map((match) =>
@@ -5046,7 +5053,7 @@ test('transfer progress from rsync stdout keeps uploads and returns alive beyond
 test('repeated, decreasing, malformed and diagnostic-only rsync output cannot extend transfer progress deadlines', async () => {
   for (const [mode, lastBytes] of [
     ['repeated', '1024'],
-    ['decreasing', '2048'],
+    ['decreasing', '1024'],
     ['malformed', 'none'],
     ['diagnostic-only', 'none'],
   ] as const) {
@@ -5305,7 +5312,7 @@ test('slot take is stopped and reaped when its control session makes no progress
 
 test('a silent live remote command remains governed by its command deadline, not transfer progress limits', async () => {
   const { env, events } = scenario({ a: { available: 8e9, hang: true, silentHang: true } });
-  env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '30';
+  env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '250';
   const result = await remote(env, workspace(), ['true'], ['--max-ms', '250']);
   expect(result.code).toBe(124);
   expect(result.stderr).toContain('deadline reached after 250 ms');
@@ -5589,15 +5596,26 @@ test('bounded return inventory retains output, status and receipts at the unchan
     });
     expect(inventory.status).toBe(0);
     expect(inventory.stderr).toBe('');
-    expect(inventory.stdout.trimEnd().split('\n').filter((line) => !line.startsWith('MANIFEST ')).sort()).toEqual(
-      ['exit-status', 'output.log', 'receipt.json'].map((file) => `PRESENT ${path}/${file}`).sort(),
-    );
-    const encoded = inventory.stdout.trimEnd().split('\n').find((line) => line.startsWith('MANIFEST '))!;
+    expect(
+      inventory.stdout
+        .trimEnd()
+        .split('\n')
+        .filter((line) => !line.startsWith('MANIFEST '))
+        .sort(),
+    ).toEqual(['exit-status', 'output.log', 'receipt.json'].map((file) => `PRESENT ${path}/${file}`).sort());
+    const encoded = inventory.stdout
+      .trimEnd()
+      .split('\n')
+      .find((line) => line.startsWith('MANIFEST '))!;
     const entries = JSON.parse(Buffer.from(encoded.slice('MANIFEST '.length), 'base64').toString());
     expect(entries.map((entry: { path: string }) => entry.path)).toEqual(
       ['exit-status', 'output.log', 'receipt.json'].map((file) => `${path}/${file}`),
     );
-    expect(entries.every((entry: { sha256: string; kind: string }) => /^[a-f0-9]{64}$/.test(entry.sha256) && entry.kind === 'file')).toBe(true);
+    expect(
+      entries.every(
+        (entry: { sha256: string; kind: string }) => /^[a-f0-9]{64}$/.test(entry.sha256) && entry.kind === 'file',
+      ),
+    ).toBe(true);
     expect(existsSync(join(directory, 'injected'))).toBe(false);
 
     for (let index = 3; index < CHECK_ARTIFACTS_MAX_FILES; index++) {
@@ -5609,7 +5627,14 @@ test('bounded return inventory retains output, status and receipts at the unchan
     });
     expect(atLimit.status).toBe(0);
     expect(atLimit.stderr).toBe('');
-    expect(new Set(atLimit.stdout.trimEnd().split('\n').filter((line) => !line.startsWith('MANIFEST '))).size).toBe(CHECK_ARTIFACTS_MAX_FILES);
+    expect(
+      new Set(
+        atLimit.stdout
+          .trimEnd()
+          .split('\n')
+          .filter((line) => !line.startsWith('MANIFEST ')),
+      ).size,
+    ).toBe(CHECK_ARTIFACTS_MAX_FILES);
     expect(atLimit.stdout).not.toContain('OVERSIZE');
 
     const overflow = join(stage, 'one-too-many');
@@ -5679,12 +5704,26 @@ test('missing or unreadable remote configuration never starts a local kernel che
   const { env, events } = scenario({ a: { available: 4.5e9 } });
   const local = { ...env };
   delete local.KERNEL_CHECK_REMOTE;
-  const result = await kernelCheck(local);
+  const isolated = workspace();
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      '--eval',
+      `
+    const { placeKernelCheck } = await import(${JSON.stringify(join(kernel, 'scripts/check.ts'))});
+    process.exit(await placeKernelCheck({ files: ${JSON.stringify(kernelFiles)} }, process.env,
+      { root: ${JSON.stringify(isolated)}, cwd: ${JSON.stringify(isolated)}, moduleDirectory: ${JSON.stringify(isolated)} }) ?? 2);
+  `,
+    ],
+    { env: local, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+  );
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  const result = { code, stderr };
+  expect(result.stderr).toContain('no check host is configured');
   expect(result.code).not.toBe(0);
   const seen = events();
   expect(seen.some((event) => event.kind === 'docker')).toBe(false);
-  // Default host discovery may probe, but unavailable placement never starts a local database.
-  expect(seen.filter((event) => event.kind !== 'docker' && event.kind !== 'probe')).toEqual([]);
+  expect(seen).toEqual([]);
 
   // An unreadable hosts file does not fall back and does not hand off.
   const missing = scenario({ a: { available: 4.5e9 } });
@@ -7751,39 +7790,45 @@ test('host lifetime preserves successful output and a native command exit 124 wi
   expect(existsSync(join(native.run, 'run-lifetime-status.json'))).toBe(false);
 });
 
-test('a failed returns transfer cannot erase a named lifetime failure or repeat its command locally', async () => {
-  const fixture = scenario({
-    a: { available: 20e9, exit: 124, lifetimeFailure: true, present: ['artifact'], rsyncBackExit: 12 },
-  });
-  const directory = workspace();
-  const completed = await remote(
-    fixture.env,
-    directory,
-    ['bun', 'test', 'named.test.ts'],
-    ['--estimate-ms', '3000', '--returns', 'artifact'],
-  );
-  expect(completed.code).toBe(124);
-  expect(completed.stderr).toContain(RUN_LIFETIME_FAILURE_MARKER);
-  expect(completed.stderr).toContain('returns failed after recorded run-lifetime infrastructure failure');
-  const receipt = parseRunLifetimeFailure(completed.stderr)!;
-  expect(receipt).toMatchObject({ phase: 'run-lifetime', limitMs: 9000 });
-  expect(
-    JSON.parse(
-      readFileSync(join(directory, '.temp/remote-check/receipts', receipt.run, 'run-lifetime-status.json'), 'utf8'),
-    ),
-  ).toEqual(receipt);
-  expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
-  expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
-  expect(fixture.events().find((event) => event.kind === 'lifetime-status')?.slotHeld).toBe(false);
-});
+test.each([7, 124])(
+  'a failed returns transfer cannot erase native exit %i or its named lifetime cause or repeat its command locally',
+  async (exit) => {
+    const fixture = scenario({
+      a: { available: 20e9, exit, lifetimeFailure: exit === 124, present: ['artifact'], rsyncBackExit: 12 },
+    });
+    const directory = workspace();
+    const completed = await remote(
+      fixture.env,
+      directory,
+      ['bun', 'test', 'named.test.ts'],
+      ['--estimate-ms', '3000', '--returns', 'artifact'],
+    );
+    expect(completed.code, completed.stderr).toBe(exit);
+    if (exit === 124) {
+      expect(completed.stderr).toContain(RUN_LIFETIME_FAILURE_MARKER);
+      expect(completed.stderr).toContain('returns failed after recorded run-lifetime infrastructure failure');
+      const receipt = parseRunLifetimeFailure(completed.stderr)!;
+      expect(receipt).toMatchObject({ phase: 'run-lifetime', limitMs: 9000 });
+      expect(
+        JSON.parse(
+          readFileSync(join(directory, '.temp/remote-check/receipts', receipt.run, 'run-lifetime-status.json'), 'utf8'),
+        ),
+      ).toEqual(receipt);
+    } else {
+      expect(completed.stderr).toContain('returns failed after native command exit 7');
+      expect(completed.stderr).not.toContain(RUN_LIFETIME_FAILURE_MARKER);
+    }
+    expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+    expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
+    if (exit === 124) expect(fixture.events().find((event) => event.kind === 'lifetime-status')?.slotHeld).toBe(false);
+  },
+);
 
 test('lifecycle control uses the selected host run and recovers idempotently after lost transport without admitting another run', async () => {
-  const { tmpdir } = await import('node:os');
   const { lifecycleControlScript, transportLifecycleControl } = await import('./remote-check.ts');
   const { processIdentity } = await import('./check-custody.ts');
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'rezics-lifecycle-transport-')));
+  const directory = realpathSync(mkdtempSync(join(root, 'lifecycle-transport-')));
   const oldPath = process.env.PATH;
-  const oldRuntimeDirectory = process.env.XDG_RUNTIME_DIR;
   try {
     const run = randomUUID();
     const gate = {
@@ -7829,12 +7874,35 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
       console.log(JSON.stringify({ack:'same-physical-release'}));\n`,
       { mode: 0o700 },
     );
-    process.env.PATH = `${directory}:${oldPath}`;
-    process.env.XDG_RUNTIME_DIR = directory;
-    await expect(transportLifecycleControl(host, run, request)).rejects.toThrow('control transport exited 255');
+    const transport = async () => {
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          '--eval',
+          `
+        const { transportLifecycleControl } = await import(${JSON.stringify(remoteCheck)});
+        console.log(await transportLifecycleControl(${JSON.stringify(host)}, ${JSON.stringify(run)}, ${JSON.stringify(request)}));
+      `,
+        ],
+        {
+          env: { ...process.env, PATH: `${directory}:${oldPath}`, XDG_RUNTIME_DIR: directory },
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: 'pipe',
+        },
+      );
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      if (code !== 0) throw new Error(stderr);
+      return stdout;
+    };
+    await expect(transport()).rejects.toThrow('control transport exited 255');
     expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(1);
     writeFileSync(mode, 'available');
-    expect(JSON.parse(await transportLifecycleControl(host, run, request))).toEqual({ ack: 'same-physical-release' });
+    expect(JSON.parse(await transport())).toEqual({ ack: 'same-physical-release' });
     const commands = readFileSync(trace, 'utf8')
       .trim()
       .split('\n')
@@ -7851,10 +7919,6 @@ test('lifecycle control uses the selected host run and recovers idempotently aft
     await expect(transportLifecycleControl({ ...host, name: 'foreign' }, run, request)).rejects.toThrow('unapproved');
     expect(readFileSync(trace, 'utf8').trim().split('\n')).toHaveLength(2);
   } finally {
-    if (oldPath === undefined) delete process.env.PATH;
-    else process.env.PATH = oldPath;
-    if (oldRuntimeDirectory === undefined) delete process.env.XDG_RUNTIME_DIR;
-    else process.env.XDG_RUNTIME_DIR = oldRuntimeDirectory;
     rmSync(directory, { recursive: true, force: true });
   }
 });

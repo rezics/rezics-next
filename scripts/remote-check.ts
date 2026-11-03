@@ -6148,7 +6148,14 @@ async function runLeased(
       assertExecutionAllowed(options, signal);
       const reason = error instanceof Error ? error.message.slice(0, 512) : 'unknown returns failure';
       returnManifest = { schema: 1, status: 'failed', entries: [], missing: [], failures: [reason] };
-      primaryFailure ??= error;
+      if (native.exitCode !== 0) {
+        const cause = native.lifetimeFailure
+          ? 'recorded run-lifetime infrastructure failure'
+          : `native command exit ${native.exitCode}`;
+        console.error(`remote-check: returns failed after ${cause}: ${reason}`);
+      } else {
+        primaryFailure ??= error;
+      }
     }
   } catch (error) {
     primaryFailure ??= error;
