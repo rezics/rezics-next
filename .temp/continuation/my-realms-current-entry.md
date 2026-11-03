@@ -1,37 +1,51 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "interface",
-  "riskAreas": ["authorization", "disclosure", "account", "deletion"],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "paths": [
-    "apps/web/src/community/my-realms-*.tsx",
-    "apps/web/src/community/my-realms-*.ts",
-    "apps/web/src/community/my-realms-*.md",
-    "apps/web/src/community/space.ts",
-    "apps/web/src/community/realm-membership-actions.ts",
-    "apps/web/src/routes/realms/index.tsx",
-    "apps/web/src/stories/my-realms-current-entry.stories.tsx",
-    "apps/web/tests/my-realms-current-entry*.test.ts*",
-    "apps/web/messages/*.json",
-    "docs/goals/web.md"
-  ],
-  "acceptance": {
-    "command": ["bun", "apps/web/scripts/focused.ts", "--private-network", "--", "bun", "test", "tests/my-realms-current-entry.test.tsx", "tests/my-realms-current-entry-actions.test.tsx", "tests/my-realms-current-entry-retirement.test.tsx"],
-    "placement": "default",
-    "tests": [
-      "Use Content's installed generated /v1/me/realms schema and examples for separate current entry, membership transition, presentation, media and action advice; do not invent a browser DTO or widen a cast.",
-      "A signed-in person recognizes current permitted Realm presentation, distinguishes readable entry from unavailable entry, and reaches an admitted existing management or leave flow before returning to the current My Realms page.",
-      "Ordinary membership never implies management, a submitted leave stays pending until actual readback, and leave/rejoin or replaced native action advice cannot retain a previous membership episode's actions.",
-      "Sparse continuation, same-cursor retry and explicit restart preserve the existing inventory; account, credentials, locale, disclosure, presentation and source replacement retire labels, media grants, selected actions and late effects.",
-      "At 1/10/20 rows the expanded native page is consumed once with O(N) formatting and one selected action, without per-row presentation, permission or membership reads. Native raw80 and growth256/1024/4096 remain producer evidence."
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'interface',
+  'riskAreas': ['authorization', 'disclosure', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'paths':
+    [
+      'apps/web/src/community/my-realms-*.tsx',
+      'apps/web/src/community/my-realms-*.ts',
+      'apps/web/src/community/my-realms-*.md',
+      'apps/web/src/community/space.ts',
+      'apps/web/src/community/realm-membership-actions.ts',
+      'apps/web/src/routes/realms/index.tsx',
+      'apps/web/src/stories/my-realms-current-entry.stories.tsx',
+      'apps/web/tests/my-realms-current-entry*.test.ts*',
+      'apps/web/messages/*.json',
+      'docs/goals/web.md',
     ],
-    "failing": true
-  },
-  "estimate": {"lines": 2500, "files": 25}
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'apps/web/scripts/focused.ts',
+          '--private-network',
+          '--',
+          'bun',
+          'test',
+          'tests/my-realms-current-entry.test.tsx',
+          'tests/my-realms-current-entry-actions.test.tsx',
+          'tests/my-realms-current-entry-retirement.test.tsx',
+        ],
+      'placement': 'default',
+      'tests':
+        [
+          "Use Content's installed generated /v1/me/realms schema and examples for separate current entry, membership transition, presentation, media and action advice; do not invent a browser DTO or widen a cast.",
+          'A signed-in person recognizes current permitted Realm presentation, distinguishes readable entry from unavailable entry, and reaches an admitted existing management or leave flow before returning to the current My Realms page.',
+          "Ordinary membership never implies management, a submitted leave stays pending until actual readback, and leave/rejoin or replaced native action advice cannot retain a previous membership episode's actions.",
+          'Sparse continuation, same-cursor retry and explicit restart preserve the existing inventory; account, credentials, locale, disclosure, presentation and source replacement retire labels, media grants, selected actions and late effects.',
+          'At 1/10/20 rows the expanded native page is consumed once with O(N) formatting and one selected action, without per-row presentation, permission or membership reads. Native raw80 and growth256/1024/4096 remain producer evidence.',
+        ],
+      'failing': true,
+    },
+  'estimate': { 'lines': 2500, 'files': 25 },
 }
 ---
 
