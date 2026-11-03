@@ -162,7 +162,7 @@ export class WorkerStore implements AttemptFence {
   ) {
     migrate(db, workerMigrations);
     ensureFlow(db);
-    this.checkResults = new CheckResults(db);
+    this.checkResults = new CheckResults(db, this.policy.storage);
   }
   /** Counts bodies decoded since the previous reset; useful for guarding host read budgets. */
   decodedRows(): { tasks: number; attempts: number } {
@@ -874,16 +874,16 @@ export class WorkerStore implements AttemptFence {
           .run(run.key, run.createdAt, JSON.stringify(run));
         this.db
           .query(
-            'DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET 5000)',
+            'DELETE FROM dev_verifier_runs WHERE cache_key IN (SELECT cache_key FROM dev_verifier_runs ORDER BY rowid DESC LIMIT -1 OFFSET ?)',
           )
-          .run();
+          .run(this.policy.verifier.runRows);
       })
       .immediate();
   }
-  devVerifierFindings(limit = 2000): DevVerifierFinding[] {
+  devVerifierFindings(limit = this.policy.verifier.findingRows): DevVerifierFinding[] {
     return this.db
       .query('SELECT body FROM dev_verifier_findings ORDER BY rowid DESC LIMIT ?')
-      .all(Math.max(0, Math.min(2000, limit)))
+      .all(Math.max(0, Math.min(this.policy.verifier.findingRows, limit)))
       .map((row) => decode<DevVerifierFinding>(row)!);
   }
   devVerifierHasKnownExisting(signature: string): boolean {
@@ -910,9 +910,9 @@ export class WorkerStore implements AttemptFence {
           );
         this.db
           .query(
-            'DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET 2000)',
+            'DELETE FROM dev_verifier_findings WHERE range_key IN (SELECT range_key FROM dev_verifier_findings ORDER BY rowid DESC LIMIT -1 OFFSET ?)',
           )
-          .run();
+          .run(this.policy.verifier.findingRows);
       })
       .immediate();
   }

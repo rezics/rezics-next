@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
+import { defaultPolicy } from './policy.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { matchesPath } from './briefs.ts';
 import { firstFailure, gateRunner, git, type GateRunner } from './merge.ts';
@@ -46,7 +47,7 @@ function observe<T>(action: () => T): T | undefined {
 
 // The root gate runs every workspace on one gate host; with every workspace grown it outlasted two hours (a timeout at
 // 2 h 05 m on 2026-10-29 blocked every promotion), so it gets four.
-export const PROMOTION_GATE_TIMEOUT_MS = 4 * 60 * 60_000;
+export const PROMOTION_GATE_TIMEOUT_MS = defaultPolicy.promotion.gateTimeoutMs;
 const STABILIZE_QUICK_GATE = [
   ['bun', 'scripts/typecheck.ts'],
   ['bun', 'run', '--cwd', 'packages/definitions', 'release'],
@@ -363,11 +364,9 @@ async function gateAt(
           observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-started'));
           executionStarted = true;
         }
-        const outcome = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
-          executionCommand,
-          tree,
-          logFor(index),
-        );
+        const outcome = await (
+          options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).promotion.gateTimeoutMs)
+        )(executionCommand, tree, logFor(index));
         observe(() => markPromotionGroupPhase(store.db, observationWindowId, 'execution-ended'));
         let failure = outcome.passed ? undefined : firstFailure(outcome.output);
         if (git(tree, 'rev-parse', 'HEAD') !== commit || git(tree, 'status', '--porcelain'))
@@ -602,7 +601,11 @@ async function rerunStabilizeInfrastructure(
   let pending = stabilizeRetryCommands(options, run, initial, failedIndex);
   const passed: PromotionGateResult[] = [];
   let current = initial;
-  for (let attempt = 1; attempt <= 2 && pending.length; attempt++) {
+  for (
+    let attempt = 1;
+    attempt <= (options.settings.policy ?? defaultPolicy).promotion.infrastructureReruns && pending.length;
+    attempt++
+  ) {
     const label = `head-infrastructure-rerun-${attempt}`;
     const reruns = await gateAt(options, run, run.devHead, pending, label, 'headResults', true);
     if (!reruns.length) break;
@@ -890,7 +893,7 @@ function mergeMainIntoDev(
   const settings = options.settings,
     checkout = settings.mainCheckout;
   const derived = (options.derivedFiles ?? defaultDerivedFiles).map((file) => file.path);
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < (options.settings.policy ?? defaultPolicy).promotion.advanceAttempts; attempt++) {
     const dev = optionalHead(checkout, branch);
     if (!dev) return undefined;
     if (isAncestor(checkout, target, dev)) return dev;
@@ -1057,11 +1060,9 @@ async function stabilizeQuickGate(options: PromotionOptions, dev: string): Promi
       if (installed.status !== 0) return false;
     }
     for (const command of STABILIZE_QUICK_GATE) {
-      const result = await (options.runGate ?? gateRunner(PROMOTION_GATE_TIMEOUT_MS))(
-        command,
-        tree,
-        join(settings.stateDirectory, `promotion-quick-${dev}-${command[command.length - 1]}.log`),
-      );
+      const result = await (
+        options.runGate ?? gateRunner((options.settings.policy ?? defaultPolicy).promotion.gateTimeoutMs)
+      )(command, tree, join(settings.stateDirectory, `promotion-quick-${dev}-${command[command.length - 1]}.log`));
       if (!result.passed || git(tree, 'rev-parse', 'HEAD') !== dev || git(tree, 'status', '--porcelain')) return false;
     }
     return head(checkout, sourceDevBranch(settings)) === dev;

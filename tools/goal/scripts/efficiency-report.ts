@@ -34,7 +34,7 @@ function parseArguments(args: string[]): Arguments {
 async function main(args: string[]): Promise<void> {
   const parsed = parseArguments(args);
   const settings = loadSettings();
-  const db = openDb(join(settings.stateDirectory, 'goal.sqlite'));
+  const db = openDb(join(settings.stateDirectory, 'goal.sqlite'), settings.policy?.storage);
   try {
     const bucket = parsed.bucket ? parseUtcHour(parsed.bucket) : completedUtcHour();
     const report = await renderHourlyEfficiencyReport(db, {

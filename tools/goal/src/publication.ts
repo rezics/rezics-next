@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -142,6 +143,7 @@ export type PreparedPublicationDependencies = {
   bunExecutable: string;
 };
 export type PublicationControllerOptions = {
+  policy?: ControlPolicy | undefined;
   db: Database;
   mainCheckout: string;
   stateDirectory: string;
@@ -1272,7 +1274,12 @@ export class PublicationController {
     if (statusBefore) throw new Error('eligible publication source worktree is not clean');
     const prepared = this.options.prepareDependencies
       ? this.options.prepareDependencies(this.options.mainCheckout, invocation.worktree, this.options.worktreeRoot)
-      : prepareExactDependencies(this.options.mainCheckout, invocation.worktree, this.options.worktreeRoot);
+      : prepareExactDependencies(
+          this.options.mainCheckout,
+          invocation.worktree,
+          this.options.worktreeRoot,
+          this.options.policy,
+        );
     const statusAfter = gitValue(
       invocation.worktree,
       ['status', '--porcelain'],
@@ -2176,6 +2183,7 @@ function prepareExactDependencies(
   mainCheckout: string,
   sourceTree: string,
   worktreeRoot: string,
+  policy = defaultPolicy,
 ): PreparedPublicationDependencies {
   const pinnedFromMain = join(mainCheckout, 'node_modules/.bin/bun');
   if (!existsSync(pinnedFromMain))
@@ -2199,7 +2207,7 @@ function prepareExactDependencies(
   const worktreeNodeModules = join(sourceTree, 'node_modules');
   if (existsSync(worktreeNodeModules) && !dependencyInstallationMatches(sourceTree))
     throw new Error('publication worktree already has mismatched dependencies; it will not be reset');
-  installShared(sourceTree, storeRoot);
+  installShared(sourceTree, storeRoot, undefined, policy);
   if (!dependencyInstallationMatches(sourceTree))
     throw new Error('prepared publication worktree does not match its exact dependency store');
   const bunExecutable = join(sourceTree, 'node_modules/.bin/bun');

@@ -2,7 +2,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import defaults from '../defaults.json';
-import { readControlPolicy } from './policy.ts';
+import { defaultPolicy, readControlPolicy } from './policy.ts';
 export { readControlPolicy } from './policy.ts';
 import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './types.ts';
 import { validatePath } from './briefs.ts';
@@ -30,7 +30,7 @@ import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
 import { readRouting } from './routing.ts';
 import { FORMAT_FLAGS, MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
-import { promote, PROMOTION_GATE_TIMEOUT_MS } from './promotion.ts';
+import { promote } from './promotion.ts';
 import { preparePromotionGate } from './promotion-placement.ts';
 import { verifyDev } from './dev-verifier.ts';
 import { gateRunner, processGroupRunner, type GateRunner } from './merge.ts';
@@ -514,7 +514,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     startedCodeVersion === undefined || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
   const databasePath = join(settings.stateDirectory, 'goal.sqlite');
   mkdirSync(settings.stateDirectory, { recursive: true });
-  const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath);
+  const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath, settings.policy?.storage);
   if (options.tasks && options.tasks.store.db !== db)
     throw new Error('Runtime modules must share one database connection');
   const store = options.tasks?.store ?? new WorkerStore(db, settings.policy);
@@ -553,7 +553,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const promotionGate: GateRunner =
     options.runGate ??
     gateRunner(
-      Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
+      Math.max(settings.integration.gateTimeoutMs, (settings.policy ?? defaultPolicy).promotion.gateTimeoutMs),
       settings.stateDirectory,
       {},
       checkResultOptions,
@@ -563,7 +563,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const verifierGate: GateRunner =
     options.runGate ??
     gateRunner(
-      Math.max(settings.integration.gateTimeoutMs, PROMOTION_GATE_TIMEOUT_MS),
+      Math.max(settings.integration.gateTimeoutMs, (settings.policy ?? defaultPolicy).verifier.gateTimeoutMs),
       undefined,
       {},
       checkResultOptions,
@@ -611,6 +611,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       });
     });
   train = new MergeTrain({
+    policy: settings.policy,
     mainCheckout: settings.mainCheckout,
     stateDirectory: settings.stateDirectory,
     worktreeRoot: settings.worktreeRoot,

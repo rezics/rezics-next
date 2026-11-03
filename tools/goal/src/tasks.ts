@@ -233,8 +233,8 @@ export function git(cwd: string, args: string[]): string {
   }
   return result.stdout.trimEnd();
 }
-function installWorktreeDependencies(worktree: string): void {
-  installShared(worktree);
+function installWorktreeDependencies(worktree: string, settings: Settings): void {
+  installShared(worktree, undefined, undefined, settings.policy);
 }
 export type RetryOptions = {
   brief?: string;
@@ -502,7 +502,7 @@ export class WorkerTasks {
           current.workspace = { module, taskName: basename(briefFile, '.md') };
           if (current.state === 'ready' && !this.dependenciesMet(current)) current.state = 'held';
         });
-        if (firstUse) installWorktreeDependencies(workspace.worktree);
+        if (firstUse) installWorktreeDependencies(workspace.worktree, this.settings);
         this.prepareSharedFrozen(this.store.task(id));
         return this.store.task(id);
       }
@@ -517,7 +517,9 @@ export class WorkerTasks {
         branch,
         worktree,
         createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base]),
-        ...(brief.kind !== 'verification' ? { installDependencies: () => installWorktreeDependencies(worktree) } : {}),
+        ...(brief.kind !== 'verification'
+          ? { installDependencies: () => installWorktreeDependencies(worktree, this.settings) }
+          : {}),
         freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
         removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree]),
         deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch]),
@@ -1290,7 +1292,7 @@ export class WorkerTasks {
         git(this.settings.mainCheckout, ['worktree', 'prune']);
         git(this.settings.mainCheckout, ['worktree', 'add', task.worktree, task.branch]);
       }
-      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree);
+      if (task.brief.kind !== 'verification') installWorktreeDependencies(task.worktree, this.settings);
     } finally {
       lease.release();
     }
@@ -1708,7 +1710,7 @@ export class WorkerTasks {
             throw new Error(`Proof pending/unavailable: captured inputs missing: ${missing.join(', ')}`);
           task = this.prepareProofWorktree(task, next);
           setupStep = 'installing worktree dependencies';
-          installWorktreeDependencies(task.worktree);
+          installWorktreeDependencies(task.worktree, this.settings);
           if (
             existsSync(join(task.worktree, 'package.json')) &&
             !existsSync(join(task.worktree, 'node_modules/.bin/bun'))
@@ -1779,7 +1781,7 @@ export class WorkerTasks {
                 );
               if (git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z']))
                 throw new Error(`Cannot refresh dependencies in ${task.worktree}: unresolved workspace paths`);
-              installWorktreeDependencies(task.worktree);
+              installWorktreeDependencies(task.worktree, this.settings);
             }
             const context = captureLaunchContext(this.store, next, boundary, origin);
             const prompt = workerPrompt(
@@ -1863,7 +1865,7 @@ export class WorkerTasks {
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
         if (!files.length && !rebasing) {
           setupStep = 'installing worktree dependencies';
-          installWorktreeDependencies(task.worktree);
+          installWorktreeDependencies(task.worktree, this.settings);
         }
         const context = captureLaunchContext(this.store, next, boundary, origin);
         const prompt = workerPrompt(

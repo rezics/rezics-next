@@ -433,180 +433,213 @@ prompt guidance uses `policy.guidance`. Provider observations are shared, while 
 and staleness limits. Usage accounting and consultation receive the same loaded policy as worker launches.
 Hourly report rendering and notifier delivery use `policy.hourlyReport` and the configured notifier validation bound;
 a delivery keeps its first persisted report identity when retried.
+Storage, dependency preparation, promotion and verifier retention use the same startup policy. Explicit installer
+limits and injected runners retain precedence. Installer capture and cleanup limits travel in the independent
+supervisor request; global-input caches are scoped by policy identity. Resident and standalone verifier deadlines
+retain their existing four-hour and two-hour defaults respectively.
 
-| Setting                                          | Default                     | Purpose                                                                              |
-| ------------------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------ |
-| `terminationGraceMs`                             | `1500`                      | Grace between termination signals when stopping an owned worker (ms).                |
-| `silenceMs`                                      | `2400000`                   | Maximum running-worker log silence before recovery (ms).                             |
-| `promotionParallelism`                           | `4`                         | Concurrent promotion checks.                                                         |
-| `integration.batchSize`                          | `4`                         | Dev landings sharing one integration candidate.                                      |
-| `integration.devLandingChecks`                   | `true`                      | Run configured dev landing checks.                                                   |
-| `integration.batchAcceptanceConcurrency`         | `8`                         | Concurrent acceptance commands within a landing batch.                               |
-| `integration.gateConcurrency`                    | `1`                         | Concurrent gate work.                                                                |
-| `integration.gateTimeoutMs`                      | `1800000`                   | Integration check deadline (ms).                                                     |
-| `integration.managerCompactTokens`               | `300000`                    | Manager context compaction token threshold.                                          |
-| `integration.checkResultReuse`                   | `false`                     | Reuse matching check results.                                                        |
-| `integration.hourlyReportTimeoutMs`              | `20000`                     | Hourly report notifier deadline (ms).                                                |
-| `integration.managerLimits.turns`                | `100`                       | Maximum manager turns per session.                                                   |
-| `integration.managerLimits.turnsWithoutDecision` | `10`                        | Manager turns allowed without a decision.                                            |
-| `integration.managerLimits.wallMs`               | `43200000`                  | Manager session wall deadline (ms).                                                  |
-| `integration.devPrelandingTypecheck`             | `false`                     | Run the dev compiler guard before landing.                                           |
-| `codex.compactTokens.sol`                        | `160000`                    | Sol context compaction token threshold.                                              |
-| `codex.compactTokens.luna`                       | `200000`                    | Luna context compaction token threshold.                                             |
-| `codex.solContextWindow`                         | `500000`                    | Sol context window tokens.                                                           |
-| `codex.toolOutputTokens`                         | `4000`                      | Maximum tokens returned by a worker tool call.                                       |
-| `codex.backgroundTerminalMaxTimeoutMs`           | `7200000`                   | Background terminal maximum wait (ms).                                               |
-| `flow.efficiencyBelow`                           | `0.4`                       | Alarm below this useful-work efficiency ratio.                                       |
-| `flow.oldestQueueMs`                             | `3600000`                   | Alarm when the oldest queue entry exceeds this age (ms).                             |
-| `flow.landingP90Ms`                              | `1800000`                   | Alarm when the landing p90 exceeds this duration (ms).                               |
-| `flow.attemptsPerIntegrated`                     | `1.5`                       | Alarm above this attempts-per-integrated-task ratio.                                 |
-| `policy.backlog.lowWater`                        | `8`                         | Ready briefs below which a running manager is woken.                                 |
-| `policy.backlog.wakeIntervalMs`                  | `3600000`                   | Minimum interval between low-backlog wakeups (ms).                                   |
-| `policy.backlog.stoppedTaskLimitMs`              | `3600000`                   | Stopped product task age before cancellation into failed backlog (ms).               |
-| `policy.backlog.stoppedTasksPerGoalPerRun`       | `20`                        | Maximum stopped tasks cancelled per Goal per sweep.                                  |
-| `policy.backlog.dispatchesPerSweep`              | `4`                         | Maximum briefs dispatched by one synchronous sweep.                                  |
-| `policy.backlog.settleMs`                        | `10000`                     | Minimum unchanged brief age before dispatch (ms).                                    |
-| `policy.backlog.refusalBriefs`                   | `4`                         | Maximum refused briefs listed in a notification.                                     |
-| `policy.backlog.refusalReasonCharacters`         | `160`                       | Maximum characters per listed refusal reason.                                        |
-| `policy.backlog.refusalSummaryCharacters`        | `1000`                      | Maximum refusal notification characters.                                             |
-| `policy.capacity.maxWorkers`                     | `32`                        | Default worker cap for host admission and backlog dispatch.                          |
-| `policy.capacity.minAvailableMiB`                | `6144`                      | Available memory floor for host admission; zero disables the floor.                  |
-| `policy.capacity.criticalHeadStartMs`            | `1800000`                   | Queue ticket head start for critical and stabilize work (ms).                        |
-| `policy.capacity.admissionRetryMs`               | `50`                        | Retry interval for a busy admission lease (ms).                                      |
-| `policy.capacity.pollIntervalMs`                 | `15000`                     | Worker and memory capacity poll interval (ms).                                       |
-| `policy.capacity.reservationPollMs`              | `250`                       | Poll interval until an admitted start is recorded (ms).                              |
-| `policy.validation.notifierArguments`            | `32`                        | Maximum notifier command argument count.                                             |
-| `policy.validation.notifierArgumentCharacters`   | `4096`                      | Maximum characters per notifier argument.                                            |
-| `policy.validation.hourlyReportMaxTimeoutMs`     | `120000`                    | Maximum accepted notifier deadline (ms).                                             |
-| `policy.flowHistoryMs`                           | `2592000000`                | Delivery flow reporting lookback (ms).                                               |
-| `policy.worker.capacityPauseMs`                  | `10000`                     | Pause before retrying a model-capacity refusal (ms).                                 |
-| `policy.worker.usageLimitRetryPauseMs`           | `180000`                    | Same-pool retry pause for a refusal with fresh allowance left (ms).                  |
-| `policy.worker.usageLimitRefusalWindowMs`        | `3600000`                   | Lookback when counting ambiguous usage-limit refusals (ms).                          |
-| `policy.worker.usageLimitRefusals`               | `3`                         | Refusals on one pool before excluding its allowance.                                 |
-| `policy.worker.usageLimitExhaustionMs`           | `3600000`                   | Allowance exclusion after repeated ambiguous refusals (ms).                          |
-| `policy.worker.waitingResumeLaunchFailures`      | `3`                         | Failed CLI launches allowed when resuming a waiting attempt.                         |
-| `policy.worker.startGraceMs`                     | `600000`                    | Empty-log and orphaned pending-attempt start grace (ms).                             |
-| `policy.worker.silenceCheckMs`                   | `60000`                     | Maximum interval between worker silence checks (ms).                                 |
-| `policy.worker.activityPollMs`                   | `30000`                     | Run-log watcher fallback polling interval (ms).                                      |
-| `policy.worker.orphanStartGraceMultiplier`       | `2`                         | Start-grace multiplier before adopting an unstarted ready task.                      |
-| `policy.worker.sweepYieldItems`                  | `8`                         | Orphan-sweep items processed before yielding the event loop.                         |
-| `policy.worker.retryIntentLeadMs`                | `1000`                      | Lead time within which a scheduled retry may be launched (ms).                       |
-| `policy.worker.toolRetryBackoffMs`               | `[120000,600000,1800000]`   | Tool-blocker retry delays by repeated fingerprint sightings (ms).                    |
-| `policy.worker.toolRetryWindowMs`                | `3600000`                   | Lookback for repeated tool-blocker fingerprints (ms).                                |
-| `policy.worker.toolRetryEventRows`               | `5000`                      | Recent event rows inspected for tool-blocker retry counts.                           |
-| `policy.worker.settlementBackoffMs`              | `[500,1000,2000,4000,8000]` | Pauses between SQLite-contended settlement writes (ms).                              |
-| `policy.worker.logTailBytes`                     | `262144`                    | Run-log tail used by bounded settlement probes (bytes).                              |
-| `policy.worker.diagnosticCharacters`             | `4000`                      | Maximum settlement launch-error diagnostic characters.                               |
-| `policy.worker.summaryCharacters`                | `1000`                      | Maximum settlement error-line characters.                                            |
-| `policy.worker.reportResultCharacters`           | `2000`                      | Final-report request result excerpt characters.                                      |
-| `policy.worker.failedResultCharacters`           | `500`                       | Failed-worker final-result tail characters.                                          |
-| `policy.worker.fixtureCleanupGraceMs`            | `250`                       | Termination grace for an unrecorded owned fixture worker (ms).                       |
-| `policy.workerResources.cpuWeight`               | `50`                        | Relative worker slice CPU weight.                                                    |
-| `policy.workerResources.ioWeight`                | `50`                        | Relative worker slice IO weight.                                                     |
-| `policy.workerResources.preparationTimeoutMs`    | `5000`                      | Deadline for each worker slice configuration command (ms).                           |
-| `policy.workerResources.memoryReserveGiB`        | `14`                        | Extra memory reserved after subtracting the check slice maximum (GiB).               |
-| `policy.workerResources.minimumMemoryFraction`   | `0.25`                      | Minimum worker memory-high share of total host memory.                               |
-| `policy.appServer.requestTimeoutMs`              | `30000`                     | App-server JSON-RPC response deadline (ms).                                          |
-| `policy.appServer.readinessTimeoutMs`            | `30000`                     | Deadline for a spawned app-server readiness marker (ms).                             |
-| `policy.appServer.connectTimeoutMs`              | `30000`                     | Loopback app-server WebSocket connection deadline (ms).                              |
-| `policy.appServer.terminationGraceMs`            | `500`                       | App-server SIGTERM grace before SIGKILL (ms).                                        |
-| `policy.appServer.diagnosticCharacters`          | `262144`                    | Maximum retained startup stderr characters.                                          |
-| `policy.containers.commandTimeoutMs`             | `15000`                     | Deadline for each worker container Docker operation (ms).                            |
-| `policy.containers.maxAgeHours`                  | `4`                         | Default stale-container age for opted-in hosts (hours).                              |
-| `policy.process.groupPollMs`                     | `1000`                      | Poll interval until an owned detached process group exits (ms).                      |
-| `policy.process.exitPollMs`                      | `50`                        | Fallback identity poll interval after a pidfd waiter fails (ms).                     |
-| `policy.process.signalDiagnosticCharacters`      | `4096`                      | Maximum retained signal-helper stderr characters.                                    |
-| `policy.process.resolverTerminationGraceMs`      | `1000`                      | Termination grace for resolver recovery without a task runtime (ms).                 |
-| `policy.host.stateSweepIntervalMs`               | `60000`                     | Host state-directory sweep interval (ms).                                            |
-| `policy.host.recoveryIntervalMs`                 | `60000`                     | Orphan recovery and host periodic work interval (ms).                                |
-| `policy.host.recoveryReadinessMs`                | `100`                       | Recovery progress wait before publishing host readiness (ms).                        |
-| `policy.host.requestTimeoutMs`                   | `60000`                     | Default manager host RPC deadline (ms).                                              |
-| `policy.host.requestRetryMs`                     | `25`                        | Pause between manager host socket connection retries (ms).                           |
-| `policy.host.decisionAuditTimeoutMs`             | `500`                       | Isolated continuation decision audit delivery deadline (ms).                         |
-| `policy.appServer.exitPollMs`                    | `20`                        | Identity poll interval while stopping recorded app-servers (ms).                     |
-| `policy.appServer.killWaitMs`                    | `5000`                      | Maximum recorded app-server wait after SIGKILL (ms).                                 |
-| `policy.containers.cleanupIntervalMs`            | `600000`                    | Minimum interval between opted-in stale-container sweeps (ms).                       |
-| `policy.watchdog.noWorkerMs`                     | `600000`                    | Ended-attempt idle time before reporting a missing worker (ms).                      |
-| `policy.watchdog.stabilizeBehindMs`              | `1800000`                   | Time stabilize may remain absent from dev before an alert (ms).                      |
-| `policy.watchdog.alertEveryMs`                   | `7200000`                   | Minimum interval between repeated watchdog violation alerts (ms).                    |
-| `policy.watchdog.failureWindowMs`                | `1800000`                   | Lookback for shared worker failure signatures (ms).                                  |
-| `policy.watchdog.failureAttempts`                | `3`                         | Minimum attempts sharing a failure signature for an incident.                        |
-| `policy.watchdog.failureTasks`                   | `2`                         | Minimum distinct tasks sharing a failure signature for an incident.                  |
-| `policy.watchdog.failureExampleCharacters`       | `200`                       | Maximum characters in a shared-failure example.                                      |
-| `policy.watchdog.hostProbeEveryMs`               | `300000`                    | Interval between asynchronous check-host SSH probes (ms).                            |
-| `policy.watchdog.hostProbeTimeoutMs`             | `20000`                     | Deadline for each check-host SSH probe (ms).                                         |
-| `policy.watchdog.hostProbeConnectTimeoutSeconds` | `10`                        | SSH connection deadline for check-host probes (seconds).                             |
-| `policy.watchdog.hostProbeDiagnosticCharacters`  | `4096`                      | Maximum first-line SSH diagnostic characters.                                        |
-| `policy.watchdog.hostProbeFailures`              | `2`                         | Consecutive failed check-host probes before outage and incident reporting.           |
-| `policy.watchdog.attemptLimitMs`                 | `7200000`                   | Long-attempt threshold when no explicit routing limit is supplied (ms).              |
-| `policy.watchdog.recentCommands`                 | `10`                        | Recent worker commands inspected for stall and polling reports.                      |
-| `policy.watchdog.commandLogTailBytes`            | `262144`                    | Worker log tail inspected for recent commands (bytes).                               |
-| `policy.watchdog.commitCountTimeoutMs`           | `5000`                      | Deadline for counting commits in long-attempt reports (ms).                          |
-| `policy.watchdog.processPollingCommands`         | `2`                         | Recent process-inspection commands before reporting repeated polling.                |
-| `policy.watchdog.longAttemptReportMs`            | `3600000`                   | Minimum interval between unchanged long-attempt reports (ms).                        |
-| `policy.width.workerThreshold`                   | `10`                        | Confirmed live workers below which an eligible Goal receives a width event.          |
-| `policy.width.bucketMs`                          | `900000`                    | Width-event deduplication bucket duration (ms).                                      |
-| `policy.width.pageSize`                          | `64`                        | Active task rows per width-snapshot database page.                                   |
-| `policy.width.sweepYieldItems`                   | `8`                         | Goal snapshots processed before yielding the width sweep.                            |
-| `policy.flow.alertEveryMs`                       | `3600000`                   | Minimum interval between alarms for the same flow threshold (ms).                    |
-| `policy.flow.waitingTaskExamples`                | `3`                         | Maximum waiting-task examples included in a flow alarm.                              |
-| `policy.lifecycle.conflictWindowRows`            | `1000`                      | Maximum rebase outcomes and attempts examined per trailing-hour conflict cohort.     |
-| `policy.provider.claudeRefreshMs`                | `120000`                    | Minimum age before refreshing a Claude usage observation (ms).                       |
-| `policy.provider.claudeStaleMs`                  | `1200000`                   | Maximum reusable Claude observation age after a failed refresh (ms).                 |
-| `policy.provider.claudeRequestTimeoutSeconds`    | `10`                        | Deadline for the native Claude OAuth usage request (seconds).                        |
-| `policy.provider.codexAllowanceTailBytes`        | `1048576`                   | Session-log suffix inspected for Codex quota observations (bytes).                   |
-| `policy.provider.usageContextObjects`            | `24`                        | Maximum nested event objects inspected for usage model, effort and tier.             |
-| `policy.provider.observationClockSkewMs`         | `60000`                     | Future timestamp tolerance when assessing a usage-limit refusal (ms).                |
-| `policy.pacing.scheduleRefreshMs`                | `1800000`                   | Minimum interval between announced Codex reset schedule requests (ms).               |
-| `policy.pacing.scheduleRequestTimeoutSeconds`    | `15`                        | Deadline for the native reset schedule request (seconds).                            |
-| `policy.pacing.minimumResetMs`                   | `900000`                    | Minimum remaining reset duration used to calculate allowance urgency (ms).           |
-| `policy.pacing.alertPercentPerHour`              | `2`                         | Unused allowance percentage per hour above which pacing alerts fire.                 |
-| `policy.pacing.alertUnusedPercent`               | `20`                        | Unused allowance percentage triggering a near-reset pacing alert.                    |
-| `policy.pacing.alertResetHours`                  | `24`                        | Remaining reset hours qualifying for an unused-allowance alert.                      |
-| `policy.pacing.alertEveryMs`                     | `10800000`                  | Minimum interval between pacing alerts for the same allowance (ms).                  |
-| `policy.manager.sleepAlarmPerHour`               | `10`                        | Sleep calls allowed per manager per UTC hour before one alarm.                       |
-| `policy.manager.sleepHistoryHours`               | `24`                        | UTC-hour sleep-counter history retained per manager.                                 |
-| `policy.manager.inboxPollMs`                     | `2000`                      | Manager inbox filesystem watcher fallback interval (ms).                             |
-| `policy.manager.fileClockSlackMs`                | `1000`                      | Filesystem timestamp tolerance when recognizing a newly written brief (ms).          |
-| `policy.manager.continuationBudgetPercent`       | `90`                        | Budget consumption percentage requesting a manager continuation.                     |
-| `policy.manager.continuationCharacters`          | `8000`                      | Manager continuation length guidance (characters).                                   |
-| `policy.manager.messageWords`                    | `60`                        | Manager decision and handoff message length guidance (words).                        |
-| `policy.guidance.longCommandWaitMs`              | `300000`                    | Minimum open-session long-command wait in worker prompts (ms).                       |
-| `policy.guidance.summaryWords`                   | `120`                       | Worker final summary length guidance (words).                                        |
-| `policy.guidance.blockerWords`                   | `80`                        | Worker final blocker detail length guidance (words).                                 |
-| `policy.guidance.toolFailureRetries`             | `2`                         | Infrastructure retries required before worker blocker reporting.                     |
-| `policy.records.sessionHeadBytes`                | `65536`                     | Attempt-log prefix inspected for a resumable session identity (bytes).               |
-| `policy.records.sessionReadBufferBytes`          | `65536`                     | Read chunk size for streamed session accounting (bytes).                             |
-| `policy.records.sessionRecordBytes`              | `1048576`                   | Maximum JSONL record size accepted for session accounting (bytes).                   |
-| `policy.records.legacyApproachCharacters`        | `1000`                      | Maximum legacy approach excerpt length (characters).                                 |
-| `policy.records.legacyResultCharacters`          | `2000`                      | Maximum legacy approach outcome excerpt length (characters).                         |
-| `policy.consultation.timeoutMs`                  | `120000`                    | Deadline for the single evidence-only consultation (ms).                             |
-| `policy.consultation.causeCharacters`            | `1000`                      | Maximum first-line consultation failure cause length (characters).                   |
-| `policy.hourlyReport.fieldCharacters`            | `160`                       | Maximum characters per hourly report identity or diagnostic field.                   |
-| `policy.hourlyReport.goalRows`                   | `8`                         | Maximum Goal rows in the hourly landing summary.                                     |
-| `policy.hourlyReport.landingRows`                | `8`                         | Maximum landing identities in the hourly report.                                     |
-| `policy.hourlyReport.launchRows`                 | `8`                         | Maximum launch-task rows in the hourly report.                                       |
-| `policy.hourlyReport.waitRows`                   | `5`                         | Maximum current wait identities in the hourly report.                                |
-| `policy.hourlyReport.incidentRows`               | `5`                         | Maximum shared tool incidents in the hourly report.                                  |
-| `policy.hourlyReport.incidentTaskExamples`       | `5`                         | Maximum orphan or quarantine task examples per incident summary.                     |
-| `policy.hourlyReport.reportBytes`                | `32000`                     | Maximum rendered hourly report size, including truncation marker (bytes).            |
-| `policy.hourlyReport.notifierOutputBytes`        | `4096`                      | Combined notifier stdout and stderr budget before termination (bytes).               |
-| `policy.hourlyReport.interruptedSendGraceMs`     | `5000`                      | Grace beyond the notifier deadline before an interrupted claim becomes unknown (ms). |
-| `policy.hourlyReport.notifierTerminationGraceMs` | `250`                       | Notifier SIGTERM grace before SIGKILL (ms).                                          |
-| `policy.routing.implementation.maxSteps`         | `300`                       | Implementation route step limit.                                                     |
-| `policy.routing.implementation.maxMs`            | `7200000`                   | Implementation route attempt time budget (ms).                                       |
-| `policy.routing.interface.maxSteps`              | `300`                       | Interface route step limit.                                                          |
-| `policy.routing.interface.maxMs`                 | `7200000`                   | Interface route attempt time budget (ms).                                            |
-| `policy.routing.bulk-text.maxSteps`              | `500`                       | Bulk-text route step limit.                                                          |
-| `policy.routing.bulk-text.maxMs`                 | `7200000`                   | Bulk-text route attempt time budget (ms).                                            |
-| `policy.routing.claim.maxSteps`                  | `300`                       | Claim route step limit.                                                              |
-| `policy.routing.claim.maxMs`                     | `7200000`                   | Claim route attempt time budget (ms).                                                |
-| `policy.routing.specification.maxSteps`          | `200`                       | Specification route step limit.                                                      |
-| `policy.routing.specification.maxMs`             | `3600000`                   | Specification route attempt time budget (ms).                                        |
-| `policy.routing.critical-path.maxSteps`          | `300`                       | Critical-path route step limit.                                                      |
-| `policy.routing.critical-path.maxMs`             | `7200000`                   | Critical-path route attempt time budget (ms).                                        |
-| `policy.routing.research.maxSteps`               | `200`                       | Research route step limit.                                                           |
-| `policy.routing.research.maxMs`                  | `3600000`                   | Research route attempt time budget (ms).                                             |
+| Setting                                               | Default                     | Purpose                                                                              |
+| ----------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| `terminationGraceMs`                                  | `1500`                      | Grace between termination signals when stopping an owned worker (ms).                |
+| `silenceMs`                                           | `2400000`                   | Maximum running-worker log silence before recovery (ms).                             |
+| `promotionParallelism`                                | `4`                         | Concurrent promotion checks.                                                         |
+| `integration.batchSize`                               | `4`                         | Dev landings sharing one integration candidate.                                      |
+| `integration.devLandingChecks`                        | `true`                      | Run configured dev landing checks.                                                   |
+| `integration.batchAcceptanceConcurrency`              | `8`                         | Concurrent acceptance commands within a landing batch.                               |
+| `integration.gateConcurrency`                         | `1`                         | Concurrent gate work.                                                                |
+| `integration.gateTimeoutMs`                           | `1800000`                   | Integration check deadline (ms).                                                     |
+| `integration.managerCompactTokens`                    | `300000`                    | Manager context compaction token threshold.                                          |
+| `integration.checkResultReuse`                        | `false`                     | Reuse matching check results.                                                        |
+| `integration.hourlyReportTimeoutMs`                   | `20000`                     | Hourly report notifier deadline (ms).                                                |
+| `integration.managerLimits.turns`                     | `100`                       | Maximum manager turns per session.                                                   |
+| `integration.managerLimits.turnsWithoutDecision`      | `10`                        | Manager turns allowed without a decision.                                            |
+| `integration.managerLimits.wallMs`                    | `43200000`                  | Manager session wall deadline (ms).                                                  |
+| `integration.devPrelandingTypecheck`                  | `false`                     | Run the dev compiler guard before landing.                                           |
+| `codex.compactTokens.sol`                             | `160000`                    | Sol context compaction token threshold.                                              |
+| `codex.compactTokens.luna`                            | `200000`                    | Luna context compaction token threshold.                                             |
+| `codex.solContextWindow`                              | `500000`                    | Sol context window tokens.                                                           |
+| `codex.toolOutputTokens`                              | `4000`                      | Maximum tokens returned by a worker tool call.                                       |
+| `codex.backgroundTerminalMaxTimeoutMs`                | `7200000`                   | Background terminal maximum wait (ms).                                               |
+| `flow.efficiencyBelow`                                | `0.4`                       | Alarm below this useful-work efficiency ratio.                                       |
+| `flow.oldestQueueMs`                                  | `3600000`                   | Alarm when the oldest queue entry exceeds this age (ms).                             |
+| `flow.landingP90Ms`                                   | `1800000`                   | Alarm when the landing p90 exceeds this duration (ms).                               |
+| `flow.attemptsPerIntegrated`                          | `1.5`                       | Alarm above this attempts-per-integrated-task ratio.                                 |
+| `policy.backlog.lowWater`                             | `8`                         | Ready briefs below which a running manager is woken.                                 |
+| `policy.backlog.wakeIntervalMs`                       | `3600000`                   | Minimum interval between low-backlog wakeups (ms).                                   |
+| `policy.backlog.stoppedTaskLimitMs`                   | `3600000`                   | Stopped product task age before cancellation into failed backlog (ms).               |
+| `policy.backlog.stoppedTasksPerGoalPerRun`            | `20`                        | Maximum stopped tasks cancelled per Goal per sweep.                                  |
+| `policy.backlog.dispatchesPerSweep`                   | `4`                         | Maximum briefs dispatched by one synchronous sweep.                                  |
+| `policy.backlog.settleMs`                             | `10000`                     | Minimum unchanged brief age before dispatch (ms).                                    |
+| `policy.backlog.refusalBriefs`                        | `4`                         | Maximum refused briefs listed in a notification.                                     |
+| `policy.backlog.refusalReasonCharacters`              | `160`                       | Maximum characters per listed refusal reason.                                        |
+| `policy.backlog.refusalSummaryCharacters`             | `1000`                      | Maximum refusal notification characters.                                             |
+| `policy.capacity.maxWorkers`                          | `32`                        | Default worker cap for host admission and backlog dispatch.                          |
+| `policy.capacity.minAvailableMiB`                     | `6144`                      | Available memory floor for host admission; zero disables the floor.                  |
+| `policy.capacity.criticalHeadStartMs`                 | `1800000`                   | Queue ticket head start for critical and stabilize work (ms).                        |
+| `policy.capacity.admissionRetryMs`                    | `50`                        | Retry interval for a busy admission lease (ms).                                      |
+| `policy.capacity.pollIntervalMs`                      | `15000`                     | Worker and memory capacity poll interval (ms).                                       |
+| `policy.capacity.reservationPollMs`                   | `250`                       | Poll interval until an admitted start is recorded (ms).                              |
+| `policy.validation.notifierArguments`                 | `32`                        | Maximum notifier command argument count.                                             |
+| `policy.validation.notifierArgumentCharacters`        | `4096`                      | Maximum characters per notifier argument.                                            |
+| `policy.validation.hourlyReportMaxTimeoutMs`          | `120000`                    | Maximum accepted notifier deadline (ms).                                             |
+| `policy.flowHistoryMs`                                | `2592000000`                | Delivery flow reporting lookback (ms).                                               |
+| `policy.worker.capacityPauseMs`                       | `10000`                     | Pause before retrying a model-capacity refusal (ms).                                 |
+| `policy.worker.usageLimitRetryPauseMs`                | `180000`                    | Same-pool retry pause for a refusal with fresh allowance left (ms).                  |
+| `policy.worker.usageLimitRefusalWindowMs`             | `3600000`                   | Lookback when counting ambiguous usage-limit refusals (ms).                          |
+| `policy.worker.usageLimitRefusals`                    | `3`                         | Refusals on one pool before excluding its allowance.                                 |
+| `policy.worker.usageLimitExhaustionMs`                | `3600000`                   | Allowance exclusion after repeated ambiguous refusals (ms).                          |
+| `policy.worker.waitingResumeLaunchFailures`           | `3`                         | Failed CLI launches allowed when resuming a waiting attempt.                         |
+| `policy.worker.startGraceMs`                          | `600000`                    | Empty-log and orphaned pending-attempt start grace (ms).                             |
+| `policy.worker.silenceCheckMs`                        | `60000`                     | Maximum interval between worker silence checks (ms).                                 |
+| `policy.worker.activityPollMs`                        | `30000`                     | Run-log watcher fallback polling interval (ms).                                      |
+| `policy.worker.orphanStartGraceMultiplier`            | `2`                         | Start-grace multiplier before adopting an unstarted ready task.                      |
+| `policy.worker.sweepYieldItems`                       | `8`                         | Orphan-sweep items processed before yielding the event loop.                         |
+| `policy.worker.retryIntentLeadMs`                     | `1000`                      | Lead time within which a scheduled retry may be launched (ms).                       |
+| `policy.worker.toolRetryBackoffMs`                    | `[120000,600000,1800000]`   | Tool-blocker retry delays by repeated fingerprint sightings (ms).                    |
+| `policy.worker.toolRetryWindowMs`                     | `3600000`                   | Lookback for repeated tool-blocker fingerprints (ms).                                |
+| `policy.worker.toolRetryEventRows`                    | `5000`                      | Recent event rows inspected for tool-blocker retry counts.                           |
+| `policy.worker.settlementBackoffMs`                   | `[500,1000,2000,4000,8000]` | Pauses between SQLite-contended settlement writes (ms).                              |
+| `policy.worker.logTailBytes`                          | `262144`                    | Run-log tail used by bounded settlement probes (bytes).                              |
+| `policy.worker.diagnosticCharacters`                  | `4000`                      | Maximum settlement launch-error diagnostic characters.                               |
+| `policy.worker.summaryCharacters`                     | `1000`                      | Maximum settlement error-line characters.                                            |
+| `policy.worker.reportResultCharacters`                | `2000`                      | Final-report request result excerpt characters.                                      |
+| `policy.worker.failedResultCharacters`                | `500`                       | Failed-worker final-result tail characters.                                          |
+| `policy.worker.fixtureCleanupGraceMs`                 | `250`                       | Termination grace for an unrecorded owned fixture worker (ms).                       |
+| `policy.workerResources.cpuWeight`                    | `50`                        | Relative worker slice CPU weight.                                                    |
+| `policy.workerResources.ioWeight`                     | `50`                        | Relative worker slice IO weight.                                                     |
+| `policy.workerResources.preparationTimeoutMs`         | `5000`                      | Deadline for each worker slice configuration command (ms).                           |
+| `policy.workerResources.memoryReserveGiB`             | `14`                        | Extra memory reserved after subtracting the check slice maximum (GiB).               |
+| `policy.workerResources.minimumMemoryFraction`        | `0.25`                      | Minimum worker memory-high share of total host memory.                               |
+| `policy.appServer.requestTimeoutMs`                   | `30000`                     | App-server JSON-RPC response deadline (ms).                                          |
+| `policy.appServer.readinessTimeoutMs`                 | `30000`                     | Deadline for a spawned app-server readiness marker (ms).                             |
+| `policy.appServer.connectTimeoutMs`                   | `30000`                     | Loopback app-server WebSocket connection deadline (ms).                              |
+| `policy.appServer.terminationGraceMs`                 | `500`                       | App-server SIGTERM grace before SIGKILL (ms).                                        |
+| `policy.appServer.diagnosticCharacters`               | `262144`                    | Maximum retained startup stderr characters.                                          |
+| `policy.containers.commandTimeoutMs`                  | `15000`                     | Deadline for each worker container Docker operation (ms).                            |
+| `policy.containers.maxAgeHours`                       | `4`                         | Default stale-container age for opted-in hosts (hours).                              |
+| `policy.process.groupPollMs`                          | `1000`                      | Poll interval until an owned detached process group exits (ms).                      |
+| `policy.process.exitPollMs`                           | `50`                        | Fallback identity poll interval after a pidfd waiter fails (ms).                     |
+| `policy.process.signalDiagnosticCharacters`           | `4096`                      | Maximum retained signal-helper stderr characters.                                    |
+| `policy.process.resolverTerminationGraceMs`           | `1000`                      | Termination grace for resolver recovery without a task runtime (ms).                 |
+| `policy.host.stateSweepIntervalMs`                    | `60000`                     | Host state-directory sweep interval (ms).                                            |
+| `policy.host.recoveryIntervalMs`                      | `60000`                     | Orphan recovery and host periodic work interval (ms).                                |
+| `policy.host.recoveryReadinessMs`                     | `100`                       | Recovery progress wait before publishing host readiness (ms).                        |
+| `policy.host.requestTimeoutMs`                        | `60000`                     | Default manager host RPC deadline (ms).                                              |
+| `policy.host.requestRetryMs`                          | `25`                        | Pause between manager host socket connection retries (ms).                           |
+| `policy.host.decisionAuditTimeoutMs`                  | `500`                       | Isolated continuation decision audit delivery deadline (ms).                         |
+| `policy.appServer.exitPollMs`                         | `20`                        | Identity poll interval while stopping recorded app-servers (ms).                     |
+| `policy.appServer.killWaitMs`                         | `5000`                      | Maximum recorded app-server wait after SIGKILL (ms).                                 |
+| `policy.containers.cleanupIntervalMs`                 | `600000`                    | Minimum interval between opted-in stale-container sweeps (ms).                       |
+| `policy.watchdog.noWorkerMs`                          | `600000`                    | Ended-attempt idle time before reporting a missing worker (ms).                      |
+| `policy.watchdog.stabilizeBehindMs`                   | `1800000`                   | Time stabilize may remain absent from dev before an alert (ms).                      |
+| `policy.watchdog.alertEveryMs`                        | `7200000`                   | Minimum interval between repeated watchdog violation alerts (ms).                    |
+| `policy.watchdog.failureWindowMs`                     | `1800000`                   | Lookback for shared worker failure signatures (ms).                                  |
+| `policy.watchdog.failureAttempts`                     | `3`                         | Minimum attempts sharing a failure signature for an incident.                        |
+| `policy.watchdog.failureTasks`                        | `2`                         | Minimum distinct tasks sharing a failure signature for an incident.                  |
+| `policy.watchdog.failureExampleCharacters`            | `200`                       | Maximum characters in a shared-failure example.                                      |
+| `policy.watchdog.hostProbeEveryMs`                    | `300000`                    | Interval between asynchronous check-host SSH probes (ms).                            |
+| `policy.watchdog.hostProbeTimeoutMs`                  | `20000`                     | Deadline for each check-host SSH probe (ms).                                         |
+| `policy.watchdog.hostProbeConnectTimeoutSeconds`      | `10`                        | SSH connection deadline for check-host probes (seconds).                             |
+| `policy.watchdog.hostProbeDiagnosticCharacters`       | `4096`                      | Maximum first-line SSH diagnostic characters.                                        |
+| `policy.watchdog.hostProbeFailures`                   | `2`                         | Consecutive failed check-host probes before outage and incident reporting.           |
+| `policy.watchdog.attemptLimitMs`                      | `7200000`                   | Long-attempt threshold when no explicit routing limit is supplied (ms).              |
+| `policy.watchdog.recentCommands`                      | `10`                        | Recent worker commands inspected for stall and polling reports.                      |
+| `policy.watchdog.commandLogTailBytes`                 | `262144`                    | Worker log tail inspected for recent commands (bytes).                               |
+| `policy.watchdog.commitCountTimeoutMs`                | `5000`                      | Deadline for counting commits in long-attempt reports (ms).                          |
+| `policy.watchdog.processPollingCommands`              | `2`                         | Recent process-inspection commands before reporting repeated polling.                |
+| `policy.watchdog.longAttemptReportMs`                 | `3600000`                   | Minimum interval between unchanged long-attempt reports (ms).                        |
+| `policy.width.workerThreshold`                        | `10`                        | Confirmed live workers below which an eligible Goal receives a width event.          |
+| `policy.width.bucketMs`                               | `900000`                    | Width-event deduplication bucket duration (ms).                                      |
+| `policy.width.pageSize`                               | `64`                        | Active task rows per width-snapshot database page.                                   |
+| `policy.width.sweepYieldItems`                        | `8`                         | Goal snapshots processed before yielding the width sweep.                            |
+| `policy.flow.alertEveryMs`                            | `3600000`                   | Minimum interval between alarms for the same flow threshold (ms).                    |
+| `policy.flow.waitingTaskExamples`                     | `3`                         | Maximum waiting-task examples included in a flow alarm.                              |
+| `policy.lifecycle.conflictWindowRows`                 | `1000`                      | Maximum rebase outcomes and attempts examined per trailing-hour conflict cohort.     |
+| `policy.provider.claudeRefreshMs`                     | `120000`                    | Minimum age before refreshing a Claude usage observation (ms).                       |
+| `policy.provider.claudeStaleMs`                       | `1200000`                   | Maximum reusable Claude observation age after a failed refresh (ms).                 |
+| `policy.provider.claudeRequestTimeoutSeconds`         | `10`                        | Deadline for the native Claude OAuth usage request (seconds).                        |
+| `policy.provider.codexAllowanceTailBytes`             | `1048576`                   | Session-log suffix inspected for Codex quota observations (bytes).                   |
+| `policy.provider.usageContextObjects`                 | `24`                        | Maximum nested event objects inspected for usage model, effort and tier.             |
+| `policy.provider.observationClockSkewMs`              | `60000`                     | Future timestamp tolerance when assessing a usage-limit refusal (ms).                |
+| `policy.pacing.scheduleRefreshMs`                     | `1800000`                   | Minimum interval between announced Codex reset schedule requests (ms).               |
+| `policy.pacing.scheduleRequestTimeoutSeconds`         | `15`                        | Deadline for the native reset schedule request (seconds).                            |
+| `policy.pacing.minimumResetMs`                        | `900000`                    | Minimum remaining reset duration used to calculate allowance urgency (ms).           |
+| `policy.pacing.alertPercentPerHour`                   | `2`                         | Unused allowance percentage per hour above which pacing alerts fire.                 |
+| `policy.pacing.alertUnusedPercent`                    | `20`                        | Unused allowance percentage triggering a near-reset pacing alert.                    |
+| `policy.pacing.alertResetHours`                       | `24`                        | Remaining reset hours qualifying for an unused-allowance alert.                      |
+| `policy.pacing.alertEveryMs`                          | `10800000`                  | Minimum interval between pacing alerts for the same allowance (ms).                  |
+| `policy.manager.sleepAlarmPerHour`                    | `10`                        | Sleep calls allowed per manager per UTC hour before one alarm.                       |
+| `policy.manager.sleepHistoryHours`                    | `24`                        | UTC-hour sleep-counter history retained per manager.                                 |
+| `policy.manager.inboxPollMs`                          | `2000`                      | Manager inbox filesystem watcher fallback interval (ms).                             |
+| `policy.manager.fileClockSlackMs`                     | `1000`                      | Filesystem timestamp tolerance when recognizing a newly written brief (ms).          |
+| `policy.manager.continuationBudgetPercent`            | `90`                        | Budget consumption percentage requesting a manager continuation.                     |
+| `policy.manager.continuationCharacters`               | `8000`                      | Manager continuation length guidance (characters).                                   |
+| `policy.manager.messageWords`                         | `60`                        | Manager decision and handoff message length guidance (words).                        |
+| `policy.guidance.longCommandWaitMs`                   | `300000`                    | Minimum open-session long-command wait in worker prompts (ms).                       |
+| `policy.guidance.summaryWords`                        | `120`                       | Worker final summary length guidance (words).                                        |
+| `policy.guidance.blockerWords`                        | `80`                        | Worker final blocker detail length guidance (words).                                 |
+| `policy.guidance.toolFailureRetries`                  | `2`                         | Infrastructure retries required before worker blocker reporting.                     |
+| `policy.records.sessionHeadBytes`                     | `65536`                     | Attempt-log prefix inspected for a resumable session identity (bytes).               |
+| `policy.records.sessionReadBufferBytes`               | `65536`                     | Read chunk size for streamed session accounting (bytes).                             |
+| `policy.records.sessionRecordBytes`                   | `1048576`                   | Maximum JSONL record size accepted for session accounting (bytes).                   |
+| `policy.records.legacyApproachCharacters`             | `1000`                      | Maximum legacy approach excerpt length (characters).                                 |
+| `policy.records.legacyResultCharacters`               | `2000`                      | Maximum legacy approach outcome excerpt length (characters).                         |
+| `policy.consultation.timeoutMs`                       | `120000`                    | Deadline for the single evidence-only consultation (ms).                             |
+| `policy.consultation.causeCharacters`                 | `1000`                      | Maximum first-line consultation failure cause length (characters).                   |
+| `policy.hourlyReport.fieldCharacters`                 | `160`                       | Maximum characters per hourly report identity or diagnostic field.                   |
+| `policy.hourlyReport.goalRows`                        | `8`                         | Maximum Goal rows in the hourly landing summary.                                     |
+| `policy.hourlyReport.landingRows`                     | `8`                         | Maximum landing identities in the hourly report.                                     |
+| `policy.hourlyReport.launchRows`                      | `8`                         | Maximum launch-task rows in the hourly report.                                       |
+| `policy.hourlyReport.waitRows`                        | `5`                         | Maximum current wait identities in the hourly report.                                |
+| `policy.hourlyReport.incidentRows`                    | `5`                         | Maximum shared tool incidents in the hourly report.                                  |
+| `policy.hourlyReport.incidentTaskExamples`            | `5`                         | Maximum orphan or quarantine task examples per incident summary.                     |
+| `policy.hourlyReport.reportBytes`                     | `32000`                     | Maximum rendered hourly report size, including truncation marker (bytes).            |
+| `policy.hourlyReport.notifierOutputBytes`             | `4096`                      | Combined notifier stdout and stderr budget before termination (bytes).               |
+| `policy.hourlyReport.interruptedSendGraceMs`          | `5000`                      | Grace beyond the notifier deadline before an interrupted claim becomes unknown (ms). |
+| `policy.hourlyReport.notifierTerminationGraceMs`      | `250`                       | Notifier SIGTERM grace before SIGKILL (ms).                                          |
+| `policy.storage.sqliteBusyTimeoutMs`                  | `30000`                     | SQLite connection contention wait (ms).                                              |
+| `policy.storage.checkResultTtlMs`                     | `604800000`                 | Maximum passing check-result age, inclusive at expiry (ms).                          |
+| `policy.storage.globalInputCacheClearAboveEntries`    | `64`                        | Clear a policy-scoped global-input cache above this entry count before inserting.    |
+| `policy.dependencies.storeLeaseWaitMs`                | `900000`                    | Maximum wait for the immutable dependency-store build lease (ms).                    |
+| `policy.dependencies.retainedStores`                  | `3`                         | Newest dependency stores retained even when unused.                                  |
+| `policy.dependencies.storeRetentionMs`                | `86400000`                  | Minimum age before removing an unused, unretained dependency store (ms).             |
+| `policy.dependencies.install.startupMs`               | `15000`                     | Dependency installer startup deadline (ms).                                          |
+| `policy.dependencies.install.runMs`                   | `180000`                    | Dependency installer running deadline (ms).                                          |
+| `policy.dependencies.install.budgetMs`                | `180000`                    | Total dependency installer execution budget (ms).                                    |
+| `policy.dependencies.install.terminationMs`           | `15000`                     | Owned dependency installer group termination budget (ms).                            |
+| `policy.dependencies.gate.startupMs`                  | `60000`                     | Control-plane package check startup deadline (ms).                                   |
+| `policy.dependencies.gate.runMs`                      | `5400000`                   | Control-plane package check running deadline (ms).                                   |
+| `policy.dependencies.gate.budgetMs`                   | `5400000`                   | Total control-plane package check execution budget (ms).                             |
+| `policy.dependencies.gate.terminationMs`              | `15000`                     | Owned control-plane package check group termination budget (ms).                     |
+| `policy.dependencies.captureHeadBytes`                | `16777216`                  | Installer and package check output head retained per stream (bytes).                 |
+| `policy.dependencies.captureTailBytes`                | `16777216`                  | Installer and package check ring-buffer tail retained per stream (bytes).            |
+| `policy.dependencies.pollMs`                          | `20`                        | Owned installer process-group termination poll interval (ms).                        |
+| `policy.dependencies.supervisorTerminationMultiplier` | `3`                         | Termination-budget allowance multiplier for the independent installer supervisor.    |
+| `policy.dependencies.supervisorOverheadMs`            | `5000`                      | Additional independent installer supervisor overhead allowance (ms).                 |
+| `policy.dependencies.supervisorBufferBytes`           | `1048576`                   | Native installer supervisor command output buffer limit (bytes).                     |
+| `policy.promotion.gateTimeoutMs`                      | `14400000`                  | Promotion root gate deadline, preserving the four-hour default (ms).                 |
+| `policy.promotion.infrastructureReruns`               | `2`                         | Additional promotion head-check reruns after infrastructure failure.                 |
+| `policy.promotion.advanceAttempts`                    | `5`                         | Attempts to publish a promotion ref while competing refs move.                       |
+| `policy.verifier.gateTimeoutMs`                       | `14400000`                  | Resident verifier gate deadline before the integration deadline floor (ms).          |
+| `policy.verifier.standaloneGateTimeoutMs`             | `7200000`                   | Standalone verifier gate deadline when no runner is supplied (ms).                   |
+| `policy.verifier.installAttempts`                     | `3`                         | Verifier dependency installation attempts including the first.                       |
+| `policy.verifier.checkAttempts`                       | `3`                         | Verifier check attempts including the first, retrying infrastructure failures.       |
+| `policy.verifier.findingRows`                         | `2000`                      | Maximum durable verifier findings and default finding page size.                     |
+| `policy.verifier.runRows`                             | `5000`                      | Maximum durable verifier cached runs.                                                |
+| `policy.routing.implementation.maxSteps`              | `300`                       | Implementation route step limit.                                                     |
+| `policy.routing.implementation.maxMs`                 | `7200000`                   | Implementation route attempt time budget (ms).                                       |
+| `policy.routing.interface.maxSteps`                   | `300`                       | Interface route step limit.                                                          |
+| `policy.routing.interface.maxMs`                      | `7200000`                   | Interface route attempt time budget (ms).                                            |
+| `policy.routing.bulk-text.maxSteps`                   | `500`                       | Bulk-text route step limit.                                                          |
+| `policy.routing.bulk-text.maxMs`                      | `7200000`                   | Bulk-text route attempt time budget (ms).                                            |
+| `policy.routing.claim.maxSteps`                       | `300`                       | Claim route step limit.                                                              |
+| `policy.routing.claim.maxMs`                          | `7200000`                   | Claim route attempt time budget (ms).                                                |
+| `policy.routing.specification.maxSteps`               | `200`                       | Specification route step limit.                                                      |
+| `policy.routing.specification.maxMs`                  | `3600000`                   | Specification route attempt time budget (ms).                                        |
+| `policy.routing.critical-path.maxSteps`               | `300`                       | Critical-path route step limit.                                                      |
+| `policy.routing.critical-path.maxMs`                  | `7200000`                   | Critical-path route attempt time budget (ms).                                        |
+| `policy.routing.research.maxSteps`                    | `200`                       | Research route step limit.                                                           |
+| `policy.routing.research.maxMs`                       | `3600000`                   | Research route attempt time budget (ms).                                             |
 
 ### Delivery flow telemetry
 

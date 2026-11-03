@@ -58,7 +58,7 @@ export async function run(
   const [command, ...args] = argv;
   if (command === 'deps' && args[0] === 'private' && args.length === 1) {
     try {
-      installPrivate(process.cwd());
+      installPrivate(process.cwd(), undefined, loadSettings().policy);
       return 0;
     } catch (error) {
       console.error(error instanceof Error ? `${error.name}: ${error.message}` : String(error));

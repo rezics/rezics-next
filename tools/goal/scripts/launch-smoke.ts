@@ -1349,7 +1349,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   persistEvidence();
   report('worker-check-boundary: passed');
 
-  const db = openDb(join(stateDirectory, 'goal.sqlite'));
+  const db = openDb(join(stateDirectory, 'goal.sqlite'), settings.policy?.storage);
   const store = new WorkerStore(db, settings.policy);
   const tasks = new WorkerTasks(settings, store);
   const landing = { enqueue: () => {} };

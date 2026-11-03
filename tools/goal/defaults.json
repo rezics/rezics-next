@@ -386,6 +386,47 @@
       "notifierOutputBytes": 4096,
       "interruptedSendGraceMs": 5000,
       "notifierTerminationGraceMs": 250
+    },
+    "storage": {
+      "sqliteBusyTimeoutMs": 30000,
+      "checkResultTtlMs": 604800000,
+      "globalInputCacheClearAboveEntries": 64
+    },
+    "dependencies": {
+      "storeLeaseWaitMs": 900000,
+      "retainedStores": 3,
+      "storeRetentionMs": 86400000,
+      "install": {
+        "startupMs": 15000,
+        "runMs": 180000,
+        "budgetMs": 180000,
+        "terminationMs": 15000
+      },
+      "gate": {
+        "startupMs": 60000,
+        "runMs": 5400000,
+        "budgetMs": 5400000,
+        "terminationMs": 15000
+      },
+      "captureHeadBytes": 16777216,
+      "captureTailBytes": 16777216,
+      "pollMs": 20,
+      "supervisorTerminationMultiplier": 3,
+      "supervisorOverheadMs": 5000,
+      "supervisorBufferBytes": 1048576
+    },
+    "promotion": {
+      "gateTimeoutMs": 14400000,
+      "infrastructureReruns": 2,
+      "advanceAttempts": 5
+    },
+    "verifier": {
+      "gateTimeoutMs": 14400000,
+      "standaloneGateTimeoutMs": 7200000,
+      "installAttempts": 3,
+      "checkAttempts": 3,
+      "findingRows": 2000,
+      "runRows": 5000
     }
   }
 }

@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readdirSync, realpathSync } from 'node:fs';
 import { basename } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -1228,6 +1229,7 @@ export function rebaseOnto(
 }
 
 export type TrainOptions = {
+  policy?: ControlPolicy | undefined;
   mainCheckout: string;
   stateDirectory: string;
   worktreeRoot: string;
@@ -1951,7 +1953,7 @@ export class MergeTrain {
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
-          installShared(trainTree);
+          installShared(trainTree, undefined, undefined, this.options.policy);
         const batchLog = logPaths.get(prepared[0]!.entry.id)!;
         const { command, result: checked } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
         for (const member of prepared)
@@ -2693,7 +2695,7 @@ export class MergeTrain {
               existsSync(join(trainTree, 'bun.lock')) &&
               existsSync(join(trainTree, 'package.json'))
             )
-              installShared(trainTree);
+              installShared(trainTree, undefined, undefined, this.options.policy);
             const checked = rerun
               ? await runGate(request.gate, trainTree, logPath)
               : { passed: true, output: '', timedOut: false };
@@ -2865,7 +2867,7 @@ export class MergeTrain {
             existsSync(join(trainTree, 'bun.lock')) &&
             existsSync(join(trainTree, 'package.json'))
           )
-            installShared(trainTree);
+            installShared(trainTree, undefined, undefined, this.options.policy);
           const { command, result: checked } = await this.checkDevCandidate(trainTree, base, candidate, logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
@@ -2897,7 +2899,7 @@ export class MergeTrain {
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
-          installShared(trainTree);
+          installShared(trainTree, undefined, undefined, this.options.policy);
         const affectedFailures: string[] = [];
         let baseTreeFiles: Set<string> | undefined;
         const affectedChecks = skipDevChecks
@@ -3420,7 +3422,7 @@ export class MergeTrain {
     const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return;
     try {
@@ -3545,7 +3547,7 @@ export class MergeTrain {
             existsSync(join(tree, 'bun.lock')) &&
             existsSync(join(tree, 'package.json'))
           )
-            installShared(tree);
+            installShared(tree, undefined, undefined, this.options.policy);
           const { command, result } = await this.checkDevCandidate(tree, targetHead, commit, logPath);
           if (!result.passed) {
             const output = result.output || 'Root typecheck failed without compiler output';
@@ -3649,7 +3651,7 @@ export class MergeTrain {
     const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return false;
     try {
@@ -3724,7 +3726,7 @@ export class MergeTrain {
           existsSync(join(trainTree, 'bun.lock')) &&
           existsSync(join(trainTree, 'package.json'))
         )
-          installShared(trainTree);
+          installShared(trainTree, undefined, undefined, this.options.policy);
         try {
           const { command, result } = await this.checkDevCandidate(trainTree, expected, merged, logPath);
           if (!result.passed) {
@@ -3869,7 +3871,7 @@ export class MergeTrain {
   ): void {
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return;
     try {
@@ -3967,7 +3969,7 @@ export class MergeTrain {
     const managers = [...new Set([managerId, supermanager].filter((id): id is string => Boolean(id)))];
     const shared = (this.options.fence as AttemptFence & { db?: Database }).db;
     const path = join(this.options.stateDirectory, 'goal.sqlite');
-    const owned = shared || !existsSync(path) ? undefined : openDb(path);
+    const owned = shared || !existsSync(path) ? undefined : openDb(path, this.options.policy?.storage);
     const db = shared ?? owned;
     if (!db) return;
     try {

@@ -310,7 +310,13 @@ export function gateRunner(
         cleanBefore = git(cwd, 'status', '--porcelain').length === 0;
         if (cleanBefore) {
           head = git(cwd, 'rev-parse', 'HEAD');
-          key = checkResultKey({ root: reuse.root, cwd, command: argv, env: { ...process.env, ...env } });
+          key = checkResultKey({
+            root: reuse.root,
+            cwd,
+            command: argv,
+            env: { ...process.env, ...env },
+            policy: reuse.results.policy,
+          });
           cached = reuse.results.lookup(key.key);
           appendFileSync(logPath, `check-results: ${cached ? 'hit' : 'miss'} ${key.key}\n`);
           if (cached && reuse.enabled && !reuse.shadow)
