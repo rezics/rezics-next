@@ -13,6 +13,9 @@ export function SavedQueryCorrection({
 }) {
   const locale = getLocale();
   const stateIssue = selection.issues.some((issue) => issue.key === 'state');
+  const safeOrigin = originHref?.startsWith('/') && !originHref.startsWith('//')
+    ? new URL(originHref, 'https://rezics.local').pathname
+    : null;
   return (
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       <PageHeading>{m.library_rule_new()}</PageHeading>
@@ -27,14 +30,14 @@ export function SavedQueryCorrection({
           ))}
         </ul>
         <div className="flex flex-wrap gap-3">
-          {originHref ? (
-            <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={originHref}>
+          {safeOrigin ? (
+            <a className="inline-flex min-h-11 items-center rounded-lg border border-border px-4" href={safeOrigin}>
               {m.library_saved_query_correct()}
             </a>
           ) : null}
           <a
             className="inline-flex min-h-11 items-center rounded-lg border border-border px-4"
-            href={savedQueryCreateHref(locale, {})}
+            href={savedQueryCreateHref(locale)}
           >
             {m.library_saved_query_blank()}
           </a>

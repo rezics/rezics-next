@@ -203,10 +203,15 @@ sources cannot report exact counts as zero. Existing dynamic DTO count omissions
 Second-scope authoring is admitted. Native saved-source execution, complete publication and member pages remain
 Commerce; Web shows unavailable at that boundary and never invents a successful native response, occurrence IDs
 or count/time fields. A Library state ID without profile and state set stays unsaved with correction.
-Decision: Web actual `/collections/$id/rule` stories compose the delivered GET rule schema and recorded release choices; they do not invent a successful saved-rule write or member-execution preview.
-The create/reopen journey is `/library/rules/new` and `/collections/$id/rule`. An owned Collection or Library
-filter selection is admitted with the shared grammar and `id` sort; representable predicates seed a private
-create draft for explicit Save. Built-in identities have no rule editor.
+Decision: Save query transfers an admitted filter and displayed type through a one-use browser-memory handoff bound
+to the initiating viewer, with `id` order; private predicates never enter the destination URL, browser storage or
+shared hydration. Text, resource and non-`id` sort selections stay on the source with an explanation; reload discards
+the handoff and shows guidance. New handoffs use the current release; reopened rules retain their accepted release,
+and explicit edits are readmitted under the current release with the draft kept on incompatibility.
+The create/reopen journey is `/library/rules/new` and `/collections/$id/rule`. The existing editor reviews title and
+rule before private create; confirmed creation offers members and rule destinations. Web stories use recorded GET
+rule/release data; any Saved state backed by a local write response is labeled an illustration because native member
+execution remains Commerce-owned. Built-in identities have no rule editor.
 
 ## Current source inventory
 

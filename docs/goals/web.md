@@ -47,16 +47,18 @@ Existing editors, refinement, rows, report queues and their original acceptance 
 Decision: extend the existing routes through small owner-backed consumer seams; keep all ten interface slices
 independent rather than making shared files or unfinished producer delivery into scheduling dependencies.
 
-- **Save a query.** Delivered on `/library/rules/new` and `/collections/$id/rule` through `saved-query-editor` and
-  the existing rule editor. An owned Collection or Library filter selection is admitted with the shared grammar and
-  `id` sort; representable predicates seed a private create draft for explicit Save. Unrepresentable Library state
-  (no profile/state set) and invalid filter JSON stay unsaved with correction. Built-in identities have no rule
-  editor. Create uses `POST /v1/collections` `{membershipKind:'dynamic', visibility:'private', rule:{filter,sort:'id'}}`;
-  edit uses `PUT .../rule` with CAS revision. Ordinary saved identities then use the existing Dynamic Collection
-  reader at `/collections/{id}`: unique-subject members, retained URL filter/`id` sort, owner-only rule edit, and
-  explicit 202 preparing / empty 200 / 503 / stale-cursor restart. Public readers receive only published permitted
-  membership, never the owner predicate. Native execution and publication remain Commerce; Web shows unavailable,
-  conflict and uncertain recovery without inventing members, counts or occurrence IDs. The Web results seam is
+- **Save a query.** `/library/rules/new` and `/collections/$id/rule` use the existing rule editor. An admitted
+  Collection filter and displayed type transfer through a one-use browser-memory handoff bound to the initiating
+  viewer, with `id` order; private predicates never enter the destination URL, browser storage or shared hydration.
+  Text, resource and non-`id` sort selections stay on the source with an explanation; reload discards the handoff and
+  shows guidance. First save creates one private dynamic Collection after title/rule review. Existing rules retain
+  their accepted release when reopened; new handoffs use the current release, and explicit edits are readmitted under
+  the current release with the draft kept on incompatibility. Built-in identities have no rule editor. Create uses
+  `POST /v1/collections` `{membershipKind:'dynamic', visibility:'private', rule:{filter,sort:'id'}}`; edit uses
+  `PUT .../rule` with CAS revision. Confirmed creation offers members and rule destinations. Ordinary saved identities
+  use the existing Dynamic Collection reader at `/collections/{id}` with distinct preparing, empty, unavailable and
+  stale-cursor recovery states. Public readers receive only published permitted membership, never the owner
+  predicate. Native execution, lifecycle, membership and publication remain Commerce-owned. The Web results seam is
   documented in [saved-query results](../../apps/web/src/library/saved-query-results.md).
 - **Advanced facets.** Extend the common Collection filter surface with released property selection and native
   count-free value continuation for that exact Collection. Eight active properties is a UI window; changing the

@@ -13,7 +13,8 @@ import {
 } from './collection-facet-values';
 import { requestLanguages } from '../kernel/languages';
 import { Exposure } from '../kernel/exposure';
-import { SaveQueryLink } from './saved-query-editor/link';
+import { SaveQueryLink } from './save-query';
+import { admitSavedQuerySelection, hasSavedQueryInput } from './saved-query-editor/selection';
 import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { useIsMobile } from '@rezics/ui/hooks/use-is-mobile';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
@@ -119,6 +120,14 @@ export function CollectionFilters({
 }) {
   const locale = getLocale();
   const search = useRouterState({ select: (state) => state.location.searchStr });
+  const saveQueryInput = {
+    ...(params.document ? { document: params.document } : {}),
+    type,
+    search,
+    invalid: Boolean(params.issues?.length || params.ignored.length),
+  };
+  const showSaveQuery = hasSavedQueryInput(saveQueryInput);
+  const saveQuerySelection = admitSavedQuerySelection(saveQueryInput);
   const mobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const refinementProperties = properties.map((property): RefinementProperty => ({
@@ -333,20 +342,9 @@ export function CollectionFilters({
             )}
           </>
         ) : null}
-        {params.document ? (
+        {showSaveQuery ? (
           <Exposure operation="collection.create">
-            <SaveQueryLink
-              document={params.document}
-              from={collectionFilterAddress(
-                locale,
-                id,
-                params.selected,
-                params.ranges,
-                params.selectedLabels,
-                type,
-                new URLSearchParams(search),
-              )}
-            />
+            <SaveQueryLink id={id} selection={saveQuerySelection} />
           </Exposure>
         ) : null}
       </div>
