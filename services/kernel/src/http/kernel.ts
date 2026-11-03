@@ -59,6 +59,7 @@ import { malImportRoutes } from '../library/list-import-mal-routes.ts';
 import { libraryExportRoutes } from '../library/library-export-routes.ts';
 import { copyArchiveRoutes } from '../library/copy-archive-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
+import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
@@ -634,7 +635,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(mal), realmRoleReader }),
   });
-  const labels = personalLabelRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {
+  const aniList = aniListImportRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(aniList), realmRoleReader }),
+  });
+  const labels = personalLabelRoutes(aniList as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
@@ -790,6 +798,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof personalLibraryRoutes> &
   ReturnType<typeof bangumiImportRoutes> &
   ReturnType<typeof malImportRoutes> &
+  ReturnType<typeof aniListImportRoutes> &
   ReturnType<typeof libraryExportRoutes> &
   ReturnType<typeof copyArchiveRoutes> &
   ReturnType<typeof communityRoutes> &

@@ -3019,6 +3019,24 @@ CREATE TABLE library.library_export (
 
 
 --
+-- Name: list_import_anilist; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.list_import_anilist (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    import_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    payload jsonb NOT NULL,
+    CONSTRAINT list_import_anilist_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT list_import_anilist_check1 CHECK ((route = ((get_byte(uuid_send(import_id), 10) * 256) + get_byte(uuid_send(import_id), 11)))),
+    CONSTRAINT list_import_anilist_ordinal_check CHECK (((ordinal >= '-1'::integer) AND (ordinal <= 199))),
+    CONSTRAINT list_import_anilist_payload_check CHECK ((octet_length((payload)::text) <= 4194304)),
+    CONSTRAINT list_import_anilist_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
 -- Name: list_import_mal; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4825,6 +4843,14 @@ ALTER TABLE ONLY library.label_assignment
 
 ALTER TABLE ONLY library.library_export
     ADD CONSTRAINT library_export_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: list_import_anilist list_import_anilist_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_anilist
+    ADD CONSTRAINT list_import_anilist_pkey PRIMARY KEY (route, account_id, import_id, ordinal);
 
 
 --

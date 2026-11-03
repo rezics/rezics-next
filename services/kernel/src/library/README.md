@@ -40,6 +40,9 @@ Native curated Collections store ordered occurrences, including repeated subject
 progress sessions/units/history, follows and published logs have production commands/readers. The public subject
 listing stores public Collection pairs and counts; it is not personal membership truth.
 
+Personal AniList evidence/reviews in `list_import_anilist` are private and account-leading; the appended owned-graph
+phase erases 100 keys per page, including wrappers and all review/command operands. See [the source contract](../../../../docs/library-import-anilist.md).
+
 Current implementation evidence is narrower than the capability:
 
 - `createCollectionPublicationFinalCommand` and `createCollectionPublicationFinalActivation` in

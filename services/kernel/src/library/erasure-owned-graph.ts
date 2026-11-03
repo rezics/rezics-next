@@ -65,6 +65,7 @@ export const OWNED_PHASES = [
   'list_import_mal',
   'library_export',
   'copy_archive',
+  'list_import_anilist',
 ] as const;
 const childQueries: {
   units: typeof units;

@@ -303,10 +303,14 @@ export function createEntryCommands(config: Dependencies) {
     subjectId: string,
     input: unknown,
     requestKey: string,
-    guard?: import('./list-import-bangumi-model.ts').BangumiGuard | ReviewedEntrySource,
+    guard?:
+      | import('./list-import-bangumi-model.ts').BangumiGuard
+      | ReviewedEntrySource
+      | { subjectId: string; pin: unknown; epoch: string },
   ) {
     const reviewedSource = guard && 'release' in guard ? guard : undefined;
     const reviewGuard = guard && 'releaseDigest' in guard ? guard : undefined;
+    const review = guard && 'pin' in guard ? guard : undefined;
     const owner = account(actor, 'library_entry:update');
     const parsed = putInput(input);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
@@ -318,14 +322,15 @@ export function createEntryCommands(config: Dependencies) {
     // Preserve the existing normalized receipt input. A missing current source must
     // reach owner authorization and receipt lookup before fresh admission fails.
     // Reviewed imports bind a canonical operand; receipt retries must never follow a new alias.
-    const resolved = reviewedSource
-      ? { subjectId, requestedSubjectId: null }
-      : existing
-        ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
-        : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
-            subjectId,
-            requestedSubjectId: null,
-          });
+    const resolved =
+      reviewedSource || review
+        ? { subjectId, requestedSubjectId: null }
+        : existing
+          ? { subjectId, requestedSubjectId: existing.requestedSubjectId }
+          : ((await resolveSubject({ pool, access }, owner, subjectId).catch(() => null)) ?? {
+              subjectId,
+              requestedSubjectId: null,
+            });
 
     // Absence retains the exact pre-incarnation receipt input.
     const requestInput = {
@@ -336,6 +341,7 @@ export function createEntryCommands(config: Dependencies) {
       ...(reviewGuard === undefined ? {} : { reviewGuard }),
       revision: parsed.revision ?? null,
       ...(parsed.incarnationId === undefined ? {} : { incarnationId: parsed.incarnationId }),
+      ...(review === undefined ? {} : { importReview: review }),
     };
     const expectedRevision = parsed.revision;
     let preparedType: PreparedType | undefined;
@@ -373,6 +379,15 @@ export function createEntryCommands(config: Dependencies) {
                   if (claim.rows[0]?.subject_id !== b.subject) throw new LibraryConflictError();
                 }
               }
+              if (
+                review &&
+                (!observation ||
+                  source?.kind !== 'supported' ||
+                  source.subjectId !== review.subjectId ||
+                  String(observation.anchor.identityEpoch) !== review.epoch ||
+                  canonicalize(source.pin) !== canonicalize(review.pin))
+              )
+                throw new LibraryConflictError();
               if (!source) throw new LibraryNotFoundError();
               if (
                 reviewGuard &&
