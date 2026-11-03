@@ -1,5 +1,4 @@
 import type { Pool, PoolClient } from 'pg';
-import { ProblemError } from '../http/problem.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { subjectIndexName } from './indices.ts';
 import { subjectConsumer } from './runner.ts';
@@ -321,7 +320,11 @@ export function createCoverageStore(pool: Pool): CoverageStore {
       codec.requireValue(slot.outcome === 'enrolled' && slot.checkpoint === 'pending' && slot.source === null);
       return mutateHome(g, (old, lineage) => {
         if (!['populating', 'live'].includes(lineage.state)) return null;
-        if (old?.attempt && (old.attempt.outcome !== 'completed' || old.attempt.id === slot.id)) return null;
+        if (
+          old?.attempt &&
+          (old.attempt.id === slot.id || !['completed', 'aborted', 'skipped'].includes(old.attempt.outcome))
+        )
+          return null;
         return {
           partition: g.partition,
           incarnation: g.incarnation,
@@ -354,20 +357,46 @@ export function createCoverageStore(pool: Pool): CoverageStore {
           (slot.source && (!codec.equal(slot.source, source) || !codec.equal(old.fence, fence)))
         )
           return null;
-        const same = codec.equal(old.current, source) && old.fence?.generation === fence?.generation;
+        const nextFence = fence ?? (codec.equal(old.current, source) ? old.fence : null);
+        const same = codec.equal(old.current, source) && codec.equal(old.fence, nextFence);
         return {
           ...old,
           current: source,
-          fence,
+          fence: nextFence,
           verified: same ? old.verified : null,
           coveredThrough: same ? old.coveredThrough : null,
           attempt: { ...slot, source, outcome },
         };
       });
     },
-    async settleNoWrite(_guard, _attemptId, _result) {
-      // Honest unavailable stub: existing mutations and durable codecs remain unchanged.
-      throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+    async settleNoWrite(value, id, result) {
+      const g = guard(value, true),
+        attemptId = codec.uuid(id);
+      const observed = codec.object(result, 'outcome checkpoint');
+      const settled =
+        observed.outcome === 'aborted'
+          ? {
+              outcome: codec.choice(observed.outcome, ['aborted']),
+              checkpoint: codec.choice(observed.checkpoint, ['pending']),
+            }
+          : {
+              outcome: codec.choice(observed.outcome, ['skipped']),
+              checkpoint: codec.choice(observed.checkpoint, ['advanced', 'lost', 'stopped']),
+            };
+      return mutateHome(g, (old, lineage) => {
+        const slot = old?.attempt;
+        if (
+          !old ||
+          !['populating', 'live'].includes(lineage.state) ||
+          !slot ||
+          slot.id !== attemptId ||
+          slot.outcome !== 'enrolled' ||
+          slot.checkpoint !== 'pending' ||
+          slot.source !== null
+        )
+          return null;
+        return { ...old, attempt: { ...slot, ...settled } };
+      });
     },
     async complete(value, id, result) {
       const g = guard(value, true),

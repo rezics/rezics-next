@@ -87,12 +87,17 @@ export function attempt(value: unknown, durable = false): ApplyAttempt {
     from: checkpoint(v.from, durable),
     through: checkpoint(v.through, durable),
     source: v.source === null ? null : home(v.source, durable),
-    outcome: choice(v.outcome, ['enrolled', 'visible', 'ambiguous', 'completed']),
+    outcome: choice(v.outcome, ['enrolled', 'visible', 'ambiguous', 'completed', 'aborted', 'skipped']),
     checkpoint: choice(v.checkpoint, ['pending', 'advanced', 'lost', 'stopped']),
   };
   requireValue(result.from.epoch === result.through.epoch && result.from.position <= result.through.position);
-  requireValue((result.outcome === 'completed') === (result.checkpoint !== 'pending'));
-  requireValue(result.outcome !== 'enrolled' || result.source === null);
+  requireValue(
+    ['completed', 'skipped'].includes(result.outcome) === (result.checkpoint !== 'pending') ||
+      result.outcome === 'aborted',
+  );
+  requireValue(result.outcome !== 'aborted' || result.checkpoint === 'pending');
+  requireValue(!['enrolled', 'visible', 'ambiguous'].includes(result.outcome) || result.checkpoint === 'pending');
+  requireValue(!['enrolled', 'aborted', 'skipped'].includes(result.outcome) || result.source === null);
   requireValue(!['visible', 'completed'].includes(result.outcome) || result.source !== null);
   requireValue(result.source === null || result.source.epoch === result.through.epoch);
   return result;
@@ -104,8 +109,10 @@ export function equal(a: unknown, b: unknown): boolean {
   return encode(a) === encode(b);
 }
 export function pair(source: CoverageHome | null, observed: StructuralFence | null): void {
-  requireValue((source === null) === (observed === null));
-  requireValue(!source || !observed || (source.epoch === observed.epoch && source.generation === observed.generation));
+  requireValue(
+    observed === null ||
+      (source !== null && source.epoch === observed.epoch && source.generation === observed.generation),
+  );
 }
 export function control(value: unknown, durable = false): CoveragePrefixControl {
   const v = object(value, 'prefix revision issuedGeneration');
@@ -165,7 +172,9 @@ export function homeRow(value: unknown, physical: IndexIncarnation): HomeCoverag
       (equal(result.verified, result.current) && result.verified.epoch === result.coveredThrough!.epoch),
   );
   requireValue(
-    !result.attempt || result.attempt.outcome === 'enrolled' || equal(result.attempt.source, result.current),
+    !result.attempt ||
+      ['enrolled', 'aborted', 'skipped'].includes(result.attempt.outcome) ||
+      equal(result.attempt.source, result.current),
   );
   return result;
 }

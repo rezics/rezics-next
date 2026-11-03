@@ -1572,7 +1572,7 @@ The following producer gaps remain required, independent of that superseded arch
   Preserve actual engine UUID, generation/name lifecycle and prevention of late accidental auto-creation. Keep
   per-partition reconciliation; counts alone cannot certify population.
 
-`coverage.ts`/`coverage-projection.ts` unavailable exports and existing `coverage-store.ts` do not close these gaps.
+Coverage storage, initialization and independent certification are live: a never-used physical UUID is bound before writers, no-write settlement preserves prior certificate fields, and certification compares the native identity basis, current homes and core fences. `identity-basis.ts` is a Search-owned reader seam over `core.partition` plus identity-epoch group/redirect counters until Semantic delivers `identity_home`. These paths still do not close default-worker, activation or generation-switch gaps.
 Actual native acceptance/default composition/growth remain required through real commands, Access, source, engine,
 worker and production rebuild, including pause/drain/restart/retirement and all owner pools. Existing adversarial
 outcomes remain useful evidence; old protocol-specific home-certificate proof is not the replacement gate.
