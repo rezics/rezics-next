@@ -201,6 +201,8 @@ an exact membership interval for selection; account ID and member state cannot s
 The installed native GET currently checks intervals internally but exposes none, and its generated client still lacks
 the GET. Browser retirement now follows successful session incarnations and current incarnation-keyed exposure changes,
 including cache errors and batched away/back transitions, without fetching authority or retaining private query snapshots.
+Producer lifetime observations now have an optional composition seam that retires page, selection and deferred focus
+without fetching; it remains unbound until Content publishes native disclosure/currentness ownership and exact intervals.
 The positive production visit, current selected ban/add integration, rejected/unknown commands and full locale/viewport
 review remain continuation work. No fixture or unavailable route establishes native completion or producer growth.
 
