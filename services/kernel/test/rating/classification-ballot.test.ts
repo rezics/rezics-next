@@ -39,7 +39,7 @@ const actions = [
 ];
 const routeKey = new Uint8Array(32).fill(31);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
-const receiptKeys: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(47)]]) };
+const receiptKeys: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(17)]]) };
 let database: GrowthDatabase;
 let realAccess: RealAccessFixture<Persona>;
 let app: ReturnType<typeof createKernel>;
@@ -62,26 +62,6 @@ beforeAll(async () => {
   });
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'voter0', 'subject:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
-  const accountProbe = await database.admin.query(
-    'SELECT route, account_id, kind, state, minimum_authn_epoch, authn_fenced FROM access.account WHERE route=$1 AND account_id=$2',
-    [routeOf(accounts.voter0), accounts.voter0],
-  );
-  console.info('classification ballot auth probe', accountProbe.rows[0]);
-  console.info(
-    'classification ballot credential probe',
-    Buffer.from(realAccess.bearer('voter0').split('.')[1]!, 'base64url').toString(),
-    new Date().toISOString(),
-  );
-  try {
-    const directAccess = realAccess.access({ actions: new Map() });
-    const actor = await directAccess.authenticate(realAccess.bearer('voter0'), {
-      pool: database.pool,
-      deadline: Date.now() + 10_000,
-    });
-    console.info('classification ballot direct auth probe', actor.accountId);
-  } catch (error) {
-    console.info('classification ballot direct auth failure', error);
-  }
 });
 
 afterAll(async () => {
