@@ -229,12 +229,9 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
           (value.recordBytes as number) < 0
         );
       }) ||
-      installedSections.reduce((sum, section) => sum + Number((totals[section] as ObjectValue).rows), 0) !==
-        m.rows ||
-      installedSections.reduce(
-        (sum, section) => sum + Number((totals[section] as ObjectValue).recordBytes),
-        0,
-      ) !== m.recordBytes
+      installedSections.reduce((sum, section) => sum + Number((totals[section] as ObjectValue).rows), 0) !== m.rows ||
+      installedSections.reduce((sum, section) => sum + Number((totals[section] as ObjectValue).recordBytes), 0) !==
+        m.recordBytes
     )
       fail('inconsistent_manifest');
   }
@@ -281,27 +278,35 @@ function validJournalDate(value: unknown): boolean {
 function supportedRecord(row: ObjectValue, section: MergeSection) {
   if (section === 'annotations') {
     if (
-      !exactKeys(row, [
-        'section',
-        'accountId',
-        'subjectId',
-        'entryIncarnationId',
-        'libraryProfilePin',
-        'annotationRevision',
-        'annotationUpdatedAt',
-      ], ['note', 'priority']) ||
+      !exactKeys(
+        row,
+        [
+          'section',
+          'accountId',
+          'subjectId',
+          'entryIncarnationId',
+          'libraryProfilePin',
+          'annotationRevision',
+          'annotationUpdatedAt',
+        ],
+        ['note', 'priority'],
+      ) ||
       !uuid(row.accountId) ||
       !uuid(row.subjectId) ||
       (row.entryIncarnationId !== null && !uuid(row.entryIncarnationId)) ||
       (row.libraryProfilePin !== null &&
-        (!row.libraryProfilePin || typeof row.libraryProfilePin !== 'object' || Array.isArray(row.libraryProfilePin))) ||
+        (!row.libraryProfilePin ||
+          typeof row.libraryProfilePin !== 'object' ||
+          Array.isArray(row.libraryProfilePin))) ||
       !revision(row.annotationRevision) ||
-      (Object.hasOwn(row, 'note') && row.note !== null &&
+      (Object.hasOwn(row, 'note') &&
+        row.note !== null &&
         (typeof row.note !== 'string' ||
           row.note.length === 0 ||
           row.note.includes('\u0000') ||
           Buffer.byteLength(row.note, 'utf8') > 4_096)) ||
-      (Object.hasOwn(row, 'priority') && row.priority !== null &&
+      (Object.hasOwn(row, 'priority') &&
+        row.priority !== null &&
         (!Number.isInteger(row.priority) || (row.priority as number) < 1 || (row.priority as number) > 100)) ||
       (row.annotationUpdatedAt !== null && !timestamp(row.annotationUpdatedAt))
     )
@@ -333,7 +338,9 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
       typeof row.state !== 'string' ||
       !revision(row.progressRevision) ||
       (row.libraryProfilePin !== null &&
-        (!row.libraryProfilePin || typeof row.libraryProfilePin !== 'object' || Array.isArray(row.libraryProfilePin))) ||
+        (!row.libraryProfilePin ||
+          typeof row.libraryProfilePin !== 'object' ||
+          Array.isArray(row.libraryProfilePin))) ||
       !timestamp(row.startedAt) ||
       (row.completedAt !== null && !timestamp(row.completedAt)) ||
       (row.lastChangedAt !== null && !timestamp(row.lastChangedAt)) ||
@@ -495,8 +502,8 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
       capture: counts.get(section) ? 'present' : 'empty',
       treatment:
         manifestSections.includes(section) && (archiveMergeSections as readonly string[]).includes(section)
-        ? 'requires-explicit-mapping'
-        : 'retained-unsupported',
+          ? 'requires-explicit-mapping'
+          : 'retained-unsupported',
     })),
   };
 }

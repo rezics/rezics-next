@@ -244,12 +244,8 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
   const labelOne = rows.find((row) => row.section === 'labels' && row.evidence.label_id === sourceLabels[0])!;
   const labelTwo = rows.find((row) => row.section === 'labels' && row.evidence.label_id === sourceLabels[1])!;
   const assignment = rows.find((row) => row.section === 'assignments')!;
-  const annotation = rows.find(
-    (row) => row.section === 'annotations' && row.evidence.subjectId === subjects[0],
-  )!;
-  const journalItem = rows.find(
-    (row) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId,
-  )!;
+  const annotation = rows.find((row) => row.section === 'annotations' && row.evidence.subjectId === subjects[0])!;
+  const journalItem = rows.find((row) => row.section === 'journals' && row.evidence.sessionId === sourceSessionId)!;
   const provenance = rows.find((row) => row.section === 'provenance')!;
   expect(provenance.status).toBe('unsupported');
   expect(provenance.evidence.observation.privacy).toEqual({ status: 'known', meaning: 'source_visible' });
@@ -321,7 +317,14 @@ test('the actual installed archive is privately reviewed, explicitly merged and 
     `UPDATE library.library_archive_merge_item SET status='applying',native_command_kind='annotation',
       native_request_key=$5,native_operands=$6::jsonb
      WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-    [routeOf(main.actor.accountId), main.actor.accountId, id, annotation.ordinal, nativeRequestKey, JSON.stringify(nativeOperands)],
+    [
+      routeOf(main.actor.accountId),
+      main.actor.accountId,
+      id,
+      annotation.ordinal,
+      nativeRequestKey,
+      JSON.stringify(nativeOperands),
+    ],
   );
   await personal.saveAnnotations(
     main.actor,
@@ -578,14 +581,17 @@ test('missing personal targets stay inert and concurrent annotation or journal r
   expect(missingReviewed.find((row: any) => row.ordinal === missingAnnotation.ordinal).status).toBe('unresolved');
   expect(missingReviewed.find((row: any) => row.ordinal === missingJournal.ordinal).status).toBe('unresolved');
   expect(
-    (await json(
-      await send(missingFactOwner, 'POST', `${mergePath}/${missing.id}/apply`, {
-        ordinals: [missingAnnotation.ordinal, missingJournal.ordinal],
-      }),
-    )).applied,
+    (
+      await json(
+        await send(missingFactOwner, 'POST', `${mergePath}/${missing.id}/apply`, {
+          ordinals: [missingAnnotation.ordinal, missingJournal.ordinal],
+        }),
+      )
+    ).applied,
   ).toMatchObject([{ status: 'stale' }, { status: 'stale' }]);
 
-  const entry = (await f.commands.putEntry(staleFactOwner.actor, subjects[0], { state: 'planned' }, entryKey())).value.entry;
+  const entry = (await f.commands.putEntry(staleFactOwner.actor, subjects[0], { state: 'planned' }, entryKey())).value
+    .entry;
   const personal = createEntryPersonalCommands({ pool: f.pool, access: f.access });
   await personal.saveAnnotations(
     staleFactOwner.actor,
@@ -642,20 +648,20 @@ test('missing personal targets stay inert and concurrent annotation or journal r
     key(),
   );
   expect(
-    (await json(
-      await send(staleFactOwner, 'POST', `${mergePath}/${stale.id}/apply`, {
-        ordinals: [annotation.ordinal, journal.ordinal],
-      }),
-    )).applied,
+    (
+      await json(
+        await send(staleFactOwner, 'POST', `${mergePath}/${stale.id}/apply`, {
+          ordinals: [annotation.ordinal, journal.ordinal],
+        }),
+      )
+    ).applied,
   ).toMatchObject([{ status: 'stale' }, { status: 'stale' }]);
 });
 
 test('annotation application rejects a recreated Entry and expiry cleanup removes retained v2 evidence', async () => {
   const original = await f.commands.readEntry(staleIncarnation.actor, subjects[0]);
   const { id } = await makeUpload(staleIncarnation);
-  const annotation = (await previewAll(staleIncarnation, id)).records.find(
-    (row: any) => row.section === 'annotations',
-  );
+  const annotation = (await previewAll(staleIncarnation, id)).records.find((row: any) => row.section === 'annotations');
   await json(
     await send(staleIncarnation, 'PATCH', `${mergePath}/${id}/review`, {
       items: [

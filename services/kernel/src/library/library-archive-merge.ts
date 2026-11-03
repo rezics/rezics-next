@@ -266,8 +266,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
   const clock = deps.clock ?? systemClock;
   const runner = createLibraryCommandRunner({ ...deps, clock });
   const entries = () => createEntryCommands({ pool: deps.pool, access: deps.access, tokens: deps.tokens, clock });
-  const personal = () =>
-    createEntryPersonalCommands({ pool: deps.pool, access: deps.access, clock });
+  const personal = () => createEntryPersonalCommands({ pool: deps.pool, access: deps.access, clock });
   const sessionCommands = () =>
     deps.journalCommands ?? createSessionCommands({ pool: deps.pool, access: deps.access, tokens: deps.tokens, clock });
   const labels = () => createPersonalLabelCommands({ pool: deps.pool, tokens: deps.tokens, clock });
@@ -854,7 +853,10 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           finishDate: current.finishDate,
         };
         if (session.subjectId !== source.subjectId)
-          return { status: 'current_conflict', review: { ...base, current: currentBinding, reason: 'session-subject-mismatch' } };
+          return {
+            status: 'current_conflict',
+            review: { ...base, current: currentBinding, reason: 'session-subject-mismatch' },
+          };
         if (session.state === 'retired')
           return { status: 'unresolved', review: { ...base, current: currentBinding, reason: 'session-retired' } };
 
@@ -871,10 +873,16 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           } else patch[field] = archiveJournal[field];
         }
         if (unsupportedField)
-          return { status: 'unsupported', review: { ...base, current: currentBinding, reason: 'unsupported-field-value', field: unsupportedField } };
+          return {
+            status: 'unsupported',
+            review: { ...base, current: currentBinding, reason: 'unsupported-field-value', field: unsupportedField },
+          };
         const parsed = parseProgressSessionJournalPatch(patch);
         if (!parsed.ok)
-          return { status: 'unsupported', review: { ...base, current: currentBinding, reason: 'invalid-journal-date', field: parsed.field } };
+          return {
+            status: 'unsupported',
+            review: { ...base, current: currentBinding, reason: 'invalid-journal-date', field: parsed.field },
+          };
 
         const changes = (['startDate', 'finishDate'] as const).some((field) => {
           const choice = choices[field];
@@ -1483,14 +1491,26 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         if (error instanceof LibraryConflictError || error instanceof ProgressConflictError) {
           applied.push({
             ordinal,
-            ...(await refuse(actor, id, ordinal, 'current_conflict', isPersonalRecovery(start.section) ? 'stale' : undefined)),
+            ...(await refuse(
+              actor,
+              id,
+              ordinal,
+              'current_conflict',
+              isPersonalRecovery(start.section) ? 'stale' : undefined,
+            )),
           });
           continue;
         }
         if (error instanceof LibraryNotFoundError) {
           applied.push({
             ordinal,
-            ...(await refuse(actor, id, ordinal, 'unresolved', isPersonalRecovery(start.section) ? 'stale' : undefined)),
+            ...(await refuse(
+              actor,
+              id,
+              ordinal,
+              'unresolved',
+              isPersonalRecovery(start.section) ? 'stale' : undefined,
+            )),
           });
           continue;
         }
@@ -1500,16 +1520,28 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         ) {
           applied.push({
             ordinal,
-            ...(await refuse(actor, id, ordinal, 'unsupported', isPersonalRecovery(start.section) ? 'unsupported' : undefined)),
+            ...(await refuse(
+              actor,
+              id,
+              ordinal,
+              'unsupported',
+              isPersonalRecovery(start.section) ? 'unsupported' : undefined,
+            )),
           });
           continue;
         }
         if (error instanceof ProgressInvalidError) {
-          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'unsupported', 'unsupported', 'invalid-native-date')) });
+          applied.push({
+            ordinal,
+            ...(await refuse(actor, id, ordinal, 'unsupported', 'unsupported', 'invalid-native-date')),
+          });
           continue;
         }
         if (isPersonalRecovery(start.section) && error instanceof ProblemError && error.code === 'invalid_request') {
-          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'current_conflict', 'failed', 'native-command-rejected')) });
+          applied.push({
+            ordinal,
+            ...(await refuse(actor, id, ordinal, 'current_conflict', 'failed', 'native-command-rejected')),
+          });
           continue;
         }
         throw error;

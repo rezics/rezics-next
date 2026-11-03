@@ -20,10 +20,10 @@ The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET
 and preview are private and no-store. Web323 owns the only archive interface; Web318 continues to own manual Entry
 and journal editing.
 
-| Retained row | Explicit current target | Selected fields | Native operation |
-| --- | --- | --- | --- |
-| `annotations` | Canonical Subject, existing Entry incarnation | `note`, `priority` | `createEntryPersonalCommands().saveAnnotations` |
-| `journals` | Canonical Subject, existing non-retired Session | `startDate`, `finishDate` | `createSessionCommands().patchSessionJournal` |
+| Retained row  | Explicit current target                         | Selected fields           | Native operation                                |
+| ------------- | ----------------------------------------------- | ------------------------- | ----------------------------------------------- |
+| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`        | `createEntryPersonalCommands().saveAnnotations` |
+| `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate` | `createSessionCommands().patchSessionJournal`   |
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
 uses the native null/clear operation. Setting an absent or null archived value is unsupported. Empty notes and

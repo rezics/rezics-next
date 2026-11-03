@@ -84,7 +84,10 @@ function archiveV2(records: ArchiveRecord[]) {
           const rows = records.filter((row) => row.section === section);
           return [
             section,
-            { rows: rows.length, recordBytes: rows.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0) },
+            {
+              rows: rows.length,
+              recordBytes: rows.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0),
+            },
           ];
         }),
       ),
@@ -175,7 +178,13 @@ test('version 2 retains exact annotation presence and partial journal dates whil
     startedAt: at,
     completedAt: null,
     lastChangedAt: null,
-    journal: { sessionId: label, revision: 3, startDate: { year: 2004, month: 2 }, finishDate: null, reflection: 'evidence only' },
+    journal: {
+      sessionId: label,
+      revision: 3,
+      startDate: { year: 2004, month: 2 },
+      finishDate: null,
+      reflection: 'evidence only',
+    },
   } as ArchiveRecord;
   const file = archiveV2([annotation, provenance, journal]);
   const decoded = decode(file);
@@ -210,7 +219,13 @@ test('invalid archived calendar dates and empty notes are rejected without norma
     startedAt: at,
     completedAt: null,
     lastChangedAt: null,
-    journal: { sessionId: label, revision: 3, startDate: { year: 2023, month: 2, day: 29 }, finishDate: null, reflection: null },
+    journal: {
+      sessionId: label,
+      revision: 3,
+      startDate: { year: 2023, month: 2, day: 29 },
+      finishDate: null,
+      reflection: null,
+    },
   } as ArchiveRecord;
   refuses(archiveV2([journal]), 'invalid_record');
   const annotation = {
