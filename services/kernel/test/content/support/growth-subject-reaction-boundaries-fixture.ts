@@ -35,7 +35,11 @@ export type SubjectReactionBoundaryObservation = Readonly<{
   database: GrowthDatabase;
   kernel: ReturnType<typeof createKernel>;
   readDependencies: Parameters<typeof withReactionCounts>[0];
-  call(method: string, path: string, options?: Readonly<{ bearer?: string }>): Promise<{
+  call(
+    method: string,
+    path: string,
+    options?: Readonly<{ bearer?: string }>,
+  ): Promise<{
     response: Response;
     text: string;
     value: Record<string, any> | null;
@@ -51,7 +55,8 @@ async function createSubject(base: ReactionRelayBase, label: string): Promise<st
     { bearer: base.author.bearer, expectedStatus: 201 },
   );
   const id = result.subject?.id;
-  if (typeof id !== 'string' || routeOf(id) === null) throw new Error('The native subject command returned no routed id');
+  if (typeof id !== 'string' || routeOf(id) === null)
+    throw new Error('The native subject command returned no routed id');
   return id;
 }
 
@@ -106,8 +111,7 @@ export async function createSubjectReactionBoundaryFixture(): Promise<SubjectRea
     const unrelatedPartitions = [...new Set(unrelatedRoutes.map(partitionOf))].sort((a, b) => a - b);
     if (selectedPartitions.length !== 1)
       throw new Error('The selected subject targets must stay in one fixed partition');
-    if (unrelatedPartitions.length !== 4)
-      throw new Error('Unrelated subject pressure must keep four fixed partitions');
+    if (unrelatedPartitions.length !== 4) throw new Error('Unrelated subject pressure must keep four fixed partitions');
     const historyRoute = routeOf(base.other.accountId);
     if (historyRoute === null) throw new TypeError('The native history actor has no route');
 
@@ -169,9 +173,7 @@ export async function openSubjectReactionBoundaryObservation(
       async call(method, path, options = {}) {
         const headers = new Headers();
         if (options.bearer) headers.set('authorization', `Bearer ${options.bearer}`);
-        const response = await kernel.handle(
-          new Request(`http://kernel.test${path}`, { method, headers }),
-        );
+        const response = await kernel.handle(new Request(`http://kernel.test${path}`, { method, headers }));
         const text = await response.text();
         return { response, text, value: text ? (JSON.parse(text) as Record<string, any>) : null };
       },

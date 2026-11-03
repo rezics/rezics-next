@@ -4,12 +4,12 @@ Decision: measure own-slot reads only with a signed account, keep public counts 
 
 ## Operation binding
 
-| Capture | Selected operation | Expected result |
-| --- | --- | --- |
-| Empty own slot | Authenticated `GET /v1/subjects/:id/reaction` for an account with no slot while another account has a registered reaction | `200 { kind: null }`; anonymous access remains `401` |
-| Zero count | Public `GET /v1/subjects/:id/reactions` after a real set and clear have been applied by the registered reaction effect | `200` with `counts: []`; the response has no viewer slot |
-| Empty internal batch | `withReactionCounts(dependencies, [], deadline)` with no selected targets | Empty items and freshness `null`, with zero database rows, buffers and statements |
-| Denied read | Public-count route for a visible subject with a real Access denial for the current account | `404` with no count disclosure; the Access lookup stays inside the measured request |
+| Capture              | Selected operation                                                                                                        | Expected result                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Empty own slot       | Authenticated `GET /v1/subjects/:id/reaction` for an account with no slot while another account has a registered reaction | `200 { kind: null }`; anonymous access remains `401`                                |
+| Zero count           | Public `GET /v1/subjects/:id/reactions` after a real set and clear have been applied by the registered reaction effect    | `200` with `counts: []`; the response has no viewer slot                            |
+| Empty internal batch | `withReactionCounts(dependencies, [], deadline)` with no selected targets                                                 | Empty items and freshness `null`, with zero database rows, buffers and statements   |
+| Denied read          | Public-count route for a visible subject with a real Access denial for the current account                                | `404` with no count disclosure; the Access lookup stays inside the measured request |
 
 The selected subjects are created by the mounted subject command in the native reaction fixture. Selected slot and
 count state comes from mounted `PUT` and `DELETE` reaction commands, followed by the registered content reaction
