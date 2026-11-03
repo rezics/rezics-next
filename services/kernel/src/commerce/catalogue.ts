@@ -2,13 +2,12 @@ import type { ParentAnchor } from '../access/index.ts';
 import { readAccount } from '../access/account-data.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { Offer } from './model.ts';
 import { readOffer } from './store.ts';
 
 /** Offers are created under the platform's Global Context. */
 export const platformRootAnchor: ParentAnchor = Object.freeze({
-  resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
+  resource: Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' }),
   async validate(_client, time) {
     authoritativeTimeValue(time);
     return true;
