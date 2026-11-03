@@ -5,6 +5,7 @@ import changesRecording from '../recorded/library-progress-changes.json';
 import sessionRecording from '../recorded/library-progress-session.json';
 import logsRecording from '../recorded/library-published-logs.json';
 import { storyViewerId } from './identities';
+import { profileSession, profileSessionId } from './progress-profiles';
 
 export type LibraryProgressStoryMode =
   | 'recorded'
@@ -15,14 +16,72 @@ export type LibraryProgressStoryMode =
   | 'error'
   | 'detail-empty'
   | 'detail-long'
-  | 'original-history';
+  | 'original-history'
+  | 'detail-original';
 
 export const originalHistoryCursors = {
   changes: 'changes/+?q=原文#一% &==',
   units: 'units/+?q=原文#二% &==',
   logs: 'logs/+?q=原文#三% &==',
 };
+export const originalHistoryNextCursors = {
+  changes: 'continued/changes+?= &',
+  units: 'continued/units+?= &',
+};
+export const originalHistoryStaleCursors = {
+  changes: 'stale/changes+?= &',
+  units: 'stale/units+?= &',
+};
+export const originalHistorySessionId = sessionRecording.progressSession.id;
 export const originalHistoryUnit = `historic-unit-${'unbroken-original-key-'.repeat(5)}`;
+
+export const libraryProgressOriginalHistory = {
+  locator: `  epubcfi(/6/2[${'original chapter annotation '.repeat(7)}])  `,
+  unit: ` historic-cursor-unit-${'unresolved original unit '.repeat(5)} `,
+} as const;
+
+const originalCursorSession = {
+  ...profileSession,
+  mode: 'cursor_position',
+  unit: libraryProgressOriginalHistory.unit,
+  amount: null,
+  total: null,
+  locator: libraryProgressOriginalHistory.locator,
+  position: '0.000000',
+  state: 'completed',
+  revision: 4,
+  completedAt: '2026-10-30T00:00:00.000Z',
+  presentation: {
+    meaning: 'unknown',
+    unitLabelLanguage: 'en',
+    structure: 'unverified',
+    recording: { state: 'unavailable' },
+  },
+};
+
+function staleCursor(): KernelRecording {
+  return { status: 409, code: 'stale_cursor' };
+}
+
+function originalCursorChange(id: string, revision: number, createdAt: string) {
+  return {
+    id,
+    revision,
+    createdAt,
+    intent: { locator: libraryProgressOriginalHistory.locator, position: '0.000000' },
+  };
+}
+
+const originalCursorChanges = [
+  originalCursorChange(`${profileSessionId}:2`, 2, '2026-10-29T00:00:00.001Z'),
+  originalCursorChange(`${profileSessionId}:3`, 3, '2026-10-29T00:00:00.002Z'),
+  {
+    id: `${profileSessionId}:4`,
+    revision: 4,
+    createdAt: '2026-10-30T00:00:00.000Z',
+    intent: { action: 'complete' },
+  },
+];
 
 export const libraryProgressStoryRequestCursor = 'earlier/opaque+==';
 export const libraryProgressStoryNextCursor = 'next/opaque+==';
@@ -89,11 +148,11 @@ export const routes: FakeRoute[] = [
   },
   {
     method: 'GET',
-    path: /^\/v1\/progressSessions\/[^/]+$/,
-    story: () => {
+    path: /^\/v1\/progressSessions\/([^/]+)$/,
+    story: ({ match }) => {
       if (mode === 'unavailable') return failed('unavailable');
       if (mode === 'error') return failed('internal_error');
-      if (mode === 'original-history')
+      if (mode === 'original-history' && match?.[1] === originalHistorySessionId)
         return {
           status: 200,
           progressSession: {
@@ -107,26 +166,34 @@ export const routes: FakeRoute[] = [
             presentation: { meaning: 'unknown', structure: 'unverified', recording: { state: 'unavailable' } },
           },
         };
+      if (mode === 'detail-original' && match?.[1] === profileSessionId)
+        return { status: 200, progressSession: originalCursorSession };
       return undefined;
     },
   },
   {
     method: 'GET',
-    path: /^\/v1\/progressSessions\/[^/]+\/changes$/,
-    story: ({ request }) => {
-      if (mode === 'original-history')
-        return {
-          status: 200,
-          changes: new URL(request.url).searchParams.has('cursor')
-            ? []
-            : Array.from({ length: 12 }, (_, index) => ({
-                ...changesRecording.changes[0],
-                id: `${sessionRecording.progressSession.id}:${index + 2}`,
-                revision: index + 2,
-                intent: { add: [index === 0 ? originalHistoryUnit : `original-${index}`] },
-              })),
-          next: new URL(request.url).searchParams.has('cursor') ? null : originalHistoryCursors.changes,
-        };
+    path: /^\/v1\/progressSessions\/([^/]+)\/changes$/,
+    story: ({ match, request }) => {
+      const cursor = new URL(request.url).searchParams.get('cursor');
+      if (mode === 'original-history' && match?.[1] === originalHistorySessionId) {
+        if (cursor === originalHistoryStaleCursors.changes) return staleCursor();
+        if (cursor === originalHistoryCursors.changes)
+          return { status: 200, changes: [], next: originalHistoryNextCursors.changes };
+        if (cursor === null)
+          return {
+            status: 200,
+            changes: Array.from({ length: 12 }, (_, index) => ({
+              ...changesRecording.changes[0],
+              id: `${originalHistorySessionId}:${index + 2}`,
+              revision: index + 2,
+              intent: { add: [index < 2 ? originalHistoryUnit : `original-${index}`] },
+            })),
+            next: originalHistoryCursors.changes,
+          };
+      }
+      if (mode === 'detail-original' && match?.[1] === profileSessionId && cursor === null)
+        return { status: 200, changes: originalCursorChanges, next: null };
       if (mode === 'detail-empty') return { status: 200, changes: [], next: null };
       if (mode !== 'detail-long') return undefined;
       const template = changesRecording.changes[0];
@@ -144,15 +211,23 @@ export const routes: FakeRoute[] = [
   },
   {
     method: 'GET',
-    path: /^\/v1\/progressSessions\/[^/]+\/completedUnits$/,
-    story: ({ request }) => {
-      if (mode !== 'original-history') return;
-      const later = new URL(request.url).searchParams.has('cursor');
-      return {
-        status: 200,
-        completedUnits: later ? [] : [originalHistoryUnit, 'original-3', 'original-7'],
-        next: later ? null : originalHistoryCursors.units,
-      };
+    path: /^\/v1\/progressSessions\/([^/]+)\/completedUnits$/,
+    story: ({ match, request }) => {
+      const cursor = new URL(request.url).searchParams.get('cursor');
+      if (mode === 'original-history' && match?.[1] === originalHistorySessionId) {
+        if (cursor === originalHistoryStaleCursors.units) return staleCursor();
+        if (cursor === originalHistoryCursors.units)
+          return { status: 200, completedUnits: [], next: originalHistoryNextCursors.units };
+        if (cursor === null)
+          return {
+            status: 200,
+            completedUnits: [originalHistoryUnit, 'original-3', 'original-7'],
+            next: originalHistoryCursors.units,
+          };
+      }
+      if (mode === 'detail-original' && match?.[1] === profileSessionId && cursor === null)
+        return { status: 200, completedUnits: [], next: null };
+      return undefined;
     },
   },
   {

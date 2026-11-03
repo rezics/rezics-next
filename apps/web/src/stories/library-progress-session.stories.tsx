@@ -3,7 +3,14 @@ import { m } from '../paraglide/messages.js';
 import { profileSession, profileSessionId, retiredSessionId } from '../kernel/fake/progress-profiles';
 import { ProgressSessionPage } from '../library/progress-session';
 import type { NativeProgressPresentation, ProgressSessionPage as ProgressPageData } from '../library/progress-reads';
-import { originalHistoryCursors, setLibraryProgressStoryMode } from '../kernel/fake/library-progress-story';
+import {
+  libraryProgressOriginalHistory,
+  originalHistoryCursors,
+  originalHistoryNextCursors,
+  originalHistoryStaleCursors,
+  originalHistoryUnit,
+  setLibraryProgressStoryMode,
+} from '../kernel/fake/library-progress-story';
 import {
   manualScalarId,
   manualSparseId,
@@ -469,6 +476,11 @@ export const IndependentHistoryRecovery: Story = {
       expect(query.has(field)).toBe(false);
       for (const [key, cursor] of Object.entries(originalHistoryCursors))
         if (key !== field) expect(query.get(key)).toBe(cursor);
+      const next = within(section).getByRole('link', { name: m.library_progress_more() });
+      const nextQuery = new URL(next.getAttribute('href')!, 'https://rezics.test').searchParams;
+      expect(nextQuery.get(field)).toBe(originalHistoryNextCursors[field]);
+      for (const [key, cursor] of Object.entries(originalHistoryCursors))
+        if (key !== field) expect(nextQuery.get(key)).toBe(cursor);
     }
     const firstLogs = canvas.getByRole('link', { name: m.library_progress_log_reader_first_page() });
     const url = new URL(firstLogs.getAttribute('href')!, 'https://rezics.test');
@@ -477,5 +489,104 @@ export const IndependentHistoryRecovery: Story = {
       changes: originalHistoryCursors.changes,
       units: originalHistoryCursors.units,
     });
+  },
+};
+
+function detailStoryPath(search: Record<string, string> = {}): string {
+  const query = new URLSearchParams(search).toString();
+  return `/library/progress/${profileSessionId}${query ? `?${query}` : ''}`;
+}
+
+function linkSearch(link: HTMLElement): URLSearchParams {
+  return new URL((link as HTMLAnchorElement).href).searchParams;
+}
+
+const constructedRouteDescription =
+  'Constructed contract-shaped responses pass through the actual Progress route. These stories do not establish native history or recording permission.';
+
+export const NarrowOriginalHistoryRoute: Story = {
+  name: 'Long original cursor history through the detail route',
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+  parameters: { docs: { description: { story: constructedRouteDescription } } },
+  play: async (context) => {
+    await libraryProgressSessionReady(context);
+    const canvas = within(context.canvasElement);
+    await canvas.findByText(m.library_progress_meaning_unknown());
+    await canvas.findByText(m.library_progress_recording_unavailable());
+    expect(canvas.queryByRole('button', { name: m.library_progress_update() })).not.toBeInTheDocument();
+    const history = canvas.getByRole('region', { name: m.library_progress_changes() });
+    const locator = libraryProgressOriginalHistory.locator;
+    expect((history.textContent?.split(locator).length ?? 1) - 1).toBe(2);
+    expect(history.textContent).toContain('0.000000');
+    expect(
+      within(history).getByRole('heading', { level: 3, name: m.library_progress_state_completed() }),
+    ).toBeVisible();
+    const summary = canvas.getByText(m.library_progress_details());
+    await userEvent.click(summary);
+    expect(summary.closest('details')?.textContent).toContain(libraryProgressOriginalHistory.unit);
+  },
+  render: () => {
+    setLibraryProgressStoryMode('detail-original');
+    return <PageStory visitor="Signed In" path={detailStoryPath()} />;
+  },
+};
+
+export const StaleChangesRecovery: Story = {
+  name: 'Stale changes cursor recovers while retaining units',
+  parameters: { docs: { description: { story: constructedRouteDescription } } },
+  render: () => {
+    setLibraryProgressStoryMode('original-history');
+    return (
+      <PageStory
+        visitor="Signed In"
+        path={`${pagePaths['library-progress-session']}?${new URLSearchParams({
+          changes: originalHistoryStaleCursors.changes,
+          units: originalHistoryCursors.units,
+        })}`}
+      />
+    );
+  },
+  play: async (context) => {
+    await libraryProgressSessionReady(context);
+    const canvas = within(context.canvasElement);
+    const changes = canvas.getByRole('region', { name: m.library_progress_changes() });
+    expect(within(changes).getAllByRole('heading', { level: 3 })).toHaveLength(12);
+    expect(within(changes).queryByRole('link', { name: m.library_collections_first_page() })).not.toBeInTheDocument();
+    const next = within(changes).getByRole('link', { name: m.library_progress_more() });
+    expect(linkSearch(next).get('changes')).toBe(originalHistoryCursors.changes);
+    expect(linkSearch(next).get('units')).toBe(originalHistoryCursors.units);
+    const units = canvas.getByRole('region', { name: m.library_progress_units() });
+    await within(units).findByText(m.library_progress_history_reader_units_page_empty());
+    expect(within(units).getByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
+  },
+};
+
+export const StaleUnitsRecovery: Story = {
+  name: 'Stale completed-units cursor recovers while retaining changes',
+  parameters: { docs: { description: { story: constructedRouteDescription } } },
+  render: () => {
+    setLibraryProgressStoryMode('original-history');
+    return (
+      <PageStory
+        visitor="Signed In"
+        path={`${pagePaths['library-progress-session']}?${new URLSearchParams({
+          changes: originalHistoryCursors.changes,
+          units: originalHistoryStaleCursors.units,
+        })}`}
+      />
+    );
+  },
+  play: async (context) => {
+    await libraryProgressSessionReady(context);
+    const canvas = within(context.canvasElement);
+    const changes = canvas.getByRole('region', { name: m.library_progress_changes() });
+    await within(changes).findByText(m.library_progress_history_reader_changes_page_empty());
+    expect(within(changes).getByRole('link', { name: m.library_collections_first_page() })).toBeVisible();
+    const units = canvas.getByRole('region', { name: m.library_progress_units() });
+    await within(units).findByText(originalHistoryUnit);
+    expect(within(units).queryByRole('link', { name: m.library_collections_first_page() })).not.toBeInTheDocument();
+    const next = within(units).getByRole('link', { name: m.library_progress_more() });
+    expect(linkSearch(next).get('units')).toBe(originalHistoryCursors.units);
+    expect(linkSearch(next).get('changes')).toBe(originalHistoryCursors.changes);
   },
 };
