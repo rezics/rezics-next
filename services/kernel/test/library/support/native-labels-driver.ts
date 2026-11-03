@@ -11,6 +11,7 @@ import { costOf } from '../../support/growth.ts';
 import { compileProfileRelease, profileTypes } from './native-conformance-profiles.ts';
 import { json, write, setEntry, publish, requestKey, unavailable, deleteAccount } from './native-conformance.ts';
 import { purgeLabelRetentionPage } from '../../../src/library/label-retention.ts';
+import { provisionOwnerUnreadableSubject } from './native-private-subject.ts';
 
 /** Transport mapping only: expectedRevision is the fixture interface's name for the public revision field. */
 function encode(action: LabelAction, input: Record<string, unknown>) {
@@ -215,11 +216,12 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
           await publish(world, await compileProfileRelease());
           unprofiledInstalled = true;
         }
-        const subject = options.unprofiled
-          ? await world.native.subject(profileTypes.people)
-          : await world.native.subject(profileTypes.book);
+        const type = options.unprofiled ? profileTypes.people : profileTypes.book;
+        const subject =
+          options.ownerReadable === false
+            ? await provisionOwnerUnreadableSubject(world, type)
+            : await world.native.subject(type);
         subjects.add(subject.id);
-        if (options.ownerReadable === false) unavailable('semantic subject read revocation source');
         return subject;
       },
       invoke,

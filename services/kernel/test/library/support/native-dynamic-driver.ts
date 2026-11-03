@@ -7,6 +7,7 @@ import type {
 import { createLibraryDriver } from './outcome-driver.ts';
 import { profileSources, profileTypes } from './native-conformance-profiles.ts';
 import { deleteAccount, grantSubjectRead, json, publish, setEntry, unavailable, write } from './native-conformance.ts';
+import { provisionOwnerReadableSubject } from './native-private-subject.ts';
 
 /** Compile source declarations and use only the accepted release to describe a fixture's meaning. */
 export async function createDynamicCollectionsDriver(): Promise<DynamicCollectionsDriver> {
@@ -39,10 +40,10 @@ export async function createDynamicCollectionsDriver(): Promise<DynamicCollectio
       rotateListCursorKey: world.native.rotateCursorKeys,
       request: world.native.request,
       async provisionSubject(name, options) {
-        if (options?.ownerOnlyReadable)
-          return unavailable('semantic private subject provisioning with genuine viewer eligibility');
         const typeId = name === 'unprofiled' ? profileTypes.people : profileTypes[name];
-        const subject = await world.native.subject(typeId);
+        const subject = options?.ownerOnlyReadable
+          ? await provisionOwnerReadableSubject(world, typeId)
+          : await world.native.subject(typeId);
         return { id: subject.id, typeId, profileId: name === 'unprofiled' ? null : profiles[name].profileId };
       },
       async activateProfileRelease(name, change) {
