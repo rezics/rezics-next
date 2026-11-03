@@ -12,6 +12,7 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
+import { exportSections, libraryExportManifest } from '../../src/library/library-export-format.ts';
 import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -29,9 +30,11 @@ const collection = newId(route),
 const scopes = [
   'library_entry:list',
   'library_entry:read',
+  'library_entry:update',
   'copy:list',
   'progress_session:list',
   'progress_session:read',
+  'progress_session:update',
   'collection:read',
   'collection:create',
   'collection:update',
@@ -67,6 +70,19 @@ function request(
         'idempotency-key': JSON.stringify(requestKey),
       },
       ...(signal ? { signal } : {}),
+    }),
+  );
+}
+function command(method: string, path: string, body: unknown, requestKey = randomUUID()) {
+  return app.handle(
+    new Request(`http://kernel.test${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${fixture.bearer('owner')}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(requestKey),
+      },
+      body: JSON.stringify(body),
     }),
   );
 }
@@ -169,8 +185,11 @@ test('native owner export streams independent persisted facts, preserves dates, 
   }
   const sections = Object.groupBy(records, (r) => r.section);
   expect(pages).toBeGreaterThan(2);
-  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 1, fullExport: false } });
+  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 2, fullExport: false } });
   expect(final.manifest.rows).toBe(records.length);
+  expect(final.manifest.recordBytes).toBe(
+    records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
+  );
   expect(sections.entries).toHaveLength(18);
   expect(records.find((r) => r.state === 'old-unknown-state')).toMatchObject({
     library_profile_pin: legacyPin,
@@ -195,8 +214,23 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.bangumiEvidence?.[0]).toMatchObject({ evidence: { source: { subject_id: 42, type: 99 } } });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { identifier: { value: '17' } } });
   expect(sections.malEvidence?.[0]).toMatchObject({ evidence: { dates: { started: { precision: 'year' } } } });
-  const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })));
-  expect<unknown>(decoded.records).toEqual(records);
+  expect(() => decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })))).toThrow();
+  const archiveRecords = records.filter((record) =>
+    exportSections.includes(record.section as (typeof exportSections)[number]),
+  );
+  const archiveManifest = {
+    ...libraryExportManifest({
+      export_id: id,
+      created_at: final.manifest.capturedAt,
+      expires_at: final.manifest.expiresAt,
+      format_version: 1,
+    }),
+    fullExport: false as const,
+    rows: archiveRecords.length,
+    recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
+  };
+  const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })));
+  expect<unknown>(decoded.records).toEqual(archiveRecords);
   expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
     rows: 18,
     capture: 'present',
@@ -210,7 +244,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(decoded.fullRestoration).toBe(false);
 
   await fixture.grant({ route, id: subjectIds[4]! }, 'owner', 'subject:read');
-  const archiveBase64 = Buffer.from(JSON.stringify({ manifest: final.manifest, records })).toString('base64');
+  const archiveBase64 = Buffer.from(JSON.stringify({ manifest: archiveManifest, records: archiveRecords })).toString('base64');
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${fixture.bearer('owner')}` },
     fetch: (async (input, init) => app.handle(new Request(input, init))) as typeof fetch,
@@ -395,7 +429,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
     routeKey,
     clock: () => new Date(otherNow),
   });
-  const noteRecords = records.map((record) => {
+  const noteRecords = archiveRecords.map((record) => {
     if (record.section !== 'occurrences') return record;
     if (record.member_id === sourceMemberIds[0]) {
       const { note: _note, ...missing } = record;
@@ -405,7 +439,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   const archiveForOther = (archiveRecords: ArchiveRecord[]) => {
     const manifest = {
-      ...final.manifest,
+      ...archiveManifest,
       rows: archiveRecords.length,
       recordBytes: archiveRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record)), 0),
     };
@@ -446,7 +480,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
     ).rowCount,
   ).toBe(0);
 
-  const sourceCollectionRecord = records.find(
+  const sourceCollectionRecord = archiveRecords.find(
     (record) => record.section === 'collections' && record.collection_id === collection,
   )!;
   const dynamicCollectionId = newId(route);
@@ -461,7 +495,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
       builtin_kind: 'seeded',
     },
   ];
-  const cancellationRecords = records.flatMap((record) =>
+  const cancellationRecords = archiveRecords.flatMap((record) =>
     record === sourceCollectionRecord ? [record, ...extraCollections] : [record],
   );
   let cancellationUploadId = '';
@@ -524,12 +558,24 @@ test('native owner export streams independent persisted facts, preserves dates, 
 test('cancellation, changed revisions, expiry and terminal deletion never yield success artifacts', async () => {
   const aborted = new AbortController();
   aborted.abort();
-  const cancelledRequest = await request('POST', '/v1/libraryExports', 'owner', randomUUID(), aborted.signal).catch(
+  const abortKey = randomUUID();
+  const beforeExport = await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`;
+  const beforeReceipts = await sql`SELECT count(*)::int AS count FROM core.receipt
+    WHERE principal_id=${owner} AND command_kind='library.export.capture'`;
+  const beforeEvents = await sql`SELECT count(*)::int AS count FROM core.outbox
+    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`;
+  const cancelledRequest = await request('POST', '/v1/libraryExports', 'owner', abortKey, aborted.signal).catch(
     () => null,
   );
   expect(cancelledRequest === null || cancelledRequest.status >= 400 || (await cancelledRequest.text()) === '').toBe(
     true,
   );
+  expect((await sql`SELECT export_id::text AS id,state FROM library.library_export WHERE route=${route} AND account_id=${owner}`)
+    .rows).toEqual(beforeExport.rows);
+  expect((await sql`SELECT count(*)::int AS count FROM core.receipt
+    WHERE principal_id=${owner} AND command_kind='library.export.capture'`).rows).toEqual(beforeReceipts.rows);
+  expect((await sql`SELECT count(*)::int AS count FROM core.outbox
+    WHERE type='com.rezics.library.export.requested.v1' AND subject=${owner}`).rows).toEqual(beforeEvents.rows);
   const cancelled = await capture();
   const path = `/v1/libraryExports/${cancelled.exportId}`;
   expect((await request('GET', `${path}/pages?cursor=forged`)).status).toBe(400);
@@ -584,4 +630,139 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
     WHERE route=${route} AND account_id=${owner}`
     ).rowCount,
   ).toBe(0);
+});
+
+test('version 2 streams annotations, accepted provenance and addressed live journals as independent facts', async () => {
+  const annotationSubject = subjectIds[16]!;
+  const provenanceSubject = subjectIds[15]!;
+  const annotationWrite = await command('PUT', `/v1/libraryEntries/${annotationSubject}/annotations`, {
+    revision: 0,
+    note: { op: 'set', value: 'Keep this private note.' },
+    priority: { op: 'set', value: 42 },
+  });
+  expect((await json(annotationWrite)).personalEntry).toMatchObject({
+    annotationRevision: 1,
+    note: 'Keep this private note.',
+    priority: 42,
+  });
+  const provenanceWrite = await command('POST', `/v1/libraryEntries/${provenanceSubject}/sourceObservations`, {
+    provider: 'reader-list',
+    recordId: 'row-17',
+    confirmReviewed: true,
+    privacy: { status: 'known', meaning: 'source_visible' },
+    sourceCreated: { status: 'known', value: '2004-02' },
+    sourceUpdated: { status: 'unknown', sourceValue: 'not-a-date' },
+  });
+  const admittedObservation = (await json(provenanceWrite, 201)).sourceObservation;
+  expect(admittedObservation).toMatchObject({
+    provider: 'reader-list',
+    recordId: 'row-17',
+    revision: 1,
+    privacy: { status: 'known', meaning: 'source_visible' },
+    sourceCreated: { status: 'known', value: '2004-02', precision: 'month', zone: 'unknown' },
+    sourceUpdated: { status: 'unknown', sourceValue: 'not-a-date' },
+  });
+  const journalWrite = await command('PATCH', `/v1/progressSessions/${session}/journal`, {
+    revision: 0,
+    startDate: { year: 2004, month: 2 },
+    finishDate: { year: 2023, month: 7, day: 11 },
+    reflection: 'Revisited before summer.',
+  });
+  expect((await json(journalWrite)).journal).toMatchObject({ sessionId: session, revision: 1, changed: true });
+
+  const requestKey = randomUUID();
+  const captureStatus = await capture(requestKey);
+  expect(captureStatus).toMatchObject({ version: 2, fullExport: false });
+  expect(captureStatus.sections.slice(-3)).toEqual(['annotations', 'provenance', 'journals']);
+  const firstPath = `/v1/libraryExports/${captureStatus.exportId}/pages?cursor=${encodeURIComponent(captureStatus.first)}`;
+  const first = await get(firstPath);
+  expect(await get(firstPath)).toEqual(first);
+  const records: Record<string, any>[] = [...first.records];
+  let final = first;
+  let cursor = first.next;
+  while (cursor) {
+    final = await get(`/v1/libraryExports/${captureStatus.exportId}/pages?cursor=${encodeURIComponent(cursor)}`);
+    records.push(...final.records);
+    if (final.next) expect(final.manifest).toBeNull();
+    cursor = final.next;
+  }
+  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 2, fullExport: false } });
+  expect(final.manifest.rows).toBe(records.length);
+  expect(final.manifest.recordBytes).toBe(
+    records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
+  );
+  for (const section of final.manifest.sections) {
+    const sectionRecords = records.filter((record) => record.section === section);
+    expect(final.manifest.sectionTotals[section]).toEqual({
+      rows: sectionRecords.length,
+      recordBytes: sectionRecords.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
+    });
+  }
+  const annotation = records.find((record) => record.section === 'annotations' && record.subjectId === annotationSubject);
+  const entry = await sql`SELECT incarnation_id::text AS id,library_profile_pin FROM library.entry
+    WHERE route=${route} AND account_id=${owner} AND subject_id=${annotationSubject}`;
+  expect(annotation).toMatchObject({
+    accountId: owner,
+    annotationRevision: 1,
+    note: 'Keep this private note.',
+    priority: 42,
+    entryIncarnationId: entry.rows[0]!.id,
+    libraryProfilePin: legacyPin,
+  });
+  expect(records.some((record) => record.section === 'provenance' && record.subjectId === annotationSubject)).toBe(false);
+  const provenance = records.find((record) => record.section === 'provenance' && record.subjectId === provenanceSubject);
+  expect(provenance).toMatchObject({
+    accountId: owner,
+    observation: {
+      provider: 'reader-list',
+      recordId: 'row-17',
+      revision: 1,
+      privacy: { status: 'known', meaning: 'source_visible' },
+      sourceCreated: { status: 'known', value: '2004-02', precision: 'month', zone: 'unknown' },
+      sourceUpdated: { status: 'unknown', sourceValue: 'not-a-date' },
+      recordedAt: expect.any(String),
+    },
+  });
+  expect(provenance!.observation.recordedAt).not.toBe(provenance!.observation.sourceCreated.value);
+  expect(provenance!.observation.recordedAt).toBe(admittedObservation.recordedAt);
+  const journal = records.find((record) => record.section === 'journals' && record.sessionId === session);
+  expect(journal).toMatchObject({
+    accountId: owner,
+    progressRevision: 1,
+    libraryProfilePin: legacyPin,
+    journal: {
+      sessionId: session,
+      revision: 1,
+      startDate: { year: 2004, month: 2 },
+      finishDate: { year: 2023, month: 7, day: 11 },
+      reflection: 'Revisited before summer.',
+    },
+  });
+  expect(records.some((record) => record.section === 'annotations' && record.subjectId === journal!.subjectId)).toBe(
+    false,
+  );
+
+  const captureReplay = await capture(requestKey);
+  expect(captureReplay).toMatchObject({ exportId: captureStatus.exportId, expiresAt: captureStatus.expiresAt });
+  expect(captureReplay.first).toBe(captureStatus.first);
+  const annotationClear = await command('PUT', `/v1/libraryEntries/${annotationSubject}/annotations`, {
+    revision: 1,
+    note: { op: 'clear' },
+    priority: { op: 'unchanged' },
+  });
+  expect((await json(annotationClear)).personalEntry.annotationRevision).toBe(2);
+  const journalClear = await command('PATCH', `/v1/progressSessions/${session}/journal`, {
+    revision: 1,
+    startDate: null,
+    finishDate: null,
+    reflection: null,
+  });
+  expect((await json(journalClear)).journal).toMatchObject({ revision: 2, changed: true });
+  expect((await get(`/v1/libraryExports/${captureStatus.exportId}`)).state).toBe('stale');
+  expect(await capture(requestKey)).toMatchObject({
+    exportId: captureStatus.exportId,
+    expiresAt: captureStatus.expiresAt,
+    state: 'stale',
+  });
+  expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], next: null, manifest: null });
 });

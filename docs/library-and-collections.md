@@ -366,6 +366,10 @@ Decision: Reopened bulk Library removals offer one explicit restore at a time; a
 
 ## Personal portability
 
+The private native export has version 2 coverage for retained entry annotations, accepted source observations and
+live occurrence journals. Its version matrix, omission rules and bounds are owned by [Personal Library export](library-export.md)
+and [Private annotation and occurrence journal export](library-journal-export.md); version 1 remains unchanged.
+
 Provider-imported date adoption uses the [consumption-date contract](library-import-consumption-dates.md).
 
 [Personal Library export](library-export.md) mounts authenticated capture, status, bounded pages and cancellation

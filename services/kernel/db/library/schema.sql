@@ -3624,12 +3624,14 @@ CREATE TABLE library.library_export (
     route integer NOT NULL,
     account_id uuid NOT NULL,
     export_id uuid NOT NULL,
+    format_version smallint DEFAULT 1 NOT NULL,
     generation bigint NOT NULL,
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     state text NOT NULL,
     CONSTRAINT library_export_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT library_export_check1 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
+    CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2]))),
     CONSTRAINT library_export_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT library_export_state_check CHECK ((state = ANY (ARRAY['collecting'::text, 'ready'::text, 'stale'::text, 'cancelled'::text, 'expired'::text, 'limit'::text])))
 );
@@ -6860,6 +6862,20 @@ CREATE INDEX entry_shelf_finished_type ON library.entry USING btree (route, acco
 --
 
 CREATE INDEX entry_source_observation_owner ON library.entry_source_observation USING btree (route, account_id, subject_id, provider, record_id);
+
+
+--
+-- Name: library_export_annotation_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_annotation_seek ON library.entry_personal_fact USING btree (route, account_id, subject_id) WHERE (annotation_revision > 0);
+
+
+--
+-- Name: library_export_journal_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_journal_seek ON library.progress_session USING btree (route, account_id, session_id) WHERE ((state <> 'retired'::text) AND (journal_revision > 0));
 
 
 --

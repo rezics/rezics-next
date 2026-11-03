@@ -14,8 +14,13 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
-import { exportSections, initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
-import { libraryExportManifest as manifest, LIBRARY_EXPORT_LIMITS } from './library-export-format.ts';
+import { exportSectionsV2, initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
+import {
+  libraryExportManifest as manifest,
+  LIBRARY_EXPORT_LIMITS,
+  sectionsForVersion,
+  type LibraryExportVersion,
+} from './library-export-format.ts';
 
 export type LibraryExportDependencies = {
   pool: Pool;
@@ -27,6 +32,7 @@ export type LibraryExportDependencies = {
 type State = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
 type Capture = {
   export_id: string;
+  format_version: LibraryExportVersion;
   generation: string;
   created_at: string;
   expires_at: string;
@@ -60,6 +66,7 @@ function binding(accountId: string, capture: Capture) {
       accountId,
       exportId: capture.export_id,
       generation: capture.generation,
+      ...(capture.format_version === 2 ? { formatVersion: capture.format_version } : {}),
     },
   };
 }
@@ -68,8 +75,15 @@ function cursor(deps: LibraryExportDependencies, accountId: string, capture: Cap
     deps.tokens,
     binding(accountId, capture),
     {
-      epoch: 1,
-      after: [seek.section, seek.parent, seek.after, seek.rows, seek.bytes],
+      epoch: capture.format_version,
+      after: [
+        seek.section,
+        seek.parent,
+        seek.after,
+        seek.rows,
+        seek.bytes,
+        ...(capture.format_version === 2 ? [seek.sectionTotals] : []),
+      ],
     },
     Date.parse(capture.created_at),
   );
@@ -83,22 +97,53 @@ function seekOf(
 ): ExportSeek {
   const result = decodeCursor(deps.tokens, binding(accountId, capture), token, now);
   if (!result.ok) throw new ProblemError('invalid_cursor');
-  const [section, parent, after, rows, bytes] = result.after;
+  const [section, parent, after, rows, bytes, sectionTotals] = result.after;
+  const expectedLength = capture.format_version === 1 ? 5 : 6;
+  const sections = sectionsForVersion(capture.format_version);
   if (
-    result.epoch !== 1 ||
-    result.after.length !== 5 ||
+    result.epoch !== capture.format_version ||
+    result.after.length !== expectedLength ||
     typeof section !== 'number' ||
     section < 0 ||
-    section >= exportSections.length ||
+    !Number.isSafeInteger(section) ||
+    section >= sections.length ||
     typeof parent !== 'string' ||
     typeof after !== 'string' ||
     typeof rows !== 'number' ||
     rows < 0 ||
+    !Number.isSafeInteger(rows) ||
     typeof bytes !== 'number' ||
-    bytes < 0
+    bytes < 0 ||
+    !Number.isSafeInteger(bytes) ||
+    rows > LIBRARY_EXPORT_LIMITS.records ||
+    bytes > LIBRARY_EXPORT_LIMITS.recordBytes
   )
     throw new ProblemError('invalid_cursor');
-  return { section, parent, after, rows, bytes };
+  if (capture.format_version === 1) return { section, parent, after, rows, bytes };
+  if (
+    !Array.isArray(sectionTotals) ||
+    sectionTotals.length !== exportSectionsV2.length ||
+    sectionTotals.some(
+      (total) =>
+        !Array.isArray(total) ||
+        total.length !== 2 ||
+        !Number.isSafeInteger(total[0]) ||
+        total[0] < 0 ||
+        !Number.isSafeInteger(total[1]) ||
+        total[1] < 0,
+    ) ||
+    sectionTotals.reduce((sum, total) => sum + total[0], 0) !== rows ||
+    sectionTotals.reduce((sum, total) => sum + total[1], 0) !== bytes
+  )
+    throw new ProblemError('invalid_cursor');
+  return {
+    section,
+    parent,
+    after,
+    rows,
+    bytes,
+    sectionTotals: sectionTotals.map((total) => [total[0], total[1]] as [number, number]),
+  };
 }
 function status(deps: LibraryExportDependencies, accountId: string, capture: Capture) {
   return {
@@ -107,7 +152,7 @@ function status(deps: LibraryExportDependencies, accountId: string, capture: Cap
     fullExport: false as const,
     first:
       capture.state === 'collecting' || capture.state === 'ready'
-        ? cursor(deps, accountId, capture, initialExportSeek())
+        ? cursor(deps, accountId, capture, initialExportSeek(capture.format_version))
         : null,
   };
 }
@@ -201,7 +246,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
   async function current(tx: OperationalTransaction, route: number, accountId: string, id: string, now: number) {
     const capture = (
       await tx.query<Capture>(
-        `SELECT export_id,generation::text,created_at::text,expires_at::text,state
+        `SELECT export_id,format_version,generation::text,created_at::text,expires_at::text,state
       FROM library.library_export WHERE route=$1 AND account_id=$2 AND export_id=$3 FOR UPDATE`,
         [route, accountId, id],
       )
@@ -261,10 +306,10 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           const source = await generation(tx, route, account.accountId);
           const at = new Date(authoritativeTimeValue(command.time)).toISOString();
           await tx.query(
-            `INSERT INTO library.library_export(route,account_id,export_id,generation,created_at,expires_at,state)
-          VALUES($1,$2,$3,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
+            `INSERT INTO library.library_export(route,account_id,export_id,format_version,generation,created_at,expires_at,state)
+          VALUES($1,$2,$3,2,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
           ON CONFLICT(route,account_id) DO UPDATE SET export_id=EXCLUDED.export_id,generation=EXCLUDED.generation,
-            created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
+            format_version=EXCLUDED.format_version,created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
             [route, account.accountId, id, source, at],
           );
           signal?.throwIfAborted();
@@ -299,7 +344,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
             manifest: null,
           };
         const seek = seekOf(deps, accountId, capture, token, now);
-        const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at);
+        const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at, capture.format_version);
         if (
           page.oversized ||
           page.seek.rows > LIBRARY_EXPORT_LIMITS.records ||
@@ -333,6 +378,16 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
                 fullExport: false as const,
                 rows: page.seek.rows,
                 recordBytes: page.seek.bytes,
+                ...(capture.format_version === 2
+                  ? {
+                      sectionTotals: Object.fromEntries(
+                        exportSectionsV2.map((section, index) => {
+                          const [rows, recordBytes] = page.seek.sectionTotals?.[index] ?? [0, 0];
+                          return [section, { rows, recordBytes }];
+                        }),
+                      ),
+                    }
+                  : {}),
               }
             : null,
         };

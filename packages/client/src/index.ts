@@ -3,6 +3,8 @@ import type { DefaultMetadata, DefaultSingleton, Elysia } from 'elysia';
 import type { SESSION_HEADER as KernelSessionHeader } from './kernel/http/request.ts';
 import type { ClientKernel as KernelType } from './kernel/http/kernel.ts';
 import type { subjectRoutes } from './kernel/semantic/http/subjects.ts';
+import type { LibraryExportFinalManifest, LibraryExportManifest } from './kernel/library/library-export-format.ts';
+import type { ExportRecord } from './kernel/library/library-export-source.ts';
 
 export type { ClientKernel as Kernel } from './kernel/http/kernel.ts';
 export type {
@@ -98,8 +100,33 @@ type PersonalEntryEndpoints = {
 type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
 
-export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries'> & {
+export type LibraryExportState = 'collecting' | 'ready' | 'stale' | 'cancelled' | 'expired' | 'limit';
+export type LibraryExportStatus = LibraryExportManifest & {
+  fullExport: false;
+  state: LibraryExportState;
+  first: string | null;
+};
+export type LibraryExportPage = {
+  exportId: string;
+  state: LibraryExportState;
+  records: ExportRecord[];
+  next: string | null;
+  manifest: LibraryExportFinalManifest | null;
+};
+type LibraryExportPath = {
+  get(options?: PersonalReadOptions): PersonalEntryCall<LibraryExportStatus>;
+  delete(options?: PersonalReadOptions): PersonalEntryCall<LibraryExportStatus>;
+  pages: {
+    get(options: { query: { cursor: string } } & PersonalReadOptions): PersonalEntryCall<LibraryExportPage>;
+  };
+};
+type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
+  post(options: PersonalWriteOptions): PersonalEntryCall<LibraryExportStatus>;
+};
+
+export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries' | 'libraryExports'> & {
   libraryEntries: PersonalLibraryEntries;
+  libraryExports: LibraryExportsClient;
   subjects: KernelSubjectsClient;
 };
 export type KernelSubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];

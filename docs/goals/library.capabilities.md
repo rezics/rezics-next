@@ -510,6 +510,10 @@ and font readiness; a recorded response or source export is not a screenshot or 
 
 ## Personal Library portability
 
+The native export now retains version 2 annotation, accepted provenance and live occurrence-journal records under
+the installed private capture and source-fence contract. Version 1 and the archive-entry/label merge remain
+version 1 only; native64/512/4096 executed growth evidence remains deferred to integration.
+
 MAL consumption-date adoption is available through its existing private upload, review and result journey. The owner
 selects an existing progress occurrence and explicitly adopts valid year, year/month or full calendar dates into the
 private journal; unknown and invalid evidence stays unapplied, and clearing requires a separate choice. AniList date
