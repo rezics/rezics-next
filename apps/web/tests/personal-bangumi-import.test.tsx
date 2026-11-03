@@ -35,6 +35,8 @@ for (const [key, value] of Object.entries({
   Node: window.Node,
   MutationObserver: window.MutationObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 }))
