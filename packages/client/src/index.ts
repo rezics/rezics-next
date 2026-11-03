@@ -126,8 +126,7 @@ type LibraryExportsClient = ((params: { id: string }) => LibraryExportPath) & {
 
 type SubjectsClient = Treaty.Sign<{ subjects: SubjectRoutes }>['subjects'];
 type SubjectPath = ReturnType<SubjectsClient>;
-type SourceClassificationsClient =
-  import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
+type SourceClassificationsClient = import('./kernel/rating/source-classifications.ts').SourceClassificationsClient;
 
 export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntries' | 'libraryExports'> & {
   libraryEntries: PersonalLibraryEntries;
