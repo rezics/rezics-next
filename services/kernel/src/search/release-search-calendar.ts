@@ -49,3 +49,70 @@ export function hasCalendarIndexFormat(mappings: unknown): boolean {
     );
   });
 }
+
+export type CalendarPhysicalIdentity = Readonly<{
+  generation: number;
+  incarnation: string;
+  indexUuid: string;
+}>;
+
+export type CalendarPopulationEvidence = CalendarPhysicalIdentity &
+  Readonly<{ partitionsByPool: Readonly<Record<string, readonly number[]>> }>;
+
+function sameIdentity(left: CalendarPhysicalIdentity, right: CalendarPhysicalIdentity): boolean {
+  return (
+    Number.isSafeInteger(left.generation) &&
+    left.generation > 0 &&
+    left.generation === right.generation &&
+    left.incarnation.length > 0 &&
+    left.incarnation === right.incarnation &&
+    left.indexUuid.length > 0 &&
+    left.indexUuid === right.indexUuid
+  );
+}
+
+function samePartitionSet(left: readonly number[], right: readonly number[]): boolean {
+  if (left.some((partition) => !Number.isSafeInteger(partition) || partition < 0)) return false;
+  if (right.some((partition) => !Number.isSafeInteger(partition) || partition < 0)) return false;
+  if (new Set(left).size !== left.length || new Set(right).size !== right.length || left.length !== right.length)
+    return false;
+  const expected = new Set(right);
+  return left.every((partition) => expected.has(partition));
+}
+
+function samePopulation(
+  population: CalendarPopulationEvidence,
+  physical: CalendarPhysicalIdentity,
+  requiredPartitionsByPool: Readonly<Record<string, readonly number[]>>,
+): boolean {
+  if (!sameIdentity(population, physical)) return false;
+  const requiredPools = Object.keys(requiredPartitionsByPool).sort();
+  const completedPools = Object.keys(population.partitionsByPool).sort();
+  return (
+    requiredPools.length === completedPools.length &&
+    requiredPools.every(
+      (pool, index) =>
+        pool === completedPools[index] &&
+        samePartitionSet(population.partitionsByPool[pool]!, requiredPartitionsByPool[pool]!),
+    )
+  );
+}
+
+/** Return the compiler capability only for the exact active physical index with complete pool coverage. */
+export function calendarFormatForReadyGeneration(input: {
+  mappings: unknown;
+  physical: CalendarPhysicalIdentity;
+  active?: CalendarPhysicalIdentity;
+  population?: CalendarPopulationEvidence;
+  requiredPartitionsByPool: Readonly<Record<string, readonly number[]>>;
+}): typeof CALENDAR_INDEX_FORMAT | undefined {
+  if (
+    !hasCalendarIndexFormat(input.mappings) ||
+    !input.active ||
+    !sameIdentity(input.active, input.physical) ||
+    !input.population ||
+    !samePopulation(input.population, input.physical, input.requiredPartitionsByPool)
+  )
+    return undefined;
+  return CALENDAR_INDEX_FORMAT;
+}

@@ -62,3 +62,39 @@ test('unknown and invalid native time never acquires a guessed filterable year',
   }
   expect(normalizeSourceStatement(property, { value: { type: 'somevalue' } }, bundledRelease.properties)).toBeNull();
 });
+
+test('precise compilation needs active physical identity and complete unique population in every pool', async () => {
+  const { calendarFormatForReadyGeneration, calendarIndexDefinition, CALENDAR_INDEX_FORMAT } = await import(
+    '../../src/search/release-search-calendar.ts'
+  );
+  const definition = calendarIndexDefinition({
+    mappings: {
+      _meta: { index_format: 1 },
+      properties: { facts: { type: 'nested', properties: {} } },
+    },
+  });
+  const mappings = definition.mappings;
+  const physical = { generation: 4, incarnation: 'inc-4', indexUuid: 'uuid-4' };
+  const requiredPartitionsByPool = { subject: [0, 1], work: [0] };
+  const population = { ...physical, partitionsByPool: { subject: [1, 0], work: [0] } };
+  const ready = { mappings, physical, active: physical, population, requiredPartitionsByPool };
+
+  expect(calendarFormatForReadyGeneration(ready)).toBe(CALENDAR_INDEX_FORMAT);
+  expect(calendarFormatForReadyGeneration({ ...ready, active: { ...physical, indexUuid: 'replaced' } })).toBeUndefined();
+  expect(
+    calendarFormatForReadyGeneration({ ...ready, population: { ...population, incarnation: 'stale-incarnation' } }),
+  ).toBeUndefined();
+  expect(
+    calendarFormatForReadyGeneration({
+      ...ready,
+      population: { ...population, partitionsByPool: { subject: [0], work: [0] } },
+    }),
+  ).toBeUndefined();
+  expect(
+    calendarFormatForReadyGeneration({
+      ...ready,
+      population: { ...population, partitionsByPool: { subject: [0, 0], work: [0] } },
+    }),
+  ).toBeUndefined();
+  expect(calendarFormatForReadyGeneration({ ...ready, mappings: {} })).toBeUndefined();
+});
