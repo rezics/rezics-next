@@ -5,6 +5,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import pg from 'pg';
 import { createEpisodeProgressCommands, episodeIds, episodeIntent } from '../../src/library/episode-progress.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
+import { permissionEvidenceDeadline } from '../../src/access/permission.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 
@@ -66,6 +67,20 @@ beforeAll(async () => {
     });
   });
   native = await createProfileEntryFixture({ pool, singleConnection: true });
+  native.access.authorize = new Proxy(native.access.authorize, {
+    apply(authorize, receiver, args) {
+      return Reflect.apply(authorize, receiver, args).then((allowed: boolean) => {
+        if (!allowed && args[2] === 'progress_session:update')
+          deniedOwnerChecks.push({
+            actor: args[1],
+            resource: args[3],
+            evidenceDeadline: permissionEvidenceDeadline(args[4]),
+            now: Date.now(),
+          });
+        return allowed;
+      });
+    },
+  });
   owner = await native.identity([
     'subject:create',
     'subject:read',
