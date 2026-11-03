@@ -12,11 +12,24 @@ import {
 } from './support/growth-edition-inventory-fixture.ts';
 
 const indexedRelations = [
-  'content.creator_edition', 'content.edition', 'content.post', 'content.revision', 'content.thread',
-  'semantic.subject', 'access.resource_grant', 'access.resource_role_grant', 'access.resource_denial',
+  'content.creator_edition',
+  'content.edition',
+  'content.post',
+  'content.revision',
+  'content.thread',
+  'semantic.subject',
+  'access.resource_grant',
+  'access.resource_role_grant',
+  'access.resource_denial',
 ];
 
-for (const axis of ['creator-candidates', 'unrelated-homes', 'source-history', 'subject-history', 'access-history'] satisfies InventoryAxis[]) {
+for (const axis of [
+  'creator-candidates',
+  'unrelated-homes',
+  'source-history',
+  'subject-history',
+  'access-history',
+] satisfies InventoryAxis[]) {
   for (const shape of ['populated', 'deep', 'terminal-empty', 'hidden'] satisfies InventoryPage[]) {
     test(`native creator inventory ${shape} page stays bounded as ${axis} grows`, async () => {
       const f = await createGrowthEditionInventoryFixture();
@@ -44,10 +57,15 @@ for (const axis of ['creator-candidates', 'unrelated-homes', 'source-history', '
             expect(cost.backgroundStatements ?? 0).toBe(0);
           }
           // The harness records actual rows, shared blocks and statements, never DTO counts.
-          console.info(JSON.stringify({
-            operation: report.name, scale: sample.scale, cost: sample.cost,
-            repetitions: sample.repetitions, verdicts: report.verdicts,
-          }));
+          console.info(
+            JSON.stringify({
+              operation: report.name,
+              scale: sample.scale,
+              cost: sample.cost,
+              repetitions: sample.repetitions,
+              verdicts: report.verdicts,
+            }),
+          );
         }
         assertGrowthAccessPaths(report.name, report.samples, indexedRelations);
       } finally {
@@ -73,7 +91,9 @@ test('native inventory retains account concealment, draft and withdrawn bindings
     expect(await f.page(undefined, f.other)).toEqual({ editions: [], next: null });
     const cursor = first.next!;
     expect((await f.request(f.path(f.author.accountId, inventoryLimit + 1, cursor))).response.status).toBe(400);
-    expect((await f.request(f.path(f.other.accountId, inventoryLimit, cursor), { person: f.other })).response.status).toBe(400);
+    expect(
+      (await f.request(f.path(f.other.accountId, inventoryLimit, cursor), { person: f.other })).response.status,
+    ).toBe(400);
     expect((await f.request(f.path(f.author.accountId, inventoryLimit, 'forged'))).response.status).toBe(400);
 
     f.setCursorTime(Date.now() + 16 * 60_000);
@@ -126,15 +146,24 @@ test('native inventory conceals a source revoked during FINAL and propagates ret
     const serialized = JSON.stringify(revoked);
     for (const id of f.editions.keys()) expect(serialized).not.toContain(id);
 
-    const partition = partitionOf(routeOf(f.author.accountId)!);
-    await f.db.admin.query("UPDATE core.partition SET write_state='moved',moved_to='other' WHERE partition_no=$1", [partition]);
-    try {
-      const unavailable = await f.request(f.path());
-      expect(unavailable.response.status, unavailable.text).toBe(503);
-      expect(unavailable.value).toMatchObject({ code: 'partition_unavailable', retryable: true });
-      expect(unavailable.response.headers.get('retry-after')).not.toBeNull();
-    } finally {
-      await f.db.admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [partition]);
+    const partitions = new Set([
+      partitionOf(routeOf(f.author.accountId)!),
+      partitionOf(routeOf(f.selectedSource.postId)!),
+    ]);
+    for (const partition of partitions) {
+      await f.db.admin.query("UPDATE core.partition SET write_state='moved',moved_to='other' WHERE partition_no=$1", [
+        partition,
+      ]);
+      try {
+        const unavailable = await f.request(f.path());
+        expect(unavailable.response.status, unavailable.text).toBe(503);
+        expect(unavailable.value).toMatchObject({ code: 'partition_unavailable', retryable: true });
+        expect(unavailable.response.headers.get('retry-after')).not.toBeNull();
+      } finally {
+        await f.db.admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [
+          partition,
+        ]);
+      }
     }
   } finally {
     await f.close();
