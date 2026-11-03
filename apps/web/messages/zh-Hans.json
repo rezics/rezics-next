@@ -2936,6 +2936,7 @@
   "realm_bans_cancel": "取消",
   "realm_bans_next": "下一页封禁",
   "realm_bans_active": "封禁已生效。现已禁止加入、参与和访问受保护内容。公开内容仍可按匿名读者的权限访问。关注保持不变。",
+  "realm_bans_receipt_previous": "这是先前操作的回执。请查看当前封禁以确认现状。",
   "realm_bans_removal_pending": "成员移除已排队。尚未确认完成；刷新当前封禁无法确认完成状态。",
   "realm_bans_lifted": "封禁已解除。可以按照 Realm 当前的规则重新加入。成员资格未恢复，关注保持不变。现有移除可能仍在等待处理。读取受保护内容仍需权限。",
   "realm_bans_role_required": "请先通过角色管理移除此账户的 Realm 所有者或版主角色，然后重试封禁。",

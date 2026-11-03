@@ -2936,6 +2936,7 @@
   "realm_bans_cancel": "Abbrechen",
   "realm_bans_next": "Nächste Seite der Sperren",
   "realm_bans_active": "Sperre aktiv. Beitritt, Teilnahme und geschützte Inhalte werden jetzt verweigert. Öffentliche Inhalte bleiben wie für anonyme Leser verfügbar. Das Folgen bleibt unverändert.",
+  "realm_bans_receipt_previous": "Beleg eines früheren Befehls. Prüfe die aktuelle Sperre, um ihren jetzigen Status zu sehen.",
   "realm_bans_removal_pending": "Die Entfernung der Mitgliedschaft ist eingereiht. Der Abschluss wurde nicht bestätigt; eine Aktualisierung der Sperren kann ihn nicht bestätigen.",
   "realm_bans_lifted": "Sperre aufgehoben. Ein Beitritt ist nach den aktuellen Regeln des Realms wieder möglich. Die Mitgliedschaft wird nicht wiederhergestellt und das Folgen bleibt unverändert. Die Entfernung kann noch ausstehen. Geschützte Lesezugriffe erfordern weiterhin eine Berechtigung.",
   "realm_bans_role_required": "Entferne zuerst über die Rollenverwaltung die Realm-Inhaber- oder Moderatorrolle dieses Kontos und versuche dann erneut, es zu sperren.",

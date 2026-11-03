@@ -2930,6 +2930,7 @@
   "realm_bans_cancel": "Cancel",
   "realm_bans_next": "Next page of bans",
   "realm_bans_active": "Ban active. Joining, participation and protected material are denied now. Public material remains available as for an anonymous reader. Following is unchanged.",
+  "realm_bans_receipt_previous": "Earlier command receipt. Inspect the current ban to check its present state.",
   "realm_bans_removal_pending": "Membership removal queued. Completion has not been confirmed; refreshing current bans cannot confirm it.",
   "realm_bans_lifted": "Ban lifted. Admission is allowed again under the Realm’s current rules. Membership is not restored and following is unchanged. Existing removal may still be pending. Protected reads still require permission.",
   "realm_bans_role_required": "Remove this account’s Realm owner or moderator role through role management first, then try banning again.",

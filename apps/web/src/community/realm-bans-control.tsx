@@ -50,9 +50,11 @@ export type RealmBansControlProps = {
 export function RealmBanOutcome({
   result,
   boundaryId,
+  historical = false,
 }: {
   result: Extract<BanWriteResult, { ok: true }>;
   boundaryId?: string;
+  historical?: boolean;
 }) {
   const id = useId();
   const accountId = result.action === 'ban' ? result.ban.accountId : result.accountId;
@@ -94,7 +96,13 @@ export function RealmBanOutcome({
           </>
         ) : null}
       </dl>
-      <p>{result.action === 'ban' ? m.realm_bans_active() : m.realm_bans_lifted()}</p>
+      <p>
+        {historical
+          ? m.realm_bans_receipt_previous()
+          : result.action === 'ban'
+            ? m.realm_bans_active()
+            : m.realm_bans_lifted()}
+      </p>
       {result.action === 'ban' && result.ban.workflowId !== null ? <p>{m.realm_bans_removal_pending()}</p> : null}
     </ContentItemFrame>
   );
@@ -332,6 +340,11 @@ function RealmBansVisit({
   const [reason, setReason, reasonNow] = useBanDraftField('');
   const [confirm, setConfirm, confirmNow] = useBanDraftField<string | null>(null);
   const [result, setResult] = useState<BanWriteResult | null>(null);
+  // Bounded command receipts are independent of the selected episode and readback.
+  // A new command replaces only the previous receipt for its own action.
+  const [receipts, setReceipts] = useState<
+    readonly { input: Readonly<BanWriteInput>; result: Extract<BanWriteResult, { ok: true }> }[]
+  >([]);
   const [retry, setRetry] = useState<BanWriteInput | null>(null);
   const [busy, setBusy] = useState(false);
   const working = useRef<object | null>(null);
@@ -556,6 +569,7 @@ function RealmBansVisit({
       setView(next);
       if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
         setResult(null);
+        setReceipts([]);
         setRetry(null);
         setSelectedReview(null);
         selectedReviewIntent.current = null;
@@ -625,7 +639,19 @@ function RealmBansVisit({
       matchesReview(origin.review, input.action, input.accountId) &&
       (origin.review.action === 'ban' ? banReview.current : unbanReview.current) === origin.review &&
       document.activeElement === origin.source;
-    setResult(next);
+    if (next.ok) {
+      // Copy native acceptance before retaining it across subsequent commands.
+      const accepted = Object.freeze(
+        next.action === 'ban' ? { ...next, ban: Object.freeze({ ...next.ban }) } : { ...next },
+      );
+      setReceipts((previous) => [
+        ...previous.filter((receipt) => receipt.result.action !== accepted.action),
+        { input, result: accepted },
+      ]);
+      setResult(accepted);
+    } else {
+      setResult(next);
+    }
     uncertain.current = !next.ok && next.reason === 'unavailable' ? input : null;
     setRetry(uncertain.current);
     selectedReviewIntent.current = null;
@@ -645,6 +671,7 @@ function RealmBansVisit({
       await refresh();
       if (origin) recoverFocus(origin.review, origin.source, 'result', generation.current, restoreResultFocus);
     } else if (next.reason === 'forbidden' || next.reason === 'signed-out' || next.reason === 'closed') {
+      setReceipts([]);
       invalidateTarget();
       unbanReview.current = null;
       setQuery('');
@@ -710,6 +737,7 @@ function RealmBansVisit({
       setQuery('');
       setReason('');
       setResult(null);
+      setReceipts([]);
     }
   }
 
@@ -756,6 +784,7 @@ function RealmBansVisit({
           setQuery('');
           setReason('');
           setResult(null);
+          setReceipts([]);
         }
         return;
       }
@@ -1308,9 +1337,16 @@ function RealmBansVisit({
           ) : null}
         </>
       )}
-      {result?.ok && (view.state === 'ready' || view.state === 'loading' || view.state === 'unavailable') ? (
-        <RealmBanOutcome result={result} boundaryId={`${id}-outcome`} />
-      ) : null}
+      {view.state === 'ready' || view.state === 'loading' || view.state === 'unavailable'
+        ? receipts.map((receipt) => (
+            <RealmBanOutcome
+              key={receipt.input.idempotencyKey}
+              result={receipt.result}
+              historical={receipt.result !== result}
+              {...(receipt.result === result ? { boundaryId: `${id}-outcome` } : {})}
+            />
+          ))
+        : null}
       {result && !result.ok ? (
         <div role="alert" className="space-y-3 text-sm">
           <p>{writeMessage(result.reason)}</p>

@@ -2936,6 +2936,7 @@
   "realm_bans_cancel": "Cancelar",
   "realm_bans_next": "Siguiente página de bloqueos",
   "realm_bans_active": "Bloqueo activo. La admisión, la participación y el material protegido están denegados desde ahora. El material público sigue disponible como para un lector anónimo. El seguimiento no cambia.",
+  "realm_bans_receipt_previous": "Confirmación de una operación anterior. Consulta el bloqueo actual para comprobar su estado.",
   "realm_bans_removal_pending": "La retirada de membresía está en cola. No se ha confirmado su finalización; actualizar los bloqueos no puede confirmarla.",
   "realm_bans_lifted": "Bloqueo levantado. Se permite de nuevo la admisión según las reglas actuales del Realm. No se restaura la membresía y el seguimiento no cambia. La retirada puede seguir pendiente. Las lecturas protegidas siguen requiriendo permiso.",
   "realm_bans_role_required": "Primero retira el rol de propietario o moderador del Realm de esta cuenta mediante la gestión de roles y vuelve a intentar bloquearla.",

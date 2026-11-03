@@ -112,6 +112,14 @@ The default remains unavailable until generated delivery can bind the admitted n
 does not certify absence. A definitive unban receipt stays independent from readback, and neither
 current absence nor accepted removal claims restored membership or completed Accounts work.
 
+Decision: retain the latest accepted ban and unban command receipts separately within the visit (at most two), replacing only the same action's prior receipt; label earlier receipts as historical without current-state assurances.
+
+Each retained receipt keeps its original immutable command and idempotency key and a copied native result.
+Starting another command, an uncertain retry, exact absence or a replacement current episode does not erase
+the opposite action's receipt. A non-null ban removal workflow stays unconfirmed after unban or reban.
+Explicit new intent creates a new key; uncertain retries preserve their own key. Revoked admission and visit
+retirement remove both private receipts. This bounded display is not native command history or workflow readback.
+
 ## Current-ban consumer cost
 
 - Touches: one native composed ban page per explicit list/retry, at most one installed selected-current inspection, existing target resolution only for a deliberate new ban, and separately charged original command/readback. Identity and authority arrive from the native composition, with no per-row network fanout.

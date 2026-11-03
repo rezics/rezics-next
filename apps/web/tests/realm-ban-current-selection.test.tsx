@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { admitRealmBanCurrent, unavailableRealmBanCurrent } from '../src/community/realm-ban-current';
 import { RealmBanCurrentObservationView } from '../src/community/realm-ban-current-control';
 import { m } from '../src/paraglide/messages.js';
+import type { BanWriteInput, BanWriteResult } from '../src/community/realm-bans';
 
 const input = Object.freeze({ realmId: 'realm', accountId: 'account', cursor: 'opaque-frontier' });
 const ban = { accountId: input.accountId, actor: null, at: '2026-11-02T14:05:00Z', reason: 'Actual reason\nFull text' };
@@ -100,6 +101,14 @@ test('inspection retry retains one frozen selection and leaves the list frontier
       button.click();
       await tick();
     });
+  const edit = async (selector: string, value: string) =>
+    act(async () => {
+      const field = host.querySelector(selector)!;
+      const prototype =
+        field.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(field, value);
+      field.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
   try {
     await act(async () => {
       root.render(
@@ -142,6 +151,66 @@ test('inspection retry retains one frozen selection and leaves the list frontier
     expect(inspections[0]).toEqual({ realmId, accountId, cursor: 'next-window' });
     expect(inspections.every((input) => input === inspections[0] && Object.isFrozen(input))).toBe(true);
     expect(reads).toEqual([undefined, 'next-window']);
+
+    const writes: BanWriteInput[] = [];
+    let accepted: BanWriteResult = { ok: true, action: 'unban', accountId };
+    await act(async () => {
+      root.render(
+        createElement(RealmBansControl, {
+          realmId,
+          ready: true,
+          initial: { state: 'ready', page: { items: [{ ...ban, accountId }], next: null } },
+          read: async () => ({ state: 'ready', page: { items: [], next: null } }),
+          inspect: async (input) => ({ state: 'absent', input }),
+          resolve: async () => ({
+            state: 'ready',
+            target: {
+              lookupHandle: 'river',
+              account: {
+                id: accountId,
+                kind: 'actor',
+                state: 'active',
+                handle: 'river',
+                displayName: 'River',
+                automated: false,
+                operatorId: null,
+              },
+            },
+          }),
+          write: async (input) => {
+            writes.push(input);
+            return accepted;
+          },
+        }),
+      );
+      await tick();
+    });
+    await click(m.realm_bans_unban());
+    await click(m.realm_bans_confirm());
+    const lifted = host.querySelector('[data-slot="realm-ban-outcome"]')!;
+    await edit('input:nth-of-type(1)[maxlength="36"]', accountId);
+    await click(m.realm_bans_inspect_action());
+    expect(host.textContent).toContain(m.realm_bans_inspect_absent());
+    expect(host.querySelector('[data-slot="realm-ban-outcome"]')).toBe(lifted);
+    await edit('input[maxlength="2048"]', '@river');
+    await click(m.realm_bans_target_lookup());
+    await click(m.realm_bans_target_select());
+    await click(m.realm_bans_ban());
+    accepted = { ok: false, reason: 'unavailable' };
+    await click(m.realm_bans_confirm_ban());
+    expect(lifted.isConnected).toBe(true);
+    const at = '2026-11-04T12:00:00.000Z';
+    accepted = { ok: true, action: 'ban', ban: { ...ban, realmId, accountId, at, workflowId: 'pending-removal' } };
+    await click(m.realm_bans_retry());
+    expect(writes[2]).toEqual(writes[1]);
+    expect(writes[0]?.idempotencyKey).not.toBe(writes[1]?.idempotencyKey);
+    expect(writes.every(Object.isFrozen)).toBe(true);
+    expect(host.querySelectorAll('[data-slot="realm-ban-outcome"]')).toHaveLength(2);
+    expect(lifted.isConnected).toBe(true);
+    expect(lifted.textContent).toContain(m.realm_bans_receipt_previous());
+    expect(lifted.textContent).not.toContain(m.realm_bans_lifted());
+    expect(host.querySelector('[data-slot="realm-ban-outcome"] time')?.getAttribute('datetime')).toBe(at);
+    expect(host.textContent).toContain(m.realm_bans_removal_pending());
   } finally {
     await act(async () => {
       root.unmount();

@@ -2936,6 +2936,7 @@
   "realm_bans_cancel": "Annuler",
   "realm_bans_next": "Page suivante des bannissements",
   "realm_bans_active": "Bannissement actif. L’adhésion, la participation et les contenus protégés sont désormais refusés. Les contenus publics restent accessibles comme pour un lecteur anonyme. Le suivi reste inchangé.",
+  "realm_bans_receipt_previous": "Confirmation d’une opération antérieure. Consultez le bannissement actuel pour vérifier son état.",
   "realm_bans_removal_pending": "Le retrait d’adhésion est en file d’attente. Son achèvement n’est pas confirmé ; actualiser les bannissements ne peut pas le confirmer.",
   "realm_bans_lifted": "Bannissement levé. L’adhésion est à nouveau possible selon les règles actuelles du Realm. L’adhésion n’est pas rétablie et le suivi reste inchangé. Le retrait peut encore être en attente. La lecture des contenus protégés nécessite toujours une autorisation.",
   "realm_bans_role_required": "Retirez d’abord le rôle de propriétaire ou de modérateur du Realm de ce compte dans la gestion des rôles, puis réessayez de le bannir.",
