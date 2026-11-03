@@ -44,6 +44,7 @@ import { feedRoutes } from '../content/feed-routes.ts';
 import { personalLabelRoutes } from '../library/label-routes.ts';
 import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
+import { diaryRoutes } from '../library/diary-routes.ts';
 import { ratingRoutes } from '../rating/routes.ts';
 import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
@@ -460,7 +461,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
-  const continued = continueRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
+  const diary = diaryRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens,
+    pool: dependencies.pool,
+    clock,
+    routeKey: dependencies.routeKey,
+    access: () => resolveAccess({ actions: actionCatalogue(diary), realmRoleReader }),
+  });
+  const continued = continueRoutes(diary as unknown as ReturnType<typeof definitionRoutes>, {
     tokens,
     pool: dependencies.pool,
     clock,
@@ -791,6 +799,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof payoutRoutes> &
   ReturnType<typeof commerceRoutes> &
   ReturnType<typeof progressRoutes> &
+  ReturnType<typeof diaryRoutes> &
   ReturnType<typeof contextRoutes> &
   ReturnType<typeof providerReviewQueueRoutes>;
 export type Kernel = KernelComposition;

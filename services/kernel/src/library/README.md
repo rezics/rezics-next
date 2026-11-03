@@ -2072,6 +2072,23 @@ its measured growth result above are unchanged; this opt-in path's native/full p
 remain deferred. `test/library/progress-presentation.test.ts` and additional native cases in
 `test/library/profile-session-command.test.ts` describe its outcomes; compiler success alone is not native proof.
 
+### Cross-subject private diary
+
+The [diary contract](../../../../docs/library-consumption-diary.md) owns exact HTTP/client methods and recovery.
+`diary-reads.ts` mounts through `diary-routes.ts` and reads native occurrences using
+`progress_session_diary_seek (route,account_id,started_at DESC,session_id DESC)`, preserving exact microseconds.
+Two bounded page observations fence revision/retirement races around one batched current Semantic summary read.
+Each fetch returns at most 26 compact rows. There are no per-occurrence session/profile reads or subject scans.
+Native summary authorization controls labels; private stored subject IDs do not disclose catalogue fields.
+Audit dates are explicit and historical metadata is unavailable until its separate owner is installed.
+
+`diary_navigation` retains at most eight keys per owner, with absolute 15-minute expiry, native caller and partition
+binding, indexed cancellation and reuse of expired slots. Keys retain no facts or permission result. The account
+lock serializes allocation with terminal fencing. The existing erasure graph appends an indexed navigation phase
+without shifting durable phase numbers; its native probe includes the new store. Expired metadata remains bounded
+and is reclaimed in place or by cancellation/terminal cleanup. Shared erasure closure remains with its owners.
+Focused scenarios live in `test/library/diary.test.ts`; broader acceptance remains deferred to integration.
+
 ### Session page
 
 - Touches: A snapshot, an admit, a partition-epoch read, and one keyset on `progress_session_account_subject` `(route, account_id, subject_id, started_at, session_id)`. Two `LIMIT` branches fetch at most `min(100, s + 1)` rows. When `s` is 100 and the page is non-empty, a second limit-1 probe runs, because the first fetch is capped at 100. The cursor binds the operation, the account and the subject.

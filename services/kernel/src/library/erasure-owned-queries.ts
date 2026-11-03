@@ -32,6 +32,7 @@ import purgeTypePreparationSlot from './erasure-owned-type-preparation-slot.sql'
 import purgeTypePreparationProgress from './erasure-owned-type-preparation-progress.sql';
 import purgeTypePreparationHeader from './erasure-owned-type-preparation-header.sql';
 import purgeBulkTarget from './erasure-owned-bulk-target.sql';
+import purgeDiaryNavigation from './erasure-owned-diary-navigation.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export const ownedQueries: {
@@ -69,6 +70,7 @@ export const ownedQueries: {
   readonly type_preparation_progress: typeof purgeTypePreparationProgress;
   readonly type_preparation_header: typeof purgeTypePreparationHeader;
   readonly bulk_target: typeof purgeBulkTarget;
+  readonly diary_navigation: typeof purgeDiaryNavigation;
 } = {
   members_preparation_result: purgeMembersPreparationResult,
   members_preparation: purgeMembersPreparation,
@@ -105,4 +107,5 @@ export const ownedQueries: {
   type_preparation_progress: purgeTypePreparationProgress,
   type_preparation_header: purgeTypePreparationHeader,
   bulk_target: purgeBulkTarget,
+  diary_navigation: purgeDiaryNavigation,
 } as const;

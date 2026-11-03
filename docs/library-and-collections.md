@@ -17,6 +17,16 @@ those adoption surfaces and earlier research. Their ABI revisions belong to thei
 alternate mode, budget, API or authority document. The [library abstraction research](research/library-abstraction.md)
 is background evidence, not implementation evidence.
 
+## Private consumption diary
+
+The [private diary](library-consumption-diary.md) adopts cross-subject occurrence navigation over real native
+sessions, separately from public published logs and current shelf summaries. Decision: order by immutable recording
+start descending, then full session UUID descending; use eight expiring owner navigation slots and the existing
+presented session method for exact reopening. Repeats and unfinished sessions remain separate. Recording timestamps
+are explicitly labelled audit facts; absent person-reported historical dates remain unavailable, with no invented
+historical sort. Native subject visibility controls optional labels. The linked contract owns installed methods,
+caller binding, bounded continuation lifecycle, concurrent edits, terminal fences and Web recovery semantics.
+
 ## Personal facts and one Collection abstraction
 
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
