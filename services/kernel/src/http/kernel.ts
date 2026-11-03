@@ -55,6 +55,7 @@ import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
+import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
@@ -603,7 +604,14 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       });
     },
   });
-  const labels = personalLabelRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+  const aniList = aniListImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(aniList), realmRoleReader }),
+  });
+  const labels = personalLabelRoutes(aniList as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
@@ -757,6 +765,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof pinRoutes> &
   ReturnType<typeof personalLabelRoutes> &
   ReturnType<typeof personalLibraryRoutes> &
+  ReturnType<typeof aniListImportRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &

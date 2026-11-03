@@ -60,6 +60,7 @@ export const OWNED_PHASES = [
   'members_preparation_result',
   'members_preparation',
   'members_preparation_owner',
+  'list_import_anilist',
 ] as const;
 const childQueries: {
   units: typeof units;

@@ -32,9 +32,11 @@ import purgeTypePreparationSlot from './erasure-owned-type-preparation-slot.sql'
 import purgeTypePreparationProgress from './erasure-owned-type-preparation-progress.sql';
 import purgeTypePreparationHeader from './erasure-owned-type-preparation-header.sql';
 import purgeBulkTarget from './erasure-owned-bulk-target.sql';
+import purgeAniList from './list-import-anilist-erase.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export const ownedQueries: {
+  readonly list_import_anilist: typeof purgeAniList;
   readonly members_preparation_result: typeof purgeMembersPreparationResult;
   readonly members_preparation: typeof purgeMembersPreparation;
   readonly members_preparation_owner: typeof purgeMembersPreparationOwner;
@@ -70,6 +72,7 @@ export const ownedQueries: {
   readonly type_preparation_header: typeof purgeTypePreparationHeader;
   readonly bulk_target: typeof purgeBulkTarget;
 } = {
+  list_import_anilist: purgeAniList,
   members_preparation_result: purgeMembersPreparationResult,
   members_preparation: purgeMembersPreparation,
   members_preparation_owner: purgeMembersPreparationOwner,

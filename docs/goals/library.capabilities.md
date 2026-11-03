@@ -37,6 +37,10 @@ runtime IDs or viewport-suffix IDs are claimed.
 
 ## Native acceptance register
 
+Personal AniList portability: `test/library/list-import-anilist.test.ts` exercises the mounted preview/review/apply
+composition with persisted native authority and subjects. The [source contract](../library-import-anilist.md) owns
+shape, mapping, retained losses, bounds and Web responses; broader frozen acceptance remains an integration check.
+
 The Kernel wrappers import the original frozen specifications. These commands are the supported native entry
 points from the worktree root; they are listed as evidence entry points and were not executed here.
 

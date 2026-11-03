@@ -19,6 +19,10 @@ is background evidence, not implementation evidence.
 
 ## Personal facts and one Collection abstraction
 
+[Personal AniList uploads](library-import-anilist.md) have mounted private preview, paged review, confirmed apply
+and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field
+remains visible private evidence. This replaces the AniList personal-import deferral only, not other sources or sync.
+
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
 immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.
