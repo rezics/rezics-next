@@ -199,9 +199,11 @@ running it with the same-process moderation suites.
 
 The private `/realms/:id/members` destination and management-region link compose one bounded page and one exact
 account inspection. The [members owner](../../apps/web/src/community/members/README.md) defines source retirement,
-opaque continuation, exact failed-address retry, concealed/denied/failed states and consumer cost. Pending membership
-does not certify participation. No actions are admitted by this inspection part; the default Realm ban Panel and
-membership command owners retain execution, uncertain retry and native readback semantics.
+opaque continuation, exact failed-address retry, concealed/denied/failed states, selected advice, and consumer cost.
+Pending membership does not certify participation. Selected add uses the existing membership command owner, and the
+default Realm ban Panel retains ban/unban execution; both retain their own uncertain retry and native readback
+semantics. The production roster source remains unavailable until its generated GET, exact interval proof and native
+lifetime publication are installed.
 
 Decision: retain an unavailable production source until the installed roster has generated GET declarations and exposes
 an exact membership interval for selection; account ID and member state cannot substitute for that interval.
@@ -212,8 +214,12 @@ Producer lifetime observations now have an optional composition seam that retire
 without fetching; it remains unbound until Content publishes native disclosure/currentness ownership and exact intervals.
 Management discovery consumes existing exact-Realm `realm.update` or appearance `canManage` observations independently
 of ban advice. Effect replay preserves the original producer observation across subscription cleanup and reconnection.
-The positive production visit, current selected ban/add integration, rejected/unknown commands and full locale/viewport
-review remain continuation work. No fixture or unavailable route establishes native completion or producer growth.
+The consumer composes current selected ban/unban advice and membership addition through those command owners, with
+explicit review, immutable retry, and selected readback. The default production visit is still unavailable because
+the generated GET, exact membership interval and native lifetime notification contract are unpublished. Add stories
+use the real command owner with deterministic response fixtures; consumer fixtures establish neither native completion nor
+producer growth. Full mounted native action acceptance and eight-locale phone/desktop light/dark visual review remain
+integration-owned.
 
 ### Current Realm ban identity and inspection boundary
 

@@ -12,6 +12,8 @@ type DisclosedRow = Extract<MemberRow, { kind: 'disclosed' }>;
 type Selection = {
   address: MemberSelectionAddress;
   read: MemberSelectionRead | { kind: 'loading' };
+  /** Kept only while the same exact selection is refreshing its explicit status. */
+  previous?: Extract<MemberSelectionRead, { kind: 'ready' }>;
 };
 
 export type MembersSnapshot = {
@@ -147,7 +149,7 @@ export class RealmMembersVisit {
         !identity.accountId ||
         !identity.reference ||
         !identity.label ||
-        !row.episode ||
+        !row.membershipInterval ||
         index.has(identity.accountId)
       )
         return null;
@@ -211,20 +213,46 @@ export class RealmMembersVisit {
     if (!this.admitted() || this.pageBusy || this.value.read.kind !== 'ready') return;
     const row = this.rows.get(accountId);
     if (!row) return;
-    await this.readSelected({
+    return this.readSelected({
       realmId: this.realmId,
       accountId: row.identity.accountId,
-      episode: row.episode,
+      membershipInterval: row.membershipInterval,
       authority: this.value.read.page.authority,
     });
   };
 
-  private async readSelected(address: MemberSelectionAddress) {
-    if (!this.admitted() || this.value.read.kind !== 'ready') return;
+  /** Inspect one deliberately entered Account ID without inferring a membership interval. */
+  inspectAccount = async (accountId: string) => {
+    if (!this.admitted() || this.pageBusy || this.value.read.kind !== 'ready') return;
+    return this.readSelected({
+      realmId: this.realmId,
+      accountId,
+      authority: this.value.read.page.authority,
+    });
+  };
+
+  private async readSelected(address: MemberSelectionAddress): Promise<MemberSelectionRead | null> {
+    if (!this.admitted() || this.value.read.kind !== 'ready') return null;
     const connection = this.connection;
     const operation = ++this.selectedOperation;
     const pageOperation = this.pageOperation;
-    this.value = { ...this.value, selection: { address, read: { kind: 'loading' } } };
+    const previous = this.value.selection;
+    let previousRead: Extract<MemberSelectionRead, { kind: 'ready' }> | undefined;
+    if (
+      previous &&
+      previous.address.realmId === address.realmId &&
+      previous.address.accountId === address.accountId &&
+      previous.address.authority === address.authority &&
+      previous.address.membershipInterval === address.membershipInterval
+    ) {
+      previousRead = previous.read.kind === 'ready'
+        ? previous.read
+        : previous.previous;
+    }
+    this.value = {
+      ...this.value,
+      selection: { address, read: { kind: 'loading' }, ...(previousRead ? { previous: previousRead } : {}) },
+    };
     this.emit();
     let read: MemberSelectionRead;
     try {
@@ -238,7 +266,8 @@ export class RealmMembersVisit {
       operation !== this.selectedOperation ||
       pageOperation !== this.pageOperation
     )
-      return;
+      return null;
+    let currentRead = read;
     if (read.kind === 'denied') {
       this.rows.clear();
       this.value = { read: { kind: 'denied' }, address: { realmId: this.realmId, cursor: null }, selection: null };
@@ -247,25 +276,40 @@ export class RealmMembersVisit {
       (read.authority !== address.authority ||
         read.realmId !== address.realmId ||
         read.identity.accountId !== address.accountId ||
-        read.episode !== address.episode)
+        (address.membershipInterval !== undefined && read.membershipInterval !== address.membershipInterval) ||
+        (read.membership === 'current' && !read.membershipInterval) ||
+        (read.membership === 'none' && read.membershipInterval !== null))
     ) {
       // Currentness changes require a replacement page and a fresh deliberate selection.
       this.rows.clear();
       this.value = { ...this.value, read: { kind: 'unavailable' }, selection: null };
+      currentRead = { kind: 'unavailable' };
     } else if (read.kind === 'concealed' || read.kind === 'changed') {
       this.rows.clear();
       this.value = { read: { kind: 'unavailable' }, address: this.value.address, selection: { address, read } };
     } else {
-      if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference)) read = { kind: 'unavailable' };
-      this.value = { ...this.value, selection: { address, read } };
+      if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference)) currentRead = { kind: 'unavailable' };
+      const retained =
+        previousRead && (currentRead.kind === 'failed' || currentRead.kind === 'unavailable')
+          ? { previous: previousRead }
+          : {};
+      this.value = { ...this.value, selection: { address, read: currentRead, ...retained } };
     }
     this.emit();
+    return currentRead;
   }
 
   retrySelected = async () => {
     const selection = this.value.selection;
     if (!selection || (selection.read.kind !== 'failed' && selection.read.kind !== 'unavailable')) return;
     await this.readSelected(selection.address);
+  };
+
+  /** Explicit status readback updates the exact selection without advancing the roster cursor. */
+  refreshSelected = async () => {
+    const selection = this.value.selection;
+    if (!selection || selection.read.kind !== 'ready') return null;
+    return this.readSelected(selection.address);
   };
 
   closeSelection = () => {

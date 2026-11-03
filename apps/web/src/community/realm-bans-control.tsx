@@ -30,6 +30,7 @@ import { RealmBanCurrentControl } from './realm-ban-current-control';
 import { unavailableRealmBanCurrent, type InspectRealmBanCurrent } from './realm-ban-current';
 import { useCommunityManagementAdmission } from './community-management';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
+import type { SelectedRealmMember } from './members/selected-account';
 
 export type RealmBansControlProps = {
   realmId: string;
@@ -39,6 +40,8 @@ export type RealmBansControlProps = {
   ready: boolean;
   resolve?: ResolveBanTarget;
   inspect?: InspectRealmBanCurrent;
+  /** One producer-current selection from the Realm member visit. */
+  selectedMember?: SelectedRealmMember;
   read: (cursor?: string) => Promise<BanReadState>;
   write: (input: BanWriteInput) => Promise<BanWriteResult>;
 };
@@ -249,6 +252,7 @@ export function RealmBansControl(props: RealmBansControlProps) {
     old.props.write !== props.write ||
     old.props.resolve !== props.resolve ||
     old.props.inspect !== props.inspect ||
+    old.props.selectedMember !== props.selectedMember ||
     old.props.lifetime !== props.lifetime ||
     old.props.initial !== props.initial
   ) {
@@ -287,6 +291,7 @@ function RealmBansVisit({
   write,
   resolve = unavailableTarget,
   inspect = unavailableRealmBanCurrent,
+  selectedMember,
   gate,
 }: Omit<RealmBansControlProps, 'initial'> & { initial: BanReadState | undefined; gate: RealmBanLifetime }) {
   const id = useId();
@@ -304,6 +309,10 @@ function RealmBansVisit({
   const completedReview = useRef<BanReviewIntent | null>(null);
   const focusRecovery = useRef<BanFocusRecovery | null>(null);
   const [focusRevision, setFocusRevision] = useState(0);
+  const [selectedReview, setSelectedReview] = useState<'ban' | 'unban' | null>(null);
+  const selectedReviewIntent = useRef<BanReviewIntent | null>(null);
+  const selectedReviewCommand = useRef<{ review: BanReviewIntent; input: BanWriteInput } | null>(null);
+  const [selectedReviewReason, setSelectedReviewReason] = useState('');
   const invalidateTarget = useCallback(() => {
     intent.current++;
     reviewSequence.current++;
@@ -315,7 +324,11 @@ function RealmBansVisit({
     setTarget({ state: 'idle' });
     setSelected(null);
     setBanConfirm(false);
-  }, [setSelected, setBanConfirm]);
+    selectedReviewIntent.current = null;
+    selectedReviewCommand.current = null;
+    setSelectedReview(null);
+    setSelectedReviewReason('');
+  }, [setSelected, setBanConfirm, setSelectedReview, setSelectedReviewReason]);
   const [reason, setReason, reasonNow] = useBanDraftField('');
   const [confirm, setConfirm, confirmNow] = useBanDraftField<string | null>(null);
   const [result, setResult] = useState<BanWriteResult | null>(null);
@@ -420,7 +433,12 @@ function RealmBansVisit({
     const destination =
       request.destination === 'trigger'
         ? review.action === 'ban'
-          ? selectedNow.current?.account.id === review.target
+          ? (
+              selectedNow.current?.account.id === review.target ||
+              (selectedMember !== undefined &&
+                selectedMember.accountId === review.target &&
+                selectedMember.current())
+            )
             ? review.trigger
             : null
           : view.state === 'ready'
@@ -436,7 +454,7 @@ function RealmBansVisit({
         ? currentListHeading.current
         : pageHeading.current;
     boundary?.focus();
-  }, [view, result, confirm, banConfirm, focusRevision, gate, realmId, id]);
+  }, [view, result, confirm, banConfirm, focusRevision, gate, realmId, id, selectedMember]);
 
   function makeReview(action: BanReviewIntent['action'], target: string, trigger: HTMLButtonElement): BanReviewIntent {
     const review = {
@@ -488,6 +506,7 @@ function RealmBansVisit({
         selectedNow.current !== null ||
         banConfirmNow.current ||
         confirmNow.current !== null ||
+        selectedReviewIntent.current !== null ||
         unresolved()),
     unresolved,
     JSON.stringify([gate.id, query, reason, selected?.account.id, banConfirm, confirm, busy, retry?.idempotencyKey]),
@@ -521,6 +540,10 @@ function RealmBansVisit({
       invalidateTarget();
       unbanReview.current = null;
       setConfirm(null);
+      selectedReviewIntent.current = null;
+      selectedReviewCommand.current = null;
+      setSelectedReview(null);
+      setSelectedReviewReason('');
       setView({ state: 'loading' });
       let next: BanReadState;
       try {
@@ -538,11 +561,15 @@ function RealmBansVisit({
       if (next.state === 'forbidden' || next.state === 'closed' || next.state === 'signed-out') {
         setResult(null);
         setRetry(null);
+        setSelectedReview(null);
+        selectedReviewIntent.current = null;
+        selectedReviewCommand.current = null;
+        setSelectedReviewReason('');
         setQuery('');
         setReason('');
       }
     },
-    [read, invalidateTarget, gate, setConfirm, setQuery, setReason],
+    [read, invalidateTarget, gate, setConfirm, setQuery, setReason, setSelectedReview, setSelectedReviewReason],
   );
 
   useEffect(() => {
@@ -605,6 +632,10 @@ function RealmBansVisit({
     setResult(next);
     uncertain.current = !next.ok && next.reason === 'unavailable' ? input : null;
     setRetry(uncertain.current);
+    selectedReviewIntent.current = null;
+    selectedReviewCommand.current = null;
+    setSelectedReview(null);
+    setSelectedReviewReason('');
     if (next.ok) {
       banReview.current = null;
       unbanReview.current = null;
@@ -888,8 +919,13 @@ function RealmBansVisit({
                   intent.current++;
                   reviewSequence.current++;
                   banReview.current = null;
+                  unbanReview.current = null;
                   focusRecovery.current = null;
                   completedReview.current = null;
+                  selectedReviewIntent.current = null;
+                  selectedReviewCommand.current = null;
+                  setSelectedReview(null);
+                  setSelectedReviewReason('');
                   setReason(event.target.value);
                   setBanConfirm(false);
                 }}
@@ -963,6 +999,164 @@ function RealmBansVisit({
               </ContentItemFrame>
             ) : null}
           </form>
+          {selectedMember && selectedMember.realmId === realmId ? (
+            <section
+              aria-labelledby={`${id}-selected-member-heading`}
+              className="min-w-0 space-y-3 rounded-xl border p-4"
+            >
+              <h3 id={`${id}-selected-member-heading`} className="font-semibold">
+                {m.realm_members_inspection()}
+              </h3>
+              <p className="break-words">
+                <bdi>{selectedMember.label}</bdi>
+                {' · '}
+                <bdi>{selectedMember.accountId}</bdi>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {m.realm_members_selected_account_in_realm({
+                  account: selectedMember.label,
+                  realm: selectedMember.realmLabel,
+                })}
+              </p>
+              {selectedMember.advice.ban === 'available' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  disabled={disabled}
+                  onClick={(event) => {
+                    if (!gate.current() || !selectedMember.current() || working.current || uncertain.current) return;
+                    intent.current++;
+                    const review = makeReview('ban', selectedMember.accountId, event.currentTarget);
+                    const input = Object.freeze({
+                      realmId,
+                      accountId: selectedMember.accountId,
+                      reason: reasonNow.current,
+                      action: 'ban' as const,
+                      idempotencyKey: crypto.randomUUID(),
+                    });
+                    selectedReviewIntent.current = review;
+                    selectedReviewCommand.current = { review, input };
+                    setSelectedReviewReason(input.reason);
+                    setSelectedReview('ban');
+                  }}
+                >
+                  {m.realm_bans_ban()}
+                </Button>
+              ) : null}
+              {selectedMember.advice.unban === 'available' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                  disabled={disabled}
+                  onClick={(event) => {
+                    if (!gate.current() || !selectedMember.current() || working.current || uncertain.current) return;
+                    intent.current++;
+                    const review = makeReview('unban', selectedMember.accountId, event.currentTarget);
+                    const input = Object.freeze({
+                      realmId,
+                      accountId: selectedMember.accountId,
+                      reason: '',
+                      action: 'unban' as const,
+                      idempotencyKey: crypto.randomUUID(),
+                    });
+                    selectedReviewIntent.current = review;
+                    selectedReviewCommand.current = { review, input };
+                    setSelectedReviewReason('');
+                    setSelectedReview('unban');
+                  }}
+                >
+                  {m.realm_bans_unban()}
+                </Button>
+              ) : null}
+              {selectedMember.advice.ban === 'unknown' || selectedMember.advice.unban === 'unknown' ? (
+                <p role="status" className="text-sm">{m.realm_members_actions_unavailable()}</p>
+              ) : null}
+              {selectedReview && selectedMember.current() ? (
+                <div
+                  role="group"
+                  aria-labelledby={`${id}-selected-review`}
+                  className="space-y-3 rounded-lg border p-4"
+                >
+                  <h4 id={`${id}-selected-review`} className="font-medium">
+                    {selectedReview === 'ban' ? m.realm_bans_ban() : m.realm_bans_unban_confirm()}
+                  </h4>
+                  <p>
+                    {m.realm_members_selected_review({
+                      action: selectedReview === 'ban' ? m.realm_bans_ban() : m.realm_bans_unban(),
+                      account: selectedMember.label,
+                      realm: selectedMember.realmLabel,
+                    })}
+                  </p>
+                  <p className="text-sm">
+                    <bdi>{selectedMember.reference}</bdi>
+                    {' · '}
+                    <bdi>{selectedMember.accountId}</bdi>
+                    {' · '}
+                    <bdi>{realmId}</bdi>
+                  </p>
+                  {selectedReview === 'ban' ? (
+                    <p className="text-sm">
+                      {m.realm_bans_reason()}: {selectedReviewReason || '—'}
+                    </p>
+                  ) : null}
+                  {selectedReview === 'ban' ? (
+                    <p className="text-sm">{m.realm_bans_help()}</p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                      disabled={disabled}
+                      onClick={(event) => {
+                        const review = selectedReviewIntent.current;
+                        const command = selectedReviewCommand.current;
+                        if (
+                          !review ||
+                          !command ||
+                          command.review !== review ||
+                          !selectedMember.current() ||
+                          review.action !== selectedReview ||
+                          !matchesReview(review, selectedReview, selectedMember.accountId)
+                        )
+                          return;
+                        void change(command.input, { review, source: event.currentTarget });
+                      }}
+                    >
+                      {selectedReview === 'ban' ? m.realm_bans_confirm_ban() : m.realm_bans_confirm()}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal wrap-anywhere py-2"
+                      disabled={disabled}
+                      onClick={(event) => {
+                        const review = selectedReviewIntent.current;
+                        if (
+                          !review ||
+                          !selectedMember.current() ||
+                          !matchesReview(review, selectedReview, selectedMember.accountId)
+                        )
+                          return;
+                        const focused = document.activeElement === event.currentTarget;
+                        if (review.action === 'ban') banReview.current = null;
+                        else unbanReview.current = null;
+                        selectedReviewIntent.current = null;
+                        selectedReviewCommand.current = null;
+                        setSelectedReviewReason('');
+                        intent.current++;
+                        recoverFocus(review, event.currentTarget, 'trigger', generation.current, focused);
+                        setSelectedReview(null);
+                      }}
+                    >
+                      {m.realm_bans_cancel()}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
           <RealmBanCurrentControl
             key={renderGeneration}
             realmId={realmId}

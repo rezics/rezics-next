@@ -3,6 +3,7 @@ import { RealmMembersVisit } from '../src/community/members/visit';
 import type { MemberPage, MemberSelectionRead, RealmMembersSource } from '../src/community/members/source';
 
 function page(ids = ['a', 'b']): MemberPage {
+  const intervals: Record<string, string> = { a: 'producer-interval-a', b: 'producer-interval-b' };
   return {
     realm: { id: 'realm', label: 'Realm' },
     authority: 'grant',
@@ -10,7 +11,7 @@ function page(ids = ['a', 'b']): MemberPage {
     rows: ids.map((accountId) => ({
       kind: 'disclosed',
       identity: { accountId, label: 'Same name', reference: accountId },
-      episode: `episode-${accountId}`,
+      membershipInterval: intervals[accountId]!,
       membership: 'current',
     })),
   };
@@ -20,7 +21,7 @@ const settle = async () => {
   await Promise.resolve();
 };
 
-test('selection uses exact account and episode, and a replacement page requires a fresh selection', async () => {
+test('selection uses exact account and interval, and a replacement page requires a fresh selection', async () => {
   let current = page();
   const addresses: unknown[] = [];
   const source: RealmMembersSource = {
@@ -32,7 +33,9 @@ test('selection uses exact account and episode, and a replacement page requires 
         kind: 'ready',
         ...address,
         identity: { accountId: address.accountId, label: 'Same name', reference: address.accountId },
+        membershipInterval: address.membershipInterval ?? null,
         membership: 'current',
+        advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
       };
     },
   };
@@ -40,12 +43,46 @@ test('selection uses exact account and episode, and a replacement page requires 
   const stop = visit.connect();
   await settle();
   await visit.select('b');
-  expect(addresses).toEqual([{ realmId: 'realm', accountId: 'b', episode: 'episode-b', authority: 'grant' }]);
+  expect(addresses).toEqual([
+    { realmId: 'realm', accountId: 'b', membershipInterval: 'producer-interval-b', authority: 'grant' },
+  ]);
   current = page(['b', 'a']);
   await visit.refresh();
   expect(visit.snapshot().selection).toBeNull();
   await visit.select('a');
   expect(visit.snapshot().selection?.address.accountId).toBe('a');
+  stop();
+});
+
+test('opaque membership intervals are scoped to the selected Account', async () => {
+  const sharedIntervalPage = page().rows.map((row) =>
+    row.kind === 'disclosed' ? { ...row, membershipInterval: 'producer-interval-token' } : row,
+  );
+  const addresses: unknown[] = [];
+  const visit = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async () => ({ kind: 'ready', page: { ...page(), rows: sharedIntervalPage } }),
+    readSelected: async (address) => {
+      addresses.push(address);
+      return {
+        kind: 'ready',
+        ...address,
+        identity: { accountId: address.accountId, reference: address.accountId, label: 'Exact account' },
+        membershipInterval: address.membershipInterval ?? null,
+        membership: 'current',
+        advice: { add: 'unavailable', ban: 'available', unban: 'available' },
+      };
+    },
+  });
+  const stop = visit.connect();
+  await settle();
+  await visit.select('a');
+  await visit.select('b');
+  expect(addresses).toEqual([
+    { realmId: 'realm', accountId: 'a', membershipInterval: 'producer-interval-token', authority: 'grant' },
+    { realmId: 'realm', accountId: 'b', membershipInterval: 'producer-interval-token', authority: 'grant' },
+  ]);
+  expect(visit.snapshot().selection?.address.accountId).toBe('b');
   stop();
 });
 
@@ -77,6 +114,42 @@ test('selected retry keeps the original account without moving the cursor; conce
   stop();
 });
 
+test('manual Account inspection does not infer an interval or move the roster cursor', async () => {
+  const addresses: unknown[] = [];
+  let pages = 0;
+  const visit = new RealmMembersVisit('realm', {
+    pageBound: 20,
+    readPage: async () => {
+      pages++;
+      return { kind: 'ready', page: page() };
+    },
+    readSelected: async (address) => {
+      addresses.push(address);
+      return {
+        kind: 'ready',
+        realmId: address.realmId,
+        authority: address.authority,
+        identity: { accountId: address.accountId, label: 'Exact entered Account', reference: 'exact-account' },
+        membershipInterval: null,
+        membership: 'none',
+        advice: { add: 'available', ban: 'unavailable', unban: 'unavailable' },
+      };
+    },
+  });
+  const stop = visit.connect();
+  await settle();
+  await visit.inspectAccount('entered-account');
+  expect(addresses).toEqual([{ realmId: 'realm', accountId: 'entered-account', authority: 'grant' }]);
+  expect(visit.snapshot().selection?.read).toMatchObject({
+    kind: 'ready',
+    identity: { accountId: 'entered-account' },
+    membership: 'none',
+    membershipInterval: null,
+  });
+  expect([pages, visit.snapshot().address.cursor]).toEqual([1, null]);
+  stop();
+});
+
 test('a newer selected account and a retired caller ignore delayed identity completion', async () => {
   const pending = Promise.withResolvers<MemberSelectionRead>();
   let active = true;
@@ -105,8 +178,9 @@ test('a newer selected account and a retired caller ignore delayed identity comp
     kind: 'ready',
     realmId: 'realm',
     authority: 'grant',
-    episode: 'episode-a',
+        membershipInterval: 'producer-interval-a',
     identity: { accountId: 'a', reference: 'a', label: 'Retired person' },
+        advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
     membership: 'current',
   });
   await selecting;
@@ -114,10 +188,10 @@ test('a newer selected account and a retired caller ignore delayed identity comp
   stop();
 });
 
-test('an episode or authority replacement cannot reuse selected advice', async () => {
+test('an interval or authority replacement cannot reuse selected advice', async () => {
   for (const replacement of [
-    { episode: 'new-episode', authority: 'grant' },
-    { episode: 'episode-a', authority: 'new-grant' },
+    { membershipInterval: 'replacement-interval', authority: 'grant' },
+    { membershipInterval: 'producer-interval-a', authority: 'new-grant' },
   ]) {
     const visit = new RealmMembersVisit('realm', {
       pageBound: 20,
@@ -128,6 +202,7 @@ test('an episode or authority replacement cannot reuse selected advice', async (
         ...replacement,
         identity: { accountId: 'a', reference: 'a', label: 'Must retire' },
         membership: 'current',
+        advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
       }),
     });
     const stop = visit.connect();

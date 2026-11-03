@@ -554,6 +554,43 @@ export async function requestRealmMembership(
   return { outcome: 'accepted', workflowId: result.data.workflowId };
 }
 
+export type RealmMemberAdditionInput = { realmId: string; accountId: string; idempotencyKey: string };
+export type RealmMemberAdditionResult =
+  | { kind: 'accepted'; workflowId: string }
+  | { kind: 'rejected' | 'unknown' };
+
+/** Selected-account addition reuses the native accepted-202 membership command. */
+export async function requestRealmMemberAddition(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: RealmMemberAdditionInput,
+): Promise<RealmMemberAdditionResult> {
+  try {
+    const { signedIn, auth } = await session(request, sessionEnv, 'session');
+    if (!signedIn || !('headers' in auth)) return { kind: 'rejected' };
+    const result = await client.realms({ realmId: input.realmId }).members.post(
+      { accountId: input.accountId },
+      {
+        headers: {
+          ...auth.headers,
+          'idempotency-key': JSON.stringify(input.idempotencyKey),
+        },
+      },
+    );
+    const status = statusOf(result);
+    const body = isRecord(result.error) && isRecord(result.error.value) ? result.error.value : undefined;
+    if (isPlatformClosedProblem(status, body)) return { kind: 'rejected' };
+    if (!result.error && status === 202 && result.data?.workflowId) {
+      return { kind: 'accepted', workflowId: result.data.workflowId };
+    }
+    if (nativeMembershipEffect(status, body) === 'not-applied') return { kind: 'rejected' };
+    return { kind: 'unknown' };
+  } catch {
+    return { kind: 'unknown' };
+  }
+}
+
 /** Compatibility for consumers that need only the command's acceptance outcome. */
 export async function changeMembership(
   client: KernelClient,

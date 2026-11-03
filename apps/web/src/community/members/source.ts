@@ -11,7 +11,8 @@ export type MemberRow =
   | {
       kind: 'disclosed';
       identity: MemberIdentity;
-      episode: string;
+      /** Opaque producer-owned proof for this exact current membership interval. */
+      membershipInterval: string;
       membership: 'current' | 'pending';
     };
 
@@ -33,8 +34,15 @@ export type MemberSelectionRead =
       realmId: string;
       authority: string;
       identity: MemberIdentity;
-      episode: string;
-      membership: 'current' | 'pending';
+      /** Opaque selected Account interval proof, or null when no current interval can be asserted. */
+      membershipInterval: string | null;
+      membership: 'current' | 'pending' | 'none' | 'unknown';
+      /** Consumer composition advice; this is not a proposed native response shape. */
+      advice: {
+        add: 'available' | 'unavailable' | 'unknown';
+        ban: 'available' | 'unavailable' | 'unknown';
+        unban: 'available' | 'unavailable' | 'unknown';
+      };
     }
   | { kind: 'concealed' | 'denied' | 'unavailable' | 'failed' | 'changed' };
 
@@ -42,9 +50,22 @@ export type MemberAddress = { realmId: string; cursor: string | null };
 export type MemberSelectionAddress = {
   realmId: string;
   accountId: string;
-  episode: string;
+  /** Present only when selection began from a disclosed roster row. */
+  membershipInterval?: string;
   authority: string;
 };
+
+export type MemberAdditionIntent = Readonly<{
+  realmId: string;
+  accountId: string;
+  membershipInterval: string | null;
+  authority: string;
+  idempotencyKey: string;
+}>;
+
+export type MemberAdditionResult =
+  | { kind: 'accepted'; workflowId: string }
+  | { kind: 'rejected' | 'unknown' };
 
 export interface RealmMembersSource {
   /**
@@ -61,6 +82,8 @@ export interface RealmMembersSource {
   readonly pageBound: number;
   readonly readPage: (address: MemberAddress) => Promise<MemberPageRead>;
   readonly readSelected: (address: MemberSelectionAddress) => Promise<MemberSelectionRead>;
+  /** Installed only after the membership command owner and exact selected readback are available. */
+  readonly addMember?: (intent: MemberAdditionIntent) => Promise<MemberAdditionResult>;
 }
 
 /** The installed producer still lacks generated GET declarations and a consumer-visible interval binding. */

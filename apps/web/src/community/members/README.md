@@ -12,6 +12,9 @@ The management host supplies these observations without a new probe or a private
 Decision: keep production unavailable until the installed roster has generated GET declarations and exposes an exact
 membership interval for selection; neither account ID nor `membership: 'member'` can stand in for that interval.
 
+Decision: interval tokens are opaque within their exact Account selection; tokens need not be globally unique across
+different Accounts.
+
 ## Producer boundary
 
 The installed [native producer](../../../../../services/kernel/src/community/README.md#realm-member-page) mounts
@@ -28,9 +31,10 @@ Cursor bytes pass through unchanged. Selected inspection never moves the page cu
 retains More. A failed page retries the exact original address. Denial is distinct from empty or unavailable.
 
 The visit indexes one admitted page and obtains one observation per deliberate selection. Selection captures the
-exact account, membership episode and authority revision; a reordered or replaced page cannot substitute another
-account. Failed selected lookup shows no fallback identity. Concealment or episode change removes the former page
-observation. Returning restores keyboard focus to the still-current account button, otherwise the heading.
+exact account, producer-owned membership interval when selected from a row, and authority revision; an entered
+Account ID never supplies an interval. A reordered or replaced page cannot substitute another account. Failed
+selected lookup shows no fallback identity. Concealment or interval change removes the former page observation.
+Returning restores keyboard focus to the still-current account button, otherwise the heading.
 
 Realm, caller, session/CSRF epoch, locale, exposure or source replacement retires the old visit and all deferred
 read/focus effects. The browser observes successful normalized session observations, including error/invalidation and
@@ -50,23 +54,30 @@ This seam does not publish native notifications or permit production binding bef
 
 ## Actions and pending work
 
-This part supports inspection only. It admits no add, remove, role, approve, mute, ban or unban command. Successful
-enumeration or readable identity supplies no action authority. Pending membership text never certifies participation.
-No selection can trigger a write, readback, hidden refresh or polling operation.
+The default production source remains unavailable and makes no requests. An explicitly installed consumer source may
+provide selected advice only with its current Account observation. The composition has one entered Account lookup,
+uses the existing membership POST owner for selected add, and passes one selected identity through a narrow context
+to the default `RealmBansPanel`; that Panel remains the ban/unban writer. No remove, role, approve or mute command is
+added. Neither enumeration nor identity alone supplies action authority.
 
-The continuation binds current selected action advice after producer publication and integrates the existing default
-`RealmBansPanel` through a narrow selected-account context. That Panel remains the ban writer. Existing membership
-and ban owners retain transport, reauthorization, immutable intent/key, uncertain retry and truthful readback.
-Accepted membership work must remain pending until native completion/readback; failed readback remains uncertainty.
-New selection or changed advice must never replay an earlier command. No new command engine belongs here.
+The add review names the exact Account and Realm. Its frozen intent keeps the Account, Realm, authority observation,
+starting interval and idempotency key together; interval proof stays local and is not sent as a wire field. A definite
+native non-application reports rejection. An uncertain result can be retried only by explicit activation with the
+same intent and key. Accepted work stays pending until an explicit selected readback reports a current membership
+interval; that readback updates the selection and never advances the roster cursor. Ban and unban continue through
+their existing command owner, reauthorization, immutable command, uncertain retry and readback. Changed selection,
+identity, advice or producer currentness retires the review before it can write.
 
 ## Cost
 
-- Touches: one page request per explicit page operation, at most one selected request per deliberate selection or
-  selected retry; no identity hydration, global scans, hidden refill, client sorting, accumulation or polling.
+- Touches: one page request per explicit page operation, at most one selected request per deliberate selection,
+  explicit retry or status check; no identity hydration, global scans, hidden refill, client sorting, accumulation or
+  polling.
   The installed unavailable adapter makes zero native requests.
-- Bound: one page, one O(N) index and one selection. No guessed wire string, cursor or media caps; publication must
-  provide them before production binding. Concealed rows carry no identity. The consumer rejects duplicate accounts,
+- Bound: one page, one O(N) index and one active selection. Its last ready observation may stay in component memory
+  during an explicit same-address status read so accepted work remains pending after a failed read; it is never shown
+  as a fallback identity. No guessed wire string, cursor or media caps; publication must provide them before
+  production binding. Concealed rows carry no identity. The consumer rejects duplicate accounts,
   mismatched Realm/selection/currentness and rows beyond the supplied producer bound.
 - Growth check: supplied 1/10/20-row tests pin finite consumer requests and replacement. Content retains native
   256/1024/4096 membership/history/partition growth. These fixtures cannot establish producer bounds or native cost.
@@ -81,8 +92,9 @@ and `page-needs-api-render-audit.md`, and the reference INDEX. The earlier apps 
 keyboard recovery; their roles, search, bulk updates, invitations and duration controls are not native contracts here.
 No legacy code was ported.
 
-Connected illustrative stories exercise ready, long/private names, sparse, denied, selected unavailable, pending
-membership and revoked while open. Rejected/unknown command stories, native mounted action/readback tests and the
-phone390/desktop1280 light/dark keyboard review across all eight locales remain in the continuation. Existing
-Storybook capture ownership remains unchanged. Unavailable production and fixture inspection alone do not complete
-the management outcome.
+Connected stories exercise ready, long/private names, sparse, denied, selected unavailable, pending membership,
+revocation, and add rejection, uncertainty and accepted-pending through the existing membership command owner with
+deterministic response fixtures. The remaining mounted native/page source acceptance and phone390/desktop1280 light/dark keyboard
+review across all eight locales are integration-owned. Existing Storybook capture ownership remains unchanged.
+Consumer fixtures and an unavailable production source do not establish native 256/1024/4096 growth or a production
+roster binding.

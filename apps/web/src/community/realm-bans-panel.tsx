@@ -8,15 +8,18 @@ import { RealmBansControl } from './realm-bans-control';
 import { RealmBanLifetime, realmBanSessionSource } from './realm-ban-lifetime';
 import type { BanReadState, BanWriteInput, BanWriteResult } from './realm-bans';
 import type { ResolveBanTarget } from './realm-ban-target';
+import { SelectedRealmMemberContext } from './members/selected-account';
 
 const subscribe = () => () => {};
 const serverRevision = () => 0;
+const serverCurrent = () => false;
 
 /** The page supplies only the Realm anchor. Native list and commands decide current authority. */
 export function RealmBansPanel({ realmId }: { realmId: string }) {
   const { state, csrfToken, subject } = useSession();
   const client = useContext(QueryClientContext);
   const region = useContext(CommunityManagementContext);
+  const selectedMember = useContext(SelectedRealmMemberContext);
   const entered = useRef(false);
   if (region?.entered) entered.current = true;
   // Keep the original positive admission read before entry; a later close retires the visit.
@@ -27,8 +30,21 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
     source?.snapshot ?? serverRevision,
     serverRevision,
   );
+  const selectedCurrent = useSyncExternalStore(
+    selectedMember?.subscribe ?? subscribe,
+    selectedMember?.current ?? serverCurrent,
+    serverCurrent,
+  );
   const locale = getLocale();
   const binding = useMemo(() => {
+    const observe = (listener: () => void) => {
+      const stopSession = source?.subscribe(listener);
+      const stopMember = selectedMember?.subscribe(listener);
+      return () => {
+        stopSession?.();
+        stopMember?.();
+      };
+    };
     const lifetime = new RealmBanLifetime(() => {
       const session = source?.read();
       return (
@@ -41,9 +57,10 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
         !!csrfToken &&
         session?.state === state &&
         session.subject === subject &&
-        session.csrfToken === csrfToken
+        session.csrfToken === csrfToken &&
+        (!selectedMember || selectedMember.current())
       );
-    }, source?.subscribe);
+    }, observe);
     return {
       lifetime,
       read: async (cursor?: string): Promise<BanReadState> => {
@@ -65,13 +82,21 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
         return lifetime.owns(ticket) && !signal.aborted ? next : { state: 'signed-out' };
       }) satisfies ResolveBanTarget,
     };
-  }, [realmId, source, revision, state, subject, csrfToken, locale, exposed]);
+  }, [realmId, source, selectedMember, selectedCurrent, revision, state, subject, csrfToken, locale, exposed]);
   const previous = useRef(binding);
   if (previous.current !== binding) {
     previous.current.lifetime.retire();
     previous.current = binding;
   }
   useLayoutEffect(() => binding.lifetime.connect(), [binding]);
-  if (state !== 'signed-in' || !subject || !exposed) return null;
-  return <RealmBansControl key={`${realmId}:${subject}`} realmId={realmId} {...binding} ready={!!csrfToken} />;
+  if (state !== 'signed-in' || !subject || !exposed || (selectedMember && !selectedCurrent)) return null;
+  return (
+    <RealmBansControl
+      key={`${realmId}:${subject}`}
+      realmId={realmId}
+      {...binding}
+      selectedMember={selectedMember ?? undefined}
+      ready={!!csrfToken}
+    />
+  );
 }

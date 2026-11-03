@@ -1,11 +1,15 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { dirname } from 'node:path';
 import { act, createElement, useState } from 'react';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { QueryClient } from '@tanstack/react-query';
 import { realmMembersLifetimeSource } from '../src/community/members/lifetime';
 import type { MembersCaller } from '../src/community/members/page';
-import type { MemberPageRead, RealmMembersSource } from '../src/community/members/source';
+import type { MemberAdditionIntent, MemberPageRead, RealmMembersSource } from '../src/community/members/source';
+import type { SelectedRealmMember } from '../src/community/members/selected-account';
+import { loadRealmBans, writeRealmBan } from '../src/community/realm-bans';
+import { RealmBansControl } from '../src/community/realm-bans-control';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -77,7 +81,7 @@ function source(read?: MemberPageRead): RealmMembersSource {
             {
               kind: 'disclosed',
               identity: { accountId: 'a', reference: 'account-a', label: 'Similar name' },
-              episode: 'episode',
+              membershipInterval: 'producer-interval-a',
               membership: 'current',
             },
           ],
@@ -87,7 +91,9 @@ function source(read?: MemberPageRead): RealmMembersSource {
       kind: 'ready',
       ...address,
       identity: { accountId: 'a', reference: 'account-a', label: 'Exact selected account' },
+      membershipInterval: address.membershipInterval ?? null,
       membership: 'pending',
+      advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
     }),
   };
 }
@@ -183,7 +189,7 @@ test('producer lifetime retirement conceals the mounted page and delayed selecti
     await act(async () => {
       pending.resolve(await fixture.readPage({ realmId: 'realm', cursor: null }));
       selected.resolve(
-        await fixture.readSelected({ realmId: 'realm', accountId: 'a', episode: 'episode', authority: 'grant' }),
+        await fixture.readSelected({ realmId: 'realm', accountId: 'a', authority: 'grant' }),
       );
       await tick();
     });
@@ -206,6 +212,210 @@ test('mounted roster inspects an exact current observation, keeps pending truthf
   expect(host.querySelector('a')).toBeNull();
   await click(m.realm_members_back());
   expect(document.activeElement?.textContent).toBe(m.realm_members_inspect());
+});
+
+test('selected addition reviews the entered identity, retries one immutable command and waits for explicit readback', async () => {
+  const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
+  const addresses: unknown[] = [];
+  const intents: MemberAdditionIntent[] = [];
+  let pages = 0;
+  let memberCurrent = false;
+  let failStatusRead = false;
+  const fixture = source();
+  await render({
+    ...fixture,
+    readPage: async (address) => {
+      pages++;
+      return fixture.readPage(address);
+    },
+    readSelected: async (address) => {
+      addresses.push(address);
+      if (failStatusRead && addresses.length === 2) return { kind: 'failed' };
+      return {
+        kind: 'ready',
+        realmId: address.realmId,
+        authority: address.authority,
+        identity: { accountId: address.accountId, reference: 'selected-account-reference', label: 'Exact inspected account' },
+        membershipInterval: memberCurrent ? 'producer-new-membership-interval' : null,
+        membership: memberCurrent ? 'current' : 'none',
+        advice: { add: memberCurrent ? 'unavailable' : 'available', ban: 'unavailable', unban: 'unavailable' },
+      };
+    },
+    addMember: async (intent) => {
+      intents.push(intent);
+      return intents.length === 1 ? { kind: 'unknown' } : { kind: 'accepted', workflowId: 'workflow' };
+    },
+  });
+  const input = host.querySelector('input')!;
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setValue.call(input, accountId);
+    input.dispatchEvent(new browser.Event('input', { bubbles: true }));
+    await tick();
+  });
+  await click(m.realm_members_lookup_account());
+  expect(addresses).toEqual([{ realmId: 'realm', accountId, authority: 'grant' }]);
+  expect(host.textContent).toContain('Exact inspected account');
+  await click(m.realm_members_add_member());
+  expect(host.textContent).toContain('Add Exact inspected account to Exact Realm?');
+  expect(host.textContent).toContain(accountId);
+  expect(host.textContent).toContain('realm');
+  await click(m.realm_bans_confirm());
+  expect(host.textContent).toContain(m.realm_members_unknown_command());
+  await click(m.realm_members_retry_command());
+  expect(intents).toHaveLength(2);
+  expect(intents[0]).toEqual(intents[1]);
+  expect(Object.isFrozen(intents[0])).toBe(true);
+  expect(host.textContent).toContain(m.realm_members_add_pending());
+  expect(addresses).toHaveLength(1);
+  expect(pages).toBe(1);
+  failStatusRead = true;
+  await click(m.realm_members_check_status());
+  expect(host.textContent).toContain(m.realm_members_selected_failed());
+  expect(host.textContent).toContain(m.realm_members_add_pending());
+  expect(host.textContent).not.toContain('Exact inspected account');
+  failStatusRead = false;
+  memberCurrent = true;
+  await click(m.realm_members_retry_selected());
+  expect(addresses).toEqual([
+    { realmId: 'realm', accountId, authority: 'grant' },
+    { realmId: 'realm', accountId, authority: 'grant' },
+    { realmId: 'realm', accountId, authority: 'grant' },
+  ]);
+  expect(host.textContent).toContain(m.realm_members_current());
+  expect(pages).toBe(1);
+});
+
+test('selected ban and unban review the exact identity and use the existing native command/readback owner', async () => {
+  const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
+  const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
+  const authorization = 'Bearer current-manager';
+  const request = () =>
+    new Request('https://site.example.test/action', { method: 'POST', headers: { authorization } });
+  let banned = false;
+  let reads = 0;
+  const calls: { method: string; path: string; idempotencyKey: string | null; body: unknown }[] = [];
+  let writeFinished = Promise.withResolvers<void>();
+  let refreshFinished = Promise.withResolvers<void>();
+  const client = createKernelClient('https://kernel.example.test', {
+    fetch: async (input, init) => {
+      const next = new Request(input, init);
+      const path = new URL(next.url).pathname;
+      if (next.method === 'GET') {
+        reads++;
+        const response = Response.json({
+          items: banned ? [{ accountId, reason: 'Selected moderation reason', actor: null, at: '2026-11-01T00:00:00Z' }] : [],
+          next: null,
+        });
+        if (reads > 1) refreshFinished.resolve();
+        calls.push({ method: next.method, path, idempotencyKey: next.headers.get('idempotency-key'), body: null });
+        return response;
+      }
+      const body = next.method === 'PUT' ? await next.json() : null;
+      calls.push({ method: next.method, path, idempotencyKey: next.headers.get('idempotency-key'), body });
+      if (next.method === 'PUT') {
+        banned = true;
+        writeFinished.resolve();
+        return Response.json({
+          ban: {
+            realmId,
+            accountId,
+            reason: 'Selected moderation reason',
+            actor: null,
+            at: '2026-11-01T00:00:00Z',
+            workflowId: null,
+          },
+        });
+      }
+      banned = false;
+      writeFinished.resolve();
+      return new Response(null, { status: 204 });
+    },
+  });
+  const read = () => loadRealmBans(client, request(), {}, { realmId });
+  const initial = await read();
+  const selectedMember: SelectedRealmMember = {
+    realmId,
+    realmLabel: 'Exact selected Realm',
+    accountId,
+    reference: 'exact-account-reference',
+    label: 'Exact selected account',
+    membershipInterval: 'opaque-selected-interval',
+    authority: 'exact-authority',
+    advice: { ban: 'available', unban: 'available' },
+    current: () => true,
+    subscribe: () => () => {},
+  };
+  host = document.createElement('main');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(
+      createElement(RealmBansControl, {
+        realmId,
+        initial,
+        ready: true,
+        read,
+        write: (input) => writeRealmBan(client, request(), {}, input),
+        selectedMember,
+      }),
+    );
+    await tick();
+  });
+  const clickEnabled = async (label: string) => {
+    const button = [...host.querySelectorAll('button')].find((node) => node.textContent === label && !node.disabled)!;
+    expect(button).toBeDefined();
+    await act(async () => {
+      button.focus();
+      button.click();
+      await tick();
+    });
+  };
+  const textarea = host.querySelector('textarea')!;
+  const setReason = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+  await act(async () => {
+    setReason.call(textarea, 'Selected moderation reason');
+    textarea.dispatchEvent(new browser.Event('input', { bubbles: true }));
+    await tick();
+  });
+  await clickEnabled(m.realm_bans_ban());
+  expect(host.textContent).toContain('Exact selected Realm');
+  expect(host.textContent).toContain('exact-account-reference');
+  expect(host.textContent).toContain(realmId);
+  expect(host.textContent).toContain('Selected moderation reason');
+  writeFinished = Promise.withResolvers<void>();
+  refreshFinished = Promise.withResolvers<void>();
+  await act(async () => {
+    const confirm = [...host.querySelectorAll('button')].find((node) => node.textContent === m.realm_bans_confirm_ban());
+    expect(confirm).toBeDefined();
+    confirm!.click();
+    await writeFinished.promise;
+    await refreshFinished.promise;
+    await tick();
+  });
+  const banCall = calls.find((call) => call.method === 'PUT')!;
+  expect(banCall).toMatchObject({
+    path: `/v1/realms/${realmId}/bans/${accountId}`,
+    body: { reason: 'Selected moderation reason' },
+  });
+  expect(banCall.idempotencyKey).toMatch(/^"[0-9a-f-]+"$/i);
+
+  await clickEnabled(m.realm_bans_unban());
+  expect(host.textContent).toContain('Membership will not be restored');
+  writeFinished = Promise.withResolvers<void>();
+  refreshFinished = Promise.withResolvers<void>();
+  await act(async () => {
+    const confirm = [...host.querySelectorAll('button')].find((node) => node.textContent === m.realm_bans_confirm());
+    expect(confirm).toBeDefined();
+    confirm!.click();
+    await writeFinished.promise;
+    await refreshFinished.promise;
+    await tick();
+  });
+  const unbanCall = calls.find((call) => call.method === 'DELETE')!;
+  expect(unbanCall.path).toBe(`/v1/realms/${realmId}/bans/${accountId}`);
+  expect(unbanCall.idempotencyKey).toMatch(/^"[0-9a-f-]+"$/i);
+  expect(reads).toBe(3);
 });
 
 test('denial and sparse empty are distinct and a failed selected lookup has no retained person label', async () => {
@@ -245,9 +455,10 @@ test('Realm, locale and source replacement remove selected identity before delay
         kind: 'ready',
         realmId: 'realm',
         authority: 'grant',
-        episode: 'episode',
+        membershipInterval: 'producer-interval-a',
         identity: { accountId: 'a', reference: 'account-a', label: 'Delayed retired account' },
         membership: 'current',
+        advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
       });
       await tick();
     });
@@ -328,9 +539,10 @@ test('browser session and incarnation-keyed exposure changes retire mounted sele
         kind: 'ready',
         realmId: 'realm',
         authority: 'grant',
-        episode: 'episode',
+        membershipInterval: 'producer-interval-a',
         membership: 'current',
         identity: { accountId: 'a', reference: 'account-a', label: 'Retired private identity' },
+        advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
       });
       await tick();
     });

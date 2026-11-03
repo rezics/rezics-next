@@ -29,6 +29,7 @@ import {
 } from './space-setup';
 import {
   requestRealmMembership,
+  requestRealmMemberAddition,
   loadMyRealms,
   loadSpacePageWithOrigin,
   locateRealmWithOrigin,
@@ -36,6 +37,7 @@ import {
   loadRealmShelfPageWithOrigin,
   type Located,
   type MembershipResult,
+  type RealmMemberAdditionInput,
   type MyRealmsPage,
   type ReaderOrigin,
   type ShelfPage,
@@ -132,6 +134,24 @@ function validateChange(input: unknown): { realmId: string; action: 'join' | 'le
   return { realmId: input.realmId, action: input.action, idempotencyKey: input.idempotencyKey };
 }
 
+function validateMemberAddition(input: unknown): RealmMemberAdditionInput {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('realmId' in input) ||
+    typeof input.realmId !== 'string' ||
+    !idempotencyKeyPattern.test(input.realmId) ||
+    !('accountId' in input) ||
+    typeof input.accountId !== 'string' ||
+    !idempotencyKeyPattern.test(input.accountId) ||
+    !('idempotencyKey' in input) ||
+    typeof input.idempotencyKey !== 'string' ||
+    !idempotencyKeyPattern.test(input.idempotencyKey)
+  )
+    throw new Error('Invalid Realm member addition');
+  return { realmId: input.realmId, accountId: input.accountId, idempotencyKey: input.idempotencyKey };
+}
+
 export const readSpacePage = createServerFn({ method: 'GET' })
   .validator(validateAddress)
   .handler(async ({ data }): Promise<SpacePageData & { readerOrigin: ReaderOrigin }> => {
@@ -204,6 +224,13 @@ export const changeRealmMembership = createServerFn({ method: 'POST' })
     } catch {
       return { outcome: 'refused' };
     }
+  });
+
+export const addRealmMember = createServerFn({ method: 'POST' })
+  .validator(validateMemberAddition)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return requestRealmMemberAddition(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
   });
 
 export const readRealmClaimState = createServerFn({ method: 'GET' })

@@ -1,9 +1,14 @@
-import { useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import type { FormEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { RealmMembersVisit } from './visit';
 import { boundedRealmMemberPage, type MemberIdentity, type RealmMembersSource } from './source';
+import { MemberAddition } from './addition';
+import { SelectedRealmMemberContext } from './selected-account';
+import { RealmBansPanel } from '../realm-bans-panel';
+import { addSelectedRealmMember } from './commands';
 
 export type MembersCaller = {
   current: () => boolean;
@@ -50,6 +55,8 @@ export function RealmMembersPage({
   const id = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const inspection = useRef<HTMLHeadingElement>(null);
+  const [accountIdDraft, setAccountIdDraft] = useState('');
+  const [accountIdInvalid, setAccountIdInvalid] = useState(false);
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const returnFocus = useRef<{ visit: RealmMembersVisit; accountId: string; from: Element | null } | null>(null);
   const selectedAddress = snapshot.selection?.address;
@@ -83,6 +90,58 @@ export function RealmMembersPage({
 
   const { read, selection } = snapshot;
   const selected = selection?.read;
+  const actionableSelected = selected?.kind === 'ready' ? selected : selection?.previous;
+  const selectedMember = useMemo(() => {
+    if (read.kind !== 'ready' || !selection || selected?.kind !== 'ready') return null;
+    const address = selection.address;
+    const value = Object.freeze({
+      realmId: address.realmId,
+      realmLabel: read.page.realm.label,
+      accountId: selected.identity.accountId,
+      reference: selected.identity.reference,
+      label: selected.identity.label,
+      membershipInterval: selected.membershipInterval,
+      authority: address.authority,
+      advice: { ban: selected.advice.ban, unban: selected.advice.unban },
+      current: () => {
+        if (!visit.isCurrent()) return false;
+        const current = visit.snapshot();
+        const currentSelection = current.selection;
+        return (
+          current.read.kind === 'ready' &&
+          currentSelection?.read.kind === 'ready' &&
+          currentSelection.address.realmId === address.realmId &&
+          currentSelection.address.accountId === address.accountId &&
+          currentSelection.address.authority === address.authority &&
+          (address.membershipInterval === undefined ||
+            currentSelection.address.membershipInterval === address.membershipInterval) &&
+          currentSelection.read.identity.accountId === selected.identity.accountId &&
+          currentSelection.read.identity.reference === selected.identity.reference &&
+          currentSelection.read.identity.label === selected.identity.label &&
+          currentSelection.read.membershipInterval === selected.membershipInterval &&
+          currentSelection.read.membership === selected.membership &&
+          currentSelection.read.advice.add === selected.advice.add &&
+          currentSelection.read.advice.ban === selected.advice.ban &&
+          currentSelection.read.advice.unban === selected.advice.unban
+        );
+      },
+      subscribe: visit.subscribe,
+    });
+    return value;
+  }, [read, selection, selected, visit]);
+
+  function inspectAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const accountId = accountIdDraft.trim().toLowerCase();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(accountId)) {
+      setAccountIdInvalid(true);
+      return;
+    }
+    setAccountIdDraft('');
+    setAccountIdInvalid(false);
+    void visit.inspectAccount(accountId);
+  }
+
   return (
     <article className="min-w-0 max-w-3xl space-y-6 text-foreground [overflow-wrap:anywhere]">
       <header className="space-y-2">
@@ -96,6 +155,33 @@ export function RealmMembersPage({
           </p>
         ) : null}
       </header>
+      {read.kind === 'ready' && !selection ? (
+        <form className="flex max-w-xl flex-wrap items-end gap-3" onSubmit={inspectAccount}>
+          <div className="min-w-0 flex-1 space-y-2">
+            <label htmlFor={`${id}-account`} className="text-sm font-medium">
+              {m.realm_bans_inspect_account()}
+            </label>
+            <input
+              id={`${id}-account`}
+              className="min-h-11 w-full rounded-md border bg-background px-3"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={36}
+              value={accountIdDraft}
+              onChange={(event) => {
+                setAccountIdDraft(event.target.value);
+                setAccountIdInvalid(false);
+              }}
+            />
+          </div>
+          <Button type="submit" variant="outline" className="min-h-11 whitespace-normal">
+            {m.realm_members_lookup_account()}
+          </Button>
+          {accountIdInvalid ? (
+            <p role="alert" className="w-full text-sm">{m.realm_members_invalid_account_id()}</p>
+          ) : null}
+        </form>
+      ) : null}
       {selection && selected ? (
         <section
           aria-labelledby={`${id}-inspection`}
@@ -110,11 +196,52 @@ export function RealmMembersPage({
           <h2 id={`${id}-inspection`} ref={inspection} tabIndex={-1} className="text-xl font-semibold">
             {m.realm_members_inspection()}
           </h2>
+          {actionableSelected && read.kind === 'ready' ? (
+            <MemberAddition
+              key={`${selection.address.accountId}:${selection.address.authority}:${selection.address.membershipInterval ?? 'entered'}`}
+              realmLabel={read.page.realm.label}
+              selected={actionableSelected}
+              address={selection.address}
+              current={() => selected?.kind === 'ready' && selectedMember?.current() === true}
+              sameSelection={() => {
+                if (!visit.isCurrent()) return false;
+                const current = visit.snapshot().selection?.address;
+                return (
+                  current?.realmId === selection.address.realmId &&
+                  current.accountId === selection.address.accountId &&
+                  current.authority === selection.address.authority &&
+                  current.membershipInterval === selection.address.membershipInterval
+                );
+              }}
+              addMember={source.addMember ?? addSelectedRealmMember}
+              refreshSelected={visit.refreshSelected}
+            />
+          ) : null}
           {selected.kind === 'ready' ? (
             <>
               <Identity identity={selected.identity} />
-              <p>{selected.membership === 'current' ? m.realm_members_current() : m.realm_members_pending()}</p>
-              <p className="text-sm text-muted-foreground">{m.realm_members_actions_unavailable()}</p>
+              <p>
+                {selected.membership === 'current'
+                  ? m.realm_members_current()
+                  : selected.membership === 'pending'
+                    ? m.realm_members_pending()
+                    : selected.membership === 'none'
+                      ? m.realm_members_nonmember()
+                      : m.realm_members_actions_unavailable()}
+              </p>
+              {read.kind === 'ready' && selected.kind === 'ready' ? (
+                <SelectedRealmMemberContext.Provider value={selectedMember}>
+                  <div className="space-y-4">
+                    {selected.advice.ban === 'available' || selected.advice.unban === 'available' ? (
+                      <RealmBansPanel realmId={realmId} />
+                    ) : selected.advice.ban === 'unknown' || selected.advice.unban === 'unknown' ? (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {m.realm_members_actions_unavailable()}
+                      </p>
+                    ) : null}
+                  </div>
+                </SelectedRealmMemberContext.Provider>
+              ) : null}
             </>
           ) : (
             <p role="status">
