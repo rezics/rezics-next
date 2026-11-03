@@ -346,7 +346,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             const options = query.view === 'FULL' ? { ...page, limit: Math.min(page.limit ?? 20, 99) } : page;
             const result = await sessionCommands().listSessions(actor, query.subjectId, options);
             return fullView(config(), actor, query.view, {
-              progressSessions: result.sessions.map(sessionView),
+              progressSessions: result.sessions.map((session) => sessionView(session)),
               next: result.next,
             });
           }),
