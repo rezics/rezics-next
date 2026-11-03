@@ -91,41 +91,47 @@ function contextKey(reference: NoticePostReference): string {
   return `${reference.threadId}/${reference.postId ?? ''}`;
 }
 
-async function currentActors(pool: Pool, ids: readonly string[], deadline: number): Promise<ReadonlyMap<string, NoticeActor>> {
+async function currentActors(
+  pool: Pool,
+  ids: readonly string[],
+  deadline: number,
+): Promise<ReadonlyMap<string, NoticeActor>> {
   const unique = [...new Set(ids.filter((id) => routeOf(id) !== null))];
   const output = new Map<string, NoticeActor>();
   if (unique.length === 0) return output;
   const routes = unique.map((id) => routeOf(id)!);
-  const identities = await within(deadline, () => withConnection(pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    const read = async () => {
-      const rows = await readPublicIdentities(client, routes, unique);
-      const byId = new Map(rows.map((identity) => [identity.id, identity]));
-      const result = new Map<string, NoticeActor>();
-      for (const [index, id] of unique.entries()) {
-        const identity = byId.get(id);
-        if (!identity || identity.state !== 'active' || identity.kind !== 'actor') continue;
-        const profile = await readPublicAccount(client, routes[index]!, id);
-        if (!profile || profile.state !== 'active' || profile.kind !== 'actor') continue;
-        result.set(id, {
-          state: 'available',
-          accountId: id,
-          displayName: profile.displayName?.trim() || profile.handle || 'Member',
-          handle: profile.handle,
-          avatarUrl: profile.avatarUrl,
-          automated: identity.automated,
-        });
+  const identities = await within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      const read = async () => {
+        const rows = await readPublicIdentities(client, routes, unique);
+        const byId = new Map(rows.map((identity) => [identity.id, identity]));
+        const result = new Map<string, NoticeActor>();
+        for (const [index, id] of unique.entries()) {
+          const identity = byId.get(id);
+          if (!identity || identity.state !== 'active' || identity.kind !== 'actor') continue;
+          const profile = await readPublicAccount(client, routes[index]!, id);
+          if (!profile || profile.state !== 'active' || profile.kind !== 'actor') continue;
+          result.set(id, {
+            state: 'available',
+            accountId: id,
+            displayName: profile.displayName?.trim() || profile.handle || 'Member',
+            handle: profile.handle,
+            avatarUrl: profile.avatarUrl,
+            automated: identity.automated,
+          });
+        }
+        return result;
+      };
+      const before = await read();
+      const after = await read();
+      const stable = new Map<string, NoticeActor>();
+      for (const [id, current] of after) {
+        if (JSON.stringify(before.get(id)) === JSON.stringify(current)) stable.set(id, current);
       }
-      return result;
-    };
-    const before = await read();
-    const after = await read();
-    const stable = new Map<string, NoticeActor>();
-    for (const [id, current] of after) {
-      if (JSON.stringify(before.get(id)) === JSON.stringify(current)) stable.set(id, current);
-    }
-    return stable;
-  }));
+      return stable;
+    }),
+  );
   for (const [id, actor] of identities) output.set(id, actor);
   return output;
 }
@@ -173,7 +179,16 @@ export async function discloseNoticeCandidates(
     throw new RangeError('At most 50 notice identities');
   const refs = new Map<string, NoticePostReference>();
   const boardRefs = new Set<string>();
-  const source = new Map<string, { summary: string; ref?: NoticePostReference; open: NoticeOpenAction; decisionId: string | null; reportId: string | null }>();
+  const source = new Map<
+    string,
+    {
+      summary: string;
+      ref?: NoticePostReference;
+      open: NoticeOpenAction;
+      decisionId: string | null;
+      reportId: string | null;
+    }
+  >();
   const sourceBoards = new Map<string, string>();
 
   for (const candidate of candidates) {
@@ -232,8 +247,7 @@ export async function discloseNoticeCandidates(
       source.set(candidate.notice_id, {
         summary: report.value.outcome === 'actioned' ? 'your report was actioned' : 'your report was dismissed',
         ...(ref ? { ref } : {}),
-        open:
-          { kind: 'report_outcome', reportId: report.value.id },
+        open: { kind: 'report_outcome', reportId: report.value.id },
         decisionId: null,
         reportId: report.value.id,
       });
@@ -332,7 +346,7 @@ export async function discloseNoticeCandidates(
       candidate.kind === 'moderation_decision'
         ? ({ state: 'system', displayName: 'Moderation team', handle: null, avatarUrl: null } as const)
         : candidate.actor_id
-          ? actors.get(candidate.actor_id) ?? safeActor()
+          ? (actors.get(candidate.actor_id) ?? safeActor())
           : safeActor();
     result.set(candidate.notice_id, {
       actor,
@@ -349,4 +363,3 @@ export async function discloseNoticeCandidates(
   }
   return result;
 }
-

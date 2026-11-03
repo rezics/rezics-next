@@ -2274,17 +2274,13 @@ export async function readNoticePostContexts(
             const rows = await rowsInPartitions(
               client,
               'post',
-              pending
-                .filter((id) => routeOf(id) !== null)
-                .map((id) => batchKey(id)),
+              pending.filter((id) => routeOf(id) !== null).map((id) => batchKey(id)),
             );
             for (const row of rows) posts.set(row.id, row);
             pending = [
               ...new Set(
                 rows.flatMap((row) =>
-                  row.parent_id &&
-                  routeOf(row.parent_id) === routeOf(row.id) &&
-                  !posts.has(row.parent_id)
+                  row.parent_id && routeOf(row.parent_id) === routeOf(row.id) && !posts.has(row.parent_id)
                     ? [row.parent_id]
                     : [],
                 ),
@@ -2299,13 +2295,17 @@ export async function readNoticePostContexts(
           );
           const threadById = new Map(threads.map((row) => [row.id, row]));
           const boardIds = [...new Set(threads.flatMap((row) => (row.board_id ? [row.board_id] : [])))];
-          const boards = await rowsInPartitions(client, 'board', boardIds.map((id) => batchKey(id)));
+          const boards = await rowsInPartitions(
+            client,
+            'board',
+            boardIds.map((id) => batchKey(id)),
+          );
           const boardById = new Map(boards.map((row) => [row.id, row]));
           const realmIds = [...new Set(boards.flatMap((row) => (row.realm_id ? [row.realm_id] : [])))];
           const realms = await realmsInPartitions(client, realmIds);
-          const extra = [
-            ...new Set([...boardIds, ...realmIds].map((id) => partitionOf(route(id)))),
-          ].filter((partition) => !anchors.has(partition));
+          const extra = [...new Set([...boardIds, ...realmIds].map((id) => partitionOf(route(id))))].filter(
+            (partition) => !anchors.has(partition),
+          );
           const extraPartitions = await readPartitions(client, extra);
           if (extraPartitions.length !== extra.length) {
             const found = new Set(extraPartitions.map((partition) => partition.partitionNo));
@@ -2372,7 +2372,7 @@ export async function readNoticePostContexts(
               if (!complete) continue;
               if (chain.at(-1)?.id !== thread.first_post_id) continue;
             }
-            const realm = board.realm_id ? realms.find((row) => row.realm_id === board.realm_id) ?? null : null;
+            const realm = board.realm_id ? (realms.find((row) => row.realm_id === board.realm_id) ?? null) : null;
             const value = {
               threadId: thread.id,
               postId: post?.id ?? null,
@@ -2433,7 +2433,11 @@ export async function readNoticeBoardContexts(
       const round = async () => {
         const decisions = await prepareBoardPageDecisions(dependencies, context);
         return batchSnapshot({ pool: dependencies.pool }, ids, context, async (client, anchors) => {
-          const boards = await batchRows(client, 'board', ids.map((id) => batchKey(id)));
+          const boards = await batchRows(
+            client,
+            'board',
+            ids.map((id) => batchKey(id)),
+          );
           const realmIds = [...new Set(boards.flatMap((board) => (board.realm_id ? [board.realm_id] : [])))];
           const realms = await batchRealms(client, realmIds);
           const extra = [...new Set(realmIds.map((id) => partitionOf(route(id))))].filter(
@@ -2466,7 +2470,7 @@ export async function readNoticeBoardContexts(
               (board.realm_id !== null && !parent.realms.get(board.realm_id))
             )
               continue;
-            const realm = board.realm_id ? realms.find((row) => row.realm_id === board.realm_id) ?? null : null;
+            const realm = board.realm_id ? (realms.find((row) => row.realm_id === board.realm_id) ?? null) : null;
             result.set(board.id, {
               value: { boardId: board.id, boardTitle: board.title },
               witness: JSON.stringify([

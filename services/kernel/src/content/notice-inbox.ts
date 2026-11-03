@@ -70,10 +70,7 @@ function readerActor(dependencies: InboxDependencies, accountId: string): Extrac
 }
 
 /** Recheck account status, authn epoch and account:read after source hydration. */
-export async function assertCurrentInboxViewer(
-  dependencies: InboxDependencies,
-  accountId: string,
-): Promise<void> {
+export async function assertCurrentInboxViewer(dependencies: InboxDependencies, accountId: string): Promise<void> {
   const actor = readerActor(dependencies, accountId);
   const accountRoute = route(accountId);
   const deadline = dependencies.deadline ?? Date.now() + 3_000;
@@ -84,21 +81,23 @@ export async function assertCurrentInboxViewer(
     { route: accountRoute, id: accountId },
     { pool: dependencies.pool, deadline },
   );
-  const current = await within(deadline, () => withConnection(dependencies.pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    const account = await readAccount(client, accountRoute, accountId);
-    return !!(
-      account &&
-      account.accountId === accountId &&
-      account.kind === 'actor' &&
-      account.state === 'active' &&
-      !account.fenced &&
-      Number.isSafeInteger(actor.authnEpoch) &&
-      actor.authnEpoch > 0 &&
-      BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch &&
-      (await check(client))
-    );
-  }));
+  const current = await within(deadline, () =>
+    withConnection(dependencies.pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      const account = await readAccount(client, accountRoute, accountId);
+      return !!(
+        account &&
+        account.accountId === accountId &&
+        account.kind === 'actor' &&
+        account.state === 'active' &&
+        !account.fenced &&
+        Number.isSafeInteger(actor.authnEpoch) &&
+        actor.authnEpoch > 0 &&
+        BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch &&
+        (await check(client))
+      );
+    }),
+  );
   if (!current) throw new InboxViewerUnavailableError('Current Inbox viewer is unavailable');
 }
 
@@ -245,12 +244,9 @@ export async function countUnreadNotices(
   });
   const truncated = rows.length > SUMMARY_CANDIDATE_LIMIT;
   const candidates = rows.slice(0, SUMMARY_CANDIDATE_LIMIT);
-  const visible = await discloseNoticeCandidates(
-    dependenciesForDisclosure(dependencies),
-    accountId,
-    candidates,
-    { includeActors: false },
-  );
+  const visible = await discloseNoticeCandidates(dependenciesForDisclosure(dependencies), accountId, candidates, {
+    includeActors: false,
+  });
   await assertCurrentInboxViewer(dependencies, accountId);
   const count = Math.min(visible.size, 100);
   const capped = truncated || visible.size > 100;
@@ -297,7 +293,12 @@ export async function markNoticesSeen(pool: Pool, accountId: string, noticeId: s
 }
 
 /** Exact one-item acknowledgement, independent from the monotonic bulk frontier. */
-export async function acknowledgeNotice(pool: Pool, accountId: string, noticeId: string, at = new Date()): Promise<void> {
+export async function acknowledgeNotice(
+  pool: Pool,
+  accountId: string,
+  noticeId: string,
+  at = new Date(),
+): Promise<void> {
   const accountRoute = route(accountId);
   if (routeOf(noticeId) !== accountRoute) throw new RangeError('Unknown notice');
   await withConnection(pool, async (client) => {

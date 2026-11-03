@@ -140,10 +140,10 @@ test('one-item acknowledgement is exact, concurrent-safe and independent of the 
   expect(flags.get(target)).toBe(false);
   expect(ids.filter((id) => id !== target).every((id) => flags.get(id) === true)).toBe(true);
   expect(
-    await db.admin.query('SELECT count(*)::integer AS count FROM content.notice_seen WHERE route=$1 AND account_id=$2', [
-      routeOf(fixture.accountId),
-      fixture.accountId,
-    ]),
+    await db.admin.query(
+      'SELECT count(*)::integer AS count FROM content.notice_seen WHERE route=$1 AND account_id=$2',
+      [routeOf(fixture.accountId), fixture.accountId],
+    ),
   ).toMatchObject({ rows: [{ count: 0 }] });
   expect((await call(`${base}/count`)).value).toMatchObject({ count: 2, capped: false });
 });
@@ -306,7 +306,11 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
     });
     expect(publicNotice.currentTarget.boardTitle).toEqual(expect.any(String));
     expect(publicNotice.summary).toEqual(expect.any(String));
-    expect(publicNotice.actions.open).toEqual({ kind: 'thread_post', threadId: publicThread.id, postId: publicReply.id });
+    expect(publicNotice.actions.open).toEqual({
+      kind: 'thread_post',
+      threadId: publicThread.id,
+      postId: publicReply.id,
+    });
     expect(publicNotice.actions.markSeen).toMatchObject({
       method: 'POST',
       path: `/v1/accounts/${people.author.id}/notifications/${publicNotice.id}:markSeen`,
@@ -352,22 +356,23 @@ test('a reporter keeps the current outcome action when the reported target is wi
       { actor: people.reporter, key: JSON.stringify('report-notice-report') },
     );
     expect(report.response.status).toBe(201);
-    const removed = await driver.takedown(
-      { kind: 'post', id: post.value!.id },
-      'Action on reported content',
-      { actor: people.moderator, key: JSON.stringify('report-notice-takedown') },
-    );
+    const removed = await driver.takedown({ kind: 'post', id: post.value!.id }, 'Action on reported content', {
+      actor: people.moderator,
+      key: JSON.stringify('report-notice-takedown'),
+    });
     expect(removed.response.status).toBe(200);
     await driver.effects('drain');
 
     const inbox = await driver.inbox(people.reporter.id, people.reporter, { limit: 50 });
     expect(inbox.response.status).toBe(200);
-    const item = (inbox.value!.items as unknown as Array<{
-      target: { reportId?: string };
-      currentTarget: { state: string };
-      summary: string;
-      actions: { open: unknown };
-    }>).find((notice) => notice.target.reportId === report.value!.reportId);
+    const item = (
+      inbox.value!.items as unknown as Array<{
+        target: { reportId?: string };
+        currentTarget: { state: string };
+        summary: string;
+        actions: { open: unknown };
+      }>
+    ).find((notice) => notice.target.reportId === report.value!.reportId);
     expect(item).toMatchObject({
       currentTarget: { state: 'withheld' },
       summary: 'your report was actioned',

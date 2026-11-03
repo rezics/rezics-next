@@ -69,7 +69,12 @@ const item = t.Object({
       { additionalProperties: false },
     ),
     t.Object(
-      { state: t.Literal('withheld'), displayName: t.Literal('Former or unavailable account'), handle: t.Null(), avatarUrl: t.Null() },
+      {
+        state: t.Literal('withheld'),
+        displayName: t.Literal('Former or unavailable account'),
+        handle: t.Null(),
+        avatarUrl: t.Null(),
+      },
       { additionalProperties: false },
     ),
     t.Object(
