@@ -204,6 +204,20 @@ test('retirement during dynamic import dispatches nothing and cannot borrow repl
   expect(calls[0]?.authorization === 'Bearer replacement-access').toBe(true);
 });
 
+test('a write waiting for its module loses dispatch authority on same-account credential replacement', async () => {
+  const loaded = deferred<ThreadWatchTransport>();
+  let imports = 0;
+  const native = createThreadWatchNative(() => ++imports === 2 ? loaded.promise : Promise.resolve(transport));
+  render({ ...baseline, native }); await settle();
+  act(() => button(m.thread_watch_watch())!.click()); await settle();
+  expect(calls.map((call) => call.method)).toEqual(['GET']);
+  credential = { ...credential, csrfToken: csrfB, accessToken: 'replacement-access' };
+  act(() => client.setQueryData(['session'], session(csrfB))); await settle();
+  loaded.resolve(transport); await settle();
+  expect(calls.map((call) => call.method)).toEqual(['GET', 'GET']);
+  expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
+});
+
 for (const visits of [1, 10, 100]) {
   test(`${visits} sequential retired visits add one private read each and retain one subscription`, async () => {
     const cache = client.getQueryCache();

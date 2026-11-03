@@ -31,7 +31,7 @@ function connectedExample(example: Example) {
   let reads = 0;
   let commands = 0;
   const kernel = createKernelClient('https://kernel.story.test', {
-    fetch: async (input, init) => {
+    fetch: (async (input, init) => {
       const request = new Request(input, init);
       if (request.method === 'GET') {
         reads++;
@@ -51,7 +51,7 @@ function connectedExample(example: Example) {
       }
       watching = request.method === 'PUT';
       return new Response(null, { status: 204 });
-    },
+    }) as typeof fetch,
   });
   const native = createThreadWatchNative(async () => ({
     readThreadWatch: ({ data }) => readNativeThreadWatch(kernel, data.threadId, 'Bearer prepared-reader'),
