@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { createKernelClient } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import pg from 'pg';
 import { createEpisodeProgressCommands, episodeIds, episodeIntent } from '../../src/library/episode-progress.ts';
 import { testRouteKey } from '../support/test-kernel.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
@@ -9,6 +10,7 @@ import { partitionOf, routeOf } from '../../src/route/route.ts';
 
 let native: NativeProfileFixture;
 let owner: NativeProfileFixture['owner'];
+const deniedOwnerChecks: unknown[] = [];
 const statement = (property: string, content: string) => ({
   property: { id: property },
   value: { type: 'value', content },
@@ -49,7 +51,21 @@ const inspect = (sessionId: string, ids: string[]) =>
   send('GET', `/v1/progressSessions/${sessionId}/episodes?ids=${ids.join(',')}`);
 
 beforeAll(async () => {
-  native = await createProfileEntryFixture({ singleConnection: true });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+  pool.on('connect', (client) => {
+    client.query = new Proxy(client.query, {
+      apply(query, receiver, args) {
+        const result = Reflect.apply(query, receiver, args);
+        if (!Array.isArray(args[1]) || !args[1].includes('progress_session:update') || !result?.then) return result;
+        return result.then((value: pg.QueryResult) => {
+          if (value.rows.some((row) => row.allowed === false))
+            deniedOwnerChecks.push({ parameters: args[1], rows: value.rows });
+          return value;
+        });
+      },
+    });
+  });
+  native = await createProfileEntryFixture({ pool, singleConnection: true });
   owner = await native.identity([
     'subject:create',
     'subject:read',
@@ -106,7 +122,7 @@ test('mounted native journey retains holes, specials, independent sessions, retr
   });
   const wire = client.progressSessions({ sessionId: first.id });
   const written = await wire.$recordEpisodes.post(body, { headers: { 'idempotency-key': JSON.stringify(retryKey) } });
-  expect(written.status).toBe(200);
+  expect({ status: written.status, deniedOwnerChecks }).toEqual({ status: 200, deniedOwnerChecks: [] });
   expect(written.data).toEqual({ revision: 2 });
   expect(await send('POST', `${path}:recordEpisodes`, body, 200, retryKey)).toEqual({ revision: 2 });
   await send('POST', `${path}:recordEpisodes`, { revision: 1, add: [two.id] }, 409);
