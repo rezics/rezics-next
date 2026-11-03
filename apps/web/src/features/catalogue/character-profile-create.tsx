@@ -13,12 +13,7 @@ import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
 import { DefinitionMeaning } from './definition-meaning';
-import {
-  EditorFailure,
-  StatementFields,
-  statementHolderKey,
-  type StatementFieldsRead,
-} from './statement-editor-view';
+import { EditorFailure, StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
 import { emptyCreationStatement, editableScalar, type SnakInput, type StatementInput } from './statement-editor';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import {
@@ -221,9 +216,7 @@ function CharacterItemValue({
         search={async (text, signal) => {
           const entries = await search(text, signal);
           const targets = definition?.targets ?? [];
-          return targets.length
-            ? entries.filter((item) => item.types.some((type) => targets.includes(type)))
-            : entries;
+          return targets.length ? entries.filter((item) => item.types.some((type) => targets.includes(type))) : entries;
         }}
         onValueChange={(items) => {
           change({ type: 'value', content: items[0]?.id ?? '' });
@@ -363,9 +356,7 @@ function CharacterProfileCreateLive({
   const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number } | null>(null);
   const fingerprint = characterCreateFingerprint(release, terms, facts);
   if (review.status === 'current' && review.fingerprint !== fingerprint)
-    setReview(
-      review.fingerprint ? { status: 'stale', fingerprint: review.fingerprint } : { status: 'stale' },
-    );
+    setReview(review.fingerprint ? { status: 'stale', fingerprint: review.fingerprint } : { status: 'stale' });
   const termEditIsAdmitted = () => isCurrent() && !running.current && !refreshRunning.current && !pending.current;
   const changeTerm = (id: number, key: keyof TermDraft, value: string) => {
     if (!termEditIsAdmitted()) return;

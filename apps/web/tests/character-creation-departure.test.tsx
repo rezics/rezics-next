@@ -155,7 +155,11 @@ test('Character creation protects local work, preserves unknown retries on Stay 
       user.selectOptions(canvas.getByRole('combobox', { name: m.correction_add_qualifier() }), 'schema:inLanguage'),
     );
     await act(async () =>
-      user.click(within(host.querySelector('[id$="-qualifiers"]') as HTMLElement).getByRole('button', { name: m.correction_add() })),
+      user.click(
+        within(host.querySelector('[id$="-qualifiers"]') as HTMLElement).getByRole('button', {
+          name: m.correction_add(),
+        }),
+      ),
     );
     await replace(input(m.correction_value()), 'ja');
     const fact = host.querySelector('[data-slot="character-initial-fact"]') as HTMLElement;

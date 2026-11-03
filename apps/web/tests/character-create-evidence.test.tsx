@@ -139,7 +139,11 @@ test('Character create reviews complete evidence, reuses citations, and associat
       ),
     );
     await act(async () =>
-      user.click(within(height.querySelector('[id$="-qualifiers"]') as HTMLElement).getByRole('button', { name: m.correction_add() })),
+      user.click(
+        within(height.querySelector('[id$="-qualifiers"]') as HTMLElement).getByRole('button', {
+          name: m.correction_add(),
+        }),
+      ),
     );
     await replace(within(height).getByRole('textbox', { name: m.correction_value() }), 'ja');
     await replace(
@@ -199,7 +203,9 @@ test('Character create reviews complete evidence, reuses citations, and associat
             qualifiers: [{ property: { id: 'schema:inLanguage' }, value: { type: 'value', content: 'ja' } }],
             references: [
               {
-                parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/height' } }],
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/height' } },
+                ],
               },
             ],
           },
@@ -209,7 +215,9 @@ test('Character create reviews complete evidence, reuses citations, and associat
             value: { type: 'value', content: 'https://example.org/character' },
             references: [
               {
-                parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/height' } }],
+                parts: [
+                  { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://example.org/height' } },
+                ],
               },
             ],
           },

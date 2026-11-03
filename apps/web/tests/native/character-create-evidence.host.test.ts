@@ -241,7 +241,9 @@ test('Character create reviews evidenced multilingual item, retries exact unknow
     amount: '+171',
     unit: 'http://www.wikidata.org/entity/Q174728',
   });
-  expect(createdRead.statements['schema:url']?.[0]?.references.map((group) => group.parts.map((part) => part.property.id))).toEqual([
+  expect(
+    createdRead.statements['schema:url']?.[0]?.references.map((group) => group.parts.map((part) => part.property.id)),
+  ).toEqual([
     ['schema:url', 'wdt:P648', 'schema:inLanguage'],
     ['schema:url', 'wdt:P648', 'schema:inLanguage'],
   ]);

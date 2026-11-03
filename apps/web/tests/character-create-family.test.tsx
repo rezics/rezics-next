@@ -93,9 +93,7 @@ test('Character creation keeps multilingual identity, initial facts, correction 
   const valueUrls = () =>
     [...host.querySelectorAll('[data-slot="character-initial-fact"]')].flatMap((row) => {
       const section = row.querySelector('[id$="-fact"]');
-      return section
-        ? [...within(section as HTMLElement).queryAllByRole('textbox', { name: m.correction_url() })]
-        : [];
+      return section ? [...within(section as HTMLElement).queryAllByRole('textbox', { name: m.correction_url() })] : [];
     }) as HTMLInputElement[];
   const click = (name: string) => act(async () => user.click(canvas().getByRole('button', { name })));
   const replace = (element: HTMLElement, text: string) =>
