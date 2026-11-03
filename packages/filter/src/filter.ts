@@ -21,6 +21,7 @@ export type NumericFilterRange = {
 export type TimeFilterRange = Readonly<CalendarRange> & { readonly type: 'time'; readonly unit?: never };
 export type FilterRange = NumericFilterRange | TimeFilterRange;
 export type FilterQualifier = { readonly property: string; readonly in: readonly string[] };
+export type ConceptSelection = Readonly<{ scheme: string; includeChildren?: boolean }>;
 
 /** Canonical equality operands for the released, dimensionless spoiler quantity. */
 export const SPOILER_LEVELS = Object.freeze(['0', '1', '2'] as const);
@@ -42,7 +43,12 @@ export function readNativeSpoilerLevel(input: unknown): string | null {
   return level;
 }
 export type FilterStatement =
-  | { readonly property: string; readonly in: readonly string[]; readonly qualifiers?: readonly FilterQualifier[] }
+  | {
+      readonly property: string;
+      readonly in: readonly string[];
+      readonly concept?: ConceptSelection;
+      readonly qualifiers?: readonly FilterQualifier[];
+    }
   | { readonly property: string; readonly range: FilterRange; readonly qualifiers?: readonly FilterQualifier[] };
 
 export type FilterDocument =
@@ -254,6 +260,25 @@ function parseQualifier(input: unknown, pointer: string): FilterQualifier {
   return { property, in: selected };
 }
 
+function parseConceptSelection(input: unknown, pointer: string): ConceptSelection {
+  const fields = record(input, pointer);
+  let scheme: string | undefined;
+  let includeChildren: boolean | undefined;
+  for (const key of Object.getOwnPropertyNames(fields)) {
+    const fieldPointer = appendPointer(pointer, key);
+    if (key === 'scheme') {
+      scheme = stringValue(ownValue(fields, key, fieldPointer), fieldPointer, false);
+      if (uuidPattern.exec(scheme)?.[0] !== scheme) fail(fieldPointer, 'invalid_format');
+    } else if (key === 'includeChildren') {
+      const value = ownValue(fields, key, fieldPointer);
+      if (typeof value !== 'boolean') fail(fieldPointer, 'invalid_type');
+      includeChildren = value;
+    } else fail(fieldPointer, 'unknown_field');
+  }
+  if (scheme === undefined) fail(appendPointer(pointer, 'scheme'), 'required');
+  return { scheme, ...(includeChildren === undefined ? {} : { includeChildren }) };
+}
+
 function parseQualifiers(input: unknown, pointer: string): FilterQualifier[] {
   const items = array(input, pointer, FILTER_LIMITS.qualifiers);
   const result: FilterQualifier[] = [];
@@ -439,12 +464,15 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
         const statementKeys = Object.getOwnPropertyNames(statementFields);
         const hasIn = Object.hasOwn(statementFields, 'in');
         const hasRange = Object.hasOwn(statementFields, 'range');
+        const hasConcept = Object.hasOwn(statementFields, 'concept');
 
         if (hasIn && hasRange) fail(appendPointer(fieldPointer, 'range'), 'unsupported');
+        if (hasConcept && (!hasIn || hasRange)) fail(appendPointer(fieldPointer, 'concept'), 'unsupported');
 
         let property: string | undefined;
         let selected: string[] | undefined;
         let range: FilterRange | undefined;
+        let concept: ConceptSelection | undefined;
         let qualifiers: FilterQualifier[] | undefined;
         for (const statementKey of statementKeys) {
           const propertyPointer = appendPointer(fieldPointer, statementKey);
@@ -454,6 +482,8 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
             selected = values(ownValue(statementFields, statementKey, propertyPointer), propertyPointer, false);
           } else if (statementKey === 'range') {
             range = parseRange(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
+          } else if (statementKey === 'concept') {
+            concept = parseConceptSelection(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
           } else if (statementKey === 'qualifiers') {
             qualifiers = parseQualifiers(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
           } else {
@@ -462,6 +492,7 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
         }
         if (property === undefined) fail(appendPointer(fieldPointer, 'property'), 'required');
         if (selected === undefined && range === undefined) fail(appendPointer(fieldPointer, 'in'), 'required');
+        if (concept && selected!.length !== 1) fail(appendPointer(fieldPointer, 'in'), 'invalid_format');
 
         const qualifierField = qualifiers === undefined ? {} : { qualifiers };
         leaves += qualifiers?.length ?? 0;
@@ -470,7 +501,7 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
           statement:
             selected === undefined
               ? { property, range: range!, ...qualifierField }
-              : { property, in: selected, ...qualifierField },
+              : { property, in: selected, ...(concept ? { concept } : {}), ...qualifierField },
         };
       }
       case 'owner':
@@ -830,7 +861,18 @@ function admitConstructed(
 
     if ('in' in statement) {
       const inPointer = appendPointer(appendPointer(pointer, 'statement'), 'in');
-      if (datatype === 'wikibase-item') validateUuidValues(statement.in, inPointer, source);
+      if (statement.concept) {
+        const conceptPointer = appendPointer(appendPointer(pointer, 'statement'), 'concept');
+        if (
+          datatype !== 'wikibase-item' ||
+          statement.in.length !== 1 ||
+          typeof statement.concept.scheme !== 'string' ||
+          uuidPattern.exec(statement.concept.scheme)?.[0] !== statement.concept.scheme ||
+          (statement.concept.includeChildren !== undefined && typeof statement.concept.includeChildren !== 'boolean')
+        )
+          reject(conceptPointer, source, 'unsupported', 'unsupported_query');
+        validateUuidValues(statement.in, inPointer, source);
+      } else if (datatype === 'wikibase-item') validateUuidValues(statement.in, inPointer, source);
       else if (datatype === 'string') {
         const pattern = codePattern(definition, construction);
         if (!pattern) reject(inPointer, source, 'unsupported', 'unsupported_query');

@@ -53,6 +53,19 @@ must check Realm authority and native figure eligibility, with typed readiness f
 Use the one released Boolean grammar, typed properties, units and same-statement qualifiers. Expand user,
 saved and authorized private predicates together, then exact-deduplicate and admit the whole tree: at most
 32 leaves, depth 4, OR 16, `in` 64 and qualifiers 4. Never truncate expansion or drop an OR branch to fit.
+
+### Concept-valued statements
+
+A concept predicate is a statement leaf with its property, one concept ID in `in`, and its selected scheme:
+`{statement:{property,in:[id],concept:{scheme,includeChildren?},qualifiers?}}`. Omitting `includeChildren` matches the
+exact concept; `includeChildren:true` matches the selected concept and its complete current descendant closure. The
+optional qualifiers constrain that same statement. Include and exclude use the surrounding `and`/`or`/`not` grammar;
+one leaf represents one concept so each selection can toggle descendants independently.
+
+Decision: represent a concept as a one-value statement plus selected-scheme metadata, and use
+`includeChildren:true` for descendants so Boolean inclusion/exclusion and same-statement qualifiers keep the existing
+grammar.
+
 When released saved-filter metadata has no localized label, identify the authored `{saved: id}` reference by its exact ID.
 An empty editor group is a repair state: keep it visible and prevent applying until a child is restored or the group is explicitly removed.
 Condition error actions use one localized navigation label and focus the matching field, nearest condition group, or error summary in that order without changing the draft.
