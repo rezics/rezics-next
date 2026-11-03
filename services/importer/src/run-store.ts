@@ -12,6 +12,14 @@ import { checkBatch, checkResult } from './accepted-checks.ts';
 import type { ImportBatchRequest, ImportBatchResult, ImportSourceRecord } from './import-contract.ts';
 import type { RecordRow } from './record-store.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
+import {
+  ConversionDiagnosticError,
+  admitDigest,
+  admitRevision,
+  isConversionDiagnosticPhase,
+  sanitizeConversionDiagnostics,
+  type ConversionDiagnosticPhase,
+} from './conversion-diagnostics.ts';
 
 export type Run = { source: string; id: string; lease: string };
 /** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
@@ -58,6 +66,9 @@ type Generation = {
   prepared: number;
   cursor: string;
   skipped?: number;
+  diagnostics_recorded?: number;
+  diagnostic_records?: number;
+  diagnostic_entries?: number;
 };
 type Entry = {
   source: string;
@@ -103,6 +114,8 @@ export const RUN_TABLES = [
   'run_commands',
   'run_payloads',
   'run_envelopes',
+  'run_conversion_diagnostics',
+  'run_conversion_diagnostic_records',
 ] as const;
 
 function fail(): never {
@@ -330,6 +343,12 @@ export class RunStore<Projection = BatchStatement[]> {
       const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
       if (!generationColumns.some(({ name }) => name === 'skipped'))
         this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'diagnostics_recorded'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostics_recorded INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'diagnostic_records'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostic_records INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'diagnostic_entries'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostic_entries INTEGER NOT NULL DEFAULT 0');
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_entries (
         source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
         row_json TEXT NOT NULL, projection_json TEXT NOT NULL, kind TEXT,
@@ -373,6 +392,16 @@ export class RunStore<Projection = BatchStatement[]> {
         pending INTEGER NOT NULL, PRIMARY KEY(source,run_id,record_key,envelope_index)) WITHOUT ROWID`);
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_envelope_pending
         ON run_envelopes(source,run_id,pending,record_key,envelope_index)`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_conversion_diagnostics (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL, phase TEXT NOT NULL,
+        digest TEXT NOT NULL, converter_revision TEXT NOT NULL, record_revision TEXT NOT NULL,
+        diagnostic_count INTEGER NOT NULL, diagnostics_json TEXT NOT NULL,
+        PRIMARY KEY(source,run_id,record_key,phase)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_conversion_diagnostic_records (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
+        PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_conversion_diagnostics_phase_review
+        ON run_conversion_diagnostics(source,run_id,phase,record_key) WHERE diagnostic_count>0`);
     } catch (error) {
       db.close();
       throw error;
@@ -1357,6 +1386,82 @@ export class RunStore<Projection = BatchStatement[]> {
       resolved: e?.resolved === 1,
       kind: e?.kind ?? null,
     };
+  }
+  retainConversionDiagnostics(
+    run: Run,
+    input: {
+      recordKey: string;
+      digest: string;
+      converterRevision: string;
+      recordRevision: string;
+      phase: ConversionDiagnosticPhase;
+      diagnostics: unknown;
+    },
+  ): void {
+    exact(input, ['recordKey', 'digest', 'converterRevision', 'recordRevision', 'phase', 'diagnostics']);
+    keyId(input.recordKey);
+    admitDigest(input.digest);
+    admitRevision(input.converterRevision, 128);
+    admitRevision(input.recordRevision, 256);
+    if (!isConversionDiagnosticPhase(input.phase)) throw new ConversionDiagnosticError();
+    const diagnostics = sanitizeConversionDiagnostics(input.diagnostics);
+    const payload = JSON.stringify(diagnostics);
+    this.transaction(() => {
+      this.generation(run);
+      const existing = this.get<{
+        digest: string;
+        converter_revision: string;
+        record_revision: string;
+      }>(
+        `SELECT digest,converter_revision,record_revision FROM run_conversion_diagnostics
+        WHERE source=? AND run_id=? AND record_key=? AND phase=?`,
+        run.source,
+        run.id,
+        input.recordKey,
+        input.phase,
+      );
+      if (existing) {
+        if (
+          existing.digest !== input.digest ||
+          existing.converter_revision !== input.converterRevision ||
+          existing.record_revision !== input.recordRevision
+        )
+          throw new ConversionDiagnosticError('Conversion diagnostic identity does not match the retained attempt');
+        return;
+      }
+      this.write(
+        `INSERT INTO run_conversion_diagnostics(
+          source,run_id,record_key,phase,digest,converter_revision,record_revision,diagnostic_count,diagnostics_json
+        ) VALUES(?,?,?,?,?,?,?,?,?)`,
+        run.source,
+        run.id,
+        input.recordKey,
+        input.phase,
+        input.digest,
+        input.converterRevision,
+        input.recordRevision,
+        diagnostics.length,
+        payload,
+      );
+      const review =
+        diagnostics.length === 0
+          ? { changes: 0 }
+          : this.write(
+              `INSERT OR IGNORE INTO run_conversion_diagnostic_records(source,run_id,record_key) VALUES(?,?,?)`,
+              run.source,
+              run.id,
+              input.recordKey,
+            );
+      this.write(
+        `UPDATE run_generations SET diagnostics_recorded=1,
+        diagnostic_records=diagnostic_records+?,diagnostic_entries=diagnostic_entries+?
+        WHERE source=? AND id=?`,
+        review.changes,
+        diagnostics.length,
+        run.source,
+        run.id,
+      );
+    });
   }
   close(): void {
     if (!this.closed) {

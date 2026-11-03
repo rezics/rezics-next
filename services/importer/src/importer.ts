@@ -28,6 +28,7 @@ import type { Candidate, Owner } from './record-bindings.ts';
 import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { resolveOwnReferences } from './own-references.ts';
+import { ConversionDiagnosticError, type ConversionDiagnosticPhase } from './conversion-diagnostics.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
@@ -195,6 +196,22 @@ export class Importer {
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');
     return result;
+  }
+
+  private retainDiagnostics(
+    run: Run,
+    staged: Staged<SourceProjection>,
+    conversion: ImportConversion,
+    phase: ConversionDiagnosticPhase,
+  ): void {
+    this.session.store.retainConversionDiagnostics(run, {
+      recordKey: staged.row.recordKey,
+      digest: conversion.digest,
+      converterRevision: conversion.converter_revision,
+      recordRevision: conversion.record_revision ?? staged.row.recordRevision,
+      phase,
+      diagnostics: conversion.diagnostics,
+    });
   }
 
   private async fences(owner: Owner, signal: AbortSignal): Promise<Omission[]> {
@@ -639,6 +656,7 @@ export class Importer {
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
       observedConversion = conversion;
+      this.retainDiagnostics(run, staged, conversion, 'application');
       if (claim?.state === 'bound') subject = claim.subject;
       else if (
         !omissions.some((o) => o.field_group === 'facts') &&
@@ -655,6 +673,7 @@ export class Importer {
           : ownReferences?.resolvedReferences;
         const context = { subjectId: subject, ...(resolvedReferences ? { resolvedReferences } : {}) };
         conversion = this.convert(registration, staged, context);
+        this.retainDiagnostics(run, staged, conversion, 'application');
         const intents =
           'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as MediaImportRequest[]) : [];
         if (intents.length && !omissions.some((o) => o.field_group === 'cover')) {
@@ -672,6 +691,7 @@ export class Importer {
               if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
                 throw new Error('Media availability is incomplete');
             conversion = this.convert(registration, staged, { ...context, mediaIds: resolution.mediaIds });
+            this.retainDiagnostics(run, staged, conversion, 'application');
           } else {
             skipCover = true;
             deferredCover = resolution.status === 'pending';
@@ -1112,7 +1132,7 @@ export class Importer {
         try {
           // Staged rows need no durability before the seal, so a page of them shares one commit. The
           // result equals staging one by one: the rows before a failure and its invalid mark persist.
-          const buffered: Staged<SourceProjection>[] = [];
+          const buffered: { staged: Staged<SourceProjection>; conversion: ImportConversion }[] = [];
           let stagingStarted = false;
           const enterStaging = () => {
             if (stagingStarted) return;
@@ -1126,11 +1146,13 @@ export class Importer {
               let failure: unknown;
               let stagedCount = 0;
               this.atomic(() => {
-                for (const staged of page) {
+                for (const item of page) {
                   try {
-                    store.stage(next, staged);
+                    store.stage(next, item.staged);
+                    this.retainDiagnostics(next, item.staged, item.conversion, 'staging');
                     stagedCount++;
                   } catch (error) {
+                    if (error instanceof ConversionDiagnosticError) throw error;
                     failure = error;
                     return;
                   }
@@ -1155,22 +1177,25 @@ export class Importer {
               options.progress?.onSkipped?.(1);
             }
             buffered.push({
-              row: {
-                source: registration.source,
-                recordKey: record.key,
-                recordRevision: conversion.record_revision ?? 'unversioned',
-                converter_revision: registration.converter_revision,
-                digest: conversion.digest,
-                state: 'present',
-              },
-              projection: {
-                sourceKind: registration.sourceKind,
-                normalizedRecord: conversion.normalized,
-                ...('outcome' in conversion && conversion.outcome === 'ignored'
-                  ? {}
-                  : registration.describeSourceRecord
-                    ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
-                    : {}),
+              conversion,
+              staged: {
+                row: {
+                  source: registration.source,
+                  recordKey: record.key,
+                  recordRevision: conversion.record_revision ?? 'unversioned',
+                  converter_revision: registration.converter_revision,
+                  digest: conversion.digest,
+                  state: 'present',
+                },
+                projection: {
+                  sourceKind: registration.sourceKind,
+                  normalizedRecord: conversion.normalized,
+                  ...('outcome' in conversion && conversion.outcome === 'ignored'
+                    ? {}
+                    : registration.describeSourceRecord
+                      ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
+                      : {}),
+                },
               },
             });
             if (buffered.length >= 100) {
