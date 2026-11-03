@@ -68,6 +68,7 @@ beforeAll(async () => {
     actor: importer.actor,
     route,
     routeKey: testRouteKey(),
+    clock: () => new Date(),
     deadline: Date.now() + 30000,
     authorization: resourceAuthorization({
       access: f.access,
