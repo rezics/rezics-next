@@ -10,6 +10,9 @@ const firstId = '11111111-1111-7111-8111-111111111111';
 const secondId = '11111111-1111-7111-8111-111111111112';
 const otherId = '11111111-1111-7111-8111-111111111113';
 const route = routeOf(firstId)!;
+const dependencies: NativeSource['dependencies'] = async () => {
+  throw new Error('Space adapter fixtures do not supply native dependency readiness');
+};
 const partition = partitionOf(route);
 const indexed = (id: string, realmId: string | null = null, revision = id) => ({
   id,
@@ -36,6 +39,7 @@ function adapterFor(
 describe('second-scope Space discovery adapter', () => {
   it('projects one canonical Space identity and hydrates current authorized summaries', async () => {
     const source: NativeSource = {
+      dependencies,
       async read(p, ids) {
         return { partition: p, position: 12n, spaces: ids.map((id) => indexed(id, id === firstId ? secondId : null)) };
       },
@@ -85,6 +89,7 @@ describe('second-scope Space discovery adapter', () => {
   it('rejects a malformed page before reading rows or exposing its frontier', async () => {
     let reads = 0;
     const source: NativeSource = {
+      dependencies,
       async read(p) {
         reads += 1;
         return { partition: p, position: 1n, spaces: [] };
@@ -109,6 +114,7 @@ describe('second-scope Space discovery adapter', () => {
   it('rejects an inexact producer position before consuming the page', async () => {
     let reads = 0;
     const source: NativeSource = {
+      dependencies,
       async read(p) {
         reads += 1;
         return { partition: p, position: 1n, spaces: [] };
@@ -129,6 +135,7 @@ describe('second-scope Space discovery adapter', () => {
     let readPosition = 21n;
     let current: ReturnType<typeof indexed> | null = null;
     const source: NativeSource = {
+      dependencies,
       async read(p, ids) {
         return { partition: p, position: readPosition, spaces: current && ids.includes(current.id) ? [current] : [] };
       },
