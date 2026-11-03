@@ -3183,6 +3183,82 @@ CREATE TABLE library.label_assignment (
 
 
 --
+-- Name: label_consolidation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.label_consolidation (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    consolidation_id uuid NOT NULL,
+    source_label_id uuid NOT NULL,
+    target_label_id uuid NOT NULL,
+    source_label_revision integer NOT NULL,
+    target_label_revision integer NOT NULL,
+    selection_digest text NOT NULL COLLATE pg_catalog."C",
+    review_evidence jsonb NOT NULL,
+    item_count smallint NOT NULL,
+    next_item smallint DEFAULT 0 NOT NULL,
+    status text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    terminal_at timestamp with time zone,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT label_consolidation_check CHECK ((source_label_id <> target_label_id)),
+    CONSTRAINT label_consolidation_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT label_consolidation_check2 CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:15:00'::interval)))),
+    CONSTRAINT label_consolidation_check3 CHECK (((status = 'active'::text) = (terminal_at IS NULL))),
+    CONSTRAINT label_consolidation_item_count_check CHECK (((item_count >= 1) AND (item_count <= 16))),
+    CONSTRAINT label_consolidation_next_item_check CHECK (((next_item >= 0) AND (next_item <= 16))),
+    CONSTRAINT label_consolidation_review_evidence_check CHECK ((jsonb_typeof(review_evidence) = 'object'::text)),
+    CONSTRAINT label_consolidation_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT label_consolidation_selection_digest_check CHECK ((selection_digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT label_consolidation_source_label_revision_check CHECK ((source_label_revision >= 1)),
+    CONSTRAINT label_consolidation_status_check CHECK ((status = ANY (ARRAY['active'::text, 'completed'::text, 'cancelled'::text]))),
+    CONSTRAINT label_consolidation_target_label_revision_check CHECK ((target_label_revision >= 1))
+);
+
+
+--
+-- Name: label_consolidation_item; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.label_consolidation_item (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    consolidation_id uuid NOT NULL,
+    item_no smallint NOT NULL,
+    subject_id uuid NOT NULL,
+    source_assignment_id uuid NOT NULL,
+    source_revision integer NOT NULL,
+    target_assignment_id uuid,
+    target_revision integer,
+    target_effective boolean,
+    target_request_key uuid NOT NULL,
+    source_request_key uuid NOT NULL,
+    status text NOT NULL,
+    stage text,
+    target_result_id uuid,
+    target_result_revision integer,
+    target_unchanged boolean,
+    source_result_revision integer,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT label_consolidation_item_check CHECK (((target_assignment_id IS NULL) = (target_revision IS NULL))),
+    CONSTRAINT label_consolidation_item_check1 CHECK (((target_assignment_id IS NULL) = (target_effective IS NULL))),
+    CONSTRAINT label_consolidation_item_check2 CHECK (((status = 'applying'::text) = (stage IS NOT NULL))),
+    CONSTRAINT label_consolidation_item_check3 CHECK (((target_result_id IS NULL) = (target_result_revision IS NULL))),
+    CONSTRAINT label_consolidation_item_item_no_check CHECK (((item_no >= 0) AND (item_no <= 15))),
+    CONSTRAINT label_consolidation_item_source_result_revision_check CHECK (((source_result_revision IS NULL) OR (source_result_revision >= 1))),
+    CONSTRAINT label_consolidation_item_source_revision_check CHECK ((source_revision >= 1)),
+    CONSTRAINT label_consolidation_item_stage_check CHECK ((stage = ANY (ARRAY['target_pending'::text, 'target_started'::text, 'target_accepted'::text, 'source_started'::text]))),
+    CONSTRAINT label_consolidation_item_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'applying'::text, 'moved'::text, 'target_applied_source_retained'::text, 'capacity_limited'::text, 'changed'::text, 'inaccessible'::text]))),
+    CONSTRAINT label_consolidation_item_target_result_revision_check CHECK (((target_result_revision IS NULL) OR (target_result_revision >= 1)))
+);
+
+
+--
 -- Name: library_export; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -5140,6 +5216,30 @@ ALTER TABLE ONLY library.label_assignment
 
 
 --
+-- Name: label_consolidation_item label_consolidation_item_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_consolidation_item
+    ADD CONSTRAINT label_consolidation_item_pkey PRIMARY KEY (route, account_id, consolidation_id, item_no);
+
+
+--
+-- Name: label_consolidation_item label_consolidation_item_route_account_id_consolidation_id__key; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_consolidation_item
+    ADD CONSTRAINT label_consolidation_item_route_account_id_consolidation_id__key UNIQUE (route, account_id, consolidation_id, subject_id);
+
+
+--
+-- Name: label_consolidation label_consolidation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_consolidation
+    ADD CONSTRAINT label_consolidation_pkey PRIMARY KEY (route, account_id, consolidation_id);
+
+
+--
 -- Name: library_export library_export_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6335,6 +6435,27 @@ CREATE UNIQUE INDEX label_assignment_reserved_slot ON library.label_assignment U
 --
 
 CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING btree (route, account_id, subject_id, assignment_id) INCLUDE (label_id, slot_no, revision, transaction_id) WHERE (slot_no IS NOT NULL);
+
+
+--
+-- Name: label_consolidation_expiry_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_consolidation_expiry_due ON library.label_consolidation USING btree (route, expires_at, account_id, consolidation_id);
+
+
+--
+-- Name: label_consolidation_item_due; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_consolidation_item_due ON library.label_consolidation_item USING btree (route, account_id, consolidation_id, status, item_no);
+
+
+--
+-- Name: label_consolidation_owner_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX label_consolidation_owner_expiry ON library.label_consolidation USING btree (route, account_id, expires_at, consolidation_id);
 
 
 --
@@ -7770,6 +7891,14 @@ ALTER TABLE ONLY library.identity_scope_seal
 
 ALTER TABLE ONLY library.label_assignment
     ADD CONSTRAINT label_assignment_route_account_id_label_id_fkey FOREIGN KEY (route, account_id, label_id) REFERENCES library.personal_label(route, account_id, label_id);
+
+
+--
+-- Name: label_consolidation_item label_consolidation_item_route_account_id_consolidation_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.label_consolidation_item
+    ADD CONSTRAINT label_consolidation_item_route_account_id_consolidation_id_fkey FOREIGN KEY (route, account_id, consolidation_id) REFERENCES library.label_consolidation(route, account_id, consolidation_id) ON DELETE CASCADE;
 
 
 --
