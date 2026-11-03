@@ -1,7 +1,7 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
-import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT, readExposure } from '../../src/access/gates/catalogue.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createSearchService } from '../../src/search/service.ts';
@@ -19,7 +19,25 @@ import { createFakeSource } from './support/fake-source.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
-afterAll(() => pool.end());
+const opening = Bun.randomUUIDv7();
+beforeAll(async () => {
+  // Dispatch fixture only; native Realm authority remains the provider's responsibility.
+  for (const group of ['search', 'search_advanced']) {
+    if (!(await readExposure(pool, group, new Date(), Date.now() + 10_000)).open)
+      await pool.query(
+        `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
+         VALUES ($1, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2)`,
+        [group, opening],
+      );
+  }
+});
+afterAll(async () => {
+  try {
+    await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  } finally {
+    await pool.end();
+  }
+});
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
 const id = (n: number) => `018f0000-0000-7000-8000-00a0${String(n).padStart(8, '0')}`;
 const populationId = id(900);
