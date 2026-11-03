@@ -106,6 +106,15 @@ export function createRealmSubjectCandidates(pool: Pool) {
       )
     ).rows[0];
   }
+  function rows(route: number, deadline: number, sql: string, parameters: unknown[]) {
+    return realmSubjectHome(
+      pool,
+      route,
+      deadline,
+      false,
+      async (client) => (await client.query<RealmSubjectCandidate>(sql, parameters)).rows,
+    );
+  }
   return {
     async observe(realm: string, deadline: number): Promise<RealmSubjectCoverage | null> {
       const route = realmSubjectRoute(realm);
@@ -221,42 +230,36 @@ export function createRealmSubjectCandidates(pool: Pool) {
     async thread(realm: string, thread: string, after: string | null, deadline: number) {
       const route = realmSubjectRoute(realm);
       realmSubjectRoute(thread);
-      return realmSubjectHome(
-        pool,
+      return rows(
         route,
         deadline,
-        false,
-        async (client) =>
-          (
-            await client.query<RealmSubjectCandidate>(
-              `SELECT ${columns} FROM content.realm_subject_candidate
-          WHERE route=$1 AND realm_id=$2 AND thread_id=$3 AND original_id>$4::uuid
-          ORDER BY original_id LIMIT 32`,
-              [route, realm, thread, after ?? zero],
-            )
-          ).rows,
+        `SELECT ${columns} FROM content.realm_subject_candidate
+        WHERE route=$1 AND realm_id=$2 AND thread_id=$3 AND original_id>$4::uuid
+        ORDER BY original_id LIMIT 32`,
+        [route, realm, thread, after ?? zero],
       );
     },
     async page(realm: string, after: CandidateKey | null, subject: string | null, limit: number, deadline: number) {
       if (!Number.isInteger(limit) || limit < 1 || limit > REALM_SUBJECT_RAW_LIMIT)
         throw new RangeError('Invalid raw candidate budget');
       const route = realmSubjectRoute(realm);
-      return realmSubjectHome(
-        pool,
+      return rows(
         route,
         deadline,
-        false,
-        async (client) =>
-          (
-            await client.query<RealmSubjectCandidate>(
-              `SELECT ${columns} FROM content.realm_subject_candidate
-          WHERE route=$1 AND realm_id=$2 AND active AND terminal_id IS NOT NULL
-          AND ($6::uuid IS NULL OR terminal_id=$6::uuid)
-          AND (terminal_id,original_id,thread_id)>($3::uuid,$4::uuid,$5::uuid)
-          ORDER BY terminal_id,original_id,thread_id LIMIT $7`,
-              [route, realm, after?.terminal ?? zero, after?.original ?? zero, after?.thread ?? zero, subject, limit],
-            )
-          ).rows,
+        `SELECT ${columns} FROM content.realm_subject_candidate
+        WHERE route=$1 AND realm_id=$2 AND active AND terminal_id IS NOT NULL
+        ${subject === null ? '' : 'AND terminal_id=$7::uuid'}
+        AND (terminal_id,original_id,thread_id)>($3::uuid,$4::uuid,$5::uuid)
+        ORDER BY terminal_id,original_id,thread_id LIMIT $6`,
+        [
+          route,
+          realm,
+          after?.terminal ?? zero,
+          after?.original ?? zero,
+          after?.thread ?? zero,
+          limit,
+          ...(subject === null ? [] : [subject]),
+        ],
       );
     },
   };
