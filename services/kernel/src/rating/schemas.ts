@@ -8,6 +8,42 @@ const grain = t.Union([t.Literal('work'), t.Literal('release'), t.Literal('episo
 
 export const RatingVoteInputSchema = strictContentSchema(t.Object({ units: t.Integer() }, closed));
 
+export const ClassificationBallotInputSchema = strictContentSchema(
+  t.Object({ assessment: t.Union([t.Literal('support'), t.Literal('oppose')]), falsePositive: t.Boolean() }, closed),
+);
+export const ClassificationBallotSetResponseSchema = t.Object(
+  { associationId: id, revision: t.String({ pattern: '^[1-9][0-9]*$' }), delivery: t.Union([t.Literal('enqueued'), t.Literal('unchanged')]) },
+  closed,
+);
+export const ClassificationBallotOwnResponseSchema = t.Object(
+  {
+    associationId: id,
+    hasBallot: t.Boolean(),
+    assessment: t.Union([t.Literal('support'), t.Literal('oppose'), t.Null()]),
+    falsePositive: t.Boolean(),
+    revision: t.Union([t.String({ pattern: '^[1-9][0-9]*$' }), t.Null()]),
+    pending: t.Boolean(),
+  },
+  closed,
+);
+const classificationAggregateAddress = { associationId: id, pending: t.Literal('unknown') };
+export const ClassificationBallotAggregateResponseSchema = t.Union([
+  t.Object({ ...classificationAggregateAddress, state: t.Literal('suppressed') }, closed),
+  t.Object(
+    {
+      ...classificationAggregateAddress,
+      state: t.Literal('published'),
+      supportCount: t.Integer({ minimum: 0 }),
+      opposeCount: t.Integer({ minimum: 0 }),
+      falsePositiveCount: t.Integer({ minimum: 0 }),
+      supportFraction: t.Union([t.Number({ minimum: 0, maximum: 1 }), t.Null()]),
+      asOf: t.String({ format: 'date-time' }),
+      generation: t.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    closed,
+  ),
+]);
+
 export const RatingVoteResponseSchema = t.Object(
   {
     units: t.Integer(),

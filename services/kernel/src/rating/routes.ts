@@ -23,10 +23,22 @@ import { createRealmRatingQuestion, QuestionDefinitionInvalidError } from './que
 import { ratingQuestionView, readVisibleRatingQuestion, readSelectedQuestionDirectory } from './question-directory.ts';
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
 import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
+import {
+  CLASSIFICATION_BALLOT_READ_AGGREGATE,
+  CLASSIFICATION_BALLOT_READ_OWN,
+  CLASSIFICATION_BALLOT_SET,
+  ClassificationBallotInvalidError,
+  ClassificationBallotNotFoundError,
+  createClassificationBallotCommands,
+} from './classification-ballot.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
 import {
   RatingAggregateResponseSchema,
   RatingPopulationPageResponseSchema,
+  ClassificationBallotAggregateResponseSchema,
+  ClassificationBallotInputSchema,
+  ClassificationBallotOwnResponseSchema,
+  ClassificationBallotSetResponseSchema,
   RatingQuestionCreateInputSchema,
   RatingQuestionDirectoryQuerySchema,
   RatingQuestionDirectoryResponseSchema,
@@ -88,6 +100,23 @@ function publicReadDetail(operationId: string, action: string) {
   };
 }
 
+function classificationDetail(operationId: string, action: string, options: { publicRead?: boolean; write?: boolean } = {}) {
+  return {
+    operationId,
+    'x-action': action,
+    'x-exposure': 'public',
+    'x-resource-types': ['semantic.subject'],
+    security: options.publicRead ? [{ bearerAuth: [] }, {}] : bearer,
+    ...(options.write ? { 'x-rate-limit': writeRate } : {}),
+  };
+}
+
+function requireClassificationAccount(actor: Actor, action: string, ...ids: string[]): void {
+  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  if (!actor.scopes.includes(action)) throw new ProblemError('forbidden');
+  requireRoutableIds(...ids);
+}
+
 async function readableSubject(dependencies: ReadDependencies, actor: Actor, subjectId: string, deadline: number) {
   const route = routeOf(subjectId);
   if (route === null) return false;
@@ -114,6 +143,11 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
     if (error instanceof LibraryNotFoundError || error instanceof RatingQuestionNotFoundError)
       throw new ProblemError('not_found');
+    if (error instanceof ClassificationBallotNotFoundError) throw new ProblemError('not_found');
+    if (error instanceof ClassificationBallotInvalidError)
+      throw new ProblemError('invalid_request', {
+        errors: [{ pointer: `/${error.field}`, code: 'out_of_range' }],
+      });
     if (error instanceof VoteInvalidError || error instanceof QuestionDefinitionInvalidError)
       throw new ProblemError('invalid_request', {
         errors: [{ pointer: `/${error.field}`, code: 'out_of_range' }],
@@ -131,6 +165,7 @@ function voteView(vote: Vote) {
 export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   const config = () => ({ ...dependencies, access: dependencies.access() });
   const votes = () => createVoteCommands(config());
+  const classificationBallots = () => createClassificationBallotCommands(config());
   return app
     .model('PublicFigure', PublicFigureSchema)
     .get(
@@ -334,6 +369,83 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         );
         if (!result || result.units === null) throw new ProblemError('not_found');
         return voteView(result);
+      },
+    )
+    .put(
+      '/v1/subjects/:id/classification-associations/:associationId/assessment',
+      {
+        params: t.Object({ id, associationId: id }, closed),
+        headers,
+        body: ClassificationBallotInputSchema,
+        response: { 200: ClassificationBallotSetResponseSchema, ...failures },
+        detail: classificationDetail('classification_ballot.set', CLASSIFICATION_BALLOT_SET, { write: true }),
+      },
+      async ({ actor, params, body, headers, admission, job }) => {
+        requireClassificationAccount(actor, CLASSIFICATION_BALLOT_SET, params.id, params.associationId);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        return admission.run('normal', job, () =>
+          command(() =>
+            classificationBallots().set(
+              actor,
+              {
+                subjectId: params.id,
+                associationId: params.associationId,
+                assessment: body.assessment,
+                falsePositive: body.falsePositive,
+              },
+              key,
+            ),
+          ),
+        );
+      },
+    )
+    .delete(
+      '/v1/subjects/:id/classification-associations/:associationId/assessment',
+      {
+        params: t.Object({ id, associationId: id }, closed),
+        headers,
+        response: { 204: t.Void(), ...failures },
+        detail: classificationDetail('classification_ballot.clear', CLASSIFICATION_BALLOT_SET, { write: true }),
+      },
+      async ({ actor, params, headers, admission, job, set }) => {
+        requireClassificationAccount(actor, CLASSIFICATION_BALLOT_SET, params.id, params.associationId);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        await admission.run('normal', job, () =>
+          command(() => classificationBallots().clear(actor, params.id, params.associationId, key)),
+        );
+        set.status = 204;
+      },
+    )
+    .get(
+      '/v1/subjects/:id/classification-associations/:associationId/assessment',
+      {
+        params: t.Object({ id, associationId: id }, closed),
+        response: { 200: ClassificationBallotOwnResponseSchema, ...failures },
+        detail: classificationDetail('classification_ballot.read_own', CLASSIFICATION_BALLOT_READ_OWN),
+      },
+      async ({ actor, params, admission, job }) => {
+        requireClassificationAccount(actor, CLASSIFICATION_BALLOT_READ_OWN, params.id, params.associationId);
+        return admission.run('normal', job, () =>
+          command(() => classificationBallots().readOwn(actor, params.id, params.associationId, job.deadline)),
+        );
+      },
+    )
+    .get(
+      '/v1/subjects/:id/classification-associations/:associationId/aggregate',
+      {
+        params: t.Object({ id, associationId: id }, closed),
+        response: { 200: ClassificationBallotAggregateResponseSchema, ...aggregateFailures },
+        detail: classificationDetail('classification_ballot.read_aggregate', CLASSIFICATION_BALLOT_READ_AGGREGATE, {
+          publicRead: true,
+        }),
+      },
+      async ({ actor, params, admission, job }) => {
+        requireRoutableIds(params.id, params.associationId);
+        return admission.run('normal', job, () =>
+          command(() =>
+            classificationBallots().readAggregate(actor, params.id, params.associationId, job.deadline),
+          ),
+        );
       },
     )
     .post(

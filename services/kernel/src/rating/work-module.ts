@@ -1,12 +1,14 @@
 import { createRatingCounter, type RatingCounter } from '../access/rating-counter.ts';
 import type { WorkModule } from '../work/registry.ts';
 import { createRatingAggregateEffect } from './aggregate-effect.ts';
+import { createClassificationBallotRelay } from './classification-ballot-projector.ts';
 import { createVoterEligibilityEffect } from './eligibility.ts';
 import { createPopulationTotalEffect } from './population-total.ts';
 import { createPublicFigureDrainEffect } from './public-figure.ts';
 import { registerRatingSegmentWork } from './segment-job.ts';
 import { createVoterRealmsEffect } from './voter-realms.ts';
 import { registerRatingSubjectMergeWork } from './merge-job.ts';
+import { startRelays } from '../events/relays.ts';
 
 // Controller composition invokes bounded repair steps; no second repair workflow owns replacements.
 export { createRatingIdentityRepairCommands } from './identity-repair.ts';
@@ -40,6 +42,7 @@ export function createRatingWorkModule(ratingCounter?: RatingCounter): WorkModul
       if (context.client) {
         registerRatingSegmentWork(context, counter);
         registerRatingSubjectMergeWork(context);
+        context.addService(() => startRelays(context.pool, [createClassificationBallotRelay(context.pool, context.clock)]));
       }
     },
   };
