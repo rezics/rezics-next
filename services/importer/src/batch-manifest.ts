@@ -400,9 +400,9 @@ export async function revalidateJobInputs(job: BatchJobPlan, directory: string):
     throw new BatchManifestError(
       `Job ${job.index} dump changed between local preview and execution; the replacement was not followed.`,
     );
-  if (identityChanged(job.state, state))
+  if (!sameFileIdentity(job.state, state))
     throw new BatchManifestError(
-      `Job ${job.index} state changed between local preview and execution; the replacement was not followed.`,
+      `Job ${job.index} state was replaced between local preview and execution; the replacement was not followed.`,
     );
 }
 
