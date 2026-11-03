@@ -167,9 +167,7 @@ export const readOwnRealmClaimPage: ReadOwnRealmClaimPage = async (deps, actor, 
           currentRealm: {
             ownershipState,
             orphanedAt:
-              current.continuity.orphaned_at === null
-                ? null
-                : new Date(current.continuity.orphaned_at).toISOString(),
+              current.continuity.orphaned_at === null ? null : new Date(current.continuity.orphaned_at).toISOString(),
             claimEligibleAt: claimEligibleAt === null ? null : new Date(claimEligibleAt).toISOString(),
           } satisfies RealmClaimCurrentContext,
           canRequest,

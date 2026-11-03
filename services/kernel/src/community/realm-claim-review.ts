@@ -118,13 +118,7 @@ function inspectionView(
   realmId: string,
   claimant: RealmClaimantPresentation = { label: 'Claimant', href: null },
 ): RealmClaimReviewInspection | null {
-  if (
-    !row?.request_id ||
-    !row.request_orphaned_at ||
-    !row.requested_at ||
-    !row.request_claim_eligible_at
-  )
-    return null;
+  if (!row?.request_id || !row.request_orphaned_at || !row.requested_at || !row.request_claim_eligible_at) return null;
   if (row.state === 'approved' && row.approved_at !== null)
     return {
       requestId: row.request_id,
@@ -190,9 +184,10 @@ export async function listRealmClaimRequests(
   const limit = input.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const examined = Math.min(limit, 20);
-  const inspectRequestId = input.inspectRequestId !== undefined && routeOf(input.inspectRequestId) === route
-    ? input.inspectRequestId
-    : undefined;
+  const inspectRequestId =
+    input.inspectRequestId !== undefined && routeOf(input.inspectRequestId) === route
+      ? input.inspectRequestId
+      : undefined;
   const clock = deps.clock ?? accessClock(deps.access);
   const accessContext = { pool: deps.pool, deadline: context.deadline };
   const binding = {
@@ -304,16 +299,17 @@ export async function listRealmClaimRequests(
           throw new ProblemError('stale_cursor');
         after = decoded.after[0];
       }
-      const rows = realm?.orphaned_at && realm.claim_eligible_at
-        ? await page.run(client, {
-            route,
-            realm: realmId,
-            orphaned: realm.orphaned_at,
-            after,
-            limit: examined,
-            at,
-          })
-        : [];
+      const rows =
+        realm?.orphaned_at && realm.claim_eligible_at
+          ? await page.run(client, {
+              route,
+              realm: realmId,
+              orphaned: realm.orphaned_at,
+              after,
+              limit: examined,
+              at,
+            })
+          : [];
       const selected = inspectRequestId
         ? await inspection.run(client, { route, realm: realmId, request: inspectRequestId, at })
         : undefined;
@@ -339,8 +335,11 @@ export async function listRealmClaimRequests(
   // Recheck hydrated Accounts and optional presentation outside the Realm checkout.
   const finalIdentities = await readIdentityRound();
   const finalPresentation = await readPresentation();
-  const sameIdentityMap = (ids: readonly string[], left: ReadonlyMap<string, RealmClaimantPresentation>, right: ReadonlyMap<string, RealmClaimantPresentation>) =>
-    canonicalize(ids.map((id) => [id, left.get(id)])) === canonicalize(ids.map((id) => [id, right.get(id)]));
+  const sameIdentityMap = (
+    ids: readonly string[],
+    left: ReadonlyMap<string, RealmClaimantPresentation>,
+    right: ReadonlyMap<string, RealmClaimantPresentation>,
+  ) => canonicalize(ids.map((id) => [id, left.get(id)])) === canonicalize(ids.map((id) => [id, right.get(id)]));
   if (
     !sameIdentityMap(pageIdentityIds, firstIdentities.page, finalIdentities.page) ||
     !sameIdentityMap(separateSelectionIds, firstIdentities.selected, finalIdentities.selected)
@@ -368,7 +367,10 @@ export async function listRealmClaimRequests(
       const selected = inspectRequestId
         ? await inspection.run(client, { route, realm: realmId, request: inspectRequestId, at })
         : undefined;
-      if (!initial.realm && (!sameInspection(initial.selected, selected) || inspectionView(selected, realmId)?.state !== 'approved'))
+      if (
+        !initial.realm &&
+        (!sameInspection(initial.selected, selected) || inspectionView(selected, realmId)?.state !== 'approved')
+      )
         throw denied();
       const rows =
         !realm || initial.rows.length === 0
@@ -411,10 +413,8 @@ export async function listRealmClaimRequests(
         stableSelection?.state === 'pending'
           ? {
               ...stableSelection,
-              claimant:
-                finalIdentities.page.get(stableSelection.claimantAccountId) ??
-                finalIdentities.selected.get(stableSelection.claimantAccountId) ??
-                { label: 'Claimant', href: null },
+              claimant: finalIdentities.page.get(stableSelection.claimantAccountId) ??
+                finalIdentities.selected.get(stableSelection.claimantAccountId) ?? { label: 'Claimant', href: null },
             }
           : stableSelection;
       const last = initial.rows.at(-1);

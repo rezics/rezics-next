@@ -138,7 +138,10 @@ const claimReviewResponse = t.Object(
           orphanedAt: instant,
           claimEligibleAt: instant,
           requestedAt: instant,
-          claimant: t.Object({ label: t.String({ maxLength: 4096 }), href: t.Union([t.String({ maxLength: 4096 }), t.Null()]) }, closed),
+          claimant: t.Object(
+            { label: t.String({ maxLength: 4096 }), href: t.Union([t.String({ maxLength: 4096 }), t.Null()]) },
+            closed,
+          ),
           approvalAdvice: t.Object(
             {
               method: t.Literal('POST'),
