@@ -7,9 +7,7 @@ export const reuseTargetLimit = 16;
 export const referenceGroupLimit = 16;
 export type ReferenceGroup = { parts: SnakInput[] };
 export type ReuseRefusal = 'locked' | 'limit' | 'definition' | 'constraint' | 'missing' | 'source' | 'self';
-export type ReusePreview =
-  | { ok: true; next: StatementInput }
-  | { ok: false; reason: ReuseRefusal };
+export type ReusePreview = { ok: true; next: StatementInput } | { ok: false; reason: ReuseRefusal };
 export type ReuseSource = {
   holder: string;
   property: string;

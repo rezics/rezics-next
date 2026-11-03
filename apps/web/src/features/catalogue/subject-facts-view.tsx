@@ -545,9 +545,7 @@ function FactField({
                   }
                   guideReturn={`${href}/edit`}
                   {...(editorHref ? { guideReturn: editorHref } : {})}
-                  reuse={
-                    onReuse && factWritable(draft) ? { disabled: busy || locked, onReuse } : undefined
-                  }
+                  reuse={onReuse && factWritable(draft) ? { disabled: busy || locked, onReuse } : undefined}
                   focusReference={focusReference}
                 />
               </fieldset>

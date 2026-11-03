@@ -84,7 +84,10 @@ test('a contributor reviews exact changed assertions, jump-back invalidates, and
   page.setDefaultTimeout(60_000);
   await open(page);
   await stage(page, 'publication date');
-  await page.getByRole('region', { name: 'publication date', exact: true }).getByLabel('Day', { exact: true }).fill('7');
+  await page
+    .getByRole('region', { name: 'publication date', exact: true })
+    .getByLabel('Day', { exact: true })
+    .fill('7');
   await stage(page, 'language');
   await page.getByRole('region', { name: 'language', exact: true }).getByLabel('Value', { exact: true }).fill('ja');
 
@@ -154,7 +157,10 @@ test('a contributor reviews exact changed assertions, jump-back invalidates, and
     (candidate) => JSON.stringify(candidate.statement.value) === JSON.stringify({ type: 'value', content: 'de' }),
   );
   expect(proposed?.decision).toBeNull();
-  await page.getByRole('region', { name: 'language', exact: true }).getByRole('link', { name: 'Review this proposal', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'language', exact: true })
+    .getByRole('link', { name: 'Review this proposal', exact: true })
+    .click();
   await page.locator('[data-candidate-item]').waitFor({ state: 'visible' });
   await ui(page.locator('[data-candidate-item]')).toHaveCount(1);
 });

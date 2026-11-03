@@ -49,7 +49,10 @@ test('reuse copies a complete group, refuses over-limit and locked targets, and 
 
   const full: FactDraft = {
     ...language,
-    statement: { ...language.statement, references: Array.from({ length: referenceGroupLimit }, () => structuredClone(group)) },
+    statement: {
+      ...language.statement,
+      references: Array.from({ length: referenceGroupLimit }, () => structuredClone(group)),
+    },
   };
   expect(previewReuse(full, group, bundledRelease, factHolder(date))).toEqual({ ok: false, reason: 'limit' });
 
@@ -103,13 +106,21 @@ test('production Edit facts copies a multi-part reference into two drafts and pr
   page.setDefaultTimeout(60_000);
   await open(page);
   await stage(page, 'publication date');
-  await page.getByRole('region', { name: 'publication date', exact: true }).getByLabel('Day', { exact: true }).fill('8');
-  const dateRefs = page.getByRole('region', { name: 'publication date', exact: true }).getByRole('group', { name: /Citations 1/ });
+  await page
+    .getByRole('region', { name: 'publication date', exact: true })
+    .getByLabel('Day', { exact: true })
+    .fill('8');
+  const dateRefs = page
+    .getByRole('region', { name: 'publication date', exact: true })
+    .getByRole('group', { name: /Citations 1/ });
   await addPart(dateRefs, 'schema:inLanguage', /language/i, 'fr');
   await stage(page, 'language');
   await page.getByRole('region', { name: 'language', exact: true }).getByLabel('Value', { exact: true }).fill('ja');
   await stage(page, 'URL');
-  await page.getByRole('region', { name: 'URL', exact: true }).getByLabel('URL', { exact: true }).fill('https://example.org/catalogue-facts/reused');
+  await page
+    .getByRole('region', { name: 'URL', exact: true })
+    .getByLabel('URL', { exact: true })
+    .fill('https://example.org/catalogue-facts/reused');
 
   await dateRefs.getByRole('button', { name: /Reuse this reference/ }).click();
   const panel = page.locator('[data-fact-reuse]');
@@ -120,11 +131,17 @@ test('production Edit facts copies a multi-part reference into two drafts and pr
   await panel.getByRole('button', { name: 'Copy onto selected drafts', exact: true }).click();
   await ui(panel.getByText('Copied onto 2 drafts.', { exact: true })).toBeVisible();
 
-  const languageRefs = page.getByRole('region', { name: 'language', exact: true }).getByRole('group', { name: /Citations 2/ });
+  const languageRefs = page
+    .getByRole('region', { name: 'language', exact: true })
+    .getByRole('group', { name: /Citations 2/ });
   await ui(languageRefs.getByText('fr', { exact: true })).toBeVisible();
   const urlRefs = page.getByRole('region', { name: 'URL', exact: true }).getByRole('group', { name: /Citations 2/ });
   await ui(urlRefs.getByText('fr', { exact: true })).toBeVisible();
-  await languageRefs.locator('div[data-statement-addition]').filter({ hasText: /language/i }).getByRole('textbox').fill('nl');
+  await languageRefs
+    .locator('div[data-statement-addition]')
+    .filter({ hasText: /language/i })
+    .getByRole('textbox')
+    .fill('nl');
   await ui(dateRefs.getByText('fr', { exact: true })).toBeVisible();
   await ui(urlRefs.getByText('fr', { exact: true })).toBeVisible();
 
@@ -162,7 +179,9 @@ test('production Edit facts copies a multi-part reference into two drafts and pr
     url.candidates.some((candidate) =>
       candidate.statement.references.some((reference) =>
         reference.parts.some(
-          (part) => part.property.id === 'schema:inLanguage' && JSON.stringify(part.value) === JSON.stringify({ type: 'value', content: 'fr' }),
+          (part) =>
+            part.property.id === 'schema:inLanguage' &&
+            JSON.stringify(part.value) === JSON.stringify({ type: 'value', content: 'fr' }),
         ),
       ),
     ),

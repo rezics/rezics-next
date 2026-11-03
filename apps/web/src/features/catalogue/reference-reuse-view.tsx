@@ -73,11 +73,7 @@ export function ReferenceReusePanel({
     pageText(read.release.properties[source.property]?.labels, locale).text || m.subject_value_unlabelled({}, o);
   const targets = drafts.filter((draft) => factHolder(draft) !== source.holder);
   return (
-    <section
-      data-fact-reuse
-      aria-labelledby={titleId}
-      className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5"
-    >
+    <section data-fact-reuse aria-labelledby={titleId} className="min-w-0 space-y-4 rounded-xl bg-card p-4 sm:p-5">
       <ContentItemHeading id={titleId} level={2} className="text-lg font-semibold">
         {m.facts_reuse_title({}, o)}
       </ContentItemHeading>
@@ -154,9 +150,7 @@ export function ReferenceReusePanel({
           {m.facts_reuse_stale({}, o)}
         </p>
       )}
-      {!!applied.length && (
-        <p role="status">{m.facts_reuse_applied({ count: applied.length }, o)}</p>
-      )}
+      {!!applied.length && <p role="status">{m.facts_reuse_applied({ count: applied.length }, o)}</p>}
       {refused.map((item) => (
         <p key={`${item.holder}:${item.reason}`} role="status" className="text-sm">
           {m.facts_reuse_refused(
