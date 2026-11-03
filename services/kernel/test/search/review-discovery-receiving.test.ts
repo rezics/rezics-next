@@ -16,7 +16,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
 import { nativeDiscoveryRegistry, createDiscoveryProjection } from '../../src/search/account-discovery.ts';
-import { allocateDiscovery, discoveryGenerations, DiscoveryProducerCoverageError } from '../../src/search/generations.ts';
+import { allocateDiscovery, discoveryGenerations, DiscoveryProducerCoverageError, discoveryConsumer } from '../../src/search/generations.ts';
 import { createDiscoveryIndex, discoveryIndexName, discoveryIndexUuid } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { startDiscoveryIndexing } from '../../src/search/runner.ts';
@@ -113,7 +113,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
 
     const edit = await revisePost(deps, author, { threadId: id, itemId: opened.value.itemId,
       title: 'Edited title', body: fromPlainText('Edited body') }, request());
-    const editedWake = await invalidate(edit, 'com.rezics.content.post.revised.v1');
+    const editedWake = await invalidate(edit, 'com.rezics.content.revision.created.v1');
     lose = true;
     await expect(receiver().step(home)).rejects.toThrow('Lost visible bulk response');
     expect(await visible()).toMatchObject([{ names: ['Edited title'] }]);
@@ -121,15 +121,16 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     await receiver().step(home); // restart, current refresh, identical visible winner
     expect((await receiver().status(home)).acknowledged).toBeGreaterThan(first.acknowledged);
 
-    const deleted = await softDeletePost(deps, author, { threadId: id, postId: opened.value.itemId }, request());
-    await invalidate(deleted, 'com.rezics.content.post.deleted.v1');
+    await fixture.grant(author.accountId, 'post:erase', { route: routeOf(opened.value.itemId)!, id: opened.value.itemId });
+    const deleted = await softDeletePost(deps, author, { postId: opened.value.itemId, reason: 'Withdraw' }, request());
+    await invalidate(deleted, 'com.rezics.content.post.erased.v1');
     // Duplicate and older wakeups cannot rewind journal progress or restore old text.
     await requestReviewDiscoveryReceiving(fixture.pool, prefix, firstWake);
     await requestReviewDiscoveryReceiving(fixture.pool, prefix, editedWake);
     const removed = await receiver().step(home);
     expect(await visible()).toEqual([]);
     expect((await nativeSource.hydrate(home, [id])).reviews).toEqual([]);
-    const restored = await restorePost(deps, author, { postId: opened.value.itemId }, request());
+    const restored = await restorePost(deps, author, opened.value.itemId, request());
     await invalidate(restored, 'com.rezics.content.post.restored.v1');
 
     // A refresh held across lease takeover must never overwrite the successor's current application.
@@ -144,7 +145,7 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     await fixture.pool.query("UPDATE search.review_discovery_receiving SET claim_until=clock_timestamp()-interval '1 second' WHERE prefix=$1", [prefix]);
     const newer = await revisePost(deps, author, { threadId: id, itemId: opened.value.itemId,
       title: 'Newest title', body: fromPlainText('Newest body') }, request());
-    await invalidate(newer, 'com.rezics.content.post.revised.v1');
+    await invalidate(newer, 'com.rezics.content.revision.created.v1');
     await receiver().step(home); // retained fixed cut, but current refresh is newer
     release.resolve();
     await expect(older).rejects.toThrow('superseded or expired');
@@ -158,11 +159,11 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     const failing = createReviewDiscoveryReceiving({ pool: fixture.pool, search, projection, source: {
       ...nativeSource, async read() { throw new Error('Native dependency unavailable'); },
     } });
-    await invalidate(newer, 'com.rezics.content.post.revised.v1');
+    await invalidate(newer, 'com.rezics.content.revision.created.v1');
     // Existing original delivery is deduplicated; create one fresh native revision to test failure.
     const final = await revisePost(deps, author, { threadId: id, itemId: opened.value.itemId,
       body: fromPlainText('Final current body') }, request());
-    await invalidate(final, 'com.rezics.content.post.revised.v1');
+    await invalidate(final, 'com.rezics.content.revision.created.v1');
     await expect(failing.step(home)).rejects.toThrow('Native dependency unavailable');
     expect(await failing.status(home)).toMatchObject({ acknowledged: complete.acknowledged, status: 'unavailable' });
     await receiver().step(home);
@@ -187,6 +188,6 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     for (const table of ['review_discovery_receiving','review_discovery_receiving_scan','discovery_copy','discovery_population','discovery_generation'])
       await fixture.pool.query(`DELETE FROM search.${table} WHERE prefix=$1`, [prefix]);
     for (const table of ['consumer_checkpoint','consumer_lag'])
-      await fixture.pool.query(`DELETE FROM core.${table} WHERE consumer LIKE $1`, [`search:discovery:${prefix}%`]);
+      await fixture.pool.query(`DELETE FROM core.${table} WHERE consumer=ANY($1::text[])`, [[1,2].map((n) => discoveryConsumer(prefix,n))]);
   }
 }, 120_000);
