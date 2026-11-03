@@ -140,9 +140,10 @@ export async function readPeopleProfile(
 
 /** Initial facts are optional, explicit native statements. Terms stay separate from schema:name. */
 export function peopleInitialItem(initial: InitialSubject, facts: Record<string, StatementInput>): PeopleItem {
-  const entries = Object.entries(facts).map(
-    ([id, fact]) => [id, [structuredClone(creationStatement(fact, { properties: {} } as Release))]] as const,
-  );
+  const entries: [string, StatementInput[]][] = Object.entries(facts).map(([id, fact]) => [
+    id,
+    [structuredClone(creationStatement(fact, { properties: {} } as Release))],
+  ]);
   return {
     ...initial,
     ...(entries.length ? { statements: Object.fromEntries(entries) } : {}),

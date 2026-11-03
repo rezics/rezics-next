@@ -10,7 +10,7 @@ import { ReferenceReusePanel } from './reference-reuse-view';
 import { captureReuse, cloneReferenceGroup, type ReuseCapture, type ReuseRefusal, type ReuseSource } from './reference-reuse';
 import type { FactDraft } from './subject-facts';
 import type { PeopleRead } from './people-profile';
-import { peopleCreateFactsRead } from './people-create';
+import { peopleCreateFactsRead } from './people-create-model';
 
 const action =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';

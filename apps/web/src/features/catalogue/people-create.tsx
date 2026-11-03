@@ -21,7 +21,7 @@ import {
   peopleCreateControl,
   peopleFactDrafts,
   peopleFactsFromDrafts,
-} from './people-create';
+} from './people-create-model';
 import { applyReuse, captureReuse, cloneReferenceGroup } from './reference-reuse';
 
 type Current = Extract<PeopleRead, { ok: true }>;

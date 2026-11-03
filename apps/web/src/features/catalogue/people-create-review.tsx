@@ -41,7 +41,7 @@ function Assertion({
           <div key={index} className="min-w-0 space-y-1">
             <dt
               className="text-muted-foreground"
-              lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang}
+              lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
             >
               {pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text ||
                 m.subject_value_unlabelled({}, o)}
@@ -162,7 +162,7 @@ export function PeopleCreateReview({
           const label = pickText(read.release.properties[property]?.labels ?? {}, locale);
           return (
             <ContentItemFrame key={property} as="div" className="min-w-0 space-y-3 rounded-xl bg-muted/30 p-4">
-              <ContentItemHeading level={3} className="text-base font-semibold" lang={label.lang}>
+              <ContentItemHeading level={3} className="text-base font-semibold" lang={label.lang ?? undefined}>
                 {label.text || property}
               </ContentItemHeading>
               {rows.map((statement, index) => (
