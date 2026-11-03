@@ -35,7 +35,16 @@ async function growHistory(scale: number, previous: number) {
   const reservations = ordinals.map(() => newId(accountRoute));
   const generations = ordinals.map(() => newId(accountRoute));
   const transactions = ordinals.map(() => newId(route));
-  const values = [route, growth.realmId, fixture.member.id, fixture.owner.id, ordinals, reservations, generations, transactions];
+  const values = [
+    route,
+    growth.realmId,
+    fixture.member.id,
+    fixture.owner.id,
+    ordinals,
+    reservations,
+    generations,
+    transactions,
+  ];
   const range = `tstzrange('2000-01-01 00:00:00+00'::timestamptz + ordinal * interval '2 seconds',
     '2000-01-01 00:00:00+00'::timestamptz + ordinal * interval '2 seconds' + interval '1 second', '[)')`;
   await growth.database.admin.query(
