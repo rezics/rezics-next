@@ -56,10 +56,14 @@ export async function createNativeZoneCollectionFixture(
     [secondSubjectId, 'second member'],
     [repeatedSubjectId, 'curated duplicate'],
   ] as const) {
-    const { member } = await create<{ member: Occurrence }>(driver.request, `/v1/collections/${collection.id}/members`, {
-      subjectId,
-      note,
-    });
+    const { member } = await create<{ member: Occurrence }>(
+      driver.request,
+      `/v1/collections/${collection.id}/members`,
+      {
+        subjectId,
+        note,
+      },
+    );
     occurrences.push(member);
   }
 
@@ -81,7 +85,8 @@ export async function removeCollectionMount(request: Request, zoneId: string, co
     configuration: ZoneStarter;
     mounts: string[];
   }>(await request('owner', { method: 'GET', path: `/v1/zones/${zoneId}/configuration` }));
-  if (!current.mounts.includes(collectionId)) throw new Error(`Zone ${zoneId} no longer mounts Collection ${collectionId}`);
+  if (!current.mounts.includes(collectionId))
+    throw new Error(`Zone ${zoneId} no longer mounts Collection ${collectionId}`);
   return request('owner', {
     method: 'PUT',
     path: `/v1/zones/${zoneId}/configuration`,

@@ -9,21 +9,27 @@ test('removing one real Zone mount preserves editable curated duplicate occurren
     const repeated = await driver.provisionSubject('game');
     const second = await driver.provisionSubject('recipe');
     const fixture = await createNativeZoneCollectionFixture(driver, repeated.id, second.id);
-    const list = async <T>(path: string) =>
-      json<T>(await driver.request('owner', { method: 'GET', path }));
+    const list = async <T>(path: string) => json<T>(await driver.request('owner', { method: 'GET', path }));
 
-    expect((await list<{ subjects: unknown[] }>(`/v1/zones/${fixture.removedZoneId}/subjects`)).subjects).toHaveLength(2);
-    expect((await list<{ collections: unknown[] }>(`/v1/zones/${fixture.retainedZoneId}/collections`)).collections).toHaveLength(1);
-    await json(
-      await removeCollectionMount(driver.request, fixture.removedZoneId, fixture.collectionId),
-      200,
+    expect((await list<{ subjects: unknown[] }>(`/v1/zones/${fixture.removedZoneId}/subjects`)).subjects).toHaveLength(
+      2,
     );
+    expect(
+      (await list<{ collections: unknown[] }>(`/v1/zones/${fixture.retainedZoneId}/collections`)).collections,
+    ).toHaveLength(1);
+    await json(await removeCollectionMount(driver.request, fixture.removedZoneId, fixture.collectionId), 200);
 
     expect((await list<{ subjects: unknown[] }>(`/v1/zones/${fixture.removedZoneId}/subjects`)).subjects).toEqual([]);
-    expect((await list<{ collections: unknown[] }>(`/v1/zones/${fixture.removedZoneId}/collections`)).collections).toEqual([]);
-    expect((await list<{ subjects: unknown[] }>(`/v1/zones/${fixture.retainedZoneId}/subjects`)).subjects).toHaveLength(2);
+    expect(
+      (await list<{ collections: unknown[] }>(`/v1/zones/${fixture.removedZoneId}/collections`)).collections,
+    ).toEqual([]);
+    expect((await list<{ subjects: unknown[] }>(`/v1/zones/${fixture.retainedZoneId}/subjects`)).subjects).toHaveLength(
+      2,
+    );
 
-    const saved = await list<{ collection: { id: string; memberCount: number } }>(`/v1/collections/${fixture.collectionId}`);
+    const saved = await list<{ collection: { id: string; memberCount: number } }>(
+      `/v1/collections/${fixture.collectionId}`,
+    );
     expect(saved.collection).toMatchObject({ id: fixture.collectionId, memberCount: 3 });
     const members = await list<{
       members: { id: string; subjectId: string; note: string | null }[];
