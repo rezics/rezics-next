@@ -993,3 +993,117 @@ The rating tombstone purge is participant `community`'s rating part; `readRating
 | Protected Realm scored page         | Two native Realm authorizations, two selected-question observations (question and label head, home partition, and current provenance authority), two freshness/prior reads, scored rank generation and seek, and native subject Access/current identity for every consumed row. The seek binds the actual `question_identity` before `prior_generation`.                                                                                                                                                                                                                                                                | [Derived bound](cost-realm-order.md): rows <= `14+C+2R_R+C R_S+2R_Q`; statements and controls <= `29+2A_R+C A_S+2A_Q`; `C<=limit<=100`, returned `V<=C`; candidate index positioning is logarithmic. This is the compatibility scorer only; it does not establish canonical-name ties or the unscored complement.                                                                                                                                     | `test/rating/growth-realm-rank-source.test.ts`: three scales and first/deep/withheld/empty/terminal cases; its selected-question cost and EXPLAIN assertions remain to be reconciled before acceptance.                                                                                          |
 
 Page sizes bound each workflow step independently: segment and eligibility pages process at most 100 votes, merge pages at most 100 voters, and figure drain/republish work is admitted in pages of at most 500 figures. Total affected work grows with page count and affected keys; a page bound does not bound the complete workflow.
+
+## Imported classification observations
+
+[register.ts](register.ts) exports `createSourceClassificationProducer(config)` for the existing Imports and Web
+server compositions. Its methods are `put(PutSourceClassification)`, `clear(ClearSourceClassification)`,
+`readExact({actor, subjectId, association, deadline})` and
+`readBatch({actor, subjectId, associations, limit, deadline})`. The supplied-key batch accepts one Subject and
+1–32 selected associations; an empty selection returns an empty array without IO. It rejects oversized input
+before any authority or source lookup and never discovers classifications or refills withheld results.
+`SourceClassificationProducer`, `SourceClassificationFigure`, `SourceClassificationRead`, the mutation/input
+interfaces, closed ingestion schemas, digest helpers and the maximum batch constant are actual exports.
+These are internal producer methods; this slice introduces no HTTP routes, public fence endpoint or governed resource.
+
+The finite VNDB profile is defined in [source-classification-contract.ts](source-classification-contract.ts).
+[VNDB's official Kana fields](https://api.vndb.org/kana#vn-fields) define tag confidence as the provider's
+`tags.rating`, greater than zero and at most three, and `tags.lie` as a boolean. Character `traits.lie` is also a
+boolean; character traits do not provide confidence. The admitted record/member pairs are `v…`/`g…` and
+`c…`/`i…`. No confidence is converted into a probability, enjoyment star score, vote or local classification
+ballot. Independently provided `confidenceCount` and `lieCount` are optional nonnegative integers. Omitted
+counts stay absent, including in the public DTO; ordinary Kana tag/trait responses do not supply those counts.
+Imports owns actual payload extraction, permission and licence admission. There is no provider fetch or second
+producer here. This capability does not admit an otherwise prohibited dataset or converter.
+
+Decision: a native canonical classification may receive an independently licensed imported observation; an imported
+candidate additionally requires the same facts tuple as its current Semantic provenance. Imports supplies the
+external association identifier; Semantic remains authoritative for the selected canonical candidate and provenance.
+
+Every association binds Subject, property, candidate, candidate revision, release, Context, exact target and
+`qualifiersDigest`. `classificationQualifiersDigest(publicStatement.qualifiers)` hashes canonical snaks with
+`{property: id, value}` and preserves qualifier order. The empty qualifier list has its own digest. The native
+adapter calls Semantic's published `currentRelationFacts`, `candidateSources`, `readRelease`, `readContext` and
+current Subject identity/Access interfaces. It contains no Semantic SQL, display-text matching or alternate
+candidate selection. It uses the public statement audience and independently checks target readability. Missing
+release/provenance authority cannot produce an available figure. A replacement, different revision, changed
+qualifiers or Context uses a different slot; old figures remain attached to their original identity.
+
+The immutable observation identity is SHA-256 of canonical JSON
+`["vndb-classification-observation.v1", association, payload]`. The payload includes exact source alias, record,
+association member, indicators, supplied counts, millisecond UTC `asOf`, attribution, licence and either an explicit
+source revision or `{kind: "unversioned", digest}` for the permitted source payload. This provider digest is distinct
+from the native immutable observation digest. CAS and idempotency keys are command input, outside that identity.
+Only admitted fields are accepted. `classificationObservation` lets Imports compute the next digest before submission.
+
+Both commands require explicit `expectedObservation` (`null` for no head) and an idempotency key. Current native
+`source_statistic:write` Global authority is checked before every receipt lookup, including exact replay and retry.
+Every changed payload requires matching CAS. Older observations conflict even with matching CAS; a different
+equal-time observation or source rebinding requires the current digest. An identical immutable payload is already
+satisfied. Clear retains a tombstone, preventing delayed observations from resurrecting a slot. A clear cannot
+rebind a retained slot to another source record/member. Clear still works when the original association, Context,
+provenance or source tuple is no longer publicly readable, using the existing governance/bulk authority alone.
+
+Two Rating tables retain immutable observations and one exact current slot. They have no voter, question or native
+aggregate keys and no dependency on the private native-ballot implementation. Neither enjoyment aggregation nor
+classification ballots consume these observations. Reads compare current Semantic evidence, local head identity
+and the source tuple fence before and after filling DTOs. Fence homes are independently anchored and released;
+no command holds a foreign checkout or writes a foreign partition. DTOs label provider, source/member, observation,
+source version, units, as-of, age and unavailable indicators. Unknown and concealed associations both return
+`{state: "unavailable", reason: "not_found"}`; absence of a current observation uses `not_observed`. Typed missing
+provenance/authority and changed-observation states carry no retained source payload.
+
+Lifecycle visibility is checked on every read and publication/replay, rather than copied into another projection.
+The existing default worker already registers the Rating event catalogue, including
+`com.rezics.rating.source_classification.changed.v1`; no aggregate drain or repair effect consumes it. Retraction,
+Context withholding, qualifier changes and fences need no asynchronous removal or scan. A retained clear is the
+bounded repair operation. An association never migrates by Subject merge, label equality or target redirect.
+
+### Exact association read Cost
+
+- Touches: `readExact` delegates to the supplied batch with one key: two Semantic observation passes, two anchored
+  Rating head reads, and two anchored facts-fence passes for a nonempty published slot. Each Semantic pass includes
+  distinct holder/target `resolveSubject`, one `readContext`, one `readRelease`, `currentRelationFacts` and a separate
+  `candidateSources` probe. Missing authority suppresses slot lookup; cleared/empty slots suppress fence reads.
+- Bound: one supplied association, two head and observation primary-key probes per pass, at most one tuple per fence
+  pass. The explicit lateral `LIMIT 1` paths bind the entire Rating primary key before reading payload bytes; each
+  stored payload is capped at 8192 bytes. Nested Semantic/Access work retains its owners' bounds, including selected
+  slot expansion/history and cold release loading; it is not counted as a single constant query.
+- Growth check: focused native tests cover empty, denied, stale and current branches; strict physical plans and
+  independent 256/1024/4096 growth of associations, observations and actor ballots remain integration work.
+
+### Supplied association batch read Cost
+
+- Touches: for N supplied keys, two Semantic passes over at most N Context/holder groups, N+1 distinct holder/target
+  identities, N distinct releases and N Contexts; two Rating reads each return at most N heads/observations. Each
+  fence pass deduplicates at most N tuples and issues one exact query and anchor per participating partition.
+- Bound: N <= explicit limit <= 32. No refill, Subject classification inventory, vote query or source-history survey.
+  Rating examines at most N selected heads and N selected observations per pass, with logarithmic B-tree positioning.
+  Bytes include up to N capped payloads plus bounded association keys. Whole-operation costs additionally include
+  two times all real Semantic/Access callees above, snapshot controls and cold release bytes. Those nested terms
+  require Performance review before assigning a numeric whole-operation ceiling.
+- Growth check: focused native tests enforce the supplied-key limit and empty branch; all-pool physical-prefix and
+  runner measurements at the three independent growth scales are deferred to integration acceptance.
+
+### Put observation Cost
+
+- Touches: each Core attempt prepares native writer authority, one Semantic exact observation and one anchored tuple
+  fence before receipt lookup; it locks one Subject and one source slot, reads one current observation, inserts at
+  most one immutable observation, updates one head and emits one registered event/receipt. Replay skips mutations.
+  After commit, exact-association disclosure runs the read operation above and compares the committed digest.
+- Bound: one exact association/slot, payload <=8192 stored bytes, and one immutable insert per changed attempt.
+  Concurrent writes serialize on the Subject/slot; CAS rejects a stale writer. Core's existing retry count multiplies
+  attempt work, including native authority and anchors; final disclosure includes every exact-read dependency above.
+- Growth check: focused native tests cover replay, independent receipt authority, stale CAS and competing writers.
+  Native physical-work growth and uncertain-commit injection remain integration acceptance work.
+
+### Clear observation Cost
+
+- Touches: current native Global writer authority before receipt lookup, one locked Subject, one exact locked slot
+  and current observation, at most one immutable tombstone insert, one head update, one registered event and receipt.
+  Replay and identical tombstones add no new observation/event. There are no public Semantic or tuple-fence reads.
+- Bound: one retained exact key per attempt; no candidate inventory, provider fetch, ballot touch or repair scan.
+  Primary-key probes retain logarithmic positioning as unrelated histories grow; existing Core retries multiply
+  the command/authority work. Clear payload contains only exact tuple/member, as-of and the literal clear marker.
+- Growth check: focused native tests clear after Subject denial, Context denial and source fencing, and reject
+  older resurrection. Three-scale all-pool physical work remains deferred to integration acceptance.

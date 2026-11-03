@@ -58,6 +58,15 @@ const identityPage = Type.Object(
 export type RatingIdentityPageEvent = Static<typeof identityPage>;
 
 export const RATING_EVENTS = {
+  'com.rezics.rating.source_classification.changed.v1': Type.Object(
+    {
+      subjectId: Type.String({ pattern: UUID }),
+      associationKey: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+      observationDigest: Type.String({ pattern: '^[0-9a-f]{64}$' }),
+      state: Type.Union([Type.Literal('published'), Type.Literal('cleared')]),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.rating.question.label-changed.v1': Type.Object(
     {
       questionId: Type.String({ pattern: UUID }),
