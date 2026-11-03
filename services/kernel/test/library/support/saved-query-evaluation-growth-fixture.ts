@@ -40,6 +40,14 @@ export async function createSavedQueryEvaluationGrowthFixture() {
       base.other,
     );
     expect(otherEntry.status).toBe(201);
+    const otherRoute = routeOf(otherSubjectId);
+    if (otherRoute === null) throw new Error('Other account subject has no route');
+    const otherOwner = await base.database.admin.query<{ accountId: string }>(
+      `SELECT account_id::text AS "accountId" FROM library.entry WHERE route=$1 AND subject_id=$2`,
+      [otherRoute, otherSubjectId],
+    );
+    const otherAccountId = otherOwner.rows[0]?.accountId;
+    if (!otherAccountId) throw new Error('Other account entry did not retain its owner identity');
     const criterionResponse = await base.send('POST', '/v1/libraryLabels', { name: 'Saved member criterion' });
     expect(criterionResponse.status).toBe(201);
     const criterion = (await criterionResponse.json()) as { label: { id: string } };
@@ -56,7 +64,6 @@ export async function createSavedQueryEvaluationGrowthFixture() {
     const saved = (await created.json()) as { collection: { id: string } };
     const collectionId = saved.collection.id;
     const ownerAccountId = base.runtime.identity.ordinary.accountId;
-    const otherAccountId = base.runtime.identity.another.accountId;
     const route = routeOf(ownerAccountId);
     if (route === null) throw new Error('Saved query owner has no route');
 
