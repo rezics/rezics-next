@@ -555,7 +555,7 @@ VNDB and retained AniList parsed source rows preserve provider identifiers, unkn
 and date precision under recursive capability redaction. Parent/row mutations, expiry without writes, completed
 request replay, cancellation and terminal fencing remain fail-closed. The received journal assessment seam is retained
 in V3; it adds no writer. V1/V2 decoding remains fixed; the current archive consumer refuses unsupported V3.
-Web323 and canonical archive8bb retain their existing interface/recovery ownership. Native growth and broader
+The existing Web export interface and canonical archive consumer retain their interface/recovery ownership. Native growth and broader
 integration acceptance remain deferred. See [export contract](../library-export.md#version-3-provider-evidence-and-assessment-seam).
 
 The native export now retains version 3 annotation, accepted provenance and live occurrence-journal records with
