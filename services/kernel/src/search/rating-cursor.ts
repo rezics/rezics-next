@@ -83,7 +83,14 @@ export async function encodeRatingCursor(
     binding,
     {
       generation: cursor.generation,
-      after: [prefix(context), context.questionId, context.populationId, context.priorEpoch, cursor.phase, ...cursor.after],
+      after: [
+        prefix(context),
+        context.questionId,
+        context.populationId,
+        context.priorEpoch,
+        cursor.phase,
+        ...cursor.after,
+      ],
     },
     now,
   );

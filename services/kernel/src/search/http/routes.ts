@@ -393,14 +393,16 @@ export function searchRoutes<App>(
               });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const realmAccess = body.population
-              ? gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access)
+              ? (gateAccess?.() ??
+                (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access))
               : undefined;
             if (body.population && !realmAccess)
               throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             const scopeAccess: Access | undefined =
               realmAccess ??
-              gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
+              gateAccess?.() ??
+              (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
             const scopeOptions = scopeAccess
               ? { access: scopeAccess, actor, deadline: job.deadline, routeKey }
               : undefined;

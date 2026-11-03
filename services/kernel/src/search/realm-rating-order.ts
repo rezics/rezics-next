@@ -143,8 +143,8 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
     )
       throw notReady();
   }
-  const scored = figure !== null && context.priorEpoch !== null &&
-    figure.priorEpoch === context.priorEpoch && figure.score !== null;
+  const scored =
+    figure !== null && context.priorEpoch !== null && figure.priorEpoch === context.priorEpoch && figure.score !== null;
   const expectedPhase = scored ? 'scored' : 'unscored';
   const tuple = hit.sort;
   const name = tuple?.[scored ? 1 : 0];
