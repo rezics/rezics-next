@@ -412,7 +412,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           closed,
         ),
         response: { 200: entryStateHistorySchema, ...failures },
-        detail: detail('library_entry.state_history.list', 'library_entry:read'),
+        detail: detail('library_entry_state_history.list', 'library_entry:read'),
       },
       async ({ actor, params, query, admission, job }) => {
         point(actor, params.subjectId, 'library_entry:read');
@@ -426,7 +426,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ subjectId: id, changeRevision: t.Numeric({ minimum: 1, maximum: 2_147_483_646 }) }),
         response: { 200: entryStateReviewSchema, ...failures },
-        detail: detail('library_entry.state_history.review', 'library_entry:read'),
+        detail: detail('library_entry_state_history.review', 'library_entry:read'),
       },
       async ({ actor, params, admission, job }) => {
         point(actor, params.subjectId, 'library_entry:read');
@@ -451,7 +451,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           ),
           422: problemSchema('idempotency_conflict'),
         },
-        detail: personalDetail('library_entry.state_history.restore', 'library_entry:update'),
+        detail: personalDetail('library_entry_state_history.restore', 'library_entry:update'),
       },
       async ({ actor, params, body, headers, admission, job, session }) => {
         account(actor);
