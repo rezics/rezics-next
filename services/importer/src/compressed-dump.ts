@@ -95,7 +95,12 @@ function mapGzipError(error: unknown, signal: AbortSignal): never {
   throw new DumpInputError('gzip dump failed integrity or completeness checks.', 'gzip-integrity');
 }
 
-function concatBytes(left: Uint8Array, right: Uint8Array, cap: number, identity: 'gzip-integrity' | 'invalid-input'): Uint8Array {
+function concatBytes(
+  left: Uint8Array,
+  right: Uint8Array,
+  cap: number,
+  identity: 'gzip-integrity' | 'invalid-input',
+): Uint8Array {
   if (!left.byteLength) return right;
   if (!right.byteLength) return left;
   if (left.byteLength + right.byteLength > cap)
@@ -113,9 +118,7 @@ function copyOf(bytes: Uint8Array, start = 0, end = bytes.byteLength): Uint8Arra
 }
 
 function u32le(bytes: Uint8Array, offset: number): number {
-  return (
-    (bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16) | (bytes[offset + 3]! << 24)) >>> 0
-  );
+  return (bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16) | (bytes[offset + 3]! << 24)) >>> 0;
 }
 
 /** RFC 1952 header length, or `undefined` when more compressed bytes are required. */
@@ -326,7 +329,10 @@ export async function* gunzipDumpChunks(
       const trailer = copyOf(rest, 0, GZIP_TRAILER);
       rest = copyOf(rest, GZIP_TRAILER);
       if (u32le(trailer, 0) !== memberCrc || u32le(trailer, 4) !== memberIsize)
-        throw new DumpInputError('gzip CRC or length trailer does not match the decompressed member.', 'gzip-integrity');
+        throw new DumpInputError(
+          'gzip CRC or length trailer does not match the decompressed member.',
+          'gzip-integrity',
+        );
       counters.members++;
       destroyInflate(inflate);
       inflate = undefined;

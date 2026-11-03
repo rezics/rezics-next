@@ -730,10 +730,11 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   } catch (error) {
     const interrupted = signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
     output = {
-      code:
-        interrupted ? 130
-        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError ? 2
-        : 1,
+      code: interrupted
+        ? 130
+        : error instanceof InputFailure || error instanceof VndbInputError || error instanceof DumpInputError
+          ? 2
+          : 1,
       stdout: '',
       stderr: diagnostic(
         interrupted

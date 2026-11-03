@@ -49,7 +49,12 @@ function argv(source: string, dump: string, directory: string, keyPath: string, 
 
 async function recordsOf(source: 'openlibrary' | 'wikidata', bytes: Uint8Array) {
   const rows = [];
-  for await (const record of readDump(source, async function* () { yield bytes; }()))
+  for await (const record of readDump(
+    source,
+    (async function* () {
+      yield bytes;
+    })(),
+  ))
     rows.push({ key: record.key, revision: record.revision, payload: record.payload });
   return rows;
 }

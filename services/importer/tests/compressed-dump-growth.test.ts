@@ -44,9 +44,9 @@ test('raw and gzip dump paths stay linear at 32/128/512 with bounded windows and
         for await (const _record of readDump(
           source,
           decodeDumpBytes(
-            async function* () {
+            (async function* () {
               for (let offset = 0; offset < gzip.byteLength; offset += 37) yield gzip.subarray(offset, offset + 37);
-            }(),
+            })(),
             { compression: 'gzip', signal, counters, highWaterMark: 64 },
           ),
           { counters: dump, maxChunkBytes: 64, maxRecordBytes: 512 },
@@ -73,7 +73,13 @@ test('raw and gzip dump paths stay linear at 32/128/512 with bounded windows and
 
       const raw = createDumpCounters();
       let rawYield = 0;
-      for await (const _record of readDump(source, async function* () { yield plain; }(), { counters: raw }))
+      for await (const _record of readDump(
+        source,
+        (async function* () {
+          yield plain;
+        })(),
+        { counters: raw },
+      ))
         rawYield++;
       expect(rawYield).toBe(count);
     }

@@ -1,9 +1,5 @@
 import type { SourceId } from '@rezics/conversion';
-import {
-  admitDumpCompression,
-  parseDumpCompression,
-  type DumpCompression,
-} from './compressed-dump.ts';
+import { admitDumpCompression, parseDumpCompression, type DumpCompression } from './compressed-dump.ts';
 import { DumpInputError, type RawVndbEntry } from './dump-input.ts';
 import { DumpPreview, DumpPreviewFailure, type DumpPreviewOptions } from './dump-preview.ts';
 import {

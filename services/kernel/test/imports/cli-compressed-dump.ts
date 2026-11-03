@@ -132,7 +132,16 @@ export async function openCompressedDumpCli() {
 
     const openlibrary = await readFile(new URL('openlibrary.tsv', fixtures));
     const wikidata = await readFile(new URL('wikidata.jsonl', fixtures));
-    return { close, invoke, preview, inspect, editor, openlibrary, wikidata, gzip: (bytes: Uint8Array) => gzipSync(bytes) };
+    return {
+      close,
+      invoke,
+      preview,
+      inspect,
+      editor,
+      openlibrary,
+      wikidata,
+      gzip: (bytes: Uint8Array) => gzipSync(bytes),
+    };
   } catch (error) {
     await close();
     throw error;

@@ -23,8 +23,12 @@ const ol = (key: number, title: string, revision = 7) =>
     title,
   })}\n`;
 const wd = (key: number, title: string, revision = 7) =>
-  JSON.stringify({ type: 'item', id: `Q${key}`, lastrevid: revision, labels: { en: { language: 'en', value: title } } }) +
-  '\n';
+  JSON.stringify({
+    type: 'item',
+    id: `Q${key}`,
+    lastrevid: revision,
+    labels: { en: { language: 'en', value: title } },
+  }) + '\n';
 
 async function collected(source: 'openlibrary' | 'wikidata', input: AsyncIterable<Uint8Array>) {
   const records = [];
@@ -46,18 +50,33 @@ test('gzip members concatenate, empty last member completes, and gzip metadata c
   const signal = new AbortController().signal;
   const concatenated = await collected(
     'openlibrary',
-    gunzipDumpChunks(async function* () {
-      yield Buffer.concat([first, second, empty]);
-    }(), { signal, decodeBudget: DEFAULT_DECODED_DUMP_BYTES }),
+    gunzipDumpChunks(
+      (async function* () {
+        yield Buffer.concat([first, second, empty]);
+      })(),
+      { signal, decodeBudget: DEFAULT_DECODED_DUMP_BYTES },
+    ),
   );
-  expect(concatenated).toEqual(await collected('openlibrary', async function* () { yield plain; }()));
   expect(concatenated).toEqual(
     await collected(
       'openlibrary',
-      decodeDumpBytes(async function* () { yield gzipSync(plain, { level: 9 }); }(), {
-        compression: 'gzip',
-        signal,
-      }),
+      (async function* () {
+        yield plain;
+      })(),
+    ),
+  );
+  expect(concatenated).toEqual(
+    await collected(
+      'openlibrary',
+      decodeDumpBytes(
+        (async function* () {
+          yield gzipSync(plain, { level: 9 });
+        })(),
+        {
+          compression: 'gzip',
+          signal,
+        },
+      ),
     ),
   );
   const utf = encode(ol(9, 'Café'));
@@ -66,17 +85,30 @@ test('gzip members concatenate, empty last member completes, and gzip metadata c
   expect(
     await collected(
       'openlibrary',
-      gunzipDumpChunks(async function* () {
-        yield Buffer.concat([gzipSync(utf.subarray(0, split)), gzipSync(utf.subarray(split))]);
-      }(), { signal, decodeBudget: DEFAULT_DECODED_DUMP_BYTES }),
+      gunzipDumpChunks(
+        (async function* () {
+          yield Buffer.concat([gzipSync(utf.subarray(0, split)), gzipSync(utf.subarray(split))]);
+        })(),
+        { signal, decodeBudget: DEFAULT_DECODED_DUMP_BYTES },
+      ),
     ),
-  ).toEqual(await collected('openlibrary', async function* () { yield utf; }()));
+  ).toEqual(
+    await collected(
+      'openlibrary',
+      (async function* () {
+        yield utf;
+      })(),
+    ),
+  );
   expect(
     await collected(
       'openlibrary',
-      gunzipDumpChunks(async function* () {
-        yield Buffer.concat([gzipSync(encode(ol(1, 'A'))), gzipSync(encode(ol(1, 'B')))]);
-      }(), { signal, decodeBudget: DEFAULT_DECODED_DUMP_BYTES }),
+      gunzipDumpChunks(
+        (async function* () {
+          yield Buffer.concat([gzipSync(encode(ol(1, 'A'))), gzipSync(encode(ol(1, 'B')))]);
+        })(),
+        { signal, decodeBudget: DEFAULT_DECODED_DUMP_BYTES },
+      ),
     ),
   ).toEqual([
     { key: '/works/OL1W', revision: '7' },
@@ -97,7 +129,14 @@ test('truncated trailer, bad CRC, later corrupt member and trailing garbage fail
   const garbage = Buffer.concat([valid, encode('not-gzip')]);
   const fail = async (bytes: Uint8Array, identity: DumpInputFailureIdentity) => {
     try {
-      await drain(gunzipDumpChunks(async function* () { yield bytes; }(), { signal, decodeBudget: 1_000_000 }));
+      await drain(
+        gunzipDumpChunks(
+          (async function* () {
+            yield bytes;
+          })(),
+          { signal, decodeBudget: 1_000_000 },
+        ),
+      );
       throw new Error(`expected ${identity}`);
     } catch (error) {
       expect(error).toBeInstanceOf(DumpInputError);
@@ -116,7 +155,14 @@ test('decode budget, cancellation during backpressure, repeated close and a repl
   const gzip = gzipSync(compressible);
   const budget = new AbortController().signal;
   try {
-    await drain(gunzipDumpChunks(async function* () { yield gzip; }(), { signal: budget, decodeBudget: 32 }));
+    await drain(
+      gunzipDumpChunks(
+        (async function* () {
+          yield gzip;
+        })(),
+        { signal: budget, decodeBudget: 32 },
+      ),
+    );
     throw new Error('expected budget');
   } catch (error) {
     expect((error as DumpInputError).identity).toBe('decode-budget');
@@ -125,9 +171,9 @@ test('decode budget, cancellation during backpressure, repeated close and a repl
   const slow = new AbortController();
   const counters = createGzipDumpCounters();
   const iterator = gunzipDumpChunks(
-    async function* () {
+    (async function* () {
       yield gzipSync(encode(ol(3, 'Slow') + ol(4, 'Consumer')));
-    }(),
+    })(),
     { signal: slow.signal, decodeBudget: 1_000_000, counters },
   );
   expect((await iterator.next()).done).toBe(false);
