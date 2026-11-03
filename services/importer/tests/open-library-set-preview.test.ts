@@ -86,9 +86,9 @@ async function mixedManifest(
 }
 
 test('preview dump-set is exclusive with --dump and --plan-dir and lists families in help', async () => {
-  expect(() =>
-    parsePreviewArgs(['--source', 'openlibrary', '--dump', 'a', '--dump-set', 'b']),
-  ).toThrow('--dump-set cannot be combined with --dump');
+  expect(() => parsePreviewArgs(['--source', 'openlibrary', '--dump', 'a', '--dump-set', 'b'])).toThrow(
+    '--dump-set cannot be combined with --dump',
+  );
   expect(() => parsePreviewArgs(['--plan-dir', 'kept', '--dump-set', 'b'])).toThrow(
     '--plan-dir reopens a retained preview',
   );
@@ -143,13 +143,7 @@ test('preview compares a mixed gzip/plain set, reopens without members, and with
       await reopened.close();
     }
 
-    const cli = await runPreviewCli([
-      '--source',
-      'openlibrary',
-      '--dump-set',
-      dumpSet,
-      '--json',
-    ]);
+    const cli = await runPreviewCli(['--source', 'openlibrary', '--dump-set', dumpSet, '--json']);
     expect(cli.code).toBe(2);
 
     const broken = await mixedManifest(root, {

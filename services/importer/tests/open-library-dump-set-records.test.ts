@@ -340,10 +340,7 @@ test('duplicate keys across members do not publish a partial capture', async () 
   }
 });
 
-async function writeMixedSet(
-  root: string,
-  files: { authors: Uint8Array; works: Uint8Array; editions: Uint8Array },
-) {
+async function writeMixedSet(root: string, files: { authors: Uint8Array; works: Uint8Array; editions: Uint8Array }) {
   await writeFile(join(root, 'authors.txt.gz'), files.authors, { mode: 0o600 });
   await writeFile(join(root, 'works.txt'), files.works, { mode: 0o600 });
   await writeFile(join(root, 'editions.txt.gz'), files.editions, { mode: 0o600 });

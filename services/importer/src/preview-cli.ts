@@ -223,8 +223,7 @@ function terminalSafeMessage(value: string): string {
 
 function importInvocation(plan: PreviewPlan): string[] {
   const alias = plan.source === plan.sourceKind ? '' : ` --source-alias ${terminalString(plan.source)}`;
-  const input =
-    plan.inputKind === 'dump-set' ? '--dump-set <complete-manifest-path>' : '--dump <complete-input-path>';
+  const input = plan.inputKind === 'dump-set' ? '--dump-set <complete-manifest-path>' : '--dump <complete-input-path>';
   return [
     'Ordinary import reopens the actual dump, acquires its lease, and rechecks authority and fences. Preview evidence does not license a later file or bypass those checks. Preview is not local import finalization or native publication.',
     `  bun services/importer/src/cli.ts --source ${plan.sourceKind}${alias} ${input} --state <sqlite-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
@@ -240,9 +239,7 @@ function renderPlan(plan: PreviewPlan, directory: string): string[] {
     `View: ${plan.viewKind === 'first-import' ? 'first-import preview; this is not proof that the server has no existing subjects' : `baseline-comparison against captured generation ${terminalString(plan.baselineId ?? '')}`}`,
     `Acquisition: ${plan.inputKind === 'dump-set' ? 'open-library-dump-set' : 'single-dump'}`,
     ...(plan.inputFamilies.length
-      ? [
-          `Input families: ${plan.inputFamilies.map((member) => `${member.family}=${member.compression}`).join(', ')}`,
-        ]
+      ? [`Input families: ${plan.inputFamilies.map((member) => `${member.family}=${member.compression}`).join(', ')}`]
       : []),
     `Input: ${plan.complete ? 'complete (decoded EOF and gzip members verified)' : `incomplete (${plan.errorIdentity ?? 'invalid-input'})`}`,
     `Phases: ${plan.complete ? 'decompression verified; preview complete; local import finalization and native publication remain ordinary-CLI steps' : 'decompression or decoded EOF failed; preview incomplete; no vanished plan; prior baseline unchanged'}`,

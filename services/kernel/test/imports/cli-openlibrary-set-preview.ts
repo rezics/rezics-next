@@ -218,7 +218,20 @@ export async function runOpenLibrarySetPreviewJourney() {
       edition: tsv(editionSource),
     });
     const previewed = await runImportCli(
-      ['preview', '--source', 'openlibrary', '--source-alias', alias, '--dump-set', changed, '--baseline', state, '--json', '--page', 'changed'],
+      [
+        'preview',
+        '--source',
+        'openlibrary',
+        '--source-alias',
+        alias,
+        '--dump-set',
+        changed,
+        '--baseline',
+        state,
+        '--json',
+        '--page',
+        'changed',
+      ],
       {
         fetch: (async () => {
           throw new Error('preview network');
@@ -270,9 +283,13 @@ export async function runOpenLibrarySetPreviewJourney() {
       if (!create) throw new Error('missing work bootstrap');
       const db = new Database(state, { readonly: true });
       try {
-        return (db.query('SELECT subject FROM binding_records WHERE source=? AND external_id=?').get(alias, workSource.key) as {
-          subject: string;
-        }).subject;
+        return (
+          db
+            .query('SELECT subject FROM binding_records WHERE source=? AND external_id=?')
+            .get(alias, workSource.key) as {
+            subject: string;
+          }
+        ).subject;
       } finally {
         db.close();
       }
@@ -280,9 +297,13 @@ export async function runOpenLibrarySetPreviewJourney() {
     const editionId = (() => {
       const db = new Database(state, { readonly: true });
       try {
-        return (db.query('SELECT subject FROM binding_records WHERE source=? AND external_id=?').get(alias, editionSource.key) as {
-          subject: string;
-        }).subject;
+        return (
+          db
+            .query('SELECT subject FROM binding_records WHERE source=? AND external_id=?')
+            .get(alias, editionSource.key) as {
+            subject: string;
+          }
+        ).subject;
       } finally {
         db.close();
       }
