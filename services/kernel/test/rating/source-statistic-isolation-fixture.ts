@@ -38,7 +38,10 @@ export type IsolationRequestOptions = {
 
 type WorkerHandle = { stop(): Promise<void> };
 
-export async function createSourceStatisticIsolationFixture(options: { withRatingWorker?: boolean } = {}) {
+export async function createSourceStatisticIsolationFixture(
+  options: { withRatingWorker?: boolean; sourceFences?: boolean } = {},
+) {
+  const scopes = options.sourceFences ? [...operationScopes, 'source_fence:takedown'] : operationScopes;
   const configuredDatabaseUrl = process.env.DATABASE_URL;
   if (!configuredDatabaseUrl) throw new Error('DATABASE_URL must name the migrated /rezics template');
   const templateUrl = new URL(configuredDatabaseUrl);
@@ -48,13 +51,13 @@ export async function createSourceStatisticIsolationFixture(options: { withRatin
       databaseUrl: templateUrl.href,
       namespace: `rating_source_isolation_${randomUUID().replaceAll('-', '')}`,
     },
-    nativeFixtureScopes,
+    options.sourceFences ? [...nativeFixtureScopes, 'source_fence:takedown'] : nativeFixtureScopes,
   );
 
   let database: GrowthDatabase | undefined;
   let worker: WorkerHandle | undefined;
   try {
-    const additionalVoters = await provisionVoters(native, operationScopes, 2);
+    const additionalVoters = await provisionVoters(native, scopes, 2);
     database = await openGrowthDatabase(native.database.pool.options.connectionString);
     database.pool.options.max = 1;
     await bootstrapRelease(database.pool, bundledRelease);
@@ -85,14 +88,14 @@ export async function createSourceStatisticIsolationFixture(options: { withRatin
     const governance = await native.auth.issue({
       accountId: governanceId,
       clientId: native.auth.ordinaryClient.id,
-      scopes: operationScopes,
+      scopes,
     });
 
     const narrowCredential = (credential: ContentCredential): Promise<ContentCredential> =>
       native.auth.issue({
         accountId: credential.actor.accountId,
         clientId: native.auth.ordinaryClient.id,
-        scopes: operationScopes,
+        scopes,
       });
     const author = await narrowCredential(native.actors.author);
     const importer = await narrowCredential(native.actors.other);
