@@ -19,7 +19,7 @@ export type ThreadWatchProps = {
   threadId: string;
   session: string;
   sessionKnown: boolean;
-  viewerId?: string;
+  viewerId?: string | undefined;
   sessionStamp: string;
   admitted: boolean;
   returnTo: string;

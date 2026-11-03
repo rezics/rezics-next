@@ -33,7 +33,7 @@ export type ThreadWatchNative = {
 };
 
 /** Content has not delivered a generated thread-watch API, so the installed route stays unavailable. */
-export const threadWatchNative: ThreadWatchNative = Object.freeze({
+export const threadWatchNative = Object.freeze<ThreadWatchNative>({
   async read() {
     return { kind: 'unavailable' };
   },
