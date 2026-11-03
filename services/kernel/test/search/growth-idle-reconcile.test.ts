@@ -230,11 +230,15 @@ test('Idle Search reconcile stays within its finite-domain bound as unrelated ch
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
   for (const sample of report.samples) {
-    expect(sample.counted?.pending?.value).toBe(0);
-    expect(sample.counted?.controlHits?.value).toBe(controlPartitions.length);
-    expect(sample.counted?.absentZero?.value).toBe(sample.counted?.absentReturned?.value);
+    const counted = sample.counted;
+    const pending = counted?.pending;
+    const controlHits = counted?.controlHits;
+    if (!pending || !controlHits) throw new Error(`counted units missing at scale ${sample.scale}`);
+    expect(pending.value).toBe(0);
+    expect(controlHits.value).toBe(controlPartitions.length);
+    expect(counted.absentZero?.value).toBe(counted.absentReturned?.value);
     expect(sample.cost.rows, `examined rows at scale ${sample.scale}`).toBeGreaterThanOrEqual(partitionDomain);
-    expect(sample.cost.rows).toBeGreaterThan(sample.counted!.pending.value);
+    expect(sample.cost.rows).toBeGreaterThan(pending.value);
     expect(sample.cost.blocks).toBeGreaterThan(0);
     expect(sample.cost.sharedHit + sample.cost.sharedRead).toBe(sample.cost.blocks);
     expect(sample.cost.statements).toBeGreaterThan(0);
@@ -248,8 +252,8 @@ test('Idle Search reconcile stays within its finite-domain bound as unrelated ch
     ).toBe(false);
     for (const [index, cost] of sample.repetitions.entries()) {
       expect(cost.rows).toBeGreaterThanOrEqual(partitionDomain);
-      expect(sample.counted!.pending.repetitions[index]).toBe(0);
-      expect(sample.counted!.controlHits.repetitions[index]).toBe(controlPartitions.length);
+      expect(pending.repetitions.at(index)).toBe(0);
+      expect(controlHits.repetitions.at(index)).toBe(controlPartitions.length);
     }
     console.info(
       JSON.stringify({
