@@ -21,6 +21,7 @@ import {
   classificationConfirmable,
   classificationReuseReason,
   classificationRetainedOutcomes,
+  classificationReviewableDrafts,
   focusableClassificationHolder,
   retainedClassificationSiblings,
   selectedClassificationTarget,
@@ -220,7 +221,7 @@ export function ClassificationReviewWorkspace({
 }) {
   const o = { locale: locale as never };
   const changed = includedChanges(drafts);
-  const items = projectChangedSet(drafts);
+  const items = projectChangedSet(classificationReviewableDrafts(drafts));
   const retained = classificationRetainedOutcomes(drafts, read);
   const admitted = new Set(
     [...new Set(drafts.map((draft) => draft.property))].filter((property) => classificationAdmitted(read, property)),

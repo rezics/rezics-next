@@ -312,3 +312,84 @@ test('failed current read, stale copy review and a removed holder diagnostic sta
     expect(button(host, m.facts_submit()).disabled).toBe(true);
   });
 });
+
+test('unknown delivery keeps original bytes while a refused sibling is repaired, and subject replacement retires private work', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassifications } = await import('../src/features/catalogue/character-profile-classification');
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
+    const { m } = await import('../src/paraglide/messages.js');
+    const { characterProfileFixture, characterProfileId } =
+      await import('../src/kernel/fake/catalogue-character-profile');
+    const fixture = characterProfileFixture();
+    const read: FactsCurrent = {
+      ok: true,
+      public: fixture.character,
+      release: structuredClone(fixture.release),
+      source: null,
+    };
+    const seed = read.public.subject.statements['schema:height']![0]!;
+    for (const field of [keywords, gender]) {
+      read.public.subject.statements[field] = [
+        {
+          ...structuredClone(seed),
+          id: `00000000-0000-4000-8000-${field === keywords ? '000000008001' : '000000008002'}`,
+          property: { id: field, data_type: 'wikibase-item' },
+          value: { type: 'value', content: concept },
+          references: [
+            {
+              hash: 'unknown',
+              parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } }],
+            },
+          ],
+        },
+      ];
+    }
+    read.public.related[concept] = { type: 'skos:Concept', labels: { en: 'Concept' } };
+    const commands: FactCommand[] = [];
+    const native = fixture.props.facts(characterProfileId);
+    const transport = {
+      ...native,
+      propose: async (command: FactCommand) => {
+        commands.push(command);
+        return command.statement.property.id === keywords
+          ? { ok: false as const, reason: 'uncertain' as const }
+          : { ok: false as const, reason: 'denied' as const };
+      },
+    };
+    const props = {
+      changedSetReview: true,
+      properties: [keywords, gender],
+      read,
+      locale: 'en',
+      search: async () => [],
+      transport,
+      review: () => fixture.props.review(characterProfileId, keywords),
+    };
+    await render(
+      h(CatalogueCurrentReading, { visible: true, ready: true, revision: 'current' }, h(CharacterClassifications, props)),
+    );
+    await act(async () => button(field(host, keywords), m.facts_edit_field()).click());
+    await enter(field(host, keywords).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/keywords`);
+    await act(async () => button(field(host, gender), m.facts_edit_field()).click());
+    await enter(field(host, gender).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/gender`);
+    await act(async () => button(host, m.facts_review()).click());
+    await act(async () => button(host, m.facts_submit()).click());
+    expect(commands).toHaveLength(2);
+    const original = commands.find((command) => command.statement.property.id === keywords)!;
+    await enter(field(host, gender).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/repaired`);
+    expect(commands.filter((command) => command.statement.property.id === keywords)).toEqual([original]);
+    await act(async () => button(field(host, keywords), m.correction_retry()).click());
+    expect(commands.filter((command) => command.statement.property.id === keywords)).toEqual([original, original]);
+    const next = structuredClone(read);
+    next.public.subject.id = '00000000-0000-4000-8000-00000000c099';
+    await render(
+      h(
+        CatalogueCurrentReading,
+        { visible: true, ready: true, revision: 'replaced' },
+        h(CharacterClassifications, { ...props, read: next }),
+      ),
+    );
+    expect(host.textContent).not.toContain(`${evidence}/keywords`);
+    expect(host.querySelector('[data-fact-reuse]')).toBeNull();
+  });
+});

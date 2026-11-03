@@ -41,6 +41,7 @@ import {
   type ReuseSource,
 } from './reference-reuse';
 import {
+  bindClassificationReview,
   classificationAdmitted,
   classificationConfirmable,
   classificationNeedsDeparture,
@@ -143,6 +144,10 @@ function CharacterClassificationSetLive({
   const [overlay, setOverlay] = useState<EditorRead | null>(null);
   const running = useRef(false);
   const lifetime = useEditorLifetime();
+  const reviewLive = useRef(review);
+  reviewLive.current = review;
+  const draftsLive = useRef(drafts);
+  draftsLive.current = drafts;
   const subjectId = read.public.subject.id;
   const subjectRef = useRef(subjectId);
   if (subjectRef.current !== subjectId) {
@@ -259,6 +264,23 @@ function CharacterClassificationSetLive({
       setBusy(false);
     }
   }
+  const readCurrentLive = useRef(readCurrent);
+  readCurrentLive.current = readCurrent;
+  const openHolderLive = useRef(openHolder);
+  openHolderLive.current = openHolder;
+  const boundReview = useMemo(
+    () =>
+      bindClassificationReview(
+        (property, session) => reviewLive.current(property, session),
+        () => readCurrentLive.current(),
+        () => lifetime.active(),
+        (property) => {
+          const draft = draftsLive.current.find((item) => item.property === property);
+          openHolderLive.current(draft ? factHolder(draft) : property);
+        },
+      ),
+    [lifetime],
+  );
   const success = drafts.filter((draft) => draft.result?.ok).length;
   if (!visible) return null;
   return (
@@ -273,7 +295,7 @@ function CharacterClassificationSetLive({
             locale={locale}
             search={search}
             transport={transport}
-            review={review}
+            review={boundReview}
             draft={draft}
             onDraft={(next) => assign(property, next)}
             parentBusy={busy}

@@ -1,4 +1,5 @@
 import type { Release } from '@rezics/definitions';
+import type { CandidateTransport } from '../../subject/candidate-review';
 import { pageText } from '../pages/shared';
 import { previewReuse, type ReusePreview, type ReuseRefusal } from './reference-reuse';
 import type { StatementInput } from './statement-editor';
@@ -182,7 +183,30 @@ export function classificationConfirmable(input: {
 }
 
 export function classificationReviewableDrafts(drafts: FactDraft[]): FactDraft[] {
-  return includedChanges(drafts).filter((draft) => !factLocked(draft) || !!draft.command);
+  return includedChanges(drafts).filter((draft) => !factLocked(draft));
+}
+
+/** After native selection, reread this Character; proposal success never marks the assertion selected. */
+export function bindClassificationReview(
+  review: (property: string, session?: string) => CandidateTransport,
+  reread: () => Promise<void>,
+  live: () => boolean,
+  onSelected: (property: string) => void,
+): (property: string, session?: string) => CandidateTransport {
+  return (property, session) => {
+    const transport = review(property, session);
+    return {
+      ...transport,
+      confirm: async (command, work) => {
+        const result = await transport.confirm(command, work);
+        if (result.ok && result.kind === 'selected' && live()) {
+          await reread();
+          if (live()) onSelected(property);
+        }
+        return result;
+      },
+    };
+  };
 }
 
 export function classificationRetainedOutcomes(drafts: FactDraft[], read: FactsCurrent): FactDraft[] {

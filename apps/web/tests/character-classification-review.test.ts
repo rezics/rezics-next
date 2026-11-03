@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
 import {
+  bindClassificationReview,
   classificationAdmitted,
   classificationBaselineKind,
   classificationConfirmable,
   classificationReuseReason,
+  classificationReviewableDrafts,
   focusableClassificationHolder,
   retainOrphanedClassificationDiagnostic,
   selectedClassificationTarget,
@@ -160,4 +162,47 @@ test('confirm waits for a current review, blocks unread or withdrawn new intent,
     'withdrawn',
   );
   expect(classificationBaselineKind({ source: null, baseline: null }, read, 'schema:keywords')).toBe('absent');
+  const uncertain = {
+    ...keywords,
+    command: sealed.command,
+    result: { ok: false as const, reason: 'uncertain' as const },
+  };
+  expect(classificationReviewableDrafts([keywords, uncertain]).map((draft) => draft.property)).toEqual(['schema:keywords']);
+});
+
+test('native selection rereads the Character and never replays the proposal command', async () => {
+  const events: string[] = [];
+  const bound = bindClassificationReview(
+    () => ({
+      read: async () => ({ ok: false as const, reason: 'denied' as const }),
+      confirm: async () => {
+        events.push('confirm');
+        return { ok: true as const, kind: 'selected' as const, public: null };
+      },
+    }),
+    async () => {
+      events.push('current');
+    },
+    () => true,
+    (property) => {
+      events.push(property);
+    },
+  );
+  await bound('schema:keywords', 'character-session').confirm({} as never);
+  expect(events).toEqual(['confirm', 'current', 'schema:keywords']);
+  const accepted = bindClassificationReview(
+    () => ({
+      read: async () => ({ ok: false as const, reason: 'denied' as const }),
+      confirm: async () => ({ ok: true as const, kind: 'accepted' as const, public: null }),
+    }),
+    async () => {
+      events.push('accepted-read');
+    },
+    () => true,
+    () => {
+      events.push('accepted-focus');
+    },
+  );
+  await accepted('schema:gender').confirm({} as never);
+  expect(events).toEqual(['confirm', 'current', 'schema:keywords']);
 });
