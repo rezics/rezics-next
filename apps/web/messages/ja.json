@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "送信前に、この追加コンテンツで変わった分類をすべて確認します。各欄は独立したネイティブ提案です。出典のコピーは本編作品の事実、所属、許諾を引き継ぎません。",
   "addon_classification_independent": "本編作品の提案、提案中の所属、現在選択中の本編は、これらの分類下書きとは別です。",
   "addon_classification_copy_note": "コピーした出典は、この追加コンテンツ上の新しい根拠です。許諾、対象の許可、候補の採択にはなりません。",
-  "addon_classification_read_failed": "現在の追加コンテンツを読めませんでした。非公開の分類下書きは残します。新しい提案は現在の読取りが認められるまで待ちます。"
+  "addon_classification_read_failed": "現在の追加コンテンツを読めませんでした。非公開の分類下書きは残します。新しい提案は現在の読取りが認められるまで待ちます。",
+  "thread_branch_scope": "このページで提供された投稿だけを元の順序で表示しています。経路と関連返信数の対象はこのページ内の親投稿へのリンク最大8階層であり、会話全体ではありません。",
+  "thread_branch_return_navigation": "たどった投稿に戻る",
+  "thread_branch_return": "このページの投稿 {position} に戻る",
+  "thread_branch_position": "このページの投稿 {position}",
+  "thread_branch_expand": "このページの関連返信 {count} 件を表示",
+  "thread_branch_collapse": "このページの関連返信 {count} 件を折りたたむ",
+  "thread_branch_path": "このページの親投稿の経路（近い順）",
+  "thread_branch_continue": "次の親投稿へ進む",
+  "thread_branch_incomplete": "この経路は不完全か、安全にグループ化できません。親投稿には直接移動できます。",
+  "thread_branch_collapsed": "このページの関連返信 {count} 件を折りたたみました。入力内容は未送信のままです。",
+  "thread_branch_parent_destination": "該当する親投稿へ移動"
 }

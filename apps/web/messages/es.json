@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "Revisa cada clasificación cambiada de este complemento antes de enviarla. Cada campo es una propuesta nativa independiente. Copiar una cita no copia los hechos, la pertenencia ni la licencia de la obra base.",
   "addon_classification_independent": "La sugerencia de obra base, la pertenencia propuesta y la obra base actualmente seleccionada permanecen aparte de estos borradores de clasificación.",
   "addon_classification_copy_note": "Una cita copiada es una nueva reivindicación de evidencia en este complemento. No otorga licencia, no admite un destino ni acepta un candidato.",
-  "addon_classification_read_failed": "No se pudo leer el complemento actual. Los borradores privados de clasificación se conservan. Las propuestas nuevas esperan una lectura actual admitida."
+  "addon_classification_read_failed": "No se pudo leer el complemento actual. Los borradores privados de clasificación se conservan. Las propuestas nuevas esperan una lectura actual admitida.",
+  "thread_branch_scope": "Solo las publicaciones proporcionadas, en su orden original. Las rutas y los recuentos de respuestas relacionadas abarcan esta página y hasta ocho enlaces a publicaciones superiores, no toda la conversación.",
+  "thread_branch_return_navigation": "Volver a las publicaciones seguidas",
+  "thread_branch_return": "Volver a la publicación {position} de esta página",
+  "thread_branch_position": "Publicación {position} de esta página",
+  "thread_branch_expand": "Mostrar {count} respuestas relacionadas de esta página",
+  "thread_branch_collapse": "Plegar {count} respuestas relacionadas de esta página",
+  "thread_branch_path": "Ruta de publicaciones superiores de esta página, primero la más cercana",
+  "thread_branch_continue": "Continuar a la siguiente publicación superior exacta",
+  "thread_branch_incomplete": "Esta ruta está incompleta o no se puede agrupar de forma fiable. La publicación superior exacta sigue disponible como destino.",
+  "thread_branch_collapsed": "Se han plegado {count} respuestas relacionadas de esta página. El texto en curso sigue sin enviarse.",
+  "thread_branch_parent_destination": "Ir a la publicación superior exacta"
 }

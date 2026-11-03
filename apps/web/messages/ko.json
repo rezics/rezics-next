@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "보내기 전에 이 추가 콘텐츠에서 바뀐 분류를 모두 검토합니다. 각 필드는 독립된 네이티브 제안입니다. 인용을 복사해도 본편 작품의 사실, 소속, 라이선스는 이어받지 않습니다.",
   "addon_classification_independent": "본편 작품 제안, 제안된 소속, 현재 선택된 본편은 이 분류 초안과 분리되어 있습니다.",
   "addon_classification_copy_note": "복사한 인용은 이 추가 콘텐츠의 새로운 근거 주장입니다. 라이선스 부여, 대상 허용, 후보 채택이 되지 않습니다.",
-  "addon_classification_read_failed": "현재 추가 콘텐츠를 읽을 수 없습니다. 비공개 분류 초안은 유지됩니다. 새 제안은 현재 읽기가 허용될 때까지 기다립니다."
+  "addon_classification_read_failed": "현재 추가 콘텐츠를 읽을 수 없습니다. 비공개 분류 초안은 유지됩니다. 새 제안은 현재 읽기가 허용될 때까지 기다립니다.",
+  "thread_branch_scope": "이 페이지에 제공된 게시물만 원래 순서로 표시합니다. 경로와 관련 답글 수는 이 페이지 안에서 최대 8단계의 부모 링크만 포함하며 전체 대화가 아닙니다.",
+  "thread_branch_return_navigation": "따라간 게시물에서 돌아오기",
+  "thread_branch_return": "이 페이지의 {position}번 게시물로 돌아가기",
+  "thread_branch_position": "이 페이지의 {position}번 게시물",
+  "thread_branch_expand": "이 페이지의 관련 답글 {count}개 표시",
+  "thread_branch_collapse": "이 페이지의 관련 답글 {count}개 접기",
+  "thread_branch_path": "이 페이지의 부모 게시물 경로, 가까운 순서",
+  "thread_branch_continue": "다음 부모 게시물로 계속 이동",
+  "thread_branch_incomplete": "이 경로는 불완전하거나 안전하게 묶을 수 없습니다. 정확한 부모 게시물로는 이동할 수 있습니다.",
+  "thread_branch_collapsed": "이 페이지의 관련 답글 {count}개를 접었습니다. 작성 중인 내용은 전송되지 않습니다.",
+  "thread_branch_parent_destination": "정확한 부모 게시물로 이동"
 }

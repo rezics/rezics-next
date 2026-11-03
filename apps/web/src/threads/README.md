@@ -144,3 +144,11 @@ Rendering adds no loader, observer or network read. One media index plus one ren
 within the existing native document/media limits. Prepared multilingual stories cover the post/revision/return
 journey at 390 and 1280 pixels in both themes, plus keyboard use and unavailable media. They reuse recorded DTO
 shapes and visibly identify prepared content; they are not native disclosure proof.
+
+## Following reply branches
+
+[Reply context](reply-context.md#bounded-page-branches) owns bounded supplied-page ancestry, local collapse and exact
+parent follow/return. `ThreadReading` composes `ConversationBranches` around its passed Post and keeps its existing
+reply-selection callback and single composer. The model never sorts the canonical list or reads off-page ancestors.
+The existing native exact-post locator is used for missing parents; no new hierarchy producer or hydration seam is
+introduced. The priority post action and document renderer interfaces are unchanged.

@@ -6373,5 +6373,16 @@
   "addon_classification_intro": "Review every changed classification on this add-on before sending. Each field is an independent native proposal. Copying a citation does not copy the base work’s facts, membership or licence.",
   "addon_classification_independent": "Base-work suggestion, proposed membership and current selected base stay separate from these classification drafts.",
   "addon_classification_copy_note": "A copied citation is a new evidence claim on this add-on. It does not grant a licence, admit a target or accept a candidate.",
-  "addon_classification_read_failed": "The current add-on could not be read. Private classification drafts are kept. New proposals wait until the current reading is admitted."
+  "addon_classification_read_failed": "The current add-on could not be read. Private classification drafts are kept. New proposals wait until the current reading is admitted.",
+  "thread_branch_scope": "Only supplied posts, in their original order. Paths and related-reply counts cover this page and at most eight parent links; they are not the whole conversation.",
+  "thread_branch_return_navigation": "Return through followed posts",
+  "thread_branch_return": "Return to post {position} on this page",
+  "thread_branch_position": "Post {position} on this page",
+  "thread_branch_expand": "Show {count} related replies on this page",
+  "thread_branch_collapse": "Hide {count} related replies on this page",
+  "thread_branch_path": "Parent path on this page, nearest first",
+  "thread_branch_continue": "Continue to the exact next parent",
+  "thread_branch_incomplete": "This path is incomplete or cannot be grouped safely. The exact parent remains a destination.",
+  "thread_branch_collapsed": "{count} related replies on this page are collapsed. Writing stays unsent.",
+  "thread_branch_parent_destination": "Go to the exact parent post"
 }

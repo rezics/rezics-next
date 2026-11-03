@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "送出前請審閱此追加內容上每一項已變更的分類。每個欄位都是獨立的原生提案。複製引文不會繼承本體作品的事實、從屬關係或授權。",
   "addon_classification_independent": "本體作品建議、擬議從屬關係與目前選定的本體，都與這些分類草稿分開。",
   "addon_classification_copy_note": "複製的引文是此追加內容上的新證據主張。它不授予授權、不承認目標，也不接受候選。",
-  "addon_classification_read_failed": "無法讀取目前追加內容。私人分類草稿會保留。新提案會等到目前讀取被允許。"
+  "addon_classification_read_failed": "無法讀取目前追加內容。私人分類草稿會保留。新提案會等到目前讀取被允許。",
+  "thread_branch_scope": "僅顯示本頁提供的貼文，保留原有順序。路徑與相關回覆數量僅涵蓋本頁，最多追溯八層父貼文，並非完整對話。",
+  "thread_branch_return_navigation": "返回先前追蹤的貼文",
+  "thread_branch_return": "返回本頁第 {position} 則貼文",
+  "thread_branch_position": "本頁第 {position} 則貼文",
+  "thread_branch_expand": "顯示本頁 {count} 則相關回覆",
+  "thread_branch_collapse": "收合本頁 {count} 則相關回覆",
+  "thread_branch_path": "本頁父貼文路徑，由近至遠",
+  "thread_branch_continue": "繼續前往下一則確切父貼文",
+  "thread_branch_incomplete": "此路徑不完整或無法安全分組。仍可前往確切的父貼文。",
+  "thread_branch_collapsed": "已收合本頁 {count} 則相關回覆。撰寫中的內容仍未送出。",
+  "thread_branch_parent_destination": "前往確切的父貼文"
 }

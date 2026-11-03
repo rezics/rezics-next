@@ -28,6 +28,8 @@ import type { ThreadSubject } from './subjects';
 import type { LoadedThreadPage, ThreadPost } from './thread-page';
 import type { readThreadPersonal } from './reads';
 import { ReplyParentReader } from './reply-context';
+import { ConversationBranches, conversationPostElement } from './conversation-branches';
+import { conversationPageModel } from './conversation-page-model';
 import { replyToThread } from './actions';
 import { csrfHeaders, draftFetch } from './composer';
 import { ThreadReplyComposer } from './reply-context-composer';
@@ -63,7 +65,7 @@ export function focusThreadPostLocation(
   )
     return;
   const HTMLElementConstructor = list.ownerDocument.defaultView?.HTMLElement;
-  const target = Array.from(list.children).find((item) => item.id === fragment);
+  const target = conversationPostElement(list, fragment);
   if (!HTMLElementConstructor || !(target instanceof HTMLElementConstructor)) return;
   target.scrollIntoView({ block: 'start' });
   target.focus({ preventScroll: true });
@@ -229,7 +231,11 @@ export function ThreadReading({
     focusRequest: 0,
   });
   const [replyPending, setReplyPending] = useState(false);
-  const replyParents = useMemo(() => new Map(posts.posts.map((post) => [post.id, post])), [posts.posts]);
+  const branches = useMemo(() => conversationPageModel(thread.id, posts.posts), [thread.id, posts.posts]);
+  const replyParents = useMemo(
+    () => new Map([...branches.byId].map(([id, row]) => [id, posts.posts[row.index]!])),
+    [branches, posts.posts],
+  );
   // Private data is consumed only while the session still says signed in.
   const currentPersonal = pageCurrent && session === 'signed-in' ? personal : undefined;
   const retainedCommandAuthority = useRef<{
@@ -313,6 +319,7 @@ export function ThreadReading({
   useLayoutEffect(() => {
     return parentReader?.connect();
   }, [parentReader]);
+  const branchScope = useMemo(() => ({}), [parentScope, sessionRevision, pageCurrent]);
   const refreshScope = useMemo(
     () => ({}),
     [readAuthority, thread.id, thread.boardId, realm?.id, session, currentPersonal?.viewerId, pageCallbackRevision],
@@ -376,19 +383,20 @@ export function ThreadReading({
               {m.thread_posts_heading()}
             </ContentItemHeading>
             {posts.posts.length ? (
-              <ol
-                id={`thread-${thread.id}`}
-                ref={postList}
-                aria-hidden={!pageCurrent}
-                inert={!pageCurrent}
-                className={pageCurrent ? 'space-y-3 scroll-mt-24' : 'invisible space-y-3 scroll-mt-24'}
-              >
-                {posts.posts.map((post) => {
+              <ConversationBranches
+                model={branches}
+                thread={{ id: thread.id, title: displayTitle }}
+                scope={branchScope}
+                current={pageCurrent}
+                isCurrent={() => isPageCallbackCurrent() && (parentReader?.current() ?? true)}
+                hash={location.hash}
+                listRef={postList}
+                renderPost={(row) => {
+                  const post = posts.posts[row.index]!;
                   const firstPost = post.id === thread.firstPost.id;
                   return (
                     <Post
-                      key={post.id}
-                      anchorId={`post-${post.id}`}
+                      anchorId={row.anchorId}
                       post={post}
                       readAuthority={readAuthority}
                       authors={authors}
@@ -429,8 +437,8 @@ export function ThreadReading({
                       review={firstPost && thread.kind === 'review'}
                     />
                   );
-                })}
-              </ol>
+                }}
+              />
             ) : (
               <p className="rounded-xl bg-card p-4 text-muted-foreground">
                 {posts.next ? m.thread_reading_empty_page() : m.thread_posts_empty()}

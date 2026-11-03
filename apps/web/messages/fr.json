@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "Relisez chaque classification modifiée de cette extension avant l’envoi. Chaque champ est une proposition native indépendante. Copier une citation ne copie ni les faits, ni l’appartenance, ni la licence de l’œuvre de base.",
   "addon_classification_independent": "La suggestion d’œuvre de base, l’appartenance proposée et l’œuvre de base actuellement sélectionnée restent distinctes de ces brouillons de classification.",
   "addon_classification_copy_note": "Une citation copiée est une nouvelle revendication de preuve sur cette extension. Elle n’accorde aucune licence, n’admet aucune cible et n’accepte aucun candidat.",
-  "addon_classification_read_failed": "L’extension actuelle n’a pas pu être lue. Les brouillons privés de classification sont conservés. Les nouvelles propositions attendent une lecture actuelle admise."
+  "addon_classification_read_failed": "L’extension actuelle n’a pas pu être lue. Les brouillons privés de classification sont conservés. Les nouvelles propositions attendent une lecture actuelle admise.",
+  "thread_branch_scope": "Uniquement les publications fournies, dans leur ordre initial. Les chemins et les nombres de réponses liées concernent cette page et au plus huit liens parents, pas la conversation entière.",
+  "thread_branch_return_navigation": "Revenir aux publications suivies",
+  "thread_branch_return": "Revenir à la publication {position} sur cette page",
+  "thread_branch_position": "Publication {position} sur cette page",
+  "thread_branch_expand": "Afficher {count} réponses liées sur cette page",
+  "thread_branch_collapse": "Replier {count} réponses liées sur cette page",
+  "thread_branch_path": "Chemin des publications parentes sur cette page, les plus proches en premier",
+  "thread_branch_continue": "Continuer vers la publication parente suivante",
+  "thread_branch_incomplete": "Ce chemin est incomplet ou ne peut pas être regroupé de façon fiable. La publication parente exacte reste accessible.",
+  "thread_branch_collapsed": "{count} réponses liées sur cette page sont repliées. Le texte en cours reste non envoyé.",
+  "thread_branch_parent_destination": "Aller à la publication parente exacte"
 }

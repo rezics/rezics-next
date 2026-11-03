@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "Prüfe jede geänderte Klassifikation dieses Add-ons, bevor du sie sendest. Jedes Feld ist ein unabhängiger nativer Vorschlag. Eine kopierte Quellenangabe übernimmt weder Fakten, Mitgliedschaft noch Lizenz des Grundwerks.",
   "addon_classification_independent": "Grundwerk-Vorschlag, vorgeschlagene Mitgliedschaft und aktuell ausgewähltes Grundwerk bleiben von diesen Klassifikationsentwürfen getrennt.",
   "addon_classification_copy_note": "Eine kopierte Quellenangabe ist ein neuer Beleganspruch auf diesem Add-on. Sie gewährt keine Lizenz, lässt kein Ziel zu und akzeptiert keinen Kandidaten.",
-  "addon_classification_read_failed": "Das aktuelle Add-on konnte nicht gelesen werden. Private Klassifikationsentwürfe bleiben. Neue Vorschläge warten auf eine zugelassene aktuelle Lesung."
+  "addon_classification_read_failed": "Das aktuelle Add-on konnte nicht gelesen werden. Private Klassifikationsentwürfe bleiben. Neue Vorschläge warten auf eine zugelassene aktuelle Lesung.",
+  "thread_branch_scope": "Nur die gelieferten Beiträge in ihrer ursprünglichen Reihenfolge. Pfade und Anzahlen verwandter Antworten gelten nur für diese Seite und höchstens acht Elternverweise, nicht für das gesamte Gespräch.",
+  "thread_branch_return_navigation": "Zu zuvor besuchten Beiträgen zurückkehren",
+  "thread_branch_return": "Zurück zu Beitrag {position} auf dieser Seite",
+  "thread_branch_position": "Beitrag {position} auf dieser Seite",
+  "thread_branch_expand": "{count} verwandte Antworten auf dieser Seite anzeigen",
+  "thread_branch_collapse": "{count} verwandte Antworten auf dieser Seite einklappen",
+  "thread_branch_path": "Übergeordnete Beiträge auf dieser Seite, nächste zuerst",
+  "thread_branch_continue": "Zum nächsten übergeordneten Beitrag weitergehen",
+  "thread_branch_incomplete": "Dieser Pfad ist unvollständig oder lässt sich nicht sicher gruppieren. Der genaue übergeordnete Beitrag bleibt erreichbar.",
+  "thread_branch_collapsed": "{count} verwandte Antworten auf dieser Seite sind eingeklappt. Geschriebener Text bleibt ungesendet.",
+  "thread_branch_parent_destination": "Zum genauen übergeordneten Beitrag"
 }

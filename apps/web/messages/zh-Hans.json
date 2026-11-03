@@ -6323,5 +6323,16 @@
   "addon_classification_intro": "发送前请审阅此追加内容上每一项已更改的分类。每个字段都是独立的原生提案。复制引文不会继承本体作品的事实、从属关系或许可。",
   "addon_classification_independent": "本体作品建议、拟议从属关系和当前选定的本体，都与这些分类草稿分开。",
   "addon_classification_copy_note": "复制的引文是此追加内容上的新证据主张。它不授予许可、不承认目标，也不接受候选。",
-  "addon_classification_read_failed": "无法读取当前追加内容。私人分类草稿会保留。新提案会等到当前读取被允许。"
+  "addon_classification_read_failed": "无法读取当前追加内容。私人分类草稿会保留。新提案会等到当前读取被允许。",
+  "thread_branch_scope": "仅显示本页提供的帖子，保留原有顺序。路径与相关回复数量仅涵盖本页，最多追溯八层父帖子，并非完整对话。",
+  "thread_branch_return_navigation": "返回先前跟随的帖子",
+  "thread_branch_return": "返回本页第 {position} 条帖子",
+  "thread_branch_position": "本页第 {position} 条帖子",
+  "thread_branch_expand": "显示本页 {count} 条相关回复",
+  "thread_branch_collapse": "收起本页 {count} 条相关回复",
+  "thread_branch_path": "本页父帖子路径，由近至远",
+  "thread_branch_continue": "继续前往下一个确切的父帖子",
+  "thread_branch_incomplete": "此路径不完整或无法安全分组。仍可前往确切的父帖子。",
+  "thread_branch_collapsed": "已收起本页 {count} 条相关回复。正在撰写的内容仍未发送。",
+  "thread_branch_parent_destination": "前往确切的父帖子"
 }

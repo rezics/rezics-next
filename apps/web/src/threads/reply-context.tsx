@@ -7,6 +7,7 @@ import type { PageAuthor, PageAuthors } from '../identity/read';
 import { exactRevisionHref } from './exact-revision-href';
 import { replyParentExcerpt, type ReplyParentResult } from './reply-parent-read';
 import type { ThreadPost } from './thread-page';
+import { useReplyParentNavigation } from './conversation-branches';
 
 export type ReplyParents = ReadonlyMap<
   string,
@@ -145,6 +146,7 @@ export function ReplyContext({
   authors?: PageAuthors;
   reader?: ReplyParentReader | undefined;
 }) {
+  const navigation = useReplyParentNavigation();
   if (parentId === null) return null;
   const parent = parents.get(parentId);
   const label =
@@ -165,7 +167,7 @@ export function ReplyContext({
         {parent ? (
           <a
             href={`#post-${parent.id}`}
-            className="min-w-0 rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            className="inline-flex min-h-11 min-w-11 min-w-0 items-center rounded-sm underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             {label}
           </a>
@@ -175,6 +177,14 @@ export function ReplyContext({
         {disclosed ? <ParentAuthor author={parent.authorId ? authors?.[parent.authorId] : undefined} /> : null}
       </p>
       {excerpt ? <p className="line-clamp-2 [overflow-wrap:anywhere]">{excerpt}</p> : null}
+      {!parent && navigation ? (
+        <a
+          href={navigation.exactHref(parentId)}
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-md px-3 py-2 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.thread_branch_parent_destination()}
+        </a>
+      ) : null}
       {!parent && reader ? <OffPageParent key={parentId} parentId={parentId} reader={reader} /> : null}
     </div>
   );
