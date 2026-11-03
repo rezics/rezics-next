@@ -648,6 +648,100 @@ export const MediaDownloadResponseSchema = t.Object(
   closed,
 );
 
+const ownMediaVariant = t.String({
+  pattern: '^(original|(avif|webp)-([1-9]|[1-9][0-9]|[12][0-9]{2}|3[01][0-9]|320|640|960|1280|1920|2560))$',
+});
+const ownMediaAction = (operationId: string) => t.Object({ operationId: t.Literal(operationId) }, closed);
+export const OwnMediaInventoryQuerySchema = t.Object(
+  { cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
+  closed,
+);
+export const OwnMediaInventoryEntrySchema = t.Object(
+  {
+    id: ContentIdSchema,
+    purpose: t.Union([
+      t.Literal('post-image'),
+      t.Literal('avatar'),
+      t.Literal('realm-icon'),
+      t.Literal('realm-banner'),
+      t.Literal('cover'),
+    ]),
+    state: t.Union([
+      t.Literal('reserved'),
+      t.Literal('uploaded'),
+      t.Literal('available'),
+      t.Literal('rejected'),
+      t.Literal('erased'),
+    ]),
+    declaredMediaType: t.Union([t.String({ maxLength: 64 }), t.Null()]),
+    actualMediaType: t.Union([t.String({ maxLength: 64 }), t.Null()]),
+    declaredByteCount: t.Union([mediaLength, t.Null()]),
+    actualByteCount: t.Union([mediaLength, t.Null()]),
+    createdAt: t.String({ format: 'date-time' }),
+    claimedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    collectionPending: t.Boolean(),
+    takenDown: t.Boolean(),
+    container: t.Union([
+      t.Object(
+        {
+          id: ContentIdSchema,
+          kind: t.Union([t.Literal('thread'), t.Literal('post'), t.Literal('realm'), t.Literal('account')]),
+        },
+        closed,
+      ),
+      t.Null(),
+    ]),
+    actions: t.Object(
+      {
+        read: t.Union([
+          t.Object(
+            {
+              operationId: t.Literal('media.authorize_download'),
+              variants: t.Array(ownMediaVariant, { minItems: 1, maxItems: 13 }),
+              recheckAtUse: t.Literal(true),
+            },
+            closed,
+          ),
+          t.Null(),
+        ]),
+        remove: t.Union([ownMediaAction('media.erase'), t.Null()]),
+        resume: t.Union([
+          t.Object(
+            {
+              operationId: t.Literal('media.read_reservation'),
+              mode: t.Union([t.Literal('same-reservation'), t.Literal('processing')]),
+              requiresOriginalFile: t.Literal(true),
+            },
+            closed,
+          ),
+          t.Null(),
+        ]),
+        retry: t.Union([
+          t.Object(
+            {
+              operationId: t.Literal('media.create'),
+              guidance: t.Literal('choose-new-file'),
+            },
+            closed,
+          ),
+          t.Null(),
+        ]),
+      },
+      closed,
+    ),
+  },
+  closed,
+);
+export const OwnMediaInventoryPageSchema = t.Object(
+  {
+    availability: t.Literal('available'),
+    entries: t.Array(OwnMediaInventoryEntrySchema, { maxItems: 20 }),
+    nextCursor: t.Union([t.String({ minLength: 1, maxLength: 2048 }), t.Null()]),
+  },
+  closed,
+);
+export type OwnMediaInventoryPage = Static<typeof OwnMediaInventoryPageSchema>;
+
 /** Only report lists accept these selectors; unrelated content pages remain unchanged. */
 export const ReportPageQuerySchema = t.Object(
   {
