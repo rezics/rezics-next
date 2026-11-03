@@ -12,6 +12,7 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { contentEffects } from '../../src/content/relays.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(17);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) };
@@ -73,6 +74,7 @@ describe('moderation decisions through HTTP and committed effects', () => {
       pool: db.pool,
       routeKey,
       tokens,
+      receiptKeys: testReceiptKeys(),
       access: fixture.access,
       writeRate: createWriteRateLimiter({ secret: 'moderation-http-fixture-secret-at-least-32-bytes' }),
     });
