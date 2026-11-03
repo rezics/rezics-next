@@ -59,8 +59,10 @@ export function albumTrackExample(scenario: AlbumTrackExample = 'admitted', loca
       },
       { property: { id: 'source:unknownPosition', data_type: 'string' }, value: { type: 'value', content: 'A-02?' } },
     ],
+    rezics: { release: publicRead.subject.release, revision: 1 },
     references: [
       {
+        hash: 'album-example-reference',
         parts: [
           {
             property: { id: 'schema:datePublished', data_type: 'time' },
@@ -76,16 +78,24 @@ export function albumTrackExample(scenario: AlbumTrackExample = 'admitted', loca
     statement: assertion(n, position).id,
     assertion: assertion(n, position),
     type: 'schema:MusicRecording',
-    label: { value: 'Harbour', language: 'en' },
+    label: 'Harbour',
     summary: {
       id: holder,
       type: 'schema:MusicRecording',
       label: { value: 'Harbour', language: 'en' },
-      description: null,
+      types: ['schema:MusicRecording', 'schema:CreativeWork'],
+      creativeWork: true,
       cover: null,
     },
     related: {
-      [examplePart]: { type: 'schema:CreativeWork', label: { value: 'Disc qualifier as supplied', language: 'en' } },
+      [examplePart]: {
+        id: examplePart,
+        type: 'schema:CreativeWork',
+        types: ['schema:CreativeWork'],
+        creativeWork: true,
+        cover: null,
+        label: { value: 'Disc qualifier as supplied', language: 'en' },
+      },
     },
   });
   const first: Links = {
@@ -107,8 +117,8 @@ export function albumTrackExample(scenario: AlbumTrackExample = 'admitted', loca
   let response: Links | Forward | undefined;
   let status: number | undefined;
   if (scenario === 'unconfigured') delete release.types['schema:MusicAlbum'];
-  const client = createKernelClient('https://album.example', {
-    fetch: async (input, init) => {
+  const exampleFetch: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
       const url = new URL(request.url);
       calls.push(url);
@@ -124,7 +134,9 @@ export function albumTrackExample(scenario: AlbumTrackExample = 'admitted', loca
       }
       return json({}, 404);
     },
-  });
+    { preconnect: fetch.preconnect },
+  );
+  const client = createKernelClient('https://album.example', { fetch: exampleFetch });
   return {
     release,
     first,
