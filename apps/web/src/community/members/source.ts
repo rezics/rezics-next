@@ -53,7 +53,7 @@ export interface RealmMembersSource {
   readonly readSelected: (address: MemberSelectionAddress) => Promise<MemberSelectionRead>;
 }
 
-/** No enumeration or selected-account API is installed on the retained base. No HTTP is invented here. */
+/** The installed producer still lacks generated GET declarations and a consumer-visible interval binding. */
 export const boundedRealmMemberPage: RealmMembersSource = Object.freeze({
   pageBound: 0,
   readPage: async () => ({ kind: 'unavailable' as const }),

@@ -196,8 +196,11 @@ opaque continuation, exact failed-address retry, concealed/denied/failed states 
 does not certify participation. No actions are admitted by this inspection part; the default Realm ban Panel and
 membership command owners retain execution, uncertain retry and native readback semantics.
 
-Decision: retain an unavailable production source until Content publishes the installed roster/selected operations,
-generated DTOs, authorized responses and action variants; illustrative composition must not become a wire contract.
+Decision: retain an unavailable production source until the installed roster has generated GET declarations and exposes
+an exact membership interval for selection; account ID and member state cannot substitute for that interval.
+The installed native GET currently checks intervals internally but exposes none, and its generated client still lacks
+the GET. Browser retirement now follows successful session incarnations and current incarnation-keyed exposure changes,
+including cache errors and batched away/back transitions, without fetching authority or retaining private query snapshots.
 The positive production visit, current selected ban/add integration, rejected/unknown commands and full locale/viewport
 review remain continuation work. No fixture or unavailable route establishes native completion or producer growth.
 
