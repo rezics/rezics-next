@@ -796,6 +796,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
+    tokens,
     clock,
     access: () =>
       resolveAccess({

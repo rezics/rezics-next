@@ -20,6 +20,7 @@ import { readPartition } from '../partition/partition.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KernelClock } from '../clock.ts';
+import type { KeyRing } from '../tokens/seal.ts';
 import { SourceFenceQuerySchema } from '../content/schemas.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
@@ -86,7 +87,7 @@ type Row = {
   observationDigest: string | null;
   figures: unknown;
 };
-type Dependencies = { pool: Pool; access: () => Access; routeKey: Uint8Array; clock?: KernelClock };
+type Dependencies = { pool: Pool; access: () => Access; routeKey: Uint8Array; tokens: KeyRing; clock?: KernelClock };
 type CommandDependencies = { pool: Pool; routeKey: Uint8Array; clock?: KernelClock };
 type WriteInput = {
   actor: Actor;
@@ -596,12 +597,13 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
   const config = () => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
+    tokens: dependencies.tokens,
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
   });
   const commands = () => createSourceStatisticCommands(config());
   const observationReads = () => createSourceObservationReadCommands(config());
-  const currentSubject = async (actor: Actor, id: string) => {
-    const current = await resolveSubject(
+  const subjectResolution = (actor: Actor, id: string) =>
+    resolveSubject(
       {
         pool: dependencies.pool,
         access: dependencies.access(),
@@ -610,6 +612,8 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
       actor,
       id,
     );
+  const currentSubject = async (actor: Actor, id: string) => {
+    const current = await subjectResolution(actor, id);
     return current?.subjectId === id;
   };
 
@@ -773,7 +777,11 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           },
           closed,
         ),
-        response: { 200: SourceObservationReadResponseSchema, ...failures },
+        response: {
+          ...failures,
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          200: SourceObservationReadResponseSchema,
+        },
         detail: detail('rating.source_observations_get', SOURCE_STATISTIC_WRITE_ACTION),
       },
       async ({ actor, params, query, authorizeCommand, admission, job }) => {
@@ -783,16 +791,25 @@ export function sourceStatisticRoutes(app: ReturnType<typeof definitionRoutes>, 
           throw new ProblemError('invalid_request');
         return admission.run('normal', job, async () => {
           try {
-            if (!(await currentSubject(actor, params.id))) throw new SourceStatisticNotFoundError();
+            const firstSubject = await subjectResolution(actor, params.id);
+            if (!firstSubject || firstSubject.subjectId !== params.id) throw new SourceStatisticNotFoundError();
             const result = await observationReads().inspect({
               subjectId: params.id,
               source: params.source,
+              caller: actor,
               ...(query.digest === undefined ? {} : { digest: query.digest }),
               ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
               ...(query.history === undefined ? {} : { history: true }),
               deadline: job.deadline,
             });
-            if (!(await currentSubject(actor, params.id))) throw new SourceStatisticNotFoundError();
+            await authorizeCommand(root, () => new GrantDeniedError());
+            const finalSubject = await subjectResolution(actor, params.id);
+            if (
+              !finalSubject ||
+              firstSubject.subjectId !== finalSubject.subjectId ||
+              firstSubject.requestedSubjectId !== finalSubject.requestedSubjectId
+            )
+              throw new SourceStatisticNotFoundError();
             return result;
           } catch (error) {
             return sourceStatisticProblem(error);

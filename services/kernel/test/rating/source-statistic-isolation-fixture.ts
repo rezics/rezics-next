@@ -1,16 +1,18 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { bundledRelease } from '@rezics/definitions/bundled';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { GLOBAL_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { mergeSubjects } from '../../src/semantic/merges.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { ContentCredential } from '../content/support/system.ts';
 import { createNativeContentSystemWithOrdinaryScopes } from '../content/support/native-system.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { testAccess, testKernel } from '../support/test-kernel.ts';
+import { testAccess, testKernel, testTokens } from '../support/test-kernel.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 
 export const SOURCE_STATISTIC_GROWTH_SCALES = [256, 1024, 4096] as const;
@@ -26,7 +28,7 @@ const operationScopes = [
   'subject:read',
 ];
 // Native setup grants these actions to its personas; exercised actors receive only operationScopes.
-const nativeFixtureScopes = [...operationScopes, 'account:suspend', 'space:create', 'realm:create'];
+const nativeFixtureScopes = [...operationScopes, 'account:suspend', 'space:create', 'realm:create', 'subject:merge'];
 
 export type IsolationActor = ContentCredential;
 export type IsolationRequestOptions = {
@@ -68,9 +70,11 @@ export async function createSourceStatisticIsolationFixture(
       jwksUrl: native.nativeAuth.verifier.jwksUrl,
       fetch: (input, init) => native.nativeAuth.handler(new Request(input, init)),
     };
+    const tokens = testTokens();
     const app = testKernel({
       pool: database.pool,
       auth,
+      tokens,
       writeRate: createWriteRateLimiter({
         secret: `${randomUUID()}${randomUUID()}`,
         overrides: JSON.stringify({ 'new-account': { write: { maximum: 10000, seconds: 60 } } }),
@@ -88,7 +92,7 @@ export async function createSourceStatisticIsolationFixture(
     const governance = await native.auth.issue({
       accountId: governanceId,
       clientId: native.auth.ordinaryClient.id,
-      scopes,
+      scopes: [...scopes, 'subject:merge'],
     });
 
     const narrowCredential = (credential: ContentCredential): Promise<ContentCredential> =>
@@ -172,6 +176,31 @@ export async function createSourceStatisticIsolationFixture(
         throw new Error(`Native importer revocation failed: HTTP ${response.status}: ${await response.text()}`);
     };
 
+    const mergeSubject = async (original: string, survivor: string): Promise<void> => {
+      const deadline = Date.now() + 30_000;
+      const actor = await access.authenticate(actors.governance.bearer, { pool: database!.pool, deadline });
+      if (actor.kind !== 'account') throw new Error('Native identity merge requires an account');
+      const authorization = await accessCommandAuthorization(
+        access,
+        actor,
+        'subject:merge',
+        { route: GLOBAL_CONTEXT.route, id: GLOBAL_CONTEXT.id },
+        { pool: database!.pool, deadline },
+        () => new Error('Native governance cannot merge fixture Subjects'),
+      );
+      const key = randomUUID();
+      await mergeSubjects(database!.pool, {
+        actor,
+        authorization,
+        deadline,
+        subjects: [original, survivor],
+        survivor,
+        idempotencyKey: key,
+        digest: createHash('sha256').update(key).digest(),
+        release: { digest: bundledDigest, release: bundledRelease },
+      });
+    };
+
     const exposure = await request('POST', '/v1/platform/exposure/personal_library:open', {
       actor: actors.governance,
       key: randomUUID(),
@@ -186,9 +215,11 @@ export async function createSourceStatisticIsolationFixture(
       database,
       app,
       access,
+      tokens,
       actors,
       request,
       createSubject,
+      mergeSubject,
       grantImporter,
       revokeImporter,
       async close(): Promise<void> {

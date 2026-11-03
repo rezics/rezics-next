@@ -1,5 +1,4 @@
 import canonicalize from 'canonicalize';
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import type { Static } from 'typebox';
@@ -12,6 +11,9 @@ import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { KernelClock } from '../clock.ts';
+import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { AccountActor } from '../request/access.ts';
 import { SourceFiguresSchema, SOURCE_OBSERVATION_MAX_BYTES, validSourceFigures } from './source-figures.ts';
 import {
   SOURCE_OBSERVATION_PAYLOAD_VERSION,
@@ -30,6 +32,8 @@ import legacyPayloadQuery from './source-observation-read-legacy-payload.sql';
 
 export const SOURCE_OBSERVATION_HISTORY_PAGE_SIZE = 1;
 export const SOURCE_OBSERVATION_READ_MAX_BYTES = 68_000;
+const HISTORY_CURSOR_OPERATION = 'rating.source-observation.history';
+const HISTORY_CURSOR_FORMAT = 'source-observation-history.v1';
 
 const closed = { additionalProperties: false } as const;
 const digestSchema = t.String({ pattern: '^[0-9a-f]{64}$' });
@@ -117,7 +121,12 @@ export type SourceObservationPayload = Static<typeof observationPayloadSchema>;
 export type SourceObservationReadItem = Static<typeof observationSchema>;
 export type SourceObservationReadResponse = Static<typeof SourceObservationReadResponseSchema>;
 
-export type SourceObservationReadDependencies = Readonly<{ pool: Pool; routeKey: Uint8Array; clock?: KernelClock }>;
+export type SourceObservationReadDependencies = Readonly<{
+  pool: Pool;
+  routeKey: Uint8Array;
+  tokens: KeyRing;
+  clock?: KernelClock;
+}>;
 type MetaRow = Readonly<{
   digest: string | null;
   sourceAlias: string;
@@ -128,81 +137,168 @@ type MetaRow = Readonly<{
   lastOrder?: string;
   legacy: boolean;
 }>;
+type HistoryQueryRow = Readonly<{
+  hasRow: boolean;
+  cursorRetained: boolean;
+  digest: string | null;
+  sourceAlias: string | null;
+  sourceRecordId: string | null;
+  asOf: string | null;
+  payloadVersion: number | null;
+  nativeOrder: string | null;
+  legacy: boolean | null;
+}>;
 type PayloadRow = Readonly<{ digest: string; payload: unknown; payloadVersion: number }>;
 type Cursor = Readonly<{
-  version: 1;
-  route: number;
-  subjectId: string;
-  source: SourceProvider;
   kind: 'native' | 'legacy';
   order: string | null;
   digest: string;
+  nativeCeiling: string | null;
+  legacyCeiling: string | null;
 }>;
 export type SourceObservationReadInput = Readonly<{
   subjectId: string;
   source: string;
+  caller: AccountActor;
   digest?: string;
   cursor?: string;
   history?: boolean;
   deadline: number;
 }>;
-type FenceSnapshot = Readonly<{ fence: Readonly<{ takenDown: boolean; securityRevision: string | null }> }>;
+type DecodedCursor = Readonly<{ epoch: number; boundary: Cursor }>;
+type FenceSnapshot = Readonly<{
+  home: number;
+  epoch: number;
+  fence: Readonly<{ takenDown: boolean; securityRevision: string | null }>;
+}>;
 
 function invalidCursor(): never {
-  throw new ProblemError('invalid_request');
+  throw new ProblemError('invalid_cursor');
 }
 
-function signCursor(cursor: Cursor, key: Uint8Array): string {
-  const payload = Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
-  const signature = createHmac('sha256', key).update(payload, 'utf8').digest('base64url');
-  return `${payload}.${signature}`;
+function historyCursorBinding(input: SourceObservationReadInput, route: number, source: SourceProvider): CursorBinding {
+  const home = partitionOf(route);
+  return {
+    operation: HISTORY_CURSOR_OPERATION,
+    parameters: {
+      account: input.caller.accountId,
+      client: input.caller.clientId,
+      delegator: input.caller.requestedBy,
+      scopes: JSON.stringify([...new Set(input.caller.scopes)].sort()),
+      authnEpoch: input.caller.authnEpoch,
+      home,
+      route,
+      subjectId: input.subjectId,
+      source,
+      query: 'history=true',
+      order: 'native.local-order-desc+legacy.digest-desc.v1',
+      pageSize: SOURCE_OBSERVATION_HISTORY_PAGE_SIZE,
+    },
+  };
 }
 
-function readCursor(value: string, key: Uint8Array, route: number, subjectId: string, source: SourceProvider): Cursor {
-  if (value.length > 512) return invalidCursor();
-  const [payload, signature, extra] = value.split('.');
-  if (!payload || !signature || extra !== undefined) return invalidCursor();
-  const expected = createHmac('sha256', key).update(payload, 'utf8').digest();
-  let supplied: Buffer;
-  let bytes: Buffer;
-  try {
-    supplied = Buffer.from(signature, 'base64url');
-    bytes = Buffer.from(payload, 'base64url');
-  } catch {
+function validOrder(value: string): boolean {
+  return /^[1-9][0-9]*$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n;
+}
+
+function cursorAfter(cursor: Cursor): CursorKey[] {
+  return [
+    HISTORY_CURSOR_FORMAT,
+    cursor.kind,
+    cursor.order ?? '',
+    cursor.digest,
+    cursor.nativeCeiling ?? '',
+    cursor.legacyCeiling ?? '',
+  ];
+}
+
+function readCursor(
+  value: string,
+  dependencies: SourceObservationReadDependencies,
+  binding: CursorBinding,
+): DecodedCursor {
+  const decoded = decodeCursor(
+    dependencies.tokens,
+    binding,
+    value,
+    (dependencies.clock?.() ?? new Date()).getTime(),
+  );
+  if (!decoded.ok || decoded.after.length !== 6 || decoded.after.some((part) => typeof part !== 'string'))
     return invalidCursor();
-  }
+  const [format, kind, order, digest, nativeCeiling, legacyCeiling] = decoded.after as string[];
+  const normalizedOrder = order === '' ? null : order;
+  const normalizedNativeCeiling = nativeCeiling === '' ? null : nativeCeiling;
+  const normalizedLegacyCeiling = legacyCeiling === '' ? null : legacyCeiling;
   if (
-    supplied.length !== expected.length ||
-    !timingSafeEqual(supplied, expected) ||
-    bytes.toString('base64url') !== payload
+    format !== HISTORY_CURSOR_FORMAT ||
+    (kind !== 'native' && kind !== 'legacy') ||
+    !/^[0-9a-f]{64}$/.test(digest!) ||
+    (normalizedOrder !== null && !validOrder(normalizedOrder)) ||
+    (normalizedNativeCeiling !== null && !validOrder(normalizedNativeCeiling)) ||
+    (normalizedLegacyCeiling !== null && !/^[0-9a-f]{64}$/.test(normalizedLegacyCeiling)) ||
+    (kind === 'native' &&
+      (normalizedOrder === null ||
+        normalizedNativeCeiling === null ||
+        BigInt(normalizedOrder) > BigInt(normalizedNativeCeiling))) ||
+    (kind === 'legacy' &&
+      (normalizedOrder !== null ||
+        normalizedLegacyCeiling === null ||
+        digest! > normalizedLegacyCeiling))
   )
     return invalidCursor();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(bytes.toString('utf8'));
-  } catch {
-    return invalidCursor();
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return invalidCursor();
-  const candidate = parsed as Record<string, unknown>;
-  const keys = Object.keys(candidate).sort().join(',');
-  if (
-    keys !== 'digest,kind,order,route,source,subjectId,version' ||
-    candidate.version !== 1 ||
-    candidate.route !== route ||
-    candidate.subjectId !== subjectId ||
-    candidate.source !== source ||
-    (candidate.kind !== 'native' && candidate.kind !== 'legacy') ||
-    typeof candidate.digest !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(candidate.digest) ||
-    (candidate.kind === 'native' && (typeof candidate.order !== 'string' || !/^[1-9][0-9]*$/.test(candidate.order))) ||
-    (candidate.kind === 'legacy' && candidate.order !== null)
-  )
-    return invalidCursor();
-  if (JSON.stringify(candidate) !== bytes.toString('utf8')) return invalidCursor();
-  if (candidate.kind === 'native' && BigInt(candidate.order as string) > 9_223_372_036_854_775_807n)
-    return invalidCursor();
-  return candidate as Cursor;
+  return {
+    epoch: decoded.epoch,
+    boundary: {
+      kind,
+      order: normalizedOrder,
+      digest: digest!,
+      nativeCeiling: normalizedNativeCeiling,
+      legacyCeiling: normalizedLegacyCeiling,
+    },
+  };
+}
+
+function encodeHistoryCursor(
+  dependencies: SourceObservationReadDependencies,
+  binding: CursorBinding,
+  epoch: number,
+  cursor: Cursor,
+): string {
+  return encodeCursor(
+    dependencies.tokens,
+    binding,
+    { epoch, after: cursorAfter(cursor) },
+    (dependencies.clock?.() ?? new Date()).getTime(),
+  );
+}
+
+function historyItems(rows: readonly HistoryQueryRow[]): { items: MetaRow[]; cursorRetained: boolean } {
+  const first = rows[0];
+  if (!first) throw new ProblemError('partition_unavailable');
+  const items = rows.flatMap((row) => {
+    if (!row.hasRow) return [];
+    if (
+      row.digest === null ||
+      row.sourceAlias === null ||
+      row.sourceRecordId === null ||
+      row.asOf === null ||
+      row.payloadVersion === null ||
+      row.legacy === null
+    )
+      throw new ProblemError('partition_unavailable');
+    return [
+      {
+        digest: row.digest,
+        sourceAlias: row.sourceAlias,
+        sourceRecordId: row.sourceRecordId,
+        asOf: row.asOf,
+        payloadVersion: row.payloadVersion,
+        nativeOrder: row.nativeOrder,
+        legacy: row.legacy,
+      },
+    ];
+  });
+  return { items, cursorRetained: first.cursorRetained };
 }
 
 function tupleFor(routeKey: Uint8Array, source: SourceProvider, sourceRecordId: string, sourceAlias: string) {
@@ -235,12 +331,13 @@ async function readFenceSnapshot(
       const client = deadlineClient(connection, deadline);
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const partition = await readPartition(client, partitionOf(tuple.route));
+        const home = partitionOf(tuple.route);
+        const partition = await readPartition(client, home);
         if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
         const [fence] = await readFences(client, [tuple]);
         if (!fence) throw new ProblemError('partition_unavailable');
         await client.query('COMMIT');
-        return { fence };
+        return { home: partition.partitionNo, epoch: partition.epoch, fence };
       } catch (error) {
         try {
           await connection.query('ROLLBACK');
@@ -384,23 +481,54 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     let native: MetaRow[] = [];
     let legacy: MetaRow[] = [];
     if (cursor?.kind !== 'legacy') {
-      native = await query<MetaRow>(
+      const nativeRows = await query<HistoryQueryRow>(
         nativeHistoryQuery,
-        { route, subject_id: input.subjectId, source, cursor_order: cursor?.order ?? null },
+        {
+          route,
+          subject_id: input.subjectId,
+          source,
+          cursor_order: cursor?.kind === 'native' ? cursor.order : null,
+          cursor_digest: cursor?.kind === 'native' ? cursor.digest : null,
+          ceiling_order: cursor?.nativeCeiling ?? null,
+        },
         input.deadline,
       );
-      if (native.length < 2)
-        legacy = await query<MetaRow>(
+      const nativePage = historyItems(nativeRows);
+      if (!nativePage.cursorRetained) throw new ProblemError('conflict');
+      native = nativePage.items;
+      if (native.length < 2) {
+        const legacyRows = await query<HistoryQueryRow>(
           legacyHistoryQuery,
-          { route, subject_id: input.subjectId, source, cursor_digest: null },
+          {
+            route,
+            subject_id: input.subjectId,
+            source,
+            cursor_digest: null,
+            ceiling_digest: cursor?.legacyCeiling ?? null,
+            boundary_digest: null,
+          },
           input.deadline,
         );
+        const legacyPage = historyItems(legacyRows);
+        if (!legacyPage.cursorRetained) throw new ProblemError('conflict');
+        legacy = legacyPage.items;
+      }
     } else {
-      legacy = await query<MetaRow>(
+      const legacyRows = await query<HistoryQueryRow>(
         legacyHistoryQuery,
-        { route, subject_id: input.subjectId, source, cursor_digest: cursor.digest },
+        {
+          route,
+          subject_id: input.subjectId,
+          source,
+          cursor_digest: cursor.digest,
+          ceiling_digest: cursor.legacyCeiling,
+          boundary_digest: cursor.digest,
+        },
         input.deadline,
       );
+      const legacyPage = historyItems(legacyRows);
+      if (!legacyPage.cursorRetained) throw new ProblemError('conflict');
+      legacy = legacyPage.items;
     }
     const page = native.length > 0 ? native : legacy;
     const selected = page[0] ?? null;
@@ -424,11 +552,15 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     )
       throw new ProblemError('invalid_request');
     const source = input.source as SourceProvider;
+    const historyBinding =
+      input.cursor !== undefined || input.history
+        ? historyCursorBinding(input, route, source)
+        : null;
     const cursor =
       input.cursor === undefined
         ? null
-        : readCursor(input.cursor, dependencies.routeKey, route, input.subjectId, source);
-    const initial = await metadataFor(input, source, route, cursor);
+        : readCursor(input.cursor, dependencies, historyBinding!);
+    const initial = await metadataFor(input, source, route, cursor?.boundary ?? null);
     const currentMeta = initial.current;
     // Current and exact observations are required resources. History positions are
     // consumed independently of disclosure, including an unreturned lookahead.
@@ -450,6 +582,19 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const before = new Map<string, FenceSnapshot>();
     for (const tuple of tupleList)
       before.set(tupleKey(tuple), await readFenceSnapshot(dependencies, tuple, input.deadline));
+    const expectedHome = partitionOf(route);
+    const firstSnapshot = tupleList.length > 0 ? before.get(tupleKey(tupleList[0]!)) ?? null : null;
+    if (!firstSnapshot && cursor) throw new ProblemError('conflict');
+    if (firstSnapshot) {
+      if (firstSnapshot.home !== expectedHome) throw new ProblemError('partition_unavailable');
+      if (
+        [...before.values()].some(
+          (snapshot) => snapshot.home !== firstSnapshot.home || snapshot.epoch !== firstSnapshot.epoch,
+        )
+      )
+        throw new ProblemError('conflict');
+      if (cursor && cursor.epoch !== firstSnapshot.epoch) return invalidCursor();
+    }
     for (const row of required) {
       const tuple = metadataTuple(dependencies.routeKey, source, row);
       if (before.get(tupleKey(tuple))?.fence.takenDown) throw new ProblemError('not_found');
@@ -485,14 +630,22 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       if (!legacyRow) throw new ProblemError('conflict');
     }
 
+    const itemCache = new Map<string, SourceObservationReadItem>();
     const itemOf = (row: MetaRow): SourceObservationReadItem => {
+      const key = row.digest ?? `legacy:${row.sourceAlias}:${row.sourceRecordId}:${row.asOf}`;
+      const cached = itemCache.get(key);
+      if (cached) return cached;
       if (row.digest === null) {
         if (!row.legacy || !legacyRow) throw new ProblemError('partition_unavailable');
-        return legacyPayloadOf(legacyRow, row, input.subjectId, source);
+        const item = legacyPayloadOf(legacyRow, row, input.subjectId, source);
+        itemCache.set(key, item);
+        return item;
       }
       const payload = payloadByDigest.get(row.digest);
       if (!payload) throw new ProblemError('partition_unavailable');
-      return payloadOf(payload, row, input.subjectId, source);
+      const item = payloadOf(payload, row, input.subjectId, source);
+      itemCache.set(key, item);
+      return item;
     };
     const currentItem = currentMeta ? itemOf(currentMeta) : null;
     const selectedItem =
@@ -506,7 +659,52 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     if (input.digest !== undefined && selectedItem?.digest !== input.digest) throw new ProblemError('not_found');
     const historyItem = disclosedHistory ? itemOf(disclosedHistory) : null;
 
-    const finalMetadata = await metadataFor(input, source, route, cursor);
+    const currentDigest = currentItem?.digest ?? null;
+    const baseEpoch = firstSnapshot?.epoch;
+    const nextCursor =
+      historyMeta && initial.lookahead && historyMeta.digest !== null && historyBinding && baseEpoch !== undefined
+        ? encodeHistoryCursor(dependencies, historyBinding, baseEpoch, {
+            kind: historyMeta.nativeOrder === null ? 'legacy' : 'native',
+            order: historyMeta.nativeOrder,
+            digest: historyMeta.digest,
+            nativeCeiling:
+              cursor?.boundary.nativeCeiling ??
+              initial.historyItems.find((item) => item.nativeOrder !== null)?.nativeOrder ??
+              null,
+            legacyCeiling:
+              cursor?.boundary.legacyCeiling ??
+              (historyMeta.nativeOrder === null
+                ? historyMeta.digest
+                : initial.lookahead.nativeOrder === null
+                  ? initial.lookahead.digest
+                  : null),
+          })
+        : null;
+    const response: SourceObservationReadResponse = {
+      source,
+      head: {
+        digest: currentDigest,
+        state: stateOf(currentItem),
+        observation: currentItem,
+      },
+      resolution: {
+        put: { expectedObservation: currentDigest },
+        clear: { expectedObservation: currentDigest },
+      },
+      ...(input.digest === undefined ? {} : { selectedObservation: selectedItem! }),
+      ...(input.cursor === undefined && !input.history
+        ? {}
+        : {
+            history: {
+              items: historyItem ? [historyItem] : [],
+              nextCursor,
+            },
+          }),
+    };
+    if (Buffer.byteLength(JSON.stringify(response), 'utf8') > SOURCE_OBSERVATION_READ_MAX_BYTES)
+      throw new ProblemError('partition_unavailable');
+
+    const finalMetadata = await metadataFor(input, source, route, cursor?.boundary ?? null);
     const initialRows = [
       ...(currentMeta ? [currentMeta] : []),
       ...(initial.selected ? [initial.selected] : []),
@@ -533,53 +731,20 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     for (const tuple of tupleList) {
       const prior = before.get(tupleKey(tuple))?.fence;
       const current = after.get(tupleKey(tuple))?.fence;
+      const priorPartition = before.get(tupleKey(tuple));
+      const currentPartition = after.get(tupleKey(tuple));
       if (
         !prior ||
         !current ||
+        !priorPartition ||
+        !currentPartition ||
+        priorPartition.home !== currentPartition.home ||
+        priorPartition.epoch !== currentPartition.epoch ||
         prior.takenDown !== current.takenDown ||
         prior.securityRevision !== current.securityRevision
       )
         throw new ProblemError('conflict');
     }
-
-    const currentDigest = currentItem?.digest ?? null;
-    const response: SourceObservationReadResponse = {
-      source,
-      head: {
-        digest: currentDigest,
-        state: stateOf(currentItem),
-        observation: currentItem,
-      },
-      resolution: {
-        put: { expectedObservation: currentDigest },
-        clear: { expectedObservation: currentDigest },
-      },
-      ...(input.digest === undefined ? {} : { selectedObservation: selectedItem! }),
-      ...(input.cursor === undefined && !input.history
-        ? {}
-        : {
-            history: {
-              items: historyItem ? [historyItem] : [],
-              nextCursor:
-                historyMeta && initial.lookahead && historyMeta.digest !== null
-                  ? signCursor(
-                      {
-                        version: 1,
-                        route,
-                        subjectId: input.subjectId,
-                        source,
-                        kind: historyMeta.nativeOrder === null ? 'legacy' : 'native',
-                        order: historyMeta.nativeOrder,
-                        digest: historyMeta.digest,
-                      },
-                      dependencies.routeKey,
-                    )
-                  : null,
-            },
-          }),
-    };
-    if (Buffer.byteLength(JSON.stringify(response), 'utf8') > SOURCE_OBSERVATION_READ_MAX_BYTES)
-      throw new ProblemError('partition_unavailable');
     return response;
   }
 

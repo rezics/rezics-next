@@ -948,17 +948,25 @@ only for continuation and currentness, never as a returned resource or permissio
 non-null cursor is therefore continuing, not exhausted. There is no refill. Initial and final native metadata and
 all tuple security revisions must agree; a change to an optional candidate or lookahead returns 409 without a new
 cursor. A final required-source takedown still returns 404. Dependency failures remain failures; callers retain the
-supplied cursor for retry. The signed cursor binds the original route, Subject, provider and native/legacy ordering
-boundary; the existing command and Subject authorization is evaluated afresh for every account and request.
+supplied cursor for retry. The signed cursor uses the native token envelope and binds caller, client, delegator,
+scopes, route, Subject, provider, home, query shape and native epoch; its issue time enforces the existing expiry.
+History keeps its initial native order ceiling and captures the legacy digest ceiling when traversal reaches that
+boundary. A removed cursor boundary returns conflict so the caller can retry the original frontier.
+
+Decision: history cursors retain the initial native order ceiling and capture the legacy digest ceiling when traversal
+reaches that boundary; continuations reject missing retained boundary rows.
 
 The installed internal factory is `createSourceObservationReadCommands(dependencies).inspect(input)` in
-`source-observation-read.ts`. Its exported `SourceObservationReadDependencies` takes `pool`, `routeKey` and optional
-`clock`; `SourceObservationReadInput` takes `subjectId`, `source`, optional `digest`/`cursor`/`history`, and `deadline`.
+`source-observation-read.ts`. Its exported `SourceObservationReadDependencies` takes `pool`, `routeKey`, native
+`tokens` and optional `clock`; `SourceObservationReadInput` takes `subjectId`, `source`, the authenticated `caller`,
+optional `digest`/`cursor`/`history`, and `deadline`.
 It returns `Promise<SourceObservationReadResponse>`; `SourceObservationReadItem` and `SourceObservationPayload` are
 also exported. The mounted route owns Access authorization and both current Subject resolutions; an internal
 factory call does not replace these checks. Existing put/clear commands consume `resolution.*.expectedObservation`
 and reauthorize the immutable intent on every attempt, including exact replay. A stale expected digest remains a
-conflict. Generated declarations and OpenAPI must come from this mounted schema before consumer delivery.
+conflict. The mounted inspection rechecks the existing action and compares both complete Subject resolutions after
+the factory has materialized and byte-checked the DTO. Generated declarations and OpenAPI must come from this
+mounted schema before consumer delivery.
 
 Consumers distinguish populated history (`items: [observation]`), continuing withheld history (`items: [],
 nextCursor: signedBoundary`), exhausted history (`items: [], nextCursor: null`) and failed reads (no inspection DTO;
@@ -982,26 +990,30 @@ provider request, ballot read or source-history sort.
   including 12 transaction controls, plus catalogue freshness work from compiled queries. Required concealment
   stops before hydration; stable historical concealment omits only its payload. Metadata, fence changes and
   dependency failures do not refill. Mounted work additionally includes authentication/account lifecycle and
-  root write authorization, admission/runner work and both complete Subject resolutions (redirect, identity,
-  Context/citation/disclosure and Access observations). These are independent current observations, not one atomic
+  root write authorization before and after materialization, admission/runner work and both complete Subject
+  resolutions (redirect, identity, Context/citation/disclosure and Access observations). These are independent current observations, not one atomic
   snapshot; their inherited owner bounds and participating pools remain additional to the local SQL count.
 - Bound: all metadata/payload queries bind route, Subject and provider. Exact uses the primary key; history uses
   the partial `(route, subject_id, source, local_order DESC)` or legacy `(route, subject_id, source, digest DESC)`
-  index, each selecting at most two physical ordered positions. No full-history sort is permitted. Head, candidate
-  and lookahead metadata are reobserved before return. Only disclosed head/selection payloads are materialized,
+  index, each selecting at most two physical ordered positions. A continuation checks its exact retained boundary by
+  key in the same bounded metadata query. The native token binds caller, client, delegator, scopes, home, epoch,
+  query shape, expiry and retained native/legacy ceilings. No full-history sort is permitted. Head, candidate and
+  lookahead metadata are reobserved before return. Only disclosed head/selection payloads are materialized,
   with at most two item validations/canonicalizations/hashes after deduplicated I/O. The schema admits immutable
   JSONB at 32,768 bytes; legacy scalar field bounds remain their writer's admission. Application payload and
   68,000-byte response checks occur after acquisition/materialization and are not peak-memory bounds. Account for
   decoded JSON/strings, canonical strings, UTF-8 buffers and hash inputs, retained item objects, repeated head/history
-  serialization and mounted HTTP serialization/copies. Oversize/unsupported historical payloads fail only when
-  selected and permitted. No receipt body or credential is provenance. Full physical/byte ceilings still require
+  response serialization before final gates, repeated head/history serialization and mounted HTTP serialization/copies.
+  Oversize/unsupported historical payloads fail only when selected and permitted. No receipt body or credential is
+  provenance. Full physical/byte ceilings still require
   inherited authority, catalogue, runner and materialization terms; output caps alone establish none of those.
 - Growth check: `test/rating/growth-source-figures.test.ts` holds page/payload shape fixed while independently
   growing unrelated heads and selected history at 256/1024/4096, capturing participating backends and strict
   ordered-prefix plans. `test/rating/source-observation-http.test.ts` uses real Access and fence commands to pin
-  concealed raw continuation, exact concealment, payload/final-fill changes, same-cursor retry and existing CAS
-  recovery. Independent authority growth, mixed legacy boundary materialization and full inherited byte ceilings
-  remain native acceptance obligations; a source assertion or a failed check setup does not establish them.
+  concealed raw continuation, exact native/legacy selection, caller/home/epoch/expiry cursor bindings, new-head
+  continuation, payload/final-fill changes, caller/Subject revocation, same-cursor retry and existing CAS recovery.
+  Independent authority growth and full inherited byte ceilings remain native acceptance obligations; a source
+  assertion or a failed check setup does not establish them.
 
 #### Operation Cost: source-statistic list
 
