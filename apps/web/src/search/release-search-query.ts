@@ -23,7 +23,7 @@ export type ReleaseSearchResult = {
   state: ReleaseSearchState;
 };
 
-type FailureState = Exclude<DiscoveryState, { status: 'ready' | 'preparing' }>;
+type FailureState = { status: Exclude<DiscoveryState['status'], 'ready' | 'preparing'> };
 export type ReleaseSearchCard = NonNullable<ReturnType<typeof parseLegacySearchPage>>['subjects'][number] & {
   kind: string;
   base: Record<string, unknown>;
@@ -51,10 +51,12 @@ export type ReleaseSearchChildrenPage = {
 };
 export type ReleaseSearchState =
   | FailureState
-  | { status: 'ready' | 'preparing'; page: ReleaseSearchGroupsPage };
+  | { status: 'ready'; page: ReleaseSearchGroupsPage }
+  | { status: 'preparing'; page: ReleaseSearchGroupsPage };
 export type ReleaseSearchChildrenState =
   | FailureState
-  | { status: 'ready' | 'preparing'; page: ReleaseSearchChildrenPage };
+  | { status: 'ready'; page: ReleaseSearchChildrenPage }
+  | { status: 'preparing'; page: ReleaseSearchChildrenPage };
 
 const cursorLimit = 4864;
 

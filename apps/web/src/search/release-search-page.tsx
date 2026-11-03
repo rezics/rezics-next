@@ -402,11 +402,11 @@ export function ReleaseSearchPage({
 }) {
   const [childViews, setChildViews] = useState<Record<string, ChildView>>({});
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
-  const page = state.status === 'ready' || state.status === 'preparing' ? state.page : undefined;
+  const page = 'page' in state ? state.page : undefined;
   const next = page?.next ?? null;
   const pageEmpty = page !== undefined && page.groups.length === 0 && next !== null;
   const restartHref = parsed
-    ? releaseSearchHref(locale, { ...parsed.form, cursor: '' })
+    ? releaseSearchHref(locale, parsed.form)
     : (retryHref ?? `/${encodeURIComponent(locale)}/search/releases`);
 
   const loadChildren = async (work: string, token: string) => {
