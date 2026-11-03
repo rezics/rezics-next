@@ -241,7 +241,10 @@ export class ImportProgressReporter {
 
   private async deliver(frame: string): Promise<void> {
     try {
-      await withAbort(Promise.resolve().then(() => this.options.sink.write(frame, this.options.signal)), this.options.signal);
+      await withAbort(
+        Promise.resolve().then(() => this.options.sink.write(frame, this.options.signal)),
+        this.options.signal,
+      );
     } catch {
       if (!this.options.signal.aborted) {
         this.failure = true;
@@ -261,7 +264,10 @@ export class ImportProgressReporter {
 }
 
 function safeTerminalText(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return value.replace(
+    /[\u0000-\u001f\u007f-\u009f]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
 }
 
 function withAbort<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {

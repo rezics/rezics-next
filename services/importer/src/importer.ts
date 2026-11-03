@@ -431,8 +431,7 @@ export class Importer {
       if (success(entry)) {
         this.session.bindings.acknowledge(owner, entry.key, { results: [entry] });
         acknowledgedEffects++;
-      }
-      else if (entry.status === 404 && request.commands.find((c) => c.key === entry.key)?.op !== 'create')
+      } else if (entry.status === 404 && request.commands.find((c) => c.key === entry.key)?.op !== 'create')
         this.session.bindings.takenDown(owner, { status: 404 });
     }
     return acknowledgedEffects;

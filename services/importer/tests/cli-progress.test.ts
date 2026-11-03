@@ -63,12 +63,19 @@ function transport() {
   const id = () => `00000000-0000-4000-8000-${(++next).toString(16).padStart(12, '0')}`;
   return {
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
-    async readFence() { return { fenced: false, securityRevision: null }; },
+    async readFence() {
+      return { fenced: false, securityRevision: null };
+    },
     async batchWrite(request: ImportBatchRequest) {
       const results: BatchWriteResult['results'] = request.commands.map((command) => ({
         key: command.key,
         status: command.op === 'retract' ? 200 : 201,
-        value: command.op === 'create' ? { id: id(), revision: 1 } : command.op === 'propose' ? { candidate: id(), revision: 1 } : { revision: 1 },
+        value:
+          command.op === 'create'
+            ? { id: id(), revision: 1 }
+            : command.op === 'propose'
+              ? { candidate: id(), revision: 1 }
+              : { revision: 1 },
       }));
       return { results };
     },
@@ -84,7 +91,11 @@ function importer(): Importer {
     path: ':memory:',
     transport: transport(),
     sleep: async () => {},
-    mediaResolver: { async resolve() { return { status: 'rejected' }; } },
+    mediaResolver: {
+      async resolve() {
+        return { status: 'rejected' };
+      },
+    },
   });
 }
 
@@ -130,15 +141,39 @@ test('CLI JSONL progress uses its sink and leaves the final summary on stdout', 
     });
     const result = await driver.invoke(
       [
-        '--source', 'wikidata', '--dump', '-', '--state', state, '--api', origin, '--account-key', keyPath,
-        '--account', '6b147e8d-1762-4717-9a65-aeb435cb843e', '--client', 'progress-test', '--auth', 'https://auth.importer.test',
-        '--progress', 'jsonl',
+        '--source',
+        'wikidata',
+        '--dump',
+        '-',
+        '--state',
+        state,
+        '--api',
+        origin,
+        '--account-key',
+        keyPath,
+        '--account',
+        '6b147e8d-1762-4717-9a65-aeb435cb843e',
+        '--client',
+        'progress-test',
+        '--auth',
+        'https://auth.importer.test',
+        '--progress',
+        'jsonl',
       ],
       { testOrigin: origin, stdin: emptyDump(), progressSink: sink } as Invocation & {
         progressSink: ImportProgressSink;
       },
     );
-    const events = frames.map((frame) => JSON.parse(frame) as { sequence: number; phase: string; terminal: boolean; sourceComplete: boolean; counts: { inputBytes: number } });
+    const events = frames.map(
+      (frame) =>
+        JSON.parse(frame) as {
+          sequence: number;
+          phase: string;
+          terminal: boolean;
+          sourceComplete: boolean;
+          counts: { inputBytes: number };
+        },
+    );
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('Import complete:');
     expect(result.stdout).not.toContain('"version":1');
@@ -218,20 +253,23 @@ function tar(files: readonly { path: string; bytes: Uint8Array }[]): Uint8Array 
 }
 
 async function* boundedChunks(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
-  for (let offset = 0; offset < bytes.length; offset += 512)
-    yield new Uint8Array(bytes.subarray(offset, offset + 512));
+  for (let offset = 0; offset < bytes.length; offset += 512) yield new Uint8Array(bytes.subarray(offset, offset + 512));
 }
 
 test('bounded VNDB archive materialization reports source pages and run-store staging', async () => {
   const names = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta'];
-  const files = await Promise.all(names.map(async (name) => ({
-    path: `db/${name}`,
-    bytes: new Uint8Array(await readFile(new URL(`vndb-tables/db/${name}`, fixtureRoot))),
-  })));
+  const files = await Promise.all(
+    names.map(async (name) => ({
+      path: `db/${name}`,
+      bytes: new Uint8Array(await readFile(new URL(`vndb-tables/db/${name}`, fixtureRoot))),
+    })),
+  );
   const importerUnderTest = importer();
   const progress = counters();
   try {
-    const materialization = new VndbMaterialization(importerUnderTest, createSourceRegistration('vndb'), { pageSize: 2 });
+    const materialization = new VndbMaterialization(importerUnderTest, createSourceRegistration('vndb'), {
+      pageSize: 2,
+    });
     const acquisition = materialization.begin();
     await materialization.stageArchive(acquisition, boundedChunks(tar(files)));
     let materialized = 0;

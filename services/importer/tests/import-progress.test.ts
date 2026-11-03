@@ -8,7 +8,12 @@ import {
 const signal = new AbortController();
 
 test('slow JSONL output coalesces record updates and flushes ordered phase and terminal frames', async () => {
-  const events: { sequence: number; phase: string; terminal: boolean; counts: { inputBytes: number; stagedRecords: number } }[] = [];
+  const events: {
+    sequence: number;
+    phase: string;
+    terminal: boolean;
+    counts: { inputBytes: number; stagedRecords: number };
+  }[] = [];
   let started!: () => void;
   let release!: () => void;
   const firstWrite = new Promise<void>((resolve) => (started = resolve));
