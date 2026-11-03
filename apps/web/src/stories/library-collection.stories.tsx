@@ -687,7 +687,7 @@ export const LongNotesSparseContinuation: Story = {
     for (const note of collectionLongNotesSparse.notes) await view.findByText(note);
     await view.findByRole('link', { name: m.library_collection_more() });
     await expect(view.getByText(m.library_subject_unavailable())).toBeVisible();
-    await expect(view.queryByRole('link', { name: 'Snow Country', exact: true })).toBeNull();
+    await expect(view.queryByRole('link', { name: (accessibleName) => accessibleName === 'Snow Country' })).toBeNull();
   },
 };
 
