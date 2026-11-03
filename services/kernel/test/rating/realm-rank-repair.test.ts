@@ -7,10 +7,12 @@ import { drainPublicFigures } from '../../src/rating/public-figure.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { ratingIdentityFixture, route, at } from './identity-repair-fixture.ts';
 
 test('native repair receipts converge both rank homes and old source events cannot restore the alias', async () => {
   const db = await openGrowthDatabase();
+  configureTestReceiptKeys(db.pool);
   try {
     const fixture = ratingIdentityFixture(() => db);
     const realm = newId(0x5a00),
