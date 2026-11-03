@@ -1191,7 +1191,7 @@ no HTTP endpoint. A returned value is descriptive, never a reusable execution ca
 Decision: question admission supports the command's own logical home only; cross-home attempts explicitly return
 `VoteReviewUnavailableError('atomic_guard_unavailable')`, even for currently co-resident homes. The executor has
 no multi-home participant enrollment/completion/abort protocol. Its owning command infrastructure must provide
-deterministically ordered native home fences held through the *same* owner commit, including movement and failure
+deterministically ordered native home fences held through the _same_ owner commit, including movement and failure
 cleanup, before cross-home installation. Neither an arbitrary foreign checkout nor local SERIALIZABLE installs it.
 The original guarded vote journey remains unavailable until its writer integrates this participant and Semantic's
 separate exact-epoch participant. This source factory is not generated client delivery or provider adoption.
