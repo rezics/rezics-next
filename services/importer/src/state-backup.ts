@@ -147,7 +147,7 @@ export async function backupStoppedState(
       const manifest: SnapshotManifest = {
         version: SNAPSHOT_FORMAT_VERSION,
         format: SNAPSHOT_FORMAT,
-        createdAt: (options.now ?? (() => new Date())).toISOString(),
+        createdAt: (options.now ?? (() => new Date()))().toISOString(),
         sqliteCompatibility,
         schemaCompatibility: SCHEMA_COMPATIBILITY,
         content: { file: 'importer-state.sqlite', bytes: digest.bytes, sha256: digest.sha256 },

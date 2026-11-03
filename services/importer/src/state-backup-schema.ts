@@ -216,7 +216,7 @@ export function quoteSqlPath(path: string): string {
 }
 
 export function parseManifest(value: Record<string, unknown>): SnapshotManifest {
-  const fail = () => {
+  const fail = (): never => {
     throw new StateBackupFailure('Snapshot manifest has the wrong shape.', 'corrupt');
   };
   if (value.version !== SNAPSHOT_FORMAT_VERSION || value.format !== SNAPSHOT_FORMAT) fail();

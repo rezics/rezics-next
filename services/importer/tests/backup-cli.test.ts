@@ -74,20 +74,26 @@ test('CLI backup, validate and restore keep pending bytes and refuse unsafe path
     const state = join(dir, 'state.sqlite');
     seed(state);
     const snapshot = join(dir, 'snapshot');
-    const fetch = (async (input: Request | string | URL) => {
+    const fetchBoundary = (async (input: Request | string | URL) => {
       requests.push(String(input instanceof Request ? input.url : input));
       throw new Error('snapshot commands must not use the network');
     }) as typeof fetch;
-    const backup = await runImportCli(['backup', '--state', state, '--output', snapshot, '--json'], { fetch });
+    const backup = await runImportCli(['backup', '--state', state, '--output', snapshot, '--json'], {
+      fetch: fetchBoundary,
+    });
     expect(backup.code).toBe(0);
     expect(JSON.parse(backup.stdout).status).toBe('ready');
     expect(JSON.parse(backup.stdout).runs[0].source).toBe('wikidata');
     expect(backup.stdout).not.toContain('Private request body sentinel');
-    const validated = await runImportCli(['validate-snapshot', '--snapshot', snapshot, '--json'], { fetch });
+    const validated = await runImportCli(['validate-snapshot', '--snapshot', snapshot, '--json'], {
+      fetch: fetchBoundary,
+    });
     expect(validated.code).toBe(0);
     expect(JSON.parse(validated.stdout).integrityPages).toBeGreaterThan(0);
     const restored = join(dir, 'restored.sqlite');
-    const restore = await runImportCli(['restore', '--snapshot', snapshot, '--state', restored], { fetch });
+    const restore = await runImportCli(['restore', '--snapshot', snapshot, '--state', restored], {
+      fetch: fetchBoundary,
+    });
     expect(restore.code).toBe(0);
     expect(restore.stdout).toContain('cannot undo native writes');
     expect(restore.stdout).toContain(restored);
@@ -114,7 +120,7 @@ test('CLI backup, validate and restore keep pending bytes and refuse unsafe path
     writeFileSync(join(dir, 'parent-file'), 'nope');
     const failed = await runImportCli(
       ['restore', '--snapshot', snapshot, '--state', join(dir, 'parent-file', 'child.sqlite'), '--json'],
-      { fetch },
+      { fetch: fetchBoundary },
     );
     expect(failed.code).toBeGreaterThan(0);
     expect(requests).toEqual([]);
