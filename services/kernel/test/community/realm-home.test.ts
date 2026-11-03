@@ -26,8 +26,8 @@ beforeAll(async () => {
 });
 afterAll(closeCommunityDrivers);
 
-async function command<T>(path: string, body: unknown, method = 'POST', head?: string) {
-  const response = await driver.request({ actor: people.owner, path, method, body, key: key(),
+async function command<T>(path: string, body: unknown, method = 'POST', head?: string, actor = people.owner) {
+  const response = await driver.request({ actor, path, method, body, key: key(),
     ...(head === undefined ? {} : { ifMatch: JSON.stringify(head) }) });
   const json = await response.json();
   expect(response.status, JSON.stringify(json)).toBe(method === 'POST' ? 201 : 200);
@@ -53,7 +53,7 @@ async function home(id: string, actor: Account | null = null): Promise<Home> {
 async function subject(type: string, label: string, statements?: unknown) {
   return (await command<{ subject: { id: string } }>('/v1/subjects', {
     type, labels: { en: label }, ...(statements ? { statements } : {}),
-  })).subject.id;
+  }, 'POST', undefined, people.subjectOwner)).subject.id;
 }
 
 test('mounted empty home keeps carrier, identity, optional states and unavailable viewer decisions distinct', async () => {
