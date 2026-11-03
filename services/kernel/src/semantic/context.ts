@@ -20,7 +20,8 @@ import { GLOBAL_CONTEXT } from './definitions.ts';
 export const CREATE_CONTEXT = 'context.create';
 
 export const globalContextAnchor: ParentAnchor = Object.freeze({
-  resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
+  // Literal identity so this module can finish while definitions.ts is still evaluating.
+  resource: Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' }),
   async validate(client, time) {
     authoritativeTimeValue(time);
     const found = await readGlobalContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
