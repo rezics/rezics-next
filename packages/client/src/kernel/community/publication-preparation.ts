@@ -19,3 +19,6 @@ export type RealmPublicationPreparation = {
   viewer: { accountId: string; clientId: string; authnEpoch: number };
   recovery: { requestIdentity: 'unknown'; replay: 'original-command' };
 };
+
+/** Response body for GET /realms/:realmId/publications/:subjectId/preparation. */
+export type RealmPublicationPreparationResponse = { preparation: RealmPublicationPreparation };

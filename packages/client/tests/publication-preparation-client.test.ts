@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import type { PublicationCommand, RealmPublicationPreparation } from '../src/index.ts';
+import type { KernelClient, PublicationCommand, RealmPublicationPreparation } from '../src/index.ts';
+
+type RealmPath = ReturnType<KernelClient['realms']>;
+type PublicationPath = ReturnType<RealmPath['publications']>;
+type PreparationRead = Awaited<ReturnType<PublicationPath['preparation']['get']>>;
 
 const preparation: RealmPublicationPreparation = {
   realm: { realmId: 'realm-1', spaceId: 'space-1', contextId: 'context-1', title: 'Realm', hostTitle: 'Space' },
@@ -20,6 +24,10 @@ const preparation: RealmPublicationPreparation = {
   recovery: { requestIdentity: 'unknown', replay: 'original-command' },
 };
 
-test('client root exports the Realm publication preparation DTO', () => {
-  expect(preparation.commands.withdraw?.expectedHead).toBe(preparation.current?.publicationId);
+const clientResponse: NonNullable<PreparationRead['data']> = { preparation };
+
+test('client root exports the Realm publication preparation DTO and typed preparation read', () => {
+  expect(clientResponse.preparation.commands.withdraw?.expectedHead).toBe(
+    clientResponse.preparation.current?.publicationId,
+  );
 });
