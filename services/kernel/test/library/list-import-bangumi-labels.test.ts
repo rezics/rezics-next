@@ -109,6 +109,8 @@ test('owner adopts existing/new labels, reopens assignments, preserves state and
   expect(await json(await send(`/${r.id}:apply`, { rows: [stateChoice] }))).toEqual(stateResult);
   expect(await f.commands.readEntry(f.owner.actor, r.subject)).toEqual(state);
   const after = await f.inspect();
+  expect(JSON.stringify(after.receipts)).not.toContain('new private');
+  expect(JSON.stringify(after.receipts)).not.toContain('private source only');
   for (const field of ['sessions', 'copies', 'follows', 'entitlements'] as const)
     expect(after[field]).toEqual(before[field]);
   expect(await apply(r.id, v.token)).toEqual(result);

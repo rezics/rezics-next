@@ -164,8 +164,12 @@ export function createBangumiLabelReview(
     const state: BangumiLabelState = { review, confirmed: false, outcomes: [] };
     if (Buffer.byteLength(JSON.stringify(state)) > BANGUMI_LABEL_LIMITS.reviewBytes)
       throw new ProblemError('invalid_request');
-    return (
-      await host.change(actor, 'labels.review', key, { id, ordinal, rowRevision, mappings }, async (tx, a) => {
+    const saved = await host.change(
+      actor,
+      'labels.review',
+      key,
+      { id, ordinal, rowRevision, mappings },
+      async (tx, a) => {
         if ((await host.header(tx, a, id, true)).cancelled) throw conflict();
         const current = await host.row(tx, a, id, ordinal);
         if (current.review?.token !== rowRevision) throw conflict();
@@ -174,9 +178,16 @@ export function createBangumiLabelReview(
         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
           [...args(a, id, ordinal), JSON.stringify(state)],
         );
-        return { ordinal, labels: state };
-      })
-    ).value;
+        // Source text and label names belong only to the removable retained row.
+        return { ordinal, token: review.token };
+      },
+    );
+    const stored = await retained(actor, id, ordinal);
+    if (!stored.labels || stored.labels.review.token !== saved.value.token || stored.review?.token !== rowRevision)
+      throw conflict();
+    if (stored.labels.review.subject && !(await subjectObservation(actor, stored.labels.review.subject.subjectId)))
+      throw new LibraryNotFoundError();
+    return { ordinal, labels: stored.labels };
   }
   function admission(
     actor: Actor,
