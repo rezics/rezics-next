@@ -50,7 +50,7 @@ export type BacklogRuntime = {
   /** The `goal cancel` path. */
   cancel(taskId: string): Promise<void>;
   now?: () => number;
-  policy?: ControlPolicy;
+  policy?: ControlPolicy | undefined;
   /** Active-task cap; defaults to `maxWorkers` in `<state>/capacity.json`, else 32. */
   workerCap?: number;
   perSweep?: number;
