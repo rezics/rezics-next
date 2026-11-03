@@ -18,6 +18,8 @@ import {
 } from '../src/source-classification.ts';
 import { RUN_TABLES, RunStore } from '../src/run-store.ts';
 import { parseClassificationArgs, runClassificationsCli } from '../src/source-classification-cli.ts';
+import { ImportSession } from '../src/import-session.ts';
+import { backupStoppedState, restoreStoppedStateSnapshot } from '../src/state-backup.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000101';
 const registration = createSourceRegistration('vndb');
@@ -235,6 +237,7 @@ async function classificationFixture(
   });
   return {
     directory,
+    path: join(directory, 'state.sqlite'),
     importer,
     transport,
     stored,
@@ -318,6 +321,16 @@ test('changed payloads keep sealed intent; stale CAS is rejected; unadmitted lic
     const listed = await runClassificationsCli(['--state', join(f.directory, 'state.sqlite'), '--source', 'vndb']);
     expect(listed.code).toBe(0);
     expect(listed.stdout).toContain(page.operations[0]!.operationId);
+    const detail = await runClassificationsCli([
+      '--state',
+      join(f.directory, 'state.sqlite'),
+      '--source',
+      'vndb',
+      '--operation',
+      page.operations[0]!.operationId,
+    ]);
+    expect(detail.code).toBe(0);
+    expect(detail.stdout).toContain('independent of a REZICS classification ballot');
     const inspected = page.operations[0]!;
     const storedKey = [...f.stored.keys()][0]!;
     f.stored.set(storedKey, { ...f.stored.get(storedKey)!, digest: 'c'.repeat(64) });
@@ -485,4 +498,68 @@ test('classification CLI rejects malformed, obsolete and resolve-without-review 
   const help = await runClassificationsCli(['--help']);
   expect(help.code).toBe(0);
   expect(help.stdout).toContain('independent of a REZICS classification ballot');
+});
+
+test('sealed classification retries from the journal without re-admission', async () => {
+  const f = await classificationFixture();
+  try {
+    f.lose();
+    expect((await f.run()).status).toBe('bulk-failed');
+    const sealed = f.writes[0]!;
+    f.recover();
+    await f.importer.close();
+    const importer = new Importer({ path: f.path, transport: f.transport, existing: true });
+    try {
+      expect(
+        (
+          await importer.runRecords(
+            registration,
+            (async function* () {
+              yield vn();
+            })(),
+          )
+        ).status,
+      ).toBe('committed');
+      expect(f.writes.at(-1)).toEqual(sealed);
+      expect(f.stored.size).toBe(1);
+    } finally {
+      await importer.close();
+    }
+  } finally {
+    await rm(f.directory, { recursive: true, force: true });
+  }
+});
+
+test('backup restores classification heads; a later identical import keeps that snapshot', async () => {
+  const f = await classificationFixture();
+  try {
+    expect((await f.run()).status).toBe('committed');
+    const heads = f.importer.session.store.database
+      .query('SELECT source,subject_id,association_key,digest FROM run_classification_heads')
+      .all();
+    expect(heads).toHaveLength(1);
+    expect((await f.run()).status).toBe('committed');
+    expect(
+      f.importer.session.store.database
+        .query('SELECT source,subject_id,association_key,digest FROM run_classification_heads')
+        .all(),
+    ).toEqual(heads);
+    await f.importer.close();
+    const output = join(f.directory, 'snapshot');
+    expect((await backupStoppedState({ state: f.path, output })).status).toBe('ready');
+    const restored = join(f.directory, 'restored.sqlite');
+    await restoreStoppedStateSnapshot({ snapshot: output, state: restored });
+    const session = new ImportSession(restored);
+    try {
+      expect(
+        session.store.database
+          .query('SELECT source,subject_id,association_key,digest FROM run_classification_heads')
+          .all(),
+      ).toEqual(heads);
+    } finally {
+      session.close();
+    }
+  } finally {
+    await f.close();
+  }
 });

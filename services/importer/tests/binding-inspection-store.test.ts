@@ -230,8 +230,10 @@ test('binding inspection pages original requests, distinguishes pending from ack
     const boundView = await inspect(state.path, ['--source', source, '--record', bound.external_id, '--json']);
     const boundDocument = JSON.parse(boundView.stdout) as {
       binding: { state: string; subject: string; storedCandidateCapacity: number };
+      resume: string;
     };
     expect(boundDocument.binding).toMatchObject({ state: 'bound', subject, storedCandidateCapacity: 23 });
+    expect(boundDocument.resume).toContain('source-classification CAS');
 
     const takenView = await inspect(state.path, ['--source', source, '--record', taken.external_id]);
     expect(takenView.stdout).toContain('observed native 404');
