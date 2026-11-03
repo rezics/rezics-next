@@ -236,6 +236,7 @@ async function classificationFixture(
   return {
     directory,
     importer,
+    transport,
     stored,
     writes,
     setFacts(next: unknown) {
@@ -357,6 +358,34 @@ test('interrupted delivery resumes the sealed body and key; older dates stay ref
     });
   } finally {
     await f.close();
+  }
+});
+
+test('ordinary import resumes a sealed classification intent without re-admission', async () => {
+  const f = await classificationFixture();
+  let resumed: Importer | undefined;
+  try {
+    f.lose();
+    expect((await f.run()).status).toBe('bulk-failed');
+    const sealed = f.writes[0]!;
+    f.recover();
+    await f.importer.close();
+    resumed = new Importer({ path: join(f.directory, 'state.sqlite'), transport: f.transport });
+    expect(
+      (
+        await resumed.runRecords(
+          registration,
+          (async function* () {
+            yield vn();
+          })(),
+        )
+      ).status,
+    ).toBe('committed');
+    expect(f.writes).toHaveLength(2);
+    expect(f.writes[1]).toEqual(sealed);
+  } finally {
+    await resumed?.close();
+    await rm(f.directory, { recursive: true, force: true });
   }
 });
 

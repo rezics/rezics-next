@@ -1927,11 +1927,12 @@ export class Importer {
       }
       const projection = conversion.sourceClassification;
       const association = admitted?.association?.({ owner, subject, conversion }) ?? null;
-      if (projection?.state === 'available' && association) {
-        const intended = intendedFromProjection(projection, association);
-        if (intended)
-          classificationWritten = await this.applyClassification(run, owner, subject, intended, signal, write);
-      }
+      const intended =
+        projection?.state === 'available' && association ? intendedFromProjection(projection, association) : null;
+      const pending = intended === null ? store.unresolvedAggregate(run, owner.external_id, 'classification') : null;
+      const resume = pending && isIntendedClassification(pending.intended) ? pending.intended : null;
+      const apply = intended ?? resume;
+      if (apply) classificationWritten = await this.applyClassification(run, owner, subject, apply, signal, write);
     }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
     const retainedProposals = new Set<BatchCommand>();

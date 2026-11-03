@@ -925,6 +925,15 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       track(() => liveTransport().readSourceStatistics(input, signal)),
     readPublicFigure: (input: Parameters<ReturnType<typeof createImportTransport>['readPublicFigure']>[0]) =>
       track(() => liveTransport().readPublicFigure(input, signal)),
+    readSourceClassifications: (
+      input: Parameters<ReturnType<typeof createImportTransport>['readSourceClassifications']>[0],
+    ) => track(() => liveTransport().readSourceClassifications(input, signal)),
+    writeSourceClassification: (
+      input: Parameters<ReturnType<typeof createImportTransport>['writeSourceClassification']>[0],
+    ) => track(() => liveTransport().writeSourceClassification(input, signal)),
+    clearSourceClassification: (
+      input: Parameters<ReturnType<typeof createImportTransport>['clearSourceClassification']>[0],
+    ) => track(() => liveTransport().clearSourceClassification(input, signal)),
     readFence: (tuple: { source: string; external_id: string; field_group: 'facts' | 'summary' | 'cover' }) =>
       readFence(() =>
         liveTransport().fence(
