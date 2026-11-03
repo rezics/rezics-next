@@ -49,7 +49,7 @@ uploads are unavailable, never zero. A declared section with zero records is emp
 the producer's explicit exclusions; it is not interpreted as an empty section. v1 cannot represent an unavailable
 installed source as a completed capture: absent expected sections are rejected. Sessions and exact unit rows are
 retained for review; History, journal/reflection, entries/labels, occurrences, Collections, annotations, provider
-import evidence and financial facts receive no effects. Unknown section names remain unsupported envelopes.
+import evidence and financial facts receive no effects. Unknown section names are refused.
 
 Every holding row returns `resolution:"unresolved"`; its page returns `effectsSupported:false` and
 `fullRestoration:false`. Two copies with equal Subject, note or dates remain independent rows. There is no duplicate

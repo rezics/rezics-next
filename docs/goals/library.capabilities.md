@@ -648,8 +648,8 @@ controller acceptance remain deferred.
 accept completed personal Library V1/V2/V3 artifacts with exact per-version section and byte accounting.
 The installed producer emits V2; V3 uses the declared assessment vocabulary pending producer delivery.
 Annotations, provenance, journals/assessment and provider evidence remain unsupported in this progress journey;
-only manifest/coverage and typed holdings/Session/unit evidence are retained. V4 remains refused. Holdings remain evidence-only; an explicitly reviewed progress
-occurrence creates a fresh native Session through the installed Session and direct episode-membership commands.
+only manifest/coverage and typed holdings/Session/unit evidence are retained. V4 remains refused. Holdings remain
+evidence-only; an explicitly reviewed progress occurrence creates a fresh native Session through the installed Session and direct episode-membership commands.
 Exact command operands and expected revisions survive a lost archive checkpoint and replay through the original
 native receipt. The owner reports `recoverable` while reconciliation is pending and withholds uncheckpointed facts.
 The focused native scenario is `services/kernel/test/library/copy-archive.test.ts`; frozen full recovery acceptance
