@@ -7,6 +7,9 @@ import {
   EXPORT_FORMAT,
   EXPORT_PAGE_ROWS,
   EXPORT_PRIVACY,
+  EXPORT_SECTIONS_V1,
+  EXPORT_SECTIONS_V2,
+  EXPORT_V2_COVERAGE,
   EXPORT_VERSION,
   type ExportArtifact,
   type ExportCommand,
@@ -15,6 +18,9 @@ import {
   type ExportPort,
   type ExportRecord,
   type ExportStatus,
+  type ExportSectionTotals,
+  type ExportVersion,
+  encodedRecordBytes,
 } from '../src/library/private-export/contract';
 import { exportCallTotal, expectedExportCalls } from '../src/library/private-export/cost';
 import { createExportJourney } from '../src/library/private-export/controller';
@@ -58,6 +64,16 @@ const { PrivateLibraryExportPage } = await import('../src/library/private-export
 
 const exportId = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const first = 'cursor-first';
+const capturedAt = new Date(Date.now() + 60_000).toISOString();
+const expiresAt = new Date(Date.parse(capturedAt) + 15 * 60_000).toISOString();
+const omissions = {
+  trash: 'excluded',
+  providerIdentifiers: 'stored evidence only',
+  personalImportEvidence: 'retained rows only',
+  commerce: 'excluded',
+  publication: 'excluded',
+  reimport: 'unavailable',
+};
 
 const visit = (viewer = 'alice', csrf = 'csrf-1'): ExportVisit => {
   const controller = new AbortController();
@@ -76,30 +92,45 @@ const visit = (viewer = 'alice', csrf = 'csrf-1'): ExportVisit => {
   };
 };
 
-function coverage(extra: Partial<ExportStatus> = {}): ExportStatus {
-  return {
+function coverage(extra: Partial<ExportStatus> = {}, version: ExportVersion = EXPORT_VERSION): ExportStatus {
+  const common = {
     format: EXPORT_FORMAT,
-    version: EXPORT_VERSION,
     exportId,
-    capturedAt: '2026-11-03 12:00:00+00',
-    expiresAt: '2026-11-03 12:15:00+00',
+    capturedAt,
+    expiresAt,
     privacy: EXPORT_PRIVACY,
     completeness: EXPORT_COMPLETENESS,
-    sections: ['entries', 'labels'],
-    omissions: {
-      trash: 'excluded',
-      reimport: 'unavailable',
-    },
+    omissions,
     fullExport: false,
     state: 'collecting',
     first,
-    ...extra,
   };
+  const versioned =
+    version === 1
+      ? { ...common, version: 1 as const, sections: [...EXPORT_SECTIONS_V1] }
+      : { ...common, version: 2 as const, coverage: EXPORT_V2_COVERAGE, sections: [...EXPORT_SECTIONS_V2] };
+  return { ...versioned, ...extra } as ExportStatus;
 }
 
-function manifest(rows: number, recordBytes: number): ExportManifest {
-  const status = coverage({ state: 'ready', first: null });
-  return { ...status, rows, recordBytes };
+function manifest(records: readonly ExportRecord[], version: ExportVersion = EXPORT_VERSION): ExportManifest {
+  const status = coverage({ state: 'ready', first: null }, version);
+  const { state: _state, first: _first, ...base } = status;
+  const sectionTotals = Object.fromEntries(
+    EXPORT_SECTIONS_V2.map((section) => [
+      section,
+      records.reduce(
+        (total, record) =>
+          record.section === section
+            ? { rows: total.rows + 1, recordBytes: total.recordBytes + encodedRecordBytes(record) }
+            : total,
+        { rows: 0, recordBytes: 0 },
+      ),
+    ]),
+  ) as ExportSectionTotals;
+  const recordBytes = records.reduce((sum, record) => sum + encodedRecordBytes(record), 0);
+  return base.version === 1
+    ? { ...base, rows: records.length, recordBytes }
+    : { ...base, rows: records.length, recordBytes, sectionTotals };
 }
 
 function recordOf(index: number): ExportRecord {
@@ -119,11 +150,13 @@ function pageOf(records: ExportRecord[], extra: Partial<ExportPage> = {}): Expor
 
 function pagesFor(total: number, emptyAfter = 0): ExportPage[] {
   const pages: ExportPage[] = [];
+  const allRecords = Array.from({ length: total }, (_, index) => recordOf(index));
+  const finalManifest = manifest(allRecords);
   let remaining = total;
   let index = 0;
   while (remaining > 0) {
     const take = Math.min(EXPORT_PAGE_ROWS, remaining);
-    const slice = Array.from({ length: take }, (_, offset) => recordOf(index + offset));
+    const slice = allRecords.slice(index, index + take);
     remaining -= take;
     index += take;
     const last = remaining === 0;
@@ -131,7 +164,7 @@ function pagesFor(total: number, emptyAfter = 0): ExportPage[] {
       pageOf(slice, {
         next: last && emptyAfter === 0 ? null : `cursor-${pages.length + 1}`,
         state: last && emptyAfter === 0 ? 'ready' : 'collecting',
-        manifest: last && emptyAfter === 0 ? manifest(total, take * 80) : null,
+        manifest: last && emptyAfter === 0 ? finalManifest : null,
       }),
     );
     if (pages.length === 1 && emptyAfter > 0 && remaining > 0) {
@@ -144,12 +177,12 @@ function pagesFor(total: number, emptyAfter = 0): ExportPage[] {
       pageOf([], {
         next: last ? null : `cursor-empty-${extra}`,
         state: last ? 'ready' : 'collecting',
-        manifest: last ? manifest(total, total * 80) : null,
+        manifest: last ? finalManifest : null,
       }),
     );
   }
   if (total === 0) {
-    return [pageOf([], { state: 'ready', next: null, manifest: manifest(0, 0) })];
+    return [pageOf([], { state: 'ready', next: null, manifest: finalManifest })];
   }
   return pages;
 }
@@ -160,6 +193,7 @@ function recordingPort(
     create?: ExportPort['create'];
     status?: ExportStatus;
     failCreateOnce?: boolean;
+    failPageOnce?: boolean;
     staleOnStatus?: boolean;
   } = {},
 ): {
@@ -174,6 +208,7 @@ function recordingPort(
   const cancels: string[] = [];
   const statuses: string[] = [];
   let createAttempts = 0;
+  let pageFailures = 0;
   const byCursor = new Map<string, ExportPage>();
   let cursor = first;
   for (const page of pages) {
@@ -195,6 +230,7 @@ function recordingPort(
     },
     async page(command) {
       pageCursors.push(command.cursor);
+      if (options.failPageOnce && pageFailures++ === 0) return { kind: 'unknown', command };
       const page = byCursor.get(command.cursor);
       if (!page) return { kind: 'unavailable' };
       return { kind: 'page', page };
@@ -321,6 +357,234 @@ test('empty continuation reaches a final manifest; missing manifest yields no fi
   expect(snap.stage).toBe('unavailable');
 });
 
+test('version 2 preserves owner records and verifies all section totals before saving exact bytes', async () => {
+  const records: ExportRecord[] = [
+    recordOf(0),
+    {
+      section: 'annotations',
+      accountId: 'owner-1',
+      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
+      entryIncarnationId: null,
+      libraryProfilePin: null,
+      annotationRevision: 3,
+      note: null,
+      priority: null,
+      annotationUpdatedAt: null,
+    },
+    {
+      section: 'provenance',
+      accountId: 'owner-1',
+      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
+      entryIncarnationId: null,
+      libraryProfilePin: null,
+      observation: {
+        provider: 'vndb',
+        recordId: 'source-row-1',
+        revision: 2,
+        privacy: { status: 'known', meaning: 'private' },
+        sourceCreated: { status: 'known', value: '2024', precision: 'year', zone: 'unknown' },
+        sourceUpdated: { status: 'cleared' },
+        recordedAt: '2026-11-04T12:01:00.000Z',
+      },
+    },
+    {
+      section: 'journals',
+      accountId: 'owner-1',
+      sessionId: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
+      subjectId: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
+      versionSubjectId: null,
+      state: 'active',
+      progressRevision: 4,
+      libraryProfilePin: null,
+      startedAt: '2026-11-04T11:00:00.000Z',
+      completedAt: null,
+      lastChangedAt: '2026-11-04T11:05:00.000Z',
+      journal: {
+        sessionId: '0192f3a0-6c1e-7b2a-9d4e-000000000002',
+        revision: 5,
+        startDate: { year: 2024 },
+        finishDate: null,
+        reflection: '',
+      },
+    },
+  ];
+  const finalManifest = manifest(records);
+  const pages = [
+    pageOf(records.slice(0, 2), { next: 'cursor-empty', state: 'collecting' }),
+    pageOf([], { next: 'cursor-final', state: 'collecting' }),
+    pageOf(records.slice(2), { state: 'ready', manifest: finalManifest }),
+  ];
+  const ready = recordingPort(pages);
+  const delivered: Uint8Array[] = [];
+  const journey = createExportJourney({
+    port: ready.port,
+    visit: visit(),
+    deliver(file) {
+      delivered.push(file.bytes.slice());
+      return true;
+    },
+  });
+
+  const snap = await journey.capture();
+  expect(snap.stage).toBe('ready');
+  expect(snap.cost.pagesVisited).toBe(3);
+  expect(snap.cost.emptyPages).toBe(1);
+  expect(snap.cost.maxPageRecords).toBeLessThanOrEqual(EXPORT_PAGE_ROWS);
+  expect(ready.pageCursors).toEqual([first, 'cursor-empty', 'cursor-final']);
+  expect(snap.manifest?.version).toBe(2);
+  expect(Object.keys(snap.manifest?.version === 2 ? snap.manifest.sectionTotals : {})).toEqual([
+    ...EXPORT_SECTIONS_V2,
+  ]);
+  expect(snap.manifest?.version === 2 ? snap.manifest.sectionTotals.annotations : null).toEqual({
+    rows: 1,
+    recordBytes: encodedRecordBytes(records[1]!),
+  });
+  expect(snap.manifest?.version === 2 ? snap.manifest.sectionTotals.units : null).toEqual({
+    rows: 0,
+    recordBytes: 0,
+  });
+  await journey.download();
+  expect(delivered).toHaveLength(1);
+  expect(new TextDecoder().decode(delivered[0])).toBe(JSON.stringify({ manifest: finalManifest, records }));
+  expect(parseAssembledArtifact(delivered[0]!)).toEqual({ manifest: finalManifest, records });
+});
+
+test('mounted version 2 coverage reaches the completed download state with zero-row totals', async () => {
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = () => 'blob:https://site.test/private-export';
+  URL.revokeObjectURL = () => {};
+  try {
+    const { port } = recordingPort(pagesFor(16, 1));
+    await mount(port);
+    expect(host.textContent).toContain(m.library_export_section_annotations());
+    expect(host.textContent).toContain(m.library_export_section_provenance());
+    expect(host.textContent).toContain(m.library_export_section_journals());
+    await click(m.library_export_capture());
+    await waitFor(m.library_export_ready());
+    expect(host.textContent).toContain(m.library_export_section_total({ rows: 0, bytes: 0 }));
+    await click(m.library_export_download());
+    await waitFor(m.library_export_downloaded());
+  } finally {
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+  }
+});
+
+test('stored version 1 keeps its original sections and retries the exact cursor', async () => {
+  const records = [recordOf(7)];
+  const stored = coverage({}, 1);
+  const oldPage = pageOf(records, { state: 'ready', manifest: manifest(records, 1) });
+  const calls = recordingPort([oldPage], {
+    create: async () => ({ kind: 'status', status: stored }),
+    failPageOnce: true,
+  });
+  const journey = createExportJourney({ port: calls.port, visit: visit() });
+
+  let snap = await journey.capture();
+  expect(snap.notice).toMatchObject({ kind: 'unknown', command: { kind: 'page', cursor: first } });
+  snap = await journey.retryUnknown();
+  expect(snap.stage).toBe('ready');
+  expect(snap.hasArtifact).toBe(true);
+  expect(snap.manifest).toMatchObject({
+    version: 1,
+    sections: [...EXPORT_SECTIONS_V1],
+    rows: 1,
+    recordBytes: encodedRecordBytes(records[0]!),
+  });
+  expect(snap.manifest?.version === 1 && 'sectionTotals' in snap.manifest).toBe(false);
+  expect(calls.creates).toHaveLength(1);
+  expect(calls.pageCursors).toEqual([first, first]);
+});
+
+test('mixed versions, captures and section totals refuse the final artifact', async () => {
+  const records = [recordOf(11)];
+  const good = manifest(records);
+  if (good.version !== 2) throw new Error('Expected a version 2 fixture');
+  const wrongTotals = {
+    ...good,
+    sectionTotals: {
+      ...good.sectionTotals,
+      entries: { rows: 0, recordBytes: 0 },
+      labels: { rows: 1, recordBytes: good.sectionTotals.entries.recordBytes },
+    },
+  };
+  const wrongCapture = {
+    ...good,
+    exportId: '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb',
+  };
+  const mismatches: ExportManifest[] = [manifest(records, 1), wrongCapture, wrongTotals];
+  for (const mismatched of mismatches) {
+    const page = pageOf(records, { state: 'ready', manifest: mismatched });
+    const journey = createExportJourney({ port: recordingPort([page]).port, visit: visit() });
+    const snap = await journey.capture();
+    expect(snap.stage).toBe('unavailable');
+    expect(snap.hasArtifact).toBe(false);
+  }
+});
+
+test('fixed expiry and viewer retirement discard late private pages', async () => {
+  const records = [recordOf(4)];
+  const deadline = 900_000;
+  let clock = deadline - 1;
+  const status = coverage({
+    capturedAt: new Date(0).toISOString(),
+    expiresAt: new Date(deadline).toISOString(),
+  });
+  const finalManifest = {
+    ...manifest(records),
+    capturedAt: status.capturedAt,
+    expiresAt: status.expiresAt,
+  };
+  const expiringPort: ExportPort = {
+    async create() {
+      return { kind: 'status', status };
+    },
+    async status() {
+      return { kind: 'status', status };
+    },
+    async page() {
+      clock = deadline;
+      return { kind: 'page', page: pageOf(records, { state: 'ready', manifest: finalManifest }) };
+    },
+    async cancel() {
+      return { kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) };
+    },
+  };
+  const expired = await createExportJourney({ port: expiringPort, visit: visit(), now: () => clock }).capture();
+  expect(expired.stage).toBe('expired');
+  expect(expired.hasArtifact).toBe(false);
+
+  let finishPage!: (result: Awaited<ReturnType<ExportPort['page']>>) => void;
+  const latePage = new Promise<Awaited<ReturnType<ExportPort['page']>>>((resolve) => {
+    finishPage = resolve;
+  });
+  const pendingPort: ExportPort = {
+    async create() {
+      return { kind: 'status', status: coverage() };
+    },
+    async status() {
+      return { kind: 'status', status: coverage() };
+    },
+    async page() {
+      return latePage;
+    },
+    async cancel() {
+      return { kind: 'cancelled', status: coverage({ state: 'cancelled', first: null }) };
+    },
+  };
+  const current = visit('alice', 'csrf-a');
+  const journey = createExportJourney({ port: pendingPort, visit: current });
+  const pending = journey.capture();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  current.retire();
+  finishPage({ kind: 'page', page: pageOf(records, { state: 'ready', manifest: manifest(records) }) });
+  await pending;
+  expect(journey.live()).toBe(false);
+  expect(journey.snapshot().hasArtifact).toBe(false);
+  expect(journey.snapshot().records).toBe(0);
+});
+
 test('uncertain create retries the original key; save retry keeps identical bytes', async () => {
   const pages = pagesFor(16, 0);
   const ready = recordingPort(pages, { failCreateOnce: true });
@@ -426,12 +690,7 @@ test('growth at 16, 128 and 1,024 records stays linear in pages and bounded per 
     expect(held).toHaveLength(2);
     expect(held[0]).toEqual(held[1]);
     expect(snap.cost.calls.create).toBe(1);
-    const limited = recordingPort([
-      pageOf(
-        Array.from({ length: 16 }, (_, index) => recordOf(index)),
-        { state: 'limit' },
-      ),
-    ]);
+    const limited = recordingPort([pageOf([], { state: 'limit' })]);
     const rejected = createExportJourney({ port: limited.port, visit: visit() });
     const terminal = await rejected.capture();
     expect(terminal.stage).toBe('limit');

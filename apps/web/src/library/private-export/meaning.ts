@@ -12,6 +12,9 @@ export function exportSectionLabel(section: string): string {
   if (section === 'collections') return m.library_export_section_collections();
   if (section === 'collectionPins') return m.library_export_section_pins();
   if (section === 'occurrences') return m.library_export_section_occurrences();
+  if (section === 'annotations') return m.library_export_section_annotations();
+  if (section === 'provenance') return m.library_export_section_provenance();
+  if (section === 'journals') return m.library_export_section_journals();
   if (section === 'bangumiUploads' || section === 'bangumiEvidence') return m.library_export_section_bangumi();
   if (section === 'malImports' || section === 'malEvidence') return m.library_export_section_mal();
   return m.library_export_section_other({ section });

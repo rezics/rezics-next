@@ -60,9 +60,19 @@ export function ExportReady({
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">{m.library_export_sections_heading()}</h2>
         <ul className="list-disc space-y-2 pl-6">
-          {manifest.sections.map((section) => (
-            <li key={section}>{exportSectionLabel(section)}</li>
-          ))}
+          {manifest.sections.map((section) => {
+            const total = manifest.version === 2 ? manifest.sectionTotals[section] : null;
+            return (
+              <li key={section}>
+                {exportSectionLabel(section)}
+                {total ? (
+                  <span className="ml-2 text-sm text-muted-foreground">
+                    {m.library_export_section_total({ rows: total.rows, bytes: total.recordBytes })}
+                  </span>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </div>
       {saveFailed ? <p role="status">{m.library_export_save_failed()}</p> : null}

@@ -1,50 +1,106 @@
 import {
   EXPORT_PAGE_RECORD_BYTES,
+  EXPORT_PAGE_ROWS,
+  EXPORT_ROW_BYTES,
+  EXPORT_SECTIONS_V1,
+  EXPORT_SECTIONS_V2,
   EXPORT_STREAM_BYTES,
   EXPORT_STREAM_RECORDS,
   artifactFilename,
   encodedBytes,
+  encodedRecordBytes,
+  isExportRecord,
   type ExportArtifact,
   type ExportManifest,
   type ExportRecord,
+  type ExportVersion,
 } from './contract';
 
-export type AssemblyLimit = { kind: 'limit' };
+export type AssemblyFailure = { kind: 'limit' | 'invalid' };
+type SectionCount = { rows: number; recordBytes: number };
 
-/**
- * Bounded sequential assembly. Each page is stored as its own chunk so the visit never
- * recopies the collected prefix. Final JSON is produced once after a complete manifest.
- */
+/** Stores bounded pages once and serializes the full artifact only after verified completion. */
 export class ExportAssembly {
   private chunks: ExportRecord[][] = [];
   private records = 0;
   private bytes = 0;
+  private lastPageBytes = 0;
+  private version: ExportVersion | null = null;
+  private sectionTotals = new Map<string, SectionCount>();
   private artifact: ExportArtifact | null = null;
 
-  addPage(records: readonly ExportRecord[]): AssemblyLimit | null {
-    if (this.artifact) return { kind: 'limit' };
-    const pageBytes = encodedBytes(records);
-    if (records.length && pageBytes > EXPORT_PAGE_RECORD_BYTES) return { kind: 'limit' };
-    if (this.records + records.length > EXPORT_STREAM_RECORDS) return { kind: 'limit' };
-    if (this.bytes + pageBytes > EXPORT_STREAM_BYTES) return { kind: 'limit' };
-    this.chunks.push(records.map((record) => record));
-    this.records += records.length;
-    this.bytes += pageBytes;
+  bind(version: ExportVersion): AssemblyFailure | null {
+    if (this.version !== null && this.version !== version) return { kind: 'invalid' };
+    this.version = version;
+    if (this.sectionTotals.size === 0) {
+      const sections = version === 1 ? EXPORT_SECTIONS_V1 : EXPORT_SECTIONS_V2;
+      for (const section of sections) this.sectionTotals.set(section, { rows: 0, recordBytes: 0 });
+    }
     return null;
   }
 
-  finalize(manifest: ExportManifest): ExportArtifact | AssemblyLimit {
+  addPage(records: readonly ExportRecord[], version: ExportVersion): AssemblyFailure | null {
+    if (this.artifact || this.version !== version) return { kind: 'invalid' };
+    if (records.length > EXPORT_PAGE_ROWS) return { kind: 'limit' };
+
+    let pageBytes = 0;
+    const pageTotals = new Map<string, SectionCount>();
+    for (const record of records) {
+      if (!isExportRecord(record) || !this.sectionTotals.has(record.section)) return { kind: 'invalid' };
+      const recordBytes = encodedRecordBytes(record);
+      if (version === 2 && recordBytes > EXPORT_ROW_BYTES) return { kind: 'limit' };
+      pageBytes += recordBytes;
+      const sectionTotal = pageTotals.get(record.section) ?? { rows: 0, recordBytes: 0 };
+      sectionTotal.rows += 1;
+      sectionTotal.recordBytes += recordBytes;
+      pageTotals.set(record.section, sectionTotal);
+    }
+
+    if (pageBytes > EXPORT_PAGE_RECORD_BYTES) return { kind: 'limit' };
+    if (this.records + records.length > EXPORT_STREAM_RECORDS) return { kind: 'limit' };
+    if (this.bytes + pageBytes > EXPORT_STREAM_BYTES) return { kind: 'limit' };
+
+    if (records.length > 0) this.chunks.push([...records]);
+    this.records += records.length;
+    this.bytes += pageBytes;
+    this.lastPageBytes = pageBytes;
+    for (const [section, added] of pageTotals) {
+      const total = this.sectionTotals.get(section)!;
+      total.rows += added.rows;
+      total.recordBytes += added.recordBytes;
+    }
+    return null;
+  }
+
+  finalize(manifest: ExportManifest): ExportArtifact | AssemblyFailure {
     if (this.artifact) return this.artifact;
-    if (manifest.rows !== this.records) return { kind: 'limit' };
-    const payload = { manifest, records: this.chunks.flat() };
-    const bytes = new TextEncoder().encode(JSON.stringify(payload));
-    if (bytes.byteLength > EXPORT_STREAM_BYTES + encodedBytes(manifest) + 64) return { kind: 'limit' };
+    if (this.version !== manifest.version || manifest.rows !== this.records || manifest.recordBytes !== this.bytes)
+      return { kind: 'invalid' };
+
+    if (manifest.version === 2) {
+      for (const section of EXPORT_SECTIONS_V2) {
+        const actual = this.sectionTotals.get(section);
+        const declared = manifest.sectionTotals[section];
+        if (!actual || declared.rows !== actual.rows || declared.recordBytes !== actual.recordBytes)
+          return { kind: 'invalid' };
+      }
+    }
+
+    const records = this.chunks.flat();
+    if (records.length !== this.records) return { kind: 'invalid' };
+    // JSON.stringify and TextEncoder each make one bounded whole-artifact copy at finalization.
+    const serialized = JSON.stringify({ manifest, records });
+    const bytes = new TextEncoder().encode(serialized);
+    if (bytes.byteLength > EXPORT_STREAM_BYTES + encodedBytes(manifest) + records.length + 64)
+      return { kind: 'limit' };
+
     this.artifact = {
       filename: artifactFilename(manifest.exportId),
       mediaType: 'application/json',
       bytes,
     };
     this.chunks = [];
+    this.lastPageBytes = 0;
     return this.artifact;
   }
 
@@ -64,10 +120,21 @@ export class ExportAssembly {
     return this.bytes;
   }
 
+  retainedRecordBytes(): number {
+    return this.artifact ? 0 : this.bytes;
+  }
+
+  retainedPageBytes(): number {
+    return this.artifact ? 0 : this.lastPageBytes;
+  }
+
   clear(): void {
     this.chunks = [];
     this.records = 0;
     this.bytes = 0;
+    this.lastPageBytes = 0;
+    this.version = null;
+    this.sectionTotals.clear();
     this.artifact = null;
   }
 }

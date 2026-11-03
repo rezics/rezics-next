@@ -1,8 +1,13 @@
 import { ExportAssembly, deliverLocalFile } from './artifact';
 import {
+  exportCoverage,
+  isExportPage,
+  isExportStatus,
   isTerminalState,
   newCommandKey,
+  sameExportCoverage,
   type ExportCommand,
+  type ExportCoverage,
   type ExportFailure,
   type ExportFileDelivery,
   type ExportManifest,
@@ -56,9 +61,11 @@ export function createExportJourney(input: {
   visit: ExportVisit;
   deliver?: ExportFileDelivery;
   onChange?: (snapshot: ExportJourneySnapshot) => void;
+  now?: () => number;
 }) {
   const { port, visit } = input;
   const deliver = input.deliver ?? deliverLocalFile;
+  const now = input.now ?? Date.now;
   const sender = { subject: visit.subject, csrfToken: visit.csrfToken };
   const cost = new ExportCostLedger();
   const assembly = new ExportAssembly();
@@ -74,6 +81,7 @@ export function createExportJourney(input: {
   let completeness: string | null = null;
   let sections: string[] = [];
   let omissions: { readonly [key: string]: string } = {};
+  let binding: ExportCoverage | null = null;
   let manifest: ExportManifest | null = null;
   let unknown: ExportCommand | null = null;
   let previousDisposition: ExportStage | null = null;
@@ -92,7 +100,8 @@ export function createExportJourney(input: {
   function retain(): void {
     const artifact = assembly.current();
     cost.retain({
-      chunks: assembly.chunksView(),
+      recordBytes: assembly.retainedRecordBytes(),
+      pageBytes: assembly.retainedPageBytes(),
       manifest,
       artifactBytes: artifact ? artifact.bytes.byteLength : 0,
     });
@@ -111,8 +120,8 @@ export function createExportJourney(input: {
       expiresAt,
       completeness,
       fullExport: false,
-      sections,
-      omissions,
+      sections: [...sections],
+      omissions: { ...omissions },
       pages: cost.snapshot.pagesVisited,
       records: assembly.recordCount() || (artifact ? (manifest?.rows ?? 0) : 0),
       manifest,
@@ -133,13 +142,19 @@ export function createExportJourney(input: {
     manifest = null;
   }
 
-  function rememberCoverage(status: ExportStatus | ExportManifest): void {
-    exportId = status.exportId;
-    capturedAt = status.capturedAt;
-    expiresAt = status.expiresAt;
-    completeness = status.completeness;
-    sections = [...status.sections];
-    omissions = status.omissions;
+  function rememberCoverage(value: ExportStatus | ExportManifest): boolean {
+    const candidate = exportCoverage(value);
+    if (binding && !sameExportCoverage(binding, candidate)) return false;
+    const issue = assembly.bind(candidate.version);
+    if (issue) return false;
+    binding ??= candidate;
+    exportId = candidate.exportId;
+    capturedAt = candidate.capturedAt;
+    expiresAt = candidate.expiresAt;
+    completeness = candidate.completeness;
+    sections = [...candidate.sections];
+    omissions = { ...candidate.omissions };
+    return true;
   }
 
   function enterTerminal(next: ExportStage): ExportJourneySnapshot {
@@ -150,6 +165,28 @@ export function createExportJourney(input: {
     stop = true;
     retain();
     return emit();
+  }
+
+  function expired(): boolean {
+    if (!expiresAt) return false;
+    const deadline = Date.parse(expiresAt);
+    return !Number.isFinite(deadline) || now() >= deadline;
+  }
+
+  function expireIfNeeded(): boolean {
+    if (!binding || !expired()) return false;
+    enterTerminal('expired');
+    return true;
+  }
+
+  function acceptStatus(status: ExportStatus): ExportJourneySnapshot | null {
+    if (!isExportStatus(status) || !rememberCoverage(status)) return enterTerminal('unavailable');
+    if (isTerminalState(status.state)) return enterTerminal(status.state);
+    if (!status.first) return enterTerminal('unavailable');
+    if (firstCursor !== null && firstCursor !== status.first) return enterTerminal('unavailable');
+    firstCursor ??= status.first;
+    if (expireIfNeeded()) return snapshot();
+    return null;
   }
 
   function applyFailure(response: ExportFailure): ExportJourneySnapshot {
@@ -168,10 +205,11 @@ export function createExportJourney(input: {
     send: () => Promise<T | ExportFailure | ExportUnknown>,
     retry = false,
   ): Promise<T | undefined> {
-    if (!live()) return;
+    if (!live() || expireIfNeeded()) return;
     const response = await send();
     if (!live()) return;
     cost.recordCall(command.kind, retry);
+    if (expireIfNeeded()) return;
     if (stop && command.kind !== 'cancel') return;
     if (response.kind === 'unknown') {
       unknown = (response as ExportUnknown).command;
@@ -191,20 +229,19 @@ export function createExportJourney(input: {
   }
 
   function acceptPage(page: ExportPage): ExportJourneySnapshot | null {
-    if (isTerminalState(page.state)) {
-      previousDisposition = page.state;
-      return enterTerminal(page.state);
-    }
-    const limited = assembly.addPage(page.records);
+    if (!isExportPage(page) || page.exportId !== exportId || !binding) return enterTerminal('unavailable');
+    if (isTerminalState(page.state)) return enterTerminal(page.state);
+    if (expireIfNeeded()) return snapshot();
+
+    const issue = assembly.addPage(page.records, binding.version);
     cost.recordPage(page);
-    if (limited) return enterTerminal('limit');
+    if (issue?.kind === 'limit') return enterTerminal('limit');
+    if (issue) return enterTerminal('unavailable');
+
     if (page.state === 'ready') {
-      if (!page.manifest) {
-        clearBytes();
-        return enterTerminal('unavailable');
-      }
+      if (!page.manifest || !sameExportCoverage(binding, page.manifest)) return enterTerminal('unavailable');
       const file = assembly.finalize(page.manifest);
-      if ('kind' in file) return enterTerminal('limit');
+      if ('kind' in file) return enterTerminal(file.kind === 'limit' ? 'limit' : 'unavailable');
       cost.recordFinalize(file.bytes.byteLength);
       manifest = page.manifest;
       rememberCoverage(page.manifest);
@@ -213,17 +250,17 @@ export function createExportJourney(input: {
       retain();
       return emit();
     }
-    if (!page.next) {
-      clearBytes();
-      return enterTerminal('unavailable');
-    }
     return null;
   }
 
   async function traverse(cursor: string, retry = false): Promise<ExportJourneySnapshot> {
     let current = cursor;
     const token = generation;
+    let checkpoint = cursor;
+    let checkpointPower = 1;
+    let checkpointDistance = 0;
     while (current && live() && !stop && token === generation) {
+      if (expireIfNeeded()) return snapshot();
       if (!exportId) return emit();
       stage = 'capturing';
       const command: Extract<ExportCommand, { kind: 'page' }> = {
@@ -237,7 +274,17 @@ export function createExportJourney(input: {
       if (stop || token !== generation) return cancelWork ?? snapshot();
       const finished = acceptPage(response.page);
       if (finished) return finished;
-      current = response.page.next ?? '';
+      const next = response.page.next ?? '';
+      if (next) {
+        checkpointDistance += 1;
+        if (next === checkpoint) return enterTerminal('unavailable');
+        if (checkpointDistance === checkpointPower) {
+          checkpoint = next;
+          checkpointPower = Math.min(checkpointPower * 2, Number.MAX_SAFE_INTEGER);
+          checkpointDistance = 0;
+        }
+      }
+      current = next;
       emit();
       await Promise.resolve();
     }
@@ -250,7 +297,7 @@ export function createExportJourney(input: {
   async function capture(): Promise<ExportJourneySnapshot> {
     if (!live()) return snapshot();
     if (unknown) return retryUnknown();
-    if (busy && stage !== 'coverage') return snapshot();
+    if (stage !== 'coverage' || busy) return snapshot();
     stop = false;
     busy = true;
     stage = 'preparing';
@@ -260,12 +307,9 @@ export function createExportJourney(input: {
     const command: Extract<ExportCommand, { kind: 'create' }> = { kind: 'create', key: requestKey };
     const response = await run(command, () => port.create(command));
     if (!response || response.kind !== 'status' || !live()) return snapshot();
-    const status = response.status;
-    rememberCoverage(status);
-    firstCursor = status.first;
-    if (isTerminalState(status.state)) return enterTerminal(status.state);
-    if (!status.first) return enterTerminal('unavailable');
-    return traverse(status.first);
+    const finished = acceptStatus(response.status);
+    if (finished) return finished;
+    return traverse(firstCursor!);
   }
 
   async function retryUnknown(): Promise<ExportJourneySnapshot> {
@@ -277,11 +321,9 @@ export function createExportJourney(input: {
       emit();
       const response = await run(command, () => port.create(command), true);
       if (!response || response.kind !== 'status' || !live()) return snapshot();
-      rememberCoverage(response.status);
-      firstCursor = response.status.first;
-      if (isTerminalState(response.status.state)) return enterTerminal(response.status.state);
-      if (!response.status.first) return enterTerminal('unavailable');
-      return traverse(response.status.first);
+      const finished = acceptStatus(response.status);
+      if (finished) return finished;
+      return traverse(firstCursor!);
     }
     if (command.kind === 'page') {
       busy = true;
@@ -295,22 +337,35 @@ export function createExportJourney(input: {
   }
 
   async function cancel(): Promise<ExportJourneySnapshot> {
+    if (!live()) return snapshot();
+    if (expireIfNeeded()) return snapshot();
     stop = true;
     if (cancelWork) return cancelWork;
+    clearBytes();
+    retain();
     const id = exportId;
     if (!id || !live()) return snapshot();
     cancelWork = (async () => {
       const command: Extract<ExportCommand, { kind: 'cancel' }> = { kind: 'cancel', exportId: id };
       const response = await run(command, () => port.cancel(command));
       if (!response || response.kind !== 'cancelled' || !live()) return snapshot();
+      if (
+        !isExportStatus(response.status) ||
+        response.status.state !== 'cancelled' ||
+        !binding ||
+        !sameExportCoverage(binding, response.status)
+      )
+        return enterTerminal('unavailable');
       return enterTerminal('cancelled');
     })();
     return cancelWork;
   }
 
   async function download(): Promise<ExportJourneySnapshot> {
+    if (!live()) return snapshot();
+    if (expireIfNeeded()) return snapshot();
     const file = assembly.current();
-    if (!file || !live()) {
+    if (!file) {
       if ((stage === 'ready' || stage === 'empty' || stage === 'save-failed') && firstCursor && exportId) {
         notice = { kind: 'bytes-lost' };
         retain();
@@ -321,6 +376,7 @@ export function createExportJourney(input: {
     try {
       const saved = await deliver(file);
       if (!live()) return snapshot();
+      if (expireIfNeeded()) return snapshot();
       if (!saved) {
         stage = 'save-failed';
         notice = null;
@@ -333,6 +389,7 @@ export function createExportJourney(input: {
       return emit();
     } catch {
       if (!live()) return snapshot();
+      if (expireIfNeeded()) return snapshot();
       stage = 'save-failed';
       notice = null;
       retain();
@@ -342,6 +399,7 @@ export function createExportJourney(input: {
 
   async function replay(): Promise<ExportJourneySnapshot> {
     if (!live() || !exportId || !firstCursor) return snapshot();
+    if (expireIfNeeded()) return snapshot();
     stop = false;
     busy = true;
     stage = 'preparing';
@@ -351,9 +409,8 @@ export function createExportJourney(input: {
     const command: Extract<ExportCommand, { kind: 'status' }> = { kind: 'status', exportId };
     const response = await run(command, () => port.status(command));
     if (!response || response.kind !== 'status' || !live()) return snapshot();
-    rememberCoverage(response.status);
-    if (isTerminalState(response.status.state)) return enterTerminal(response.status.state);
-    if (response.status.first && response.status.first !== firstCursor) return enterTerminal('stale');
+    const finished = acceptStatus(response.status);
+    if (finished) return finished;
     return traverse(firstCursor);
   }
 
@@ -374,6 +431,7 @@ export function createExportJourney(input: {
     completeness = null;
     sections = [];
     omissions = {};
+    binding = null;
     clearBytes();
     stage = 'coverage';
     retain();
@@ -385,8 +443,19 @@ export function createExportJourney(input: {
     stop = true;
     busy = false;
     unknown = null;
-    clearBytes();
     visit.retire();
+    exportId = null;
+    firstCursor = null;
+    capturedAt = null;
+    expiresAt = null;
+    completeness = null;
+    sections = [];
+    omissions = {};
+    binding = null;
+    notice = null;
+    clearBytes();
+    stage = 'coverage';
+    retain();
   }
 
   return {

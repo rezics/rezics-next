@@ -2,6 +2,7 @@ import {
   EXPORT_PAGE_RECORD_BYTES,
   EXPORT_PAGE_ROWS,
   encodedBytes,
+  encodedRecordBytes,
   type ExportManifest,
   type ExportPage,
 } from './contract';
@@ -74,7 +75,7 @@ export class ExportCostLedger {
   }
 
   recordPage(page: ExportPage): void {
-    const bytes = encodedBytes(page.records);
+    const bytes = page.records.reduce((sum, record) => sum + encodedRecordBytes(record), 0);
     this.snapshot.pagesVisited += 1;
     if (page.records.length === 0) this.snapshot.emptyPages += 1;
     this.snapshot.recordsProcessed += page.records.length;
@@ -88,11 +89,14 @@ export class ExportCostLedger {
     this.snapshot.artifactBytes = bytes;
   }
 
-  retain(input: { chunks: readonly unknown[][]; manifest: ExportManifest | null; artifactBytes: number }): void {
-    const pageBytes = input.chunks.length ? encodedBytes(input.chunks[input.chunks.length - 1]) : 0;
+  retain(input: {
+    recordBytes: number;
+    pageBytes: number;
+    manifest: ExportManifest | null;
+    artifactBytes: number;
+  }): void {
     const manifestBytes = input.manifest ? encodedBytes(input.manifest) : 0;
-    const recordBytes = input.chunks.reduce((sum, chunk) => sum + encodedBytes(chunk), 0);
-    this.snapshot.retainedBytes = recordBytes + manifestBytes + pageBytes + input.artifactBytes;
+    this.snapshot.retainedBytes = input.recordBytes + manifestBytes + input.pageBytes + input.artifactBytes;
   }
 
   withinCaps(): boolean {

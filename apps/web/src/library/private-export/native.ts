@@ -3,25 +3,13 @@ import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import {
-  EXPORT_COMPLETENESS,
-  EXPORT_CURSOR_CHARS,
-  EXPORT_FORMAT,
-  EXPORT_PAGE_ROWS,
-  EXPORT_PRIVACY,
-  EXPORT_VERSION,
-  SUBJECT_ID,
+  isExportPage,
+  isExportStatus,
   quotedIdempotencyKey,
   type ExportCommand,
   type ExportFailure,
   type ExportFailureKind,
-  type ExportJson,
-  type ExportManifest,
-  type ExportOmissions,
-  type ExportPage,
   type ExportPort,
-  type ExportRecord,
-  type ExportState,
-  type ExportStatus,
   type ExportUnknown,
 } from './contract';
 
@@ -57,7 +45,7 @@ function asSurface(value: unknown): LibraryExportSurface | undefined {
   return surface;
 }
 
-/** Bind installed `libraryExports` methods. Missing methods stay unavailable. */
+/** Use only the mounted generated `libraryExports` surface; absent methods stay unavailable. */
 export function nativeLibraryExport(client: KernelClient): LibraryExportSurface | undefined {
   return asSurface(Reflect.get(client, 'libraryExports'));
 }
@@ -92,61 +80,6 @@ function unknown(command: ExportCommand): ExportUnknown {
 function outcomeOf(status: number, body: unknown, command: ExportCommand): ExportFailure | ExportUnknown {
   if (status === 0 || status >= 500) return unknown(command);
   return failure(status, body);
-}
-
-function isJson(value: unknown): value is ExportJson {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
-    return true;
-  if (Array.isArray(value)) return value.every(isJson);
-  if (!record(value)) return false;
-  return Object.values(value).every(isJson);
-}
-
-function isRecord(value: unknown): value is ExportRecord {
-  return record(value) && isJson(value);
-}
-
-const states: readonly ExportState[] = ['collecting', 'ready', 'stale', 'cancelled', 'expired', 'limit'];
-
-function isState(value: unknown): value is ExportState {
-  return typeof value === 'string' && (states as readonly string[]).includes(value);
-}
-
-function isOmissions(value: unknown): value is ExportOmissions {
-  if (!record(value)) return false;
-  return Object.values(value).every((item) => typeof item === 'string');
-}
-
-function hasCoverage(value: Record<string, unknown>): boolean {
-  if (value.format !== EXPORT_FORMAT || value.version !== EXPORT_VERSION) return false;
-  if (typeof value.exportId !== 'string' || !SUBJECT_ID.test(value.exportId)) return false;
-  if (typeof value.capturedAt !== 'string' || typeof value.expiresAt !== 'string') return false;
-  if (value.privacy !== EXPORT_PRIVACY || value.completeness !== EXPORT_COMPLETENESS) return false;
-  if (value.fullExport !== false || !Array.isArray(value.sections) || !isOmissions(value.omissions)) return false;
-  return value.sections.every((section) => typeof section === 'string');
-}
-
-function isStatus(value: unknown): value is ExportStatus {
-  if (!record(value) || !hasCoverage(value) || !isState(value.state)) return false;
-  if (value.first !== null && (typeof value.first !== 'string' || value.first.length > EXPORT_CURSOR_CHARS))
-    return false;
-  return true;
-}
-
-function isManifest(value: unknown): value is ExportManifest {
-  if (!record(value) || !hasCoverage(value)) return false;
-  if (typeof value.rows !== 'number' || typeof value.recordBytes !== 'number') return false;
-  return (
-    Number.isInteger(value.rows) && value.rows >= 0 && Number.isInteger(value.recordBytes) && value.recordBytes >= 0
-  );
-}
-
-function isPage(value: unknown): value is ExportPage {
-  if (!record(value) || typeof value.exportId !== 'string' || !SUBJECT_ID.test(value.exportId)) return false;
-  if (!isState(value.state) || !Array.isArray(value.records) || value.records.length > EXPORT_PAGE_ROWS) return false;
-  if (value.next !== null && (typeof value.next !== 'string' || value.next.length > EXPORT_CURSOR_CHARS)) return false;
-  if (value.manifest !== null && !isManifest(value.manifest)) return false;
-  return value.records.every(isRecord);
 }
 
 async function withSession(
@@ -201,14 +134,14 @@ export function kernelExportPort(
       return call(
         command,
         (surface, authorization) => surface.post(undefined, { headers: headers(authorization, command.key) }),
-        (data) => (isStatus(data) ? ({ kind: 'status' as const, status: data } as const) : undefined),
+        (data) => (isExportStatus(data) ? ({ kind: 'status' as const, status: data } as const) : undefined),
       );
     },
     async status(command) {
       return call(
         command,
         (surface, authorization) => surface({ id: command.exportId }).get({ headers: headers(authorization) }),
-        (data) => (isStatus(data) ? ({ kind: 'status' as const, status: data } as const) : undefined),
+        (data) => (isExportStatus(data) ? ({ kind: 'status' as const, status: data } as const) : undefined),
       );
     },
     async page(command) {
@@ -219,7 +152,7 @@ export function kernelExportPort(
           if (!pages) return Promise.resolve({ status: 503, error: { value: { code: 'unavailable' } } });
           return pages.get({ query: { cursor: command.cursor }, headers: headers(authorization) });
         },
-        (data) => (isPage(data) ? ({ kind: 'page' as const, page: data } as const) : undefined),
+        (data) => (isExportPage(data) ? ({ kind: 'page' as const, page: data } as const) : undefined),
       );
     },
     async cancel(command) {
@@ -227,7 +160,7 @@ export function kernelExportPort(
         command,
         (surface, authorization) =>
           surface({ id: command.exportId }).delete(undefined, { headers: headers(authorization) }),
-        (data) => (isStatus(data) ? ({ kind: 'cancelled' as const, status: data } as const) : undefined),
+        (data) => (isExportStatus(data) ? ({ kind: 'cancelled' as const, status: data } as const) : undefined),
       );
     },
   };

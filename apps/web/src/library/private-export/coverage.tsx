@@ -1,5 +1,5 @@
 import { m } from '../../paraglide/messages.js';
-import { EXPORT_SECTIONS, EXPORT_TTL_MINUTES } from './contract';
+import { EXPORT_SECTIONS_V2, EXPORT_TTL_MINUTES, EXPORT_VERSION } from './contract';
 import { ExportAction } from './controls';
 import { exportSectionLabel } from './meaning';
 
@@ -19,13 +19,14 @@ export function ExportCoverage({
       <p>{m.library_export_intro()}</p>
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">{m.library_export_coverage_heading()}</h2>
+        <p>{m.library_export_version({ version: EXPORT_VERSION })}</p>
         <p>{m.library_export_coverage()}</p>
         <p>{m.library_export_full_false()}</p>
       </div>
       <div className="space-y-3">
         <h2 className="text-xl font-semibold">{m.library_export_sections_heading()}</h2>
         <ul className="list-disc space-y-2 pl-6">
-          {EXPORT_SECTIONS.filter((section) => section !== 'bangumiEvidence' && section !== 'malEvidence').map(
+          {EXPORT_SECTIONS_V2.filter((section) => section !== 'bangumiEvidence' && section !== 'malEvidence').map(
             (section) => (
               <li key={section}>{exportSectionLabel(section)}</li>
             ),

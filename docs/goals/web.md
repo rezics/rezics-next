@@ -290,9 +290,11 @@ distinct from public Collection ItemList export and from personal-list import wr
 native coverage, creates only on explicit intent, traverses pages sequentially, assembles a local versioned JSON
 file after the final manifest, and offers download, save retry, replay of the original first cursor, cancellation and
 deliberate restart. Native storage, fences, expiry, limits and admission stay with Commerce. Missing typed methods
-render unavailable. Decision: bind the installed Eden `libraryExports` surface when present; do not add a second
-export engine or copy missing fields from other private reads. Details and Cost live in
-[personal Library export](../library-export.md).
+render unavailable. Decision: new captures use version 2; stored version 1 captures keep their original coverage,
+manifest fields and cursors, while version 2 annotations, provenance and journals remain illustrative in stories until
+recorded. Bind the installed `libraryExports` surface when present; do not add a second export engine or copy missing
+fields from other private reads. The [Web consumer guide](../../apps/web/src/library/private-export/README.md) and
+[personal Library export](../library-export.md) describe the visit and native contract.
 
 ### Personal Collection archive recovery
 
