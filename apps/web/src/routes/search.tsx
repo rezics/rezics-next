@@ -78,6 +78,7 @@ function SearchFailed() {
 
 function SearchRoute() {
   const search = Route.useSearch();
+  const location = Route.useLocation();
   const deps = searchLoaderDeps(search);
   const navigate = Route.useNavigate();
   const locale = getLocale();
@@ -100,10 +101,18 @@ function SearchRoute() {
       />
     );
   }
-  return <SearchResults deps={deps} locale={locale} />;
+  return <SearchResults deps={deps} locale={locale} searchHref={location.publicHref} />;
 }
 
-function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
+function SearchResults({
+  deps,
+  locale,
+  searchHref,
+}: {
+  deps: ReturnType<typeof searchLoaderDeps>;
+  locale: string;
+  searchHref: string;
+}) {
   const sessionState = useSession();
   const reader = searchSessionOwner(sessionState);
   if (searchRequiresCurrentReader(deps) && (sessionState.state !== 'signed-in' || reader === null))
@@ -113,12 +122,14 @@ function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderD
         data={{ ...searchUnavailablePage(deps), recovery: { status: 'session' } }}
         locale={locale}
         session={null}
+        searchHref={searchHref}
       />
     );
   return (
     <LoadedSearchResults
       deps={deps}
       locale={locale}
+      searchHref={searchHref}
       key={searchSessionLifetime(locale, deps, reader ?? undefined)}
       {...(searchRequiresCurrentReader(deps) && reader ? { reader } : {})}
       session={reader}
@@ -129,11 +140,13 @@ function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderD
 function LoadedSearchResults({
   deps,
   locale,
+  searchHref,
   reader,
   session,
 }: {
   deps: ReturnType<typeof searchLoaderDeps>;
   locale: string;
+  searchHref: string;
   reader?: string;
   session: string | null;
 }) {
@@ -144,6 +157,7 @@ function LoadedSearchResults({
       query={deps.query}
       data={data}
       locale={locale}
+      searchHref={searchHref}
       onRetry={retry}
       session={session}
       {...(realms.data ? { realmDiscovery: realms.data } : {})}

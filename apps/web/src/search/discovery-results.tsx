@@ -6,7 +6,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
-import { subjectHref } from '../subject/subject-href';
+import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { displayRating } from '../features/pages/subject-ratings';
 import { ResultRow, localizedLabel } from './results';
 import {
@@ -92,7 +92,17 @@ export function discoveryAccountHref(account: AccountDiscoverySummary, locale: s
     : undefined;
 }
 
-function AccountRow({ account, kind, locale }: { account: AccountDiscoverySummary; kind: string; locale: string }) {
+function AccountRow({
+  account,
+  kind,
+  locale,
+  subjectHrefFor,
+}: {
+  account: AccountDiscoverySummary;
+  kind: string;
+  locale: string;
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
+}) {
   const options = messageOptions(locale);
   const title =
     account.displayName || (account.handle ? `@${account.handle}` : m.discovery_unnamed_account({}, options));
@@ -122,7 +132,10 @@ function AccountRow({ account, kind, locale }: { account: AccountDiscoverySummar
           {verified && (
             <a
               className="text-primary underline underline-offset-4"
-              href={subjectHref({ id: verified.id, label: verified.label }, locale).href}
+              href={
+                subjectHrefFor?.({ id: verified.id, label: verified.label }) ??
+                subjectHref({ id: verified.id, label: verified.label }, locale).href
+              }
             >
               {m.discovery_verified_as({ name: verified.label }, options)}
             </a>
@@ -165,11 +178,13 @@ export function DiscoveryResults({
   locale,
   yearProperties = [],
   restartHref,
+  subjectHrefFor,
 }: {
   state: DiscoveryState;
   locale: string;
   yearProperties?: string[];
   restartHref?: string | undefined;
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
 }) {
   if (state.status !== 'ready' || state.page.hits.length === 0) {
     const options = messageOptions(locale);
@@ -215,9 +230,25 @@ export function DiscoveryResults({
         {state.page.hits.map((hit) => {
           const kind = localizedLabel(kinds[hit.key.kind] ?? {}, locale).text || hit.key.kind;
           if (isAccountHit(hit))
-            return <AccountRow key={discoveryKey(hit)} account={hit.summary.value} kind={kind} locale={locale} />;
+            return (
+              <AccountRow
+                key={discoveryKey(hit)}
+                account={hit.summary.value}
+                kind={kind}
+                locale={locale}
+                subjectHrefFor={subjectHrefFor}
+              />
+            );
           if (isPublicDiscoveryHit(hit))
-            return <DiscoveryPublicRow key={discoveryKey(hit)} hit={hit} kind={kind} locale={locale} />;
+            return (
+              <DiscoveryPublicRow
+                key={discoveryKey(hit)}
+                hit={hit}
+                kind={kind}
+                locale={locale}
+                subjectHrefFor={subjectHrefFor}
+              />
+            );
           const summary = hit.summary.value;
           const label = summary.label;
           const contextLists = hit.contexts
@@ -243,6 +274,7 @@ export function DiscoveryResults({
                 locale={locale}
                 hitTypes={kinds}
                 yearProperties={yearProperties}
+                subjectHrefFor={subjectHrefFor}
               />
               {viewerRows.get(discoveryKey(hit)) ? (
                 <ViewerFactsRow
@@ -262,7 +294,10 @@ export function DiscoveryResults({
                         <li key={context.id}>
                           <a
                             className="text-primary underline underline-offset-4"
-                            href={subjectHref({ id: context.id, label: contextLabel }, locale).href}
+                            href={
+                              subjectHrefFor?.({ id: context.id, label: contextLabel }) ??
+                              subjectHref({ id: context.id, label: contextLabel }, locale).href
+                            }
                           >
                             {contextLabel}
                           </a>

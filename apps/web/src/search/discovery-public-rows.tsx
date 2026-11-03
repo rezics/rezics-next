@@ -3,7 +3,7 @@ import { Cover } from '@rezics/ui/cover';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
-import { subjectHref } from '../subject/subject-href';
+import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { discoveryCollectionHref, discoveryReviewHref, discoverySpaceHref } from './discovery-public-links';
 import type { PublicCollectionSummary, PublicDiscoveryHit, PublicReviewSummary, PublicSpaceSummary } from './discovery';
 
@@ -64,11 +64,13 @@ function ReviewRow({
   summary,
   kind,
   locale,
+  subjectHrefFor,
 }: {
   id: string;
   summary: PublicReviewSummary;
   kind: string;
   locale: string;
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
 }) {
   const reviewedSubject = summary.subject;
   const reviewedTitle = reviewedSubject?.title;
@@ -76,7 +78,14 @@ function ReviewRow({
     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
       <span>{kind}</span>
       {reviewedSubject && reviewedTitle ? (
-        <a href={subjectHref({ id: reviewedSubject.id, label: reviewedTitle }, locale).href}>{reviewedTitle}</a>
+        <a
+          href={
+            subjectHrefFor?.({ id: reviewedSubject.id, label: reviewedTitle }) ??
+            subjectHref({ id: reviewedSubject.id, label: reviewedTitle }, locale).href
+          }
+        >
+          {reviewedTitle}
+        </a>
       ) : null}
     </span>
   );
@@ -132,14 +141,32 @@ function SpaceRow({
 }
 
 /** Current public summaries only; rendering does not read, hydrate, rank, or enrich a row. */
-export function DiscoveryPublicRow({ hit, kind, locale }: { hit: PublicDiscoveryHit; kind: string; locale: string }) {
+export function DiscoveryPublicRow({
+  hit,
+  kind,
+  locale,
+  subjectHrefFor,
+}: {
+  hit: PublicDiscoveryHit;
+  kind: string;
+  locale: string;
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
+}) {
   const { id } = hit.key;
   const summary = hit.summary;
   switch (summary.kind) {
     case 'collection':
       return <PublicCollectionRow id={id} summary={summary.value} kind={kind} locale={locale} />;
     case 'review':
-      return <ReviewRow id={id} summary={summary.value} kind={kind} locale={locale} />;
+      return (
+        <ReviewRow
+          id={id}
+          summary={summary.value}
+          kind={kind}
+          locale={locale}
+          subjectHrefFor={subjectHrefFor}
+        />
+      );
     case 'space':
       return <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} />;
   }

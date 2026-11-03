@@ -21,7 +21,7 @@ import { coverSrc } from '../media/cover-src';
 import { coverOf, coverSubject, type SubjectSummary } from '../media/summary';
 import { listKeyFacts } from '../media/type-presentation';
 import { m } from '../paraglide/messages.js';
-import { subjectHref } from '../subject/subject-href';
+import { subjectHref, type SubjectHrefInput } from '../subject/subject-href';
 import { pickResultAliases } from './result-aliases';
 import { hitCalendarDate, releaseDateText } from './release-search-date';
 
@@ -97,6 +97,7 @@ type ResultPresentation = {
   locale: string;
   hitTypes: Record<string, Record<string, string>>;
   yearProperties: readonly string[];
+  subjectHrefFor?: ((subject: SubjectHrefInput) => string) | undefined;
   /** Optional adapter for an already available release presentation; it performs no reads. */
   listPresentationFor?: (types: readonly string[]) => ListPresentation | undefined;
 };
@@ -108,10 +109,11 @@ export function ResultRow({
   hitTypes,
   yearProperties,
   listPresentationFor,
+  subjectHrefFor,
 }: ResultPresentation & { hit: ResultHit }) {
   const label = localizedLabel(hit.labels, locale);
   const title = label.text || m.subject_value_unlabelled({}, { locale: locale as never });
-  const subjectLink = subjectHref({ id: hit.id, label: title }, locale);
+  const subjectLink = subjectHrefFor?.({ id: hit.id, label: title }) ?? subjectHref({ id: hit.id, label: title }, locale).href;
   const typeName = localizedLabel(Object.hasOwn(hitTypes, hit.type) ? (hitTypes[hit.type] ?? {}) : {}, locale);
   const description = localizedLabel(hit.descriptions ?? {}, locale);
   const date = hitCalendarDate(hit.facts, yearProperties);
@@ -165,7 +167,7 @@ export function ResultRow({
             className="text-[17px] leading-snug font-semibold sm:text-lg md:text-xl"
           >
             <ContentItemTitleLink
-              href={subjectLink.href}
+              href={subjectLink}
               lang={label.lang}
               data-slot="list-row-link"
               className="block after:rounded-lg focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring"
@@ -205,7 +207,10 @@ export function ResultRow({
                               buttonVariants({ variant: 'link' }),
                               'h-auto min-h-11 min-w-11 max-w-full justify-start whitespace-normal px-1 py-1 text-start underline',
                             )}
-                            href={subjectHref({ id: fact.id, label: fact.text }, locale).href}
+                            href={
+                              subjectHrefFor?.({ id: fact.id, label: fact.text }) ??
+                              subjectHref({ id: fact.id, label: fact.text }, locale).href
+                            }
                           >
                             {fact.text}
                           </a>
