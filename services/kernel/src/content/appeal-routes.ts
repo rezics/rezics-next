@@ -13,6 +13,97 @@ const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const statement = t.String({ minLength: 1, maxLength: 2000 });
 const receipt = t.Object({ id: t.String() }, { additionalProperties: false });
 const privateHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
+const listQuerySchema = t.Object(
+  {
+    ...ContentPageQuerySchema.properties,
+    inspect: t.Optional(t.String({ minLength: 1, maxLength: 128 })),
+  },
+  { additionalProperties: false },
+);
+const sourceSchema = t.Object(
+  { partition: t.Integer(), epoch: t.Integer(), position: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) },
+  { additionalProperties: false },
+);
+const appellantIdentitySchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+      handle: t.Union([t.String(), t.Null()]),
+      displayName: t.Union([t.String(), t.Null()]),
+      automated: t.Boolean(),
+    },
+    { additionalProperties: false },
+  ),
+  ...(['deleted', 'concealed', 'unavailable'] as const).map((state) =>
+    t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
+  ),
+]);
+const targetContextSchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      destination: t.Union([
+        t.Object({ kind: t.Literal('board'), id: t.String() }, { additionalProperties: false }),
+        t.Object({ kind: t.Literal('thread'), id: t.String(), boardId: t.String() }, { additionalProperties: false }),
+      ]),
+    },
+    { additionalProperties: false },
+  ),
+  ...(['concealed', 'unavailable'] as const).map((state) =>
+    t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
+  ),
+]);
+const appealReviewProperties = {
+  id: t.String(),
+  decisionId: t.String(),
+  appellantId: t.String(),
+  appellantIdentity: appellantIdentitySchema,
+  statement: t.String(),
+  createdAt: t.String({ format: 'date-time' }),
+  decision: t.Object(
+    {
+      statement: t.String(),
+      target: t.Object(
+        {
+          kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]),
+          id: t.String(),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  targetContext: targetContextSchema,
+  canResolve: t.Boolean(),
+  resolutionCommand: t.Object(
+    {
+      operationId: t.Literal('moderation_appeal.resolve'),
+      method: t.Literal('POST'),
+      path: t.String(),
+    },
+    { additionalProperties: false },
+  ),
+  source: sourceSchema,
+};
+const appealReviewSchema = t.Object(appealReviewProperties, { additionalProperties: false });
+const selectedAppealSchema = t.Object(
+  {
+    ...appealReviewProperties,
+    resolution: t.Union([
+      t.Object(
+        {
+          outcome: t.Union([t.Literal('upheld'), t.Literal('reversed')]),
+          statement: t.String(),
+          resolvedAt: t.String({ format: 'date-time' }),
+        },
+        { additionalProperties: false },
+      ),
+      t.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
 const readFailures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -121,39 +212,22 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
     );
   const listOptions = {
     params,
-    query: ContentPageQuerySchema,
+    query: listQuerySchema,
     response: {
       200: withHeaders(
         t.Object(
           {
-            appeals: t.Array(
-              t.Object(
-                {
-                  id: t.String(),
-                  decisionId: t.String(),
-                  appellantId: t.String(),
-                  statement: t.String(),
-                  createdAt: t.String({ format: 'date-time' }),
-                  decision: t.Object(
-                    {
-                      statement: t.String(),
-                      target: t.Object(
-                        {
-                          kind: t.Union([t.Literal('board'), t.Literal('thread'), t.Literal('post')]),
-                          id: t.String(),
-                        },
-                        { additionalProperties: false },
-                      ),
-                    },
-                    { additionalProperties: false },
-                  ),
-                  canResolve: t.Boolean(),
-                },
-                { additionalProperties: false },
-              ),
-              { maxItems: 100 },
-            ),
+            appeals: t.Array(appealReviewSchema, { maxItems: 100 }),
             next: t.Union([t.String(), t.Null()]),
+            selectedAppeal: t.Optional(selectedAppealSchema),
+            provenance: t.Object(
+              {
+                actorId: t.String(),
+                session: t.Object({ clientId: t.String(), authnEpoch: t.Integer() }, { additionalProperties: false }),
+                source: sourceSchema,
+              },
+              { additionalProperties: false },
+            ),
           },
           { additionalProperties: false },
         ),
@@ -178,6 +252,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
         admission.run('normal', job, async () => {
           const result = await listAppeals(deps, { kind: 'board', id }, { actor, deadline: job.deadline }, query);
           session.record(result.anchor);
+          if (result.selectedAnchor) session.record(result.selectedAnchor);
           set.headers['cache-control'] = 'private, no-store';
           return result.value;
         }),
@@ -199,6 +274,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
         admission.run('normal', job, async () => {
           const result = await listAppeals(deps, { kind: 'thread', id }, { actor, deadline: job.deadline }, query);
           session.record(result.anchor);
+          if (result.selectedAnchor) session.record(result.selectedAnchor);
           set.headers['cache-control'] = 'private, no-store';
           return result.value;
         }),
