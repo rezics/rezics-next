@@ -46,7 +46,7 @@ export async function realmSubjectHome<T>(
   route: number,
   deadline: number,
   write: boolean,
-  run: (client: PoolClient, version: CandidateVersion) => Promise<T>,
+  run: (client: Pick<PoolClient, 'query'>, version: CandidateVersion) => Promise<T>,
 ): Promise<T> {
   return within(deadline, () =>
     withConnection(pool, async (connection) => {
@@ -77,7 +77,7 @@ const versionEqual = (a: CandidateVersion, b: CandidateVersion) => a.epoch === b
 
 /** Structural locators only. Callers obtain and validate native provenance before writing. */
 export function createRealmSubjectCandidates(pool: Pool) {
-  async function generation(client: PoolClient, route: number, realm: string) {
+  async function generation(client: Pick<PoolClient, 'query'>, route: number, realm: string) {
     await client.query(
       `INSERT INTO content.realm_subject_generation(route,realm_id)
       VALUES($1,$2) ON CONFLICT DO NOTHING`,
@@ -89,14 +89,14 @@ export function createRealmSubjectCandidates(pool: Pool) {
       [route, realm],
     );
   }
-  async function bump(client: PoolClient, route: number, realm: string, delta = 0) {
+  async function bump(client: Pick<PoolClient, 'query'>, route: number, realm: string, delta = 0) {
     await client.query(
       `UPDATE content.realm_subject_generation SET revision=revision+1,
       unresolved=unresolved+$3 WHERE route=$1 AND realm_id=$2`,
       [route, realm, delta],
     );
   }
-  async function fenceAt(client: PoolClient, route: number, realm: string, thread: string) {
+  async function fenceAt(client: Pick<PoolClient, 'query'>, route: number, realm: string, thread: string) {
     return (
       await client.query<CandidateVersion>(
         `SELECT source_epoch AS epoch,
