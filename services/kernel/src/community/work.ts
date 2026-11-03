@@ -1,4 +1,5 @@
 import { registerDiscoveryWork } from './discovery-register.ts';
+import { createSpaceDiscoveryEffect } from './space-discovery.ts';
 import { maintainRealmMemberCounts } from './member-count.ts';
 import { PARTITIONS } from '../route/route.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
@@ -90,7 +91,7 @@ export function registerCommunityWork({ pool, client, clock, addEffects }: WorkC
 export const communityWorkModule: WorkModule = {
   name: 'community',
   async register(context) {
-    context.addEffects([createRevisionLocatorEffect(context.pool)]);
+    context.addEffects([createRevisionLocatorEffect(context.pool), createSpaceDiscoveryEffect(context.pool)]);
     registerCommunityWork(context);
     // Use the existing maintenance queue and native command segments. DBOS
     // retains partition locators/continuation only; source progress stays native.

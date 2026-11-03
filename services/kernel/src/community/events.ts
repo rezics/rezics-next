@@ -1,4 +1,5 @@
 import { Type } from 'typebox';
+import { SPACE_DISCOVERY_INVALIDATED, SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
 
 const id = Type.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
@@ -63,6 +64,7 @@ function lifecycle(kind: 'space' | 'realm', state: 'active' | 'removed') {
 
 /** Closed community event catalogue. Envelope identity and ordering belong to the kernel. */
 export const COMMUNITY_EVENTS = {
+  [SPACE_DISCOVERY_INVALIDATED]: SpaceDiscoveryInvalidation,
   'com.rezics.community.realm-discovery.changed.v1': Type.Object(
     { realmId: id, realmEpoch: Type.String({ pattern: '^[1-9][0-9]*$' }) },
     { additionalProperties: false },

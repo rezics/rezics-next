@@ -82,6 +82,51 @@ physical-proof claim.
 The adopted design evidence is [Realm discovery research](../../../../docs/research/content-realm-discovery-design.md).
 Its proposed `items` envelope is superseded here by the kernel resource-plural `realms` envelope.
 
+## Public Space discovery invalidations
+
+Decision: reuse native Space/Realm revisions and lifecycle events as change evidence; publish dependency scope
+invalidations for shared gates instead of enumerating Spaces in a mutation or copying the bootstrap reader.
+
+`space-discovery.ts` is registered in the production Community worker as `community_space_discovery` through
+the ordinary durable effects relay. It consumes Space creation, metadata/address edits and removal/restoration;
+Realm creation, revision/board-scheme edits and removal/restoration; native media availability/removal events;
+Context lifecycle changes, source-tuple fences and API exposure changes. Realm title/description/avatar selection
+and public/protected changes already produce `realm.updated.v1`. A Space has no native visibility or avatar
+field: the carried Realm is independently guarded enrichment of that Space identity. Popular/Trending Realm
+discussion activity and its source-contribution fences are unrelated and are not consumed here.
+
+The closed `com.rezics.community.space-discovery.invalidated.v1` payload names a Space or a dependency scope,
+the original log `(partition, epoch, position, eventId, type)`, and any native revision/lifecycle/security version.
+All positions remain decimal strings. It contains no title, description, image, removal reason or eligibility
+claim. A Realm delta resolves its immutable host with one exact native identity read, including removed Realms;
+an unavailable binding retries rather than losing a removal. Each invalidation is committed to the originating
+partition. Its own envelope is the delivery position; the retained origin identifies the native change, never a
+replacement source snapshot or a globally ordered resource version. Native positions from different homes or
+epochs must not be compared as one scalar.
+
+Command receipts coalesce duplicate origin/target deliveries. Ordinary effects retain failed work across crashes;
+the receipt and emitted event commit together. Replaying after receipt expiry can emit another harmless wake.
+Consumers must hydrate current native truth on every wake, including removal, restoration and reordered old edits;
+never apply an old event body or interpret its type as current permission. Search owns registration, index
+replacement/removal and query behavior. Current native Space/Realm/Content hydration remains the final disclosure
+authority while delivery lags. This producer does not establish index convergence or whole-query privacy proof.
+
+**Space-source seam.** The separate population/bootstrap producer should use these same existing native events
+and the retained origin tuple, without importing its reader here. Direct targets are canonical Space IDs. Shared
+`context`, `media`, `source-fence` and `exposure` targets are durable invalidation obligations, not expanded Space
+lists or an assertion that no Spaces depend on them. Completing their propagation still requires a bounded,
+durable dependency-to-Space frontier and Search consumer integration; it must use native dependency keys, survive
+duplicate/reordered changes, and never scan all partitions or census the population per mutation. Until that
+frontier and the population/current hydration owner are connected, Space discovery remains unenabled.
+
+Cost: the original mutation adds no reads or writes. A direct Space effect adds no source checkout; a Realm effect
+adds one exact retained `(route, realm_id)` point read, released before its delivery command. Each delivered
+invalidation adds one same-home command, receipt and outbox event, bounded independently of population/history.
+A shared dependency change emits one scope obligation with no Space enumeration. Generic effect admission and
+retry retain their existing per-event bounds. Physical/native/main convergence costs remain unmeasured; focused
+`test/community/space-discovery.test.ts` covers actual native edit/gate/removal/restoration delivery, reordering,
+duplicate delivery and one actual source-fence scope obligation.
+
 `createSpace` derives its route from the authenticated account and idempotency key.
 It requires `space:create` on the Global Context through `parentCreationAuthorization`.
 One `runCommand` transaction inserts the Space, its first revision and native Access initialization:
