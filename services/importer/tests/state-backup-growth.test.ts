@@ -20,7 +20,7 @@ function command(recordKey: string): BatchCommand {
       converter_revision: 'test@1',
       field_group: 'facts',
     },
-    subject: { type: 'item', labels: { en: `Title ${recordKey}` }, descriptions: { en: 'x'.repeat(256) } },
+    subject: { type: 'item', labels: { en: `Title ${recordKey}` } },
   };
 }
 
