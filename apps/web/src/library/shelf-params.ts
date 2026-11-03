@@ -34,9 +34,9 @@ export type ShelfDisplay = {
   layout: ShelfLayout;
   size: ShelfSize;
   columns?: string;
-  layoutExplicit: boolean;
-  sizeExplicit: boolean;
-  columnsExplicit: boolean;
+  layoutExplicit?: boolean;
+  sizeExplicit?: boolean;
+  columnsExplicit?: boolean;
 };
 
 export const shelfOrders = ['lastActivity', 'createdAt', 'finishedAt'] as const;

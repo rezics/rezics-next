@@ -349,10 +349,16 @@ function presentShelf(value: unknown): ShelfPreferences | undefined {
       return undefined;
   }
   return {
-    ...(value.layouts !== undefined ? { layouts: { ...value.layouts } as ShelfPreferences['layouts'] } : {}),
-    ...(value.sorts !== undefined ? { sorts: structuredClone(value.sorts) as ShelfPreferences['sorts'] } : {}),
-    ...(value.gridSize !== undefined ? { gridSize: value.gridSize as ShelfPreferences['gridSize'] } : {}),
-    ...(value.tableColumns !== undefined ? { tableColumns: [...value.tableColumns] as ShelfPreferences['tableColumns'] } : {}),
+    ...(value.layouts !== undefined
+      ? { layouts: { ...value.layouts } as NonNullable<ShelfPreferences['layouts']> }
+      : {}),
+    ...(value.sorts !== undefined
+      ? { sorts: structuredClone(value.sorts) as NonNullable<ShelfPreferences['sorts']> }
+      : {}),
+    ...(value.gridSize !== undefined ? { gridSize: value.gridSize as NonNullable<ShelfPreferences['gridSize']> } : {}),
+    ...(value.tableColumns !== undefined
+      ? { tableColumns: [...value.tableColumns] as NonNullable<ShelfPreferences['tableColumns']> }
+      : {}),
   };
 }
 
@@ -472,7 +478,8 @@ export async function changePreferences(
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { ok: false, reason: 'forbidden' };
     const { idempotencyKey, ...body } = change;
-    const result = await client.accounts({ accountId }).preferences.patch(body, {
+    const preferences = client.accounts({ accountId }).preferences;
+    const result = await preferences.patch(body as Parameters<typeof preferences.patch>[0], {
       headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
         'idempotency-key': string;
       },

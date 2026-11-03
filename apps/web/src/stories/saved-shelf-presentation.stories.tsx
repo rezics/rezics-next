@@ -5,7 +5,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { PersonalLibraryPage } from '../library/entries-page';
 import type { PersonalLibraryView } from '../library/entries-read';
 import { resolveShelfPresentation } from '../library/shelf-preferences';
-import type { ShelfPreferences } from '../settings/preferences';
+import type { ShelfPreferencePatch, ShelfPreferences } from '../settings/preferences';
 import { ShelfPreferencesCard } from '../settings/shelf-preferences';
 import { SettingsSessionContext, SettingsSessionOwner } from '../settings/settings-session-owner';
 import type { ReadingIO } from '../settings/reading-preferences';
@@ -71,13 +71,39 @@ const libraryPage: PersonalLibraryView = {
   next: null,
 };
 
-function mergeShelf(current: ShelfPreferences, patch: ShelfPreferences | null): ShelfPreferences {
+function mergeShelf(current: ShelfPreferences, patch: ShelfPreferencePatch | null): ShelfPreferences {
   if (patch === null) return {};
   const next: ShelfPreferences = { ...current };
-  if (patch.layouts) next.layouts = { ...current.layouts, ...patch.layouts };
-  if (patch.sorts) next.sorts = { ...current.sorts, ...patch.sorts };
-  if (patch.gridSize !== undefined) next.gridSize = patch.gridSize;
-  if (patch.tableColumns !== undefined) next.tableColumns = [...patch.tableColumns];
+  if (patch.layouts === null) delete next.layouts;
+  else if (patch.layouts) {
+    const layouts = { ...current.layouts };
+    for (const [scope, layout] of Object.entries(patch.layouts)) {
+      if (layout === null) delete layouts[scope];
+      else layouts[scope] = layout;
+    }
+    next.layouts = layouts;
+  }
+  if (patch.sorts === null) delete next.sorts;
+  else if (patch.sorts) {
+    const sorts = { ...current.sorts };
+    for (const [tab, value] of Object.entries(patch.sorts)) {
+      const key = tab as keyof NonNullable<ShelfPreferences['sorts']>;
+      if (value === null) {
+        delete sorts[key];
+        continue;
+      }
+      const previous = sorts[key];
+      const field = value.field === null ? undefined : (value.field ?? previous?.field);
+      const direction = value.direction === null ? undefined : (value.direction ?? previous?.direction);
+      if (field && direction) sorts[key] = { field, direction };
+      else delete sorts[key];
+    }
+    next.sorts = sorts;
+  }
+  if (patch.gridSize === null) delete next.gridSize;
+  else if (patch.gridSize !== undefined) next.gridSize = patch.gridSize;
+  if (patch.tableColumns === null) delete next.tableColumns;
+  else if (patch.tableColumns !== undefined) next.tableColumns = [...patch.tableColumns];
   return next;
 }
 

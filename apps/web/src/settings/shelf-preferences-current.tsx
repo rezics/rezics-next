@@ -31,7 +31,7 @@ export const readCurrentShelfPreferences = createServerFn({ method: 'GET' }).han
 /** A loader snapshot can only affect the viewer who produced its current session read. */
 export function shelfForCurrentViewer(
   snapshot: ShelfPreferenceSnapshot | undefined,
-  viewer: { state: string; subject: string | null | undefined; csrfToken: string | null },
+  viewer: { state: string; subject?: string | null; csrfToken: string | null },
 ): ShelfPreferences {
   if (
     !snapshot ||
@@ -51,7 +51,7 @@ export class ShelfPreferenceSnapshotOwner {
   private viewer: string | undefined;
   private retired = false;
 
-  observe(viewer: { state: string; subject: string | null | undefined; csrfToken: string | null }) {
+  observe(viewer: { state: string; subject?: string | null; csrfToken: string | null }) {
     if (viewer.state === 'unknown') {
       if (this.viewer !== undefined) this.retired = true;
       return;
@@ -72,7 +72,7 @@ export class ShelfPreferenceSnapshotOwner {
     this.retired = true;
   }
 
-  private matchesSnapshot(viewer: { state: string; subject: string | null | undefined; csrfToken: string | null }) {
+  private matchesSnapshot(viewer: { state: string; subject?: string | null; csrfToken: string | null }) {
     return this.snapshotAccountId === viewer.subject && this.snapshotCsrfToken === viewer.csrfToken;
   }
 

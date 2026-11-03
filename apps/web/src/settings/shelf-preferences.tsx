@@ -66,8 +66,8 @@ type ShelfState = {
   dirty: Set<string>;
   pending: Pending | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
-  reason?: string;
-  failure?: NativePreferenceFailure;
+  reason: string | undefined;
+  failure: NativePreferenceFailure | undefined;
 };
 type ShelfOwner = {
   canRead: () => boolean;
@@ -103,7 +103,10 @@ function draftFrom(shelf: ShelfPreferences): ShelfDraft {
   };
 }
 
-function nativeColumnList(shelf: ShelfPreferences, selected: PersonalShelfColumnId[]): ShelfPreferences['tableColumns'] {
+function nativeColumnList(
+  shelf: ShelfPreferences,
+  selected: PersonalShelfColumnId[],
+): NonNullable<ShelfPreferences['tableColumns']> {
   const chosen = new Set<PersonalShelfColumnId>(['title', ...selected]);
   const existing = shelf.tableColumns ?? [];
   const retained = existing.filter((column) => {
@@ -165,6 +168,8 @@ export class ShelfPreferenceDraftRecovery {
       dirty: new Set(),
       pending: null,
       phase: 'idle',
+      reason: undefined,
+      failure: undefined,
     };
   }
 
@@ -265,7 +270,7 @@ export class ShelfPreferenceDraftRecovery {
       return;
     }
     const shelf = reset ? null : patchFor(this.state.known.shelf, this.state.draft, this.state.dirty);
-    if (!reset && !Object.keys(shelf).length) {
+    if (!reset && shelf && !Object.keys(shelf).length) {
       this.update({ phase: 'saved' });
       return;
     }
@@ -362,8 +367,8 @@ export function ShelfPreferencesCard({
   io: ReadingIO;
   onVersionChange: (version: number) => void;
 }) {
-  const canWrite = useSettingsCurrent(csrfToken, !!io);
-  const canRead = useSettingsReadCurrent(csrfToken, !!io);
+  const canWrite = useSettingsCurrent(csrfToken, !!io)();
+  const canRead = useSettingsReadCurrent(csrfToken, !!io)();
   const ownerRef = useRef({ version, canWrite, canRead, onVersionChange });
   ownerRef.current = { version, canWrite, canRead, onVersionChange };
   const [controller] = useState(

@@ -227,7 +227,7 @@ function LibraryRoute() {
     const observe = () => {
       const query = queryClient.getQueryState(sessionQuery.queryKey);
       if (query?.status === 'error') owner.retire();
-      else if (query?.status === 'success') owner.observe(query.data);
+      else if (query?.status === 'success' && query.data) owner.observe(query.data);
       else if (query?.status === 'pending') owner.observe({ state: 'unknown', subject: null, csrfToken: null });
     };
     observe();
