@@ -22,7 +22,7 @@ test('urgent flag and front matter require a live supermanager session or its re
       .run(id, JSON.stringify({ id, status: 'running', threadId: `${id}-session` }));
     const started: string[] = [], printed: string[] = [];
     const runtime = { settings: h.settings, db: h.store.db, store: h.store, tasks: h.tasks,
-      job: { start: async (id: string) => { started.push(id); } } } as never;
+      job: { start: async (id: string) => { started.push(id); }, drain: async () => {} } } as never;
     const call = (command: string, args: string[], id?: string) => runWorkerCommand(command, args, {
       runtime, env: id ? { CODEX_THREAD_ID: `${id}-session`, GOAL_MANAGER: id } : { GOAL_MANAGER: parent },
       print: (text) => printed.push(text),
