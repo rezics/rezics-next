@@ -19,6 +19,13 @@ import {
   type BangumiOutcome,
 } from './list-import-bangumi-model.ts';
 
+import {
+  BANGUMI_LABEL_LIMITS,
+  type BangumiLabelState,
+  type BangumiLabelOutcome,
+  type BangumiTagPage,
+} from './list-import-bangumi-label-model.ts';
+
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const ordinal = t.Integer({ minimum: 0, maximum: 99 });
@@ -154,6 +161,86 @@ export function bangumiImportRoutes(
         return admitted(actor, () =>
           admission.run('normal', job, () =>
             engine().apply(actor, params.uploadId, body.rows, request.signal, job.deadline),
+          ),
+        );
+      },
+    )
+    .get(
+      '/v1/libraryImports/bangumi/:uploadId/rows/:ordinal/tags',
+      {
+        params: t.Object({ uploadId: id, ordinal }, closed),
+        query: t.Object(
+          { after: t.Optional(t.Integer({ minimum: -1, maximum: BANGUMI_LIMITS.rowBytes, default: -1 })) },
+          closed,
+        ),
+        response: { 200: result<BangumiTagPage>(), ...failures },
+        detail: detail('library_bangumi.tags', false),
+      },
+      ({ actor, params, query, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () => engine().tags(actor, params.uploadId, params.ordinal, query.after ?? -1));
+      },
+    )
+    .post(
+      customMethod('/v1/libraryImports/bangumi/:uploadId', 'reviewLabels'),
+      {
+        params,
+        headers,
+        body: t.Object(
+          {
+            ordinal,
+            rowRevision: id,
+            mappings: t.Array(
+              t.Object(
+                {
+                  index: t.Integer({ minimum: 0, maximum: BANGUMI_LIMITS.rowBytes }),
+                  target: t.Union([
+                    t.Object({ labelId: id }, closed),
+                    t.Object({ name: t.String({ maxLength: 8192 }) }, closed),
+                  ]),
+                },
+                closed,
+              ),
+              { maxItems: BANGUMI_LABEL_LIMITS.selections },
+            ),
+          },
+          closed,
+        ),
+        response: { 200: result<{ ordinal: number; labels: BangumiLabelState }>(), ...failures },
+        detail: detail('library_bangumi.review_labels'),
+      },
+      ({ actor, params, body, headers, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () =>
+          admission.run('normal', job, () =>
+            engine().reviewLabels(
+              actor,
+              params.uploadId,
+              body.ordinal,
+              body.rowRevision,
+              body.mappings,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
+      },
+    )
+    .post(
+      customMethod('/v1/libraryImports/bangumi/:uploadId', 'applyLabels'),
+      {
+        params,
+        body: t.Object({ ordinal, reviewToken: id }, closed),
+        response: {
+          200: result<{ uploadId: string; ordinal: number; outcomes: BangumiLabelOutcome[]; remaining: number[] }>(),
+          ...failures,
+        },
+        detail: detail('library_bangumi.apply_labels'),
+      },
+      ({ actor, params, body, request, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () =>
+          admission.run('normal', job, () =>
+            engine().applyLabels(actor, params.uploadId, body.ordinal, body.reviewToken, request.signal, job.deadline),
           ),
         );
       },
