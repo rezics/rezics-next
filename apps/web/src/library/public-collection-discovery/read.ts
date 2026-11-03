@@ -23,9 +23,7 @@ export type PublicCollectionDiscoveryState =
 
 export type PublicCollectionDiscoverySender = Parameters<typeof readDiscovery>[1];
 
-function isCollectionHit(
-  hit: DiscoveryHit,
-): hit is Extract<DiscoveryHit, { summary: { kind: 'subject' } }> {
+function isCollectionHit(hit: DiscoveryHit): hit is Extract<DiscoveryHit, { summary: { kind: 'subject' } }> {
   return hit.key.kind === publicCollectionKind && isCatalogueHit(hit);
 }
 

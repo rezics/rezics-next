@@ -12,7 +12,6 @@ export function publicCollectionDiscoveryQueryOptions(locale: string, cursor?: s
     refetchOnReconnect: false,
     retry: false,
     queryKey: ['public-collection-discovery', 'anonymous', locale, cursor ?? null],
-    queryFn: ({ signal }) =>
-      readPublicCollectionDiscovery({ data: { locale, ...(cursor ? { cursor } : {}) }, signal }),
+    queryFn: ({ signal }) => readPublicCollectionDiscovery({ data: { locale, ...(cursor ? { cursor } : {}) }, signal }),
   });
 }

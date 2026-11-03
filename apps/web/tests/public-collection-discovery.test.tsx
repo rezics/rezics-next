@@ -36,7 +36,14 @@ test('uses Search collection kind paging and keeps only native public summaries 
       data: {
         hits: [nativeHit('collection-1', 'First'), nativeHit('collection-2', 'Second')],
         kinds: {
-          values: [{ id: 'collection', labels: { en: 'Collections' }, icon: 'collection', count: { kind: 'collection', value: 2, exact: true } }],
+          values: [
+            {
+              id: 'collection',
+              labels: { en: 'Collections' },
+              icon: 'collection',
+              count: { kind: 'collection', value: 2, exact: true },
+            },
+          ],
           next: null,
         },
         next: 'next+/=',
