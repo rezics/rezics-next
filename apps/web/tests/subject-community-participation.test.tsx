@@ -153,13 +153,17 @@ test('community actions require exact current thread advice and matched operatio
     watch: { state: 'current', watching: false },
     overflow: true,
   });
-  expect(projectCommunityActionAdvice(input, { threadId: '01a17a3b-0884-721b-91ef-d7ffd7bb58e6', postRevisionId })).toEqual({
+  expect(
+    projectCommunityActionAdvice(input, { threadId: '01a17a3b-0884-721b-91ef-d7ffd7bb58e6', postRevisionId }),
+  ).toEqual({
     reply: null,
     reaction: null,
     watch: null,
     overflow: false,
   });
-  expect(projectCommunityActionAdvice(input, { threadId, postRevisionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58e7' })).toEqual({
+  expect(
+    projectCommunityActionAdvice(input, { threadId, postRevisionId: '01a17a3b-0884-721b-91ef-d7ffd7bb58e7' }),
+  ).toEqual({
     reply: null,
     reaction: null,
     watch: null,
@@ -169,7 +173,12 @@ test('community actions require exact current thread advice and matched operatio
     item.operationId === 'thread.clear_reaction' ? { ...item, state: 'denied' } : item,
   );
   expect(projectCommunityActionAdvice(nativeAdvice(denied), { threadId, postRevisionId })?.reaction).toBeNull();
-  expect(projectCommunityActionAdvice(nativeAdvice(exactActions, { state: 'unavailable', retryable: false }), { threadId, postRevisionId })).toBeUndefined();
+  expect(
+    projectCommunityActionAdvice(nativeAdvice(exactActions, { state: 'unavailable', retryable: false }), {
+      threadId,
+      postRevisionId,
+    }),
+  ).toBeUndefined();
 });
 
 function watchView(preparedWatch: ThreadWatchNative) {
@@ -264,7 +273,9 @@ test('native watch baseline skips per-card reads and an uncertain write recovers
   expect(host.textContent).toContain(m.thread_watch_watching());
   expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
   expect(
-    [...host.querySelectorAll<HTMLButtonElement>('button')].some((button) => button.textContent === m.thread_watch_stop()),
+    [...host.querySelectorAll<HTMLButtonElement>('button')].some(
+      (button) => button.textContent === m.thread_watch_stop(),
+    ),
   ).toBe(false);
 });
 

@@ -136,7 +136,9 @@ export function projectCommunityActionAdvice(
     return;
   const references = parseReferences(actions.references);
   if (!references) return;
-  const threadReference = references.find((reference) => reference.type === 'content.thread' && reference.id === source.threadId);
+  const threadReference = references.find(
+    (reference) => reference.type === 'content.thread' && reference.id === source.threadId,
+  );
   const exactThread =
     threadReference?.state === 'current' && threadReference.sourceRevisionId === source.postRevisionId
       ? threadReference
@@ -190,4 +192,3 @@ export function projectCommunityActionAdvice(
     overflow: report === 'available' || report === 'sign_in_required',
   };
 }
-
