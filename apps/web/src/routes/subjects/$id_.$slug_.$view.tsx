@@ -85,8 +85,19 @@ const readView = createServerFn({ method: 'GET', strict: false })
     };
   })
   .handler(async ({ data }) => {
+    const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
+    const verification = {
+      sitekey: config.TURNSTILE_SITE_KEY ?? '',
+      scriptUrl:
+        (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+        'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+    };
     if (data.realm)
-      return { href: `/${data.locale}/subjects/${data.id}/${data.slug}`, paths: {} as Record<string, string> };
+      return {
+        href: `/${data.locale}/subjects/${data.id}/${data.slug}`,
+        paths: {} as Record<string, string>,
+        verification,
+      };
     const { loadContextSubject } = await import('../../features/pages/context-subject');
     const { client, authorization } = await subjectKernelClient(data.locale, data.realm, data.reader);
     const canonical = await loadContextSubject(client, data.id, data.locale, { realm: data.realm, authorization });
@@ -94,16 +105,10 @@ const readView = createServerFn({ method: 'GET', strict: false })
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, data.view), data.search));
 
-    const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
     return {
       href: canonical.value.href,
       paths: subjectViewPaths(canonical.value.paths, data.view),
-      verification: {
-        sitekey: config.TURNSTILE_SITE_KEY ?? '',
-        scriptUrl:
-          (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
-          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
-      },
+      verification,
     };
   });
 
