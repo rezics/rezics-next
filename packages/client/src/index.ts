@@ -158,11 +158,6 @@ export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 
-/** Closed uploader wire types come from the installed route, including its cursor. */
-export type OwnMediaInventoryPage = Routes['media']['get']['response'][200];
-export type OwnMediaInventoryEntry = OwnMediaInventoryPage['entries'][number];
-export type OwnMediaInventoryQuery = Routes['media']['get']['query'];
-
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
 export type KernelClientOptions = {

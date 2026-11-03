@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
-import { createKernelClient, type OwnMediaInventoryPage } from '@rezics/client';
+import type { OwnMediaInventoryPage } from '../../src/content/schemas.ts';
 import { mediaRealmDownloadFixture } from './media-realm-download-fixture.ts';
 import objects from '../../src/content/own-media-objects.sql';
 import { observeSql } from './support/sql-observer.ts';
@@ -14,14 +14,10 @@ afterAll(async () => {
 });
 
 async function inventory() {
-  const client = createKernelClient('http://kernel.test', {
-    headers: { authorization: `Bearer ${fixture.alice.bearer}` },
-    fetch: (input, init) => fixture.kernel.handle(new Request(input, init)),
-  });
-  const result = await client.media.get();
-  expect(result.status).toBe(200);
+  const result = await fixture.call('GET', '/v1/media', { bearer: fixture.alice.bearer });
+  expect(result.response.status).toBe(200);
   expect(result.response.headers.get('cache-control')).toBe('private, no-store');
-  const page: OwnMediaInventoryPage = result.data!;
+  const page = result.value as OwnMediaInventoryPage;
   return page.entries.find(({ id }) => id === fixture.privateImage.id)!;
 }
 
