@@ -25,7 +25,13 @@ test('Derived native protected Realm rank page cost at 256/1024/4096 rows, inclu
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         grow: async (_database, scale, previous) => {
           await fixture.grow(dimension, scale, previous);
-          for (const plan of await fixture.planEvidence()) expect(plan).toContain('realm_rank_score_idx');
+          const plans = await fixture.planEvidence();
+          for (const plan of plans) {
+            expect(plan).toContain('realm_rank_score_idx');
+            expect(plan).not.toContain('"Node Type":"Sort"');
+          }
+          expect(plans[1]).toContain('Index Cond');
+          expect(plans[1]).toContain('ROW(score, subject_id) < ROW');
         },
         prepare: async () => {
           await fixture.refresh();
@@ -76,6 +82,8 @@ test('Derived native protected Realm rank page cost at 256/1024/4096 rows, inclu
         // Six complete native calls: compare the fresh withheld cursor's empty page too.
         for (const cost of sample.repetitions) {
           expect(cost.rows).toBeGreaterThanOrEqual(consumed);
+          expect(cost.relations['rating.realm_rank']!.rows).toBe(consumed);
+          expect(cost.relations['semantic.subject']!.rows).toBeGreaterThanOrEqual(2 * consumed);
           expect(cost.rows).toBeLessThanOrEqual(3 * full.rows + 3 * empty.rows);
           expect(cost.statements + cost.controlStatements).toBeLessThanOrEqual(
             3 * full.statements + 3 * empty.statements,
