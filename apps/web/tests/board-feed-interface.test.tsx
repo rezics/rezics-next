@@ -131,7 +131,7 @@ test('native order, exact large counts and exact date operands survive long supp
     ...original,
     title,
     createdAt,
-    reactions: { like: 1234567890123, insightful: 2 },
+    reactions: { upvote: 1234567890123, downvote: 1234567890130, like: 1234567890123, insightful: 2 },
     replyCount: 987654321012,
     lastActivityAt,
   };
@@ -151,7 +151,12 @@ test('native order, exact large counts and exact date operands survive long supp
   expect(markup).toContain('data-slot="feed-action-bar"');
   expect(markup).toContain(m.feed_action_reply());
   expect(markup).toContain('1.2T');
-  expect(markup).toContain('Like 1.2T');
+  expect(markup).toContain('aria-label="Like 1,234,567,890,123"');
+  expect(markup).toContain('aria-label="Upvote 1,234,567,890,123"');
+  expect(markup).toContain('aria-label="Downvote 1,234,567,890,130"');
+  expect(markup).toContain('aria-label="-7"');
+  expect(markup).toContain(`aria-label="${m.feed_action_reply()} 987,654,321,012"`);
+  expect(markup).toContain(new Intl.NumberFormat('en', { notation: 'compact' }).format(987654321012));
   expect(markup).toContain(`dateTime="${createdAt}"`);
   expect(markup).toContain(`dateTime="${lastActivityAt}"`);
   expect(markup).toContain(`title="${fullDateTime(createdAt, 'en')}"`);
@@ -164,6 +169,23 @@ test('native order, exact large counts and exact date operands survive long supp
   expect(hrefs(markup).filter((url) => url.pathname === firstHref).length).toBeGreaterThanOrEqual(1);
   expect(markup).not.toContain(m.board_feed_reactions({ count: 0 }));
   expect(calls).toHaveLength(readCount);
+});
+
+test('reply count zero is visible while an absent count stays unavailable', async () => {
+  setLocale('en', { reload: false });
+  const { page } = await fixture();
+  const original = page.threads.threads[0]!;
+  const zeroPage: CommunityBoardPage = {
+    ...page,
+    threads: { ...page.threads, threads: [{ ...original, replyCount: 0 }] },
+  };
+  const zeroMarkup = await render([{ page: zeroPage, sort: 'hot' }]);
+  expect(zeroMarkup).toContain(`aria-label="${m.feed_action_reply()} 0"`);
+  expect(zeroMarkup).toContain('>0</span>');
+
+  const unavailableMarkup = await render([{ page, sort: 'hot' }]);
+  expect(unavailableMarkup).toContain(`aria-label="${m.feed_action_reply()}"`);
+  expect(unavailableMarkup).not.toContain(`aria-label="${m.feed_action_reply()} 0"`);
 });
 
 test('plain sort anchors reset continuation and sparse pages preserve exact opaque bytes for every selection', async () => {

@@ -130,15 +130,16 @@ export const ChooseReaction: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const choices = await openChoices(canvasElement);
-    for (const name of kindNames) await expect(within(choices).getByRole('button', { name })).toBeVisible();
-    await userEvent.click(within(choices).getByRole('button', { name: 'Like' }));
+    for (const name of kindNames)
+      await expect(within(choices).getByRole('button', { name: new RegExp(`^${name}(?:\\s|$)`) })).toBeVisible();
+    await userEvent.click(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ }));
     const like = await canvas.findByRole('button', { name: 'Like 1' });
     await expect(like).toHaveAttribute('aria-pressed', 'true');
     await expect(canvas.getByRole('button', { name: 'Upvote 8' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(within(dialog()).getByRole('button', { name: 'Like' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(within(dialog()).getByRole('button', { name: /^Like(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(canvas.getByRole('status', { name: '1 changes started' })).toBeVisible();
     await expectInkBlue(canvas.getByRole('button', { name: 'Like 1' }));
-    await expectInkBlue(within(dialog()).getByRole('button', { name: 'Like' }));
+    await expectInkBlue(within(dialog()).getByRole('button', { name: /^Like(?:\s|$)/ }));
     await userEvent.click(canvas.getByRole('button', { name: 'Confirm reaction' }));
     await expect(canvas.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'true');
   },
@@ -148,7 +149,7 @@ export const MenuOpenPhone: Story = {
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const choices = await openChoices(canvasElement);
-    await expect(within(choices).getByRole('button', { name: 'Like' })).toBeVisible();
+    await expect(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ })).toBeVisible();
   },
 };
 
@@ -157,11 +158,11 @@ export const ReplaceReaction: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const choices = await openChoices(canvasElement);
-    await userEvent.click(within(choices).getByRole('button', { name: 'Love' }));
+    await userEvent.click(within(choices).getByRole('button', { name: /^Love(?:\s|$)/ }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Love 6' })).toHaveAttribute('aria-pressed', 'true'));
     await expect(canvas.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'false');
     await expect(canvas.getByRole('status', { name: '1 changes started' })).toBeVisible();
-    await userEvent.click(within(dialog()).getByRole('button', { name: 'Upvote' }));
+    await userEvent.click(within(dialog()).getByRole('button', { name: /^Upvote(?:\s|$)/ }));
     await expect(canvas.getByRole('status', { name: '1 changes started' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Upvote 1' })).not.toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Confirm reaction' }));
@@ -171,8 +172,8 @@ export const ReplaceReaction: Story = {
     await expect(canvas.getByRole('status', { name: '2 changes started' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Love 5' })).toHaveAttribute('aria-pressed', 'false');
     await expect(canvas.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(within(dialog()).getByRole('button', { name: 'Upvote' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(within(dialog()).getByRole('button', { name: 'Love' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(within(dialog()).getByRole('button', { name: /^Upvote(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(within(dialog()).getByRole('button', { name: /^Love(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(canvas.getByRole('button', { name: 'Confirm reaction' }));
     await expect(canvas.getByRole('button', { name: 'Upvote 1' })).toHaveAttribute('aria-pressed', 'true');
   },
@@ -183,10 +184,10 @@ export const ClearReaction: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const choices = await openChoices(canvasElement);
-    await expect(within(choices).getByRole('button', { name: 'Like' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(within(choices).getByRole('button', { name: 'Like' }));
+    await expect(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ }));
     await waitFor(() => expect(canvas.queryByRole('button', { name: 'Like 1' })).not.toBeInTheDocument());
-    await expect(within(dialog()).getByRole('button', { name: 'Like' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(within(dialog()).getByRole('button', { name: /^Like(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'false');
     await expect(canvas.getByRole('button', { name: 'Upvote 4' })).toHaveAttribute('aria-pressed', 'false');
     await userEvent.click(canvas.getByRole('button', { name: 'Confirm reaction' }));
     await expect(canvas.queryByRole('button', { name: 'Like 1' })).not.toBeInTheDocument();
@@ -208,8 +209,8 @@ export const CountsInLocale: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const japanese = within(canvas.getByRole('region', { name: 'Japanese' }));
-    await expect(japanese.getByRole('button', { name: 'Like 1.2万' })).toBeVisible();
-    await expect(japanese.getByRole('button', { name: 'Insightful 1万' })).toBeVisible();
+    await expect(japanese.getByRole('button', { name: `Like ${new Intl.NumberFormat('ja').format(12_000)}` })).toBeVisible();
+    await expect(japanese.getByRole('button', { name: `Insightful ${new Intl.NumberFormat('ja').format(10_000)}` })).toBeVisible();
     const german = within(canvas.getByRole('region', { name: 'German' }));
     await expect(german.getByRole('button', { name: 'Like 12.000' })).toBeVisible();
     await expect(german.getByRole('button', { name: 'Insightful 10.000' })).toBeVisible();
@@ -322,7 +323,7 @@ export const FailedChangeRollsBack: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: 'Love 2' })).toHaveAttribute('aria-pressed', 'true');
     const choices = await openChoices(canvasElement);
-    await userEvent.click(within(choices).getByRole('button', { name: 'Like' }));
+    await userEvent.click(within(choices).getByRole('button', { name: /^Like(?:\s|$)/ }));
     await waitFor(() => expect(canvas.getByRole('button', { name: 'Like 5' })).toHaveAttribute('aria-pressed', 'true'));
     await expect(canvas.getByRole('button', { name: 'Love 1' })).toHaveAttribute('aria-pressed', 'false');
     await expect(canvas.queryByRole('status')).not.toBeInTheDocument();
@@ -330,8 +331,8 @@ export const FailedChangeRollsBack: Story = {
     await waitFor(() => expect(canvas.getByRole('status', { name: 'The reaction change failed.' })).toBeVisible());
     await expect(canvas.getByRole('button', { name: 'Love 2' })).toHaveAttribute('aria-pressed', 'true');
     await expect(canvas.getByRole('button', { name: 'Like 4' })).toHaveAttribute('aria-pressed', 'false');
-    await expect(within(dialog()).getByRole('button', { name: 'Love' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(within(dialog()).getByRole('button', { name: 'Like' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(within(dialog()).getByRole('button', { name: /^Love(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(within(dialog()).getByRole('button', { name: /^Like(?:\s|$)/ })).toHaveAttribute('aria-pressed', 'false');
     await expectInkBlue(canvas.getByRole('button', { name: 'Love 2' }));
   },
 };

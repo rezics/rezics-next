@@ -113,7 +113,8 @@ The score is upvote minus downvote from that map. Without a supplied map the pil
 cannot write; it never reports zero or reads each row to manufacture a baseline. Subjects retain their installed
 non-vote reaction kinds. A `plain` reply pill omits its filled background without reducing its phone targets.
 `reaction.reactionOrigin` and `origin` bind commands and browser feedback to the owner's current source visit.
-Do not pass a fabricated current predicate to retain an old private snapshot.
+Every compact reaction control exposes each exact admitted operand in its accessible name, including both vote inputs
+and the signed score. Do not pass a fabricated current predicate to retain an old private snapshot.
 
 `VoteControl` delegates to `ThreadReactions` and the shared `Reactions` queue. It does not implement another vote
 engine. Fresh feed commands reconcile through the existing single-target point read; `settleWithRead: false` lets
@@ -122,6 +123,8 @@ visit command and explicit retry. A refused change restores the last projection 
 No command runs on mount or on a session observation. Account/token replacement and away/back retire old callers.
 
 `reply` accepts an existing reply-intent callback or an admitted link; missing reply destinations remain unavailable.
+An optional safe native `replyCount` is shown compactly and named exactly in the action's accessible label. Zero remains
+visible as zero; absence or an unsafe value remains unavailable. The count does not replace or wrap the reply link.
 `library` accepts the existing Library control or its owner destination. `overflow` accepts the installed author/report
 menu so detail hosts keep edit, erasure and report ownership. Reporting is never a visible action button. Without a
 delivered command/configuration the default menu labels report, mute and hide as unavailable. It never hides a row
@@ -138,20 +141,26 @@ for manual copying and a Close action returning focus. Replacement visits retire
 Decision: phone Share and vote-presentation reaction pickers use compact labeled icons; desktop Share retains its text,
 and a copied link replaces the Share glyph with a check while keeping the control's accessible name and recovery flow.
 
-Content's generated `feedItems.get` summaries currently pick thread/post identity, title and creation metadata only;
-they supply neither reaction counts nor the viewer slot. Home deliberately renders unavailable voting until Content
-delivers those fields in the same bounded page, with source privacy and current-reader admission. No browser DTO or
-per-row read fills that gap. Content also needs typed mute-author/hide commands before those menu entries can act.
+The installed Kernel source emits optional `reactionTarget`, `reactions` and `viewerReaction` on eligible Content
+thread/post summaries and optional `reactionsAsOf` on the page. The current generated Web client has not published
+those fields: its `FeedContentSummary` still has only author and excerpt, and its page type lacks `reactionsAsOf`.
+Until normal client generation publishes them, Home keeps reactions unavailable and binds none of these values. Do
+not add a browser DTO or cast, infer a thread target from `summary.id`, or read each row. Once present, bind the exact
+target: use `reactionTarget` verbatim. The installed thread projector supplies its thread ID; never infer it from
+`summary.id` or replace it with an opening post. A post target keeps its supplied post ID only after the native
+thread/destination relationship is admitted. The count map uses the seven native kinds and positive integer entries;
+an empty map means known zero, absent counts mean unavailable. Anonymous viewer-slot omission differs from
+authenticated `null`, and a null watermark does not prove a later write converged. Following projection failure
+withholds its rows and preserves its input frontier for retry.
+
 Home receives the existing public verification configuration with its page result and reuses `PostActions` for
 reporting. The row's canonical destination also feeds that owner's copy/recovery flow. Missing verification
-configuration keeps reporting explicitly unavailable. The remaining Home vote projection and feedback commands
-are described in `.temp/continuation/feed-actions.md`.
-
-The board owner keeps board-feed, pin and slow-mode files. Import `FeedActionBar`, pass each existing thread's actual
-reaction counts/value and current-source origin, keep its existing localized destination and reply route, and pass
-its installed report/author menu as `overflow`. `feedFeedbackEntries(locale, signedIn, href)` supplies honest mute/hide
-entries for that menu. Keep pin/slow-mode entries with their current owners. No extra board read is required.
-
+configuration keeps reporting explicitly unavailable. The board caller forwards only `threadActivity`'s admitted
+safe-integer reply count to the shared bar; a prepared fixture proves the receiving and exact accessible label, not
+native delivery. The board owner keeps board-feed, pin and slow-mode files, keeps its localized reply destination,
+and passes its installed report/author menu as `overflow`. `feedFeedbackEntries(locale, signedIn, href)` supplies
+honest mute/hide entries for that menu. Keep pin/slow-mode entries with their current owners. No extra board read is
+required.
 Presentation is O(NR) for the native page cap (20) and fixed installed kind set. One explicit vote owns one write
 and at most its bounded readback; sharing owns no kernel reads. The focused action-bar scenarios cover 1, 10 and 20
 mounted rows, session/source retirement, receipt settlement/refusal, exact unknown retry, Home Continue, sign-in and

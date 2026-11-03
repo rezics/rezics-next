@@ -178,6 +178,10 @@ function formatCount(locale: string, count: number): string {
   return new Intl.NumberFormat(locale, { notation: 'compact' }).format(count);
 }
 
+function formatExactCount(locale: string, count: number): string {
+  return new Intl.NumberFormat(locale).format(count);
+}
+
 // Pressed text is ink blue (`--primary`). Brand red is a mark and never colors text.
 const chipClass = cn(
   buttonVariants({ variant: 'outline', size: 'sm' }),
@@ -362,18 +366,19 @@ export const Reactions = (props: ReactionsProps) => {
   const voteArrow = (kind: 'upvote' | 'downvote') => {
     const Icon = reactionIcons[kind];
     const pressed = shown.value === kind;
+    const count = shown.counts[kind] ?? 0;
     const className = cn(
       'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11',
       pressed ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
     );
     return signedOut ? (
-      <a href={signInHref} aria-label={labels[kind]} className={className}>
+      <a href={signInHref} aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`} className={className}>
         <Icon aria-hidden className="size-5" />
       </a>
     ) : (
       <button
         type="button"
-        aria-label={labels[kind]}
+        aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
         aria-pressed={pressed}
         className={className}
         disabled={disabled}
@@ -398,7 +403,11 @@ export const Reactions = (props: ReactionsProps) => {
           className={cn('inline-flex items-center rounded-full', props.presentation !== 'vote-plain' && 'bg-muted/70')}
         >
           {voteArrow('upvote')}
-          <output aria-live="polite" className="min-w-8 px-1 text-center text-sm font-semibold tabular-nums">
+          <output
+            aria-label={formatExactCount(props.locale, score)}
+            aria-live="polite"
+            className="min-w-8 px-1 text-center text-sm font-semibold tabular-nums"
+          >
             {formatCount(props.locale, score)}
           </output>
           {voteArrow('downvote')}
@@ -411,7 +420,7 @@ export const Reactions = (props: ReactionsProps) => {
         const pressed = shown.value === kind;
         const formatted = formatCount(props.locale, count);
         const Icon = reactionIcons[kind];
-        const name = `${labels[kind]} ${formatted}`;
+        const name = `${labels[kind]} ${formatExactCount(props.locale, count)}`;
         if (signedOut) {
           return (
             <span
@@ -431,6 +440,7 @@ export const Reactions = (props: ReactionsProps) => {
         }
         return (
           <Button
+            aria-label={name}
             aria-pressed={pressed}
             className={cn(chipClass, pressed && pressedClass, phoneHidden(kind) && 'max-sm:hidden')}
             data-pressed={pressed ? 'true' : 'false'}
@@ -467,6 +477,7 @@ export const Reactions = (props: ReactionsProps) => {
                 const count = shown.counts[kind] ?? 0;
                 return (
                   <Button
+                    aria-label={`${labels[kind]} ${formatExactCount(props.locale, count)}`}
                     aria-pressed={pressed}
                     className={cn('relative w-full justify-start px-3 transition-none', pressed && pressedClass)}
                     disabled={disabled}

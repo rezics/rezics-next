@@ -126,12 +126,12 @@ test(
 
       await group.getByRole('button', { name: 'React', exact: true }).click();
       const choices = page.getByRole('dialog', { name: 'Choose a reaction' });
-      await choices.getByRole('button', { name: 'Like', exact: true }).click();
+      await choices.getByRole('button', { name: /^Like(?:\s|$)/ }).click();
       await eventually(() => slotCalls().length === 1);
       await eventually(() => chipState(page, 'Like 7', 'true'));
       expect(await chipState(page, 'Insightful 3', 'false')).toBe(true);
 
-      await choices.getByRole('button', { name: 'Love', exact: true }).click();
+      await choices.getByRole('button', { name: /^Love(?:\s|$)/ }).click();
       await eventually(() => slotCalls().length === 2);
       await eventually(() => chipState(page, 'Love 4', 'true'));
       expect(await chipState(page, 'Like 6', 'false')).toBe(true);

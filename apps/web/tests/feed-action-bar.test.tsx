@@ -94,7 +94,10 @@ async function click(node: Element | null) {
 }
 const button = (label: string) =>
   [...host.querySelectorAll('button')].find(
-    (node) => node.getAttribute('aria-label') === label || node.textContent === label,
+    (node) =>
+      node.getAttribute('aria-label') === label ||
+      node.getAttribute('aria-label')?.startsWith(`${label} `) === true ||
+      node.textContent === label,
   ) ?? null;
 const score = () => host.querySelector('[data-slot="vote-control"] output')?.textContent;
 const settle = async (index = 0) => {
@@ -149,6 +152,56 @@ test('one-slot votes update immediately, settle from actual counts, and revert a
   expect(score()).toBe('9');
   expect(host.textContent).toContain(m.reaction_forbidden());
   expect(reads).toHaveLength(1);
+});
+
+test('reaction names expose exact localized operands and the signed score', async () => {
+  const count = 1234567890123;
+  await paint(
+    <FeedActionBar
+      {...props()}
+      locale="de"
+      reaction={{
+        ...props().reaction!,
+        counts: { upvote: count, downvote: count + 7, like: count },
+      }}
+    />,
+  );
+  const exact = new Intl.NumberFormat('de').format(count);
+  expect(
+    host.querySelector(
+      `[data-slot="reaction-chip"][aria-label="${m.reaction_like({}, { locale: 'de' })} ${exact}"]`,
+    ),
+  ).not.toBeNull();
+  expect(
+    host.querySelector(
+      `[data-slot="vote-control"] button[aria-label="${m.reaction_upvote({}, { locale: 'de' })} ${exact}"]`,
+    ),
+  ).not.toBeNull();
+  expect(host.querySelector('[data-slot="vote-control"] output')?.getAttribute('aria-label')).toBe(
+    new Intl.NumberFormat('de').format(-7),
+  );
+});
+
+test('reply counts distinguish zero from unavailable and retain the exact reply destination', async () => {
+  await paint(<FeedActionBar {...props()} replyCount={0} />);
+  let action = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');
+  expect(action?.getAttribute('aria-label')).toBe(`${m.feed_action_reply()} 0`);
+  expect(action?.textContent).toContain('0');
+  expect(action?.getAttribute('href')).toBe('/en/threads/thread/reading#reply');
+
+  await paint(<FeedActionBar {...props()} replyCount={987654321012} />);
+  action = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');
+  expect(action?.getAttribute('aria-label')).toBe(
+    `${m.feed_action_reply()} ${new Intl.NumberFormat('en').format(987654321012)}`,
+  );
+  expect(action?.getAttribute('href')).toBe('/en/threads/thread/reading#reply');
+  expect(action?.textContent).toContain(new Intl.NumberFormat('en', { notation: 'compact' }).format(987654321012));
+
+  await paint(<FeedActionBar {...props()} />);
+  action = host.querySelector<HTMLAnchorElement>('[data-slot="feed-reply-action"]');
+  expect(action?.getAttribute('aria-label')).toBe(m.feed_action_reply());
+  expect(action?.textContent).not.toContain('0');
+  expect(action?.getAttribute('href')).toBe('/en/threads/thread/reading#reply');
 });
 
 test('compact actions retain their names and copy feedback keeps the share control reusable', async () => {

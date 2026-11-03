@@ -14,6 +14,7 @@ function PreparedCard({
   long = false,
   plain = false,
   unavailable = false,
+  countInspection = false,
 }: {
   signedIn?: boolean;
   voted?: boolean;
@@ -21,6 +22,7 @@ function PreparedCard({
   long?: boolean;
   plain?: boolean;
   unavailable?: boolean;
+  countInspection?: boolean;
 }) {
   const locale = getLocale();
   const [replies, setReplies] = useState(0);
@@ -38,7 +40,9 @@ function PreparedCard({
     let value: 'upvote' | 'downvote' | null = voted ? 'upvote' : null;
     return {
       target: { kind: 'post', id: 'prepared-post' },
-      counts: { upvote: 8, downvote: 2 },
+      counts: countInspection
+        ? { upvote: 1234567890123, downvote: 1234567890130 }
+        : { upvote: 8, downvote: 2 },
       value,
       preparedTransport: {
         change: async ({ data }) => {
@@ -53,7 +57,7 @@ function PreparedCard({
         }),
       },
     };
-  }, [voted, refused]);
+  }, [countInspection, voted, refused]);
   return (
     <QueryClientProvider client={client}>
       <main className="mx-auto max-w-3xl space-y-4 p-4">
@@ -74,6 +78,7 @@ function PreparedCard({
             signedIn={signedIn}
             reaction={unavailable ? undefined : reaction}
             plain={plain}
+            {...(countInspection ? { replyCount: 987654321012 } : {})}
             reply={{ onReply: () => setReplies((n) => n + 1) }}
             library={{ href: `/${locale}/subjects/prepared/work?slot=collections` }}
           >
@@ -108,8 +113,11 @@ export const SignedIn: Story = {
   globals: { viewport: { value: 'desktop1280' }, theme: 'light' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.reaction_upvote() }));
-    await expect(canvas.getByRole('button', { name: m.reaction_upvote() })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) }));
+    await expect(canvas.getByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await userEvent.click(canvas.getByRole('button', { name: m.feed_action_reply() }));
     await expect(canvas.getByRole('status')).toHaveTextContent('Prepared reply destination opened.');
     await expect(canvas.getByRole('link', { name: 'Continue' })).toBeVisible();
@@ -122,7 +130,7 @@ export const SignedOut: Story = {
   args: { signedIn: false },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: m.reaction_upvote() })).toHaveAttribute(
+    await expect(canvas.getByRole('link', { name: new RegExp(`^${m.reaction_upvote()}\\s`) })).toHaveAttribute(
       'href',
       `/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/threads/prepared/reading`)}`,
     );
@@ -132,6 +140,30 @@ export const SignedOut: Story = {
 export const Voted: Story = { args: { voted: true } };
 export const PlainReply: Story = { args: { plain: true, voted: true }, globals: { viewport: { value: 'phone390' } } };
 export const UnavailableVotes: Story = { args: { unavailable: true }, globals: { viewport: { value: 'phone390' } } };
+export const ExactCountsPhone: Story = {
+  args: { countInspection: true, plain: true },
+  globals: { viewport: { value: 'phone390' }, theme: 'light' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const upvoteCount = 1234567890123;
+    const replyCount = 987654321012;
+    await expect(
+      canvas.getByRole('button', {
+        name: `${m.reaction_upvote()} ${new Intl.NumberFormat(getLocale()).format(upvoteCount)}`,
+      }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole('button', {
+        name: `${m.feed_action_reply()} ${new Intl.NumberFormat(getLocale()).format(replyCount)}`,
+      }),
+    ).toBeVisible();
+    await expect(canvasElement.querySelector('[data-slot="vote-control"] output')).toHaveAttribute('aria-label', '-7');
+  },
+};
+export const ExactCountsDesktopDark: Story = {
+  ...ExactCountsPhone,
+  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+};
 export const CopiedLink: Story = {
   play: async ({ canvasElement }) => {
     const share = Object.getOwnPropertyDescriptor(navigator, 'share');
@@ -155,9 +187,11 @@ export const Refused: Story = {
   args: { refused: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByRole('button', { name: m.reaction_downvote() }));
+    await userEvent.click(await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_downvote()}\\s`) }));
     await expect(await canvas.findByRole('status')).toHaveTextContent(m.reaction_forbidden());
-    await expect(canvas.getByRole('button', { name: m.reaction_downvote() })).toHaveAttribute('aria-pressed', 'false');
+    await expect(
+      canvas.getByRole('button', { name: new RegExp(`^${m.reaction_downvote()}\\s`) }),
+    ).toHaveAttribute('aria-pressed', 'false');
   },
 };
 export const Phone: Story = { ...SignedIn, globals: { viewport: { value: 'phone390' }, theme: 'light' } };
@@ -171,7 +205,7 @@ export const DesktopDarkKeyboard: Story = {
   globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const up = await canvas.findByRole('button', { name: m.reaction_upvote() });
+    const up = await canvas.findByRole('button', { name: new RegExp(`^${m.reaction_upvote()}\\s`) });
     up.focus();
     await userEvent.keyboard('{Enter}');
     await expect(up).toHaveAttribute('aria-pressed', 'true');

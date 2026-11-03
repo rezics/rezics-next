@@ -174,7 +174,7 @@ async function openPicker(page: Page, panel: PanelName = 'primary') {
 
 async function chooseFromPicker(page: Page, kind: string, panel: PanelName = 'primary') {
   const dialog = await openPicker(page, panel);
-  await dialog.getByRole('button', { name: new RegExp('^' + kind) }).click();
+  await dialog.getByRole('button', { name: new RegExp(`^${kind}(?:\\s|$)`) }).click();
 }
 
 async function waitBusy(page: Page, panel: PanelName, busy: boolean) {
@@ -231,7 +231,9 @@ test('shared Reactions serialize original choices and retire every obsolete visi
       locale: 'ja',
       collapse: 1,
     });
-    const japaneseLike = primary.getByRole('button', { name: 'Like 1.2万' });
+    const japaneseLike = primary.getByRole('button', {
+      name: `Like ${new Intl.NumberFormat('ja').format(12_000)}`,
+    });
     await japaneseLike.waitFor({ state: 'visible' });
     expect(await japaneseLike.getAttribute('class')).not.toContain('max-sm:hidden');
     expect(await primary.getByRole('button', { name: 'Downvote 1' }).getAttribute('class')).toContain('max-sm:hidden');

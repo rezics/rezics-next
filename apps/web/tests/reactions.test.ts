@@ -161,12 +161,12 @@ test(
 
       await threadReactions.getByRole('button', { name: 'React', exact: true }).click();
       const choices = page.getByRole('dialog', { name: 'Choose a reaction' });
-      await choices.getByRole('button', { name: 'Like', exact: true }).click();
+      await choices.getByRole('button', { name: /^Like(?:\s|$)/ }).click();
       await eventually(() => reactionCalls().length === 1);
       expectReaction(reactionCalls()[0], 'PUT', `/v1/threads/${id(2)}/reaction`, access, { kind: 'like' });
       await expect(threadReactions.getByRole('button', { name: 'Like 1' })).toHaveAttribute('aria-pressed', 'true');
 
-      await choices.getByRole('button', { name: 'Love', exact: true }).click();
+      await choices.getByRole('button', { name: /^Love(?:\s|$)/ }).click();
       await eventually(() => reactionCalls().length === 2);
       expectReaction(reactionCalls()[1], 'PUT', `/v1/threads/${id(2)}/reaction`, access, { kind: 'love' });
       expect(reactionCalls()[1]!.key).not.toBe(reactionCalls()[0]!.key);
@@ -182,7 +182,7 @@ test(
 
       await replyReactions.getByRole('button', { name: 'React', exact: true }).click();
       const replyChoices = page.getByRole('dialog', { name: 'Choose a reaction' });
-      await replyChoices.getByRole('button', { name: 'Insightful', exact: true }).click();
+      await replyChoices.getByRole('button', { name: /^Insightful(?:\s|$)/ }).click();
       await eventually(() => reactionCalls().length === 4);
       expectReaction(reactionCalls()[3], 'PUT', `/v1/posts/${id(13)}/reaction`, access, { kind: 'insightful' });
       await expect(replyReactions.getByRole('button', { name: 'Insightful 1' })).toHaveAttribute(
@@ -255,7 +255,7 @@ test(
       await threadReactions.getByRole('button', { name: 'React', exact: true }).click();
       await page
         .getByRole('dialog', { name: 'Choose a reaction' })
-        .getByRole('button', { name: 'Love', exact: true })
+        .getByRole('button', { name: /^Love(?:\s|$)/ })
         .click();
       await expect(threadReactions.getByRole('button', { name: 'Love 1' })).toHaveAttribute('aria-pressed', 'true');
       refusal = { status: 403, code: 'forbidden' };
@@ -271,7 +271,7 @@ test(
       refusal = { status: 403, code: 'platform_closed' };
       await page
         .getByRole('dialog', { name: 'Choose a reaction' })
-        .getByRole('button', { name: 'Upvote', exact: true })
+        .getByRole('button', { name: /^Upvote(?:\s|$)/ })
         .click();
       await expect(threadReactions.getByRole('status', { name: 'This part of REZICS is not open yet.' })).toBeVisible();
       expect(

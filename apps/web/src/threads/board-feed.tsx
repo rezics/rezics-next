@@ -82,7 +82,7 @@ function ThreadCard({
         ) : null}
       </>
     ) : null;
-  const { lastActivityAt } = threadActivity(thread);
+  const { replyCount, lastActivityAt } = threadActivity(thread);
   const counts = nativeReactionCounts(thread);
 
   return (
@@ -117,6 +117,7 @@ function ThreadCard({
             href={href}
             signedIn={signedIn}
             origin={origin}
+            {...(replyCount === null ? {} : { replyCount })}
             {...(counts === undefined
               ? {}
               : {

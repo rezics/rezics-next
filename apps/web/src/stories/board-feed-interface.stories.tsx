@@ -200,7 +200,11 @@ const meta = {
         const rows = region.getAllByRole('listitem');
         await expect(rows).toHaveLength(2);
         await expect(within(rows[0]!).getByText(m.board_feed_reactions({ count: reactions }))).toBeVisible();
-        await expect(within(rows[0]!).getByText(m.board_feed_replies({ count: replies }))).toBeVisible();
+        await expect(
+          within(rows[0]!).getByRole('link', {
+            name: `${m.feed_action_reply()} ${new Intl.NumberFormat(getLocale()).format(replies)}`,
+          }),
+        ).toBeVisible();
         await expect(rows[0]!.querySelector(`time[datetime="${lastActivityAt}"]`)).toBeVisible();
         await expect(within(rows[1]!).queryByText(m.board_feed_reactions({ count: reactions }))).toBeNull();
         await expect(within(rows[1]!).queryByText(m.board_feed_replies({ count: replies }))).toBeNull();
@@ -217,7 +221,11 @@ const meta = {
           await expect(row.querySelector('a[href*="/@"]')).toBeNull();
         } else await expect(item.getByText(displayName)).toBeVisible();
         await expect(item.getByText(m.board_feed_reactions({ count: reactions }))).toBeVisible();
-        await expect(item.getByText(m.board_feed_replies({ count: replies }))).toBeVisible();
+        await expect(
+          item.getByRole('link', {
+            name: `${m.feed_action_reply()} ${new Intl.NumberFormat(getLocale()).format(replies)}`,
+          }),
+        ).toBeVisible();
         await expect(row.querySelector(`time[datetime="${lastActivityAt}"]`)).toHaveAttribute(
           'title',
           fullDateTime(lastActivityAt, getLocale()),

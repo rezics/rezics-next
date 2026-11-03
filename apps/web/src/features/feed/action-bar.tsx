@@ -30,6 +30,8 @@ export type FeedActionBarProps = {
   href?: string | undefined;
   signedIn: boolean;
   reaction?: FeedReaction | undefined;
+  /** Safe native count for the linked reply destination; missing means unavailable. */
+  replyCount?: number | undefined;
   /** Existing reaction engine presentation; feed cards keep their vote layout unless a caller opts in. */
   reactionPresentation?: 'chips' | 'vote' | 'vote-plain' | undefined;
   plain?: boolean | undefined;
@@ -151,6 +153,7 @@ function ActionVisit({
   title,
   signedIn,
   reaction,
+  replyCount,
   reactionPresentation,
   plain,
   reply,
@@ -162,6 +165,27 @@ function ActionVisit({
   isCurrent,
 }: FeedActionBarProps & { isCurrent(): boolean }) {
   const options = { locale: locale as Locale };
+  const safeReplyCount =
+    typeof replyCount === 'number' && Number.isSafeInteger(replyCount) && replyCount >= 0 ? replyCount : undefined;
+  const replyLabel = m.feed_action_reply({}, options);
+  const exactReplyCount =
+    safeReplyCount === undefined ? undefined : new Intl.NumberFormat(locale).format(safeReplyCount);
+  const compactReplyCount =
+    safeReplyCount === undefined
+      ? undefined
+      : new Intl.NumberFormat(locale, { notation: 'compact' }).format(safeReplyCount);
+  const replyName = exactReplyCount === undefined ? replyLabel : `${replyLabel} ${exactReplyCount}`;
+  const replyContent = (
+    <>
+      <ReplyIcon aria-hidden />
+      <span>{replyLabel}</span>
+      {compactReplyCount === undefined ? null : (
+        <span aria-hidden className="tabular-nums">
+          {compactReplyCount}
+        </span>
+      )}
+    </>
+  );
   const [feedback, setFeedback] = useState<'copied' | 'manual' | null>(null);
   const [manualUrl, setManualUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -255,9 +279,13 @@ function ActionVisit({
   const actions = (
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1" data-slot="feed-secondary-actions">
       {!signedIn ? (
-        <a href={signIn} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}>
-          <ReplyIcon aria-hidden />
-          {m.feed_action_reply({}, options)}
+        <a
+          href={signIn}
+          aria-label={replyName}
+          data-slot="feed-reply-action"
+          className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}
+        >
+          {replyContent}
         </a>
       ) : reply && 'onReply' in reply ? (
         <Button
@@ -265,23 +293,35 @@ function ActionVisit({
           variant="ghost"
           size="sm"
           className={actionClass}
+          aria-label={replyName}
+          data-slot="feed-reply-action"
           disabled={reply.disabled || !available}
           onClick={() => {
             if (current()) reply.onReply();
           }}
         >
-          <ReplyIcon aria-hidden />
-          {m.feed_action_reply({}, options)}
+          {replyContent}
         </Button>
       ) : reply && 'href' in reply ? (
-        <a href={reply.href} className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}>
-          <ReplyIcon aria-hidden />
-          {m.feed_action_reply({}, options)}
+        <a
+          href={reply.href}
+          aria-label={replyName}
+          data-slot="feed-reply-action"
+          className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} ${actionClass}`}
+        >
+          {replyContent}
         </a>
       ) : (
-        <Button variant="ghost" size="sm" className={actionClass} disabled title={unavailable}>
-          <ReplyIcon aria-hidden />
-          {m.feed_action_reply({}, options)}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={actionClass}
+          aria-label={replyName}
+          data-slot="feed-reply-action"
+          disabled
+          title={unavailable}
+        >
+          {replyContent}
         </Button>
       )}
       {!signedIn ? (
