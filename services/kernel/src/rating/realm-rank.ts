@@ -8,13 +8,18 @@ import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { globalReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import readIdentity from '../semantic/read-subject-identity.sql';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 import readFreshness from './aggregate-read-freshness.sql';
-import questionRead from './question-read.sql';
-import { ratingQuestionIdentity, realmRankQuestionEligible } from './question-directory.ts';
+import {
+  ratingQuestionIdentity,
+  ratingQuestionView,
+  readVisibleRatingQuestion,
+  realmRankQuestionEligible,
+  type RatingQuestionView,
+} from './question-directory.ts';
 
 export type RealmRankRequest = Readonly<{
   realmId: string;
@@ -34,13 +39,7 @@ export type RealmRankCandidate = Readonly<{
   asOf: string;
   updating: boolean;
 }>;
-export type RealmRankQuestion = Readonly<{
-  id: string;
-  revision: number;
-  label: string;
-  grain: 'work' | 'release' | 'episode' | 'character';
-  scale: Readonly<{ min: number; max: number; displayStep: number }>;
-}>;
+export type RealmRankQuestion = Readonly<RatingQuestionView>;
 export type RealmRankPage = Readonly<{
   question: RealmRankQuestion;
   candidates: readonly RealmRankCandidate[];
@@ -164,22 +163,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       };
       await authorizeRealm();
       const readQuestion = async () => {
-        const check = await accessCheck(
-          deps.access,
-          actor,
-          'definitions:read',
-          {
-            route: GLOBAL_CONTEXT.route,
-            id: GLOBAL_CONTEXT.id,
-            eligibility: globalReadEligibility('definitions:read'),
-          },
-          { pool: deps.pool, deadline },
-        );
-        const readable = await withConnection(deps.pool, (client) => check(deadlineClient(client, deadline)));
-        if (!readable) throw new ProblemError('not_found');
-        const question = await observe(deps.pool, partitionOf(routeOf(input.questionId)!), deadline, (client) =>
-          questionRead.run(client, { question_id: input.questionId }),
-        );
+        const question = await readVisibleRatingQuestion(deps, actor, input.questionId, deadline);
         if (!question) throw new ProblemError('not_found');
         if (!realmRankQuestionEligible(question)) throw new ProblemError('invalid_request');
         return question;
@@ -207,7 +191,10 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
            WHERE route=$1 AND question_id=$2 AND population_id=$3`,
             [populationRoute, input.questionId, input.realmId],
           );
-          return { ...(result.rows[0] ?? { generation: '0', active: false, identity: null }), updating: freshness!.updating };
+          return {
+            ...(result.rows[0] ?? { generation: '0', active: false, identity: null }),
+            updating: freshness!.updating,
+          };
         });
       const prior = await readPrior();
       const observed = await observe(deps.pool, input.partition, deadline, async (client, epoch) => {
@@ -290,13 +277,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
       });
       const last = observed.rows.at(-1);
       return {
-        question: {
-          id: question.id,
-          revision: question.revision,
-          label: question.label,
-          grain: question.grain,
-          scale: { min: question.minimumUnits, max: question.maximumUnits, displayStep: question.stepUnits },
-        },
+        question: ratingQuestionView(question),
         candidates,
         // No lookahead, counts or refill. A full consumed batch may lead to one empty terminal page.
         next:

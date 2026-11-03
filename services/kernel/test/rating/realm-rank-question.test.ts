@@ -10,19 +10,21 @@ test('selected questions keep their scale, private prior, threshold and continua
   const fixture = await createFigureFixture({ subjects: 11, partitions: 1 });
   try {
     const { system, kernel } = communityFixtureRuntime();
-    const questionIds = [newId(0x2100), newId(0x2200)];
+    const questionIds = [newId(0x2100), newId(routeOf(fixture.realmId)!)];
     for (const [index, questionId] of questionIds.entries())
       await fixture.database.admin.query(
-        `INSERT INTO rating.question(id,owner_id,revision,label,grain,minimum_units,maximum_units,step_units)
-         VALUES($1,$2,$3,$4,'work',$5,$6,$7)`,
+        `INSERT INTO rating.question(id,owner_id,revision,label,grain,minimum_units,maximum_units,step_units,realm_id,meaning)
+         VALUES($1,$2,$3,$4,'work',$5,$6,$7,$8,$9)`,
         [
           questionId,
-          fixture.realmId,
+          fixture.realmMembers[0]!.id,
           index + 1,
           index === 0 ? 'Translation quality' : 'Adaptation fidelity',
           index === 0 ? 0 : 2,
           index === 0 ? 4 : 20,
           index === 0 ? 1 : 2,
+          index === 0 ? null : fixture.realmId,
+          index === 0 ? null : 'Judge adaptation independently of translation quality.',
         ],
       );
     const source = createRealmRankSource({
@@ -72,7 +74,7 @@ test('selected questions keep their scale, private prior, threshold and continua
         if (subjectIndex === 9) await fixture.drain();
       }
       // These Global votes must never supply the selected Realm's prior.
-      for (const voter of fixture.globalVoters)
+      for (const voter of questionIndex === 0 ? fixture.globalVoters : [])
         await write(questionId, fixture.subjectIds[0]!, voter, questionIndex === 0 ? 0 : 20);
     }
     await fixture.drain();
@@ -80,6 +82,10 @@ test('selected questions keep their scale, private prior, threshold and continua
     const secondRequest = { ...request, questionId: questionIds[1]! };
     const second = await page(secondRequest);
     const directory = await (await fixture.request('/v1/rating-questions')).json();
+    const realmDirectory = await (
+      await fixture.request(`/v1/rating-questions?realm=${fixture.realmId}`, fixture.realmMembers[0]!)
+    ).json();
+    directory.ratingQuestions.push(...realmDirectory.ratingQuestions);
     for (const result of [first, second]) {
       expect(result.question).toEqual(
         directory.ratingQuestions.find((q: { id: string }) => q.id === result.question.id),
@@ -104,6 +110,13 @@ test('selected questions keep their scale, private prior, threshold and continua
     await expect(
       page(request, { ...actor, scopes: actor.scopes.filter((scope) => scope !== 'definitions:read') }),
     ).rejects.toMatchObject({ code: 'not_found' });
+    const unavailableQuestion = newId(0x2400);
+    await fixture.database.admin.query(
+      `INSERT INTO rating.question(id,owner_id,revision,label,grain,minimum_units,maximum_units,step_units,realm_id,meaning)
+       VALUES($1,$2,1,'Unavailable question','work',0,1,1,$3,'Private meaning')`,
+      [unavailableQuestion, fixture.realmMembers[0]!.id, newId(0x2400)],
+    );
+    await expect(page({ ...request, questionId: unavailableQuestion })).rejects.toMatchObject({ code: 'not_found' });
     // A below-threshold change contributes no rank generation or cursor evidence.
     await write(request.questionId, boundary, fixture.realmMembers[0]!, null);
     await fixture.drain();
