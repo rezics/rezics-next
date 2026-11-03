@@ -159,7 +159,7 @@ test('Collection, review and Space rows keep native identity and omit missing en
   const list = renderToStaticMarkup(<HomeFeed result={{ state: 'ready', page }} locale="en" />);
   expect(list.indexOf('Books I come back to')).toBeLessThan(list.indexOf('A careful reread'));
   expect(list.indexOf('A careful reread')).toBeLessThan(list.indexOf('Home Reading Room'));
-  expect(list).toContain(m.library_next_page());
+  expect(list).toContain('data-feed-has-next="true"');
   for (const locale of locales) {
     setLocale(locale, { reload: false });
     const labeled = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(reviewRow(false), locale)} />);
