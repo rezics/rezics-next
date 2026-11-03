@@ -902,3 +902,32 @@ At `1a7a0f7787`, alias consumer verification was limited to workspace typing:
 `$ bun scripts/construct.ts` (`remote-check: command 138.994 s on c`). The latter command's wrapper
 selected host `c` despite the unset variable. Neither native acceptance file nor tests were executed;
 the supplemental alias cases remain later integration proof.
+
+## Bangumi creator and voice credits
+
+Admitted `subject-persons` and `person-characters` rows now reach native credit proposals through the existing
+operator seed caller after work/person/character claims exist. Detailed role Concepts bind through
+`wdt:P3831`; voice credits keep the bound character on `wdt:P453`. Archive staff `position` is a role code.
+Music and live-action staff remain the pinned omitted producer binding.
+
+Decision: music/live-action staff codes stay the inventory omission
+`Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.`
+
+Frozen focused scenarios:
+
+- `authored staff and voice rows keep detailed role and character without fabricated order`
+- `music and live-action staff remain the pinned omitted producer binding`
+- `absent endpoints, unknown roles and a changed role withhold or replace the credit`
+- `production seed caller without sourceVocabulary cannot publish detailed credits`
+- `operator publishes authored staff and voice credits, keeps keys on reopen, and withholds honest loss`
+- `a facts fence withholds refresh and music staff reports the exact omitted producer binding`
+- `operator seed publishes detailed creator and voice credits for an independent editor`
+
+Mapper/operator files: `packages/conversion/tests/bangumi-creator-credits.test.ts`,
+`services/importer/tests/bangumi-creator-credits.test.ts`. Native command reserved for integration:
+
+```sh
+bun run --cwd services/kernel check test/imports/bangumi-creator-credits.test.ts
+```
+
+This delivery does not claim that native command passed.

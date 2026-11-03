@@ -203,12 +203,21 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
       return;
     }
     case 'staff': {
+      const code = environment.sourceCode(row.roleCode);
+      if (row.subjectType === 3 || row.subjectType === 6) {
+        environment.pushGap({
+          path,
+          ...(code ? { code } : {}),
+          reason: 'unsupported_source_case',
+          property: `staff.${row.subjectType}`,
+        });
+        return;
+      }
       const table =
         row.subjectType === 1 || row.subjectType === 2 || row.subjectType === 4
           ? staffTerms[row.subjectType]
           : undefined;
       const property = table && Object.entries(table).find(([, codes]) => codes.includes(row.roleCode))?.[0];
-      const code = environment.sourceCode(row.roleCode);
       if (!code || !property) {
         environment.pushGap({
           path,
