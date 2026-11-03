@@ -16,6 +16,20 @@ cursor, while retaining independent same-statement truth results for each qualif
 
 ## Current evidence
 
+Decision: inverse membership from selected works reuses forward selected-value probes, with no inverse absence certificate; a runtime release head change, including a return to the same digest, retires the evidence window.
+
+The `matchInverseRelationFacets` source seam accepts at most 256 candidate/source/property
+probes, groups selected works by their native partition and preserves separate same-statement
+qualifier conjunctions. It reanchors result subjects after foreign I/O. Hidden, unavailable or
+unproven source evidence stays unknown under NOT. The caller supplies the runtime release
+observation for the complete window; individual native probes also observe the runtime release.
+This seam does not yet admit inverse syntax through the universal API.
+
+Native relation disclosure now admits historical parsed rows against the runtime release's
+source type, facet and qualifier declarations. A changed datatype cannot reuse its historical
+interpretation. The runtime release digest and activation head are checked again after tuple
+and original/terminal subject disclosure. This guard applies to sampled and overflow evidence.
+
 Candidate index facts are hints. Current checks forward the complete qualifier conjunction to
 the Semantic relation source, including when the selected relation sample overflows. Qualified
 relation leaves under NOT also require current native evidence; absence from a sample cannot
@@ -67,9 +81,10 @@ per admitted variant; retained raw rows remain at most 1000. Existing source, ta
 disclosure work is unchanged. Progress writes at most A cursor rows using the existing lifecycle.
 
 This is one bounded native evidence step, not an absence certificate, a whole-page bound or a
-measurement of total preparation. Inverse appearances, spoiler thresholds, current release
-replacement, finite complete preparation, matching context previews and the installed character/
-person Web journey still require the continuation contract. A complete whole-page K must be
+measurement of total preparation. Universal inverse admission, appearance-constrained voice
+membership, complete journey spoiler thresholds, finite authorized preparation, matching context
+previews and the installed character/person Web journey still require the continuation contract.
+A complete whole-page K must be
 derived before dispatch for that integrated plan; a raw native LIMIT cannot certify it.
 
 Runtime binding adds two exact activation-pointer reads per native relation probe or nonempty
