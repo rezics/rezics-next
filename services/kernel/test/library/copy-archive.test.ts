@@ -539,10 +539,12 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
     clock: () => new Date(now),
   });
   const sessionCount = async () =>
-    (await f.pool.query<{ count: number }>(
-      'SELECT count(*)::int AS count FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3',
-      [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
-    )).rows[0]!.count;
+    (
+      await f.pool.query<{ count: number }>(
+        'SELECT count(*)::int AS count FROM library.progress_session WHERE route=$1 AND account_id=$2 AND subject_id=$3',
+        [routeOf(owner.actor.accountId), owner.actor.accountId, subjectId],
+      )
+    ).rows[0]!.count;
   const createUpload = await json(await send('POST', '', artifact, entryKey()));
   const createReview = await json(
     await send(
@@ -563,8 +565,13 @@ test('checkpoint replay preserves the original create and revision-sensitive mea
     beforeCreate = await sessionCount(),
     createAbort = new AbortController();
   await expect(
-    service.applyProgress(owner.actor, createUpload.uploadId, createReview.reviewId, createKey, createAbort.signal, () =>
-      createAbort.abort(),
+    service.applyProgress(
+      owner.actor,
+      createUpload.uploadId,
+      createReview.reviewId,
+      createKey,
+      createAbort.signal,
+      () => createAbort.abort(),
     ),
   ).rejects.toThrow();
   const createPending = await json(

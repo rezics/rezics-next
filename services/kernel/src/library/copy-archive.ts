@@ -1792,7 +1792,8 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     active_command: unknown | null;
     error_code: string | null;
   }) {
-    const missingOperands = app.state === 'applying' && app.active_step !== null && !storedStepCommand(app.active_command);
+    const missingOperands =
+      app.state === 'applying' && app.active_step !== null && !storedStepCommand(app.active_command);
     return {
       state: missingOperands ? ('failed' as const) : app.state === 'applying' ? ('recoverable' as const) : app.state,
       error: app.error_code ?? (missingOperands ? 'recovery_operands_unavailable' : null),
