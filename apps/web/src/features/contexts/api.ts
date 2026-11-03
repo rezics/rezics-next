@@ -1,7 +1,11 @@
 import type { KernelClient } from '@rezics/client';
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
+import {
+  parseNativeContextDirectoryPage,
+  parseNativeContextLifecycle,
+} from '../../community/setup-context-native';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
-import { unavailableContextDirectory, type ContextDirectoryApi } from './directory-api';
+import type { ContextDirectoryApi } from './directory-api';
 import {
   parseCommand,
   contextId,
@@ -35,10 +39,49 @@ export function failure(status: number, body?: unknown, mutation = false): Failu
 function caught(error: unknown, mutation = false): Failure {
   return isPlatformClosedError(error) ? { kind: 'denied' } : { kind: mutation ? 'unknown' : 'unavailable' };
 }
+/** Generated GET /v1/contexts and GET /v1/contexts/{id}/lifecycle. No catalogue scan or ownership list. */
+export function kernelContextDirectory(client: KernelClient): ContextDirectoryApi {
+  return {
+    async list(input, headers) {
+      try {
+        const response = await client.contexts.get({
+          query: {
+            ...(input.query ? { query: input.query } : {}),
+            limit: input.limit,
+            ...(input.cursor ? { cursor: input.cursor } : {}),
+            deleted: input.deleted,
+          },
+          headers,
+        });
+        if (response.status !== 200 || !response.data)
+          return { ...failure(response.status, response.error?.value), ...continuity(response.headers) };
+        const page = parseNativeContextDirectoryPage(response.data);
+        return page
+          ? { kind: 'ready', value: page, ...continuity(response.headers) }
+          : { ...unavailable, ...continuity(response.headers) };
+      } catch (error) {
+        return caught(error);
+      }
+    },
+    async lifecycle(id, headers) {
+      try {
+        const response = await client.contexts({ id }).lifecycle.get({ headers });
+        if (response.status !== 200 || !response.data)
+          return { ...failure(response.status, response.error?.value), ...continuity(response.headers) };
+        const entry = parseNativeContextLifecycle(response.data);
+        return entry && entry.id === id
+          ? { kind: 'ready', value: entry, ...continuity(response.headers) }
+          : { ...unavailable, ...continuity(response.headers) };
+      } catch (error) {
+        return caught(error);
+      }
+    },
+  };
+}
 export function createContextApi(
   client: KernelClient,
   authorization: string,
-  directory: ContextDirectoryApi = unavailableContextDirectory,
+  directory: ContextDirectoryApi = kernelContextDirectory(client),
 ) {
   const headers = (session?: string): Record<string, string> => ({
     authorization,

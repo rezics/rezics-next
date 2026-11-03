@@ -171,6 +171,65 @@ describe('An editor finds current readable Contexts creates one and follows nati
     expect(failure(400, { code: 'invalid_cursor' })).toEqual({ kind: 'stale' });
   });
 
+  test('production default uses generated directory and lifecycle methods with isolated query and deleted filter', async () => {
+    const calls: { method: string; path: string; query: string }[] = [];
+    const entry = {
+      id: fixtureId,
+      kind: 'community' as const,
+      labels: { ja: '読者の編集' },
+      state: 'active' as const,
+      deletedAt: null,
+      purgeAfter: null,
+    };
+    const dto = {
+      id: fixtureId,
+      kind: 'community' as const,
+      labels: { ja: '読者の編集' },
+      settings: null,
+      defaults: {},
+    };
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+    const client = createKernelClient('https://context-generated.invalid', {
+      fetch: (async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        const url = new URL(request.url);
+        calls.push({ method: request.method, path: url.pathname, query: url.search });
+        if (url.pathname === '/v1/contexts' && request.method === 'GET') {
+          const deleted = url.searchParams.get('deleted') === 'true';
+          const query = url.searchParams.get('query') ?? '';
+          const match = !query || Object.values(entry.labels).some((label) => label.includes(query));
+          return json({
+            contexts: deleted || !match ? [] : [entry],
+            next: null,
+          });
+        }
+        if (url.pathname === `/v1/contexts/${fixtureId}/lifecycle`) return json({ context: entry });
+        if (url.pathname === `/v1/contexts/${fixtureId}`) return json({ context: dto });
+        if (url.pathname === '/v1/viewerActions')
+          return json({ resources: [{ type: 'semantic.context', id: fixtureId, viewerActions: [] }] });
+        return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+      }) as typeof fetch,
+    });
+    const api = createContextApi(client, auth);
+    const listed = await api.list(directoryInput({ query: '読者' }));
+    expect(listed.page).toEqual({ kind: 'ready', value: { contexts: [entry], next: null } });
+    const listQuery = new URLSearchParams(calls[0]!.query);
+    expect(calls[0]).toMatchObject({ method: 'GET', path: '/v1/contexts' });
+    expect(listQuery.get('limit')).toBe('20');
+    expect(listQuery.get('deleted')).toBe('false');
+    expect(listQuery.get('query')).toBe('読者');
+    expect((await api.list(directoryInput({ query: '読者', deleted: true }))).page).toEqual({
+      kind: 'ready',
+      value: { contexts: [], next: null },
+    });
+    expect(await api.detail(fixtureId)).toMatchObject({
+      kind: 'ready',
+      value: { context: dto, lifecycle: entry, lifecycleUnavailable: false },
+    });
+    expect(calls.some((call) => call.path === `/v1/contexts/${fixtureId}/lifecycle`)).toBe(true);
+  });
+
   test('product components show real empty/search/permission states, read-only settings and server lifecycle dates in all locales', async () => {
     const en = await Bun.file(new URL('../messages/en.json', import.meta.url)).json();
     const keys = Object.keys(en)

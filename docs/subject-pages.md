@@ -698,12 +698,12 @@ Creation is offered only from native `viewerActions` on the Global `semantic.con
 and restoration use current native actions for that exact resource, never creator history, website scopes or a
 copied authorizer. Global has neither lifecycle action. A missing resolver leaves changes disabled.
 
-The agreed additions are `GET /v1/contexts?query?&limit?&cursor?&deleted? -> {contexts,next}` and
-`GET /v1/contexts/{id}/lifecycle -> {context}`. Each directory entry is exactly
+The generated `GET /v1/contexts` and `GET /v1/contexts/{id}/lifecycle` methods bind the signed-in workspace
+directory and lifecycle reads. Each directory entry is exactly
 `{id,kind,labels,state,deletedAt,purgeAfter}`; labels and lifecycle dates come only from the current authorized
-server response. These methods are visibly unavailable adapters while absent from the generated client, to be
-replaced by the producer's generated bindings on landing. Existing create/read/delete/restore methods are bound
-now. This source and typing delivery is not native Goal completion.
+server response. Create, read, delete and restore remain the existing generated methods. Decision: production
+`/my/contexts` reuses the community twenty-row directory parser and native viewerActions/restore deadlines; it
+does not infer ownership.
 
 Each mutation seals one payload and idempotency key. Unknown outcomes permit only exact replay while retaining the
 draft. Confirmed writes reread native current Context, lifecycle and actions with returned session continuity;

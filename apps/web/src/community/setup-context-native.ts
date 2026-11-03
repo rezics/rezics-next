@@ -23,6 +23,19 @@ const directoryPageSchema = v.strictObject({
   contexts: v.pipe(v.array(directoryEntrySchema), v.maxLength(SETUP_CONTEXT_DIRECTORY_LIMIT)),
   next: v.nullable(v.string()),
 }) satisfies v.GenericSchema<ContextDirectoryPage>;
+const lifecycleSchema = v.strictObject({ context: directoryEntrySchema });
+
+/** Strict GET /v1/contexts page; extra keys or more than twenty rows are unavailable. */
+export function parseNativeContextDirectoryPage(data: unknown): ContextDirectoryPage | null {
+  const parsed = v.safeParse(directoryPageSchema, data);
+  return parsed.success ? parsed.output : null;
+}
+
+/** Strict GET /v1/contexts/{id}/lifecycle body; a directory row is never inferred. */
+export function parseNativeContextLifecycle(data: unknown): ContextDirectoryEntry | null {
+  const parsed = v.safeParse(lifecycleSchema, data);
+  return parsed.success ? parsed.output.context : null;
+}
 export type ContextDirectoryResult = ContextDirectoryPage | { kind: 'denied' | 'unavailable' };
 export type ContextDirectoryInput = { query: string; cursor?: string; signal?: AbortSignal };
 export const setupContextDirectorySchema = v.strictObject({

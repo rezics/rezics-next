@@ -4,16 +4,8 @@ import { checkSubjectStructure } from '@rezics/definitions/validate';
 export type ContextDto = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['contexts']>['get']>>['data']
 >['context'];
-/** Agreed directory/lifecycle addition. Replace this adapter's declarations with the generated producer on landing. */
-export type ContextDirectoryEntry = {
-  id: string;
-  kind: 'global' | 'community';
-  labels: Record<string, string>;
-  state: 'active' | 'deleted';
-  deletedAt: string | null;
-  purgeAfter: string | null;
-};
-export type DirectoryPage = { contexts: ContextDirectoryEntry[]; next: string | null };
+export type DirectoryPage = NonNullable<Awaited<ReturnType<KernelClient['contexts']['get']>>['data']>;
+export type ContextDirectoryEntry = DirectoryPage['contexts'][number];
 export type DirectoryInput = { query?: string; cursor?: string; deleted: boolean; limit: number };
 export type Failure = {
   kind: 'signed-out' | 'denied' | 'missing' | 'invalid' | 'conflict' | 'stale' | 'unavailable' | 'unknown';
