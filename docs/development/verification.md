@@ -100,7 +100,9 @@ Decision: retain the pinned Bun runtime and confine runtime markers; expire inac
 and recognized fixture, browser, randomized `.tmp` and Node cache entries after 24 hours.
 
 The control plane's maintenance timer should invoke `bun scripts/tmp-janitor.ts` hourly once available; use
-`--dry-run` to preview. It examines only entries belonging to its UID with the patterns in
+`--dry-run` to preview. The service needs permission to inspect `/proc`, including nondumpable user daemons; a
+privileged service selects the owner's numeric UID with `--owner-uid=<uid>`. An unprivileged invocation cannot select
+another UID. It examines only entries belonging to the selected UID with the patterns in
 `scripts/tmp-janitor.ts`. It checks both modification and metadata age, including descendants. It preserves
 unrecognized entries, top-level symlinks, foreign-owned descendants, and entries referenced by a live cwd, descriptor,
 memory mapping or inherited temp/cache environment. Failure to inspect a live process of the same UID refuses the

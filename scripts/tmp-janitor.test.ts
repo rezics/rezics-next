@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, closeSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { cleanTemporaryEntries, ownedTemporaryDirectory } from './tmp-janitor.ts';
 import { fixturePool, harness, temporaryDirectory } from '../tools/goal/src/test-support.ts';
@@ -8,9 +8,16 @@ import { workerEnvironment } from '../tools/goal/src/launch.ts';
 import { processGroupRunner } from '../tools/goal/src/merge.ts';
 
 const agedNow = () => Date.now() + 3 * 24 * 60 * 60 * 1000;
+// Keep the real caller's cwd, fds and mappings, independent of host daemons with protected procfs entries.
+function inspectCaller() {
+  const t = temporaryDirectory();
+  symlinkSync('/proc/self', join(t.path, `${process.pid}`));
+  return t.path;
+}
 
 test('janitor removes stale known entries, preserving recent, unknown and symlink entries', () => {
   const t = temporaryDirectory();
+  const processDirectory = inspectCaller();
   const stale = ['.abc123-0.hm', 'node-compile-cache', 'goal-rollout-old', 'rezics-producer-lifecycle-old', '.tmpAb1234', 'playwright_chromiumdev_profile-old'];
   for (const name of stale) {
     const path = join(t.path, name);
@@ -19,19 +26,20 @@ test('janitor removes stale known entries, preserving recent, unknown and symlin
   }
   writeFileSync(join(t.path, 'unrelated'), 'keep');
   symlinkSync(join(t.path, 'unrelated'), join(t.path, 'goal-db-link'));
-  expect(cleanTemporaryEntries({ root: t.path }).removed).toEqual([]);
-  const preview = cleanTemporaryEntries({ root: t.path, now: agedNow(), dryRun: true });
+  expect(cleanTemporaryEntries({ root: t.path, processDirectory }).removed).toEqual([]);
+  const preview = cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow(), dryRun: true });
   expect(preview.errors).toEqual([]);
   expect(preview.removed.map((path) => path.slice(t.path.length + 1)).sort()).toEqual(stale.sort());
   expect(existsSync(join(t.path, stale[0]!))).toBe(true);
-  const result = cleanTemporaryEntries({ root: t.path, now: agedNow() });
+  const result = cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() });
   expect(result.errors).toEqual([]);
   expect(readdirSync(t.path).sort()).toEqual(['goal-db-link', 'unrelated']);
-  expect(cleanTemporaryEntries({ root: t.path, now: agedNow() }).removed).toEqual([]);
+  expect(cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() }).removed).toEqual([]);
 });
 
 test('live cwd, descriptors, hard links and mappings reserve stale trees until released', () => {
   const t = temporaryDirectory();
+  const processDirectory = inspectCaller();
   const busy = join(t.path, 'goal-db-live');
   mkdirSync(busy);
   const file = join(busy, 'open');
@@ -42,11 +50,11 @@ test('live cwd, descriptors, hard links and mappings reserve stale trees until r
   const previous = process.cwd();
   try {
     process.chdir(busy);
-    expect(cleanTemporaryEntries({ root: t.path, now: agedNow() }).removed).toEqual([]);
+    expect(cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() }).removed).toEqual([]);
   } finally { process.chdir(previous); closeSync(fd); }
   // mmap must remain protected after the creating descriptor has closed.
   const mapped = Bun.mmap(file);
-  expect(cleanTemporaryEntries({ root: t.path, now: agedNow() }).removed).toEqual([]);
+  expect(cleanTemporaryEntries({ root: t.path, processDirectory, now: agedNow() }).removed).toEqual([]);
   expect(mapped.toString()).toBe('mapped');
 });
 
@@ -89,7 +97,7 @@ test('a failing test cleans forgotten fixture trees and its invocation scratch d
   const result = spawnSync(process.execPath, ['test', './failure.test.ts'], { cwd: t.path, encoding: 'utf8' });
   expect(result.status).toBe(1);
   expect(result.stderr).toContain('intentional fixture failure');
-  const paths = JSON.parse(require('node:fs').readFileSync(join(t.path, 'paths.json'), 'utf8')) as string[];
+  const paths = JSON.parse(readFileSync(join(t.path, 'paths.json'), 'utf8')) as string[];
   expect(paths.every((path) => !existsSync(path))).toBe(true);
 });
 

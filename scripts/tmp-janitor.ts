@@ -57,7 +57,7 @@ function inode(stat: { dev: number; ino: number }): string {
 }
 
 /** Snapshot references once per pass, rather than scan every PID for each of hundreds of thousands of markers. */
-function processUse(uid: number): Use {
+function processUse(uid: number, processDirectory: string): Use {
   const used: Use = { paths: new Set(), inodes: new Set() };
   const reference = (path: string) => {
     for (let current = path; ; current = dirname(current)) {
@@ -65,9 +65,9 @@ function processUse(uid: number): Use {
       if (dirname(current) === current) break;
     }
   };
-  for (const pid of readdirSync('/proc')) {
+  for (const pid of readdirSync(processDirectory)) {
     if (!/^\d+$/.test(pid)) continue;
-    const directory = join('/proc', pid);
+    const directory = join(processDirectory, pid);
     let own = false;
     try {
       own = statSync(directory).uid === uid;
@@ -119,13 +119,22 @@ function treeUsed(path: string, used: Use, uid: number, cutoff: number): boolean
 export type JanitorResult = { removed: string[]; skipped: string[]; errors: string[] };
 
 /** Only current-UID, recognized, inactive entries qualify. /tmp itself and symlink targets never qualify. */
-export function cleanTemporaryEntries(options: { root?: string; now?: number; dryRun?: boolean } = {}): JanitorResult {
+export function cleanTemporaryEntries(options: {
+  root?: string;
+  now?: number;
+  dryRun?: boolean;
+  ownerUid?: number;
+  /** Isolated procfs view for tests; the CLI always inspects the host's /proc. */
+  processDirectory?: string;
+} = {}): JanitorResult {
   const root = resolve(options.root ?? '/tmp');
   const rootStat = lstatSync(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('tmp-janitor: root must be a real directory');
-  const uid = process.getuid!();
+  const uid = options.ownerUid ?? process.getuid!();
+  if (!Number.isSafeInteger(uid) || uid < 0 || (process.getuid!() !== 0 && uid !== process.getuid!()))
+    throw new Error('tmp-janitor: only root can select a different owner UID');
   const now = options.now ?? Date.now();
-  const used = processUse(uid); // Failure refuses the entire pass before any deletion.
+  const used = processUse(uid, options.processDirectory ?? '/proc'); // Refuse the pass before any deletion on failure.
   const result: JanitorResult = { removed: [], skipped: [], errors: [] };
   for (const name of readdirSync(root)) {
     const rule = temporaryEntryRules.find((rule) => rule.pattern.test(name));
@@ -160,8 +169,13 @@ export function cleanTemporaryEntries(options: { root?: string; now?: number; dr
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  if (args.some((arg) => arg !== '--dry-run')) throw new Error('Usage: bun scripts/tmp-janitor.ts [--dry-run]');
-  const result = cleanTemporaryEntries({ dryRun: args.includes('--dry-run') });
+  const uidArgs = args.filter((arg) => /^--owner-uid=\d+$/.test(arg));
+  if (args.some((arg) => arg !== '--dry-run' && !uidArgs.includes(arg)) || uidArgs.length > 1)
+    throw new Error('Usage: bun scripts/tmp-janitor.ts [--dry-run] [--owner-uid=<uid>]');
+  const result = cleanTemporaryEntries({
+    dryRun: args.includes('--dry-run'),
+    ...(uidArgs.length ? { ownerUid: Number(uidArgs[0]!.split('=')[1]) } : {}),
+  });
   console.log(JSON.stringify(result));
   if (result.errors.length) process.exitCode = 1;
 }
