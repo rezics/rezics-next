@@ -98,7 +98,7 @@ export type BoardOpeningPage = Readonly<{
   anchors: readonly AnchoredPosition[];
 }>;
 
-type BoardOpeningDependencies = ContentBoardDependencies &
+export type BoardOpeningDependencies = ContentBoardDependencies &
   Pick<ContentCommandDependencies, 'realmParticipation' | 'routeKey'> & {
     /** Installed by the conversation-activity producer when its current witness reader is delivered. */
     readConversationActivityBatch?: BoardOpeningActivityReader;
@@ -259,9 +259,11 @@ export function projectBoardOpeningComments(
   return {
     state: 'current',
     cohort: witness.cohort.kind,
-    count: witness.count,
+    // Keep the selected observation independent of a producer's retained objects.
+    // Hydration must compare two observations even if the producer reuses its cache.
+    count: { ...witness.count },
     lastActivityAt: witness.lastActivityAt,
-    source: witness.source,
+    source: { ...witness.source },
   };
 }
 

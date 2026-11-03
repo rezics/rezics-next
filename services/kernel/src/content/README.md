@@ -2603,6 +2603,9 @@ The HTTP response head is `board`, `pinnedThreads`, `threads`, `next`, `rankRefr
 a withheld or unsupported cohort carries `comments: {state:'unavailable'}`. A changed final witness returns
 `503 dependency_unavailable` with no partial page. The existing Web Board reader owns binding this response and review.
 
+Selected count and source values are copied at the producer boundary. A producer refreshing a retained summary
+object cannot change the initial observation used to detect a hydration race.
+
 ### Cost: mounted Board opening envelope
 
 - Touches: The mounted factory runs two `readRealmBoard` observations and two `listBoardOpeningThreads` passes
