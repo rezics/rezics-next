@@ -12,21 +12,13 @@ type Page = { subjects: { id: string }[]; next: string | null; as_of: string };
 type Indexed = {
   _id: string;
   _index: string;
-  _source: {
-    rating_score?: number | null;
-    rating_prior_epoch?: number | null;
-    name_sort: string | null;
-  };
+  _source: { rating_score?: number | null; rating_prior_epoch?: number | null; name_sort: string | null };
 };
 
 function problem(response: HttpResponse, status: number, code: string) {
   expect(response.status, JSON.stringify(response.body)).toBe(status);
   expect(response.headers.get('content-type')).toContain('application/problem+json');
-  expect(response.body).toMatchObject({
-    status,
-    code,
-    request_id: expect.any(String),
-  });
+  expect(response.body).toMatchObject({ status, code, request_id: expect.any(String) });
 }
 function page(response: HttpResponse): Page {
   expect(response.status, JSON.stringify(response.body)).toBe(200);
@@ -68,11 +60,7 @@ async function vote(client: DriverClient, voter: string, subject: Subject, units
   const response = await client.nativeVote(voter, subject.id, units);
   expect(response.status, JSON.stringify(response.body)).toBe(units === null ? 204 : 200);
   if (units !== null) {
-    expect(response.body).toEqual({
-      units,
-      revision: expect.any(Number),
-      at: expect.any(String),
-    });
+    expect(response.body).toEqual({ units, revision: expect.any(Number), at: expect.any(String) });
     expect(response.headers.get('rezics-session-token')).toBeTruthy();
   }
 }
@@ -113,17 +101,9 @@ test('real native votes publish Global scores through the default worker, relay 
     for (const name of ['semantic', 'search']) expect(stats.startedServices[name]).toBeGreaterThan(0);
     expect(stats.searchStarterInvocations).toBe(1);
     const text = `nativerating${randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
-    const query = {
-      text,
-      filter: { type: { in: ['schema:Book'] } },
-      sort: 'rating',
-      limit: 2,
-    };
+    const query = { text, filter: { type: { in: ['schema:Book'] } }, sort: 'rating', limit: 2 };
     const search = (extra: Record<string, unknown> = {}, persona: Persona = 'anonymous') =>
-      driver.request(persona, 'POST', '/v1/subjects:search', {
-        ...query,
-        ...extra,
-      });
+      driver.request(persona, 'POST', '/v1/subjects:search', { ...query, ...extra });
     const base: Subject[] = [];
     for (const label of [
       'Zulu tie',
@@ -151,10 +131,7 @@ test('real native votes publish Global scores through the default worker, relay 
       const response = await fetch(`${process.env.OPENSEARCH_URL}/${owned!.name}subjects/_search`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          size: 25,
-          query: { terms: { id: subjects.map((subject) => subject.id) } },
-        }),
+        body: JSON.stringify({ size: 25, query: { terms: { id: subjects.map((subject) => subject.id) } } }),
         signal: AbortSignal.timeout(10_000),
       });
       expect(response.status).toBe(200);
@@ -233,10 +210,7 @@ test('real native votes publish Global scores through the default worker, relay 
       ] as const) {
         const response = await search({ [key]: value }, persona);
         problem(response, 400, 'invalid_request');
-        expect(response.body.errors).toContainEqual({
-          pointer: `/${key}`,
-          code: 'unknown_field',
-        });
+        expect(response.body.errors).toContainEqual({ pointer: `/${key}`, code: 'unknown_field' });
       }
     }
     // The native persona bearer predates suspension, so the authentication floor rejects it.

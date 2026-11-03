@@ -41,11 +41,7 @@ const result = t.Object(
 );
 export const FactSchema = t.Union([
   t.Object(
-    {
-      kind: t.Literal('item'),
-      id: t.String({ format: 'uuid' }),
-      labels: t.Record(t.String(), t.String()),
-    },
+    { kind: t.Literal('item'), id: t.String({ format: 'uuid' }), labels: t.Record(t.String(), t.String()) },
     object,
   ),
   t.Object({ kind: t.Literal('time'), year: t.Integer() }, object),
@@ -175,20 +171,12 @@ export function searchRoutes<App>(
 ) {
   // A direct Access override without prepare owns its full decision and cannot evaluate domain floors.
   const includeEligibility = !access || typeof access === 'function' || typeof access.prepare === 'function';
-  async function fill<
-    T extends {
-      subjects: { id: string; type: string; labels: Record<string, string> }[];
-    },
-  >(
+  async function fill<T extends { subjects: { id: string; type: string; labels: Record<string, string> }[] }>(
     page: T,
     authorize: (resource: Resource) => Promise<AccessCheck>,
     languages: readonly string[] = [],
     active: Awaited<ReturnType<typeof activeRelease>> | undefined = undefined,
-  ): Promise<
-    Omit<T, 'subjects'> & {
-      subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[];
-    }
-  > {
+  ): Promise<Omit<T, 'subjects'> & { subjects: (T['subjects'][number] & { summary: SubjectSummary | null })[] }> {
     active = active === undefined ? await activeRelease(pool) : active;
     const summaries = active
       ? await readSubjectSummaries(
@@ -199,11 +187,7 @@ export function searchRoutes<App>(
             release: active.release,
             authorize: summaryAuthorization(async (id, batch) => {
               const route = routeOf(id)!;
-              return authorize({
-                route,
-                id,
-                eligibility: relatedReadEligibility({ route, id }, batch),
-              });
+              return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
             }),
           },
           page.subjects.map((subject) => subject.id),
@@ -212,30 +196,19 @@ export function searchRoutes<App>(
       : new Map();
     return {
       ...page,
-      subjects: page.subjects.map((subject) => ({
-        ...subject,
-        summary: summaries.get(subject.id) ?? null,
-      })),
+      subjects: page.subjects.map((subject) => ({ ...subject, summary: summaries.get(subject.id) ?? null })),
     };
   }
   function publicBases<
     T extends {
-      subjects: {
-        id: string;
-        type: string;
-        labels: Record<string, string>;
-        summary: SubjectSummary | null;
-      }[];
+      subjects: { id: string; type: string; labels: Record<string, string>; summary: SubjectSummary | null }[];
     },
   >(
     page: T,
     languages: readonly string[],
     active: Awaited<ReturnType<typeof activeRelease>>,
   ): Omit<T, 'subjects'> & {
-    subjects: (T['subjects'][number] & {
-      kind: string;
-      base: SearchHttpBase;
-    })[];
+    subjects: (T['subjects'][number] & { kind: string; base: SearchHttpBase })[];
   } {
     return {
       ...page,
@@ -254,10 +227,7 @@ export function searchRoutes<App>(
             image: subject.summary?.cover
               ? {
                   ...subject.summary.cover,
-                  aspect: {
-                    width: subject.summary.cover.width,
-                    height: subject.summary.cover.height,
-                  },
+                  aspect: { width: subject.summary.cover.width, height: subject.summary.cover.height },
                 }
               : null,
             url: { id: subject.id, label: title },
@@ -311,10 +281,7 @@ export function searchRoutes<App>(
           const outcome = await trending.read(query.language, query.limit);
           if (outcome.status !== 'ready')
             throw new ProblemError('semantic_not_ready', {
-              headers: {
-                'retry-after': '1',
-                'cache-control': 'private, no-store',
-              },
+              headers: { 'retry-after': '1', 'cache-control': 'private, no-store' },
             });
           return outcome.page;
         });
@@ -330,11 +297,7 @@ export function searchRoutes<App>(
               t.Object(
                 {
                   limit: t.Integer({ minimum: 1, maximum: 8 }),
-                  cursor: t.Optional(
-                    t.String({
-                      maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength,
-                    }),
-                  ),
+                  cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
                 },
                 object,
               ),
@@ -380,16 +343,11 @@ export function searchRoutes<App>(
       ({ body, authorize, admission, job, actor, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
-          throw new ProblemError('unsupported_query', {
-            errors: [{ pointer: '/population', code: 'unsupported' }],
-          });
+          throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
         async function prepare(): Promise<AccessCheck> {
           if (
             body.representation === 'discovery-v1'
-              ? requiresAdvancedDiscoverySearch({
-                  ...body,
-                  representation: 'discovery-v1',
-                })
+              ? requiresAdvancedDiscoverySearch({ ...body, representation: 'discovery-v1' })
               : requiresAdvancedSearch(body)
           )
             await admitGroup({
@@ -412,16 +370,10 @@ export function searchRoutes<App>(
           const check = await prepare();
           return admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-            if (!discovery)
-              throw new ProblemError('index_not_ready', {
-                headers: { 'retry-after': '1' },
-              });
+            if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const ownerAccess: Access | undefined =
               gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
-            if (!ownerAccess)
-              throw new ProblemError('index_not_ready', {
-                headers: { 'retry-after': '1' },
-              });
+            if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             return discoveryHttpPage(
               await discovery(
                 actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
@@ -439,10 +391,7 @@ export function searchRoutes<App>(
               throw new ProblemError('invalid_request', {
                 errors: [{ pointer: '/representation', code: 'invalid_format' }],
               });
-            if (!search)
-              throw new ProblemError('index_not_ready', {
-                headers: { 'retry-after': '1' },
-              });
+            if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             let completed: SearchHttpResponse | undefined;
             await search.search(
@@ -461,10 +410,7 @@ export function searchRoutes<App>(
                 },
               },
             );
-            if (!completed)
-              throw new ProblemError('index_not_ready', {
-                headers: { 'retry-after': '1' },
-              });
+            if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             await trending.submitted(actor, body);
             return completed;
           });
@@ -485,11 +431,7 @@ export function searchRoutes<App>(
                 {
                   property: t.String(),
                   size: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
-                  cursor: t.Optional(
-                    t.String({
-                      maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength,
-                    }),
-                  ),
+                  cursor: t.Optional(t.String({ maxLength: LIST_CURSOR_BOUNDS.search.maxTokenLength })),
                 },
                 object,
               ),
@@ -523,10 +465,7 @@ export function searchRoutes<App>(
         });
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-          if (!search)
-            throw new ProblemError('index_not_ready', {
-              headers: { 'retry-after': '1' },
-            });
+          if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           return search.facets(
             actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
             body,
@@ -565,19 +504,14 @@ export function searchRoutes<App>(
       },
       async ({ query, authorize, admission, job }) => {
         if (query.limit !== undefined && (query.limit < 1 || query.limit > 10))
-          throw new ProblemError('invalid_request', {
-            errors: [{ pointer: '/limit', code: 'out_of_range' }],
-          });
+          throw new ProblemError('invalid_request', { errors: [{ pointer: '/limit', code: 'out_of_range' }] });
         const check = await authorize({
           ...resource,
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
-          if (!search)
-            throw new ProblemError('index_not_ready', {
-              headers: { 'retry-after': '1' },
-            });
+          if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           let completed: Static<typeof suggestResponse> | undefined;
           await search.suggest(query.q, query.limit, query.languages, {
             deadline: job.deadline,
@@ -585,10 +519,7 @@ export function searchRoutes<App>(
               completed = await fill(page, authorize, query.languages);
             },
           });
-          if (!completed)
-            throw new ProblemError('index_not_ready', {
-              headers: { 'retry-after': '1' },
-            });
+          if (!completed) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
           return completed;
         });
       },

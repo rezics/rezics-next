@@ -24,12 +24,7 @@ afterEach(async () => {
 const search = (body: unknown, persona: Persona = 'anonymous') =>
   driver!.request(persona, 'POST', '/v1/subjects:search', body);
 const typeFilter = (type = 'schema:Book') => ({ type: { in: [type] } });
-const query = () => ({
-  text: marker,
-  filter: typeFilter(),
-  sort: 'rating',
-  limit: 2,
-});
+const query = () => ({ text: marker, filter: typeFilter(), sort: 'rating', limit: 2 });
 
 function problem(response: HttpResponse, status: number, code: string) {
   expect(response.status).toBe(status);
@@ -127,14 +122,7 @@ async function fixtures() {
   // projection/composition failure from missing rating admission.
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {
-    const indexed = page(
-      await search({
-        text: `${marker} | ${marker}outside`,
-        sort: 'name',
-        limit: 100,
-      }),
-      100,
-    );
+    const indexed = page(await search({ text: `${marker} | ${marker}outside`, sort: 'name', limit: 100 }), 100);
     if (all.every((subject) => indexed.subjects.some((item) => item.id === subject.id))) {
       ready = true;
       break;
