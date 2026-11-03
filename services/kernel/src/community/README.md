@@ -1801,6 +1801,7 @@ writer, asset picker or upload/lifecycle engine here.
   timestamp, nonnegative int64 security revision, digest and constrained float4 focal coordinates
   are finite native scalars. Credit is always null here; no rights/provenance document is read.
   These are acquisition field ceilings, not a whole-operation memory or serialization ceiling.
+
 - **Selected rules:** each of the two complete owner calls prepares one batched decisions object
   (`E=1+d+i+o+r<=5` SQL per invocation, with producer costs still charged), then takes two
   source/body snapshots. A complete snapshot has `H+8+e+B` local statements, `H<=33` ancestor

@@ -62,10 +62,12 @@ test.serial(
     // Historical optional metadata must be bounded at acquisition, while the
     // valid image, selected keys and current descriptor grants remain usable.
     const route = routeOf(avatar.id)!;
-    const original = (await f.base.db.admin.query(
-      'SELECT thumbhash, average_color FROM content.media WHERE route=$1 AND media_id=$2',
-      [route, avatar.id],
-    )).rows[0];
+    const original = (
+      await f.base.db.admin.query('SELECT thumbhash, average_color FROM content.media WHERE route=$1 AND media_id=$2', [
+        route,
+        avatar.id,
+      ])
+    ).rows[0];
     try {
       for (const size of [32, 33, 65_536]) {
         await f.base.db.admin.query(
