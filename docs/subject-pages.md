@@ -906,6 +906,37 @@ semantics stay with their existing Goal; missing producer capability is named un
 predecessor/successor IDs are configuration until this release admits them; Semantic owns configuration and Imports owns
 identity/source mapping.
 
+### Ordinary Organization history
+
+The ordinary Organization overview reads history without entering the People editor. It names the released grain,
+retains multilingual descriptions, and groups admitted authored/text facts, dates and outgoing organization or credit
+relations. The People profile read and biography affiliation model remain shared with correction; the producer model
+binds requested predecessor, successor and parent descriptors. Unconfigured predicates are unsupported, not empty
+history. An admitted field with no assertions is empty; an independently concealed destination is withheld; a missing
+native document presentation is unavailable. No date, label, redirect or repeated credit creates an inferred edge.
+
+Each assertion can open its rank, original statement identity/revision, start/end qualifiers and grouped citations.
+Partial date precision remains with the native value. Exact disclosed destination identities use the existing public
+Subject visit return to Connections; the originating overview remains reachable without a nested return chain.
+Inspection returns focus to its surviving opener and offers the existing exact statement correction address. Facts,
+Relations and Works remain the full reading/correction routes and own their native continuation and command recovery.
+Replacing the source, locale, provider, session observation or exposure retires values, links, open inspection and its
+return controls. Delayed profile reads cannot revive them; authority retirement needs a fresh Subject observation.
+
+Decision: the ordinary overview uses one fresh shared People profile observation, and delegates inverse relations and
+continuation to the existing Relations/Works readers rather than inferring incoming edges from outgoing facts.
+
+**Cost:** One People profile read per admitted composition observation (one Subject GET and the existing active
+definition pointer/release GETs), with one request in flight; no per-row hydration, session/exposure reads, commands,
+polling or automatic retries. Explicit retry repeats only that observation. The accepted public response is at most
+2 MiB of serialized UTF-8 JSON; admission temporarily serializes it once. At most 32 released fields and 20 assertions
+per field are presented, with at most 32 qualifiers, 16 reference groups and 16 parts per group per assertion. An
+oversized assertion is withheld intact and the overview explicitly directs the reader to full facts/relations.
+Only one evidence inspection and its opener are retained; no continuation history or private draft is held. Work is
+O(released fields + accepted public bytes); retained UI references share the one admitted public response and release.
+JSON/string/object overhead remains additional memory. Locale strings wrap and all actions have 44px targets in the
+existing phone390/desktop1280 theme layouts. Source stories are illustrative, not native or browser verification.
+
 ## Statement consent
 
 The relation editor uses the released `disclosure: sourceOrConsent` annotation. For an unsourced assertion,

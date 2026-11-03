@@ -7817,5 +7817,15 @@
   "person_reader_correct": "提出更正",
   "person_reader_statement": "陈述详情",
   "person_reader_more": "阅读全部当前信息",
-  "person_reader_return": "返回人物传记"
+  "person_reader_return": "返回人物传记",
+  "organization_reader_title": "组织沿革",
+  "organization_reader_intro": "阅读已发布的沿革、日期及从本组织指向其他对象的关系。未配置不代表没有沿革。",
+  "organization_reader_unavailable": "当前组织信息已不可用。请重新加载对象。",
+  "organization_reader_no_citation": "此陈述未提供引文。",
+  "organization_reader_identity": "陈述标识与修订版本",
+  "organization_reader_direction": "方向：本组织 → 陈述所指对象。",
+  "organization_reader_inspect": "查看日期与来源",
+  "organization_reader_return": "返回沿革",
+  "organization_reader_no_fields": "尚未配置原生沿革字段。请通过事实与关系查看受支持的信息。",
+  "organization_reader_bounded": "此概览的显示范围有限。请打开事实或关系查看其余信息。"
 }

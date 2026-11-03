@@ -7817,5 +7817,15 @@
   "person_reader_correct": "Proposer des corrections",
   "person_reader_statement": "Détails de l’assertion",
   "person_reader_more": "Lire toutes les informations actuelles",
-  "person_reader_return": "Revenir à la biographie"
+  "person_reader_return": "Revenir à la biographie",
+  "organization_reader_title": "Histoire de l’organisation",
+  "organization_reader_intro": "Consultez l’histoire, les dates et les affiliations sortantes publiées. Une configuration absente ne prouve pas l’absence d’histoire.",
+  "organization_reader_unavailable": "Cette lecture n’est plus disponible. Rechargez le sujet.",
+  "organization_reader_no_citation": "Aucune citation n’est fournie pour cette affirmation.",
+  "organization_reader_identity": "Identité et révision de l’affirmation",
+  "organization_reader_direction": "Direction : cette organisation → destination indiquée.",
+  "organization_reader_inspect": "Consulter les dates et les sources",
+  "organization_reader_return": "Revenir à l’histoire",
+  "organization_reader_no_fields": "Aucun champ d’histoire natif n’est configuré. Consultez les faits et les relations disponibles.",
+  "organization_reader_bounded": "Cet aperçu est limité. Ouvrez les faits ou les relations pour consulter la suite."
 }

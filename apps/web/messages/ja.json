@@ -7817,5 +7817,15 @@
   "person_reader_correct": "修正を提案",
   "person_reader_statement": "記述の詳細",
   "person_reader_more": "現在の情報をすべて読む",
-  "person_reader_return": "略歴に戻る"
+  "person_reader_return": "略歴に戻る",
+  "organization_reader_title": "組織の沿革",
+  "organization_reader_intro": "公開された沿革、日付、組織からの関係を読みます。未設定であることは、沿革が存在しないことを意味しません。",
+  "organization_reader_unavailable": "この組織の情報は現在利用できません。対象を再読み込みしてください。",
+  "organization_reader_no_citation": "この記述には出典がありません。",
+  "organization_reader_identity": "記述の識別子とリビジョン",
+  "organization_reader_direction": "方向：この組織 → 記述された対象。",
+  "organization_reader_inspect": "日付と出典を確認",
+  "organization_reader_return": "沿革に戻る",
+  "organization_reader_no_fields": "沿革の項目は設定されていません。対応している情報は事実と関係から確認できます。",
+  "organization_reader_bounded": "この概要の表示件数には上限があります。残りは事実または関係を開いて確認してください。"
 }

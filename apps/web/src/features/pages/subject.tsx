@@ -19,6 +19,7 @@ import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
+import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
@@ -749,6 +750,17 @@ export function SubjectPage({
                 locale={locale}
                 public={composedSubjectRead(read)}
                 bounds={boundedProfileRelations(page)}
+                link={ContextLink}
+              />
+            ) : null}
+            {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (
+              <OrganizationOverview
+                id={read.subject.id}
+                context={read.subject.context}
+                source={page}
+                locale={locale}
+                reader={page.requestedReader ?? null}
+                realm={realm}
                 link={ContextLink}
               />
             ) : null}

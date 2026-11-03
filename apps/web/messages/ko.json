@@ -7817,5 +7817,15 @@
   "person_reader_correct": "수정 제안",
   "person_reader_statement": "진술 세부 정보",
   "person_reader_more": "현재 정보 모두 읽기",
-  "person_reader_return": "약력으로 돌아가기"
+  "person_reader_return": "약력으로 돌아가기",
+  "organization_reader_title": "단체 연혁",
+  "organization_reader_intro": "공개된 연혁, 날짜와 단체에서 나가는 관계를 읽습니다. 설정이 없다고 연혁이 없는 것은 아닙니다.",
+  "organization_reader_unavailable": "이 단체 정보는 더 이상 표시할 수 없습니다. 대상을 다시 불러오세요.",
+  "organization_reader_no_citation": "이 진술에는 인용 출처가 없습니다.",
+  "organization_reader_identity": "진술 식별자와 리비전",
+  "organization_reader_direction": "방향: 이 단체 → 명시된 대상.",
+  "organization_reader_inspect": "날짜와 출처 확인",
+  "organization_reader_return": "연혁으로 돌아가기",
+  "organization_reader_no_fields": "연혁 항목이 설정되지 않았습니다. 지원되는 정보는 사실과 관계에서 확인하세요.",
+  "organization_reader_bounded": "이 개요의 표시 범위는 제한됩니다. 나머지는 사실이나 관계를 열어 확인하세요."
 }

@@ -7817,5 +7817,15 @@
   "person_reader_correct": "Korrekturen vorschlagen",
   "person_reader_statement": "Details zur Aussage",
   "person_reader_more": "Alle aktuellen Angaben lesen",
-  "person_reader_return": "Zur Biografie zurückkehren"
+  "person_reader_return": "Zur Biografie zurückkehren",
+  "organization_reader_title": "Organisationsgeschichte",
+  "organization_reader_intro": "Veröffentlichte Geschichte, Daten und ausgehende Verbindungen lesen. Fehlende Konfiguration bedeutet nicht, dass keine Geschichte existiert.",
+  "organization_reader_unavailable": "Diese Organisationsansicht ist nicht mehr verfügbar. Laden Sie das Subjekt erneut.",
+  "organization_reader_no_citation": "Für diese Aussage ist keine Quelle angegeben.",
+  "organization_reader_identity": "Identität und Revision der Aussage",
+  "organization_reader_direction": "Richtung: diese Organisation → angegebenes Ziel.",
+  "organization_reader_inspect": "Daten und Quellen prüfen",
+  "organization_reader_return": "Zur Geschichte zurück",
+  "organization_reader_no_fields": "Keine nativen Geschichtsfelder sind konfiguriert. Unterstützte Angaben stehen unter Fakten und Beziehungen.",
+  "organization_reader_bounded": "Diese Übersicht ist begrenzt. Weitere Angaben finden Sie unter Fakten und Beziehungen."
 }
