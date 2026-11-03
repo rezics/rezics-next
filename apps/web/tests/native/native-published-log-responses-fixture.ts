@@ -18,7 +18,11 @@ export const nativePublishedLogResponseHeaderAllowlist = [
 ] as const;
 
 export type NativePublishedLogResponsePersona = 'alice' | 'bob' | 'anonymous';
-export type NativePublishedLogReviewSurface = 'owner-log-history' | 'public-log-reader' | 'private-source' | 'publish-command';
+export type NativePublishedLogReviewSurface =
+  | 'owner-log-history'
+  | 'public-log-reader'
+  | 'private-source'
+  | 'publish-command';
 
 type ScenarioDescriptor = Readonly<{
   surface: NativePublishedLogReviewSurface;
@@ -209,14 +213,16 @@ export const nativePublishedLogResponseScenarioManifest = {
     state: 'restore-expired',
     persona: 'alice',
     availability: 'unavailable',
-    binding: 'No supported native clock and retention workflow in this fixture can advance a real deletion beyond its restore window.',
+    binding:
+      'No supported native clock and retention workflow in this fixture can advance a real deletion beyond its restore window.',
   },
   restoreHistorical: {
     surface: 'public-log-reader',
     state: 'restore-historical-source',
     persona: 'alice',
     availability: 'unavailable',
-    binding: 'No supported native command in this fixture can detach or destroy the private source while retaining the public snapshot.',
+    binding:
+      'No supported native command in this fixture can detach or destroy the private source while retaining the public snapshot.',
   },
 } as const satisfies Readonly<Record<string, ScenarioDescriptor>>;
 
@@ -296,7 +302,8 @@ function responseBodyRecord(response: NativePublishedLogResponse, label: string)
 function nestedRecord(value: unknown, key: string, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} was not an object`);
   const nested = (value as Record<string, unknown>)[key];
-  if (!nested || typeof nested !== 'object' || Array.isArray(nested)) throw new Error(`${label}.${key} was not an object`);
+  if (!nested || typeof nested !== 'object' || Array.isArray(nested))
+    throw new Error(`${label}.${key} was not an object`);
   return nested as Record<string, unknown>;
 }
 
@@ -319,11 +326,17 @@ function parseResponseBody(bodyText: string): unknown {
   }
 }
 
-function requiredHeader(call: NativePublishedLogCall, name: (typeof nativePublishedLogResponseHeaderAllowlist)[number]): string {
+function requiredHeader(
+  call: NativePublishedLogCall,
+  name: (typeof nativePublishedLogResponseHeaderAllowlist)[number],
+): string {
   return requiredString(call.response.headers[name], `Native ${call.command.method} ${call.command.path} ${name}`);
 }
 
-function headerInteger(call: NativePublishedLogCall, name: (typeof nativePublishedLogResponseHeaderAllowlist)[number]): number {
+function headerInteger(
+  call: NativePublishedLogCall,
+  name: (typeof nativePublishedLogResponseHeaderAllowlist)[number],
+): number {
   const value = Number(requiredHeader(call, name));
   return requiredInteger(value, `Native ${call.command.method} ${call.command.path} ${name}`);
 }
@@ -354,8 +367,7 @@ async function nativeIdentity(): Promise<NativePublishedLogResponseManifest['ide
   const statusResult = Bun.spawnSync({ cmd: ['git', 'status', '--porcelain'], cwd: root });
   const revisionText = revisionResult.exitCode === 0 ? revisionResult.stdout.toString().trim() : '';
   const revision = /^[0-9a-f]{40}$/i.test(revisionText) ? revisionText : null;
-  const clean =
-    revision !== null && statusResult.exitCode === 0 && statusResult.stdout.toString().trim().length === 0;
+  const clean = revision !== null && statusResult.exitCode === 0 && statusResult.stdout.toString().trim().length === 0;
   return {
     source: { repository: 'rezics', revision, clean },
     build: {
@@ -465,10 +477,15 @@ export async function createNativePublishedLogResponseFixture(): Promise<NativeP
     );
 
     keys.recordSourceProgress = idempotencyKey();
-    const recordSource = await perform('POST', `/v1/progressSessions/${encodeURIComponent(sourceSessionId)}:record`, 'alice', {
-      body: { revision: revisions.sourceCreated, amount: '125' },
-      idempotencyKey: keys.recordSourceProgress,
-    });
+    const recordSource = await perform(
+      'POST',
+      `/v1/progressSessions/${encodeURIComponent(sourceSessionId)}:record`,
+      'alice',
+      {
+        body: { revision: revisions.sourceCreated, amount: '125' },
+        idempotencyKey: keys.recordSourceProgress,
+      },
+    );
     requireStatus(recordSource, 200, 'Private source progress recording');
     revisions.sourceCurrent = requiredInteger(
       nestedRecord(recordSource.response.body, 'progressSession', 'Private source progress recording').revision,

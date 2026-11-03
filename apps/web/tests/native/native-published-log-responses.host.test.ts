@@ -66,7 +66,16 @@ function rawJson(bodyText: string): unknown {
 
 function assertNoPrivateSourceFields(response: NativePublishedLogResponse): void {
   const publishedLog = nested(response.body, 'publishedLog', 'Public log response');
-  for (const field of ['amount', 'completedUnitCount', 'locator', 'position', 'progressSession', 'sessionId', 'total', 'unit'])
+  for (const field of [
+    'amount',
+    'completedUnitCount',
+    'locator',
+    'position',
+    'progressSession',
+    'sessionId',
+    'total',
+    'unit',
+  ])
     expect(publishedLog).not.toHaveProperty(field);
 }
 
@@ -105,22 +114,32 @@ describe('native published-log response bindings', () => {
       expect(call.response.path).toBe(call.command.path);
       expect(call.response.persona).toBe(call.command.persona);
       expect(call.response.body).toEqual(rawJson(call.response.bodyText));
-      expect(Object.keys(call.response.headers).every((name) =>
-        (nativePublishedLogResponseHeaderAllowlist as readonly string[]).includes(name),
-      )).toBe(true);
+      expect(
+        Object.keys(call.response.headers).every((name) =>
+          (nativePublishedLogResponseHeaderAllowlist as readonly string[]).includes(name),
+        ),
+      ).toBe(true);
       expect(Object.keys(call.command.input).sort()).toEqual(
-        call.command.input.bodyText === null
-          ? ['bodyText', 'idempotencyKey']
-          : ['body', 'bodyText', 'idempotencyKey'],
+        call.command.input.bodyText === null ? ['bodyText', 'idempotencyKey'] : ['body', 'bodyText', 'idempotencyKey'],
       );
       if (call.command.input.bodyText !== null)
         expect(JSON.stringify(call.command.input.body)).toBe(call.command.input.bodyText);
     }
 
-    for (const name of ['publish', 'delete', 'restore', 'occupiedRestore', 'deleteAgain', 'staleRestore', 'finalRestore']) {
+    for (const name of [
+      'publish',
+      'delete',
+      'restore',
+      'occupiedRestore',
+      'deleteAgain',
+      'staleRestore',
+      'finalRestore',
+    ]) {
       expect(fixture.manifest.commandKeys[name]).toMatch(/^"[0-9a-f-]{36}"$/i);
     }
-    expect(new Set(Object.values(fixture.manifest.commandKeys)).size).toBe(Object.keys(fixture.manifest.commandKeys).length);
+    expect(new Set(Object.values(fixture.manifest.commandKeys)).size).toBe(
+      Object.keys(fixture.manifest.commandKeys).length,
+    );
   });
 
   test('keeps the current private source separate from public readers through delete and restore', () => {
@@ -143,9 +162,15 @@ describe('native published-log response bindings', () => {
     });
 
     const privateScenarios = [
-      'sourceOwnerBeforeDelete', 'sourceOtherBeforeDelete', 'sourceAnonymousBeforeDelete',
-      'sourceOwnerWhileHidden', 'sourceOtherWhileHidden', 'sourceAnonymousWhileHidden',
-      'sourceOwnerAfterRestore', 'sourceOtherAfterRestore', 'sourceAnonymousAfterRestore',
+      'sourceOwnerBeforeDelete',
+      'sourceOtherBeforeDelete',
+      'sourceAnonymousBeforeDelete',
+      'sourceOwnerWhileHidden',
+      'sourceOtherWhileHidden',
+      'sourceAnonymousWhileHidden',
+      'sourceOwnerAfterRestore',
+      'sourceOtherAfterRestore',
+      'sourceAnonymousAfterRestore',
     ] as const;
     for (const scenario of privateScenarios) {
       const call = callFor(scenario);
@@ -164,8 +189,12 @@ describe('native published-log response bindings', () => {
     }
 
     const publicScenarios = [
-      'publicOwnerBeforeDelete', 'publicOtherBeforeDelete', 'publicAnonymousBeforeDelete',
-      'publicOwnerAfterRestore', 'publicOtherAfterRestore', 'publicAnonymousAfterRestore',
+      'publicOwnerBeforeDelete',
+      'publicOtherBeforeDelete',
+      'publicAnonymousBeforeDelete',
+      'publicOwnerAfterRestore',
+      'publicOtherAfterRestore',
+      'publicAnonymousAfterRestore',
     ] as const;
     for (const scenario of publicScenarios) {
       const call = callFor(scenario);
@@ -178,7 +207,11 @@ describe('native published-log response bindings', () => {
       assertNoPrivateSourceFields(call.response);
     }
 
-    for (const scenario of ['publicOwnerWhileHidden', 'publicOtherWhileHidden', 'publicAnonymousWhileHidden'] as const) {
+    for (const scenario of [
+      'publicOwnerWhileHidden',
+      'publicOtherWhileHidden',
+      'publicAnonymousWhileHidden',
+    ] as const) {
       const call = callFor(scenario);
       expect(call.response.status).toBe(200);
       const hidden = nested(call.response.body, 'publishedLog', scenario);
@@ -213,8 +246,12 @@ describe('native published-log response bindings', () => {
     expect(finalBeforeIds).toHaveLength(1);
     expect(object(finalBefore.response.body, 'Owner history final page before delete').next).toBeNull();
     expect(finalBefore.command.persona).toBe('alice');
-    expect(new URL(firstBefore.command.path, 'https://kernel.invalid').searchParams.get('accountId')).toBe(aliceAccountId);
-    expect(new URL(finalBefore.command.path, 'https://kernel.invalid').searchParams.get('accountId')).toBe(aliceAccountId);
+    expect(new URL(firstBefore.command.path, 'https://kernel.invalid').searchParams.get('accountId')).toBe(
+      aliceAccountId,
+    );
+    expect(new URL(finalBefore.command.path, 'https://kernel.invalid').searchParams.get('accountId')).toBe(
+      aliceAccountId,
+    );
     expect(new URL(finalBefore.command.path, 'https://kernel.invalid').searchParams.get('cursor')).toBe(beforeCursor);
     const beforeIds = [...firstBeforeIds, ...finalBeforeIds];
     expect(new Set(beforeIds).size).toBe(101);
@@ -240,7 +277,9 @@ describe('native published-log response bindings', () => {
     expect(new URL(finalAfter.command.path, 'https://kernel.invalid').searchParams.get('cursor')).toBe(afterCursor);
     expect([...firstAfterIds, ...finalAfterIds]).toEqual(beforeIds);
 
-    for (const call of fixture.manifest.calls.filter(({ command }) => command.method === 'GET' && command.path.startsWith('/v1/publishedLogs/'))) {
+    for (const call of fixture.manifest.calls.filter(
+      ({ command }) => command.method === 'GET' && command.path.startsWith('/v1/publishedLogs/'),
+    )) {
       expect(new URL(call.command.path, 'https://kernel.invalid').searchParams.has('cursor')).toBe(false);
       expect(object(call.response.body, 'Public log response')).not.toHaveProperty('next');
     }
