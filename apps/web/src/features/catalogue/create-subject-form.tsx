@@ -133,6 +133,7 @@ function CreateSubjectFormLive({
   profile,
   onCreated,
   navigation,
+  typeAdmission,
 }: {
   profile?: {
     title: string;
@@ -158,6 +159,11 @@ function CreateSubjectFormLive({
   onCreated?: (result: Created) => void;
   /** A containing workspace composes creation state into its shared departure decision. */
   navigation?: (state: Parameters<typeof CreateSubjectLifetime>[0]) => ReactNode;
+  typeAdmission?: {
+    offered?: readonly CreateType[];
+    unavailable?: readonly string[];
+    admitType?: (type: CreateType) => boolean;
+  };
 }) {
   const lifetime = useEditorLifetime();
   const options = { locale: locale as never };
@@ -583,6 +589,9 @@ function CreateSubjectFormLive({
                         if (nextType) setFailure(undefined);
                       }}
                       onPendingChange={setDirectoryPending}
+                      {...(typeAdmission?.offered ? { offered: typeAdmission.offered } : {})}
+                      {...(typeAdmission?.unavailable ? { unavailable: typeAdmission.unavailable } : {})}
+                      {...(typeAdmission?.admitType ? { admitType: typeAdmission.admitType } : {})}
                     />
                     <FieldDescription id="create-grain">{m.catalogue_create_grain({}, options)}</FieldDescription>
                   </div>

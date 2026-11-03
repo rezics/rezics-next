@@ -37,6 +37,11 @@ export const catalogueEntries = {
     label: m.catalogue_create_title({}, options(locale)),
     href: `/${locale}/catalogue/new`,
   }),
+  relatedWorkCreate: ({ locale, token }: Locale & { token: string }): CatalogueEntry => ({
+    group: 'create',
+    label: m.catalogue_create_title({}, options(locale)),
+    href: `/${locale}/catalogue/new?relatedWorkHandoff=${encodeURIComponent(token)}`,
+  }),
   authored: ({ id, title, locale }: Locale & { id: string; title: string }): CatalogueEntry => ({
     group: 'edit',
     label: m.authored_title({}, options(locale)),

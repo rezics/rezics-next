@@ -14,6 +14,8 @@ export type CreateType = {
   description: string;
   labelLanguage?: string;
   descriptionLanguage?: string;
+  /** Structural bases from the exact Type descriptor; admission consumers do not invent them. */
+  bases?: string[];
 };
 export type CreateDefinitions = { ok: true; types: CreateType[] } | { ok: false };
 export type TypeDirectoryQuery = { query?: string; typeId?: string; cursor?: string };
@@ -45,18 +47,25 @@ export type TermDraft = { language: string; label: string; description: string; 
 
 /** Labels/help come from emitted metadata. Data-language choices never relabel the definitions. */
 export function createTypes(
-  release: { types: Record<string, { labels?: Record<string, string>; descriptions?: Record<string, string> }> },
+  release: {
+    types: Record<
+      string,
+      { labels?: Record<string, string>; descriptions?: Record<string, string>; bases?: readonly string[] }
+    >;
+  },
   locale: string,
 ): CreateType[] {
   return Object.entries(release.types)
     .flatMap(([id, definition]) => {
       const label = pickText(definition.labels ?? {}, locale).text;
       if (!label) return [];
+      const bases = (definition.bases ?? []).filter((base) => typeof base === 'string' && base.length > 0);
       return [
         {
           id,
           label,
           description: pickText(definition.descriptions ?? {}, locale).text,
+          ...(bases.length ? { bases } : {}),
         },
       ];
     })

@@ -56,6 +56,10 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relation-edit')({
       typeof search.creditHandoff === 'string' && /^[0-9a-f-]{36}$/i.test(search.creditHandoff)
         ? search.creditHandoff
         : undefined,
+    relatedWorkHandoff:
+      typeof search.relatedWorkHandoff === 'string' && /^[0-9a-f-]{36}$/i.test(search.relatedWorkHandoff)
+        ? search.relatedWorkHandoff
+        : undefined,
   }),
   loaderDeps: ({ search }) => ({ realm: search.realm }),
   loader: ({ params, deps, location }) =>
@@ -73,7 +77,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relation-edit')({
 });
 function RelationEditRoute() {
   const { page, frame, supported } = Route.useLoaderData();
-  const { creditHandoff } = Route.useSearch();
+  const { creditHandoff, relatedWorkHandoff } = Route.useSearch();
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8">
       <SubjectFrame
@@ -87,10 +91,11 @@ function RelationEditRoute() {
       />
       {supported ? (
         <RelationEditorSession
-          key={`${frame.id}:${creditHandoff ?? ''}`}
+          key={`${frame.id}:${creditHandoff ?? ''}:${relatedWorkHandoff ?? ''}`}
           id={frame.id}
           locale={getLocale()}
           {...(creditHandoff ? { creditHandoffToken: creditHandoff } : {})}
+          {...(relatedWorkHandoff ? { relatedWorkHandoffToken: relatedWorkHandoff } : {})}
         />
       ) : (
         <p>{m.relation_context()}</p>

@@ -14,19 +14,27 @@ import {
 } from './type-directory-client';
 export type { TypeDirectoryDescriptor } from './type-directory-client';
 
-function createType(summary: {
-  typeId: string;
-  label: string;
-  language: string | null;
-  description: string | null;
-  descriptionLanguage: string | null;
-}): CreateType {
+function createType(
+  summary: {
+    typeId: string;
+    label: string;
+    language: string | null;
+    description: string | null;
+    descriptionLanguage: string | null;
+  },
+  definition?: Record<string, unknown>,
+): CreateType {
+  const listed = definition?.bases;
+  const bases = Array.isArray(listed)
+    ? listed.filter((base): base is string => typeof base === 'string' && base.length > 0 && base.length <= 256)
+    : [];
   return {
     id: summary.typeId,
     label: summary.label,
     ...(summary.language ? { labelLanguage: summary.language } : {}),
     description: summary.description ?? '',
     ...(summary.descriptionLanguage ? { descriptionLanguage: summary.descriptionLanguage } : {}),
+    ...(bases.length ? { bases } : {}),
   };
 }
 
@@ -134,7 +142,7 @@ export const readCreateTypeDescriptor = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const locale = requestLocale() ?? 'en';
     const result = await readTypeDescriptor(data, locale);
-    return result.ok ? { ok: true, type: createType(result.descriptor) } : result;
+    return result.ok ? { ok: true, type: createType(result.descriptor, result.descriptor.definition) } : result;
   });
 
 export const readCurrentTypeDescriptor = createServerFn({ method: 'GET' })

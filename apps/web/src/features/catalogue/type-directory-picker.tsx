@@ -17,6 +17,9 @@ export function TypeDirectoryPicker({
   refreshToken,
   onSelectionChange,
   onPendingChange,
+  offered,
+  unavailable,
+  admitType,
 }: {
   locale: string;
   transport: TypeDirectoryTransport;
@@ -27,6 +30,9 @@ export function TypeDirectoryPicker({
   refreshToken: number;
   onSelectionChange: (type: CreateType | null) => void;
   onPendingChange: (pending: boolean) => void;
+  offered?: readonly CreateType[];
+  unavailable?: readonly string[];
+  admitType?: (type: CreateType) => boolean;
 }) {
   const options = { locale: locale as never };
   const [query, setQuery] = useState('');
@@ -37,7 +43,7 @@ export function TypeDirectoryPicker({
   const [searchState, setSearchState] = useState<'idle' | 'loading' | 'ready' | 'failed' | 'stale'>('idle');
   const [failedCursor, setFailedCursor] = useState<string | null>(null);
   const [selectionPending, setSelectionPending] = useState(false);
-  const [selectionError, setSelectionError] = useState<'missing' | 'unavailable' | null>(null);
+  const [selectionError, setSelectionError] = useState<'missing' | 'unavailable' | 'unadmitted' | null>(null);
   const [retryTypeId, setRetryTypeId] = useState<string>();
   const pageRequest = useRef(0);
   const selectionRequest = useRef(0);
@@ -101,9 +107,14 @@ export function TypeDirectoryPicker({
       const result = await transport.descriptor(typeId);
       if (request !== selectionRequest.current) return;
       if (result.ok) {
-        onSelectionChange(result.type);
-        setRetryTypeId(undefined);
-        setSelectionError(null);
+        if (admitType && !admitType(result.type)) {
+          if (clearSelection) onSelectionChange(null);
+          setSelectionError('unadmitted');
+        } else {
+          onSelectionChange(result.type);
+          setRetryTypeId(undefined);
+          setSelectionError(null);
+        }
       } else {
         if (clearSelection) onSelectionChange(null);
         setSelectionError(result.reason);
@@ -128,6 +139,32 @@ export function TypeDirectoryPicker({
   const currentBinding = activeSearch;
   return (
     <div className="min-w-0 space-y-3">
+      {!!offered?.length && (
+        <div className="min-w-0 space-y-2">
+          <p className="text-sm font-medium">{m.related_work_offered_types({}, options)}</p>
+          <ul className="min-w-0 space-y-2">
+            {offered.map((type) => (
+              <li key={type.id} className="min-w-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={disabled || selectionPending}
+                  onClick={() => void readDescriptor(type.id, false)}
+                >
+                  <span lang={type.labelLanguage ?? locale}>{type.label || type.id}</span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {!!unavailable?.length && (
+        <ul className="min-w-0 space-y-1 text-sm text-muted-foreground">
+          {unavailable.map((type) => (
+            <li key={type}>{m.related_work_type_unavailable({ type }, options)}</li>
+          ))}
+        </ul>
+      )}
       <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
         <div className="min-w-0 space-y-2">
           <FieldLabel htmlFor="create-type-query">{m.catalogue_create_type_search({}, options)}</FieldLabel>
@@ -176,7 +213,9 @@ export function TypeDirectoryPicker({
           <p>
             {selectionError === 'missing'
               ? m.catalogue_create_type_retired({}, options)
-              : m.catalogue_create_type_read_failed({}, options)}
+              : selectionError === 'unadmitted'
+                ? m.related_work_type_unadmitted({}, options)
+                : m.catalogue_create_type_read_failed({}, options)}
           </p>
           {selectionError === 'unavailable' && retryTypeId && (
             <Button

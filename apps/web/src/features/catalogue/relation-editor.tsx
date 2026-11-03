@@ -28,6 +28,15 @@ import {
   type CreatedCreditIdentity,
 } from './credit-target-handoff';
 import {
+  createRelatedWorkHandoff,
+  discardRelatedWorkHandoff,
+  isRelatedWorkGroup,
+  relatedWorkTargetAdmitted,
+  type CreatedRelatedWork,
+  type RelatedWorkHandoff,
+} from './related-work-handoff';
+import { catalogueEntries } from './catalogue-entry';
+import {
   relationDraft,
   relationSlotMatches,
   validRelationSlot,
@@ -108,9 +117,11 @@ function RelationEditorLive({
   embedded = false,
   navigation,
   creditTargetHandoff,
+  relatedWorkHandoff,
   handoffReader,
   handoffReaderLive,
   onCreditTargetHandoffConsumed,
+  onRelatedWorkHandoffConsumed,
   propertyIds,
   excludedProperties,
   initialProperty,
@@ -130,9 +141,11 @@ function RelationEditorLive({
   /** A containing profile can compose the existing dirty/pending state into one decision. */
   navigation?: (state: Parameters<typeof RelationEditorNavigation>[0]) => ReactNode;
   creditTargetHandoff?: CreditTargetHandoff;
+  relatedWorkHandoff?: RelatedWorkHandoff;
   handoffReader?: string;
   handoffReaderLive?: () => boolean;
   onCreditTargetHandoffConsumed?: (token: string) => void;
+  onRelatedWorkHandoffConsumed?: (token: string) => void;
   /** Restricts this embedded editor to a profile-owned relation workspace. */
   propertyIds?: readonly string[] | undefined;
   excludedProperties?: readonly string[] | undefined;
@@ -232,7 +245,11 @@ function RelationEditorLive({
   const [ownConsent, setOwnConsent] = useState(false);
   const [consentEntry, setConsentEntry] = useState<ConsentAddress>();
   const [createdCreditIdentity, setCreatedCreditIdentity] = useState<CreatedCreditIdentity>();
+  const [createdRelatedWork, setCreatedRelatedWork] = useState<CreatedRelatedWork>();
+  const [relatedWorkBlocked, setRelatedWorkBlocked] = useState(false);
+  const [relationshipAttempted, setRelationshipAttempted] = useState(false);
   const restoredHandoff = useRef<string | undefined>(undefined);
+  const chooseRelatedWork = useRef<HTMLButtonElement>(null);
   const nativeSession = useRef<string | undefined>(undefined);
   if (!nativeSession.current && composition?.session) nativeSession.current = composition.session;
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
@@ -344,6 +361,79 @@ function RelationEditorLive({
     onCreditTargetHandoffConsumed,
     visible,
   ]);
+  useEffect(() => {
+    const handoff = relatedWorkHandoff;
+    if (!handoff || restoredHandoff.current === handoff.token) return;
+    if (!visible || !current?.descriptor || !mount.active()) return;
+    const sealed = !!request.current || proposed || relationshipAttempted;
+    if (sealed) {
+      restoredHandoff.current = handoff.token;
+      discardRelatedWorkHandoff(handoff.token);
+      onRelatedWorkHandoffConsumed?.(handoff.token);
+      return;
+    }
+    if (!editable()) return;
+    restoredHandoff.current = handoff.token;
+    const admittedField = fields?.find((item) => item.id === handoff.propertyId);
+    const sameTargets =
+      !!admittedField &&
+      JSON.stringify([...admittedField.targets].sort()) === JSON.stringify([...handoff.targets].sort());
+    const identity = handoff.identity;
+    const admitted =
+      handoff.workId === id &&
+      handoff.reader === handoffReader &&
+      handoffReaderLive?.() === true &&
+      handoff.context === candidateContext &&
+      handoff.releaseDigest === current.descriptor.releaseDigest &&
+      current.public.subject.id === id &&
+      !!admittedField &&
+      isRelatedWorkGroup(admittedField.group) &&
+      admittedField.group === handoff.group &&
+      sameTargets &&
+      handoff.draft.property.id === admittedField.id &&
+      handoff.draft.qualifiers.every((snak) =>
+        admittedField.qualifiers.some(
+          (definition) => definition.id === snak.property.id && definition.datatype === snak.property.data_type,
+        ),
+      );
+    const choosable =
+      admitted &&
+      !!identity &&
+      identity.id === handoff.createdId &&
+      relatedWorkTargetAdmitted(identity.type, identity.bases, admittedField.targets);
+    const restored = structuredClone(handoff.draft);
+    handoff.qualifierIdentities.forEach((identityId, index) => {
+      const snak = restored.qualifiers[index];
+      if (!snak) return;
+      qualifierIdentities.current.set(snak, identityId);
+      nextQualifierIdentity.current = Math.max(nextQualifierIdentity.current, identityId + 1);
+    });
+    edit(restored);
+    setCitation(handoff.citation);
+    setRank(handoff.rank);
+    if (choosable && identity) setCreatedRelatedWork(identity);
+    else {
+      if (identity || !admitted) setRelatedWorkBlocked(true);
+      discardRelatedWorkHandoff(handoff.token);
+      onRelatedWorkHandoffConsumed?.(handoff.token);
+    }
+  }, [
+    relatedWorkHandoff,
+    current,
+    edit,
+    editable,
+    handoffReader,
+    handoffReaderLive,
+    id,
+    mount,
+    onRelatedWorkHandoffConsumed,
+    proposed,
+    relationshipAttempted,
+    visible,
+  ]);
+  useLayoutEffect(() => {
+    if (createdRelatedWork && draft.value.type === 'somevalue') chooseRelatedWork.current?.focus();
+  }, [createdRelatedWork, draft.value.type]);
   const qualifierAvailable = (definition: RelationQualifier) =>
     ['string', 'external-id', 'url', 'wikibase-item'].includes(definition.datatype) &&
     draft.qualifiers.length < 16 &&
@@ -757,6 +847,73 @@ function RelationEditorLive({
     setCreatedCreditIdentity(undefined);
     onCreditTargetHandoffConsumed?.(handoff.token);
   }
+  function createMissingRelatedWork() {
+    if (
+      !editable() ||
+      !visible ||
+      draft.value.type !== 'somevalue' ||
+      !field ||
+      !isRelatedWorkGroup(field.group) ||
+      !current?.descriptor ||
+      !handoffReader ||
+      !handoffReaderLive?.() ||
+      relationshipAttempted ||
+      proposed
+    )
+      return;
+    const handoff = createRelatedWorkHandoff({
+      workId: id,
+      sourceLabel: pickText(current.public.subject.labels, locale).text,
+      reader: handoffReader,
+      context: candidateContext,
+      releaseDigest: current.descriptor.releaseDigest,
+      propertyId: field.id,
+      propertyLabel: field.label,
+      group: field.group,
+      targets: [...field.targets],
+      ...(slot ? { slot } : {}),
+      draft: structuredClone(draft),
+      citation,
+      rank,
+      qualifierIdentities: draft.qualifiers.map((snak) => qualifierIdentity(snak)),
+    });
+    if (!handoff) return;
+    window.location.assign(catalogueEntries.relatedWorkCreate({ locale, token: handoff.token }).href);
+  }
+  function chooseCreatedRelatedWork() {
+    const identity = createdRelatedWork;
+    const handoff = relatedWorkHandoff;
+    if (
+      !identity ||
+      !editable() ||
+      !visible ||
+      !handoffReaderLive?.() ||
+      !field ||
+      !isRelatedWorkGroup(field.group) ||
+      !relatedWorkTargetAdmitted(identity.type, identity.bases, field.targets) ||
+      draft.value.type !== 'somevalue' ||
+      (handoff &&
+        (handoff.reader !== handoffReader ||
+          handoff.workId !== id ||
+          handoff.propertyId !== field.id ||
+          handoff.createdId !== identity.id))
+    )
+      return;
+    picked.current[identity.id] = {
+      id: identity.id,
+      title: identity.label,
+      types: [identity.type, ...identity.bases],
+      typeLabel: identity.type,
+      year: null,
+      cover: null,
+    };
+    edit({ ...draft, value: { type: 'value', content: identity.id } });
+    setCreatedRelatedWork(undefined);
+    if (handoff) {
+      discardRelatedWorkHandoff(handoff.token);
+      onRelatedWorkHandoffConsumed?.(handoff.token);
+    }
+  }
   function applyEdit(next: RelationDraft) {
     targetCheck.current++;
     setTargetChecking(false);
@@ -991,6 +1148,7 @@ function RelationEditorLive({
     try {
       const pending = request.current;
       if ('statement' in pending) {
+        setRelationshipAttempted(true);
         const next = await transport.propose(proposalReplay.current ? { ...pending, retry: true } : pending);
         if (!lifetime.active()) return;
         if (!next.ok) {
@@ -1351,6 +1509,35 @@ function RelationEditorLive({
                               </Button>
                             </div>
                           )}
+                          {createdRelatedWork && draft.value.type === 'somevalue' && (
+                            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                              <p>
+                                {createdRelatedWork.label} · {createdRelatedWork.type} ·{' '}
+                                <code className="break-all">{createdRelatedWork.id}</code>
+                              </p>
+                              <a
+                                className="inline-flex min-h-11 items-center underline"
+                                href={
+                                  subjectHref({ id: createdRelatedWork.id, label: createdRelatedWork.label }, locale)
+                                    .href
+                                }
+                              >
+                                {createdRelatedWork.label}
+                              </a>
+                              <Button
+                                ref={chooseRelatedWork}
+                                type="button"
+                                variant="outline"
+                                disabled={!editable() || !handoffReaderLive?.()}
+                                onClick={chooseCreatedRelatedWork}
+                              >
+                                {m.relation_use_created_work({}, options)}
+                              </Button>
+                            </div>
+                          )}
+                          {relatedWorkBlocked && (
+                            <p role="alert">{m.relation_related_work_blocked({}, options)}</p>
+                          )}
                           {!createdCreditIdentity &&
                             draft.value.type === 'somevalue' &&
                             field?.group === 'credit' &&
@@ -1365,6 +1552,24 @@ function RelationEditorLive({
                                 onClick={createMissingCreditTarget}
                               >
                                 {m.relation_create_credit_target({}, options)}
+                              </Button>
+                            )}
+                          {!createdRelatedWork &&
+                            !relationshipAttempted &&
+                            !proposed &&
+                            draft.value.type === 'somevalue' &&
+                            !!field &&
+                            isRelatedWorkGroup(field.group) &&
+                            !!current?.descriptor &&
+                            !!handoffReader &&
+                            !!handoffReaderLive?.() && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!editable()}
+                                onClick={createMissingRelatedWork}
+                              >
+                                {m.relation_create_related_work({}, options)}
                               </Button>
                             )}
                         </Field>

@@ -145,6 +145,37 @@ source-or-consent behavior remain authoritative. Invalid input, stale metadata, 
 drafts. Uncertain requests freeze the original body and key for retry; changing metadata or session state hides
 the retained workspace until it can be read again.
 
+## Browser flow: missing related work
+
+A released work-to-work relation in the relation editor (derivation, world, association, or order groups
+emitted by the current Type descriptor) can search an existing target first. When the draft target is still
+unchosen, **Create a missing related work** opens generic subject creation. Membership, credit identity,
+appearance, Contents, StoryArc children, add-on bases, and edition or release creation stay on their existing
+owners. Decision: admission uses the pinned field targets plus the created Type's exact ID or listed bases from
+the current creation descriptor; no Type list is hardcoded, and a matching title never infers identity.
+
+The visit is a private in-memory handoff bound to the source subject, property, optional slot, pinned release,
+current reader, and an immutable copy of the editable draft (qualifiers, grouped references, rank, and qualifier
+holder identities). The URL carries only a local token. Cross-reader, expired, changed-property, and arbitrary UUID
+tokens cannot establish a relationship or authorize a write.
+
+Creation explains the intended relationship and source work as context only. Multilingual terms and native facts are
+ordinary creation input and never copy source names, credits, dates, citations, or provider identity. Confirmation
+uses the sealed generic create command. Unknown delivery retries the same body and key; a confirmed but unread
+identity retries only the read. Cancellation returns to the preserved relationship draft through an explicit
+decision and sends no relationship command.
+
+Return shows the created readable target and requires **Choose this work** before replacing the unchosen draft
+target. Changed metadata or an unavailable created target explains the block without discarding entered
+qualifiers or evidence and without creating a second target. A sealed or already consumed handoff is not mutated.
+Successful target creation is not identity matching and does not prove the asserted adaptation, sequel, or other
+work relationship.
+
+The contributor then reviews the restored relation, may correct evidence, and proposes through the existing
+relation writer. Candidate acceptance, Context selection, and the current source-subject read remain independent.
+Unknown relation outcomes keep their own sealed body and key. A failed relationship never offers Create again as
+recovery. Target creation, relationship proposal, acceptance, and Context selection remain distinct actions.
+
 ## Browser flow: add-ons and expansions
 
 The subject's existing **Contribute** menu offers **Add-on and expansion editor**. Creation uses
