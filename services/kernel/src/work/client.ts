@@ -10,6 +10,53 @@ export type WorkClient = DBOSClient & {
   discoverLegacyLeaveChild(workflowId: string): Promise<string | null>;
 };
 const selectedClientPools = new WeakMap<DBOSClient, Pool>();
+const legacyDiscoveryIndexSetup = new WeakMap<Pool, Promise<void>>();
+const legacyDiscoveryIndexStatements = [
+  `CREATE INDEX IF NOT EXISTS work_legacy_leave_parent_input_identity
+     ON dbos.workflow_input (
+       (inputs::jsonb #>> '{json,0,realmId}'),
+       (inputs::jsonb #>> '{json,0,memberAccountId}'),
+       (inputs::jsonb #>> '{json,0,reservationId}')
+     ) INCLUDE (workflow_uuid)`,
+  `CREATE INDEX IF NOT EXISTS work_legacy_leave_child_input_identity
+     ON dbos.workflow_input (
+       (inputs::jsonb #>> '{json,0,principal,id}'),
+       (inputs::jsonb #>> '{json,0,memberAccountId}'),
+       (inputs::jsonb #>> '{json,0,reservationId}')
+     ) INCLUDE (workflow_uuid)`,
+] as const;
+
+async function ensureLegacyDiscoveryIndexes(pool: Pool): Promise<void> {
+  let setup = legacyDiscoveryIndexSetup.get(pool);
+  if (!setup) {
+    setup = (async () => {
+      const connection = await pool.connect();
+      try {
+        await connection.query('BEGIN');
+        await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          'rezics/work/legacy-membership-discovery/indexes',
+        ]);
+        for (const statement of legacyDiscoveryIndexStatements) await connection.query(statement);
+        await connection.query('COMMIT');
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch {
+          // Preserve the original installation failure.
+        }
+        throw error;
+      } finally {
+        connection.release();
+      }
+    })();
+    legacyDiscoveryIndexSetup.set(pool, setup);
+    void setup.catch(() => {
+      legacyDiscoveryIndexSetup.delete(pool);
+    });
+  }
+  await setup;
+}
+
 /** Private service composition binding. Matching URLs or a structural client do not enroll. */
 export function assertSelectedWorkClient(client: WorkClient, pool: Pool): void {
   if (!(client instanceof DBOSClient) || selectedClientPools.get(client) !== pool)
@@ -111,14 +158,22 @@ export async function createWorkClient(databaseUrl: string, pool?: Pool): Promis
   });
   if (pool) selectedClientPools.set(client, pool);
   const listWorkflowSteps = client.listWorkflowSteps.bind(client);
-  let lookupPool: Pool | undefined;
+  let ownsLookupPool = false;
+  const lookupPool = pool ?? new Pool({ connectionString: databaseUrl, max: 1 });
+  if (!pool) ownsLookupPool = true;
+  try {
+    await ensureLegacyDiscoveryIndexes(lookupPool);
+  } catch (error) {
+    if (ownsLookupPool) await lookupPool.end();
+    await client.destroy();
+    throw error;
+  }
   let closing: Promise<void> | undefined;
   return Object.assign(client, {
     async discoverLegacyLeaveChild(workflowId: string) {
       const legacyLeave = /^realm:leave:([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(workflowId);
       if (!legacyLeave) return null;
-      const lookup = pool ?? (lookupPool ??= new Pool({ connectionString: databaseUrl, max: 1 }));
-      const result = await lookup.query<{ workflow_uuid: string }>(
+      const result = await lookupPool.query<{ workflow_uuid: string }>(
         `/* work:legacy-membership-child-discovery */
          SELECT child.workflow_uuid
            FROM dbos.workflow_input AS parent_input
@@ -150,8 +205,7 @@ export async function createWorkClient(databaseUrl: string, pool?: Pool): Promis
       const [workflowId, options] = args;
       const legacyLeave = /^realm:leave:([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(workflowId);
       if (!legacyLeave || (await client.getWorkflow(workflowId))) return listWorkflowSteps(workflowId, options);
-      const lookup = pool ?? (lookupPool ??= new Pool({ connectionString: databaseUrl, max: 1 }));
-      const result = await lookup.query<{ workflow_uuid: string }>(
+      const result = await lookupPool.query<{ workflow_uuid: string }>(
         `SELECT child.workflow_uuid
            FROM dbos.workflow_status AS parent
            JOIN dbos.workflow_input AS parent_input
@@ -179,7 +233,7 @@ export async function createWorkClient(databaseUrl: string, pool?: Pool): Promis
           selectedClientPools.delete(client);
           await client.destroy();
         } finally {
-          await lookupPool?.end();
+          if (ownsLookupPool) await lookupPool.end();
         }
       })()),
   });

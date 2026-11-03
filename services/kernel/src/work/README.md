@@ -30,6 +30,7 @@ the newest retained `community.leave` workflow's `accounts.membership` child wit
 reservation. It returns the child workflow ID or `null`; callers can then use the normal indexed status and step reads.
 The existing `listWorkflowSteps` legacy fallback remains the compatibility path and retains its linear diagnostic.
 
+`createWorkClient` installs both indexes idempotently before returning, under a PostgreSQL advisory transaction lock.
 The native indexes are `dbos.work_legacy_leave_parent_input_identity` on the input JSON paths
 `realmId/memberAccountId/reservationId` and `dbos.work_legacy_leave_child_input_identity` on
 `principal.id/memberAccountId/reservationId`. Both include `workflow_uuid`. Discovery is one SQL statement; for a
