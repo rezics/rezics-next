@@ -924,6 +924,42 @@ $$;
 
 
 --
+-- Name: guard_retained_output_insert(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.guard_retained_output_insert() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  PERFORM 1 FROM library.collection WHERE route=NEW.route AND collection_id=NEW.collection_id FOR UPDATE;
+  IF NOT EXISTS (
+    SELECT 1 FROM library.collection_source_output_publication r
+    JOIN library.collection_source_output_head h USING(route,collection_id,generation)
+    JOIN library.collection_source_output g USING(route,collection_id,generation)
+    JOIN library.collection s ON s.route=r.route AND s.collection_id=r.collection_id
+    JOIN access.account a ON a.route=s.route AND a.account_id=s.curator_account_id
+    JOIN library.native_source_fence f ON f.route=r.route AND f.kind='collection' AND f.owner_id=r.collection_id
+    JOIN editorial.write_basis b ON b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
+    JOIN core.partition p ON p.partition_no=b.partition_no AND p.epoch=b.epoch AND p.position>=b.position
+    WHERE (r.route,r.collection_id,r.generation,r.transaction_id,r.native_xid,r.source_generation,r.expected_members,r.member_fence)=
+      (NEW.route,NEW.collection_id,NEW.generation,NEW.transaction_id,NEW.native_xid,NEW.source_generation,NEW.members,NEW.member_fence)
+      AND a.state='deleted' AND a.authn_fenced AND s.state='active' AND s.visibility='public'
+      AND s.membership_kind='dynamic' AND s.source_generation=r.source_generation
+      AND h.source_generation=r.source_generation AND g.source_generation+1=r.source_generation
+      AND s.curator_account_id=r.account_id AND g.account_id=r.account_id
+      AND r.incarnation=s.collection_id::text || ':' || extract(epoch FROM s.created_at)::text
+      AND f.generation=r.collection_fence AND g.state='complete'
+      AND g.expected_members=r.expected_members AND g.written_members=r.expected_members
+      AND g.member_count=r.expected_members AND g.member_fence=r.member_fence
+      AND r.xmin=b.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin
+      AND r.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+      AND b.principal_kind='account' AND b.position>0 AND p.write_state='active' AND p.moved_to IS NULL
+  ) THEN RAISE EXCEPTION 'Retained output requires terminal ownership and committed complete A' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+END; $$;
+
+
+--
 -- Name: guard_retained_public_output(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -2143,7 +2179,7 @@ CREATE TABLE library.collection_retained_output (
     members bigint NOT NULL,
     member_fence bigint NOT NULL,
     transaction_id uuid NOT NULL,
-    native_xid xid8 DEFAULT pg_current_xact_id() NOT NULL,
+    native_xid xid8 NOT NULL,
     partition_no integer GENERATED ALWAYS AS ((route >> 4)) STORED,
     CONSTRAINT collection_retained_output_members_check CHECK ((members >= 0))
 );
@@ -6073,6 +6109,13 @@ CREATE TRIGGER collection_retained_immutable BEFORE UPDATE ON library.collection
 --
 
 CREATE TRIGGER collection_retained_output_immutable BEFORE DELETE OR UPDATE ON library.collection_retained_output FOR EACH ROW EXECUTE FUNCTION library.guard_native_source_receipt();
+
+
+--
+-- Name: collection_retained_output collection_retained_output_insert; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER collection_retained_output_insert BEFORE INSERT ON library.collection_retained_output FOR EACH ROW EXECUTE FUNCTION library.guard_retained_output_insert();
 
 
 --
