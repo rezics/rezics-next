@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { createKernelClient, type RatingQuestionDirectory } from '@rezics/client';
 import type { Account, Method } from '../../../../specs/community-driver.ts';
+import { ProblemError } from '../../src/http/problem.ts';
 import type { Access, Actor } from '../../src/request/access.ts';
 import { readSelectedQuestionDirectory } from '../../src/rating/question-directory.ts';
 import { routeOf } from '../../src/route/route.ts';
@@ -32,7 +34,7 @@ test('selected question pages requalify the caller and lifecycle after native so
   const driver = await createCommunityDriver();
   try {
     const fixture = await driver.provision();
-    const { system } = communityFixtureRuntime();
+    const { system, kernel } = communityFixtureRuntime();
     const call = (method: Method, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
       driver.request({ method, path, actor, body, key: JSON.stringify(key) });
     const json = async (response: Response, status = 200): Promise<any> => {
@@ -87,7 +89,7 @@ test('selected question pages requalify the caller and lifecycle after native so
     const definition = {
       meaning: 'Assess this work using its stated scale.',
       label: 'Canonical question wording',
-      grain: 'work',
+      grain: 'work' as const,
       scale: { min: 0, max: 10, displayStep: 1 },
     };
     const question = (await json(
@@ -123,6 +125,52 @@ test('selected question pages requalify the caller and lifecycle after native so
       scale: definition.scale,
     });
 
+    // The installed client reads the mounted route, not a source-only metadata port.
+    const client = createKernelClient('https://content.test', {
+      headers: { authorization: `Bearer ${fixture.member.bearer}` },
+      fetch: ((input, init) => kernel.handle(new Request(input, init))) as typeof fetch,
+    });
+    const createKey = { headers: { 'idempotency-key': JSON.stringify(randomUUID()) } };
+    const author = client.realms({ realmId })['rating-questions'];
+    const created = await author.post(definition, createKey);
+    expect(created.status).toBe(201);
+    expect((await author.post(definition, createKey)).data).toEqual(created.data);
+    const directory = client['rating-questions'];
+    const first = await directory.get({ query: { realm: realmId, limit: 1 } });
+    expect(first.status).toBe(200);
+    const selected: RatingQuestionDirectory = first.data!;
+    expect(selected.ratingQuestions).toHaveLength(1);
+    expect(selected.next).toBeString();
+    const rawFirst = selected.ratingQuestions[0]!;
+    const point = directory({ questionId: rawFirst.id });
+    expect((await point.get()).data).toEqual(rawFirst);
+    await json(await call('POST', `/v1/rating-questions/${rawFirst.id}/$retire`, fixture.member, {
+      expectedLifecycleRevision: 1,
+    }));
+    expect((await directory.get({ query: { realm: realmId, limit: 1, cursor: selected.next! } })).status).toBe(400);
+    const restart = await directory.get({ query: { realm: realmId, limit: 1 } });
+    expect(restart.status).toBe(200);
+    expect(restart.data?.ratingQuestions).toEqual([]);
+    expect(restart.data?.next).toBeString();
+    const continuation = { query: { realm: realmId, limit: 1, cursor: restart.data!.next! } };
+    const resumed = await directory.get(continuation);
+    expect(resumed.status).toBe(200);
+    expect(resumed.data?.ratingQuestions).toHaveLength(1);
+    expect((await directory.get(continuation)).data).toEqual(resumed.data);
+    // Restore the raw first row so the observation races below select active definitions.
+    await json(await call('POST', `/v1/rating-questions/${rawFirst.id}/$restore`, fixture.member, {
+      expectedLifecycleRevision: 2,
+    }));
+
+    const unavailable = afterSecondPreparation(system.access, 'realm:read', async () => {
+      throw new ProblemError('partition_unavailable');
+    });
+    const frontier = await page(system.access, member, realmId);
+    await expect(page(unavailable, member, realmId, null, frontier.lifecycleGeneration)).rejects.toMatchObject({
+      code: 'partition_unavailable',
+    });
+    expect(await page(unavailable, member, realmId, null, frontier.lifecycleGeneration)).toEqual(frontier);
+
     const readGrant = {
       resource: realmResource,
       subject: { kind: 'account', id: fixture.outsider.id },
@@ -139,7 +187,9 @@ test('selected question pages requalify the caller and lifecycle after native so
 
     const retirementAccess = afterSecondPreparation(system.access, 'realm:read', async () => {
       await json(
-        await call('POST', `/v1/rating-questions/${question.id}:retire`, fixture.member, { expectedRevision: 1 }),
+        await call('POST', `/v1/rating-questions/${question.id}/$retire`, fixture.member, {
+          expectedLifecycleRevision: rawFirst.id === question.id ? 3 : 1,
+        }),
       );
     });
     await expect(page(retirementAccess, member, realmId)).rejects.toMatchObject({ code: 'invalid_cursor' });
@@ -148,9 +198,9 @@ test('selected question pages requalify the caller and lifecycle after native so
       revision: 1,
       label: 'Corrected display caption',
       canonicalLabel: definition.label,
-      lifecycle: { state: 'retired', revision: 2 },
+      lifecycle: { state: 'retired', revision: rawFirst.id === question.id ? 4 : 2 },
     });
-    expect((await page(system.access, member, realmId)).ratingQuestions).toEqual([]);
+    expect((await page(system.access, member, realmId)).ratingQuestions.map(({ id }) => id)).toEqual([created.data!.id]);
 
     const globalCaller = await actor(fixture.member);
     const globalAccess = afterSecondPreparation(system.access, 'definitions:read', async () => {

@@ -32,6 +32,9 @@ export type {
 export type { WatchManagementItem, WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
 
 type Routes = KernelType['~Routes']['v1'];
+export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
+export type RatingQuestionDirectory = Routes['rating-questions']['get']['response'][200];
+export type RatingQuestion = RatingQuestionDirectory['ratingQuestions'][number];
 type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['labels']['get']['response'][200];
 
 export type QuestionLabel = QuestionLabelHistoryResponse['labels'][number];
