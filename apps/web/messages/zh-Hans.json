@@ -198,6 +198,8 @@
   "facts_edit_field": "编辑此字段",
   "facts_add_value": "提议另一个值",
   "facts_private": "私有提案草稿",
+  "classification_recovery_summary": "分类草稿和尚未确认的精确提案已保留。兼容的取值与引文遵循当前阅读。",
+  "classification_recovery_withdrawn": "此项分类目前不再获准。请检查保留的陈述；新的写入需等到再次获准。",
   "facts_include": "包含此更改",
   "facts_unchanged": "未更改；不会发送提案。",
   "facts_uncertain": "送达结果不确定。重试会保留原始陈述和请求密钥。",

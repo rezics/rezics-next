@@ -208,6 +208,8 @@
   "facts_edit_field": "Edit this field",
   "facts_add_value": "Propose another value",
   "facts_private": "Private proposal draft",
+  "classification_recovery_summary": "Classification drafts and exact pending proposals were kept. Compatible values and citations follow the current reading.",
+  "classification_recovery_withdrawn": "This classification is no longer admitted. Inspect the retained assertion; new writes wait until it is readmitted.",
   "facts_include": "Include this change",
   "facts_unchanged": "Unchanged; no proposal will be sent.",
   "facts_uncertain": "Delivery is uncertain. Retry keeps the exact statement and request key.",

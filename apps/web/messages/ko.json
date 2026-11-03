@@ -198,6 +198,8 @@
   "facts_edit_field": "이 필드 편집",
   "facts_add_value": "다른 값 제안",
   "facts_private": "비공개 제안 초안",
+  "classification_recovery_summary": "분류 초안과 정확한 대기 중 제안은 유지되었습니다. 호환되는 값과 인용은 현재 읽기를 따릅니다.",
+  "classification_recovery_withdrawn": "이 분류는 더 이상 허용되지 않습니다. 유지된 주장을 확인하세요. 새 쓰기는 다시 허용될 때까지 기다립니다.",
   "facts_include": "이 변경 포함",
   "facts_unchanged": "변경 없음. 제안을 보내지 않습니다.",
   "facts_uncertain": "전달 결과를 알 수 없습니다. 재시도 시 동일한 진술과 요청 키를 유지합니다.",

@@ -198,6 +198,8 @@
   "facts_edit_field": "Editar este campo",
   "facts_add_value": "Proponer otro valor",
   "facts_private": "Borrador privado de propuesta",
+  "classification_recovery_summary": "Se conservaron los borradores de clasificación y las propuestas exactas pendientes. Los valores y citas compatibles siguen la lectura actual.",
+  "classification_recovery_withdrawn": "Esta clasificación ya no está admitida. Inspeccione la aserción retenida; las escrituras nuevas esperan a que se readmita.",
   "facts_include": "Incluir este cambio",
   "facts_unchanged": "Sin cambios; no se enviará ninguna propuesta.",
   "facts_uncertain": "La entrega es incierta. Reintentar conserva la declaración y la clave de solicitud exactas.",

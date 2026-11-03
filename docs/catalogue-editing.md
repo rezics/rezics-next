@@ -462,6 +462,13 @@ existing picker, ordinary citations, per-field candidates and explicit decision/
 Album and Screen bind that control; Game keeps its existing specialized classification workspace. A later
 proposal awaits review and does not alter the current reading. Existing disclosure and source-or-consent rules
 remain native.
+Decision: Album and Manga keep that Character classification writer mounted across reading loss and when every
+admitted classification field is withdrawn, hiding stale public and private controls while retaining drafts,
+citations and exact sealed retry identity. Compatible drafts resume under a newly admitted reading; withdrawn
+assertions stay inspect-only and admit no new writes. Explicit discard and departure, or viewer/CSRF
+replacement, retire the holder. Keyboard recovery orients to the classification summary. Creation and
+selected-reader recovery remain independent. Semantic retains Concept suggestion, proposal, review, selection
+and command authority; Web binds the existing generated candidate methods and does not invent an endpoint.
 
 The real-route story IDs are:
 
@@ -594,6 +601,10 @@ accepts a story arc, not an invented track. `wdt:P361` part-of-work has no order
 its separate native relation and position. No track, recording, audio store, streaming service or lyric controls
 are supplied. The initial classification picker is native; correction reuses the shared item-value control for
 admitted classification fields, with independent drafts and the ordinary candidate review.
+Album classification correction keeps that private holder mounted while a current reading is missing or every
+admitted classification field is withdrawn, then recovers compatible drafts and citations under the newly
+admitted reading. Withdrawn assertions remain visible for reconciliation; sealed unknown commands keep their
+original sender, credentials, key and operands. Creation readback and this correction holder stay independent.
 
 Correction reuses the scalar multi-field staging and per-field partial results, exact candidate review, qualified
 relation editor and original authored-text composer. Unchanged language maps, qualifiers and references remain

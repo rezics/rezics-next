@@ -198,6 +198,8 @@
   "facts_edit_field": "Dieses Feld bearbeiten",
   "facts_add_value": "Weiteren Wert vorschlagen",
   "facts_private": "Privater Vorschlagsentwurf",
+  "classification_recovery_summary": "Klassifikationsentwürfe und genaue ausstehende Vorschläge wurden behalten. Kompatible Werte und Nachweise folgen der aktuellen Lesung.",
+  "classification_recovery_withdrawn": "Diese Klassifikation ist nicht mehr zugelassen. Prüfe die behaltene Aussage; neue Schreibvorgänge warten auf erneute Zulassung.",
   "facts_include": "Diese Änderung einschließen",
   "facts_unchanged": "Unverändert; es wird kein Vorschlag gesendet.",
   "facts_uncertain": "Übermittlung unklar. Beim Wiederholen bleiben Aussage und Anfrageschlüssel gleich.",

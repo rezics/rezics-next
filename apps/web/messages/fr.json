@@ -198,6 +198,8 @@
   "facts_edit_field": "Modifier ce champ",
   "facts_add_value": "Proposer une autre valeur",
   "facts_private": "Brouillon privé de proposition",
+  "classification_recovery_summary": "Les brouillons de classification et les propositions exactes en attente ont été conservés. Les valeurs et citations compatibles suivent la lecture actuelle.",
+  "classification_recovery_withdrawn": "Cette classification n’est plus admise. Inspectez l’assertion conservée ; les nouvelles écritures attendent une nouvelle admission.",
   "facts_include": "Inclure ce changement",
   "facts_unchanged": "Inchangé ; aucune proposition ne sera envoyée.",
   "facts_uncertain": "Transmission incertaine. Réessayer conserve la déclaration et la clé de requête exactes.",

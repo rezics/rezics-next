@@ -13,7 +13,7 @@ import {
 } from '../../threads/authoring-departure';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
-import type { FactsTransport, FactDraft } from './subject-facts';
+import type { FactsCurrent, FactsTransport, FactDraft } from './subject-facts';
 import { factChanged, factLimit, factLocked, sealFacts, sendFacts, stageFact } from './subject-facts';
 import { ExcludedFact, FactField } from './subject-facts-view';
 import { correctionProperty } from './statement-editor';
@@ -22,7 +22,12 @@ import { isMangaType, mangaGroups } from './manga-profile';
 import { CatalogueCurrentReading, useCurrentReadingActive } from './editor-lifetime';
 import { mangaGroupLabels, type MangaReady } from './manga-profile-view';
 import { DefinitionGuideLink } from './definition-guide-view';
-import { CharacterClassifications, classificationFields } from './character-profile-classification';
+import { classificationFields } from './character-profile-classification';
+import {
+  ClassificationRecovery,
+  beginClassificationKeyboardRecovery,
+  retainClassificationRead,
+} from './classification-recovery';
 
 export type MangaCorrectionPorts = {
   facts: FactsTransport;
@@ -106,6 +111,8 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
     () => (read?.public ? { ok: true as const, release: read.release, public: read.public, source: null } : undefined),
     [read],
   );
+  const retainedClassification = useRef<FactsCurrent | undefined>(undefined);
+  const classificationRead = retainClassificationRead(retainedClassification, current);
   const label = subject ? pickText(subject.labels, locale) : undefined;
   const href = subject ? subjectHref({ id: subject.id, label: label!.text }, locale).href : '';
   const groups = subject && read ? mangaGroups(read.release, subject.type, locale) : undefined;
@@ -327,25 +334,20 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
             />
           ))}
           {Object.entries(groups)
-            .filter(([group, fields]) => group !== 'writing' && fields.length)
+            .filter(
+              ([group, fields]) =>
+                group !== 'writing' &&
+                fields.length &&
+                (group !== 'classification' || disabled || !ports),
+            )
             .map(([group, fields]) => (
               <section className="min-w-0 space-y-4 [overflow-wrap:anywhere]" key={group}>
                 <ContentItemHeading level={2} className="font-sans text-xl font-semibold">
                   {labels[group as keyof typeof labels]}
                 </ContentItemHeading>
                 {group === 'membership' && <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>}
-                {group === 'classification' && current && ports && !disabled ? (
-                  <CharacterClassifications
-                    properties={classificationFields(current.release, subject.type, fields)}
-                    read={current}
-                    locale={locale}
-                    search={search}
-                    transport={ports.facts}
-                    review={ports.review}
-                  />
-                ) : (
-                  fields.map((property) =>
-                    correctionProperty(current.release, subject.type, property) ? (
+                {fields.map((property) =>
+                  correctionProperty(current.release, subject.type, property) ? (
                       <FactField
                         key={property}
                         property={property}
@@ -445,10 +447,32 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
                         </ContentItemFrame>
                       </section>
                     ),
-                  )
                 )}
               </section>
             ))}
+        </>
+      )}
+      {!disabled && ports && classificationRead && (
+        <ClassificationRecovery
+          title={
+            <ContentItemHeading level={2} className="font-sans text-xl font-semibold">
+              {labels.classification}
+            </ContentItemHeading>
+          }
+          properties={classificationFields(
+            classificationRead.release,
+            classificationRead.public.subject.type,
+            mangaGroups(classificationRead.release, classificationRead.public.subject.type, locale).classification,
+          )}
+          read={classificationRead}
+          locale={locale}
+          search={search}
+          transport={ports.facts}
+          review={ports.review}
+        />
+      )}
+      {subject && current && groups && (
+        <>
           <ContentItemFrame
             as="div"
             className="min-w-0 space-y-3 rounded-xl bg-card p-4 sm:p-5 [overflow-wrap:anywhere]"
@@ -468,7 +492,10 @@ function MangaCorrectionsLive({ read, locale, disabled, ports, reload, search = 
                 className="h-auto min-h-11 min-w-11 max-w-full whitespace-normal break-words py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:py-1"
                 variant="outline"
                 disabled={busy}
-                onClick={() => active() && void reload()}
+                onClick={(event) => {
+                  beginClassificationKeyboardRecovery(event);
+                  if (active()) void reload();
+                }}
               >
                 {m.correction_reload({}, o)}
               </Button>

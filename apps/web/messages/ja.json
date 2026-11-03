@@ -198,6 +198,8 @@
   "facts_edit_field": "この項目を編集",
   "facts_add_value": "別の値を提案",
   "facts_private": "非公開の提案下書き",
+  "classification_recovery_summary": "分類の下書きと未確定の正確な提案は保持されています。互換のある値と出典は現在の読み取りに従います。",
+  "classification_recovery_withdrawn": "この分類は現在認められていません。保持した主張を確認してください。新しい書き込みは再承認まで待ちます。",
   "facts_include": "この変更を含める",
   "facts_unchanged": "変更なし。提案は送信されません。",
   "facts_uncertain": "送信結果が不明です。再試行では同じ記述とリクエストキーを保持します。",

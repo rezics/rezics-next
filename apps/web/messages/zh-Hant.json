@@ -198,6 +198,8 @@
   "facts_edit_field": "編輯此欄位",
   "facts_add_value": "提議另一個值",
   "facts_private": "私人提案草稿",
+  "classification_recovery_summary": "分類草稿與尚未確認的精確提案已保留。相容的取值與引文遵循目前閱讀。",
+  "classification_recovery_withdrawn": "此項分類目前不再獲准。請檢查保留的陳述；新的寫入需等到再次獲准。",
   "facts_include": "包含此變更",
   "facts_unchanged": "未變更；不會傳送提案。",
   "facts_uncertain": "送達結果不確定。重試會保留原始陳述和請求金鑰。",

@@ -23,7 +23,11 @@ import { DefinitionMeaning } from './definition-meaning';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { RelationEditor } from './relation-editor';
-import { CharacterClassifications, classificationFields } from './character-profile-classification';
+import { classificationFields } from './character-profile-classification';
+import {
+  ClassificationRecovery,
+  beginClassificationKeyboardRecovery,
+} from './classification-recovery';
 import { EditorFailure, PartValue } from './statement-editor-view';
 import { ExactReview, FactField, SelectedFacts } from './subject-facts-view';
 import {
@@ -297,7 +301,15 @@ function AlbumCorrections({
           />
         </CatalogueCurrentReading>
       </AuthoringDepartureProvider>
-      <Button type="button" variant="outline" disabled={loading} onClick={() => void reload()}>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={loading}
+        onClick={(event) => {
+          beginClassificationKeyboardRecovery(event);
+          void reload();
+        }}
+      >
         {loadFailure ? m.correction_retry({}, o) : m.correction_reload({}, o)}
       </Button>
     </div>
@@ -653,20 +665,22 @@ function AlbumCorrectionWorkspaceLive({
           />
         </fieldset>
       </section>
-      {visible && !!fields!.classifications.length && (
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold">{m.album_classification({}, o)}</h2>
-          {enabled ? (
-            <CharacterClassifications
-              properties={classificationFields(current.release, albumType, fields!.classifications)}
-              read={current}
-              locale={locale}
-              search={search}
-              transport={editors.facts}
-              review={editors.review}
-            />
-          ) : (
-            fields!.classifications.map((property) => (
+      {enabled ? (
+        <ClassificationRecovery
+          title={<h2 className="text-xl font-semibold">{m.album_classification({}, o)}</h2>}
+          properties={classificationFields(current.release, albumType, fields!.classifications)}
+          read={current}
+          locale={locale}
+          search={search}
+          transport={editors.facts}
+          review={editors.review}
+        />
+      ) : (
+        visible &&
+        !!fields!.classifications.length && (
+          <section className="space-y-4">
+            <h2 className="text-xl font-semibold">{m.album_classification({}, o)}</h2>
+            {fields!.classifications.map((property) => (
               <div key={property} className="space-y-2">
                 <h3 className="font-medium">
                   <DefinitionMeaning values={current.release.properties[property]!.labels} locale={locale} />
@@ -680,9 +694,9 @@ function AlbumCorrectionWorkspaceLive({
                   <p className="text-sm text-muted-foreground">{m.facts_no_value({}, o)}</p>
                 )}
               </div>
-            ))
-          )}
-        </section>
+            ))}
+          </section>
+        )
       )}
       {visible && !!fields!.authored.length && (
         <section className="space-y-3 rounded-xl border border-border p-4 sm:p-5">
