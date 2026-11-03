@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "此頁未傳回任何內容。",
   "catalogue_file_episode": "分集",
   "catalogue_file_release": "發行版",
-  "catalogue_file_next": "下一頁"
+  "catalogue_file_next": "下一頁",
+  "home_catalogue": "探索目錄",
+  "subject_connections_title": "跨作品關聯",
+  "subject_connections_updated": "關聯已更新。",
+  "subject_connections_relation": "關係",
+  "subject_connections_in": "連入",
+  "subject_connections_out": "連出",
+  "subject_connections_explore": "探索附近關聯",
+  "subject_connections_global": "此領域暫不提供圖譜探索。請使用上方的關係列表。",
+  "subject_connections_choose": "選擇最多八種關係",
+  "subject_connections_depth": "深度",
+  "subject_connections_bounded": "此處僅顯示原生圖譜的一部分。請逐項展開關聯；完整署名與角色資訊見上方列表。",
+  "subject_connections_truncated": "此圖譜並不完整。請開啟目的頁面，從該頁的關係列表繼續探索。",
+  "subject_connections_return": "返回上一個頁面"
 }

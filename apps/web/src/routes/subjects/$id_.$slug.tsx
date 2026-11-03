@@ -1,3 +1,5 @@
+import { SubjectConnections } from '../../features/pages/subject-connections-view';
+import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { contextSubjectAddress } from '../../features/pages/context-subject';
 import { contextHref } from '../../features/pages/context-navigation';
 import { PendingPage } from '../../shell/pending';
@@ -199,6 +201,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     search: Record<string, unknown>,
   ): {
     realm?: string | undefined;
+    via?: string | undefined;
     slot?: 'collections';
     slotResult?: string;
     ratingFailure?: true;
@@ -209,6 +212,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
     undoKey?: string;
   } => ({
     realm: validatePageRealm(search.realm),
+    via: subjectVisitReturn(search.via, getLocale()),
     ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
     ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
     ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
@@ -435,6 +439,11 @@ export function SubjectOverview({
           <RatingsContext.Provider value={ratings}>
             <SubjectPage
               page={page}
+              connections={
+                currentReader ? (
+                  <SubjectConnections page={page} viewer={browserSession} returnTo={search.via} />
+                ) : undefined
+              }
               curation={realm ? undefined : <SubjectCandidateCuration id={id} locale={locale} />}
               locale={getLocale()}
               messages={subjectPageMessages()}

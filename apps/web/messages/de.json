@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "Auf dieser Seite wurde nichts zurückgegeben.",
   "catalogue_file_episode": "Folge",
   "catalogue_file_release": "Veröffentlichung",
-  "catalogue_file_next": "Nächste Seite"
+  "catalogue_file_next": "Nächste Seite",
+  "home_catalogue": "Katalog erkunden",
+  "subject_connections_title": "Verbindungen zwischen Werken",
+  "subject_connections_updated": "Verbindungen aktualisiert.",
+  "subject_connections_relation": "Beziehung",
+  "subject_connections_in": "Eingehend",
+  "subject_connections_out": "Ausgehend",
+  "subject_connections_explore": "Nahe Verbindungen erkunden",
+  "subject_connections_global": "In diesem Bereich ist der Graph nicht verfügbar. Verwende die Beziehungslisten oben.",
+  "subject_connections_choose": "Bis zu acht Beziehungen auswählen",
+  "subject_connections_depth": "Tiefe",
+  "subject_connections_bounded": "Dieser native Ausschnitt ist begrenzt. Verbindungen lassen sich einzeln aufdecken; genauere Mitwirkendenangaben stehen in den Listen oben.",
+  "subject_connections_truncated": "Dieser Ausschnitt ist unvollständig. Öffne ein Ziel, um dessen Beziehungslisten zu erkunden.",
+  "subject_connections_return": "Zum vorherigen Ziel zurück"
 }

@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "이 페이지에서 아무것도 반환되지 않았습니다.",
   "catalogue_file_episode": "에피소드",
   "catalogue_file_release": "출시판",
-  "catalogue_file_next": "다음 페이지"
+  "catalogue_file_next": "다음 페이지",
+  "home_catalogue": "카탈로그 둘러보기",
+  "subject_connections_title": "작품 간 연결",
+  "subject_connections_updated": "연결을 업데이트했습니다.",
+  "subject_connections_relation": "관계",
+  "subject_connections_in": "들어오는 관계",
+  "subject_connections_out": "나가는 관계",
+  "subject_connections_explore": "주변 연결 탐색",
+  "subject_connections_global": "이 영역에서는 그래프를 사용할 수 없습니다. 위의 관계 목록을 이용하세요.",
+  "subject_connections_choose": "관계를 최대 8개 선택",
+  "subject_connections_depth": "깊이",
+  "subject_connections_bounded": "표시 범위가 제한된 네이티브 그래프입니다. 연결을 개별적으로 펼치세요. 역할 등 크레딧 정보는 위 목록에 있습니다.",
+  "subject_connections_truncated": "그래프의 일부입니다. 대상 페이지의 관계 목록에서 탐색을 계속하세요.",
+  "subject_connections_return": "이전 대상으로 돌아가기"
 }

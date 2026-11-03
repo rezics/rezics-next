@@ -1,3 +1,4 @@
+import { loadRoutePage } from './route';
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -46,9 +47,13 @@ const readHomePage = createServerFn({ method: 'GET' })
   .validator(localeInput)
   .handler(async ({ data: locale }) => {
     const { env } = await import('cloudflare:workers');
-    const feed = await loadPublicHomeFeed(kernelClient(locale));
+    const client = kernelClient(locale);
+    const [feed, catalogue] = await Promise.all([
+      loadPublicHomeFeed(client),
+      loadRoutePage(client, '/', locale).catch(() => ({ kind: 'missing' as const })),
+    ]);
     const origin = validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN);
-    return { feed, origin };
+    return { feed, origin, catalogue };
   });
 
 /** Only this anonymous result enters the reusable page query cache or hydration payload. */

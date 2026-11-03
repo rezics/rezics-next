@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "Cette page n’a rien renvoyé.",
   "catalogue_file_episode": "Épisode",
   "catalogue_file_release": "Parution",
-  "catalogue_file_next": "Page suivante"
+  "catalogue_file_next": "Page suivante",
+  "home_catalogue": "Explorer le catalogue",
+  "subject_connections_title": "Liens entre les œuvres",
+  "subject_connections_updated": "Liens actualisés.",
+  "subject_connections_relation": "Relation",
+  "subject_connections_in": "Entrante",
+  "subject_connections_out": "Sortante",
+  "subject_connections_explore": "Explorer les liens proches",
+  "subject_connections_global": "Le graphe est indisponible dans cet espace. Utilisez les listes de relations ci-dessus.",
+  "subject_connections_choose": "Choisir jusqu’à huit relations",
+  "subject_connections_depth": "Profondeur",
+  "subject_connections_bounded": "Ce voisinage natif est limité. Révélez chaque lien séparément ; les crédits détaillés figurent dans les listes ci-dessus.",
+  "subject_connections_truncated": "Ce voisinage est partiel. Ouvrez une destination pour poursuivre avec ses propres listes de relations.",
+  "subject_connections_return": "Revenir à la destination précédente"
 }

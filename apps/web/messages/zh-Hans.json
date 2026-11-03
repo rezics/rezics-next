@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "此页未返回任何内容。",
   "catalogue_file_episode": "分集",
   "catalogue_file_release": "发行版",
-  "catalogue_file_next": "下一页"
+  "catalogue_file_next": "下一页",
+  "home_catalogue": "探索目录",
+  "subject_connections_title": "跨作品关联",
+  "subject_connections_updated": "关联已更新。",
+  "subject_connections_relation": "关系",
+  "subject_connections_in": "连入",
+  "subject_connections_out": "连出",
+  "subject_connections_explore": "探索附近关联",
+  "subject_connections_global": "此领域暂不提供图谱探索。请使用上方的关系列表。",
+  "subject_connections_choose": "选择最多八种关系",
+  "subject_connections_depth": "深度",
+  "subject_connections_bounded": "此处仅显示原生图谱的一部分。请逐项展开关联；完整署名与角色信息见上方列表。",
+  "subject_connections_truncated": "此图谱并不完整。请打开目标页面，从该页的关系列表继续探索。",
+  "subject_connections_return": "返回上一个页面"
 }

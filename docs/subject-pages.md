@@ -1323,3 +1323,102 @@ template and selected Context again and dispatches only that group's relation re
 returned as unrequested (204), retaining their existing client state. A continued document opened directly offers
 those groups a fresh-start link. No first-page slice or cross-group cursor represents a complete graph or total.
 The existing 16-read, 128-slot and native request bounds still apply.
+
+
+## Mounted cross-media visits
+
+Home mounts the native `/` page's four existing TypeLists alongside the existing Home feed. Books, Anime,
+Visual novels and Recipes retain Search's admission, ordering, 12-hit preview and explicit list continuation.
+The anime and visual-novel Realm pages retain their delivered native Space page and discovery composer. Neither
+page reads an Imports manifest, invents a featured seed card, or performs a per-hit detail fetch. The authentic
+Imports cross-media producer supplies selected identities and statements; a proposed statement is not a public
+relation. Its `gaps[].fields`, `gaps[].record` and `unresolved[].{holder,target,property}` remain producer-owned.
+
+The mounted Subject overview adds **Connections across works** under the native page composition. It admits its
+forward and incoming stream choices from the current definitions release's effective type properties, targets,
+inverse labels and relation groups. Work relations include cross-media counterparts, adaptations, sequels and
+side stories when admitted. Characters expose incoming appearances and independently filtered character-qualified
+voice credits; people expose incoming staff and cast credits. These are the generated native `relations` and
+`links` methods, with the original holder, property, selected Context, native cursor and qualifier filter. The
+reader never joins another subject's biography into an appearance or treats a qualified character as the voice
+actor. Existing character and generic catalogue editors retain all command, admission and immutable retry custody.
+
+Each of Relations, Characters and Credits owns one selected property/direction and one current page of at most
+12 rows. Changing that selection or choosing More removes its prior page before requesting the replacement;
+sibling sections remain independent. Native counts may include concealed endpoints. Empty pages with a native
+continuation still offer More; hidden summaries never acquire a guessed title or a raw-ID link. The existing
+qualified-credit projection supplies credited names, order, role, character and part notes from each assertion's
+own disclosed related summaries. Spoiler consent remains per assertion occurrence and content. Nothing in a
+character's voice-credit result authorizes its appearance endpoint, or conversely.
+
+The supplemental authenticated Web loader re-resolves the actual page representation before and after the selected
+native reads. It checks the caller's expected Context and current release. A replacement or refused reading retires
+all old rows, pending deliveries and cursors; retry starts a fresh visit. Session state, account, CSRF-session token,
+page, Realm, Context, locale or reader-gate replacement retires the mounted private window synchronously. Responses
+are private/no-store and remain outside public hydration, shared QueryClient caches and metadata. Reads reuse the
+installed session authorization helper; writes and unknown-command retry credentials remain with the existing
+editors. Loading, sparse-empty, denied, stale and unavailable states retain explicit recovery. Selection, More,
+recovery and reveal controls wrap at phone widths, keep a 44px target and return keyboard focus to the section status
+when an exhausted action disappears.
+
+Decision: cross-media navigation keeps one canonical public return destination and starts a fresh bounded visit;
+native graphs without a Realm Context selector remain unavailable in Realms.
+
+A `via` return address admits only a same-locale canonical Subject or Realm path, with at most one Realm operand.
+No nested return chain, cursor, credential, draft or private row travels with it. A link from a qualified note has
+the same return behavior as its main work/person link. Returning re-resolves the destination under current authority
+and anchors at Connections. Native canonical redirects continue to preserve the original bounded search operands.
+
+**Explore nearby connections** explicitly selects up to eight release-admitted properties, depth 1 or 2 and the
+installed native limit of 25. It calls the existing native graph reader once; it does not perform traversal in Web.
+The current graph DTO has no Context selector or per-edge `qualifiers`/`related` projection. Realm exploration is
+therefore labelled unavailable, and Global graph connections use independent reveal controls. Exact qualified credits
+remain in the stream lists. A truncated graph says it is partial and links to exact readable destinations, whose
+lists start a fresh bounded visit. Semantic owns any future Context-aware graph DTO; Imports owns actual omitted
+source fields and unresolved seed endpoints. Neither gap licenses a local graph producer or fabricated success.
+
+### Cross-media visit cost
+
+For a selected page let `P(v)` be the installed native `pages:read` plan's component count, already bounded by
+16 reads and 128 slots; its supplied section limits remain authoritative. Home adds one such aggregate: its four
+catalogue search components have limit 12, so at most 48 hits enter the existing TypeList projection. The existing
+Home feed and Realm discovery keep their own fixed request components and caps; this composition adds no search
+or detail request per catalogue hit.
+
+The supplemental visit has two page aggregates, the installed active-digest/release pair and one selected stream
+per nonempty group: `C(v) = 4 + g(v) <= 7` native HTTP calls, or `2P(v) + 2 + g(v)` underlying components. A deliberate
+single-section replacement has five HTTP calls and at most 12 rows. A deliberate graph selection has five HTTP
+calls, native depth 1/2, at most eight properties and limit 25 per expansion. The installed graph engine caps its
+edges at 500 and nodes at 501; Web does not alter its indexed-row, expansion or statement derivation. This adapter
+introduces no database query, engine projection or worker path.
+
+Every successful stream response retained by this adapter is at most 1,048,576 UTF-8 JSON bytes and 12 native rows;
+over-limit responses become unavailable. Projection consumes only those rows and their bounded response's related
+summaries. Three current sections retain at most 36 rows and three such byte windows, plus fixed release stream
+metadata. An explicitly requested graph retains at most one such byte window in addition to those sections; its
+nodes, edges and truncation descriptors are processed once. Aggregate and release metadata remain request-local,
+never accumulated across deliberate visits. Processing and retained current-page state are
+`O(sum L_i + sum B_i)` plus the one selected graph response. Following `k` destinations costs the sum of their
+bounded components; unrelated catalogue population does not add calls or retained rows.
+
+`apps/web/tests/subject-connections.test.ts` exercises the actual Web loader/window boundary with native-format
+response doubles at catalogue populations 32, 256 and 2,048, counting calls, processed values and serialized bytes,
+including concealed summaries, sparse continuation, stale reading and late-delivery retirement. This is authored
+Web boundary coverage, not evidence of native SQL scan bounds or mounted seed admission. Existing native engines
+remain their owners' responsibility. The native acceptance uses actual mounted selected seed destinations.
+
+### Final mounted core capture acceptance
+
+`apps/web/tests/native/cross-media-pages.test.ts` reuses a retained native browser/session rather than provisioning
+another campaign. `REZICS_CROSS_MEDIA_VISIT` names a private worktree-local configuration containing the mounted
+`origin`, retained `cdp` and `contextIndex`, authentic Imports `seedResult`, both actual `realms` paths, independently
+admitted `destinations` for Library, Collection, board thread, settings and creator sales, and selected native `edges`
+with holder/direction/property, target and expected qualifier text. Proposed-only or missing seed identities fail
+acceptance; no canned seed or Storybook substitute is admitted. Native producer gaps remain visible.
+
+After the connected native journey succeeds, its last step captures Home, both Realms, one work for each of
+Steins;Gate, CLANNAD and Fate, a character, a person, Search, Library, Collection, a board thread, settings and creator
+sales. Every page requires phone390 and desktop1440 in light and dark: 56 images under
+`.temp/screenshots/core/<nn>-<page>-<width>-<theme>.png`, with every resulting path listed by the task result. These
+captures are required mounted acceptance, not a substitute for growth assertions. The landing policy defers native
+acceptance and browser capture to the integration verifier; authored harnesses do not establish executed evidence.

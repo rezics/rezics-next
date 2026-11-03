@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "Esta página no devolvió nada.",
   "catalogue_file_episode": "Episodio",
   "catalogue_file_release": "Publicación",
-  "catalogue_file_next": "Página siguiente"
+  "catalogue_file_next": "Página siguiente",
+  "home_catalogue": "Explorar el catálogo",
+  "subject_connections_title": "Conexiones entre obras",
+  "subject_connections_updated": "Conexiones actualizadas.",
+  "subject_connections_relation": "Relación",
+  "subject_connections_in": "Entrante",
+  "subject_connections_out": "Saliente",
+  "subject_connections_explore": "Explorar conexiones cercanas",
+  "subject_connections_global": "El grafo no está disponible en este ámbito. Usa las listas de relaciones de arriba.",
+  "subject_connections_choose": "Elige hasta ocho relaciones",
+  "subject_connections_depth": "Profundidad",
+  "subject_connections_bounded": "Este entorno nativo tiene un límite. Revela cada conexión por separado; los créditos detallados están en las listas de arriba.",
+  "subject_connections_truncated": "Este entorno es parcial. Abre un destino para continuar desde sus propias listas de relaciones.",
+  "subject_connections_return": "Volver al destino anterior"
 }

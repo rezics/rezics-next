@@ -5881,5 +5881,18 @@
   "catalogue_file_empty": "Nothing was returned on this page.",
   "catalogue_file_episode": "Episode",
   "catalogue_file_release": "Release",
-  "catalogue_file_next": "Next page"
+  "catalogue_file_next": "Next page",
+  "home_catalogue": "Explore the catalogue",
+  "subject_connections_title": "Connections across works",
+  "subject_connections_updated": "Connections updated.",
+  "subject_connections_relation": "Relation",
+  "subject_connections_in": "Incoming",
+  "subject_connections_out": "Outgoing",
+  "subject_connections_explore": "Explore nearby connections",
+  "subject_connections_global": "Graph exploration is unavailable in this Realm. Use the relation lists above.",
+  "subject_connections_choose": "Choose up to eight relations",
+  "subject_connections_depth": "Depth",
+  "subject_connections_bounded": "This is a bounded native neighbourhood. Reveal connections separately; read qualified credits in the lists above.",
+  "subject_connections_truncated": "This neighbourhood is partial. Open a destination to continue from its own connection lists.",
+  "subject_connections_return": "Return to the previous destination"
 }

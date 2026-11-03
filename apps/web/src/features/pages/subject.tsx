@@ -475,10 +475,13 @@ export function SubjectPage({
   base,
   operator,
   curation,
+  connections,
   subjectLabel,
   framed = false,
 }: {
   page: SubjectPageData;
+  /** Mounted native connection readers share this visit’s labels, disclosure and selected Context. */
+  connections?: ReactNode;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
   subjectLabel?: string;
   /** The containing view already renders the subject's identity. */
@@ -742,6 +745,7 @@ export function SubjectPage({
                 root={PageRoot}
               />
             </SubjectCommunityContext.Provider>
+            {overview && connections}
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
             {overview && <SubjectSourcesLink />}
             {curation}

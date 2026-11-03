@@ -40,6 +40,7 @@ export function HomeFeed({
   kindControl,
   spaceControl,
   questionControl,
+  catalogue,
   suppressResultMessage = false,
   onRetry,
   onNext,
@@ -57,6 +58,8 @@ export function HomeFeed({
   kindControl?: ReactNode;
   spaceControl?: ReactNode;
   questionControl?: ReactNode;
+  /** Native route TypeLists; the feed and Search retain their own adapters. */
+  catalogue?: ReactNode;
   /** The selected metadata control already explains and recovers its own blocked selection. */
   suppressResultMessage?: boolean;
   onRetry?: () => void;
@@ -181,6 +184,7 @@ export function HomeFeed({
         {spaceControl}
         {questionControl}
       </div>
+      {catalogue}
       <FeedResults
         boundaryRef={boundary}
         regionLabel={m.nav_home({}, options)}
@@ -237,6 +241,7 @@ export function HomeFeedConsumer({
   readQuestions,
   readQuestion,
   origin,
+  catalogue,
 }: {
   initial: HomeFeedResult;
   locale: string;
@@ -247,6 +252,7 @@ export function HomeFeedConsumer({
   readQuestions: HomeQuestionsReader;
   readQuestion: HomeQuestionReader;
   origin: string;
+  catalogue?: ReactNode;
 }) {
   const window = useState(() => createHomeFeedWindow(initial, read))[0];
   const choices = useState(() => createHomeKindChoices(readKinds))[0];
@@ -388,6 +394,7 @@ export function HomeFeedConsumer({
   return (
     <HomeFeed
       result={snapshot.result}
+      catalogue={catalogue}
       locale={locale}
       signedIn={signedIn}
       stream={snapshot.input.stream}

@@ -1,3 +1,4 @@
+import { HomeCatalogue } from '../features/pages/home-catalogue';
 import { useSuspenseQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback } from 'react';
@@ -86,6 +87,7 @@ export function Home() {
     <HomeFeedConsumer
       key={`${locale}:${viewer?.scope ?? 'public'}`}
       initial={loaded.feed}
+      catalogue={<HomeCatalogue result={loaded.catalogue} locale={locale} />}
       locale={locale}
       signedIn={viewer !== null}
       read={read}

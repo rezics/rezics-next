@@ -5824,5 +5824,18 @@
   "catalogue_file_empty": "このページでは何も返りませんでした。",
   "catalogue_file_episode": "話",
   "catalogue_file_release": "リリース",
-  "catalogue_file_next": "次のページ"
+  "catalogue_file_next": "次のページ",
+  "home_catalogue": "カタログを探す",
+  "subject_connections_title": "作品をまたぐつながり",
+  "subject_connections_updated": "つながりを更新しました。",
+  "subject_connections_relation": "関係",
+  "subject_connections_in": "この項目への関係",
+  "subject_connections_out": "この項目からの関係",
+  "subject_connections_explore": "近くのつながりを調べる",
+  "subject_connections_global": "この領域ではグラフを利用できません。上の関係リストをご利用ください。",
+  "subject_connections_choose": "関係を最大8種類選択",
+  "subject_connections_depth": "深さ",
+  "subject_connections_bounded": "表示範囲に上限があるネイティブグラフです。つながりは個別に開いてください。役割などのクレジット情報は上のリストにあります。",
+  "subject_connections_truncated": "グラフの一部を表示しています。移動先の関係リストから探索を続けられます。",
+  "subject_connections_return": "前の項目に戻る"
 }

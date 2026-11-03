@@ -3446,3 +3446,27 @@ Cost: current sales read
   `creator-sales-current-refresh.test.tsx` covers replacement of a seeded page after a foreign refresh and
   subsequent healthy rotation.
   Native/browser/visual/full acceptance remains controller-owned after integration.
+
+
+## Mounted cross-media catalogue navigation
+
+Home now includes the existing native route TypeLists without replacing the Home feed or Search adapters. Realm
+catalogues continue through the delivered Space composer. Subject overviews mount the authenticated Connections
+reader for work relations, character appearances/qualified voice credits and incoming person credits. It uses the
+current release and actual native `relations`, `links` and explicitly requested bounded graph method; it never
+loads a canned Imports manifest or hydrates related endpoints per row.
+
+The reader owns three independently replaceable 12-row pages, bounded no-store response windows and a single
+optional native graph. Target, selected reading and current session/CSRF replacement erase old pages and pending
+results. Existing editors keep command and immutable retry authority. Eight launch locales include selection,
+preparing, empty, denied, stale, unavailable and recovery text. Links retain one validated public return destination
+and acquire fresh authority when followed. Graph exploration remains unavailable in Realms until Semantic supplies
+a Context selector; qualifiers remain on the native relation streams. Imports source gaps and unresolved endpoints
+keep their exact producer identities.
+
+The [Subject owner contract](../../docs/subject-pages.md#mounted-cross-media-visits) defines caps, disclosure,
+return navigation and the final native capture. Focused boundary tests live in `tests/subject-connections.test.ts`;
+they are response-double coverage, not a native execution claim. Native `tests/native/cross-media-pages.test.ts`
+requires a retained mounted stack and authentic selected full-graph seed via `REZICS_CROSS_MEDIA_VISIT`; it creates
+no replacement native stack and preserves the existing browser and native handles. Its final 56-image core set
+must cover 390/1440 light/dark after the native journey. Landing defers that acceptance and capture to integration.
