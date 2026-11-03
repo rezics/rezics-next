@@ -35,6 +35,7 @@ import type { NativeConformanceWorld } from './native-conformance.ts';
 import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
 import type { Access } from '../../../src/request/access.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
+import { NativeLabelCommandTrace } from './native-label-command-trace.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -136,11 +137,27 @@ function bindDatabaseClock(pool: Pool, now: () => string): () => void {
 }
 
 /** Instrument library-owned pg.Pool instances as well as the shared growth pool. */
-function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () => CapturedStatements | undefined) {
+function instrumentLibraryPools(
+  databaseUrl: string,
+  mainPool: Pool,
+  active: () => CapturedStatements | undefined,
+  trace: NativeLabelCommandTrace,
+) {
   const prototype = Pool.prototype as unknown as ConnectPrototype;
   const original = prototype.connect;
   const clients = new WeakSet<PoolClient>();
   const pending = new WeakMap<PoolClient, Promise<void>>();
+  const mainClients = new Map<PoolClient, PoolClient['query']>();
+  const onAcquire = (client: PoolClient) => {
+    if (mainClients.has(client)) return;
+    const query = client.query;
+    mainClients.set(client, query);
+    client.query = ((...args: Parameters<PoolClient['query']>) => {
+      trace.query(args);
+      return query.apply(client, args as never);
+    }) as PoolClient['query'];
+  };
+  mainPool.on('acquire', onAcquire);
 
   async function prepare(client: PoolClient): Promise<void> {
     if (clients.has(client)) return pending.get(client);
@@ -152,6 +169,7 @@ function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () 
     client.query = ((...args: Parameters<PoolClient['query']>) => {
       const text = queryText(args[0]);
       if (text !== undefined) active()?.statements.push(text);
+      trace.query(args);
       return query(...args);
     }) as PoolClient['query'];
     const setup = Promise.all(autoExplainSetup.map((statement) => query(statement))).then(() => undefined);
@@ -186,6 +204,9 @@ function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () 
   };
 
   return () => {
+    mainPool.off('acquire', onAcquire);
+    for (const [client, query] of mainClients) client.query = query;
+    mainClients.clear();
     prototype.connect = original;
   };
 }
@@ -244,8 +265,10 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
   let restorePoolInstrumentation: (() => void) | undefined;
   let restoreDatabaseClock: (() => void) | undefined;
   let dropped = false;
+  const commandTrace = new NativeLabelCommandTrace();
 
   const cleanup = async () => {
+    commandTrace.close();
     if (child) {
       child.kill('SIGCONT');
       child.kill('SIGTERM');
@@ -365,7 +388,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
           const [, , action, resource] = args;
           if (['collection:update', 'space:manage', 'account:manage'].includes(action))
             managementObserver?.({ action, resource: { route: resource.route, id: resource.id } });
-          return authorize(...args);
+          return commandTrace.authorize(action, () => authorize(...args));
         };
         nativeAccess = access;
         return access;
@@ -517,7 +540,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
 
     workClient = await createWorkClient(databaseUrl);
     let activeInternalCapture: CapturedStatements | undefined;
-    restorePoolInstrumentation = instrumentLibraryPools(databaseUrl, db.pool, () => activeInternalCapture);
+    restorePoolInstrumentation = instrumentLibraryPools(databaseUrl, db.pool, () => activeInternalCapture, commandTrace);
 
     const accounts = {
       owner: { id: ownerAccount.id, route: ownerAccount.route, partition: ownerAccount.partition },
@@ -881,6 +904,7 @@ export async function createLibraryDriver(): Promise<NativeConformanceWorld> {
         reader: db.admin,
         databaseUrl,
         workClient,
+        traceCommand: (operation) => commandTrace.trace(operation),
         steward: governor,
         growth: db,
         async principal(partition) {

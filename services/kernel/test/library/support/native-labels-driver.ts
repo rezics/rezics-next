@@ -323,8 +323,7 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
         return unavailable('native request page peak-memory and candidate observations');
       },
       async traceCommand(operation) {
-        await operation();
-        return unavailable('native Access-return and receipt-read trace binding');
+        return world.native.traceCommand(operation);
       },
       async measureLabelSource(operation) {
         await world.native.capture(operation);

@@ -6,6 +6,7 @@ import type { Capture } from '../../support/growth.ts';
 import type { GrowthDatabase } from '../../support/growth.ts';
 import type { ReadTrace, Principal } from '../../../../../specs/follow-counts-driver.ts';
 import type { LibraryAccountHost } from './native-account-host.ts';
+import type { TracedCommand } from '../../../../../specs/library-labels-driver.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
 import type { AccountActor } from '../../../src/request/access.ts';
 
@@ -52,6 +53,7 @@ export interface NativeConformanceWorld extends LibraryDriver {
     hold(): Promise<void>;
     resume(): Promise<void>;
     capture<T>(operation: () => Promise<T>): Promise<{ value: T; capture: Capture }>;
+    traceCommand<T>(operation: () => Promise<T>): Promise<TracedCommand<T>>;
   };
 }
 
