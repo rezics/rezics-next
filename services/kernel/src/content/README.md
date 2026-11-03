@@ -1034,6 +1034,8 @@ is implemented here. Rendered acceptance and connected physical cost evidence re
 
 #### Web consumer handoff
 
+Decision: an in-flight exact decision page binds its original Authorization header; replacing even a same-account, same-client bearer withholds the old response and requires a fresh read.
+
 Decision: generate this envelope with `bun run --cwd services/kernel typecheck --emit-client --emit-openapi` so both
 repository generators share the admitted compiler database and return their installed outputs to the worktree.
 
