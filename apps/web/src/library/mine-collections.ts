@@ -196,8 +196,9 @@ export async function loadMineCollectionsPage(
       state: 'loaded',
       collections,
       navigationCollections,
-      savedQueryCapability:
-        dynamicCollectionsAvailable([...collections, ...navigationCollections]) ? 'available' : 'unavailable',
+      savedQueryCapability: dynamicCollectionsAvailable([...collections, ...navigationCollections])
+        ? 'available'
+        : 'unavailable',
       next: page.next,
       ...(cursorReset ? { cursorReset: true } : {}),
     };

@@ -12,9 +12,7 @@ export type SavedQueryLayout = 'rows' | 'previews';
 export function ownedSavedQueries(collections: readonly MineCollection[], viewerId: string): MineCollection[] {
   return collections.filter(
     (collection) =>
-      collection.curatorAccountId === viewerId &&
-      collection.membershipKind === 'dynamic' &&
-      !collection.builtinKind,
+      collection.curatorAccountId === viewerId && collection.membershipKind === 'dynamic' && !collection.builtinKind,
   );
 }
 
