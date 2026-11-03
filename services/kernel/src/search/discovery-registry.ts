@@ -140,12 +140,12 @@ export function createDiscoveryRegistry(
     entries: Object.freeze([...byKind.values()]),
     get,
     ownerAdapters,
-    getOwnerAdapter(kind) {
+    getOwnerAdapter(kind: DiscoveryOwnerKind) {
       const entry = ownerByKind.get(kind);
       if (!entry) throw new RangeError('Unregistered discovery kind');
       return entry;
     },
-    domains(kind) {
+    domains(kind: string) {
       const entry = byKind.get(kind) ?? ownerByKind.get(kind as DiscoveryOwnerKind);
       if (!entry) throw new RangeError('Unregistered discovery kind');
       return entry.domains;

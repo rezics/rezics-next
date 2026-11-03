@@ -7,11 +7,7 @@ import {
   discoveryDomain,
   evaluateDiscoveryCondition,
 } from '../../src/search/discovery-registry.ts';
-import type {
-  DiscoveryOwnerKey,
-  DiscoveryReadContext,
-  DiscoveryRegistryOptions,
-} from '../../src/search/discovery.ts';
+import type { DiscoveryOwnerKey, DiscoveryReadContext, DiscoveryRegistryOptions } from '../../src/search/discovery.ts';
 
 const id = '018f0000-0000-7000-8000-00a000000001';
 const route = 160;
@@ -91,14 +87,9 @@ test('ready owner adapters preserve canonical identity and current text/kind met
     expect(discoveryDomain(registry, kind, 'kind')).toBe('applicable');
     expect(discoveryDomain(registry, kind, 'type')).toBe('not_applicable');
     expect(
-      evaluateDiscoveryCondition(
-        registry,
-        kind,
-        { not: { domain: 'type', value: 'schema:Person' } },
-        () => {
-          throw new Error('An inapplicable Subject predicate must not be evaluated');
-        },
-      ),
+      evaluateDiscoveryCondition(registry, kind, { not: { domain: 'type', value: 'schema:Person' } }, () => {
+        throw new Error('An inapplicable Subject predicate must not be evaluated');
+      }),
     ).toBe('not_applicable');
   }
 });
@@ -125,7 +116,5 @@ test('unknown, foreign, and unavailable owners fail closed while legacy registra
   expect(unavailable.ownerAdapters.collection.readiness).toBe('unavailable');
   expect(() => unavailable.ownerKey(keys[0]!)).toThrow();
   expect(() => unavailable.getOwnerAdapter('collection')).toThrow();
-  await expect(
-    hydrateOwnerDiscoveryHits(unavailable, [keys[0]!], {} as DiscoveryReadContext),
-  ).rejects.toThrow();
+  await expect(hydrateOwnerDiscoveryHits(unavailable, [keys[0]!], {} as DiscoveryReadContext)).rejects.toThrow();
 });
