@@ -32,9 +32,7 @@ test('Imported MusicAlbum Movie and TVSeries readers expose admitted profile sou
     id: albumId,
     href: catalogueEntries.album({ id: albumId, label: 'Harbour sessions', locale: 'en' }).href,
   });
-  const credit = music.groups
-    .flatMap((group) => group.fields)
-    .find((field) => field.property === 'schema:contributor')
+  const credit = music.groups.flatMap((group) => group.fields).find((field) => field.property === 'schema:contributor')
     ?.values[0];
   expect(credit).toMatchObject({
     state: 'value',
@@ -54,7 +52,11 @@ test('Imported MusicAlbum Movie and TVSeries readers expose admitted profile sou
   const originalDate = album.publicRead.subject.statements['schema:datePublished']![0]!.value;
   const current = await album.editors.facts.read();
   if (!current.ok) throw new Error('Expected current album');
-  const field = stageFact(current, 'schema:datePublished', current.public.subject.statements['schema:datePublished']![0]!.id)!;
+  const field = stageFact(
+    current,
+    'schema:datePublished',
+    current.public.subject.statements['schema:datePublished']![0]!.id,
+  )!;
   field.statement.value = {
     type: 'value',
     content: { time: '+2025-00-00T00:00:00Z', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
@@ -66,14 +68,23 @@ test('Imported MusicAlbum Movie and TVSeries readers expose admitted profile sou
   expect(field.result).toMatchObject({ ok: true, kind: 'proposed-awaiting-review' });
   const proposed = field.result;
   if (!proposed?.ok) throw new Error('Expected proposed candidate');
-  const review = await album.editors.review('schema:datePublished').read('schema:datePublished', undefined, proposed.session);
+  const review = await album.editors
+    .review('schema:datePublished')
+    .read('schema:datePublished', undefined, proposed.session);
   expect(review.ok && review.page?.candidates.some((candidate) => candidate.id === proposed.candidate)).toBe(true);
   const reread = musicReaderVisit({ locale: 'en', release: album.release, public: album.publicRead });
-  expect(reread.groups.flatMap((group) => group.fields).find((field) => field.property === 'schema:datePublished')?.values[0]).toMatchObject({
+  expect(
+    reread.groups.flatMap((group) => group.fields).find((field) => field.property === 'schema:datePublished')
+      ?.values[0],
+  ).toMatchObject({
     state: 'value',
-    time: originalDate.type === 'value' && typeof originalDate.content === 'object' && originalDate.content && 'time' in originalDate.content
-      ? originalDate.content.time
-      : undefined,
+    time:
+      originalDate.type === 'value' &&
+      typeof originalDate.content === 'object' &&
+      originalDate.content &&
+      'time' in originalDate.content
+        ? originalDate.content.time
+        : undefined,
   });
 
   for (const type of ['schema:Movie', 'schema:TVSeries'] as const) {

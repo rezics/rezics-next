@@ -104,7 +104,8 @@ export function profileSourceRecords(subject: unknown): ProfileSourceRecord[] {
   return subject.sourceRecords.flatMap((record) => {
     if (!isRecord(record) || typeof record.name !== 'string' || typeof record.url !== 'string') return [];
     const licenceId = isRecord(record.licence) && typeof record.licence.id === 'string' ? record.licence.id : undefined;
-    const licenceUrl = isRecord(record.licence) && typeof record.licence.url === 'string' ? record.licence.url : undefined;
+    const licenceUrl =
+      isRecord(record.licence) && typeof record.licence.url === 'string' ? record.licence.url : undefined;
     return [
       {
         name: record.name,
@@ -136,7 +137,12 @@ export function profileLibraryControls(release: Release, type: string): ProfileL
   };
 }
 
-export function profileFieldLabel(release: Release, property: string, locale: string, related?: SubjectRead['related']) {
+export function profileFieldLabel(
+  release: Release,
+  property: string,
+  locale: string,
+  related?: SubjectRead['related'],
+) {
   const fromRelease = pickText(release.properties[property]?.labels ?? {}, locale);
   if (fromRelease.text) return fromRelease;
   const fromRelated = pickText(related?.[property]?.labels ?? {}, locale);
@@ -158,8 +164,7 @@ export function profileFieldValue(
   const roleId = qualifierContent(statement, 'wdt:P3831');
   const position = qualifierContent(statement, 'schema:position');
   const episodeNumber = qualifierContent(statement, 'schema:episodeNumber');
-  const roleLabel =
-    typeof roleId === 'string' ? pickText(related?.[roleId]?.labels ?? {}, locale).text : '';
+  const roleLabel = typeof roleId === 'string' ? pickText(related?.[roleId]?.labels ?? {}, locale).text : '';
   const credit = {
     ...(typeof creditedAs === 'string' && creditedAs ? { creditedAs } : {}),
     ...(roleLabel ? { roleLabel } : {}),

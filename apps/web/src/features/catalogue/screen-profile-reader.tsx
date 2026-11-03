@@ -10,12 +10,7 @@ import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './scree
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
 import { loadScreenProfile } from './screen-profile-actions';
-import {
-  ProfileBoundNotes,
-  ProfileLibraryNote,
-  ProfileReaderGroups,
-  ProfileSourceList,
-} from './music-reader-view';
+import { ProfileBoundNotes, ProfileLibraryNote, ProfileReaderGroups, ProfileSourceList } from './music-reader-view';
 import type { ProfileBound, ProfileReaderState } from './music-reader';
 
 const actionClass =
@@ -133,8 +128,7 @@ export function ScreenProfileOverview({
     refetchOnReconnect: false,
   });
   const release = query.data?.ok ? query.data.release : undefined;
-  const reason =
-    query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
+  const reason = query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
   return (
     <ScreenProfileReader
       locale={locale}

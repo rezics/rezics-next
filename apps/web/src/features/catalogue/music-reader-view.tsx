@@ -128,13 +128,7 @@ function FieldList({
   );
 }
 
-export function ProfileSourceList({
-  sources,
-  locale,
-}: {
-  sources: readonly ProfileSourceRecord[];
-  locale: string;
-}) {
+export function ProfileSourceList({ sources, locale }: { sources: readonly ProfileSourceRecord[]; locale: string }) {
   const o = options(locale);
   return (
     <section data-slot="profile-source-evidence" className="min-w-0 space-y-3">
@@ -167,21 +161,13 @@ export function ProfileSourceList({
   );
 }
 
-export function ProfileBoundNotes({
-  bounds,
-  locale,
-}: {
-  bounds: readonly ProfileBound[];
-  locale: string;
-}) {
+export function ProfileBoundNotes({ bounds, locale }: { bounds: readonly ProfileBound[]; locale: string }) {
   const incomplete = bounds.filter((bound) => !bound.complete);
   if (!incomplete.length) return null;
   return (
     <ul data-slot="profile-bounded-relations" className="text-sm text-muted-foreground">
       {incomplete.map((bound) => (
-        <li key={bound.property}>
-          {m.profile_reader_page_incomplete({ label: bound.property }, options(locale))}
-        </li>
+        <li key={bound.property}>{m.profile_reader_page_incomplete({ label: bound.property }, options(locale))}</li>
       ))}
     </ul>
   );
@@ -332,8 +318,7 @@ export function MusicAlbumOverview({
     refetchOnReconnect: false,
   });
   const release = query.data?.ok ? query.data.release : undefined;
-  const reason =
-    query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
+  const reason = query.data && !query.data.ok ? query.data.reason : query.isError ? 'unavailable' : undefined;
   return (
     <MusicAlbumReader
       locale={locale}
