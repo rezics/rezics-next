@@ -66,12 +66,7 @@ export type StagingRetirementEligibilityReason =
   | 'vndb-pre-native'
   | 'unknown-status';
 
-export type StagingRetirementOwnerAvailability =
-  | 'absent'
-  | 'live'
-  | 'stale'
-  | 'uninspectable'
-  | 'unavailable';
+export type StagingRetirementOwnerAvailability = 'absent' | 'live' | 'stale' | 'uninspectable' | 'unavailable';
 
 export type StagingRetirementCheckpointState = 'absent' | 'present' | 'corrupt' | 'unavailable';
 
@@ -302,7 +297,10 @@ function effectPin(
   ];
   for (const [table, sql, present] of probes) {
     if (present && !present.has(table)) continue;
-    if (retentionExistsFlag(database, sql, source, id)) return table === 'run_disappearance_stops' || table === 'run_disappearance_missing' ? 'sealed-evidence' : 'prepared-or-effect';
+    if (retentionExistsFlag(database, sql, source, id))
+      return table === 'run_disappearance_stops' || table === 'run_disappearance_missing'
+        ? 'sealed-evidence'
+        : 'prepared-or-effect';
   }
   if (
     retentionExistsFlag(
@@ -330,21 +328,19 @@ function readCheckpoint(
         disappearance_threshold,committed_ordinal,skipped,rolling_digest
        FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
     )
-    .get(source, id) as
-    | {
-        version: number;
-        sha256: string;
-        bytes: number;
-        source_alias: string;
-        source_kind: string;
-        converter_revision: string;
-        decoder_id: string;
-        disappearance_threshold: number;
-        committed_ordinal: number;
-        skipped: number;
-        rolling_digest: string;
-      }
-    | null;
+    .get(source, id) as {
+    version: number;
+    sha256: string;
+    bytes: number;
+    source_alias: string;
+    source_kind: string;
+    converter_revision: string;
+    decoder_id: string;
+    disappearance_threshold: number;
+    committed_ordinal: number;
+    skipped: number;
+    rolling_digest: string;
+  } | null;
   if (!row) return { state: 'absent' };
   try {
     const checkpoint = admitStagingCheckpoint({
@@ -491,7 +487,9 @@ function classifyOnDatabase(
   const pin: StagingRetirementReview['pin'] =
     generation.id === pins.active ? 'active' : generation.id === pins.baseline ? 'baseline' : 'none';
   const counts = countsFor(database, input.source, generation.id, catalog.tables);
-  const checkpoint = readCheckpoint(database, input.source, generation.id, catalog.tables) ?? { state: 'absent' as const };
+  const checkpoint = readCheckpoint(database, input.source, generation.id, catalog.tables) ?? {
+    state: 'absent' as const,
+  };
   const revision = captureRevision({ generation, checkpoint, counts });
   const review = {
     ...base,

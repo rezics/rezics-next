@@ -445,10 +445,7 @@ test('sealed, pending, busy, incompatible and ambiguous state is refused', async
       const active = concurrent.database
         .query('SELECT id,lease FROM run_generations WHERE source=? AND id=?')
         .get(source, seeded.capture) as { id: string; lease: string };
-      concurrent.stage(
-        { source, id: active.id, lease: active.lease },
-        staged(source, 'Q4', '4'.repeat(64)),
-      );
+      concurrent.stage({ source, id: active.id, lease: active.lease }, staged(source, 'Q4', '4'.repeat(64)));
     } finally {
       concurrent.close();
     }
@@ -596,9 +593,7 @@ test('sealed, pending, busy, incompatible and ambiguous state is refused', async
     expect(JSON.parse(aborted.stdout).status).toBe('cancelled');
     const owners = new RunStore<SourceProjection>(state, { projectionMode: 'source-record' });
     try {
-      expect(
-        owners.database.query('SELECT capability FROM import_owners WHERE source=?').get(source),
-      ).toBeNull();
+      expect(owners.database.query('SELECT capability FROM import_owners WHERE source=?').get(source)).toBeNull();
     } finally {
       owners.close();
     }
@@ -652,12 +647,12 @@ test('crash in every staging retirement phase resumes the same plan', async () =
       const store = new RunStore<SourceProjection>(state, { projectionMode: 'source-record' });
       try {
         expect(
-          store.database.query('SELECT status FROM run_generations WHERE source=? AND id=?').get(source, seeded.capture),
+          store.database
+            .query('SELECT status FROM run_generations WHERE source=? AND id=?')
+            .get(source, seeded.capture),
         ).toEqual({ status: 'retired' });
         expect(
-          store.database
-            .query('SELECT generation,present_count,sequence FROM run_sources WHERE source=?')
-            .get(source),
+          store.database.query('SELECT generation,present_count,sequence FROM run_sources WHERE source=?').get(source),
         ).toEqual(seeded.pins);
         expect(
           store.database
