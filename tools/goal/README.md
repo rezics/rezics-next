@@ -451,6 +451,12 @@ Launch smoke forwards its startup policy snapshot to its inner process. Its UUID
 fixture command delays, evidence traversal accounting, JSON syntax costs and UTF-8 shrink factor are fixed protocol
 or fixture constants. Owner-decision IDs retain their fixed 128-character persisted identity format; input and
 manager-message limits use the caller policy. Brief estimate defaults remain guidance, without estimate caps.
+Merge helpers append an optional command policy after existing brief arguments; pool-selection options carry the
+provider policy through fallbacks. Pool-local freshness and explicit routing still take precedence. Completed Git
+output that exceeds the byte bound fails instead of becoming successful partial evidence or ancestry.
+Provider-defined window identities, day/hour/percentage conversions, Git index stages and mode codes, persistent
+hash widths, JSON-RPC codes, suite partitions, source/workflow pins and lifecycle fixture timings retain their
+protocol or representation meaning; they are not operator limits.
 
 | Setting                                               | Default                     | Purpose                                                                                         |
 | ----------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------- |

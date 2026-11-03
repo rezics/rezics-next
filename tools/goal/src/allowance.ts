@@ -35,7 +35,7 @@ export function choosePool(
     exclude?: string[];
     history?: readonly PoolReading[];
     now?: number;
-    policy?: ControlPolicy['provider'];
+    policy?: ControlPolicy['provider'] | undefined;
   } = {},
 ): Pool {
   const now = options.now ?? Date.now();

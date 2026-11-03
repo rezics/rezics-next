@@ -790,7 +790,6 @@ export class WorkerTasks {
           submitted.brief.markdown,
           submitted.brief.paths,
           this.settings.policy?.brief,
-          this.settings.policy?.merge,
         );
         if (
           previousFrozen.length !== nextFrozen.length ||

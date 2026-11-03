@@ -1288,7 +1288,6 @@ export function rebaseOnto(
     const outside = outsideScope(
       changed.filter((path) => !derivedForPath(path, files, policy).length && !own.has(path)),
       allowedPaths,
-      policy,
     );
     if (outside.length) {
       git(cwd, 'reset', '--hard', head);

@@ -8,14 +8,14 @@ import { firstFailure, git, policyGit } from './merge.ts';
 import { defaultPolicy, readControlPolicy } from './policy.ts';
 import { scriptPolicy, readScriptPolicy, withScriptPolicy } from './script-policy.ts';
 import { reportServices } from './service.ts';
-import { repository, temporaryDirectory, harness } from './test-support.ts';
+import { repository, temporaryDirectory, harness, mergeTrainHarness } from './test-support.ts';
 import { WorkerStore } from './store.ts';
 import { recordToolBlockerFailure } from './tool-incidents.ts';
 import { CHECK_COMPATIBILITY_CONTRACT, checkScriptCompatibility } from './check-compatibility.ts';
 import { syncChecks } from '../scripts/cp-sync.ts';
 import { choosePool } from './allowance.ts';
 import { choosePoolWithFallback } from './pools.ts';
-import { changedPathsBetween, rebaseOnto, rebaseUpstream, stagePaths } from './merge-train.ts';
+import { MergeTrain, changedPathsBetween, rebaseOnto, rebaseUpstream, stagePaths } from './merge-train.ts';
 import { ownerConflictGitConfig, policyOwnerConflictGit } from './owner-conflict.ts';
 import { git as taskGit } from './tasks.ts';
 import { isAncestor } from './workspace.ts';
@@ -327,6 +327,51 @@ test('evidence never publishes an oversized tracked or untracked patch as comple
     expect(() => evidenceBundle(task, attempt, null, policy)).toThrow();
     evidenceBundle(task, attempt);
     expect(readFileSync(join(attempt.evidencePath, 'diff.patch'), 'utf8')).toContain('é'.repeat(1000));
+  } finally {
+    f.close();
+  }
+});
+
+test('negative probe command bounds preserve injected runners and mandatory full checks', async () => {
+  const f = mergeTrainHarness();
+  try {
+    f.commit('second');
+    const head = git(f.main, 'rev-parse', 'HEAD');
+    const snapshot = { mainBranch: 'main', mainHead: head, devBranch: 'main', devHead: head, stabilizeBranch: 'main' };
+    for (const limit of [1, 2]) {
+      const calls: string[][] = [];
+      const train = new MergeTrain({
+        ...f.options,
+        policy: readControlPolicy({
+          controlPlane: { negativeProbeCommands: limit, checkTimeoutMs: 1, negativeProbeTimeoutMs: 1 },
+        }),
+        runControlPlaneGate: async (command) => {
+          calls.push([...command]);
+          return {
+            passed: command.at(-1) === 'base' || command.includes('install'),
+            timedOut: false,
+            output: 'fixture',
+          };
+        },
+      });
+      const result = await train['verifyControlPlaneCandidate'](
+        f.main,
+        head,
+        snapshot,
+        join(f.path, `probe-${limit}.log`),
+        undefined,
+        undefined,
+        [
+          ['bun', 'test', '--timeout', '9', 'base'],
+          ['bun', 'test', '--timeout', '9', 'second'],
+        ],
+      );
+      expect(calls.filter((command) => command[1] === 'test').map((command) => command.at(-1))).toEqual(
+        limit === 1 ? ['base'] : ['base', 'second'],
+      );
+      expect(result.negativeOnly ?? false).toBe(limit === 2);
+      expect(calls.some((command) => command.includes('typecheck'))).toBe(limit === 1);
+    }
   } finally {
     f.close();
   }
