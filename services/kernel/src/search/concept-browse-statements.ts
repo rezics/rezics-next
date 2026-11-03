@@ -180,6 +180,48 @@ export function conceptStatementQualifiers(request: ConceptStatementRequest): re
   ];
 }
 
+/** Raw key continuity is required even for an empty terminal seek or a rejected window.
+ * A native terminal flag cannot turn a full dispatch into an absence certificate.
+ */
+function validConceptStatementWindow(
+  partition: number,
+  request: ConceptStatementRequest,
+  cursor: ConceptStatementCursor | null,
+  page: ConceptStatementWindow,
+  limit: number,
+): boolean {
+  if (
+    !Array.isArray(page.statements) ||
+    !Number.isSafeInteger(page.examined) ||
+    page.examined < page.statements.length ||
+    page.examined > limit ||
+    typeof page.complete !== 'boolean' ||
+    page.terminal !== page.examined < limit ||
+    (page.complete && !page.terminal) ||
+    (page.examined > 0 && page.after === null) ||
+    (page.examined === 0 && (page.after === null) !== (cursor === null))
+  )
+    return false;
+  if (
+    page.readyPrefix !== undefined &&
+    (typeof page.readyPrefix !== 'string' || !/^[0-9a-f]{64}$/.test(page.readyPrefix))
+  )
+    return false;
+  if (page.after === null) return true;
+  try {
+    conceptStatementRequest(partition, request, page.after, limit);
+  } catch {
+    return false;
+  }
+  if (page.readyPrefix !== undefined && page.readyPrefix !== page.after.observation) return false;
+  if (!cursor) return true;
+  if (page.after.observation !== cursor.observation) return false;
+  return page.examined === 0
+    ? page.after.slot === cursor.slot && page.after.candidate === cursor.candidate
+    : page.after.slot > cursor.slot ||
+        (page.after.slot === cursor.slot && page.after.candidate > cursor.candidate);
+}
+
 /** A bounded native witness window composed with a retained closure. Never traverses the graph
  * per candidate and never refills. A native mutation on a rejected row also retires the cut.
  */
@@ -210,18 +252,7 @@ export async function matchNativeConceptStatements(
   if (read.status === 'changed') return restart();
   if (read.status !== 'current') return { status: read.status, match: 'not_proven' };
   const nativePage = structuredClone(read.page);
-  if (
-    !Array.isArray(nativePage.statements) ||
-    !Number.isSafeInteger(nativePage.examined) ||
-    nativePage.examined < 0 ||
-    nativePage.examined < nativePage.statements.length ||
-    nativePage.examined > limit ||
-    typeof nativePage.complete !== 'boolean' ||
-    typeof nativePage.terminal !== 'boolean' ||
-    (nativePage.complete && (!nativePage.terminal || nativePage.examined >= limit)) ||
-    (!nativePage.terminal && nativePage.after === null)
-  )
-    return restart();
+  if (!validConceptStatementWindow(partition, request, cursor, nativePage, limit)) return restart();
   // A terminal suffix cannot prove the omitted prefix. Multi-window absence needs a separate
   // owner proof; this matcher accepts a native complete-prefix proof only from its first window.
   const page = { ...nativePage, complete: cursor === null && nativePage.complete };
@@ -265,7 +296,7 @@ export async function matchNativeConceptStatementPrefix(
   const request = conceptStatementRequest(partition, input, null, attempt.windowLimit());
   const cut = ownConceptStatementCut({ source, store, state });
   const scanned = await scanConceptStatementPrefix(reader, cut, partition, request, attempt);
-  if (scanned.status !== 'current') return attempt.finishStatus(scanned.status, [cut]);
+  if (scanned.status !== 'current') return attempt.abandon(scanned.status, [cut]);
   const current = await attempt.revalidate([cut]);
   if (current === 'not_proven') return attempt.result('current');
   return current === 'current'
@@ -329,7 +360,7 @@ export async function matchNativeConceptFilter(
   let complete = true;
   for (const [index, request] of requests.entries()) {
     const scanned = await scanConceptStatementPrefix(reader, admittedCuts[index]!, partition, request, attempt);
-    if (scanned.status !== 'current') return attempt.finishStatus(scanned.status, admittedCuts);
+    if (scanned.status !== 'current') return attempt.abandon(scanned.status, admittedCuts);
     matches.push(scanned.match);
     complete &&= scanned.complete;
   }
@@ -386,6 +417,18 @@ class ConceptStatementAttempt {
     }
     return this.result(status);
   }
+  async abandon(status: ConceptStatementPrefixResult['status'], cuts: readonly ConceptStatementCut[]) {
+    // A later unavailable/preparing leaf must not hide a mutation in an earlier rejected
+    // window. Its admitted revalidation allowance is still spent before releasing the cut.
+    const current = this.validators.length ? await this.revalidate(cuts) : 'current';
+    const final =
+      status === 'restart' || current === 'restart'
+        ? 'restart'
+        : status === 'unavailable' || current === 'unavailable'
+          ? 'unavailable'
+          : status;
+    return this.finishStatus(final, cuts);
+  }
   async revalidate(
     cuts: readonly ConceptStatementCut[],
   ): Promise<'current' | 'not_proven' | 'restart' | 'unavailable'> {
@@ -395,11 +438,16 @@ class ConceptStatementAttempt {
       const current = await currentConceptMemberships(source, store, state, [state.selection.concept]);
       usable &&= current[0] === true;
     }
+    let changed = false,
+      available = true;
     for (const validate of this.validators) {
       const current = await validate();
-      if (current === 'changed') return 'restart';
-      if (current !== 'current') return 'unavailable';
+      changed ||= current === 'changed';
+      available &&= current === 'current';
     }
+    // Drain every visited witness: unavailable evidence cannot mask a later mutation.
+    if (changed) return 'restart';
+    if (!available) return 'unavailable';
     return usable ? 'current' : 'not_proven';
   }
 }
@@ -438,32 +486,7 @@ async function scanConceptStatementPrefix(
     if (read.status === 'changed') return result('restart');
     if (read.status !== 'current') return result(read.status);
     const page = structuredClone(read.page);
-    if (
-      !Array.isArray(page.statements) ||
-      !Number.isSafeInteger(page.examined) ||
-      page.examined < page.statements.length ||
-      page.examined > limit ||
-      page.terminal !== page.examined < limit ||
-      (page.examined > 0 && page.after === null)
-    )
-      return result('restart');
-    if (page.after !== null) {
-      // Also admit empty terminal continuations before treating them as evidence.
-      try {
-        conceptStatementRequest(partition, request, page.after, limit);
-      } catch {
-        return result('restart');
-      }
-      if (
-        cursor &&
-        (page.after.observation !== cursor.observation ||
-          (page.examined > 0 &&
-            (page.after.slot < cursor.slot ||
-              (page.after.slot === cursor.slot && page.after.candidate <= cursor.candidate))) ||
-          (page.examined === 0 && (page.after.slot !== cursor.slot || page.after.candidate !== cursor.candidate)))
-      )
-        return result('restart');
-    }
+    if (!validConceptStatementWindow(partition, request, cursor, page, limit)) return result('restart');
     if (page.readyPrefix === undefined) certified = false;
     else {
       if (

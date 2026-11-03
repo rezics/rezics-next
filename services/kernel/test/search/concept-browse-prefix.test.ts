@@ -36,6 +36,8 @@ function fixture(
     certified?: boolean;
     brokenCursor?: boolean;
     concealed?: boolean;
+    interrupted?: 'preparing' | 'unavailable';
+    droppedTerminalCursor?: boolean;
   } = {},
 ) {
   const dispatches: number[] = [],
@@ -54,6 +56,7 @@ function fixture(
   const reader: ConceptStatementReader = async (_partition, _request, after, limit) => {
     const index = dispatches.length;
     dispatches.push(limit);
+    if (options.interrupted && index === 2) return { status: options.interrupted };
     return {
       status: 'current',
       page: {
@@ -66,7 +69,9 @@ function fixture(
           ? nativeConceptStatementCoverage(true, after, index < 2 ? limit : 0, limit, 0, observation)
           : {}),
         after:
-          index >= 2 || (options.brokenCursor && index === 1)
+          options.droppedTerminalCursor && index >= 2
+            ? null
+            : index >= 2 || (options.brokenCursor && index === 1)
             ? after
             : {
                 slot: `00000000-0000-4000-8000-00000000000${index + 1}`,
@@ -113,16 +118,33 @@ test('exhausting either allowance or lacking native prefix certification cannot 
 test('a later rejected candidate mutation retires an earlier positive; unavailable evidence discards it', async () => {
   const changed = fixture({ positive: true, changed: 1 });
   expect(await changed.match()).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
-  expect(changed.validations).toEqual([0, 1]);
+  expect(changed.validations).toEqual([0, 1, 2]);
   expect(changed.retired()).toBe(1);
   const unavailable = fixture({ positive: true, unavailable: 1 });
   expect(await unavailable.match()).toMatchObject({ status: 'unavailable', match: 'not_proven', complete: false });
 });
 
 test('a nonadvancing full raw cursor restarts without treating the omitted suffix as absence', async () => {
-  const f = fixture({ brokenCursor: true });
+  for (const f of [fixture({ brokenCursor: true }), fixture({ droppedTerminalCursor: true })]) {
+    expect(await f.match()).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
+    expect(f.retired()).toBe(1);
+  }
+});
+
+test('unavailable revalidation cannot conceal a later rejected-candidate mutation', async () => {
+  const f = fixture({ unavailable: 0, changed: 1 });
   expect(await f.match()).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
+  expect(f.validations).toEqual([0, 1, 2]);
   expect(f.retired()).toBe(1);
+});
+
+test('interrupted traversal still revalidates every visited window before releasing the cut', async () => {
+  for (const interrupted of ['preparing', 'unavailable'] as const) {
+    const f = fixture({ interrupted, changed: 0 });
+    expect(await f.match()).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
+    expect(f.validations).toEqual([0, 1]);
+    expect(f.retired()).toBe(1);
+  }
 });
 
 test('concealed native evidence in any window prevents complete multi-window exclusion', async () => {
