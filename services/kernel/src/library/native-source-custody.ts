@@ -754,7 +754,8 @@ function nativeLibrarySourceCustody(
         if (
           (source.publicCustody && !(episode.kind === 'terminal' && input.identity.scope === 'private_builtin')) ||
           input.identity.scope === 'active_explicit_output'
-        ) return blocked('public_custody');
+        )
+          return blocked('public_custody');
         if (
           episode.kind === 'deleted' &&
           (source.state !== 'deleted' ||
