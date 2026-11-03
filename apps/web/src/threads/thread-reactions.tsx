@@ -478,7 +478,9 @@ function ReactionCaller({
         {...(presentation ? { presentation } : {})}
         onChange={onChange}
         value={resolved ? resolved.snapshot.value : value}
-        {...(signedIn ? {} : { signInHref: `${locale ? `/${locale}` : ''}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
+        {...(signedIn
+          ? {}
+          : { signInHref: `${locale ? `/${locale}` : ''}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` })}
       />
       {recovery ? (
         <>

@@ -7,59 +7,94 @@ import type { FeedReaction } from '../features/feed/vote-control';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 
-function PreparedCard({ signedIn = true, voted = false, refused = false, long = false }: {
-  signedIn?: boolean; voted?: boolean; refused?: boolean; long?: boolean;
+function PreparedCard({
+  signedIn = true,
+  voted = false,
+  refused = false,
+  long = false,
+}: {
+  signedIn?: boolean;
+  voted?: boolean;
+  refused?: boolean;
+  long?: boolean;
 }) {
   const locale = getLocale();
   const [replies, setReplies] = useState(0);
   const client = useMemo(() => {
     const value = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    value.setQueryData(['session'], signedIn
-      ? { state: 'signed-in', subject: 'prepared-reader', csrfToken: 'prepared-csrf' }
-      : { state: 'signed-out', subject: null, csrfToken: null });
+    value.setQueryData(
+      ['session'],
+      signedIn
+        ? { state: 'signed-in', subject: 'prepared-reader', csrfToken: 'prepared-csrf' }
+        : { state: 'signed-out', subject: null, csrfToken: null },
+    );
     return value;
   }, [signedIn]);
   const reaction = useMemo<FeedReaction>(() => {
     let value: 'upvote' | 'downvote' | null = voted ? 'upvote' : null;
     return {
       target: { kind: 'post', id: 'prepared-post' },
-      counts: { upvote: 8, downvote: 2 }, value,
+      counts: { upvote: 8, downvote: 2 },
+      value,
       preparedTransport: {
         change: async ({ data }) => {
           if (refused) return { ok: false as const, reason: 'forbidden' as const };
           value = data.kind === 'upvote' || data.kind === 'downvote' ? data.kind : null;
           return { ok: true as const };
         },
-        read: async () => ({ ok: true as const, counts: { upvote: value === 'upvote' ? 9 : 8,
-          downvote: value === 'downvote' ? 3 : 2 }, value }),
+        read: async () => ({
+          ok: true as const,
+          counts: { upvote: value === 'upvote' ? 9 : 8, downvote: value === 'downvote' ? 3 : 2 },
+          value,
+        }),
       },
     };
   }, [voted, refused]);
-  return <QueryClientProvider client={client}>
-    <main className="mx-auto max-w-3xl space-y-4 p-4">
-      <p role="note" className="text-sm text-muted-foreground">Prepared responses: illustrative vote receipts and unavailable feedback commands.</p>
-      <article className="space-y-3 border-b border-border pb-4">
-        <h1 className="text-xl font-semibold">{long
-          ? 'A very long discussion title about reading together, sharing observations and returning to a work across languages — 一起閱讀的討論'
-          : 'Reading together'}</h1>
-        <p>What did you notice on the second reading?</p>
-        <FeedActionBar locale={locale} title="Reading together" href={`/${locale}/threads/prepared/reading`}
-          signedIn={signedIn} reaction={reaction} reply={{ onReply: () => setReplies((n) => n + 1) }}
-          library={{ href: `/${locale}/subjects/prepared/work?slot=collections` }}>
-          <a className="inline-flex min-h-11 items-center text-sm underline" href={`/${locale}/library/progress`}>Continue</a>
-        </FeedActionBar>
-        {replies ? <p role="status">Prepared reply destination opened.</p> : null}
-      </article>
-    </main>
-  </QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <main className="mx-auto max-w-3xl space-y-4 p-4">
+        <p role="note" className="text-sm text-muted-foreground">
+          Prepared responses: illustrative vote receipts and unavailable feedback commands.
+        </p>
+        <article className="space-y-3 border-b border-border pb-4">
+          <h1 className="text-xl font-semibold">
+            {long
+              ? 'A very long discussion title about reading together, sharing observations and returning to a work across languages — 一起閱讀的討論'
+              : 'Reading together'}
+          </h1>
+          <p>What did you notice on the second reading?</p>
+          <FeedActionBar
+            locale={locale}
+            title="Reading together"
+            href={`/${locale}/threads/prepared/reading`}
+            signedIn={signedIn}
+            reaction={reaction}
+            reply={{ onReply: () => setReplies((n) => n + 1) }}
+            library={{ href: `/${locale}/subjects/prepared/work?slot=collections` }}
+          >
+            <a className="inline-flex min-h-11 items-center text-sm underline" href={`/${locale}/library/progress`}>
+              Continue
+            </a>
+          </FeedActionBar>
+          {replies ? <p role="status">Prepared reply destination opened.</p> : null}
+        </article>
+      </main>
+    </QueryClientProvider>
+  );
 }
 
 const meta = {
-  title: 'Patterns/Feed/Action bar', component: PreparedCard,
-  parameters: { layout: 'fullscreen', viewport: { options: {
-    phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
-    desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
-  } } },
+  title: 'Patterns/Feed/Action bar',
+  component: PreparedCard,
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '900px' } },
+      },
+    },
+  },
 } satisfies Meta<typeof PreparedCard>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -82,8 +117,10 @@ export const SignedOut: Story = {
   args: { signedIn: false },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('link', { name: m.reaction_upvote() })).toHaveAttribute('href',
-      `/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/threads/prepared/reading`)}`);
+    await expect(canvas.getByRole('link', { name: m.reaction_upvote() })).toHaveAttribute(
+      'href',
+      `/${getLocale()}/auth/sign-in?return_to=${encodeURIComponent(`/${getLocale()}/threads/prepared/reading`)}`,
+    );
     await expect(canvas.queryByRole('button', { name: m.report_action() })).toBeNull();
   },
 };
@@ -98,10 +135,14 @@ export const Refused: Story = {
   },
 };
 export const Phone: Story = { ...SignedIn, globals: { viewport: { value: 'phone390' }, theme: 'light' } };
-export const PhoneDarkLongStrings: Story = { ...SignedIn, args: { long: true },
-  globals: { viewport: { value: 'phone390' }, theme: 'dark' } };
+export const PhoneDarkLongStrings: Story = {
+  ...SignedIn,
+  args: { long: true },
+  globals: { viewport: { value: 'phone390' }, theme: 'dark' },
+};
 export const DesktopDarkKeyboard: Story = {
-  args: { long: true }, globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
+  args: { long: true },
+  globals: { viewport: { value: 'desktop1280' }, theme: 'dark' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const up = await canvas.findByRole('button', { name: m.reaction_upvote() });

@@ -339,8 +339,11 @@ export const Reactions = (props: ReactionsProps) => {
     );
   };
 
-  const votes = props.presentation !== undefined && props.presentation !== 'chips' &&
-    kinds.includes('upvote') && kinds.includes('downvote');
+  const votes =
+    props.presentation !== undefined &&
+    props.presentation !== 'chips' &&
+    kinds.includes('upvote') &&
+    kinds.includes('downvote');
   // Native count maps omit zero kinds. An admitted map is a complete projection, not a generic click count.
   const score = (shown.counts.upvote ?? 0) - (shown.counts.downvote ?? 0);
   const voteArrow = (kind: 'upvote' | 'downvote') => {
@@ -355,8 +358,14 @@ export const Reactions = (props: ReactionsProps) => {
         <Icon aria-hidden className="size-5" />
       </a>
     ) : (
-      <button type="button" aria-label={labels[kind]} aria-pressed={pressed} className={className}
-        disabled={disabled} onClick={() => select(kind)}>
+      <button
+        type="button"
+        aria-label={labels[kind]}
+        aria-pressed={pressed}
+        className={className}
+        disabled={disabled}
+        onClick={() => select(kind)}
+      >
         <Icon aria-hidden className={cn('size-5', pressed && 'fill-current')} />
       </button>
     );
@@ -371,8 +380,10 @@ export const Reactions = (props: ReactionsProps) => {
       role="group"
     >
       {votes ? (
-        <div data-slot="vote-control" className={cn('inline-flex items-center rounded-full',
-          props.presentation !== 'vote-plain' && 'bg-muted/70')}>
+        <div
+          data-slot="vote-control"
+          className={cn('inline-flex items-center rounded-full', props.presentation !== 'vote-plain' && 'bg-muted/70')}
+        >
           {voteArrow('upvote')}
           <output aria-live="polite" className="min-w-8 px-1 text-center text-sm font-semibold tabular-nums">
             {formatCount(props.locale, score)}

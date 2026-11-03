@@ -210,11 +210,14 @@ export function HomeFeed({
         getItemKey={(item) => item.id}
         itemPresentation={(item) => {
           const presentation = homeFeedItemPresentation(item, locale);
-          return { ...presentation, actions: (
-            <HomeFeedActions key={item.id} item={item} locale={locale} signedIn={signedIn}>
-              {presentation.actions}
-            </HomeFeedActions>
-          ) };
+          return {
+            ...presentation,
+            actions: (
+              <HomeFeedActions key={item.id} item={item} locale={locale} signedIn={signedIn}>
+                {presentation.actions}
+              </HomeFeedActions>
+            ),
+          };
         }}
         onRetry={onRetry}
         onRestart={onRestart}

@@ -506,8 +506,6 @@ export function ThreadPage() {
   );
 }
 
-
-
 function fullDateTime(value: string): string {
   const date = new Date(value);
   return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'full', timeStyle: 'long', timeZone: 'UTC' }).format(date);
@@ -943,34 +941,45 @@ export function ThreadReadingPost({
               plain={post.parentId !== null}
               layout="detail"
               origin={{ key: lifetime.id, isCurrent: () => current() }}
-              reaction={{ target, counts, value, onMutation, personalReady, settleWithRead: false,
-                reactionOrigin: { key: lifetime.id, reader: viewerId ?? null, isCurrent: () => current() } }}
+              reaction={{
+                target,
+                counts,
+                value,
+                onMutation,
+                personalReady,
+                settleWithRead: false,
+                reactionOrigin: { key: lifetime.id, reader: viewerId ?? null, isCurrent: () => current() },
+              }}
               reply={{ onReply, disabled: replyPending || !personalReady }}
-              overflow={editing ? <span /> : ownsPost ? (
-                <ContentActions
-                  key={lifetime.id}
-                  labels={labels}
-                  onCopyLink={copyLink}
-                  onDelete={deletePost}
-                  onEdit={() => {
-                    if (!commandReady() || !ownsPost) return;
-                    const key = crypto.randomUUID();
-                    editOwner.current = { lifetime, ticket, key };
-                    setEditKey(key);
-                    setEditing(true);
-                  }}
-                  ownsContent
-                  triggerRef={menuButton}
-                  extraEntries={feedFeedbackEntries(getLocale(), signedIn, returnTo)}
-                />
-              ) : (
-                <PostActions
-                  target={target}
-                  {...(post.revisionId ? { revisionId: post.revisionId } : {})}
-                  verification={verification}
-                  extraEntries={feedFeedbackEntries(getLocale(), signedIn, returnTo)}
-                />
-              )}
+              overflow={
+                editing ? (
+                  <span />
+                ) : ownsPost ? (
+                  <ContentActions
+                    key={lifetime.id}
+                    labels={labels}
+                    onCopyLink={copyLink}
+                    onDelete={deletePost}
+                    onEdit={() => {
+                      if (!commandReady() || !ownsPost) return;
+                      const key = crypto.randomUUID();
+                      editOwner.current = { lifetime, ticket, key };
+                      setEditKey(key);
+                      setEditing(true);
+                    }}
+                    ownsContent
+                    triggerRef={menuButton}
+                    extraEntries={feedFeedbackEntries(getLocale(), signedIn, returnTo)}
+                  />
+                ) : (
+                  <PostActions
+                    target={target}
+                    {...(post.revisionId ? { revisionId: post.revisionId } : {})}
+                    verification={verification}
+                    extraEntries={feedFeedbackEntries(getLocale(), signedIn, returnTo)}
+                  />
+                )
+              }
             />
           </div>
         </div>
