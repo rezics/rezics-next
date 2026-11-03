@@ -4,7 +4,8 @@ import { SearchUnavailableError } from '../../src/search/opensearch.ts';
 import { admitSearchPayload } from '../../src/search/query-payload.ts';
 
 const prefix = 'keyset-';
-const plan = { size: 2, sort: 'id' as const, generation: 1 };
+type Plan = { size: number; sort: 'id'; generation: number; after?: readonly (string | number | null)[] };
+const plan: Plan = { size: 2, sort: 'id', generation: 1 };
 
 function hit(id: string, index = `${prefix}subjects-g1`) {
   return { _id: id, _index: index, _source: { partition: 10, security_revision: 1 }, sort: [id] };
