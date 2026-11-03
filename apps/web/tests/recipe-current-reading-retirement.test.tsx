@@ -116,7 +116,7 @@ test('Recipe recovery retires current authority and keeps the private draft and 
     return lateResult!;
   };
   const show = (node: ReactNode) =>
-    act(async () =>
+    act(() => {
       root.render(
         <QueryClientProvider client={client}>
           <CandidateReaderBoundary
@@ -126,9 +126,9 @@ test('Recipe recovery retires current authority and keeps the private draft and 
             {node}
           </CandidateReaderBoundary>
         </QueryClientProvider>,
-      ),
-    );
-  const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+      );
+    });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   const until = async (predicate: () => boolean) => {
     for (let attempt = 0; attempt < 100 && !predicate(); attempt++) await settle();
     expect(predicate()).toBe(true);

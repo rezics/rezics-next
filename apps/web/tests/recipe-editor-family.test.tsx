@@ -376,19 +376,23 @@ test('Recipe creation and current correction share complete frames with independ
     await replace(input(ownIngredient, m.correction_language()), 'en');
     const siblingScalar = scalar(ownIngredient);
     await cite(ownIngredient, longCitation);
-    const retiredCitation = citationChange(ownIngredient);
-    await act(async () => retiredCitation({ type: 'value', content: 'https://example.test/retired' }));
     expect(url(ownIngredient).value).toBe(longCitation);
+    const retiredCitation = citationChange(ownIngredient);
     await act(async () =>
       siblingScalar({
         type: 'value',
         content: { language: 'en', text: '400 ml water' },
       }),
     );
+    expect(url(ownIngredient).value).toBe(longCitation);
     const retiredScalar = scalar(ownIngredient);
     await replace(input(ownIngredient, m.correction_value()), '500 ml water');
-    await act(async () => retiredScalar({ type: 'value', content: 'retired scalar' }));
+    await act(async () => {
+      retiredScalar({ type: 'value', content: 'retired scalar' });
+      retiredCitation({ type: 'value', content: 'https://example.test/retired' });
+    });
     expect(input(ownIngredient, m.correction_value()).value).toBe('500 ml water');
+    expect(url(ownIngredient).value).toBe(longCitation);
     await replace(input(ownIngredient, m.correction_value()), '400 ml water');
     await replace(url(draft), longCitation);
     expect(url(draft).value).toBe(longCitation);
