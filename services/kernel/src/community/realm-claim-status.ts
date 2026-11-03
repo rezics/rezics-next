@@ -26,6 +26,27 @@ export type RealmClaimStatus = Readonly<{
   currentEpisode: boolean;
 }>;
 
+export type RealmClaimCurrentContext = Readonly<{
+  ownershipState: 'owned' | 'orphaned';
+  orphanedAt: string | null;
+  claimEligibleAt: string | null;
+}>;
+
+export type RealmClaimRequestAdvice = Readonly<{
+  available: boolean;
+  method: 'POST';
+  destination: string;
+  requiredAction: 'realm:participate';
+  requiredHeader: 'Idempotency-Key';
+  body: Readonly<Record<string, never>>;
+}>;
+
+export type OwnRealmClaimPage = Readonly<{
+  claimRequest: RealmClaimStatus | null;
+  currentRealm: RealmClaimCurrentContext;
+  requestAdvice: RealmClaimRequestAdvice;
+}>;
+
 /** Own exact receipt, or the own request in the current native orphan episode.
  * Null means an authorized, active point has no matching request. Inaccessible
  * containers throw not_found; unavailable native authority throws its typed error.
@@ -37,7 +58,14 @@ export type ReadOwnRealmClaim = (
   context: Readonly<{ deadline: number }>,
 ) => Promise<RealmClaimStatus | null>;
 
-export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, context) => {
+export type ReadOwnRealmClaimPage = (
+  deps: Readonly<{ pool: Pool; access: Access; clock?: () => Date }>,
+  actor: Actor,
+  input: Readonly<{ realmId: string; requestId?: string }>,
+  context: Readonly<{ deadline: number }>,
+) => Promise<OwnRealmClaimPage>;
+
+export const readOwnRealmClaimPage: ReadOwnRealmClaimPage = async (deps, actor, input, context) => {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   const { realmId, requestId } = input;
   const route = routeOf(realmId);
@@ -112,12 +140,40 @@ export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, c
         if (canonicalize(current) !== canonicalize(located)) throw unavailable();
         if (!(await read(client, time)) || !(await participate(client, time)) || !(await space(client, time)))
           throw new ProblemError('not_found');
+        const ownershipState =
+          current.continuity.ownership_state === 'orphaned'
+            ? 'orphaned'
+            : current.continuity.ownership_state === 'owned'
+              ? 'owned'
+              : null;
+        if (!ownershipState) throw unavailable();
         const orphaned = current.continuity.ownership_state === 'orphaned' ? current.continuity.orphaned_at : null;
         const key = { route, realm: realmId, account: actor.accountId, orphaned };
-        if (requestId !== undefined) return exactRead.run(client, { ...key, request: requestId });
-        // An active owned Realm has no current orphan episode. This is known
-        // point absence only after all three ordinary current decisions succeed.
-        return orphaned === null ? null : currentRead.run(client, { ...key, orphaned });
+        const claim =
+          requestId !== undefined
+            ? await exactRead.run(client, { ...key, request: requestId })
+            : orphaned === null
+              ? null
+              : await currentRead.run(client, { ...key, orphaned });
+        const at = authoritativeTimeValue(time);
+        const claimEligibleAt = current.continuity.claim_eligible_at;
+        const canRequest =
+          ownershipState === 'orphaned' &&
+          claimEligibleAt !== null &&
+          Date.parse(claimEligibleAt) <= Date.parse(at) &&
+          !claim?.current_episode;
+        return {
+          claim,
+          currentRealm: {
+            ownershipState,
+            orphanedAt:
+              current.continuity.orphaned_at === null
+                ? null
+                : new Date(current.continuity.orphaned_at).toISOString(),
+            claimEligibleAt: claimEligibleAt === null ? null : new Date(claimEligibleAt).toISOString(),
+          } satisfies RealmClaimCurrentContext,
+          canRequest,
+        };
       });
     };
     const first = await admitted();
@@ -126,16 +182,30 @@ export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, c
     // disclose a stale result. Neither round holds a checkout across preparation.
     const final = await admitted();
     if (canonicalize(first) !== canonicalize(final)) throw unavailable();
-    if (!final) return null;
-    if (final.state !== 'pending' && final.state !== 'approved') throw unavailable();
+    const claim = final.claim;
+    if (claim && claim.state !== 'pending' && claim.state !== 'approved') throw unavailable();
     return {
-      realmId,
-      requestId: final.request_id,
-      state: final.state,
-      orphanedAt: new Date(final.orphaned_at).toISOString(),
-      requestedAt: new Date(final.requested_at).toISOString(),
-      approvedAt: final.approved_at === null ? null : new Date(final.approved_at).toISOString(),
-      currentEpisode: final.current_episode,
+      claimRequest:
+        claim === null
+          ? null
+          : {
+              realmId,
+              requestId: claim.request_id,
+              state: claim.state,
+              orphanedAt: new Date(claim.orphaned_at).toISOString(),
+              requestedAt: new Date(claim.requested_at).toISOString(),
+              approvedAt: claim.approved_at === null ? null : new Date(claim.approved_at).toISOString(),
+              currentEpisode: claim.current_episode,
+            },
+      currentRealm: final.currentRealm,
+      requestAdvice: {
+        available: final.canRequest,
+        method: 'POST',
+        destination: `/v1/realms/${realmId}/claimRequests`,
+        requiredAction: 'realm:participate',
+        requiredHeader: 'Idempotency-Key',
+        body: {},
+      },
     };
   } catch (error) {
     if (
@@ -148,3 +218,6 @@ export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, c
     throw new ProblemError('dependency_unavailable', { detail: 'Native Realm claim status is unavailable.' });
   }
 };
+
+export const readOwnRealmClaim: ReadOwnRealmClaim = async (deps, actor, input, context) =>
+  (await readOwnRealmClaimPage(deps, actor, input, context)).claimRequest;

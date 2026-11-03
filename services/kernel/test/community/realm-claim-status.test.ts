@@ -81,7 +81,14 @@ async function status(path: string, bearer = claimant().bearer): Promise<RealmCl
   const response = await request('GET', path, bearer);
   expect(response.status, await response.clone().text()).toBe(200);
   const body = await response.json();
-  expect(Object.keys(body)).toEqual(['claimRequest']);
+  expect(Object.keys(body).sort()).toEqual(['claimRequest', 'currentRealm', 'requestAdvice'].sort());
+  expect(Object.keys(body.currentRealm).sort()).toEqual(['ownershipState', 'orphanedAt', 'claimEligibleAt'].sort());
+  expect(body.requestAdvice).toMatchObject({
+    method: 'POST',
+    destination: path.includes('/mine') ? path.replace('/mine', '') : path.slice(0, path.lastIndexOf('/')),
+    requiredAction: 'realm:participate',
+    requiredHeader: 'Idempotency-Key',
+  });
   if (body.claimRequest)
     expect(Object.keys(body.claimRequest).sort()).toEqual(
       ['realmId', 'requestId', 'state', 'orphanedAt', 'requestedAt', 'approvedAt', 'currentEpisode'].sort(),

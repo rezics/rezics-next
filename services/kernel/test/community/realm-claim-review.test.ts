@@ -117,23 +117,45 @@ test('GET native pending Realm claim review, preserving sole Accounts approval',
   const path = `/v1/realms/${source.realmId}/claimRequests`;
   const response = await request('GET', path, reviewer().bearer);
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    claimRequests: [
-      {
-        realmId: source.realmId,
-        requestId: claim.requestId,
-        claimantAccountId: owner().actor.accountId,
-        state: 'pending',
-        orphanedAt: new Date(claim.orphanedAt).toISOString(),
-        claimEligibleAt: new Date(claim.claimEligibleAt).toISOString(),
-        requestedAt: new Date(claim.requestedAt).toISOString(),
-      },
-    ],
-    next: null,
+  const review = await response.json();
+  expect(review.claimRequests).toHaveLength(1);
+  expect(review.claimRequests[0]).toMatchObject({
+    realmId: source.realmId,
+    requestId: claim.requestId,
+    claimantAccountId: owner().actor.accountId,
+    state: 'pending',
+    orphanedAt: new Date(claim.orphanedAt).toISOString(),
+    claimEligibleAt: new Date(claim.claimEligibleAt).toISOString(),
+    requestedAt: new Date(claim.requestedAt).toISOString(),
+    claimant: { label: expect.any(String) },
+    approvalAdvice: {
+      method: 'POST',
+      destination: `${path}/${claim.requestId}:approve`,
+      requiredAction: 'realm:approve_claim',
+      requiredHeader: 'Idempotency-Key',
+    },
   });
+  expect(review.selectedRequest).toBeNull();
+  expect(review.next).toBeNull();
+  expect(review.realmPresentation).toEqual({ state: 'unavailable' });
+
+  const selectedResponse = await request('GET', `${path}?inspectRequestId=${claim.requestId}`, reviewer().bearer);
+  expect(selectedResponse.status).toBe(200);
+  const selected = await selectedResponse.json();
+  expect(selected.selectedRequest).toMatchObject({
+    requestId: claim.requestId,
+    claimantAccountId: owner().actor.accountId,
+    state: 'pending',
+    orphanedAt: new Date(claim.orphanedAt).toISOString(),
+    claimEligibleAt: new Date(claim.claimEligibleAt).toISOString(),
+    currentEpisode: true,
+    approvalAdvice: { destination: `${path}/${claim.requestId}:approve` },
+  });
+  expect(selected.next).toBe(review.next);
   expect(await grants()).toEqual(before);
   const operation = openApiDocument(system.kernel).paths['/v1/realms/{realmId}/claimRequests']!.get!;
   expect(operation).toMatchObject({ 'x-exposure': 'public', 'x-action': 'realm:approve_claim' });
+  expect(operation.parameters?.map((parameter) => parameter.name)).toContain('inspectRequestId');
   // Reading grants nothing. The pre-existing Accounts command is the only approval path.
   const approved = await approveRealmClaim(
     deps(),
@@ -142,6 +164,19 @@ test('GET native pending Realm claim review, preserving sole Accounts approval',
     context(),
   );
   expect(approved.state).toBe('owned');
+  const readbackResponse = await request('GET', `${path}?inspectRequestId=${claim.requestId}`, reviewer().bearer);
+  expect(readbackResponse.status).toBe(200);
+  const readback = await readbackResponse.json();
+  expect(readback).toMatchObject({
+    claimRequests: [],
+    next: null,
+    selectedRequest: {
+      requestId: claim.requestId,
+      state: 'approved',
+      orphanedAt: new Date(claim.orphanedAt).toISOString(),
+      currentEpisode: false,
+    },
+  });
   expect((await request('GET', path, reviewer().bearer)).status).toBe(404);
 });
 

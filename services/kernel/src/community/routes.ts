@@ -1,6 +1,6 @@
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';
-import { readOwnRealmClaim } from './realm-claim-status.ts';
+import { readOwnRealmClaimPage } from './realm-claim-status.ts';
 import { listRealmClaimRequests } from './realm-claim-review.ts';
 import { exactRealmPresentationImage } from '../content/realm-media.ts';
 import { approveRealmClaim } from '../access/realm-claim.ts';
@@ -138,12 +138,72 @@ const claimReviewResponse = t.Object(
           orphanedAt: instant,
           claimEligibleAt: instant,
           requestedAt: instant,
+          claimant: t.Object({ label: t.String({ maxLength: 4096 }), href: t.Union([t.String({ maxLength: 4096 }), t.Null()]) }, closed),
+          approvalAdvice: t.Object(
+            {
+              method: t.Literal('POST'),
+              destination: t.String({ maxLength: 4096 }),
+              requiredAction: t.Literal('realm:approve_claim'),
+              requiredHeader: t.Literal('Idempotency-Key'),
+            },
+            closed,
+          ),
         },
         closed,
       ),
       { maxItems: 20 },
     ),
     next: t.Union([t.String(), t.Null()]),
+    selectedRequest: t.Union([
+      t.Object(
+        {
+          requestId: id,
+          claimantAccountId: id,
+          state: t.Literal('pending'),
+          orphanedAt: instant,
+          claimEligibleAt: instant,
+          requestedAt: instant,
+          currentEpisode: t.Literal(true),
+          claimant: t.Object(
+            { label: t.String({ maxLength: 4096 }), href: t.Union([t.String({ maxLength: 4096 }), t.Null()]) },
+            closed,
+          ),
+          approvalAdvice: t.Object(
+            {
+              method: t.Literal('POST'),
+              destination: t.String({ maxLength: 4096 }),
+              requiredAction: t.Literal('realm:approve_claim'),
+              requiredHeader: t.Literal('Idempotency-Key'),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          requestId: id,
+          state: t.Literal('approved'),
+          orphanedAt: instant,
+          requestedAt: instant,
+          approvedAt: instant,
+          currentEpisode: t.Literal(false),
+        },
+        closed,
+      ),
+      t.Null(),
+    ]),
+    realmPresentation: t.Union([
+      t.Object(
+        {
+          state: t.Literal('available'),
+          name: t.String({ maxLength: 1024 }),
+          description: t.String({ maxLength: 4096 }),
+        },
+        closed,
+      ),
+      t.Object({ state: t.Literal('unavailable') }, closed),
+    ]),
   },
   closed,
 );
@@ -151,6 +211,7 @@ const claimReviewQuery = t.Object(
   {
     limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
     cursor: t.Optional(t.String({ maxLength: 4096 })),
+    inspectRequestId: t.Optional(id),
   },
   closed,
 );
@@ -205,6 +266,41 @@ const realmClaimStatus = t.Object(
     requestedAt: instant,
     approvedAt: t.Union([instant, t.Null()]),
     currentEpisode: t.Boolean(),
+  },
+  closed,
+);
+const realmClaimCurrentContext = t.Object(
+  {
+    ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
+    orphanedAt: t.Union([instant, t.Null()]),
+    claimEligibleAt: t.Union([instant, t.Null()]),
+  },
+  closed,
+);
+const realmClaimRequestAdvice = t.Object(
+  {
+    available: t.Boolean(),
+    method: t.Literal('POST'),
+    destination: t.String({ maxLength: 4096 }),
+    requiredAction: t.Literal('realm:participate'),
+    requiredHeader: t.Literal('Idempotency-Key'),
+    body: t.Object({}, closed),
+  },
+  closed,
+);
+const realmClaimOwnPageResponse = t.Object(
+  {
+    claimRequest: t.Union([realmClaimStatus, t.Null()]),
+    currentRealm: realmClaimCurrentContext,
+    requestAdvice: realmClaimRequestAdvice,
+  },
+  closed,
+);
+const realmClaimExactResponse = t.Object(
+  {
+    claimRequest: realmClaimStatus,
+    currentRealm: realmClaimCurrentContext,
+    requestAdvice: realmClaimRequestAdvice,
   },
   closed,
 );
@@ -1350,7 +1446,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
               deadline: job.deadline,
             },
           );
-          return { claimRequests: [...result.claimRequests], next: result.next };
+          return { ...result, claimRequests: [...result.claimRequests] };
         }),
     )
     .post(
@@ -1399,7 +1495,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         params: realmParams,
         response: {
-          200: strict(t.Object({ claimRequest: t.Union([realmClaimStatus, t.Null()]) }, closed)),
+          200: strict(realmClaimOwnPageResponse),
           ...readFailures,
         },
         detail: {
@@ -1411,17 +1507,16 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
       },
       async ({ params, actor, admission, job }) => {
-        const claimRequest = await admission.run('normal', job, () =>
-          readOwnRealmClaim(realmDependencies(), actor, params, { deadline: job.deadline }),
+        return admission.run('normal', job, () =>
+          readOwnRealmClaimPage(realmDependencies(), actor, params, { deadline: job.deadline }),
         );
-        return { claimRequest };
       },
     )
     .get(
       '/v1/realms/:realmId/claimRequests/:requestId',
       {
         params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
-        response: { 200: strict(t.Object({ claimRequest: realmClaimStatus }, closed)), ...readFailures },
+        response: { 200: strict(realmClaimExactResponse), ...readFailures },
         detail: {
           operationId: 'realm.claim_request_status',
           'x-exposure': 'public',
@@ -1431,11 +1526,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         },
       },
       async ({ params, actor, admission, job }) => {
-        const claimRequest = await admission.run('normal', job, () =>
-          readOwnRealmClaim(realmDependencies(), actor, params, { deadline: job.deadline }),
+        const page = await admission.run('normal', job, () =>
+          readOwnRealmClaimPage(realmDependencies(), actor, params, { deadline: job.deadline }),
         );
-        if (!claimRequest) throw new ProblemError('not_found');
-        return { claimRequest };
+        if (!page.claimRequest) throw new ProblemError('not_found');
+        return { ...page, claimRequest: page.claimRequest };
       },
     )
     .post(
