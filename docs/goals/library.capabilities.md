@@ -494,6 +494,13 @@ remains an integration responsibility, and source delivery does not assert its r
 
 ## Personal MyAnimeList export slice
 
+[Retained MAL tag adoption](../library-import-mal-labels.md) adds exact supported source evidence, reviewed
+existing IDs/proposed normalized names, per-value native create/assign outcomes and original-key resumption to the
+installed review/apply producer. `test/library/list-import-mal-labels.test.ts` covers the private label journey,
+grammar losses, duplicates, invalid/colliding names, capacity, target replacement, refresh, lost acknowledgement,
+partial cancellation, expiry/removal and foreign owners. The account graph test includes retained adoption fields.
+Whole-caller native64/512/4096 acceptance remains deferred to integration; no growth measurement is claimed here.
+
 Mounted source: [MAL contract and Web transport examples](../library-import-mal.md). The implementation binds
 current authority, admitted external identifiers, released state roles, native entry revisions and original command
 receipts. Private evidence retains fields without native admission, including simultaneous chapter/volume values.

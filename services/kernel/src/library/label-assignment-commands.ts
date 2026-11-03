@@ -34,6 +34,7 @@ import { readPersonalLabel } from './label-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
 import subjectPage from './label-assignment-subject-page.sql';
+import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type Assignment = { id: string; labelId: string; subjectId: string; revision: number };
@@ -124,6 +125,7 @@ export function createLabelAssignmentCommands(deps: {
     value: unknown,
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
+    malLabelFence?: MalLabelFence,
   ) {
     const account = owner(actor, 'library_entry:update');
     id(labelId);
@@ -132,7 +134,7 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed },
+      input: { labelId, ...parsed, ...(malLabelFence ? { malLabelFence } : {}) },
       requestKey: key,
     };
     const execute = async (
@@ -141,6 +143,7 @@ export function createLabelAssignmentCommands(deps: {
       prepared: { subjectId?: string; error?: unknown },
     ): Promise<CommandResult<ReturnType<typeof minimal> | { deleted: true; revision: number }>> => {
       if (prepared.error !== undefined) throw prepared.error;
+      if (malLabelFence) await assertMalLabelFence(tx, account, malLabelFence);
       const route = sameAccountRoute(account.accountId, labelId);
       const tuple = {
         route,
@@ -202,10 +205,12 @@ export function createLabelAssignmentCommands(deps: {
         ...request,
         async prepare(attempt) {
           try {
+            if (malLabelFence) await prepareMalLabelFence(deps, account, malLabelFence, attempt.time, deadline);
             const resolved = await withRequestDeadline(deadline, () =>
               resolveSubject(deps, account, parsed.subjectId, attempt.time),
             );
             if (!resolved) throw new LibraryNotFoundError();
+            if (malLabelFence && resolved.subjectId !== malLabelFence.subject) throw new LibraryConflictError();
             return { subjectId: resolved.subjectId };
           } catch (error) {
             return { error };
@@ -216,8 +221,8 @@ export function createLabelAssignmentCommands(deps: {
     );
   }
   // Operation-specific return types preserve the minimal receipt contract for native and HTTP consumers.
-  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string) {
-    return (await mutate(actor, labelId, value, key, 'assign')) as import('../command/command.ts').CommandOutcome<
+  async function assignLabel(actor: Actor, labelId: string, value: { subjectId: string }, key: string, malLabelFence?: MalLabelFence) {
+    return (await mutate(actor, labelId, value, key, 'assign', malLabelFence)) as import('../command/command.ts').CommandOutcome<
       ReturnType<typeof minimal>
     >;
   }
