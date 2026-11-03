@@ -79,7 +79,16 @@ export type RunOptions = Readonly<{
 
 export type { ConversionDiagnosticPhase, SanitizedConversionDiagnostic } from './conversion-diagnostics.ts';
 
-export type RunStatus = 'committed' | 'invalid-dump' | 'mass-disappearance' | 'bulk-failed' | 'interrupted' | 'busy';
+export type RunStatus =
+  | 'committed'
+  | 'invalid-dump'
+  | 'mass-disappearance'
+  | 'bulk-failed'
+  | 'interrupted'
+  | 'busy'
+  | 'not-resumable'
+  | 'incompatible'
+  | 'unavailable';
 
 /** Per-record state acknowledges one source record; a baseline describes the whole completed source run. */
 export type RunResult = Readonly<{

@@ -1,11 +1,23 @@
 import { Database } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import type { FileHandle } from 'node:fs/promises';
 import { RecordBindings } from './record-bindings.ts';
+import { closeExistingImporterState, openExistingImporterState, ResumeStateError } from './resume-state.ts';
 import { RunStore, type Run, type SourceProjection } from './run-store.ts';
 
 type Ownership = { pid: number; birth: string; capability: string };
 export type ImportOwnership = Readonly<{ source: string; capability: string }>;
+export type ImportSessionOptions = {
+  instrumentDatabase?: (database: Database) => Database;
+  existing?: boolean;
+  descriptor?: FileHandle;
+};
+export type ActiveGenerationPeek = Readonly<{
+  run: Run;
+  status: 'staging' | 'ready' | 'finalizing' | 'unsupported';
+  skipped: number;
+}>;
 
 // Linux start time is a process birth identity, including across PID reuse. A boot
 // identity also prevents an old database owner from matching after a host reboot.
@@ -37,10 +49,16 @@ export class ImportSession {
   readonly bindings: RecordBindings;
   private readonly identity = processIdentity(process.pid).birth;
   private readonly held = new Map<string, ImportOwnership>();
+  private readonly descriptor?: FileHandle;
   private closed = false;
 
-  constructor(path: string | Database, options: { instrumentDatabase?: (database: Database) => Database } = {}) {
-    this.store = new RunStore<SourceProjection>(path, { ...options, projectionMode: 'source-record' });
+  constructor(path: string | Database, options: ImportSessionOptions = {}) {
+    this.store = new RunStore<SourceProjection>(path, {
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      projectionMode: 'source-record',
+      ...(options.existing ? { existing: true } : {}),
+    });
+    this.descriptor = options.descriptor;
     try {
       this.bindings = new RecordBindings(this.store.database);
       this.store.database.exec(`CREATE TABLE IF NOT EXISTS import_owners (
@@ -49,6 +67,24 @@ export class ImportSession {
     } catch (error) {
       this.store.close();
       throw error;
+    }
+  }
+
+  /** Writable existing-state factory; a missing path does not create a database. */
+  static async openExisting(path: string, options: ImportSessionOptions = {}): Promise<ImportSession> {
+    const opened = await openExistingImporterState(path);
+    try {
+      const session = new ImportSession(opened.database, {
+        ...options,
+        existing: true,
+        descriptor: opened.descriptor,
+      });
+      return session;
+    } catch (error) {
+      await closeExistingImporterState(opened);
+      throw error instanceof ResumeStateError
+        ? error
+        : new ResumeStateError('unavailable', 'Importer state is damaged or unavailable.');
     }
   }
 
@@ -85,6 +121,18 @@ export class ImportSession {
     return active ? this.store.reopen(active) : null;
   }
 
+  /** Status under this owner; never rotates a staging generation's lease. */
+  peekActive(ownership: ImportOwnership): ActiveGenerationPeek | null {
+    this.check(ownership);
+    const active = this.store.peekActive(ownership.source);
+    if (!active) return null;
+    const status =
+      active.status === 'staging' || active.status === 'ready' || active.status === 'finalizing'
+        ? active.status
+        : 'unsupported';
+    return { run: active.run, status, skipped: active.skipped };
+  }
+
   private check(ownership: ImportOwnership): void {
     if (this.closed || this.held.get(ownership.source) !== ownership) throw new Error('Stale import ownership');
     const row = this.store.database
@@ -108,5 +156,6 @@ export class ImportSession {
     this.bindings.close();
     this.store.close();
     this.closed = true;
+    void this.descriptor?.close().catch(() => {});
   }
 }

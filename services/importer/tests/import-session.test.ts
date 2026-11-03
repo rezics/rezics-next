@@ -1,6 +1,6 @@
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -307,5 +307,37 @@ test('unfenced media intent cannot acknowledge without resolver, while fenced co
     expect(resolverCalls).toBe(0);
   } finally {
     await fenced.close();
+  }
+});
+
+test('existing-state open refuses a missing path and peekActive does not rotate a staging lease', async () => {
+  const dir = directory();
+  try {
+    await expect(ImportSession.openExisting(join(dir, 'missing.sqlite'))).rejects.toMatchObject({ kind: 'missing' });
+    expect(existsSync(join(dir, 'missing.sqlite'))).toBe(false);
+    const created = new ImportSession(`${dir}/state.sqlite`);
+    const own = created.acquire('wikidata');
+    if (own === 'busy') throw 0;
+    const run = created.store.begin('wikidata');
+    if (run === 'busy') throw 0;
+    const lease = run.lease;
+    const peeked = created.peekActive(own);
+    expect(peeked?.status).toBe('staging');
+    expect(peeked?.run.lease).toBe(lease);
+    expect(created.store.activeRun('wikidata')?.lease).toBe(lease);
+    created.release(own);
+    created.close();
+    const reopened = await ImportSession.openExisting(`${dir}/state.sqlite`);
+    try {
+      const next = reopened.acquire('wikidata');
+      if (next === 'busy') throw 0;
+      expect(reopened.peekActive(next)?.status).toBe('staging');
+      expect(reopened.peekActive(next)?.run.lease).toBe(lease);
+      reopened.release(next);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true });
   }
 });

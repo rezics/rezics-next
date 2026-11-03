@@ -72,8 +72,14 @@ export type ImportRunOptions = {
   sink?: RunResultSink;
   progress?: ImportProgressObserver;
 };
+export type ResumeRunOptions = ImportRunOptions & {
+  /** Credentials and live transport are constructed only after sealed work is admitted. */
+  activateNetwork?: () => void | Promise<void>;
+};
 export type ImporterOptions = {
   path: string | Database;
+  session?: ImportSession;
+  existing?: boolean;
   transport: ImportTransport;
   recordConcurrency?: number;
   mediaDeadlineMs?: number;
@@ -134,10 +140,12 @@ export class Importer {
       throw new TypeError('mediaDeadlineMs must be a non-negative finite number');
     this.recordConcurrency = concurrency;
     this.mediaDeadlineMs = mediaDeadlineMs;
-    this.session = new ImportSession(
-      options.path,
-      options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {},
-    );
+    this.session =
+      options.session ??
+      new ImportSession(options.path, {
+        ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+        ...(options.existing ? { existing: true } : {}),
+      });
   }
 
   async runDump(
@@ -164,6 +172,18 @@ export class Importer {
   ): Promise<ImportRunResult> {
     if (this.closing) return Promise.reject(new Error('Importer is closing'));
     const task = this.run(registration, records, options);
+    this.running.add(task);
+    void task.finally(() => this.running.delete(task)).catch(() => {});
+    return task;
+  }
+
+  /**
+   * Finish one existing sealed generation. Never begins, stages, seals, abandons
+   * or replaces acquisition, and never consumes dump or empty replacement input.
+   */
+  resumeExisting(registration: SourceRegistration, options: ResumeRunOptions = {}): Promise<ImportRunResult> {
+    if (this.closing) return Promise.reject(new Error('Importer is closing'));
+    const task = this.resumeSealed(registration, options);
     this.running.add(task);
     void task.finally(() => this.running.delete(task)).catch(() => {});
     return task;
@@ -1039,12 +1059,8 @@ export class Importer {
     }
   }
 
-  private async run(
-    registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
-    options: ImportRunOptions,
-  ): Promise<ImportRunResult> {
-    const result: ImportRunResult = {
+  private emptyResult(): ImportRunResult {
+    return {
       status: 'interrupted',
       skipped: 0,
       counts: { new: 0, changed: 0, unchanged: 0, vanished: 0 },
@@ -1054,6 +1070,16 @@ export class Importer {
       vanished: [],
       diagnostic: '',
     };
+  }
+
+  private attachRun(
+    options: ImportRunOptions,
+    result: ImportRunResult,
+  ): {
+    observe: (kind: Kind, key: string) => void;
+    finish: (status: RunStatus, diagnostic: string) => ImportRunResult;
+    signal: AbortSignal;
+  } {
     const limit = options.collectionLimit ?? 0;
     if (!Number.isSafeInteger(limit) || limit < 0 || limit > 10000) throw new TypeError('Invalid key collection limit');
     const observe = (kind: Kind, key: string) => {
@@ -1080,11 +1106,278 @@ export class Importer {
       ...(options.signal ? [options.signal] : []),
     ]);
     this.runControllers.set(signal, runController);
+    if (options.progress) this.progressObservers.set(signal, options.progress);
+    return { observe, finish, signal };
+  }
+
+  private compatible(
+    registration: SourceRegistration,
+    run: Run,
+  ): { ok: true } | { ok: false; reason: string } {
+    let after: string | undefined;
+    for (;;) {
+      const page = this.session.store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
+      for (const staged of page) {
+        const projection = staged.projection as { sourceKind?: unknown; normalizedRecord?: unknown } | null;
+        if (!projection || typeof projection !== 'object' || typeof projection.sourceKind !== 'string')
+          return {
+            ok: false,
+            reason: 'Stored projections lack source-kind provenance for a safe compatibility check.',
+          };
+        if (projection.sourceKind !== registration.sourceKind)
+          return { ok: false, reason: 'Stored source kind does not match the configured registration.' };
+        const state = this.session.store.key(run.source, staged.row.recordKey, run);
+        if (state.resolved || state.kind) continue;
+        if (staged.row.converter_revision !== registration.converter_revision)
+          return { ok: false, reason: 'Stored converter revision does not match the configured registration.' };
+        try {
+          this.convert(registration, staged);
+        } catch {
+          return { ok: false, reason: 'Current converter cannot reproduce an unprepared staged projection.' };
+        }
+      }
+      if (page.length) after = page.at(-1)!.row.recordKey;
+      if (page.length < 100) return { ok: true };
+    }
+  }
+
+  private async finishCursor(run: Run, signal: AbortSignal, current: 'more' | 'complete'): Promise<'more' | 'complete'> {
+    let final: 'incomplete' | 'more' | 'complete' = current;
+    while (final === 'more') {
+      await Promise.resolve();
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      final = this.session.store.finalize(run, 100);
+    }
+    return final;
+  }
+
+  private async applySealed(
+    registration: SourceRegistration,
+    run: Run,
+    work: {
+      observe: (kind: Kind, key: string) => void;
+      finish: (status: RunStatus, diagnostic: string) => ImportRunResult;
+      signal: AbortSignal;
+      mediaDeadline: number;
+      resumed: boolean;
+      finalizeOnly: boolean;
+    },
+  ): Promise<ImportRunResult> {
+    const { observe, finish, signal, mediaDeadline } = work;
+    if (work.finalizeOnly) {
+      const finalizing = this.progress(signal)?.onPhase?.('finalizing');
+      if (finalizing !== undefined) await finalizing;
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      let final = this.session.store.finalize(run, 100);
+      if (final === 'incomplete') return finish('bulk-failed', 'Records remain unresolved');
+      if (final === 'more') final = await this.finishCursor(run, signal, final);
+      return finish(
+        final === 'complete' ? 'committed' : 'bulk-failed',
+        final === 'complete' ? 'Resumed source finalization' : 'Records remain unresolved',
+      );
+    }
+    const reconciling = this.progress(signal)?.onPhase?.('reconciling');
+    if (reconciling !== undefined) await reconciling;
+    if (work.resumed && !(await this.drain(run, signal, 'resumed')))
+      return finish('bulk-failed', 'Durable operations remain unresolved');
+    let failed = false;
+    let after: string | undefined;
+    for (;;) {
+      const page = this.session.store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
+      this.retain(
+        'staged',
+        page.map((staged) => ({ recordKey: staged.row.recordKey, value: staged })),
+      );
+      const outcomes = await this.concurrent(
+        'staged',
+        page,
+        signal,
+        (staged) => staged.row.recordKey,
+        async (staged, write): Promise<Planned | 'failed' | null> => {
+          const { row, projection } = staged;
+          if (row.state === 'vanished') return null;
+          const state = this.session.store.key(row.source, row.recordKey, run);
+          if (state.coverPending) return state.kind ? { kind: state.kind, deferredCover: true } : 'failed';
+          try {
+            const configured =
+              projection.sourceKind === registration.sourceKind &&
+              row.converter_revision === registration.converter_revision
+                ? registration
+                : createSourceRegistration(projection.sourceKind, {
+                    source: row.source,
+                    converterRevision: row.converter_revision,
+                  });
+            const planned = await this.plan(configured, run, staged, signal, write);
+            if (!planned) return 'failed';
+            for (const pending of this.session.store.pendingRecord(run, row.recordKey))
+              if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
+            return planned;
+          } catch (error) {
+            if (error instanceof Interrupted) throw error;
+            return 'failed';
+          }
+        },
+      );
+      for (let index = 0; index < outcomes.length; index++) {
+        const outcome = outcomes[index];
+        if (outcome === 'failed') failed = true;
+        else if (outcome) {
+          if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
+          observe(outcome.kind, page[index]!.row.recordKey);
+        }
+      }
+      if (page.length) after = page.at(-1)!.row.recordKey;
+      this.options.observer?.onPageRetained?.('staged', []);
+      if (page.length < 100) break;
+    }
+    after = undefined;
+    for (;;) {
+      const page = this.session.store.pageVanished(run, { ...(after ? { after } : {}), limit: 100 });
+      this.retain(
+        'vanished',
+        page.map((prior) => ({ recordKey: prior.recordKey, value: prior })),
+      );
+      const outcomes = await this.concurrent(
+        'vanished',
+        page,
+        signal,
+        (prior) => prior.recordKey,
+        async (prior, write): Promise<Planned | 'failed'> => {
+          try {
+            const planned = await this.plan(
+              registration,
+              run,
+              {
+                row: { ...prior, state: 'vanished' },
+                projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
+              },
+              signal,
+              write,
+            );
+            if (!planned) return 'failed';
+            for (const pending of this.session.store.pendingRecord(run, prior.recordKey))
+              if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
+            return planned;
+          } catch (error) {
+            if (error instanceof Interrupted) throw error;
+            return 'failed';
+          }
+        },
+      );
+      for (let index = 0; index < outcomes.length; index++) {
+        const outcome = outcomes[index]!;
+        if (outcome === 'failed') failed = true;
+        else observe(outcome.kind, page[index]!.recordKey);
+      }
+      if (page.length) after = page.at(-1)!.recordKey;
+      this.options.observer?.onPageRetained?.('vanished', []);
+      if (page.length < 100) break;
+    }
+    this.session.store.pagePending(run, { limit: 100 });
+    const deferredMedia = this.progress(signal)?.onPhase?.('deferred-media');
+    if (deferredMedia !== undefined) await deferredMedia;
+    if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
+    if (failed) return finish('bulk-failed', 'Durable operations remain unresolved');
+    const finalizing = this.progress(signal)?.onPhase?.('finalizing');
+    if (finalizing !== undefined) await finalizing;
+    let final = this.session.store.finalize(run, 100);
+    if (final === 'more') final = await this.finishCursor(run, signal, final);
+    return finish(
+      final === 'complete' ? 'committed' : 'bulk-failed',
+      final === 'complete' ? 'Source snapshot committed' : 'Records remain unresolved',
+    );
+  }
+
+  private async resumeSealed(registration: SourceRegistration, options: ResumeRunOptions): Promise<ImportRunResult> {
+    const result = this.emptyResult();
+    const { observe, finish, signal } = this.attachRun(options, result);
+    const mediaDeadline = this.now() + this.mediaDeadlineMs;
+    const ownership = this.session.acquire(registration.source);
+    if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
+    try {
+      const peeked = this.session.peekActive(ownership);
+      if (!peeked)
+        return finish(
+          'not-resumable',
+          'No resumable sealed acquisition for this source. Use ordinary import with a complete dump, or inspect this state read-only.',
+        );
+      if (peeked.status === 'staging')
+        return finish(
+          'not-resumable',
+          'This source still has incomplete staging and cannot be resumed without its original dump. Use ordinary import with complete input, or inspect this state read-only.',
+        );
+      if (peeked.status === 'unsupported')
+        return finish(
+          'not-resumable',
+          'Stored generation status is not resumable. Use inspect for a read-only view.',
+        );
+      if (peeked.status === 'ready') {
+        let compatibility: { ok: true } | { ok: false; reason: string };
+        try {
+          compatibility = this.compatible(registration, peeked.run);
+        } catch {
+          return finish('unavailable', 'Importer state is damaged or unavailable.');
+        }
+        if (!compatibility.ok) return finish('incompatible', compatibility.reason);
+      }
+      if (options.activateNetwork) await options.activateNetwork();
+      const run = this.session.reopen(ownership);
+      if (!run) return finish('not-resumable', 'Sealed acquisition disappeared after ownership was taken.');
+      const recheck = this.session.store.peekActive(ownership.source);
+      if (!recheck || recheck.run.id !== run.id)
+        return finish('not-resumable', 'Sealed acquisition disappeared after ownership was taken.');
+      if (recheck.status !== peeked.status && recheck.status !== 'finalizing' && recheck.status !== 'ready')
+        return finish('not-resumable', 'Stored generation status is not resumable. Use inspect for a read-only view.');
+      const skipped = this.session.store.skipped(run);
+      result.skipped = skipped;
+      options.progress?.onRun?.(run.id, true);
+      const resuming = options.progress?.onPhase?.('resuming');
+      if (resuming !== undefined) await resuming;
+      options.progress?.onSkipped?.(skipped);
+      if (recheck.status === 'finalizing') {
+        options.progress?.onSourceCompleted?.();
+        return await this.applySealed(registration, run, {
+          observe,
+          finish,
+          signal,
+          mediaDeadline,
+          resumed: true,
+          finalizeOnly: true,
+        });
+      }
+      options.progress?.onSourceCompleted?.();
+      return await this.applySealed(registration, run, {
+        observe,
+        finish,
+        signal,
+        mediaDeadline,
+        resumed: true,
+        finalizeOnly: false,
+      });
+    } catch (error) {
+      if (error instanceof Interrupted)
+        return finish('interrupted', error.message);
+      if (error instanceof Error && (error.name === 'CredentialInputError' || error.name === 'ResumeActivationError'))
+        throw error;
+      return finish('bulk-failed', 'Import operations remain unresolved');
+    } finally {
+      this.runControllers.delete(signal);
+      this.progressObservers.delete(signal);
+      this.session.release(ownership);
+    }
+  }
+
+  private async run(
+    registration: SourceRegistration,
+    records: AsyncIterable<SourceRecord>,
+    options: ImportRunOptions,
+  ): Promise<ImportRunResult> {
+    const result = this.emptyResult();
+    const { observe, finish, signal } = this.attachRun(options, result);
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
     const ownership = this.session.acquire(registration.source);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
-    if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
       let run = this.session.reopen(ownership);
       let resumed = !!run;
@@ -1114,8 +1407,11 @@ export class Importer {
             options.progress?.onSourceCompleted?.();
             const finalizing = options.progress?.onPhase?.('finalizing');
             if (finalizing !== undefined) await finalizing;
-            while (final === 'more') final = store.finalize(run, 100);
-            return finish('committed', 'Resumed source finalization');
+            if (final === 'more') final = await this.finishCursor(run, signal, final);
+            return finish(
+              final === 'complete' ? 'committed' : 'bulk-failed',
+              final === 'complete' ? 'Resumed source finalization' : 'Records remain unresolved',
+            );
           }
         }
       }
@@ -1221,119 +1517,14 @@ export class Importer {
         result.skipped = skipped;
       }
       result.skipped = skipped;
-      const reconciling = options.progress?.onPhase?.('reconciling');
-      if (reconciling !== undefined) await reconciling;
-      if (resumed && !(await this.drain(run, signal, 'resumed')))
-        return finish('bulk-failed', 'Durable operations remain unresolved');
-      let failed = false;
-      let after: string | undefined;
-      for (;;) {
-        const page = store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
-        this.retain(
-          'staged',
-          page.map((staged) => ({ recordKey: staged.row.recordKey, value: staged })),
-        );
-        const outcomes = await this.concurrent(
-          'staged',
-          page,
-          signal,
-          (staged) => staged.row.recordKey,
-          async (staged, write): Promise<Planned | 'failed' | null> => {
-            const { row, projection } = staged;
-            // Prior attempts can already have classified disappeared rows in this
-            // journal. The dedicated vanished index owns that enumeration.
-            if (row.state === 'vanished') return null;
-            const state = store.key(row.source, row.recordKey, run);
-            if (state.coverPending) return state.kind ? { kind: state.kind, deferredCover: true } : 'failed';
-            try {
-              const configured =
-                projection.sourceKind === registration.sourceKind &&
-                row.converter_revision === registration.converter_revision
-                  ? registration
-                  : createSourceRegistration(projection.sourceKind, {
-                      source: row.source,
-                      converterRevision: row.converter_revision,
-                    });
-              const planned = await this.plan(configured, run, staged, signal, write);
-              if (!planned) return 'failed';
-              for (const pending of store.pendingRecord(run, row.recordKey))
-                if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
-              return planned;
-            } catch (error) {
-              if (error instanceof Interrupted) throw error;
-              return 'failed';
-            }
-          },
-        );
-        for (let index = 0; index < outcomes.length; index++) {
-          const outcome = outcomes[index];
-          if (outcome === 'failed') failed = true;
-          else if (outcome) {
-            if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
-            observe(outcome.kind, page[index]!.row.recordKey);
-          }
-        }
-        if (page.length) after = page.at(-1)!.row.recordKey;
-        this.options.observer?.onPageRetained?.('staged', []);
-        if (page.length < 100) break;
-      }
-      after = undefined;
-      for (;;) {
-        const page = store.pageVanished(run, { ...(after ? { after } : {}), limit: 100 });
-        this.retain(
-          'vanished',
-          page.map((prior) => ({ recordKey: prior.recordKey, value: prior })),
-        );
-        const outcomes = await this.concurrent(
-          'vanished',
-          page,
-          signal,
-          (prior) => prior.recordKey,
-          async (prior, write): Promise<Planned | 'failed'> => {
-            try {
-              const planned = await this.plan(
-                registration,
-                run,
-                {
-                  row: { ...prior, state: 'vanished' },
-                  projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
-                },
-                signal,
-                write,
-              );
-              if (!planned) return 'failed';
-              for (const pending of store.pendingRecord(run, prior.recordKey))
-                if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
-              return planned;
-            } catch (error) {
-              if (error instanceof Interrupted) throw error;
-              return 'failed';
-            }
-          },
-        );
-        for (let index = 0; index < outcomes.length; index++) {
-          const outcome = outcomes[index]!;
-          if (outcome === 'failed') failed = true;
-          else observe(outcome.kind, page[index]!.recordKey);
-        }
-        if (page.length) after = page.at(-1)!.recordKey;
-        this.options.observer?.onPageRetained?.('vanished', []);
-        if (page.length < 100) break;
-      }
-      // Inspect durable leftovers without retrying a failed record in the same run.
-      store.pagePending(run, { limit: 100 });
-      const deferredMedia = options.progress?.onPhase?.('deferred-media');
-      if (deferredMedia !== undefined) await deferredMedia;
-      if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
-      if (failed) return finish('bulk-failed', 'Durable operations remain unresolved');
-      const finalizing = options.progress?.onPhase?.('finalizing');
-      if (finalizing !== undefined) await finalizing;
-      let final = store.finalize(run, 100);
-      while (final === 'more') final = store.finalize(run, 100);
-      return finish(
-        final === 'complete' ? 'committed' : 'bulk-failed',
-        final === 'complete' ? 'Source snapshot committed' : 'Records remain unresolved',
-      );
+      return await this.applySealed(registration, run, {
+        observe,
+        finish,
+        signal,
+        mediaDeadline,
+        resumed,
+        finalizeOnly: false,
+      });
     } catch (error) {
       return finish(
         error instanceof Interrupted ? 'interrupted' : 'bulk-failed',
