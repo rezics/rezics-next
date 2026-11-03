@@ -73,13 +73,14 @@ test('an erasure before delivery fences missing contributions without changing o
   try {
     const vote = { voterId: newId(route), targetId: newId(route), populationId: newId(route),
       questionId: STANDARD_QUESTION_ID, countingKey: '0'.repeat(64), units: 10, revision: 1, at };
-    await applyRatingChanges(db.pool, [{ ...vote, units: undefined, remove: true, erasure: true }]);
+    const { units: _units, ...removal } = vote;
+    await applyRatingChanges(db.pool, [{ ...removal, remove: true, erasure: true }]);
     await applyRatingChanges(db.pool, [vote, { ...vote, rekey: true, rekeyAt: at, rekeyAllowMissing: true }]);
     const rows = () => db.admin.query('SELECT units FROM rating.population_vote WHERE target_id=$1', [vote.targetId]);
     expect((await rows()).rows).toEqual([]);
     const ordinary = { ...vote, targetId: newId(route) };
     await applyRatingChanges(db.pool, [ordinary]);
-    await applyRatingChanges(db.pool, [{ ...ordinary, units: undefined, remove: true }]);
+    await applyRatingChanges(db.pool, [{ ...removal, targetId: ordinary.targetId, remove: true }]);
     await applyRatingChanges(db.pool, [ordinary]);
     expect((await db.admin.query('SELECT units FROM rating.population_vote WHERE target_id=$1',
       [ordinary.targetId])).rows).toEqual([{ units: 10 }]);
