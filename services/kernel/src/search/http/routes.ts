@@ -271,7 +271,7 @@ export function searchRoutes<App>(
         },
       },
       async ({ query, authorize, admission, job, set }) => {
-        set.headers['cache-control'] = 'private, no-store';
+        if (body.population !== undefined) set.headers['cache-control'] = 'private, no-store';
         const check = await authorize({
           ...resource,
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
@@ -392,6 +392,11 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'invalid_format' }],
               });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+            const realmAccess = body.population
+              ? gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access)
+              : undefined;
+            if (body.population && !realmAccess)
+              throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
             let completed: SearchHttpResponse | undefined;
             await search.search(
@@ -401,6 +406,7 @@ export function searchRoutes<App>(
               active,
               {
                 deadline: job.deadline,
+                ...(realmAccess ? { realmAuthority: { access: realmAccess, actor } } : {}),
                 async complete(page) {
                   completed = publicBases(
                     await fill(page, authorize, body.languages, active),

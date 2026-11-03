@@ -66,7 +66,7 @@ import {
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
 import { ownSubjectRequest } from './service-request.ts';
-import { readRealmRatingOrder, type RealmRatingSource } from './realm-rating-order.ts';
+import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
 
 export type SearchRequest = {
@@ -91,6 +91,7 @@ export type PublicSearchPage = {
 
 export type PublicSearchReadContext = Readonly<{
   deadline: number;
+  realmAuthority?: RealmRatingQuery['authority'];
   complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 
@@ -472,6 +473,7 @@ export function createSearchService({
             text,
             filter: admitted,
             deadline: readContext?.deadline ?? Date.now() + 10_000,
+            ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
           },
         });
         const results = ordered.subjects.map((subject) => projectHit(subject, hitOptions));

@@ -709,7 +709,8 @@ the complete text/filter predicate in scored-descending then unscored order with
 using equivalent catalogue analysis or complete bounded retained evaluation. A returned page cannot establish
 its own population or rank. At most three native seeks and the existing candidate ceilings apply; exhausted
 allowances return readiness. No owner ordering/authority implementation is installed by default: missing,
-denied or unavailable evidence never means an empty or unscored population.
+denied or unavailable evidence never means an empty or unscored population. HTTP passes its live Access and Actor
+to the provider; a standalone native composition owns equivalent authority, never a grant inferred from an account ID.
 
 The separate native adapter validates population, standard question, prior epoch, disclosure threshold, figure
 revision, strict tuples and matching subject-home snapshot positions. Both phases and the sealed continuation
