@@ -1176,6 +1176,7 @@ IDs cannot stand in for lifecycle equality. The version includes live/availabili
 This adds one exact-key source query for at most 100 examined candidates, without reading bodies or refilling pages.
 The census commit rechecks those source versions and their current dependency directory inside its CAS transaction,
 so a repair between the producer's final snapshot and installation cannot commit stale contribution eligibility.
+A changed commit observation resets the generation and signed frontier together, invalidating earlier page deltas.
 
 ##### Cost: retained census page
 

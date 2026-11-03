@@ -70,6 +70,8 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   }
   const partition = partitionOf(routeOf(written.value.threadId)!);
   expect(await source.censusCoverage(partition)).toMatchObject({ state: 'preparing', installed: false });
+  expect(await source.maintainCensus(partition)).toMatchObject({ state: 'progress', examined: 25 });
+  const beforeRepair = await source.censusCoverage(partition);
   const commitObserver = observeSql(fixture.pool);
   try {
     await source.pageWithCut(partition, null, 1);
@@ -88,6 +90,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
       barrier.release();
     }
     expect(await pending).toMatchObject({ state: 'changed', examined: 0 });
+    expect((await source.censusCoverage(partition)).generation).not.toBe(beforeRepair.generation);
   } finally {
     await commitObserver.close();
   }

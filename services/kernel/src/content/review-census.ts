@@ -103,16 +103,19 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
     ).rows[0];
   }
 
-  async function reset(partition: number, state: Installation, deadline: number): Promise<ReviewCensusStep> {
-    const generation = await realmSubjectHome(pool, partition * 16, deadline, true, async (client) => {
-      const result = await client.query<{ generation: string }>(
-        `UPDATE content.review_census_installation SET generation=gen_random_uuid(),revision=revision+1,
+  async function restart(client: Pick<PoolClient, 'query'>, partition: number, state: Installation): Promise<string> {
+    const result = await client.query<{ generation: string }>(
+      `UPDATE content.review_census_installation SET generation=gen_random_uuid(),revision=revision+1,
          after_route=NULL,after_id=NULL,after_token=NULL,cut=NULL,exhausted=false,observed_public=0,examined=0
          WHERE route=$1 AND generation=$2::uuid AND revision=$3::bigint RETURNING generation::text`,
-        [partition * 16, state.generation, state.revision],
-      );
-      return result.rows[0]?.generation ?? (await load(client, partition))!.generation;
-    });
+      [partition * 16, state.generation, state.revision],
+    );
+    return result.rows[0]?.generation ?? (await load(client, partition))!.generation;
+  }
+
+  async function reset(partition: number, state: Installation, deadline: number): Promise<ReviewCensusStep> {
+    const generation = await realmSubjectHome(pool, partition * 16, deadline, true,
+      (client) => restart(client, partition, state));
     return { state: 'changed', generation, examined: 0 };
   }
 
@@ -183,9 +186,9 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
         if (locked.generation !== state.generation || locked.revision !== state.revision)
           return { state: 'changed', generation: locked.generation, examined: 0 };
         const current = await reader.observe(client, partition, page.cut, page.episodes);
+        if (current.state === 'changed' || (current.state === 'ready' && !sameReviewCensusCut(page.cut, current.cut)))
+          return { state: 'changed', generation: await restart(client, partition, locked), examined: 0 };
         if (current.state !== 'ready') return { state: current.state, generation: state.generation, examined: 0 };
-        if (!sameReviewCensusCut(page.cut, current.cut))
-          return { state: 'changed', generation: state.generation, examined: 0 };
 
         const keys = JSON.stringify(page.episodes);
         const previous = await client.query<{ id: string; generation: string; eligible: boolean }>(
