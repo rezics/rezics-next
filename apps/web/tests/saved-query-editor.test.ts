@@ -14,6 +14,9 @@ import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/library/subject-label-input', () => ({
+  subjectLabelInputIssue: () => undefined,
+}));
 const { SavedQueryEditor } = await import('../src/library/saved-query-editor/editor');
 
 const presence = { owner: { presence: true } } as const;
