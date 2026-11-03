@@ -1,9 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import {
-  admittedReleaseProducerRoles,
-  buildReleaseSearchFilter,
-} from '../../src/search/release-search.ts';
+import { admittedReleaseProducerRoles, buildReleaseSearchFilter } from '../../src/search/release-search.ts';
 
 const releaseType = 'wd:Q20631656';
 const platformId = '018f0000-0000-7000-8000-000000000001';
