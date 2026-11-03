@@ -124,9 +124,10 @@ export function classifyTask(brief: Brief): TaskClass {
   if (brief.kind === 'specification') return brief.kind;
   if (brief.criticalPath && brief.waiting.length && brief.inseparable) return 'critical-path';
   if (brief.kind === 'interface' || brief.kind === 'bulk-text') return brief.kind;
-  if (!brief.acceptance.failing || brief.estimate.lines > 1500 || brief.estimate.files > 24)
+  // A brief is one user journey of about 2,000-3,000 lines across backend and interface (docs/development/efficiency.md).
+  if (!brief.acceptance.failing || brief.estimate.lines > 4000 || brief.estimate.files > 60)
     throw new Error(
-      'implementation needs failing acceptance tests and an estimate within 1500 lines and 24 files; return it to its manager',
+      'implementation needs failing acceptance tests and an estimate within 4000 lines and 60 files; return it to its manager',
     );
   return 'implementation';
 }
