@@ -419,8 +419,8 @@ the ordinary public subject journey. This page offers no lifecycle command or hi
 Explicit keyboard continuation or retry focuses a boundary for newly admitted unique revisions (including zero and the actual next-page state); keyboard selection or explanation retry focuses its heading, while failed reads focus their own retry or failure boundary. Pointer actions, initial reads and retired results stay quiet. Focus movement, including away and back, pointer interaction, Tab or leaving the window cancels the original handoff; a successful read never revives it.
 
 Loading, no revisions, denied, invalid, changed, unavailable/retry and limited safe detail are distinct states.
-The temporary detail port remains unavailable until the published closed Semantic response is bound; consumer
-presentation examples do not establish native detail availability. There is no guessed detail wire schema or
+The generated client binds the served revision-detail read through the private/no-store session BFF. Consumer
+presentation examples do not establish native execution or visual acceptance. There is no guessed detail wire schema or
 successful runtime fallback. Definition labels use the existing locale fallback, independently of data languages.
 
 ### Open owner joins
