@@ -14,6 +14,7 @@ import { createOpenSearch } from '../../src/search/opensearch.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { createOutcomeRpc } from './support/outcome-rpc.ts';
 import type { WorkerStats } from './support/outcome-worker.ts';
@@ -196,7 +197,13 @@ test('only search pauses: real semantic witnesses and source events converge, th
     release.types['schema:Book']!.facets = ['schema:author'];
     release.filters = {};
     await bootstrapRelease(pool, release);
-    const kernel = createKernel({ pool, routeKey, access: access.access, writeRate: access.writeRate });
+    const kernel = createKernel({
+      pool,
+      routeKey,
+      access: access.access,
+      writeRate: access.writeRate,
+      receiptKeys: testReceiptKeys(),
+    });
     async function post(path: string, body: unknown) {
       const response = await kernel.handle(
         new Request(`http://kernel.test${path}`, {
@@ -298,7 +305,10 @@ test('only search pauses: real semantic witnesses and source events converge, th
     expect(resumed.searchStarterInvocations).toBe(2);
     expect(resumed.registeredModules).toEqual(paused.registeredModules);
     expect(resumed.registrationCounts).toEqual(paused.registrationCounts);
-    expect(resumed.startedServices).toEqual({ ...paused.startedServices, search: 2 });
+    expect(resumed.startedServices).toEqual({
+      ...paused.startedServices,
+      search: paused.startedServices.search! + 1,
+    });
     const reader = createSearchService({
       pool,
       client: search,
