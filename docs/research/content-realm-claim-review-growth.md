@@ -5,7 +5,7 @@ current Global `realm:approve_claim`. Its authority and bounds remain in
 [Pending Realm claim review](../../services/kernel/src/community/README.md#pending-realm-claim-review).
 This document does not change that contract or register another gate.
 
-The bound base source is `520e1bdc0ec1a1e5b0649413aa849457394c8ec0`. Inspection found
+The inspected base source is `84073cae8387eca5c6de858498194a2c7003862f`. Inspection found
 the selected native prerequisite absent: `account-erasure.ts:236–237` dispatches
 the registered membership phase to `eraseAccountMembershipsPage`; that function
 closes/purges memberships and unlinks their locators without calling
@@ -36,11 +36,21 @@ through the actual POST route, verifies same-episode pending deduplication with 
 fresh key, and lists through the actual GET route with ordinary native Global
 grants. It asserts the exact operational DTO, the full one-candidate page's empty
 successor, viewer/limit cursor binding, claimant denial, and revoked review
-authority with an independently allowed control. These semantic assertions are
-separate from future growth observation; no Access implementation is replaced.
+authority with an independently allowed control. Forty native HTTP requests now
+exercise the twenty-candidate cap at limit 100, a full deep page and its terminal
+empty successor. Exact DTO assertions apply to every populated page. Fully
+filtered pages still consume raw keys at limits 1 and 100; restoring the read
+clock resumes after those keys rather than refilling them. An existing SQL
+observer holds the actual HTTP candidate query while an ordinary grant revocation
+commits, requiring final disclosure to deny the page and an independent current
+reviewer to retain access. These authored semantic assertions are separate from
+future growth observation; no Access implementation is replaced.
+
+Decision: use the trusted read clock after original eligibility but before native request time to test ineligible candidates without rewriting request or episode sources.
 The final source comparison retains the original head, lifecycle state, orphan
 instant and 720-hour deadline. This does not measure a three-scale bound or cover
-concurrent source/authority changes between snapshots.
+concurrent head, lifecycle, public-source, partition or native episode changes
+between snapshots.
 
 The remaining listing series belongs in the same focused test and private fixture:
 independent unrelated Realms, pending requests and retained episodes at

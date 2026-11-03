@@ -4,7 +4,9 @@ import type { RealmClaimReviewPage } from '../../../src/community/realm-claim-re
 import { PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
+import reviewPage from '../../../src/community/realm-claim-review-page.sql';
 import { contentGovernanceCredential } from '../../content/support/system.ts';
+import { observeSql } from '../../content/support/sql-observer.ts';
 import { accountDeletionRuntime, deletePersona } from '../../support/account-deletion.ts';
 import { createCommunityDriver, communityFixtureRuntime, closeCommunityDrivers } from '../community-driver.ts';
 
@@ -93,6 +95,21 @@ export async function claimReviewGrowthFixture() {
       expect({ status: response.status, value }).toMatchObject({ status });
       return value as T;
     }
+    async function revokeReviewer() {
+      const response = await driver.request({
+        method: 'POST',
+        path: '/v1/grants:revoke',
+        actor: { id: governance.actor.accountId, bearer: governance.bearer },
+        key: JSON.stringify(crypto.randomUUID()),
+        body: {
+          resource: PLATFORM_RESOURCE,
+          subject: { kind: 'account', id: reviewer.actor.accountId },
+          actions: ['realm:approve_claim'],
+          valid: '(,)',
+        },
+      });
+      expect({ status: response.status, value: await response.json() }).toMatchObject({ status: 200 });
+    }
     return {
       realm,
       ownerAccountId: owner.accountId,
@@ -131,9 +148,34 @@ export async function claimReviewGrowthFixture() {
         await system.clock.setCommandTime(new Date(eligible - 1).toISOString());
         const early = await reviewCall<{ code: string }>('POST', '', 409, claimant.bearer);
         expect(early.code).toBe('conflict');
-        await system.clock.setCommandTime(new Date(eligible + 1).toISOString());
+        await system.clock.setCommandTime(new Date(eligible + 2).toISOString());
       },
       submit: () => reviewCall<RealmClaimRequest>('POST', '', 202, claimant.bearer),
+      async submitAdditional(count: number) {
+        const items = [];
+        for (let i = 0; i < count; i++) {
+          const person = await deletion.person();
+          await post(
+            '/v1/grants',
+            {
+              resource: { route: routeOf(realm.realmId), id: realm.realmId },
+              subject: { kind: 'account', id: person.accountId },
+              actions: ['realm:read', 'realm:participate'],
+              valid: '(,)',
+            },
+            { id: governance.actor.accountId, bearer: governance.bearer },
+          );
+          const claim = await reviewCall<RealmClaimRequest>('POST', '', 202, person.bearer);
+          items.push({ ...claim, claimantAccountId: person.accountId });
+        }
+        return items;
+      },
+      async reviewTime(millisecondsAfterEligibility: number) {
+        const row = await source();
+        await system.clock.setCommandTime(
+          new Date(Date.parse(row.claim_eligible_at!) + millisecondsAfterEligibility).toISOString(),
+        );
+      },
       list(limit = 1, cursor?: string, actor: 'reviewer' | 'control' | 'claimant' = 'reviewer') {
         const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
         return reviewCall<RealmClaimReviewPage>('GET', `?${query}`, 200, { reviewer, control, claimant }[actor].bearer);
@@ -148,20 +190,22 @@ export async function claimReviewGrowthFixture() {
         );
         expect(value.code).toBe(code);
       },
-      async revokeReviewer() {
-        const response = await driver.request({
-          method: 'POST',
-          path: '/v1/grants:revoke',
-          actor: { id: governance.actor.accountId, bearer: governance.bearer },
-          key: JSON.stringify(crypto.randomUUID()),
-          body: {
-            resource: PLATFORM_RESOURCE,
-            subject: { kind: 'account', id: reviewer.actor.accountId },
-            actions: ['realm:approve_claim'],
-            valid: '(,)',
-          },
-        });
-        expect({ status: response.status, value: await response.json() }).toMatchObject({ status: 200 });
+      async revokeDuringList() {
+        // Hold the actual HTTP read after its initial candidate query. The
+        // ordinary grant command commits before the final source/Access snapshot.
+        const observer = observeSql(system.database.pool);
+        const barrier = observer.hold({ statement: reviewPage.sql }, 'after');
+        const pending = reviewCall<{ code: string }>('GET', '?limit=20', 404, reviewer.bearer);
+        try {
+          const reached = await Promise.race([barrier.entered.then(() => true), pending.then(() => false)]);
+          expect(reached).toBe(true);
+          await revokeReviewer();
+        } finally {
+          barrier.release();
+          await observer.close();
+          await pending;
+        }
+        expect((await pending).code).toBe('not_found');
       },
       async eraseOwner() {
         // Auth commits the immutable root. The default registered Community
