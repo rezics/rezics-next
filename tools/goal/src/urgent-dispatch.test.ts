@@ -44,7 +44,8 @@ test('urgent flag and front matter require a live supermanager session or its re
     await call('urgent', ['revoke', owner], parent);
     await expect(call('dispatch', [h.briefFile], owner)).rejects.toThrow('active urgent grant');
     writeFileSync(h.briefFile, urgent.brief.markdown.replace('"urgent": true', '"urgent": false'));
-    expect(() => h.tasks.amend(urgent.id, { expectedAttempt: 0, brief: h.briefFile })).toThrow('urgent lane cannot change');
+    expect(() => h.tasks.amend(urgent.id, { expectedAttempt: 0, brief: h.briefFile },
+      { id: urgent.brief.manager, sessionId: 'owner-session' })).toThrow('urgent lane cannot change');
   } finally { h.dispose(); }
 });
 
