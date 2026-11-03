@@ -83,20 +83,7 @@ export const routes: FakeRoute[] = [
     story: ({ recordings }) => {
       const read = recordings['my-realms'];
       if (!read || !Array.isArray(read.items)) return;
-      return {
-        ...read,
-        items: read.items.map((item, index) =>
-          item && typeof item === 'object'
-            ? {
-                ...item,
-                description:
-                  index === 0
-                    ? 'A welcoming table for patient readers, long conversations, and notes worth keeping.'
-                    : undefined,
-              }
-            : item,
-        ),
-      };
+      return read;
     },
   },
   {

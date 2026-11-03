@@ -506,7 +506,6 @@ export async function loadMyRealms(
     realms: page.items.map((item) => ({
       realmId: item.realmId,
       name: item.name,
-      description: (item as typeof item & { description?: string | null }).description ?? null,
     })),
     next: page.next,
     readerOrigin,
