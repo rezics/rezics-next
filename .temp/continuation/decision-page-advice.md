@@ -1,37 +1,30 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/decision-page*.ts",
-    "services/kernel/src/content/decision-page*.sql",
-    "services/kernel/src/content/moderation-decisions.ts",
-    "services/kernel/src/content/moderation-routes.ts",
-    "services/kernel/src/content/register.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/*decision-page*.ts",
-    "services/kernel/test/content/support/*decision-page*.ts",
-    "packages/client/src/kernel/**",
-    "contracts/openapi.json"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [],
-  "estimate": {
-    "lines": 2200,
-    "files": 18
-  },
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/decision-page*.ts',
+      'services/kernel/src/content/decision-page*.sql',
+      'services/kernel/src/content/moderation-decisions.ts',
+      'services/kernel/src/content/moderation-routes.ts',
+      'services/kernel/src/content/register.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/*decision-page*.ts',
+      'services/kernel/test/content/support/*decision-page*.ts',
+      'packages/client/src/kernel/**',
+      'contracts/openapi.json',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 2200, 'files': 18 },
+  'inseparable': true,
 }
 ---
+
 # Open the retained decision with native current appeal advice and optional context
 
 Complete the original decision-page journey on the retained source. The exact reader now compares actual

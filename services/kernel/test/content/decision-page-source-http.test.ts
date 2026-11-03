@@ -123,9 +123,7 @@ test('an exact private read retires across appeal creation and resolution, then 
   );
   const head = () =>
     fixture.system.database.pool
-      .query('SELECT epoch,position FROM core.partition WHERE partition_no=$1', [
-        partitionOf(routeOf(target.postId)!),
-      ])
+      .query('SELECT epoch,position FROM core.partition WHERE partition_no=$1', [partitionOf(routeOf(target.postId)!)])
       .then(({ rows }) => rows);
   const before = await head();
   const resolved = await open();
