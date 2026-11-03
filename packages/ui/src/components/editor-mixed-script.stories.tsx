@@ -59,7 +59,7 @@ function createDemo(initial: DocumentSnapshot, label: string, lang: string) {
         <p role="status" aria-label="Snapshot validity">
           {valid ? 'Valid snapshot' : 'Invalid snapshot'}
         </p>
-        <output aria-label="Serialized document" className="block max-h-48 overflow-auto font-mono text-xs">
+        <output aria-label="Serialized document" className="block font-mono text-xs break-all">
           {serializeDocument(value)}
         </output>
       </div>
