@@ -422,7 +422,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         response: { 200: withHeaders(slowModeResponse, sessionHeader), ...readFailures },
         detail: {
-          operationId: 'board.slow_mode.get',
+          operationId: 'board.get_slow_mode',
           'x-action': 'board:read',
           'x-exposure': 'public',
           'x-resource-types': ['content.board'],
@@ -452,7 +452,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         body: strictContentSchema(slowModeInput),
         response: { 200: withHeaders(slowModeInput, sessionHeader), ...writeFailures },
         detail: {
-          operationId: 'board.slow_mode.set',
+          operationId: 'board.set_slow_mode',
           'x-action': 'moderation:takedown',
           'x-exposure': 'public',
           'x-resource-types': ['content.board'],
