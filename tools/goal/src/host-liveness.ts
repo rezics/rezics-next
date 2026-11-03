@@ -152,7 +152,12 @@ function readRetryState(path: string, maximum: number, policy: ControlPolicy['ho
     return repairRetryState(path, reason, maximum, policy);
   }
   if (isRetryState(value, policy.retryFailures)) return value;
-  return repairRetryState(path, `expected failures from 0 to ${policy.retryFailures} and a non-negative safe integer nextAt`, maximum, policy);
+  return repairRetryState(
+    path,
+    `expected failures from 0 to ${policy.retryFailures} and a non-negative safe integer nextAt`,
+    maximum,
+    policy,
+  );
 }
 
 /** Called only under the host lease; identities include boot and start time, never just a PID. */

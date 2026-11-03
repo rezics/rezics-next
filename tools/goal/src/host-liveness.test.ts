@@ -22,6 +22,7 @@ import {
 import { processIdentity, sameProcess, type ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 import { readControlPolicy } from './policy.ts';
+import { hostRequest, managerHostRestartAllowed } from './integration-cli.ts';
 
 const runtime = join(import.meta.dir, 'fixtures/cli-runtime.ts');
 const liveness = join(import.meta.dir, 'host-liveness.ts');
@@ -321,7 +322,9 @@ test('host startup uses the local deadline and current-output budget without cha
   try {
     writeFileSync(script, "process.stderr.write('prefix-tail'); process.exit(17);");
     await expect(ensureHostRunning(config)).rejects.toThrow('showing 4 of 11 bytes:\ntail');
-    await expect(ensureHostRunning({ ...config, policy: undefined })).rejects.toThrow('prefix-tail');
+    const baseline = { ...config };
+    delete baseline.policy;
+    await expect(ensureHostRunning(baseline)).rejects.toThrow('prefix-tail');
     writeFileSync(script, 'setTimeout(() => {}, 3000);');
     await expect(ensureHostRunning(config)).rejects.toThrow('Manager host startup timed out');
   } finally {
@@ -344,12 +347,18 @@ test('supervision applies local journal and health budgets while explicit interv
     pollMs: 5,
     minBackoffMs: 40,
     maxBackoffMs: 160,
-    policy: readControlPolicy({ host: { pollMs: 10000, retryFailures: 2, healthResetMs: 1, retryDiagnosticCharacters: 1 } }).host,
+    policy: readControlPolicy({
+      host: { pollMs: 10000, retryFailures: 2, healthResetMs: 1, retryDiagnosticCharacters: 1 },
+    }).host,
   };
   // A mismatched start identifies a dead incarnation without signalling any process.
-  writeFileSync(join(dir.path, 'manager-host-liveness.json'), JSON.stringify({
-    identity: { ...processIdentity()!, start: '0' }, desired: true,
-  }));
+  writeFileSync(
+    join(dir.path, 'manager-host-liveness.json'),
+    JSON.stringify({
+      identity: { ...processIdentity()!, start: '0' },
+      desired: true,
+    }),
+  );
   writeFileSync(retry, '{');
   const running = superviseHost(config, controller.signal);
   try {
@@ -364,6 +373,23 @@ test('supervision applies local journal and health budgets while explicit interv
     controller.abort();
     await running;
     console.error = previousError;
+    dir.close();
+  }
+});
+
+test('host RPC and restart budgets use local policy and explicit RPC arguments retain precedence', async () => {
+  const dir = temporaryDirectory();
+  const policy = readControlPolicy({ host: { requestTimeoutMs: 15, requestRetryMs: 1, restartIntervalMs: 10 } }).host;
+  try {
+    const socket = join(dir.path, 'missing.sock');
+    await expect(hostRequest(socket, { command: 'decision' }, undefined, undefined, policy)).rejects.toThrow(
+      'after 15ms',
+    );
+    await expect(hostRequest(socket, { command: 'decision' }, 30, 0, policy)).rejects.toThrow('after 30ms');
+    expect(managerHostRestartAllowed(dir.path, 1000, policy)).toBe(true);
+    expect(managerHostRestartAllowed(dir.path, 1009, policy)).toBe(false);
+    expect(managerHostRestartAllowed(dir.path, 1010, policy)).toBe(true);
+  } finally {
     dir.close();
   }
 });

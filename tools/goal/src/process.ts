@@ -128,7 +128,11 @@ export function readWorkerExit(logPath: string): WorkerExit {
   }
 }
 /** Wait until a worker's wrapper has exited, then read the exit it recorded just before. */
-export function waitForWorkerExit(identity: ProcessIdentity | null, logPath: string, policy = defaultPolicy.process): Promise<WorkerExit> {
+export function waitForWorkerExit(
+  identity: ProcessIdentity | null,
+  logPath: string,
+  policy = defaultPolicy.process,
+): Promise<WorkerExit> {
   const fixtureOwner = fixtureOwnerForLog(logPath);
   const waiting = (async () => {
     if (identity)
@@ -208,7 +212,11 @@ except FileNotFoundError: pass
   });
 }
 /** Pin the incarnation before signalling: a PID can be recycled after the /proc check. */
-export async function signalProcessIdentity(identity: ProcessIdentity, name: NodeJS.Signals, policy = defaultPolicy.process): Promise<boolean> {
+export async function signalProcessIdentity(
+  identity: ProcessIdentity,
+  name: NodeJS.Signals,
+  policy = defaultPolicy.process,
+): Promise<boolean> {
   if (!matches(inspectProcessIdentity(identity.pid), identity)) return false;
   // The helper uses exit 3 for a missing or replaced incarnation; it is a protocol result, not a retry cap.
   const source = `import os,sys,signal
@@ -258,7 +266,11 @@ finally:
   });
 }
 /** Signal only an identified detached group, then verify every surviving member before allowing launch. */
-export async function terminateProcessGroup(identity: ProcessIdentity | null, graceMs: number, policy = defaultPolicy.process): Promise<void> {
+export async function terminateProcessGroup(
+  identity: ProcessIdentity | null,
+  graceMs: number,
+  policy = defaultPolicy.process,
+): Promise<void> {
   if (!identity) return;
   const members = checkedProcessGroup(identity);
   if (!members.length) return;
@@ -292,7 +304,12 @@ export async function terminateProcessGroup(identity: ProcessIdentity | null, gr
  * server that a worker or a test starts in a new session leaves the worker's process group, so only its place finds
  * it. This process and its ancestors are spared.
  */
-export async function stopProcessesUnder(directory: string, graceMs: number, procRoot = '/proc', policy = defaultPolicy.process): Promise<number> {
+export async function stopProcessesUnder(
+  directory: string,
+  graceMs: number,
+  procRoot = '/proc',
+  policy = defaultPolicy.process,
+): Promise<number> {
   const root = resolve(directory);
   const spared = new Set<number>();
   for (let pid = process.pid; pid > 1 && !spared.has(pid);) {

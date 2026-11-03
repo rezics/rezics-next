@@ -117,10 +117,19 @@ export async function settle(
       : undefined;
     if (!proofTask && !pendingChecks?.length) removeAttemptContainers(ref.taskId, ref.attempt, policy.containers);
     store.assertCurrent(ref);
-    await terminateProcessGroup(store.attempt(ref).process, tasks.settings.terminationGraceMs, tasks.settings.policy?.process);
+    await terminateProcessGroup(
+      store.attempt(ref).process,
+      tasks.settings.terminationGraceMs,
+      tasks.settings.policy?.process,
+    );
     if (!proofTask && !pendingChecks?.length) {
       if (!store.task(ref.taskId).workspace)
-        await stopProcessesUnder(store.task(ref.taskId).worktree, tasks.settings.terminationGraceMs, undefined, tasks.settings.policy?.process);
+        await stopProcessesUnder(
+          store.task(ref.taskId).worktree,
+          tasks.settings.terminationGraceMs,
+          undefined,
+          tasks.settings.policy?.process,
+        );
     }
     let queued = false;
     let finished = false;

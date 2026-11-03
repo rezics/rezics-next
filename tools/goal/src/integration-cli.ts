@@ -200,7 +200,8 @@ async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof d
       if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
     }
   }
-  if (!(await waitForProcessExit(identity, policy.killWaitMs, policy.exitPollMs))) throw new Error(`App-server process did not exit: ${identity.pid}`);
+  if (!(await waitForProcessExit(identity, policy.killWaitMs, policy.exitPollMs)))
+    throw new Error(`App-server process did not exit: ${identity.pid}`);
 }
 
 async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
@@ -316,7 +317,11 @@ export function hostRequest(
 }
 
 const hostRestartPath = (stateDirectory: string) => join(stateDirectory, 'manager-host-restart.json');
-export function managerHostRestartAllowed(stateDirectory: string, now = Date.now(), policy = defaultPolicy.host): boolean {
+export function managerHostRestartAllowed(
+  stateDirectory: string,
+  now = Date.now(),
+  policy = defaultPolicy.host,
+): boolean {
   const path = hostRestartPath(stateDirectory);
   try {
     const previous = JSON.parse(readFileSync(path, 'utf8')) as { at?: unknown };
@@ -337,7 +342,7 @@ export function managerHostRestartAllowed(stateDirectory: string, now = Date.now
 async function ensureHost(runtime: IntegrationRuntime): Promise<void> {
   mkdirSync(runtime.stateDirectory, { recursive: true });
   const config = {
-    policy: runtime.managerServices.policy?.host,
+    policy: runtime.managerServices.policy?.host ?? defaultPolicy.host,
     stateDirectory: runtime.stateDirectory,
     managerSocket: runtime.managerSocket,
     mainCheckout: runtime.mainCheckout,
@@ -933,9 +938,10 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
           await ensureHost(runtime);
           // The durable local decision is authoritative. Keep the host's legacy audit view in sync with a short,
           // isolated delivery attempt; its failure must not change the inbox-send or continuation result.
-          await requestHost({ command: 'decision', manager: sender.managerId }, policy.host.decisionAuditTimeoutMs).catch(
-            (error) => console.error(`manager decision audit delivery failed: ${String(error)}`),
-          );
+          await requestHost(
+            { command: 'decision', manager: sender.managerId },
+            policy.host.decisionAuditTimeoutMs,
+          ).catch((error) => console.error(`manager decision audit delivery failed: ${String(error)}`));
           await requestHost({
             command: 'outgoing-message',
             manager: sender.managerId,
@@ -1008,11 +1014,7 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
         throw new Error(`Resident supermanager ${id} is an external session and cannot be started`);
       await ensureHost(runtime);
       await recordManagerCommand(runtime);
-      console.log(
-        JSON.stringify(
-          await requestHost({ command: 'start', spec: runtime.manager(id, engine, budget) }),
-        ),
-      );
+      console.log(JSON.stringify(await requestHost({ command: 'start', spec: runtime.manager(id, engine, budget) })));
     } else if (subcommand === 'renew') {
       // --engine moves a manager to another engine, for example to keep a weekly allowance within its week.
       const engineAt = flags.indexOf('--engine');

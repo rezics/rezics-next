@@ -777,7 +777,11 @@ export class WorkerJob implements GateOutcomeSink {
         store.updateAttempt(ref, (current) => {
           current.escalation = 'stalled';
         });
-        silenceStopping = terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs, this.tasks.settings.policy?.process);
+        silenceStopping = terminateProcessGroup(
+          attempt.process ?? null,
+          this.tasks.settings.terminationGraceMs,
+          this.tasks.settings.policy?.process,
+        );
         void silenceStopping.catch(() => {});
       } catch (error) {
         if (!(error instanceof StaleAttemptError)) {
@@ -848,7 +852,11 @@ export class WorkerJob implements GateOutcomeSink {
           )
             return;
           console.error(`Worker ${ref.taskId} attempt ${ref.attempt} wrote nothing; stopping it so it is retried.`);
-          void terminateProcessGroup(attempt.process ?? null, this.tasks.settings.terminationGraceMs, this.tasks.settings.policy?.process).catch(() => {});
+          void terminateProcessGroup(
+            attempt.process ?? null,
+            this.tasks.settings.terminationGraceMs,
+            this.tasks.settings.policy?.process,
+          ).catch(() => {});
         } catch {
           /* A superseded attempt needs no check. */
         }
@@ -964,11 +972,24 @@ export class WorkerJob implements GateOutcomeSink {
         .replace(/[\r\n]+/g, ' ')
         .slice(0, 4000);
       try {
-        await terminateProcessGroup(current.process, this.tasks.settings.terminationGraceMs, this.tasks.settings.policy?.process);
+        await terminateProcessGroup(
+          current.process,
+          this.tasks.settings.terminationGraceMs,
+          this.tasks.settings.policy?.process,
+        );
         for (const process of current.auxiliaryProcesses)
-          await terminateProcessGroup(process, this.tasks.settings.terminationGraceMs, this.tasks.settings.policy?.process);
+          await terminateProcessGroup(
+            process,
+            this.tasks.settings.terminationGraceMs,
+            this.tasks.settings.policy?.process,
+          );
         if (!task.workspace && task.brief.kind !== 'verification')
-          await stopProcessesUnder(task.worktree, this.tasks.settings.terminationGraceMs, undefined, this.tasks.settings.policy?.process);
+          await stopProcessesUnder(
+            task.worktree,
+            this.tasks.settings.terminationGraceMs,
+            undefined,
+            this.tasks.settings.policy?.process,
+          );
       } catch (cleanupError) {
         detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, 4000);
         // Unknown custody is an operational condition, not an exit or a free worker slot.
@@ -1483,9 +1504,9 @@ export class WorkerJob implements GateOutcomeSink {
           (async () => {
             try {
               // Follow at once, so the stall and start checks watch an adopted worker too; only its exit waits.
-              const exited = (attempt.process ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()).then(() =>
-                readWorkerExit(attempt.logPath),
-              );
+              const exited = (
+                attempt.process ? waitForProcessGroup(attempt.process, this.policy.process) : Promise.resolve()
+              ).then(() => readWorkerExit(attempt.logPath));
               await this.follow({ attempt, exited });
             } catch (error) {
               await this.endAsEnvironment(ref, error);

@@ -1957,7 +1957,8 @@ export class WorkerTasks {
               .filter((identity): identity is NonNullable<typeof identity> => identity !== null)
               .map((identity) => [`${identity.pid}:${identity.start}:${identity.boot}:${identity.group}`, identity]),
           );
-          for (const process of owned.values()) await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
+          for (const process of owned.values())
+            await terminateProcessGroup(process, this.settings.terminationGraceMs, this.settings.policy?.process);
           this.store.finishTermination(ref);
         } catch (error) {
           this.store.finishTermination(ref, String(error));
