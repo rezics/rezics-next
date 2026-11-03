@@ -1670,7 +1670,13 @@ CREATE TABLE library.bangumi_upload_row (
     review jsonb,
     choice jsonb,
     outcome jsonb,
+    labels jsonb,
+    label_creations integer DEFAULT 0 NOT NULL,
+    label_assignments integer DEFAULT 0 NOT NULL,
+    CONSTRAINT bangumi_label_review_bytes CHECK (((labels IS NULL) OR (octet_length((labels)::text) <= 32768))),
     CONSTRAINT bangumi_upload_row_evidence_check CHECK ((octet_length((evidence)::text) <= 32768)),
+    CONSTRAINT bangumi_upload_row_label_assignments_check CHECK (((label_assignments >= 0) AND (label_assignments <= 16))),
+    CONSTRAINT bangumi_upload_row_label_creations_check CHECK (((label_creations >= 0) AND (label_creations <= 16))),
     CONSTRAINT bangumi_upload_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99)))
 );
 

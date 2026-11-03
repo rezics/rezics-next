@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -152,11 +153,12 @@ export function createPersonalLabelCommands(config: {
     actor: Actor,
     input: unknown,
     key: string,
-    importGuard?: AniListLabelGuard | MalLabelFence,
+    importGuard?: AniListLabelGuard | MalLabelFence | LabelCommandAdmission,
   ) {
     const malLabelFence =
       importGuard && 'sourceDigest' in importGuard && 'subject' in importGuard ? importGuard : undefined;
     const guard = importGuard && 'subjectId' in importGuard ? importGuard : undefined;
+    const admission = importGuard && 'prepare' in importGuard ? importGuard : undefined;
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input);
     const body: LibraryCommandBody<LabelValue> = async (tx, command) => {
@@ -170,6 +172,31 @@ export function createPersonalLabelCommands(config: {
       );
       return { value: minimal(label), events: events(owner, label.id) };
     };
+    if (admission) {
+      try {
+        return await runner.ownAccountPrepared(
+          actor,
+          {
+            action: 'library_entry:update',
+            kind: 'library_label.create',
+            requestKey: key,
+            input: { name: parsed.name, review: admission.input },
+            prepare: (attempt) => admission.prepare(attempt.time),
+          },
+          async (tx, command, validate) => {
+            await validate(tx);
+            return body(tx, command);
+          },
+        );
+      } catch (error) {
+        if (
+          (error as { code?: string; constraint?: string })?.code === '23505' &&
+          (error as { constraint?: string }).constraint === 'personal_label_live_name'
+        )
+          throw new LibraryConflictError();
+        throw error;
+      }
+    }
     if (!malLabelFence) return run(actor, 'library_label.create', { name: parsed.name }, key, body, guard);
     if (!config.access) throw new TypeError('MAL label adoption requires Subject access');
     const access = config.access,

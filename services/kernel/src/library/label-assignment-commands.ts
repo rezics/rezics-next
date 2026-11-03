@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -126,10 +127,11 @@ export function createLabelAssignmentCommands(deps: {
     value: unknown,
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
-    importGuard?: AniListLabelGuard | MalLabelFence,
+    importGuard?: AniListLabelGuard | MalLabelFence | LabelCommandAdmission,
   ) {
     const guard = importGuard && 'subjectId' in importGuard ? importGuard : undefined;
     const malLabelFence = importGuard && 'subject' in importGuard ? importGuard : undefined;
+    const admission = importGuard && 'prepare' in importGuard ? importGuard : undefined;
     const account = owner(actor, 'library_entry:update');
     id(labelId);
     const parsed = input(value, operation !== 'assign');
@@ -142,15 +144,19 @@ export function createLabelAssignmentCommands(deps: {
         ...parsed,
         ...(guard ? { importReview: guard } : {}),
         ...(malLabelFence ? { malLabelFence } : {}),
+        ...(admission ? { review: admission.input } : {}),
       },
       requestKey: key,
     };
     const execute = async (
       tx: Client,
       command: { transactionId: string; time: AuthoritativeTime },
-      prepared: { subjectId?: string; error?: unknown },
-    ): Promise<CommandResult<ReturnType<typeof minimal> | { deleted: true; revision: number }>> => {
+      prepared: { subjectId?: string; error?: unknown; validate?: (tx: Client) => Promise<void> },
+    ): Promise<
+      CommandResult<(ReturnType<typeof minimal> & { unchanged?: boolean }) | { deleted: true; revision: number }>
+    > => {
       if (prepared.error !== undefined) throw prepared.error;
+      await prepared.validate?.(tx);
       if (malLabelFence) await assertMalLabelFence(tx, account, malLabelFence);
       const route = sameAccountRoute(account.accountId, labelId);
       const tuple = {
@@ -180,10 +186,16 @@ export function createLabelAssignmentCommands(deps: {
           case 'migration_required':
             throw new ProblemError('index_not_ready');
           case 'existing':
-            return noEffect({ ...minimal(result.assignment), ...(guard || malLabelFence ? { unchanged: true } : {}) });
+            return noEffect({
+              ...minimal(result.assignment),
+              ...(guard || malLabelFence || admission ? { unchanged: true } : {}),
+            });
           case 'applied':
             return {
-              value: { ...minimal(result.assignment), ...(guard || malLabelFence ? { unchanged: false } : {}) },
+              value: {
+                ...minimal(result.assignment),
+                ...(guard || malLabelFence || admission ? { unchanged: false } : {}),
+              },
               events: events(account, labelId),
             };
         }
@@ -237,7 +249,10 @@ export function createLabelAssignmentCommands(deps: {
             );
             if (!resolved) throw new LibraryNotFoundError();
             if (malLabelFence && resolved.subjectId !== malLabelFence.subject) throw new LibraryConflictError();
-            return { subjectId: resolved.subjectId };
+            return {
+              subjectId: resolved.subjectId,
+              ...(admission ? { validate: await admission.prepare(attempt.time) } : {}),
+            };
           } catch (error) {
             return { error };
           }
@@ -252,7 +267,7 @@ export function createLabelAssignmentCommands(deps: {
     labelId: string,
     value: { subjectId: string },
     key: string,
-    importGuard?: AniListLabelGuard | MalLabelFence,
+    importGuard?: AniListLabelGuard | MalLabelFence | LabelCommandAdmission,
   ) {
     return (await mutate(
       actor,
