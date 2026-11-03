@@ -1,3 +1,5 @@
+import type { ProgressSessionJournal } from './progress-model.ts';
+
 /** Compact private occurrence; identifiers are retained native facts, never catalogue disclosure. */
 export type DiaryOccurrence = {
   id: string;
@@ -7,8 +9,8 @@ export type DiaryOccurrence = {
   revision: number;
   recordedStartedAt: string;
   recordedCompletedAt: string | null;
-  /** Historical-date ownership is optional and is not installed by this reader. */
-  reportedDates: { availability: 'unavailable' };
+  /** Read from the installed journal owner; unknown dates stay null, with their original precision. */
+  reportedDates: { availability: 'available' } & Pick<ProgressSessionJournal, 'revision' | 'startDate' | 'finishDate'>;
   subject: DiarySubject | null;
   versionSubject: DiarySubject | null;
 };
