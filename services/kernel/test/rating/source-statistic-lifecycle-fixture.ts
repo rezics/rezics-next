@@ -4,24 +4,18 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
-import { createAuthService } from '@rezics/auth';
-import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
-import { Pool } from 'pg';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
-import { readAccount } from '../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { communityFixtureRuntime } from '../community/community-driver.ts';
-import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { createFigureFixture, type FigureFixture } from './support/figure-fixture.ts';
 
 const issuer = 'https://source-statistic.auth.example.test';
 const audience = 'https://api.rezics.test';
-const password = 'source statistic lifecycle fixture password';
 const scopes = [
   'rating:vote',
   'source_fence:takedown',
@@ -33,15 +27,13 @@ const scopes = [
 
 export type SourceStatisticLifecycleFixture = Awaited<ReturnType<typeof createSourceStatisticLifecycleFixture>>;
 
-/** Production Kernel, Auth and Access over a migrated isolated database. The optional native figure fixture
+/** Production Kernel and shared Access with signed account tokens over a migrated isolated database.
+ * The optional native figure fixture
  * supplies real public figures and worker-produced rating controls for the composed lifecycle acceptance. */
 export async function createSourceStatisticLifecycleFixture(options: { nativeFigures?: boolean } = {}) {
   let database: GrowthDatabase | undefined;
   let nativeFigures: FigureFixture | undefined;
   let closeBase: (() => Promise<void>) | undefined;
-  let authPool: Pool | undefined;
-  let authDatabase: string | undefined;
-  let authCreated = false;
   try {
     if (options.nativeFigures) {
       nativeFigures = await createFigureFixture({ subjects: 4, partitions: 2 });
@@ -53,66 +45,32 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
     }
     const routeKey =
       nativeFigures === undefined ? new Uint8Array(32).fill(121) : communityFixtureRuntime().system.routeKey;
-    const databaseUrl = database.url;
-    authDatabase = `source_statistic_lifecycle_${crypto.randomUUID().replaceAll('-', '')}`;
-    const authUrl = new URL(databaseUrl);
-    authUrl.pathname = `/${authDatabase}`;
-    await database.admin.query(`CREATE DATABASE ${authDatabase}`);
-    authCreated = true;
-    const { migrate } = await import('../../../auth/scripts/database.ts');
-    migrate(authUrl.toString());
-    authPool = new Pool({ connectionString: authUrl.toString() });
-
     const accountId = newId(0x23a1);
     await database.admin.query(
       `INSERT INTO access.account
          (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch, membership_inverse_complete)
-       VALUES ($1, $2, 'actor', 'pending', $2, false, 1, true)`,
+       VALUES ($1, $2, 'actor', 'active', $2, false, 1, true)`,
       [routeOf(accountId), accountId],
     );
-    const signing = {
-      ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
-      kid: `source-statistic-${crypto.randomUUID()}`,
-      alg: 'ES256',
-    };
-    const auth = await createAuthService({
-      database: authPool,
-      issuer,
-      audience,
-      secret: 'source-statistic-lifecycle-auth-secret-at-least-32-bytes',
-      signing: { activeKid: signing.kid, privateKeys: [signing] },
-      trustedAccess: trustedAccessPorts({
-        async readAccount(id) {
-          const route = routeOf(id);
-          if (route === null) return null;
-          const account = await readAccount(database!.pool, route, id);
-          return account
-            ? {
-                accountId: id,
-                kind: account.kind,
-                state: account.state,
-                authnEpoch: Number(account.minimumAuthnEpoch),
-                automated: false,
-              }
-            : null;
-        },
-        async authorizeProvisioning(reference) {
-          if (reference !== accountId) throw new Error('Unexpected lifecycle fixture provisioning reference');
-          return { accountId };
-        },
-      }),
-    });
+    const keys = await generateKeyPair('ES256', { extractable: true });
+    const kid = `source-statistic-${crypto.randomUUID()}`;
+    const jwk = { ...(await exportJWK(keys.publicKey)), kid, alg: 'ES256' };
     const clientId = `source-statistic-lifecycle-${crypto.randomUUID()}`;
-    await auth.internal.registerClient({ clientId, firstParty: true, scopes });
-    await auth.internal.provisionPassword({
-      authorization: accountId,
-      email: `${accountId}@example.test`,
-      password,
-    });
-    await database.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(accountId),
-      accountId,
-    ]);
+    const issue = (requestedScopes: readonly string[]) =>
+      new SignJWT({
+        client_id: clientId,
+        scope: requestedScopes.join(' '),
+        authn_epoch: 1,
+        auth_time: Math.floor(Date.now() / 1000),
+        amr: ['pwd'],
+      })
+        .setProtectedHeader({ alg: 'ES256', kid, typ: 'at+jwt' })
+        .setIssuer(issuer)
+        .setAudience(audience)
+        .setSubject(accountId)
+        .setIssuedAt()
+        .setExpirationTime('1h')
+        .sign(keys.privateKey);
 
     let access: ReturnType<typeof createAccess>;
     const app = createKernel({
@@ -132,15 +90,12 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
             issuer,
             audience,
             jwksUrl: `${issuer}/.well-known/jwks.json`,
-            fetch: (input, init) => auth.handler(new Request(input, init)),
+            fetch: async () => Response.json({ keys: [jwk] }),
           },
         })),
     });
-    const fullBearer = await issue(auth, accountId, clientId, scopes);
-    // Keep the real Auth session claims while restricting the independently signed reader token.
-    const readerBearer = await new SignJWT({ ...decodeJwt(fullBearer), scope: 'subject:read' })
-      .setProtectedHeader({ alg: 'ES256', kid: signing.kid, typ: 'at+jwt' })
-      .sign(await importJWK(signing, 'ES256'));
+    const fullBearer = await issue(scopes);
+    const readerBearer = await issue(['subject:read']);
 
     await database.admin.query(
       `INSERT INTO access.resource_role_grant
@@ -243,55 +198,11 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       async close(): Promise<void> {
         if (closed) return;
         closed = true;
-        await authPool!.end();
-        if (authCreated) await dropTestDatabase(database!.admin, authDatabase!);
         await closeBase!();
       },
     };
   } catch (error) {
-    try {
-      await authPool?.end();
-    } finally {
-      try {
-        if (authCreated && database && authDatabase) await dropTestDatabase(database.admin, authDatabase);
-      } finally {
-        await closeBase?.();
-      }
-    }
+    await closeBase?.();
     throw error;
   }
-}
-
-async function issue(
-  auth: Awaited<ReturnType<typeof createAuthService>>,
-  accountId: string,
-  clientId: string,
-  requestedScopes: readonly string[],
-): Promise<string> {
-  const signed = await auth.handler(
-    new Request(`${issuer}/signin`, {
-      method: 'POST',
-      headers: { origin: issuer, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        email: `${accountId}@example.test`,
-        password,
-        client_id: clientId,
-        scope: requestedScopes.join(' '),
-      }),
-    }),
-  );
-  if (signed.status !== 200) throw new Error(`Lifecycle fixture sign-in failed: ${signed.status}`);
-  const cookie = signed.headers
-    .getSetCookie()
-    .map((value) => value.split(';')[0])
-    .join('; ');
-  const issued = await auth.handler(
-    new Request(`${issuer}/token`, {
-      method: 'POST',
-      headers: { origin: issuer, cookie, 'content-type': 'application/json' },
-      body: '{}',
-    }),
-  );
-  if (issued.status !== 200) throw new Error(`Lifecycle fixture token issuance failed: ${issued.status}`);
-  return ((await issued.json()) as { access_token: string }).access_token;
 }
