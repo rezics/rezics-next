@@ -24,12 +24,25 @@ export function createProfileReceiptObservations(pool: Pool) {
   const originals = new Map<string, { requestKey: string; status: number }>();
   const identity = (accountId: string, kind: string, key: string) => JSON.stringify([accountId, kind, key]);
   return {
-    observe(accountId: string, requestKey: string, response: Response, committed?: ReturnType<typeof currentCommandReceipt>, transportKey = requestKey) {
+    observe(
+      accountId: string,
+      requestKey: string,
+      response: Response,
+      committed?: ReturnType<typeof currentCommandReceipt>,
+      transportKey = requestKey,
+    ) {
       if (!response.ok) return;
       if (committed) {
-        if (committed.principal.kind !== 'account' || committed.principal.id !== accountId || committed.key !== requestKey)
+        if (
+          committed.principal.kind !== 'account' ||
+          committed.principal.id !== accountId ||
+          committed.key !== requestKey
+        )
           throw new Error('Historical receipt belongs to another command or owner');
-        originals.set(identity(accountId, committed.kind, committed.storageKey), { requestKey, status: response.status });
+        originals.set(identity(accountId, committed.kind, committed.storageKey), {
+          requestKey,
+          status: response.status,
+        });
       }
       let account = observations.get(accountId);
       if (!account) observations.set(accountId, (account = new Map()));
@@ -44,7 +57,9 @@ export function createProfileReceiptObservations(pool: Pool) {
         nativeReceiptKeyCandidates(pool, row.commandKind, row.accountId, key).includes(row.storageKey),
       );
       if (matches.length !== 1 || matches[0]![1].statuses.size !== 1)
-        throw new Error('Native Library dependency_unavailable: unobserved or ambiguous original receipt HTTP identity');
+        throw new Error(
+          'Native Library dependency_unavailable: unobserved or ambiguous original receipt HTTP identity',
+        );
       const { requestKey, statuses } = matches[0]![1];
       return {
         accountId: row.accountId,
@@ -220,7 +235,8 @@ export function createProfileHistoricalNativeFixture(host: HistoricalProfileHost
     copy,
     async seed(rows: HistoricalProfileCounts = { entries: 5, sessions: 18, copies: 4 }) {
       for (const count of Object.values(rows))
-        if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Historical relation counts must be nonnegative integers');
+        if (!Number.isSafeInteger(count) || count < 0)
+          throw new RangeError('Historical relation counts must be nonnegative integers');
       const states = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
       const modes: ProgressMode[] = ['scalar_amount', 'cursor_position', 'completed_units'];
       const units: ProgressUnit[] = ['page', 'chapter', 'episode', 'volume', 'minute', 'percent'];
@@ -233,7 +249,11 @@ export function createProfileHistoricalNativeFixture(host: HistoricalProfileHost
       }
       if (!subjects.length && (rows.sessions || rows.copies)) subjects.push(await host.createSubject());
       for (let n = 0; n < rows.sessions; n++)
-        await session(subjects[n % subjects.length]!, modes[Math.floor(n / units.length) % modes.length]!, units[n % units.length]!);
+        await session(
+          subjects[n % subjects.length]!,
+          modes[Math.floor(n / units.length) % modes.length]!,
+          units[n % units.length]!,
+        );
       for (let n = 0; n < rows.copies; n++) await copy(subjects[n % subjects.length]!, statuses[n % statuses.length]!);
     },
   };

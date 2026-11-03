@@ -27,7 +27,10 @@ import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
 import { testRouteKey, testTokens } from '../../support/test-kernel.ts';
-import { createProfileHistoricalNativeFixture, createProfileReceiptObservations } from './profile-historical-native-fixture.ts';
+import {
+  createProfileHistoricalNativeFixture,
+  createProfileReceiptObservations,
+} from './profile-historical-native-fixture.ts';
 
 export type ProfileVertical = 'game' | 'recipe' | 'record' | 'unprofiled';
 export const entryTypes = { game: 'ex:Child', recipe: 'ex:Recipe', record: 'ex:Record', unprofiled: 'ex:Person' };

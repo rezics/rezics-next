@@ -13,7 +13,10 @@ import { readWorkerConfig, startWorker } from '../../src/worker.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { observeRetentionQueries } from './entry-retention-worker-runtime.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
-import { createProfileReceiptObservations, type StoredProfileReceipt } from './support/profile-historical-native-fixture.ts';
+import {
+  createProfileReceiptObservations,
+  type StoredProfileReceipt,
+} from './support/profile-historical-native-fixture.ts';
 
 // Historical fixture only: the same old native command boundary used by
 // profile-copy-compatibility.test.ts. No new production endpoint or NULL-pin default.
@@ -204,8 +207,13 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
   const client = await createWorkClient(process.env.DATABASE_URL!, f.pool);
   try {
     const owner = await f.identity([
-      'subject:read', 'library_entry:update', 'library_entry:read', 'library_entry:delete',
-      'progress_session:create', 'progress_session:update', 'copy:create',
+      'subject:read',
+      'library_entry:update',
+      'library_entry:read',
+      'library_entry:delete',
+      'progress_session:create',
+      'progress_session:update',
+      'copy:create',
     ]);
     const accountId = owner.actor.accountId;
     await f.grantLibraryGate(accountId);
@@ -213,24 +221,39 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
     await legacy.seed();
     const seeded = await snapshot(f, accountId);
     expect([seeded.entries.length, seeded.sessions.length, seeded.copies.length]).toEqual([5, 18, 4]);
-    expect(seeded.entries.map(({ row }) => row.state).sort()).toEqual(['completed', 'dropped', 'in_progress', 'paused', 'planned']);
+    expect(seeded.entries.map(({ row }) => row.state).sort()).toEqual([
+      'completed',
+      'dropped',
+      'in_progress',
+      'paused',
+      'planned',
+    ]);
     expect(new Set(seeded.sessions.map(({ row }) => `${row.mode}/${row.unit}`)).size).toBe(18);
     expect(seeded.history.flatMap((row) => row.units ?? []).map((row: { unit_id: string }) => row.unit_id)).toEqual(
       Array.from({ length: 6 }, () => ['1', '3', '7']).flat(),
     );
-    const scalar = await f.pool.query('SELECT amount::text,total::text FROM library.progress_session WHERE route=$1 AND account_id=$2 AND mode=$3 AND unit=$4', [routeOf(accountId), accountId, 'scalar_amount', 'page']);
+    const scalar = await f.pool.query(
+      'SELECT amount::text,total::text FROM library.progress_session WHERE route=$1 AND account_id=$2 AND mode=$3 AND unit=$4',
+      [routeOf(accountId), accountId, 'scalar_amount', 'page'],
+    );
     expect(scalar.rows).toEqual([{ amount: '999999999999.999999', total: '999999999999.999999' }]);
     expect(seeded.copies.map(({ row }) => row.status).sort()).toEqual(['disposed', 'lent', 'ordered', 'owned']);
     for (const { row } of [...seeded.entries, ...seeded.sessions, ...seeded.copies]) {
       expect(row.account_id).toBe(accountId);
       expect(row.library_profile_pin).toBeNull();
     }
-    const stored = (await f.pool.query<StoredProfileReceipt & { transactionId: string }>(
-      `SELECT principal_id AS "accountId",command_kind AS "commandKind",idempotency_key AS "storageKey",
+    const stored = (
+      await f.pool.query<StoredProfileReceipt & { transactionId: string }>(
+        `SELECT principal_id AS "accountId",command_kind AS "commandKind",idempotency_key AS "storageKey",
        encode(request_digest,'hex') AS digest,response,transaction_id AS "transactionId" FROM core.receipt
        WHERE partition_no=$1 AND principal_id=$2 AND command_kind=ANY($3::text[]) ORDER BY command_kind,idempotency_key`,
-      [routeOf(accountId)! >> 4, accountId, ['library.entry.put', 'progress_session.start', 'progress_session.record', 'library.copy.create']],
-    )).rows;
+        [
+          routeOf(accountId)! >> 4,
+          accountId,
+          ['library.entry.put', 'progress_session.start', 'progress_session.record', 'library.copy.create'],
+        ],
+      )
+    ).rows;
     const observed = stored.map((row) => legacy.receipts.bind(row));
     expect(observed).toHaveLength(45);
     expect(observed.filter((row) => row.status === 200)).toHaveLength(18);
@@ -242,9 +265,17 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
     const transactions = new Set(stored.map((row) => row.transactionId));
     for (const { row } of [...seeded.entries, ...seeded.sessions, ...seeded.copies])
       expect(transactions.has(row.transaction_id as string)).toBe(true);
-    expect(observed.some(({ response }) => (response as { amount?: string }).amount === '999999999999.999999')).toBe(true);
+    expect(observed.some(({ response }) => (response as { amount?: string }).amount === '999999999999.999999')).toBe(
+      true,
+    );
     const old = seeded.entries[0]!.row;
-    const retained = await f.commands.deleteEntry(owner.actor, old.subject_id as string, 1, entryKey(), old.incarnation_id as string);
+    const retained = await f.commands.deleteEntry(
+      owner.actor,
+      old.subject_id as string,
+      1,
+      entryKey(),
+      old.incarnation_id as string,
+    );
     if (!('deletionId' in retained.value)) throw new Error('Entry was not retained');
     const before = await snapshot(f, accountId);
     const runtime = createLibraryProfileMigrationRuntime({ pool: f.pool, client });
@@ -253,22 +284,43 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
     while (state.phase !== 'ready') state = await runtime.resume({ accountId });
     const after = await snapshot(f, accountId);
     for (const relation of ['entries', 'sessions', 'copies'] as const)
-      expect(withoutPins(after[relation], relation === 'copies')).toEqual(withoutPins(before[relation], relation === 'copies'));
+      expect(withoutPins(after[relation], relation === 'copies')).toEqual(
+        withoutPins(before[relation], relation === 'copies'),
+      );
     expect(after.history).toEqual(before.history);
     expect(after.receipts).toEqual(before.receipts);
     const restored = await f.commands.restoreEntry(owner.actor, old.subject_id as string, retained.value, entryKey());
     expect(restored.value.entry).toMatchObject({
-      subjectId: old.subject_id, incarnationId: old.incarnation_id, state: old.state, createdAt: new Date(old.created_at as string).toISOString(),
+      subjectId: old.subject_id,
+      incarnationId: old.incarnation_id,
+      state: old.state,
+      createdAt: new Date(old.created_at as string).toISOString(),
     });
     const fact = await facts.readEntryFact(f.pool, routeOf(accountId)!, accountId, old.subject_id as string);
-    expect(fact?.pin).toEqual({ provenance: 'legacy', releaseDigest: f.originalDigest, acceptingType: null, profileId: 'legacy-fixed-v1' });
+    expect(fact?.pin).toEqual({
+      provenance: 'legacy',
+      releaseDigest: f.originalDigest,
+      acceptingType: null,
+      profileId: 'legacy-fixed-v1',
+    });
     const original = stored.findIndex((row) => row.commandKind === 'library.entry.put');
-    const accepted = stored[original]!.response as { entry: { subjectId: string; state: string; [key: string]: unknown } };
-    const replay = await f.send(owner.bearer, 'PUT', `/v1/libraryEntries/${accepted.entry.subjectId}`, { state: accepted.entry.state }, observed[original]!.requestKey);
+    const accepted = stored[original]!.response as {
+      entry: { subjectId: string; state: string; [key: string]: unknown };
+    };
+    const replay = await f.send(
+      owner.bearer,
+      'PUT',
+      `/v1/libraryEntries/${accepted.entry.subjectId}`,
+      { state: accepted.entry.state },
+      observed[original]!.requestKey,
+    );
     expect(replay.status).toBe(observed[original]!.status);
     expect(await replay.json()).toEqual({
       libraryEntry: Object.fromEntries(
-        ['subjectId', 'incarnationId', 'state', 'revision', 'createdAt', 'updatedAt'].map((key) => [key, accepted.entry[key]]),
+        ['subjectId', 'incarnationId', 'state', 'revision', 'createdAt', 'updatedAt'].map((key) => [
+          key,
+          accepted.entry[key],
+        ]),
       ),
     });
     const transport = createProfileReceiptObservations(f.pool);
@@ -276,9 +328,12 @@ test('historical fixture commits original owner facts and HTTP receipts, includi
     transport.observe(accountId, observed[original]!.requestKey, replay, undefined, header);
     expect(transport.bind(stored[original]!).requestKey).toBe(header);
     const originalKeys = new Set(stored.map((row) => row.storageKey));
-    const originalReceipts = (state: typeof seeded) => state.receipts.filter(({ row }) => originalKeys.has(row.idempotency_key as string));
+    const originalReceipts = (state: typeof seeded) =>
+      state.receipts.filter(({ row }) => originalKeys.has(row.idempotency_key as string));
     expect(originalReceipts(await snapshot(f, accountId))).toEqual(originalReceipts(seeded));
-    await expect(legacy.copy(old.subject_id as string, 'owned')).rejects.toThrow('Library owner no longer admits unpinned facts');
+    await expect(legacy.copy(old.subject_id as string, 'owned')).rejects.toThrow(
+      'Library owner no longer admits unpinned facts',
+    );
   } finally {
     await client.close();
     await f.close();
