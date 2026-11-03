@@ -627,7 +627,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       if (Date.now() - reapedAt < 600_000) return;
       reapedAt = Date.now();
       try {
-        reapContainers(runtime.db, runtime.stateDirectory);
+        reapContainers(runtime.db, runtime.stateDirectory, Date.now(), runtime.managerServices.policy?.containers);
       } catch (error) {
         console.error(error);
       }

@@ -414,9 +414,14 @@ The table is the policy reference for values supplied by `defaults.json`. Local 
 paths as nested objects and override individual leaves; omitted leaves retain the package default. For example,
 `{"policy":{"capacity":{"maxWorkers":16},"backlog":{"lowWater":4}}}` changes only those two limits.
 `config.ts` validates policy values before composing the runtime. Numeric `policy` leaves are positive safe integers,
-except `minAvailableMiB`, which also accepts zero. A host still opts into admission with `capacity.json`; its explicit
+except the memory floor and extra memory reserve, which accept zero. The worker memory fraction is finite and in
+`(0, 1]`; container age is a finite non-negative number of hours. Retry schedules are non-empty arrays of safe integer
+milliseconds: tool retries permit zero, while settlement pauses must be positive. A host still opts into admission with `capacity.json`; its explicit
 worker and memory fields override `policy.capacity`. A missing capacity file continues to disable host admission.
 Managers choose implementation estimate size; routing has no line or file estimate cap.
+Worker tuning uses `policy.workerResources`, lifecycle and retries use `policy.worker`, and transports use
+`policy.appServer` and `policy.containers`; environment memory overrides and synthetic caller overrides keep precedence.
+A host still opts into stale-container cleanup with `containers.json`, whose explicit age overrides the central age.
 
 | Setting                                          | Default      | Purpose                                                                |
 | ------------------------------------------------ | ------------ | ---------------------------------------------------------------------- |
@@ -463,6 +468,41 @@ Managers choose implementation estimate size; routing has no line or file estima
 | `policy.validation.notifierArgumentCharacters`   | `4096`       | Maximum characters per notifier argument.                              |
 | `policy.validation.hourlyReportMaxTimeoutMs`     | `120000`     | Maximum accepted notifier deadline (ms).                               |
 | `policy.flowHistoryMs`                           | `2592000000` | Delivery flow reporting lookback (ms).                                 |
+
+| `policy.worker.capacityPauseMs` | `10000` | Pause before retrying a model-capacity refusal (ms). |
+| `policy.worker.usageLimitRetryPauseMs` | `180000` | Same-pool retry pause for a refusal with fresh allowance left (ms). |
+| `policy.worker.usageLimitRefusalWindowMs` | `3600000` | Lookback when counting ambiguous usage-limit refusals (ms). |
+| `policy.worker.usageLimitRefusals` | `3` | Refusals on one pool before excluding its allowance. |
+| `policy.worker.usageLimitExhaustionMs` | `3600000` | Allowance exclusion after repeated ambiguous refusals (ms). |
+| `policy.worker.waitingResumeLaunchFailures` | `3` | Failed CLI launches allowed when resuming a waiting attempt. |
+| `policy.worker.startGraceMs` | `600000` | Empty-log and orphaned pending-attempt start grace (ms). |
+| `policy.worker.silenceCheckMs` | `60000` | Maximum interval between worker silence checks (ms). |
+| `policy.worker.activityPollMs` | `30000` | Run-log watcher fallback polling interval (ms). |
+| `policy.worker.orphanStartGraceMultiplier` | `2` | Start-grace multiplier before adopting an unstarted ready task. |
+| `policy.worker.sweepYieldItems` | `8` | Orphan-sweep items processed before yielding the event loop. |
+| `policy.worker.retryIntentLeadMs` | `1000` | Lead time within which a scheduled retry may be launched (ms). |
+| `policy.worker.toolRetryBackoffMs` | `[120000,600000,1800000]` | Tool-blocker retry delays by repeated fingerprint sightings (ms). |
+| `policy.worker.toolRetryWindowMs` | `3600000` | Lookback for repeated tool-blocker fingerprints (ms). |
+| `policy.worker.toolRetryEventRows` | `5000` | Recent event rows inspected for tool-blocker retry counts. |
+| `policy.worker.settlementBackoffMs` | `[500,1000,2000,4000,8000]` | Pauses between SQLite-contended settlement writes (ms). |
+| `policy.worker.logTailBytes` | `262144` | Run-log tail used by bounded settlement probes (bytes). |
+| `policy.worker.diagnosticCharacters` | `4000` | Maximum settlement launch-error diagnostic characters. |
+| `policy.worker.summaryCharacters` | `1000` | Maximum settlement error-line characters. |
+| `policy.worker.reportResultCharacters` | `2000` | Final-report request result excerpt characters. |
+| `policy.worker.failedResultCharacters` | `500` | Failed-worker final-result tail characters. |
+| `policy.worker.fixtureCleanupGraceMs` | `250` | Termination grace for an unrecorded owned fixture worker (ms). |
+| `policy.workerResources.cpuWeight` | `50` | Relative worker slice CPU weight. |
+| `policy.workerResources.ioWeight` | `50` | Relative worker slice IO weight. |
+| `policy.workerResources.preparationTimeoutMs` | `5000` | Deadline for each worker slice configuration command (ms). |
+| `policy.workerResources.memoryReserveGiB` | `14` | Extra memory reserved after subtracting the check slice maximum (GiB). |
+| `policy.workerResources.minimumMemoryFraction` | `0.25` | Minimum worker memory-high share of total host memory. |
+| `policy.appServer.requestTimeoutMs` | `30000` | App-server JSON-RPC response deadline (ms). |
+| `policy.appServer.readinessTimeoutMs` | `30000` | Deadline for a spawned app-server readiness marker (ms). |
+| `policy.appServer.connectTimeoutMs` | `30000` | Loopback app-server WebSocket connection deadline (ms). |
+| `policy.appServer.terminationGraceMs` | `500` | App-server SIGTERM grace before SIGKILL (ms). |
+| `policy.appServer.diagnosticCharacters` | `262144` | Maximum retained startup stderr characters. |
+| `policy.containers.commandTimeoutMs` | `15000` | Deadline for each worker container Docker operation (ms). |
+| `policy.containers.maxAgeHours` | `4` | Default stale-container age for opted-in hosts (hours). |
 
 ### Delivery flow telemetry
 

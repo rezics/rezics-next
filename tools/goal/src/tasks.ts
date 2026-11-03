@@ -1741,6 +1741,7 @@ export class WorkerTasks {
             ),
             this.settings.codex,
             resumeSession,
+            this.settings.policy,
           );
         }
         if (task.workspace) {
@@ -1787,7 +1788,16 @@ export class WorkerTasks {
               this.settings.stateDirectory,
             );
             retryPrepared = true;
-            return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
+            return await this.launcher(
+              this.store,
+              task,
+              next,
+              pool,
+              prompt,
+              this.settings.codex,
+              resumeSession,
+              this.settings.policy,
+            );
           });
         }
         this.commitRetryLeftovers(task, old?.attempt ?? 0);
@@ -1861,7 +1871,16 @@ export class WorkerTasks {
           this.settings.stateDirectory,
         );
         retryPrepared = true;
-        return await this.launcher(this.store, task, next, pool, prompt, this.settings.codex, resumeSession);
+        return await this.launcher(
+          this.store,
+          task,
+          next,
+          pool,
+          prompt,
+          this.settings.codex,
+          resumeSession,
+          this.settings.policy,
+        );
       } catch (error) {
         const failed = this.store.updateAttempt(next, (a) => {
           a.state = 'exited';

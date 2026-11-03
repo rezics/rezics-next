@@ -695,6 +695,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     join(settings.mainCheckout, 'tools/goal/src/cli.ts'),
   ];
   const managerServices: ManagerServices = {
+    policy: settings.policy,
     command,
     backlogDirectory: backlogDirectory(settings.stateDirectory),
     checkCompletion,

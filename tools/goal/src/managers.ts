@@ -1,3 +1,4 @@
+import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -90,6 +91,7 @@ export type ResidentSupermanagerState = Pick<ManagerSessionSnapshot, 'id' | 'sta
 export type ManagerState = ManagedManagerState | ResidentSupermanagerState;
 export type CompletionEvidence = { passed: boolean; evidencePath: string; summary: string };
 export type ManagerServices = {
+  policy?: ControlPolicy;
   connect?: (pool: CodexPool, onStart?: (identity: ProcessIdentity) => void) => Promise<AppServer>;
   windows: ManagerWindows;
   checkCompletion(goal: string): Promise<CompletionEvidence>;
@@ -357,7 +359,9 @@ export class ManagerSessions {
       tracked.add(key);
       this.services.onAppServerStart?.(identity);
     };
-    const connecting = this.services.connect ? this.services.connect(pool, onStart) : connectPool(pool, onStart);
+    const connecting = this.services.connect
+      ? this.services.connect(pool, onStart)
+      : connectPool(pool, onStart, undefined, (this.services.policy ?? defaultPolicy).appServer);
     const client = connecting.then(async (server) => {
       try {
         if (server.identity) onStart(server.identity);

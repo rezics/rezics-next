@@ -190,6 +190,48 @@
       "notifierArgumentCharacters": 4096,
       "hourlyReportMaxTimeoutMs": 120000
     },
-    "flowHistoryMs": 2592000000
+    "flowHistoryMs": 2592000000,
+    "worker": {
+      "capacityPauseMs": 10000,
+      "usageLimitRetryPauseMs": 180000,
+      "usageLimitRefusalWindowMs": 3600000,
+      "usageLimitRefusals": 3,
+      "usageLimitExhaustionMs": 3600000,
+      "waitingResumeLaunchFailures": 3,
+      "startGraceMs": 600000,
+      "silenceCheckMs": 60000,
+      "activityPollMs": 30000,
+      "orphanStartGraceMultiplier": 2,
+      "sweepYieldItems": 8,
+      "retryIntentLeadMs": 1000,
+      "toolRetryBackoffMs": [120000, 600000, 1800000],
+      "toolRetryWindowMs": 3600000,
+      "toolRetryEventRows": 5000,
+      "settlementBackoffMs": [500, 1000, 2000, 4000, 8000],
+      "logTailBytes": 262144,
+      "diagnosticCharacters": 4000,
+      "summaryCharacters": 1000,
+      "reportResultCharacters": 2000,
+      "failedResultCharacters": 500,
+      "fixtureCleanupGraceMs": 250
+    },
+    "workerResources": {
+      "cpuWeight": 50,
+      "ioWeight": 50,
+      "preparationTimeoutMs": 5000,
+      "memoryReserveGiB": 14,
+      "minimumMemoryFraction": 0.25
+    },
+    "appServer": {
+      "requestTimeoutMs": 30000,
+      "readinessTimeoutMs": 30000,
+      "connectTimeoutMs": 30000,
+      "terminationGraceMs": 500,
+      "diagnosticCharacters": 262144
+    },
+    "containers": {
+      "commandTimeoutMs": 15000,
+      "maxAgeHours": 4
+    }
   }
 }

@@ -725,6 +725,7 @@ export async function launch(
   prompt: string,
   codex?: Settings['codex'],
   resumeSession?: string,
+  policy: ControlPolicy = defaultPolicy,
 ): Promise<RunningWorker> {
   if (!agentAdapter(attempt.profile.cli).canResume) resumeSession = undefined;
   store.assertCurrent(attempt);
@@ -800,6 +801,7 @@ export async function launch(
         wrapperArgs,
         startOptions,
         () => existsSync(pidPath) || existsSync(exitPath),
+        policy.workerResources,
       );
       const pid = existsSync(pidPath) ? Number(readFileSync(pidPath, 'utf8')) : 0;
       const identity = processIdentity(pid);
@@ -828,7 +830,7 @@ export async function launch(
   } catch (error) {
     if (unrecordedFixtureWorker) {
       try {
-        await terminateProcessGroup(unrecordedFixtureWorker, 250);
+        await terminateProcessGroup(unrecordedFixtureWorker, policy.worker.fixtureCleanupGraceMs);
       } catch (cleanupError) {
         throw new AggregateError([error, cleanupError], 'fixture ownership failed and its worker could not be reaped');
       }
