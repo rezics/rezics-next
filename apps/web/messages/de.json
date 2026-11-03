@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "Geladene Auswahl zu einer Sammlung hinzufügen",
   "library_bulk_add_loaded": "{count} ausgewählte geladene Themen. Andere Seiten und Treffer sind nicht enthalten.",
   "library_bulk_add_review": "Dieses Ziel prüfen",
-  "library_bulk_add_captured_destination": "Erfasstes Ziel: {title}"
+  "library_bulk_add_captured_destination": "Erfasstes Ziel: {title}",
+  "library_saved_queries_heading": "Gespeicherte Abfragen",
+  "library_saved_queries_empty_page": "Auf dieser Seite gibt es keine gespeicherten Abfragen.",
+  "library_saved_queries_unavailable": "Gespeicherte Abfragen sind nicht verfügbar."
 }

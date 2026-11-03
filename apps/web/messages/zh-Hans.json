@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "将已加载的所选条目添加到收藏集",
   "library_bulk_add_loaded": "已选择 {count} 个已加载的主题，不包含其他页面或匹配项。",
   "library_bulk_add_review": "检查此目标收藏集",
-  "library_bulk_add_captured_destination": "已保存的目标收藏集：{title}"
+  "library_bulk_add_captured_destination": "已保存的目标收藏集：{title}",
+  "library_saved_queries_heading": "已保存的查询",
+  "library_saved_queries_empty_page": "此页面没有已保存的查询。",
+  "library_saved_queries_unavailable": "已保存的查询目前不可用。"
 }

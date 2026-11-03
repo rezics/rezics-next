@@ -19,6 +19,7 @@ import { PinControl } from './pin-control';
 import { matchesPinsOrigin, type LibraryPinsRead } from './pins-read';
 import { useLibraryReadOrigin, type AcceptedPinsOrigin } from './pins-current';
 import type { MineCollection, MineCollectionsPage } from './mine-collections';
+import { SavedQueryDirectory } from './saved-query-directory';
 import {
   readMineCollectionsViewerPage,
   type MineCollectionsAddress,
@@ -188,6 +189,7 @@ function MineCollectionsViewerRead({
       pins={pins}
       pinsOrigin={pinsOrigin}
       layout={address.layout}
+      viewerId={subject}
       {...(address.cursor ? { cursor: address.cursor } : {})}
     />
   );
@@ -203,16 +205,22 @@ export function MineCollectionsPageView({
   pinsOrigin,
   layout = 'rows',
   cursor,
+  viewerId,
 }: {
   page: MineCollectionsPage;
   pins: LibraryPinsRead;
   pinsOrigin?: AcceptedPinsOrigin;
   layout?: CollectionBrowseLayout;
   cursor?: string;
+  viewerId?: string | null;
 }) {
   const navigate = useNavigate();
   const canCreate = useOperation('collection.create');
   const canReadLibrary = useOperation('library_entry.list');
+  const canEditRules =
+    useOperation('collection.create') &&
+    useOperation('collection_rule.get') &&
+    useOperation('collection_rule.update');
   const loaded = page.signedIn && (!page.state || page.state === 'loaded');
   const requestedAddress = admitMineCollectionsAddress({ cursor, layout, addressError: page.invalidAddress });
   const requestedCursor = requestedAddress.cursor;
@@ -260,6 +268,17 @@ export function MineCollectionsPageView({
             collections={loaded ? navigationCollections : []}
             collectionsState={page.state ?? 'loaded'}
             showCollectionsNotice={false}
+          />
+        ) : null}
+        {loaded && viewerId ? (
+          <SavedQueryDirectory
+            collections={page.collections}
+            capability={page.savedQueryCapability ?? 'unavailable'}
+            viewerId={viewerId}
+            canEditRules={canEditRules}
+            currentHref={currentHref}
+            next={page.next}
+            layout={layout}
           />
         ) : null}
         {loaded && collections.length ? <CollectionBrowseToolbar layout={layout} onLayoutChange={setLayout} /> : null}

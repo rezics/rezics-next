@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "將已載入的所選項目加入收藏集",
   "library_bulk_add_loaded": "已選取 {count} 個已載入的主題，不包含其他頁面或符合項目。",
   "library_bulk_add_review": "檢查此目標收藏集",
-  "library_bulk_add_captured_destination": "已儲存的目標收藏集：{title}"
+  "library_bulk_add_captured_destination": "已儲存的目標收藏集：{title}",
+  "library_saved_queries_heading": "已儲存的查詢",
+  "library_saved_queries_empty_page": "此頁面沒有已儲存的查詢。",
+  "library_saved_queries_unavailable": "已儲存的查詢目前無法使用。"
 }

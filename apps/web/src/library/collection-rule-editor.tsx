@@ -28,10 +28,12 @@ export function RuleEditLink({
   collection,
   viewerId,
   allowed,
+  className,
 }: {
-  collection: { id: string; curatorAccountId: string | null; membershipKind?: string; builtinKind?: string };
+  collection: { id: string; curatorAccountId?: string | null; membershipKind?: string; builtinKind?: string };
   viewerId: string | null;
   allowed: boolean;
+  className?: string;
 }) {
   if (
     !allowed ||
@@ -41,7 +43,11 @@ export function RuleEditLink({
     collection.builtinKind
   )
     return null;
-  return <a href={`/${getLocale()}/collections/${encodeURIComponent(collection.id)}/rule`}>{m.library_rule_edit()}</a>;
+  return (
+    <a className={className} href={`/${getLocale()}/collections/${encodeURIComponent(collection.id)}/rule`}>
+      {m.library_rule_edit()}
+    </a>
+  );
 }
 
 function TechnicalDetails({ label, children, id }: { label: string; children: ReactNode; id?: string }) {

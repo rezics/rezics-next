@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "Ajouter la sélection chargée à une collection",
   "library_bulk_add_loaded": "{count} sujets chargés sélectionnés. Les autres pages et résultats ne sont pas inclus.",
   "library_bulk_add_review": "Vérifier cette destination",
-  "library_bulk_add_captured_destination": "Destination enregistrée : {title}"
+  "library_bulk_add_captured_destination": "Destination enregistrée : {title}",
+  "library_saved_queries_heading": "Requêtes enregistrées",
+  "library_saved_queries_empty_page": "Aucune requête enregistrée sur cette page.",
+  "library_saved_queries_unavailable": "Les requêtes enregistrées ne sont pas disponibles."
 }

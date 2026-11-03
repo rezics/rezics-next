@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "불러온 선택 항목을 컬렉션에 추가",
   "library_bulk_add_loaded": "불러온 대상 {count}개를 선택했습니다. 다른 페이지와 검색 결과는 포함되지 않습니다.",
   "library_bulk_add_review": "이 추가 위치 검토",
-  "library_bulk_add_captured_destination": "저장된 추가 위치: {title}"
+  "library_bulk_add_captured_destination": "저장된 추가 위치: {title}",
+  "library_saved_queries_heading": "저장된 쿼리",
+  "library_saved_queries_empty_page": "이 페이지에 저장된 쿼리가 없습니다.",
+  "library_saved_queries_unavailable": "저장된 쿼리를 사용할 수 없습니다."
 }

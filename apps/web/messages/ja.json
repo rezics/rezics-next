@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "読み込み済みの選択項目をコレクションに追加",
   "library_bulk_add_loaded": "読み込み済みの対象を{count}件選択しています。他のページや検索結果は含まれません。",
   "library_bulk_add_review": "この追加先を確認",
-  "library_bulk_add_captured_destination": "保存した追加先：{title}"
+  "library_bulk_add_captured_destination": "保存した追加先：{title}",
+  "library_saved_queries_heading": "保存済みクエリ",
+  "library_saved_queries_empty_page": "このページに保存済みクエリはありません。",
+  "library_saved_queries_unavailable": "保存済みクエリを利用できません。"
 }

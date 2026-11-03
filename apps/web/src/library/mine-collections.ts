@@ -19,6 +19,7 @@ export type MineCollectionPreview =
 
 export type MineCollection = CollectionPresentationData & {
   id: string;
+  curatorAccountId?: string | null;
   title: string | null;
   membershipKind?: 'curated' | 'dynamic';
   builtinKind?: string;
@@ -34,6 +35,7 @@ export type MineCollectionsPage = {
   signedIn: boolean;
   collections: MineCollection[];
   navigationCollections?: MineCollection[];
+  savedQueryCapability?: 'available' | 'unavailable';
   next: string | null;
   state?: 'loaded' | 'preparing' | 'denied' | 'unavailable' | 'error';
   cursorReset?: true;
@@ -113,8 +115,9 @@ function present(collection: RawCollection & Partial<CollectionPreview>): MineCo
   return {
     ...collectionPresentationOf(collection),
     id: collection.id,
+    curatorAccountId: collection.curatorAccountId,
     title: collection.title ?? null,
-    ...(membershipKind === 'dynamic' ? { membershipKind } : {}),
+    ...(membershipKind === 'curated' || membershipKind === 'dynamic' ? { membershipKind } : {}),
     ...(typeof builtinKind === 'string' ? { builtinKind } : {}),
     ...(builtinLabels ? { builtinLabels } : {}),
     visibility: collection.visibility,
@@ -135,7 +138,18 @@ export async function loadMineCollectionsForOwner(
   input: { layout?: 'rows' | 'previews' } = {},
 ): Promise<MineCollectionsPage> {
   const page = await readPage(client, accountId, authorization, undefined, input.layout === 'previews');
-  return { signedIn: true, collections: page.collections.map(present), next: page.next };
+  const collections = page.collections.map(present);
+  return {
+    signedIn: true,
+    collections,
+    savedQueryCapability: dynamicCollectionsAvailable(collections) ? 'available' : 'unavailable',
+    next: page.next,
+  };
+}
+
+/** Dynamic support is proven by an admitted owner DTO, never inferred from an empty page. */
+function dynamicCollectionsAvailable(collections: readonly MineCollection[]): boolean {
+  return collections.some((collection) => collection.membershipKind === 'dynamic');
 }
 
 /** Reads one signed-in person's collection page, including private and unlisted records. */
@@ -175,11 +189,15 @@ export async function loadMineCollectionsPage(
     // Preview navigation shares the returned page's budget, including on later cursor pages.
     if (!address.cursor || address.layout === 'previews') navigationPage = page;
     if (!navigationPage) navigationPage = await readPage(client, accountId, authorization);
+    const collections = page.collections.map(present);
+    const navigationCollections = navigationPage.collections.map(present);
     return {
       signedIn: true,
       state: 'loaded',
-      collections: page.collections.map(present),
-      navigationCollections: navigationPage.collections.map(present),
+      collections,
+      navigationCollections,
+      savedQueryCapability:
+        dynamicCollectionsAvailable([...collections, ...navigationCollections]) ? 'available' : 'unavailable',
       next: page.next,
       ...(cursorReset ? { cursorReset: true } : {}),
     };

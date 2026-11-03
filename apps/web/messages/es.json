@@ -4983,5 +4983,8 @@
   "library_bulk_add_destination": "Añadir la selección cargada a una colección",
   "library_bulk_add_loaded": "{count} temas cargados seleccionados. No se incluyen otras páginas ni coincidencias.",
   "library_bulk_add_review": "Revisar este destino",
-  "library_bulk_add_captured_destination": "Destino capturado: {title}"
+  "library_bulk_add_captured_destination": "Destino capturado: {title}",
+  "library_saved_queries_heading": "Consultas guardadas",
+  "library_saved_queries_empty_page": "No hay consultas guardadas en esta página.",
+  "library_saved_queries_unavailable": "Las consultas guardadas no están disponibles."
 }

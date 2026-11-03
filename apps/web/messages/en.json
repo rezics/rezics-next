@@ -5044,5 +5044,8 @@
   "library_bulk_add_destination": "Add loaded selection to a Collection",
   "library_bulk_add_loaded": "{count} selected loaded subjects. Other pages and matches are not included.",
   "library_bulk_add_review": "Review this destination",
-  "library_bulk_add_captured_destination": "Captured destination: {title}"
+  "library_bulk_add_captured_destination": "Captured destination: {title}",
+  "library_saved_queries_heading": "Saved queries",
+  "library_saved_queries_empty_page": "No saved queries are on this page.",
+  "library_saved_queries_unavailable": "Saved queries are unavailable."
 }
