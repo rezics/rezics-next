@@ -394,9 +394,20 @@ export const BoardThreadsQuerySchema = t.Object(
 );
 export const BoardThreadsResponseSchema = t.Object(
   {
+    pinnedThreads: t.Array(ThreadViewSchema, { maxItems: 3 }),
     threads: t.Array(ThreadViewSchema, { maxItems: 100 }),
     next: t.Union([t.String(), t.Null()]),
     rankRefreshedAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+  },
+  closed,
+);
+export const BoardThreadPinInputSchema = t.Object({ pinned: t.Boolean() }, closed);
+export const BoardThreadPinResponseSchema = t.Object(
+  {
+    boardId: ContentIdSchema,
+    threadId: ContentIdSchema,
+    pinned: t.Boolean(),
+    pinPosition: t.Union([t.Integer({ minimum: 1, maximum: 3 }), t.Null()]),
   },
   closed,
 );

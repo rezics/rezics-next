@@ -5,7 +5,7 @@ import {
   normalizeBoardQuery,
   type BoardCursorBinding,
 } from '../../src/content/board-cursor.ts';
-import { decodeCursor, type CursorBinding } from '../../src/tokens/cursor.ts';
+import { decodeCursor, encodeCursor, type CursorBinding } from '../../src/tokens/cursor.ts';
 import { seal, type KeyRing } from '../../src/tokens/seal.ts';
 
 const key = (byte: number) => new Uint8Array(32).fill(byte);
@@ -33,6 +33,7 @@ const expectedCoreBinding: CursorBinding = {
     query: binding.query,
     sort: binding.sort,
     viewer: viewerAccountId,
+    representation: 'pinned-section-v1',
   },
 };
 
@@ -47,6 +48,16 @@ test('a board cursor binds board, normalized query, sort, verified viewer and cu
     epoch: 7,
     after: [after.createdAt, after.threadId],
   });
+  const oldToken = encodeCursor(
+    ring,
+    {
+      operation: 'board.threads.list',
+      parameters: { boardId: binding.boardId, query: binding.query, sort: binding.sort, viewer: viewerAccountId },
+    },
+    { epoch: 7, after: [after.createdAt, after.threadId] },
+    now,
+  );
+  expect(decodeBoardCursor(ring, binding, oldToken, 7, now)).toEqual({ ok: false, reason: 'invalid' });
 
   for (const other of [
     { ...binding, boardId: '01890f3e-7c00-7000-8000-000000000004' },
@@ -83,7 +94,7 @@ test('board cursors use core signing, key rotation, tamper detection and the tru
 });
 
 test('malformed signed board keysets and authored input are rejected without decoder exceptions', () => {
-  const scope = `cursor\0board.threads.list\0{"boardId":${JSON.stringify(binding.boardId)},"query":"red fox","sort":"newest","viewer":${JSON.stringify(viewerAccountId)}}`;
+  const scope = `cursor\0board.threads.list\0{"boardId":${JSON.stringify(binding.boardId)},"query":"red fox","representation":"pinned-section-v1","sort":"newest","viewer":${JSON.stringify(viewerAccountId)}}`;
   const malformed = [
     [],
     [after.createdAt],

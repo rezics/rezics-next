@@ -91,6 +91,7 @@ function coreBinding(binding: BoardCursorBinding): CursorBinding {
       query: normalizeBoardQuery(binding.query),
       sort: binding.sort,
       viewer,
+      representation: 'pinned-section-v1',
     },
   };
 }

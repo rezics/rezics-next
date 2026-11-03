@@ -102,6 +102,17 @@ Add the few outcome cases alongside current suites in new adjacent files; preser
    an empty `threads` array with `next` means no visible threads on this page, with Next retained; use the terminal
    empty message only without continuation. One outcome case advances from an empty page to a visible thread under
    the same sort. Add no totals, hidden-candidate explanations or client loop draining candidates.
+4. **Pin a board thread — Content, consumed by Web controls.** Keep at most three indexed pin slots per board, newest
+   first; repeating the current desired state preserves order and unpinning compacts slots. Return the bounded,
+   currently disclosed `pinnedThreads` section beside the existing active/hot/newest page, exclude pins from that
+   page, and bind continuation to this representation while advancing across sparse candidates. The native mutation
+   reruns current moderator and board/thread/container read authority before receipt replay and never grants
+   visibility. One focused HTTP outcome covers moderator, member, banned and hidden-thread behavior, cap/order,
+   idempotence and continuation. Web owns the controls.
+
+Content adopts the second-scope outcomes in [public scope](../scope.md): Realm rating sorts, pins, slow mode, watch,
+public Collection/review/Space discovery and the moderator workbench. Email notifications and account mute/block
+remain deferred.
 
 [Accounts/Access](../../services/kernel/src/access/README.md) retains standing/grants;
 [Community](../../services/kernel/src/community/README.md) retains Realm participation and membership boundaries;

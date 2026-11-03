@@ -3,18 +3,24 @@
 ## Outcome
 
 People can participate in communities, publish and discuss content, rate and review subjects, and receive relevant
-in-app notices. Moderators can resolve reports and enforce visibility and erasure across owned resources.
+in-app notices. Moderators can resolve reports, pin board threads, and enforce visibility and erasure across owned
+resources.
 
 ## Done when
 
-- Threads, posts, replies, revisions and board listings work through real APIs for readers, authors and moderators.
+- Threads, posts, replies, revisions, board listings and persistent board pins work through real APIs for readers,
+  authors and moderators. Pins never grant visibility, and active, hot and newest continuation skips pinned threads
+  without losing sparse-page progress.
   Canonical document bodies, licences, references and media claims follow their owner contracts.
 - Media reservation, upload completion, image derivatives, downloads and bounded abandoned-object collection preserve
   uploader identity and current disclosure across the kernel and site Worker.
-- Spaces and Realms support membership, roles, bans, boards, Context behavior and publication without granting global
-  ownership. Bans deny protected reads immediately during removal work.
-- Reactions, board ranking, subject ratings and reviews provide only permitted aggregates with declared freshness.
+- Spaces and Realms support membership, roles, bans, boards, slow mode, watch, Context behavior and publication
+  without granting global ownership. Bans deny protected reads immediately during removal work.
+- Reactions, board ranking, Realm rating sorts, subject ratings and reviews provide only permitted aggregates with
+  declared freshness.
   Search can consume the safe public rating aggregate without exposing private Realm figures.
+- Public Collection, review and Space discovery, plus a moderator workbench for reports and owned resources, follow
+  their current disclosure and moderation contracts.
 - Reports, moderator resolution and minimal appeals work across owners; takedown, erasure and exact references
   preserve current disclosure and the retained lifecycle evidence.
 - Minimal in-app reply, mention and moderation notifications honor preferences and send-time access.
@@ -24,10 +30,10 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 ## Scope
 
-Includes content, media, community resources, publication, reactions, ratings/reviews, moderation and minimal
-in-app notices. Articles and hosted works remain closed behind grants until polished. Email notifications and Realm
-rating sorts remain deferred under [public scope](../scope.md). Web owns editors and media transport; accounts owns
-membership authority and preferences.
+Includes content, media, community resources, publication, reactions, ratings/reviews, Realm rating sorts, moderation,
+slow mode, watch, public Collection/review/Space discovery and minimal in-app notices. Articles and hosted works
+remain closed behind grants until polished. Email notifications and account mute/block remain deferred under
+[public scope](../scope.md). Web owns editors and media transport; accounts owns membership authority and preferences.
 
 ## Ownership
 

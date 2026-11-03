@@ -857,11 +857,13 @@ CREATE TABLE content.board_thread (
     active_rank double precision DEFAULT 0 NOT NULL,
     rank_refreshed_at timestamp with time zone DEFAULT transaction_timestamp() NOT NULL,
     hot_rank double precision DEFAULT 0 NOT NULL,
+    pin_slot smallint,
     CONSTRAINT board_thread_active_rank_finite CHECK (((active_rank >= (0)::double precision) AND (active_rank < 'Infinity'::double precision))),
     CONSTRAINT board_thread_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
     CONSTRAINT board_thread_created_at_check CHECK (isfinite(created_at)),
     CONSTRAINT board_thread_hot_rank_finite CHECK (((hot_rank >= (0)::double precision) AND (hot_rank < 'Infinity'::double precision))),
     CONSTRAINT board_thread_last_activity_finite CHECK (isfinite(last_activity_at)),
+    CONSTRAINT board_thread_pin_slot_check CHECK (((pin_slot IS NULL) OR ((pin_slot >= 1) AND (pin_slot <= 3)))),
     CONSTRAINT board_thread_rank_refreshed_finite CHECK (isfinite(rank_refreshed_at)),
     CONSTRAINT board_thread_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT board_thread_source_epoch_check CHECK ((source_epoch > 0)),
@@ -2343,6 +2345,13 @@ CREATE INDEX board_thread_hot_page_idx ON content.board_thread USING btree (rout
 --
 
 CREATE INDEX board_thread_page_idx ON content.board_thread USING btree (route, board_id, created_at, thread_id);
+
+
+--
+-- Name: board_thread_pin_position_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE UNIQUE INDEX board_thread_pin_position_idx ON content.board_thread USING btree (route, board_id, pin_slot) INCLUDE (thread_id) WHERE (pin_slot IS NOT NULL);
 
 
 --

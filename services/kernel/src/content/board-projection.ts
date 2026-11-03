@@ -10,6 +10,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';
 import type { BoardId, ThreadId } from './model.ts';
 import activePage from './board-rank-page.sql';
+import pinPage from './board-pin-page.sql';
 import page from './page-board-threads.sql';
 import readSourceActivity from './read-source-activity.sql';
 import upsert from './board-rank-upsert.sql';
@@ -48,11 +49,27 @@ const sourceTypes = [
 ] as const;
 const projected = 'com.rezics.content.board-thread.projected.v1';
 const maxPosition = 9223372036854775807n;
+export const MAX_BOARD_PINS = 3;
 
 function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new RangeError('Invalid routed content identity');
   return value;
+}
+
+/** The persisted pin section is a fixed indexed read from the board projection. */
+export async function readBoardPins(
+  client: Pick<PoolClient, 'query'>,
+  boardId: BoardId,
+): Promise<readonly ThreadId[]> {
+  const parameters = { route: route(boardId), board_id: boardId, limit: MAX_BOARD_PINS };
+  const { rows } = await client.query<(typeof pinPage)['~reylo']['element']>(
+    pinPage.sql,
+    pinPage.params.map((name) => parameters[name as keyof typeof parameters]),
+  );
+  if (rows.length > MAX_BOARD_PINS || rows.some((row, index) => row.pin_slot !== index + 1))
+    throw new Error('Board pin positions are inconsistent');
+  return rows.map((row) => row.thread_id);
 }
 
 function timestamp(value: string): string {

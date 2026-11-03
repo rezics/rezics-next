@@ -4,6 +4,7 @@ import { locateThreadPost } from './post-location.ts';
 import { editionRoutes } from './edition-routes.ts';
 import { listAuthorThreads, listAuthorPosts } from './author-item-reads.ts';
 import { listBoardThreads, listRealmBoards, readRealmBoard, type ContentBoardDependencies } from './boards.ts';
+import { BoardPinLimitError, setBoardThreadPin } from './board-pin.ts';
 import { InvalidGlobalBoardDirectoryCursorError, listGlobalBoards } from './global-board-directory.ts';
 import { listSubjectThreads } from './subject-threads.ts';
 import { InvalidSitemapCursorError, listSitemapBoards, listSitemapThreads } from './sitemap.ts';
@@ -80,6 +81,8 @@ import {
   BoardViewSchema,
   BoardThreadsQuerySchema,
   BoardThreadsResponseSchema,
+  BoardThreadPinInputSchema,
+  BoardThreadPinResponseSchema,
   SitemapBoardPageSchema,
   SitemapQuerySchema,
   SitemapThreadPageSchema,
@@ -199,6 +202,8 @@ const globalBoardCreateBody = strictContentSchema(
 );
 const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
 const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
+const boardThreadPinInput = strictContentSchema(BoardThreadPinInputSchema);
+const boardThreadPinResponse = strictContentSchema(BoardThreadPinResponseSchema);
 const sitemapQuery = strictContentSchema(SitemapQuerySchema);
 const sitemapBoardPage = strictContentSchema(SitemapBoardPageSchema);
 const sitemapThreadPage = strictContentSchema(SitemapThreadPageSchema);
@@ -267,6 +272,7 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof InvalidGlobalBoardDirectoryCursorError) throw new ProblemError('invalid_cursor');
     if (error instanceof BoardCreationInputError) throw new ProblemError('invalid_request');
     if (error instanceof BoardCreationConflictError) throw new ProblemError('conflict');
+    if (error instanceof BoardPinLimitError) throw new ProblemError('conflict');
     if (error instanceof ReviewConflictError) throw new ProblemError('conflict');
     if (error instanceof RevisionPreconditionError) throw new ProblemError('precondition_failed');
     if (
@@ -1024,10 +1030,50 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             // Board pages hydrate through discloseThreads, which supplies removed slots.
             return {
+              pinnedThreads: [...page.pinnedThreads] as ThreadView[],
               threads: [...page.entries] as ThreadView[],
               next: page.nextCursor,
               rankRefreshedAt: page.rankRefreshedAt,
             };
+          }),
+        );
+      },
+    )
+    .post(
+      '/v1/boards/:id/threads/:threadId/pin',
+      {
+        params: t.Object({ id: t.String(), threadId: t.String() }, { additionalProperties: false }),
+        headers: commandHeaders,
+        parse: [parseBody, 'json'],
+        body: boardThreadPinInput,
+        response: {
+          200: withHeaders(boardThreadPinResponse, sessionHeader),
+          409: problemSchema('conflict'),
+          ...writeFailures,
+        },
+        detail: {
+          operationId: 'board_thread.set_pin',
+          'x-resource-types': ['content.board', 'content.thread'],
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-rate-limit': writeRate,
+          security: writeSecurity,
+        },
+      },
+      async ({ params: { id, threadId }, actor, body, request, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        existingId(id);
+        existingId(threadId);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const result = await setBoardThreadPin(
+              dependencies,
+              actor,
+              { boardId: id, threadId, pinned: body.pinned },
+              requestContext(request, job.deadline),
+            );
+            session.record(result);
+            return result.value;
           }),
         );
       },

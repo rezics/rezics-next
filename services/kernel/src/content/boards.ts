@@ -5,6 +5,7 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import { realmReadEligibility } from '../community/realm.ts';
+import { readBoardPins } from './board-projection.ts';
 import {
   decodeBoardCursor,
   decodeBoardRankCursor,
@@ -37,6 +38,7 @@ export type ContentBoardDependencies = ContentReadDependencies & {
 };
 export type BoardPageInput = { cursor?: string; limit?: number; sort?: BoardCursorSort; query?: string };
 export type BoardThreadPage = Page<ThreadView> & {
+  pinnedThreads: readonly ThreadView[];
   anchors: readonly AnchoredPosition[];
   /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
   rankRefreshedAt: string | null;
@@ -292,8 +294,10 @@ export async function listBoardThreads(
         );
         for (const row of result.rows) candidates.push({ id: row.thread_id, createdAt: row.created_at! });
       }
+      const pinnedIds = await readBoardPins(client, boardId);
       return {
         candidates,
+        pinnedIds,
         hasMore: candidates.length === 200,
         invalidCursor,
         epoch: partition.epoch,
@@ -308,6 +312,7 @@ export async function listBoardThreads(
   if (selected.invalidCursor) throw new TypeError('Invalid content cursor');
   if (selected.epoch !== boardAnchor.epoch) throw new TypeError('Invalid content cursor');
   const candidates: readonly ListedBoardCandidate[] = selected.candidates;
+  const pinnedIdSet = new Set(selected.pinnedIds);
   const rankFreshness = new Map<string, string>();
   for (const candidate of candidates) {
     if ('rankRefreshedAt' in candidate) rankFreshness.set(candidate.id, candidate.rankRefreshedAt);
@@ -339,7 +344,7 @@ export async function listBoardThreads(
           ? { kind: 'rank', rank: candidate.rank!, threadId: candidate.id }
           : { kind: 'created', createdAt: candidate.createdAt!, threadId: candidate.id };
       scanned++;
-      if (!survivors.has(candidate.id)) continue;
+      if (!survivors.has(candidate.id) || pinnedIdSet.has(candidate.id)) continue;
       const revision = round.revisions.get(candidate.id);
       if (!revision) continue;
       entries.push(candidate.id);
@@ -366,12 +371,44 @@ export async function listBoardThreads(
   const currentPositions: BoardPageAfter[] = [];
   for (const [index, result] of finalItems.entries()) {
     if (!result.value || result.value.boardId !== boardId) continue;
+    if (pinnedIdSet.has(result.value.id)) continue;
     if (query && result.value.firstPost.availability !== 'available') continue;
     current.push(result.value);
     currentPositions.push(entryPositions[index]!);
   }
   const pageEntries = current.slice(0, limit);
   if (finalState.boardAnchor.epoch !== boardAnchor.epoch) throw new TypeError('Invalid content cursor');
+
+  const pinnedSelection = await selectBoardThreadCandidates(
+    dependencies,
+    boardId,
+    selected.pinnedIds,
+    context,
+    decisions,
+    query,
+  );
+  anchors.push(...pinnedSelection.anchors);
+  let pinnedThreads: ThreadView[] = [];
+  if (pinnedSelection.survivors.length) {
+    let pinnedFinalState: { boardAnchor: AnchoredPosition; parentAllowed: boolean } | undefined;
+    const pinnedItems = await withBoardDisclosure(
+      boardId,
+      board,
+      () => discloseThreads(dependencies, pinnedSelection.survivors as ThreadView['id'][], context),
+      decisions,
+      {
+        query,
+        expectedRevisions: pinnedSelection.revisions,
+        onFinal: (value) => (pinnedFinalState = value),
+      },
+    );
+    if (!pinnedFinalState) throw new Error('Board pin disclosure did not complete');
+    anchors.push(...pinnedItems.map((result) => result.anchor), pinnedFinalState.boardAnchor);
+    if (!pinnedFinalState.parentAllowed) throw new ContentNotFoundError();
+    pinnedThreads = pinnedItems.flatMap((result) =>
+      result.value?.boardId === boardId ? [result.value] : [],
+    );
+  }
   const hasVisibleMore = current.length > limit;
   const more = hasVisibleMore || scanned < candidates.length || selected.hasMore;
   const cursorAfter =
@@ -397,6 +434,7 @@ export async function listBoardThreads(
   }
   return {
     entries: pageEntries,
+    pinnedThreads,
     anchor: finalState.boardAnchor,
     anchors,
     nextCursor,

@@ -92,6 +92,36 @@ both board checks and the thread check pass. For a non-public Realm board, each 
 account's current Realm ban key at authorization time (and the delegating principal's key for a delegated actor);
 an open ban overrides every independent grant, while public boards and Global boards read no ban key.
 
+### Board pins
+
+`POST /v1/boards/{id}/threads/{threadId}/pin` accepts `{ pinned: boolean }` with an `Idempotency-Key` and returns
+`{ boardId, threadId, pinned, pinPosition }`. It is a desired-state native command: repeating the same request is
+safe, and requesting the current state does not change ordering. At most three threads are pinned on a board. New
+pins lead the section; existing pins keep their position; unpinning compacts the remaining positions. `409 conflict`
+means the three slots are full.
+
+The board page response includes `pinnedThreads`, bounded to three, followed by the existing `threads` page. The
+active, hot, newest and oldest feed excludes every pin selected from the same candidate snapshot, so a thread occurs
+in only one section. Sparse progress records every scanned candidate, including pinned and undisclosed candidates.
+The sealed cursor binds `pinned-section-v1`; an earlier listing cursor cannot continue under the changed
+representation. The page query applies to both sections. Pins are projection hints, never visibility authority:
+current board, Realm, thread, opening-post and Access checks disclose each result, and a removed or newly hidden
+thread stays out of both sections.
+
+The command checks current `moderation:takedown` authority on the Realm for a Realm board or the board for a Global
+board. Before receipt lookup, it also rechecks current board, Realm (when present), thread and opening-post reads;
+protected Realm board checks retain current ban and account-standing behavior. A replay repeats these checks. Web
+owns pin controls and consumes the disclosed pin state.
+
+Pin listing adds one partial-index range for at most three projection rows and the existing bounded disclosure for
+those candidates. A mutation locks one board row, one target row and at most three pinned rows, then updates at most
+four projection rows; the fixed command receipt and event envelope add constant work. This does not enumerate or
+rescore board threads. The order decision is: Board pins are capped at three; new pins lead, existing pins keep
+their order, and unpinning compacts the remaining slots.
+
+Focused outcomes in `test/content/board-pin-http.test.ts` cover moderator, member, banned and hidden-thread behavior,
+cap and order, idempotent requests and sparse continuation.
+
 The `readResource` public-eligibility callbacks declare native work through
 `ResourceEligibilityOptions.work.prepare/verify`. Preparation returns the already captured evidence and performs
 no IO. Verification rereads the actual board, thread or post point (including its current head and exact moderation
@@ -1425,6 +1455,15 @@ check uses scales [256, 1024, 4096] with the series rule.
 
 - **Touches:** One board point read, at most 200 candidates and bounded thread/board/Realm disclosure; at most 100 results.
 - **Growth check:** `test/content/board-hot-http.test.ts`: “the hot page stays within its bound as boards and threads grow”.
+
+### Board pins
+
+- **Touches:** One indexed read of at most three pin slots per board page, then bounded disclosure for those threads.
+  A pin command locks one board, its target and at most three current pins; it updates at most four projection rows.
+- **Bound:** Constant rows and statements for a pin or unpin, plus the existing fixed command and Access costs; no
+  thread enumeration or rank refresh. Page work adds at most three candidates to the existing 200-candidate bound.
+- **Focused outcomes:** `test/content/board-pin-http.test.ts` covers moderator, member, banned and hidden-thread cases,
+  cap/order, replay authorization and sparse continuation.
 
 ### Mention notices
 

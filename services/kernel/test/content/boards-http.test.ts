@@ -157,7 +157,7 @@ test('board metadata and listing mount once with the actual read action and plur
     ].sort(),
   );
   expect(detail.body.board.realmId).toBeNull();
-  expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
+  expect((await get(path(id))).body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
   for (const values of [{ limit: '0' }, { limit: '101' }, { limit: '1.5' }, { sort: 'popular' }])
     await invalid(path(id, values));
 });
@@ -229,7 +229,7 @@ test('every returned candidate passes current thread root and board disclosure w
   ] as const) {
     for (const visibility of ['protected', 'taken_down']) {
       await state(kind, target, visibility);
-      expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
+      expect((await get(path(id))).body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
     }
     await state(kind, target, 'published');
   }
@@ -342,7 +342,7 @@ test('query matches only current authorized revision text and never erased text 
   for (const query of ['erasuresentinel', 'replacementtoken']) {
     const result = await get(path(id, { query }));
     expect(result.response.status).toBe(200);
-    expect(result.body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
+    expect(result.body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
     expect(JSON.stringify(result.body)).not.toContain(query);
   }
 });

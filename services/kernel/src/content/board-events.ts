@@ -13,4 +13,14 @@ export const BOARD_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.content.board-thread.pin.changed.v1': Type.Object(
+    {
+      boardId: UUID,
+      threadId: UUID,
+      actorId: UUID,
+      pinned: Type.Boolean(),
+      pinPosition: Type.Union([Type.Integer({ minimum: 1, maximum: 3 }), Type.Null()]),
+    },
+    { additionalProperties: false },
+  ),
 } as const;
