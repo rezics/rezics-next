@@ -242,6 +242,79 @@ Zero is a vote and clear is a separate DELETE. The own-vote read stays private a
 statistics follow native figures with their independent source, scale, count, as-of date, licence and attribution;
 they never supply or alter the native mean, vote count or ordering score.
 
+## Realm question authoring and selection
+
+Decision: `owner_id` remains the creating account; separate `realm_id` records Realm provenance, and explicit
+`?realm=` selects that Realm's definitions without changing the default Global directory or its cursor binding.
+
+`POST /v1/realms/{realmId}/rating-questions` accepts strict JSON
+`{ meaning, label, grain, scale: { min, max, displayStep } }` with `Idempotency-Key`. `meaning` is the exact
+immutable opinion being asked (1–2,000 Unicode code points); `label` is its distinct nonblank display name
+(1–200 code points). Text is retained exactly, including intentional whitespace, and rejects NUL. Grain is
+`work`, `release`, `episode` or `character`. A changed meaning, label, grain or scale requires a new identity.
+This slice exposes no editing, retirement or Global authoring command. Native Realm lifecycle and grants keep
+their existing owners.
+
+The creator must be a current authenticated account with ordinary native `realm:manage` authority on that
+selected active Realm. Membership and role names are not substitute authorizations. `resourceAuthorization`
+prepares and verifies current Access for each command attempt before receipt lookup; revoking manage denies
+an exact replay before it discloses the earlier result. The command writes one question, receipt and registered
+`com.rezics.rating.question.created.v1` event in the Realm's single native partition. Its generated ID encodes
+that Realm's route. `owner_id` records the creator, rather than a Realm ID or permission shortcut. The receipt
+digest binds principal, operation and the complete definition; changed inputs with the same key conflict.
+
+Success, including an authorized exact replay, returns HTTP `201` with
+`{ id, realmId, meaning, revision: 1, label, grain, scale }` and ordinary session progress. Meaning, provenance,
+revision and scale persist together. A database trigger rejects changes to authored definitions. Existing
+legacy definitions retain their previous representation and the seeded standard question remains unchanged.
+
+Supported scales are integer stored units with `0 <= min < max <= 20`, positive integer `displayStep`, and
+`(max-min) % displayStep === 0`. Binary `0..1` and integer `0..10` questions are supported by the installed
+vote SQL, event validation and aggregate histogram path. Votes must lie on the exact selected scale. Display
+mapping is consumer-owned: custom `0..10` does not inherit the standard question's half-point display mapping.
+Brief33 owns removing the native `0..20` envelope across that delivery path; this command must consume its
+bounds only after that capability is delivered. A definition is never proof of ranked population readiness;
+custom-question rank publication remains with its separate owner.
+
+`GET /v1/rating-questions/{id}` refreshes the exact selected definition. Legacy definitions keep their exact wire
+shape; Realm definitions add `realmId` and `meaning`. `GET /v1/rating-questions?realm={realmId}&limit=1..20`
+uses the existing `{ ratingQuestions, next }` capability with explicit native Realm selection. It does not merge
+or infer Realm choices from Global pages. Its opaque continuation binds the exact selection, limit and every
+verified viewer/credential authority field, with sorted distinct scopes, the existing 15-minute expiry and
+4,096-character cap. Default Global tokens retain their previous binding. Tokens cannot cross viewers or
+selections. Unknown, duplicate or invalid query parameters fail rather than changing the selection.
+
+Each selected Realm page performs two native Realm readability observations, one before metadata and one before
+release. All rows share that Realm; no ownership or membership join replaces Access. One indexed seek consumes
+at most 20 raw rows plus one unconsumed lookahead and hydrates at most 20 definitions. Progress uses the last
+raw key, and no total or completeness claim accompanies an empty page. Each page is a fresh observation, not a
+snapshot of the catalogue across requests. The cursor resumes after the consumed raw key even if earlier rows
+are no longer present. Point reads perform one exact question-home metadata seek, one native home binding and
+one current authority observation after releasing the metadata snapshot. Page reads bind the selected Realm
+home. No operation holds a metadata checkout while preparing another native authority observation.
+
+Unknown or unreadable questions/Realm selections return `404`; missing manage returns `403`. Invalid definitions
+return `400`; changed idempotent inputs return `422`. Native authority, moved-home, admission or database failure
+retains ordinary `503` unavailable states, never empty metadata or allowed admission. Protected labels cannot
+enter the default Global directory. Vote writes recheck question readability during every native command
+preparation before receipt disclosure; private own-vote reads also recheck it. Standard vote admission retains
+its existing scope contract. Aggregate and population HTTP handlers select current readable metadata before
+reading numeric results. Low-level aggregate functions remain trusted computation ports, not disclosure ports.
+
+`readVisibleRatingQuestion` and `ratingQuestionView` in `question-directory.ts` provide exact current provenance,
+meaning, revision, grain and scale for native consumers, including the rank owner. Review-context selections use
+that authority boundary on initial and continuation observations. Content point and board-page disclosure hides
+an unreadable custom question's citation while retaining the ordinarily readable post; unavailable authority
+propagates. Standard citations retain their existing behavior. Content's `reads.ts` and
+`review-context-eligibility.ts`, plus Rating's internal aggregate metadata export, change outside the declared
+paths solely to close those provenance boundaries. Search controls, query/partition coordination, Web interfaces,
+membership repair and custom rank publication are separate deliveries.
+
+Focused outcomes live in `test/rating/realm-question-authoring.test.ts`: native manage grants, creation and exact
+replay, changed-input conflict, persisted author/provenance, point/selection refresh, binary and `0..10` scales,
+protected/ban denial, current vote admission and manage loss before replay. Physical growth is unmeasured;
+the dev verifier owns clause measurements and broader acceptance after integration.
+
 ## Protected Realm rank source
 
 The adopted second scope includes Realm rating order. Private Realm numbers stay outside the common Search
@@ -251,8 +324,8 @@ the factory with the production `{ pool, access, tokens }`, and calls
 The actor comes from native credential verification. The factory performs current Realm authorization itself,
 then checks every consumed candidate through native subject Access and current identity before release; an
 unreadable or redirected subject contributes no returned figure. Missing or denied Realm returns `not_found`.
-Unavailable authority, data or moved homes fail closed. Search owns predicate integration and any coordination
-of partition-local pages; Web owns selection controls. This port installs no additional search route or service.
+Unavailable authority, data or moved homes fail closed. Search owns selection/rating-sort controls, query
+integration and coordination of partition-local pages; Content retains the native partition-local producer contract. This port installs no additional search route or service.
 
 Decision: the first usable slice requires an explicitly selected standard question, one subject partition and
 descending Bayesian score; other questions return `invalid_request` until their separate private publication lands.
@@ -342,7 +415,10 @@ and references, independently of today's thread references or vote.
 Vote routes require an authenticated account with `rating:vote` behind the `personal_library` gate. Vote reads are
 private to the authenticated account; the target and question identify a vote but never select its owner. Aggregate,
 population and source-statistics reads are public under subject and Realm read rules. Question point and directory
-reads use current Global `definitions:read`, including its native anonymous public floor and authenticated denials.
+reads use current Global `definitions:read` for legacy definitions, including its native anonymous public floor
+and authenticated denials. Realm definitions instead require current native Realm readability, including protected
+Realm grants, active hosts and bans. The same provenance check guards vote admission, aggregate/population HTTP
+reads, review-context selection and citation disclosure.
 
 - `PUT /v1/subjects/{id}/ratings/{questionId}/vote` accepts the strict JSON body `{ "units": integer }` and
   requires an `Idempotency-Key`. It returns `{ "units", "revision", "at" }` for the caller's current vote.
@@ -357,7 +433,8 @@ reads use current Global `definitions:read`, including its native anonymous publ
   scale.
 - `GET /v1/rating-questions?limit=1..20&cursor=<opaque>` returns exactly
   `{ ratingQuestions: RatingQuestion[], next: string | null }`, with default limit 20. Every entry uses the same
-  current stored-unit metadata as the point route. UUID identity ascending is the only ordering. The primary-key
+  current stored-unit metadata as the point route. This default selection contains only definitions without Realm
+  provenance. UUID identity ascending is the only ordering. The `(realm_id, id)` index
   seek consumes at most `limit` entries and probes one unconsumed lookahead; the signed continuation starts after
   the last consumed key. Every page rechecks Global authority before reading question rows. Denial preserves the
   point route's `404`; unavailable authority or data reads retain ordinary problem responses, never empty choices.
@@ -367,11 +444,11 @@ reads use current Global `definitions:read`, including its native anonymous publ
   votes or population statistics. Clients request each page explicitly.
   Choices are metadata, not feed membership, candidate eligibility or Source readiness. The cursor retains only
   a position and does not freeze question revisions or hydrate entries. Selected identity can be refreshed through
-  the unchanged point route; separate requests do not certify a shared snapshot. This installed directory adds no
+  the point route; separate requests do not certify a shared snapshot. This installed directory adds no
   feed predicate, Source, Home consumer or generated client declarations.
 
   Operation Cost:
-  - **Touches:** one metadata page through `rating.question_pkey (id)`, plus the existing Global authority probes.
+  - **Touches:** one metadata page through `question_realm_directory_idx (realm_id, id)`, plus the existing Global authority probes.
   - **Bound:** one indexed seek, at most 21 examined question rows and 20 returned rows, independent of catalogue
     size; B-tree descent grows logarithmically. No alternate catalogue or ownership-derived authority.
   - **Growth check:** native growth execution is deferred. The mounted paging/authority regression in

@@ -2,13 +2,15 @@ import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, type CommandEvent } from '../command/command.ts';
+import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } from '../command/command.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
 import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { readVisibleRatingQuestion } from './question-directory.ts';
 import { readVotePopulations } from './voter-realms.ts';
 import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-producer.ts';
 import {
@@ -29,6 +31,8 @@ export const VOTE_SCOPE = 'rating:vote';
 export type RatingQuestion = {
   id: string;
   ownerId: string | null;
+  realmId: string | null;
+  meaning: string | null;
   revision: number;
   label: string;
   grain: 'work' | 'release' | 'episode' | 'character';
@@ -132,9 +136,8 @@ function queryClient(client: Queryable): Queryable {
   return { query: client.query.bind(client) };
 }
 
-async function findQuestion(pool: Pool, questionId: string): Promise<RatingQuestion> {
-  if (routeOf(questionId) === null) throw new RatingQuestionNotFoundError();
-  const row = await withConnection(pool, (client) => questionRead.run(client, { question_id: questionId }));
+async function findQuestion(config: Dependencies, actor: Actor, questionId: string): Promise<RatingQuestion> {
+  const row = await readVisibleRatingQuestion(config, actor, questionId, deadlineFor(5_000), false);
   if (!row) throw new RatingQuestionNotFoundError();
   return asQuestion(row);
 }
@@ -186,7 +189,7 @@ export function createVoteCommands(config: Dependencies) {
       throw new VoteInvalidError('vote');
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
-    const question = await findQuestion(pool, input.questionId);
+    const question = await findQuestion(config, actor, input.questionId);
     validateUnits(question, input.units);
     const resolved = await resolveSubject(
       { pool, access, ...(clock === undefined ? {} : { clock }) },
@@ -196,13 +199,19 @@ export function createVoteCommands(config: Dependencies) {
     if (!resolved) throw new LibraryNotFoundError();
 
     try {
-      const outcome = await runner.ownAccount(
+      const outcome = await runner.ownAccountPrepared(
         actor,
         {
           action: VOTE_SCOPE,
           kind: 'rating.vote.put',
           requestKey: idempotencyKey,
           input: { questionId: input.questionId, targetId: input.targetId, units: input.units },
+          // Current question provenance is checked again on each native attempt,
+          // before ownAccountPrepared permits receipt disclosure or execution.
+          prepare: async (attempt) => {
+            const current = await readVisibleRatingQuestion(config, actor, question.id, commandAttemptDeadline(attempt), false);
+            if (!current) throw new RatingQuestionNotFoundError();
+          },
         },
         async (tx, command) => {
           const route = requireRoute(owner.accountId);
@@ -343,6 +352,7 @@ export function createVoteCommands(config: Dependencies) {
   async function readOwnVote(actor: Actor, questionId: string, targetId: string): Promise<Vote | null> {
     const owner = voteAccount(actor);
     if (routeOf(questionId) === null || routeOf(targetId) === null) return null;
+    await findQuestion(config, actor, questionId);
     const route = requireRoute(owner.accountId);
     return withConnection(pool, async (client) => {
       const current = await readAccount(client, route, owner.accountId);
@@ -359,15 +369,10 @@ export function createVoteCommands(config: Dependencies) {
 
   async function readRatingQuestion(actor: Actor, questionId: string): Promise<RatingQuestion> {
     const owner = voteAccount(actor);
-    if (routeOf(questionId) === null) throw new RatingQuestionNotFoundError();
-    const route = requireRoute(owner.accountId);
-    return withConnection(pool, async (client) => {
-      const current = await readAccount(client, route, owner.accountId);
-      assertCurrentAccount(owner, current);
-      const row = await questionRead.run(client, { question_id: questionId });
-      if (!row) throw new RatingQuestionNotFoundError();
-      return asQuestion(row);
+    await withConnection(pool, async (client) => {
+      assertCurrentAccount(owner, await readAccount(client, requireRoute(owner.accountId), owner.accountId));
     });
+    return findQuestion(config, actor, questionId);
   }
 
   return { putVote, putVoteOutcome, readOwnVote, readRatingQuestion };

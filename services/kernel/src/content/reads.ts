@@ -1,3 +1,5 @@
+import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { createHash } from 'node:crypto';
 import { parseStoredDocument, serializeDocument } from '@rezics/document';
 import { isSpdxLicense } from './document.ts';
@@ -1096,6 +1098,9 @@ export async function discloseBoardPageThreads(
     }
     return { items: output, parentAllowed: true };
   });
+  for (const [id, thread] of result.value.items) {
+    if (thread) result.value.items.set(id, await readableCitation(dependencies, context, thread));
+  }
   const items = threadIds.map((id) => {
     const partition = result.anchors.get(partitionOf(route(id)))!;
     return {
@@ -1263,7 +1268,28 @@ async function disclose(
   // snapshot, including when the pool has only one connection. Bytes and keys
   // leave this function only after both authorities have passed their final check.
   if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
+  if (disclosed.value) disclosed = { ...disclosed, value: await readableCitation(dependencies, context, disclosed.value) };
   return disclosed;
+}
+
+/** Independently anchored question authorization runs only after content releases
+ * its snapshots. An unreadable question suppresses the citation, preserving the
+ * ordinary post and its own disclosure checks; unavailable authority propagates. */
+async function readableCitation<T extends PostEntry | ThreadView>(
+  dependencies: ContentReadDependencies, context: ReadContext, value: T,
+): Promise<T> {
+  const post = 'firstPost' in value ? value.firstPost : value;
+  const citation = 'voteCitation' in post ? post.voteCitation : null;
+  if (!citation || citation.questionId === STANDARD_QUESTION_ID) return value;
+  let readable = false;
+  try {
+    readable = !!(await readVisibleRatingQuestion(dependencies, context.actor, citation.questionId, context.deadline));
+  } catch (error) {
+    if (!(error instanceof ProblemError && error.code === 'not_found')) throw error;
+  }
+  if (readable) return value;
+  const filtered = { ...post, voteCitation: null };
+  return ('firstPost' in value ? { ...value, firstPost: filtered } : filtered) as T;
 }
 
 function erasedPlaceholder(post: Row): ErasedPlaceholder {

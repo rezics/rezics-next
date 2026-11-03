@@ -1,12 +1,11 @@
 import { parseDiscoveryFilter } from '@rezics/filter';
 import { deadlineClient } from '../access/authenticate.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import questionRead from '../rating/question-read.sql';
-import { globalReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
+import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import subjectExists from '../semantic/subject-exists.sql';
 import type { ReadContext } from './model.ts';
 import {
@@ -63,20 +62,9 @@ export type ReviewContextCandidate = Readonly<
 async function currentQuestion(deps: ReviewContextDependencies, id: string, context: ReadContext) {
   // Parse the exact request leaf before authorization, metadata or enumeration.
   parseDiscoveryFilter({ ratingQuestion: { id } });
-  const check = await accessCheck(
-    deps.access,
-    context.actor,
-    'definitions:read',
-    { route: 0, id: GLOBAL_CONTEXT.id, eligibility: globalReadEligibility('definitions:read') },
-    { pool: deps.pool, deadline: context.deadline },
-  );
-  return withConnection(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, context.deadline);
-    if (!(await check(bounded))) throw new ProblemError('not_found');
-    const question = await questionRead.run(bounded, { question_id: id });
-    if (!question) throw new ProblemError('not_found');
-    return question;
-  });
+  const question = await readVisibleRatingQuestion(deps, context.actor, id, context.deadline);
+  if (!question) throw new ProblemError('not_found');
+  return question;
 }
 
 export async function resolveRatingQuestionSelection(

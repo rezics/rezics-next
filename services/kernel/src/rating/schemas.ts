@@ -21,6 +21,8 @@ export const RatingQuestionResponseSchema = t.Object(
   {
     id,
     revision,
+    realmId: t.Optional(id),
+    meaning: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
     label: t.String({ minLength: 1, maxLength: 200 }),
     grain,
     scale: t.Object(
@@ -35,8 +37,22 @@ export const RatingQuestionResponseSchema = t.Object(
   closed,
 );
 
+export const RatingQuestionCreateInputSchema = strictContentSchema(t.Object(
+  {
+    meaning: t.String({ minLength: 1, maxLength: 2000 }),
+    label: t.String({ minLength: 1, maxLength: 200 }),
+    grain,
+    scale: t.Object({
+      min: t.Integer({ minimum: 0, maximum: 19 }),
+      max: t.Integer({ minimum: 1, maximum: 20 }),
+      displayStep: t.Integer({ minimum: 1, maximum: 20 }),
+    }, closed),
+  }, closed,
+));
+
 export const RatingQuestionDirectoryQuerySchema = t.Object(
   {
+    realm: t.Optional(id),
     limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1, default: 20 })),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
   },

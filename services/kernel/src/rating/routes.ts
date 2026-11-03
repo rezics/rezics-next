@@ -13,20 +13,21 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { globalReadEligibility, subjectReadEligibility } from '../semantic/eligibility.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import subjectExists from '../semantic/subject-exists.sql';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { LibraryNotFoundError } from '../library/command-support.ts';
-import questionRead from './question-read.sql';
-import { readRatingQuestionDirectory } from './question-directory.ts';
+import { createRealmRatingQuestion, QuestionDefinitionInvalidError } from './question-authoring.ts';
+import { ratingQuestionView, readVisibleRatingQuestion, readSelectedQuestionDirectory } from './question-directory.ts';
 import { PublicFigureSchema, readSubjectPublicFigure } from './public-figure-http.ts';
 import { createVoteCommands, RatingQuestionNotFoundError, VoteInvalidError, VOTE_SCOPE, type Vote } from './votes.ts';
-import { readAggregateFigure, readRatingPopulationPage, readRatingQuestion } from './aggregate-read.ts';
+import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
 import {
   RatingAggregateResponseSchema,
   RatingPopulationPageResponseSchema,
+  RatingQuestionCreateInputSchema,
   RatingQuestionDirectoryQuerySchema,
   RatingQuestionDirectoryResponseSchema,
   RatingQuestionResponseSchema,
@@ -113,7 +114,7 @@ async function command<T>(run: () => Promise<T>): Promise<T> {
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
     if (error instanceof LibraryNotFoundError || error instanceof RatingQuestionNotFoundError)
       throw new ProblemError('not_found');
-    if (error instanceof VoteInvalidError)
+    if (error instanceof VoteInvalidError || error instanceof QuestionDefinitionInvalidError)
       throw new ProblemError('invalid_request', {
         errors: [{ pointer: `/${error.field}`, code: 'out_of_range' }],
       });
@@ -169,7 +170,8 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           closed,
         ),
         response: { 200: RatingAggregateResponseSchema, ...aggregateFailures },
-        detail: publicReadDetail('rating.aggregate_get', 'subject:read'),
+        detail: { ...publicReadDetail('rating.aggregate_get', 'subject:read'),
+          'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'] },
       },
       async ({ actor, params, query, admission, job }) => {
         const populations = Array.isArray(query.population) ? query.population : [query.population];
@@ -177,7 +179,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         requireRoutableIds(params.id, query.question, ...populations);
         return admission.run('normal', job, async () => {
           if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
-          const question = await readRatingQuestion(dependencies.pool, query.question);
+          const question = await readVisibleRatingQuestion(config(), actor, query.question, job.deadline);
           if (!question) throw new ProblemError('not_found');
           const figures = await Promise.all(
             populations.map(async (population) => {
@@ -207,13 +209,14 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         params: t.Object({ id }, closed),
         query: t.Object({ question: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed),
         response: { 200: RatingPopulationPageResponseSchema, ...aggregateFailures },
-        detail: publicReadDetail('rating.populations_get', 'subject:read'),
+        detail: { ...publicReadDetail('rating.populations_get', 'subject:read'),
+          'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'] },
       },
       async ({ actor, params, query, admission, job }) => {
         requireRoutableIds(params.id, query.question);
         return admission.run('normal', job, async () => {
           if (!(await readableSubject(config(), actor, params.id, job.deadline))) throw new ProblemError('not_found');
-          const question = await readRatingQuestion(dependencies.pool, query.question);
+          const question = await readVisibleRatingQuestion(config(), actor, query.question, job.deadline);
           if (!question) throw new ProblemError('not_found');
           const binding: CursorBinding = {
             operation: 'rating.population-page',
@@ -329,6 +332,34 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         return voteView(result);
       },
     )
+    .post(
+      '/v1/realms/:realmId/rating-questions',
+      {
+        params: t.Object({ realmId: id }, closed), headers,
+        body: RatingQuestionCreateInputSchema,
+        response: {
+          201: withHeaders(RatingQuestionResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
+          ...failures,
+        },
+        detail: {
+          operationId: 'rating.question_create', 'x-action': 'realm:manage',
+          'x-exposure': 'public', 'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate, security: bearer,
+        },
+      },
+      async ({ actor, params, body, headers, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        requireRoutableIds(params.realmId);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const outcome = await admission.run('normal', job, () => command(() =>
+          createRealmRatingQuestion(config(), actor, { ...body, realmId: params.realmId },
+            { idempotencyKey: key, deadline: job.deadline }),
+        ));
+        session.record({ partition: outcome.partition, epoch: outcome.epoch, position: outcome.position });
+        set.status = 201;
+        return outcome.value;
+      },
+    )
     .get(
       '/v1/rating-questions',
       {
@@ -336,18 +367,14 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         transform: ({ request }) => {
           const parameters = new URL(request.url).searchParams;
           for (const name of parameters.keys())
-            if (!['limit', 'cursor'].includes(name) || parameters.getAll(name).length !== 1)
+            if (!['limit', 'cursor', 'realm'].includes(name) || parameters.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
         response: { 200: RatingQuestionDirectoryResponseSchema, ...aggregateFailures },
-        detail: publicReadDetail('rating.question_list', 'definitions:read'),
+        detail: { ...publicReadDetail('rating.question_list', 'definitions:read'),
+          'x-resource-types': ['community.realm', 'semantic.context'] },
       },
-      async ({ actor, query, authorize, admission, job }) => {
-        const check = await authorize({
-          route: 0,
-          id: GLOBAL_CONTEXT.id,
-          eligibility: globalReadEligibility('definitions:read'),
-        });
+      async ({ actor, query, admission, job }) => {
         return admission.run('normal', job, async () => {
           const limit = query.limit ?? 20;
           // Bind every verified credential-authority field, with scopes treated as a set.
@@ -355,7 +382,8 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
           const binding: CursorBinding = {
             operation: 'rating.question-directory',
-            parameters: { limit, authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex') },
+            parameters: { limit, authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
+              ...(query.realm === undefined ? {} : { realm: query.realm }) },
           };
           let after: string | null = null;
           if (query.cursor !== undefined) {
@@ -375,11 +403,8 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
               throw new ProblemError('invalid_cursor');
             after = decoded.after[0];
           }
-          const page = await withConnection(dependencies.pool, async (client) => {
-            const bounded = deadlineClient(client, job.deadline);
-            if (!(await check(bounded))) throw new ProblemError('not_found');
-            return readRatingQuestionDirectory(bounded, { after, limit });
-          });
+          const page = await readSelectedQuestionDirectory(config(), actor,
+            { after, limit, ...(query.realm === undefined ? {} : { realmId: query.realm }) }, job.deadline);
           return {
             ratingQuestions: page.ratingQuestions,
             next:
@@ -400,35 +425,15 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ questionId: id }, closed),
         response: { 200: RatingQuestionResponseSchema, ...failures },
-        detail: publicReadDetail('rating.question_get', 'definitions:read'),
+        detail: { ...publicReadDetail('rating.question_get', 'definitions:read'),
+          'x-resource-types': ['community.realm', 'semantic.context'] },
       },
-      async ({ params, authorize, admission, job }) => {
+      async ({ actor, params, admission, job }) => {
         requireRoutableIds(params.questionId);
-        const check = await authorize({
-          route: 0,
-          id: GLOBAL_CONTEXT.id,
-          eligibility: globalReadEligibility('definitions:read'),
-        });
-        const question = await admission.run('normal', job, async () =>
-          withConnection(dependencies.pool, async (client) => {
-            const bounded = deadlineClient(client, job.deadline);
-            if (!(await check(bounded))) throw new ProblemError('not_found');
-            const row = await questionRead.run(bounded, { question_id: params.questionId });
-            if (!row) throw new ProblemError('not_found');
-            return row;
-          }),
-        );
-        return {
-          id: question.id,
-          revision: question.revision,
-          label: question.label,
-          grain: question.grain,
-          scale: {
-            min: question.minimumUnits,
-            max: question.maximumUnits,
-            displayStep: question.stepUnits,
-          },
-        };
+        const question = await admission.run('normal', job, () =>
+          readVisibleRatingQuestion(config(), actor, params.questionId, job.deadline));
+        if (!question) throw new ProblemError('not_found');
+        return ratingQuestionView(question);
       },
     );
 }

@@ -27,16 +27,17 @@ export type RatingPopulationPage = Readonly<{
 
 export type RatingQuestionGrain = 'work' | 'release' | 'episode' | 'character';
 
+/** Trusted internal metadata only; disclosure callers use readVisibleRatingQuestion. */
 export async function readRatingQuestion(
   client: Queryable,
   questionId: string,
-): Promise<Readonly<{ id: string; grain: RatingQuestionGrain }> | null> {
+): Promise<Readonly<{ id: string; grain: RatingQuestionGrain; realmId: string | null }> | null> {
   if (routeOf(questionId) === null) return null;
   const row = await questionRead.run(client, { question_id: questionId });
   if (!row) return null;
   if (row.grain !== 'work' && row.grain !== 'release' && row.grain !== 'episode' && row.grain !== 'character')
     throw new Error('Unknown rating question grain');
-  return { id: row.id, grain: row.grain };
+  return { id: row.id, grain: row.grain, realmId: row.realmId };
 }
 
 function asFigure(
