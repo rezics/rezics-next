@@ -6,6 +6,7 @@ import {
   relationFacetProperty,
   type FilterRelease,
 } from '@rezics/filter';
+import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
@@ -20,6 +21,7 @@ import {
   encodeRetainedSearchCursor,
   retainedSearchContinuation,
   type SearchCursorBinding,
+  type SearchSortValue,
 } from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
@@ -42,8 +44,11 @@ import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan }
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
-import { registerSearchScopeRuntime } from './service-scope.ts';
+import { registerSearchScopeRuntime, createSearchScopeForService } from './service-scope.ts';
 import type { RealmSubjectSource } from './realm-scope.ts';
+import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
+import { ScopeWork, scopeAllowance } from './scope-execution.ts';
+import type { ScopeBasis } from './scope-source.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
@@ -88,6 +93,8 @@ export type PublicSearchPage = {
 
 export type PublicSearchReadContext = Readonly<{
   deadline: number;
+  /** The verified request context used only by the service-bound native Scope. */
+  scope?: LeafOptions;
   complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 
@@ -114,6 +121,71 @@ async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
     if (error instanceof SearchUnavailableError) throw indexNotReady();
     throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
   }
+}
+
+function containsOwnerPredicate(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'owner')) return true;
+  if ('not' in node && containsOwnerPredicate(node.not)) return true;
+  return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsOwnerPredicate));
+}
+
+function scopeEvaluationReservation(work: ScopeWork, rawKeys: number) {
+  const allowance = work.remaining();
+  const remaining = allowance.remaining;
+  return {
+    rawKeys,
+    native: {
+      points: remaining.nativePoints,
+      witnesses: remaining.witnessKeys,
+      rows: remaining.nativeRows,
+      bytes: remaining.bytes,
+      emptySeeks: remaining.emptySeeks,
+    },
+    allowance,
+  };
+}
+
+export function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown {
+  const record = request !== null && typeof request === 'object' && !Array.isArray(request)
+    ? (request as Record<string, unknown>)
+    : { request };
+  return {
+    ...record,
+    scopeBasis: {
+      release: basis.release,
+      query: basis.query,
+      profile: basis.profile,
+      canonical: basis.canonical,
+      generation: 'generation' in basis ? basis.generation : null,
+      index: 'index' in basis ? basis.index : null,
+    },
+  };
+}
+
+function scopeCursorAfter(sort: 'id' | 'name' | 'collections', after: readonly (string | number | null)[]) {
+  if (sort === 'id') {
+    if (after.length !== 1 || typeof after[0] !== 'string') throw new ProblemError('search_restart_required');
+    return after[0];
+  }
+  if (sort === 'name') {
+    if (
+      after.length !== 2 ||
+      !(after[0] === null || typeof after[0] === 'string') ||
+      typeof after[1] !== 'string'
+    )
+      throw new ProblemError('search_restart_required');
+    return [after[0], after[1]] as const;
+  }
+  if (
+    after.length !== 3 ||
+    typeof after[0] !== 'number' ||
+    !(after[1] === null || typeof after[1] === 'string') ||
+    typeof after[2] !== 'string'
+  )
+    throw new ProblemError('search_restart_required');
+  return [after[0], after[1], after[2]] as const;
 }
 
 function project(subject: IndexedSubject, languages?: readonly string[]): Result {
@@ -376,7 +448,7 @@ export function createSearchService({
       const active = current ?? (await release());
       if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       try {
-        admitted = admitFilter(filter, active);
+        admitted = admitFilter(filter, active, containsOwnerPredicate(filter) ? { owner: true } : undefined);
       } catch (error) {
         if (error instanceof FilterError)
           throw new ProblemError(error.problem, {
@@ -418,7 +490,27 @@ export function createSearchService({
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
         invalid('/kindCursor', 'invalid_type');
-      const binding = { operation: 'subjects.search', request: bindingRequest, principal };
+      const scopedRequest = admitted !== undefined && containsOwnerPredicate(admitted);
+      let scope: ReturnType<typeof createSearchScopeForService> | undefined;
+      let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
+      let scopeWork: ScopeWork | undefined;
+      if (scopedRequest) {
+        const options = readContext?.scope;
+        if (!options) throw indexNotReady();
+        scope = createSearchScopeForService(service, options);
+        scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+        const nativeOrder = !text && (sort === 'name' || sort === 'collections') ? sort : undefined;
+        preparedScope = await sourceRequest(() =>
+          scope!.prepare(admitted!, {
+            releaseDigest: native?.digest ?? kindDigest(current!),
+            ...(nativeOrder ? { nativeOrder, pageSize: limit } : {}),
+            allowance: scopeWork!.remaining(),
+          }),
+        );
+        scopeWork.native(scope.work(preparedScope));
+      }
+      const cursorRequest = preparedScope ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis) : bindingRequest;
+      const binding = { operation: 'subjects.search', request: cursorRequest, principal };
       // Preserve a known unsafe candidate total across continuations in the signed
       // scope; the request/principal binding and keyset payload stay unchanged.
       const lowerBoundBinding = { ...binding, operation: 'subjects.search.lower_bound' };
@@ -482,7 +574,9 @@ export function createSearchService({
       if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
-      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f', relationOverflow: true }) : undefined;
+      const compiledFilter = admitted && !preparedScope
+        ? compileFilter(admitted, { prefix: 'f', relationOverflow: true })
+        : undefined;
       const overflowProperties = [
         ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
       ];
@@ -536,29 +630,185 @@ export function createSearchService({
               ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
             }
           : source;
+      const evaluateScope = async (ids: readonly string[]) => {
+        if (!scope || !preparedScope || !scopeWork) throw indexNotReady();
+        if (ids.length === 0) return [] as const;
+        const evaluation = await sourceRequest(() =>
+          scope.evaluate(
+            preparedScope!,
+            [...ids],
+            scopeEvaluationReservation(scopeWork!, ids.length),
+          ),
+        );
+        scopeWork.native(scope.work(evaluation));
+        if (
+          evaluation.basis.canonical !== preparedScope.basis.canonical ||
+          evaluation.values.length !== ids.length ||
+          evaluation.progress !== null ||
+          evaluation.values.includes('not_proven')
+        )
+          throw indexNotReady();
+        return evaluation.values;
+      };
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
         sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
-          checkHits(disclosureSource, hits, clauses, admitted ? { filter: admitted, relationProperties } : undefined),
+          checkHits(
+            disclosureSource,
+            hits,
+            clauses,
+            admitted && !preparedScope ? { filter: admitted, relationProperties } : undefined,
+          ),
         );
         inexact ||= relationRejected === true;
         const ratingAccepted = rating ? await ratingCandidates([...hits], rating, sourcePositions) : undefined;
         const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
+        let scopedMatches: Set<string> | undefined;
+        if (scope && preparedScope && scopeWork && passed.length) {
+          const ids = passed.map(({ subject }) => subject.id);
+          const values = await evaluateScope(ids);
+          scopedMatches = new Set(ids.filter((_, index) => values[index] === true));
+        }
         const checked = new Map<(typeof hits)[number], IndexedSubject>();
         for (const hit of hits) {
           if (rating && hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
           const subject = subjects.get(hit);
-          if (subject && (!ratingAccepted || ratingAccepted.has(hit))) checked.set(hit, subject);
+          if (
+            subject &&
+            (!scopedMatches || scopedMatches.has(subject.id)) &&
+            (!ratingAccepted || ratingAccepted.has(hit))
+          )
+            checked.set(hit, subject);
         }
         return checked;
       };
+      if (
+        scope &&
+        preparedScope &&
+        scopeWork &&
+        !text &&
+        (sort === 'id' || sort === 'name' || sort === 'collections') &&
+        !hitOptions.descriptions &&
+        !hitOptions.properties
+      ) {
+        let hits: SearchHit[] = [];
+        let after: SearchSortValue[] | null = null;
+        let exhausted = false;
+        if (sort === 'id') {
+          const afterSubject = cursor?.ok ? scopeCursorAfter('id', cursor.after) : null;
+          const page = await sourceRequest(() =>
+            scope!.prefix(preparedScope!, {
+              afterSubject,
+              quota: limit,
+              budget: Math.min(256, limit + 1),
+              allowance: scopeWork!.remaining(),
+            }),
+          );
+          if (page.basis.canonical !== preparedScope.basis.canonical || !page.usage.work)
+            throw new ProblemError('search_restart_required');
+          scopeWork.native(page.usage.work);
+          hits = [...page.hits];
+          exhausted = page.exhausted;
+          after = page.coveredThrough === null ? null : [page.coveredThrough];
+          if (!exhausted && after === null) throw indexNotReady();
+          if (hits.length < limit && !exhausted) throw indexNotReady();
+        } else if (sort === 'name') {
+          let orderedAfter: readonly [string | null, string] | null = cursor?.ok
+            ? scopeCursorAfter('name', cursor.after)
+            : null;
+          let covered: readonly [string | null, string] | null = null;
+          while (hits.length < limit) {
+            const quota = Math.min(99, limit - hits.length);
+            const page = await sourceRequest(() =>
+              scope!.orderedPrefix(preparedScope!, {
+                order: 'name',
+                after: orderedAfter,
+                quota,
+                budget: quota + 1,
+                allowance: scopeWork!.remaining(),
+              }),
+            );
+            if (page.basis.canonical !== preparedScope.basis.canonical)
+              throw new ProblemError('search_restart_required');
+            scopeWork.native(page.usage.work);
+            hits.push(...page.hits.map(({ sort: _sort, ...hit }) => hit));
+            covered = page.coveredThrough;
+            exhausted = page.exhausted;
+            if (hits.length >= limit || exhausted) break;
+            if (page.hits.length === 0 || covered === null) throw indexNotReady();
+            orderedAfter = covered;
+          }
+          after = covered === null ? null : [...covered];
+          if (!exhausted && after === null) throw indexNotReady();
+          if (hits.length < limit && !exhausted) throw indexNotReady();
+        } else {
+          let orderedAfter: readonly [number, string | null, string] | null = cursor?.ok
+            ? scopeCursorAfter('collections', cursor.after)
+            : null;
+          let covered: readonly [number, string | null, string] | null = null;
+          while (hits.length < limit) {
+            const quota = Math.min(99, limit - hits.length);
+            const page = await sourceRequest(() =>
+              scope!.orderedPrefix(preparedScope!, {
+                order: 'collections',
+                after: orderedAfter,
+                quota,
+                budget: quota + 1,
+                allowance: scopeWork!.remaining(),
+              }),
+            );
+            if (page.basis.canonical !== preparedScope.basis.canonical)
+              throw new ProblemError('search_restart_required');
+            scopeWork.native(page.usage.work);
+            hits.push(...page.hits.map(({ sort: _sort, ...hit }) => hit));
+            covered = page.coveredThrough;
+            exhausted = page.exhausted;
+            if (hits.length >= limit || exhausted) break;
+            if (page.hits.length === 0 || covered === null) throw indexNotReady();
+            orderedAfter = covered;
+          }
+          after = covered === null ? null : [...covered];
+          if (!exhausted && after === null) throw indexNotReady();
+          if (hits.length < limit && !exhausted) throw indexNotReady();
+        }
+        if (new Set(hits.map((hit) => hit.id)).size !== hits.length) throw indexNotReady();
+        const publicResults = await sourceRequest(() => publicHitFigures(pool, hits));
+        const as_of = await asOf(generation!);
+        const witnesses = new Map<string, number>();
+        for (const hit of hits.slice(0, 2)) witnesses.set(hit.type, (witnesses.get(hit.type) ?? 0) + 1);
+        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+        const response: PublicSearchPage = {
+          subjects: publicResults,
+          ...(metadata
+            ? {
+                kinds: {
+                  values: metadata.values,
+                  next:
+                    metadata.after === null
+                      ? null
+                      : await encodeKindCursor(cursors, binding, generation!, kinds!.digest, metadata.after, now),
+                },
+              }
+            : {}),
+          next: exhausted
+            ? null
+            : await encodeSearchCursor(cursors, binding, { generation: generation!, after: after ?? [] }, now),
+          as_of,
+        };
+        await readContext?.complete(response);
+        const finalValues = await evaluateScope(hits.map((hit) => hit.id));
+        if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
+        if ((await indexRequest(freshAliasGeneration)) !== generation)
+          throw new ProblemError('search_restart_required');
+        return response;
+      }
       const runtime = publicFilters?.();
       if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
       const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
       const capturePlan = {
         ...plan,
         generation,
-        filterDocument: admitted,
+        ...(preparedScope ? {} : { filterDocument: admitted }),
         text,
         pageSize: limit,
         size: Math.min(200, 2 * limit + 1),
@@ -695,6 +945,10 @@ export function createSearchService({
         // This operation's final observation must follow all query and source work;
         // another request's in-flight alias read cannot bracket this response.
         await readContext?.complete(response);
+        if (scope && preparedScope && shown.length) {
+          const finalValues = await evaluateScope(shown.map((subject) => subject.id));
+          if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
+        }
         if ((await indexRequest(freshAliasGeneration)) !== generation)
           throw new ProblemError('search_restart_required');
         if (retainedRead) {

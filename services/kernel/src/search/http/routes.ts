@@ -389,6 +389,10 @@ export function searchRoutes<App>(
               });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
+            const scopeAccess: Access | undefined =
+              gateAccess?.() ??
+              (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
+            const scopeOptions = scopeAccess ? { access: scopeAccess, actor, deadline: job.deadline, routeKey } : undefined;
             let completed: SearchHttpResponse | undefined;
             await search.search(
               actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
@@ -397,6 +401,7 @@ export function searchRoutes<App>(
               active,
               {
                 deadline: job.deadline,
+                ...(scopeOptions ? { scope: scopeOptions } : {}),
                 async complete(page) {
                   completed = publicBases(
                     await fill(page, authorize, body.languages, active),

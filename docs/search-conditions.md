@@ -174,6 +174,18 @@ bearers give `401 invalid_credentials` with `Bearer error="invalid_token"` BEFOR
 anonymous downgrade. Verified suspended 403 is defensive only. Keep existing native suspension personas; do not
 fabricate a valid suspended bearer.
 
+The `/v1/subjects:search` route passes the verified request Actor, concrete Access instance, route key and fixed
+deadline to its returned Search service. Search expands the filter against the active release, passes that pinned
+filter and the same remaining work allowance into the service-bound Scope, and binds the current Scope basis into
+Search cursors. A changed basis fails cursor admission before old hits can be returned; the existing invalid-cursor
+response applies. The allowance covers preparation, scoped evaluation or ordered paging, and final currentness
+checks.
+
+The route-to-Scope bridge is delivered, but Library's native current owner Collection source and owner-leaf
+evidence producers remain an integration dependency. Until those native producers supply current authorized
+evidence, owner-scoped Search stays explicitly not-ready; Search never manufactures ready evidence or falls back
+to a broader catalogue query.
+
 ## Whole-query disclosure and Accounts discovery
 
 Current authority protects the full query: membership, NOT, exclusion, order, zero-hit populations, counts,
