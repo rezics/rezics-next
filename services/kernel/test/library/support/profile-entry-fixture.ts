@@ -6,9 +6,11 @@ import { releaseDigest, type Release } from '@rezics/definitions';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
   fixture,
+  compiledProfile,
   libraryLabels,
   libraryProfile,
   legacyProfile,
+  profileOf,
   unitData,
   type ProfileData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
@@ -89,7 +91,6 @@ export async function compileEntryRelease(
   const profiles = Object.fromEntries(
     Object.entries(entryStates).map(([vertical, state]) => {
       const profile = libraryProfile(`fixture.${vertical}`, vertical === 'record' ? 'track' : 'minute');
-      if (vertical === 'game' && gameUnits) profile.progress.allowed[0].units = gameUnits.map((unit) => unitData(unit));
       profile.entryStateSet.states.push({ id: version === 'replacement' ? `${state}_again` : state, role: 'active' });
       return [vertical, profile];
     }),
@@ -121,7 +122,13 @@ export async function compileEntryRelease(
       labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
     input.presentation[key] = JSON.stringify(labels);
   }
-  return compileCatalogue(input);
+  const release = compileCatalogue(input);
+  const game = gameUnits ? profileOf(release, 'ex:Parent') : null;
+  if (game) {
+    game.progress.allowed[0].units = gameUnits!.map((unit) => unitData(unit));
+    Object.assign(game, compiledProfile(game));
+  }
+  return release;
 }
 
 export type NativeProfileFixture = Awaited<ReturnType<typeof createProfileEntryFixture>>;
