@@ -21,6 +21,15 @@ export type RelationFacetProbe = {
 /** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */
 export type RelationFacetMatch = boolean | 'not_proven';
 
+/** Complete current work-link evidence. Concealed or malformed values carry no identity. */
+export type NativeWorkLinkValue = { kind: 'work'; id: string } | { kind: 'unknown' };
+export type NativeWorkLinkEvidence = Readonly<{
+  /** False means this bounded observation did not prove a complete current selection. */
+  complete: boolean;
+  /** An empty complete list proves no current work link. */
+  values: readonly NativeWorkLinkValue[];
+}>;
+
 /**
  * Filterable form of a statement value.
  * Time keeps its astronomical year and only the month/day represented by native precision.
@@ -105,6 +114,11 @@ export interface SubjectSource {
   /** Gather all indexed keys and current cuts before authorizing any page witness dispatch. */
   prepareRelationFacets?(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage>;
   matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
+  /** Read the complete adopted Global exampleOfWork selection for current visible releases. */
+  readCompleteWorkLinks?(
+    partition: number,
+    ids: readonly string[],
+  ): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
 }
 
 /** Active public Collection counts for subjects in one partition. Only the count is read. */

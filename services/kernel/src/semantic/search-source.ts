@@ -160,6 +160,7 @@ export function subjectSource(
   SubjectSourceKeyPages & {
     canonicalNames: SubjectCanonicalNames;
     readConceptStatements: ConceptStatementReader;
+    readCompleteWorkLinks: NonNullable<SubjectSource['readCompleteWorkLinks']>;
   } {
   const relations = relationSource(pool, routeKey);
   return {
@@ -341,6 +342,7 @@ export function subjectSource(
     matchRelationFacets: relations.match,
     prepareRelationFacets: relations.preparePage,
     readConceptStatements: relations.readConceptStatements,
+    readCompleteWorkLinks: relations.readCompleteWorkLinks,
 
     async count(partition) {
       assertPartition(partition);

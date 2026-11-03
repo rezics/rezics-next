@@ -33,6 +33,8 @@ import { withConnection } from '../database/pool.ts';
 import {
   MAX_RELATION_FACET_PROBES,
   MAX_RELATION_FACET_VALUES,
+  type NativeWorkLinkEvidence,
+  type NativeWorkLinkValue,
   type IndexedStatement,
   type RelationFacetMatch,
   type RelationFacetProbe,
@@ -51,6 +53,9 @@ import readReleases from './search-source-releases.sql';
 import rebuild from './search-selected-rebuild.sql';
 
 const ZERO = '00000000-0000-0000-0000-000000000000';
+const WORK_LINK_PROPERTY = 'schema:exampleOfWork';
+const MAX_COMPLETE_WORK_LINK_ROWS = 256;
+const MAX_COMPLETE_WORK_LINK_RELEASES = 20;
 const object = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 export type SelectedStatement = {
   route: number;
@@ -100,13 +105,13 @@ type Prepared = {
 /** A raw key budget bounds rejects as well as published rows. No permission survives a call. */
 export function relationSource(pool: Pool, routeKey?: Uint8Array) {
   /** Independently anchored original and terminal public identities, bounded redirect traversal. */
-  async function publicSubjects(
+  async function canonicalPublicSubjects(
     ids: readonly string[],
     expected: ReadonlyMap<string, SourceSubject>,
     observations?: Map<string, string>,
-  ): Promise<Set<string>> {
+  ): Promise<Map<string, { id: string; type: string }>> {
     const roots = [...new Set(ids)];
-    const states = new Map<string, { visible: boolean; redirect: string | null }>();
+    const states = new Map<string, { visible: boolean; redirect: string | null; type: string }>();
     let pending = roots;
     for (let depth = 0; pending.length && depth < 8; depth++) {
       const groups = new Map<number, { route: number; id: string }[]>();
@@ -114,7 +119,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         if (states.has(id)) continue;
         const route = routeOf(id);
         if (route === null) {
-          states.set(id, { visible: false, redirect: null });
+          states.set(id, { visible: false, redirect: null, type: '' });
           continue;
         }
         const home = partitionOf(route);
@@ -145,17 +150,22 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
               value?.currentRelease === before.currentRelease &&
               value?.type === before.type &&
               value?.selection_ready === before.selection_ready);
-          states.set(id, { visible: value?.visibility === 'visible' && stable, redirect: value?.redirect ?? null });
+          states.set(id, {
+            visible: value?.visibility === 'visible' && stable,
+            redirect: value?.redirect ?? null,
+            type: value?.type ?? '',
+          });
           if (value?.visibility === 'visible' && value.redirect) pending.push(value.redirect);
         }
       }
       pending = [...new Set(pending)];
     }
-    const allowed = new Set<string>();
+    const allowed = new Map<string, { id: string; type: string }>();
     for (const root of roots) {
       const seen = new Set<string>();
       let id: string | null = root;
       let valid = true;
+      let terminal: { id: string; type: string } | undefined;
       while (id) {
         const state = states.get(id);
         if (seen.has(id) || !state?.visible) {
@@ -163,11 +173,23 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           break;
         }
         seen.add(id);
-        id = state.redirect;
+        if (state.redirect) id = state.redirect;
+        else {
+          terminal = { id, type: state.type };
+          id = null;
+        }
       }
-      if (valid) allowed.add(root);
+      if (valid && terminal) allowed.set(root, terminal);
     }
     return allowed;
+  }
+
+  async function publicSubjects(
+    ids: readonly string[],
+    expected: ReadonlyMap<string, SourceSubject>,
+    observations?: Map<string, string>,
+  ): Promise<Set<string>> {
+    return new Set((await canonicalPublicSubjects(ids, expected, observations)).keys());
   }
 
   async function disclosed(
@@ -726,6 +748,148 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       if (!(await runtimeIsCurrent(prepared.runtime))) return results;
       for (const { subject, statement } of disclosedStatements) results.get(subject)!.statements.push(statement);
       return results;
+    },
+
+    async readCompleteWorkLinks(partition: number, submittedIds: readonly string[]) {
+      if (
+        !Number.isInteger(partition) ||
+        partition < 0 ||
+        partition >= 4096 ||
+        !Array.isArray(submittedIds) ||
+        submittedIds.length > MAX_COMPLETE_WORK_LINK_RELEASES
+      )
+        throw new TypeError('Invalid complete work-link request');
+      const ids = [...submittedIds];
+      if (
+        new Set(ids).size !== ids.length ||
+        ids.some((id) => {
+          const route = routeOf(id);
+          return route === null || partitionOf(route) !== partition;
+        })
+      )
+        throw new TypeError('Invalid complete work-link keys');
+      const unavailable = () =>
+        new Map(ids.map((id) => [id, { complete: false, values: [] as NativeWorkLinkValue[] }]));
+      if (!ids.length || !routeKey) return unavailable();
+
+      const snapshot = async () =>
+        inSearchSnapshot(pool, async (client) => {
+          const home = await readPartition(client, partition);
+          const runtime = await activeRelease(client);
+          if (!home || home.writeState === 'moved' || !runtime) return null;
+          const subjects = (await readSubjects.run(client, {
+            partition_no: partition,
+            routes: ids.map((id) => routeOf(id)!),
+            subject_ids: ids,
+          })) as SourceSubject[];
+          const byId = new Map(subjects.map((subject) => [subject.id, subject]));
+          const eligible = ids.filter((id) => {
+            const subject = byId.get(id);
+            return (
+              subject?.visibility === 'visible' &&
+              !subject.redirect &&
+              subject.selection_ready &&
+              subject.current_revision !== null &&
+              facetProperties(runtime.release, [subject.type]).includes(WORK_LINK_PROPERTY) &&
+              relationFacetProperty(runtime.release, WORK_LINK_PROPERTY) &&
+              runtime.release.properties[WORK_LINK_PROPERTY]?.datatype === 'wikibase-item'
+            );
+          });
+          const selected = eligible.length
+            ? ((await readConcepts.run(client, {
+                partition_no: partition,
+                requests: eligible.map((id) => ({
+                  route: routeOf(id)!,
+                  subject_id: id,
+                  property: WORK_LINK_PROPERTY,
+                  after_slot: ZERO,
+                  after_candidate: ZERO,
+                })),
+                property_limit: MAX_COMPLETE_WORK_LINK_ROWS + 1,
+                input_limit: MAX_COMPLETE_WORK_LINK_ROWS + 1,
+              })) as SelectedStatement[])
+            : [];
+          const digests = [...new Set(selected.map((row) => row.release))];
+          const releaseRows = digests.length
+            ? ((await readReleases.run(client, { route: 0, digests })) as { digest: string; body: Release }[])
+            : [];
+          const releases = new Map<string, Release | null>(releaseRows.map((row) => [row.digest, row.body]));
+          for (const digest of digests)
+            if (!releases.has(digest)) releases.set(digest, await readRelease(client, digest));
+          return { runtime, subjects: byId, eligible: new Set(eligible), selected, releases };
+        });
+
+      const first = await snapshot();
+      if (!first || first.selected.length > MAX_COMPLETE_WORK_LINK_ROWS) return unavailable();
+      const firstIdentities = new Map<string, string>();
+      const expected = new Map([...first.subjects].filter(([id]) => first.eligible.has(id)));
+      const firstDisclosed = await disclosed(first.selected, first.releases, expected, first.runtime, firstIdentities);
+      const firstCanonical = await canonicalPublicSubjects(
+        firstDisclosed.map(({ statement }) => statement.value),
+        expected,
+        firstIdentities,
+      );
+      const project = (
+        current: NonNullable<typeof first>,
+        statements: readonly { subject: string; statement: IndexedStatement }[],
+        canonical: ReadonlyMap<string, { id: string; type: string }>,
+      ): Map<string, NativeWorkLinkEvidence> => {
+        const result = unavailable();
+        for (const id of current.eligible) {
+          const raw = current.selected.filter((row) => row.subject_id === id);
+          const visible = statements.filter((row) => row.subject === id);
+          const values: NativeWorkLinkValue[] = [];
+          if (raw.length !== visible.length) values.push({ kind: 'unknown' });
+          for (const { statement } of visible) {
+            const target = canonical.get(statement.value);
+            const targetType = target && current.runtime.release.types[target.type];
+            if (
+              !target ||
+              (target.type !== 'schema:CreativeWork' && !targetType?.bases?.includes('schema:CreativeWork'))
+            ) {
+              values.push({ kind: 'unknown' });
+              continue;
+            }
+            values.push({ kind: 'work', id: target.id });
+          }
+          result.set(id, { complete: true, values });
+        }
+        return result;
+      };
+      const projected = project(first, firstDisclosed, firstCanonical);
+      const second = await snapshot();
+      if (
+        !second ||
+        second.runtime.digest !== first.runtime.digest ||
+        second.runtime.head !== first.runtime.head ||
+        !isDeepStrictEqual(second.subjects, first.subjects) ||
+        !isDeepStrictEqual(second.selected, first.selected) ||
+        second.selected.length > MAX_COMPLETE_WORK_LINK_ROWS
+      )
+        return unavailable();
+      const secondIdentities = new Map<string, string>();
+      const secondExpected = new Map([...second.subjects].filter(([id]) => second.eligible.has(id)));
+      const secondDisclosed = await disclosed(
+        second.selected,
+        second.releases,
+        secondExpected,
+        second.runtime,
+        secondIdentities,
+      );
+      const secondCanonical = await canonicalPublicSubjects(
+        secondDisclosed.map(({ statement }) => statement.value),
+        secondExpected,
+        secondIdentities,
+      );
+      const reprojected = project(second, secondDisclosed, secondCanonical);
+      if (
+        !isDeepStrictEqual(firstIdentities, secondIdentities) ||
+        !isDeepStrictEqual(firstCanonical, secondCanonical) ||
+        !isDeepStrictEqual(projected, reprojected) ||
+        !(await runtimeIsCurrent(second.runtime))
+      )
+        return unavailable();
+      return projected;
     },
 
     async match(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]> {
