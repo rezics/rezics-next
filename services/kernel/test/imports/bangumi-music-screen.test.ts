@@ -43,7 +43,7 @@ async function subject(id: number) {
 test('ordinary Bangumi music and live-action imports are typed subjects with source provenance', async () => {
   expect(createSourceRegistration('bangumi').converter_revision).toBe(converter_revision);
   expect(initial.outcome).toBe('complete');
-  expect(initial.skipped).toBe(0);
+  expect(rows.map((row) => binding(row.id)).every(Boolean)).toBe(true);
   for (const [id, type] of [
     [3, 'schema:MusicAlbum'],
     [6, 'schema:Movie'],
