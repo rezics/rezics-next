@@ -1063,10 +1063,12 @@ other view. Sections a type does not support are left out; the rest keep this or
 
 Content's `listSubjectThreads` and `SubjectThreadsResponseSchema` add current context and reaction freshness; the
 retained producer's `reviewContext` supplies a current question, not a historical scale snapshot. The generated
-client still declares ordinary ThreadView rows. Web's optional versioned `card` consumer seam binds historical
-citation, media and activity to the exact first-post revision without changing generated declarations. It is a
-minimal interface pending Content's complete projection, not evidence that the installed producer emits those
-facts. `recorded` must exactly equal the first post's citation. `question` supplies its own historical id, revision,
+client still declares ordinary ThreadView rows. The default reader consumes Content's installed current card through the existing generated method: disclosed
+thread authors, document language/spoiler presentation, opening-post-owned media and public activity coverage.
+Its exact/lower-bound reply count remains independent of nullable last activity; missing coverage is unavailable.
+The optional versioned `card` seam separately binds historical citation, media and activity to the exact first-post
+revision without changing generated declarations. It remains a historical interface, not evidence that the installed
+producer supplies historical scale, lifecycle or original-target facts. `recorded` must exactly equal the first post's citation. `question` supplies its own historical id, revision,
 label and min/max/step; current lifecycle is separate. `originalTarget` retains its id/label even when `mergedInto`
 names the current Subject. Withheld citation has no partial provenance. Media must belong to the same thread and
 be declared and referenced by that exact document; it uses the existing media renderer without hydration. Native
@@ -1077,13 +1079,19 @@ identity/context authority, and Content remains the action authority.
 
 Decision: Bind controls only to Content's current selected-card advice on the exact thread and opening-post revision; `post.create` opens that thread's existing reply owner, and new-thread creation stays unavailable until Content supplies a concrete Board target. Current `reviewContext` grants neither historical provenance nor action authority.
 
-Historical decision: accept presentation only through the optional versioned `card` consumer seam; an absent or
-invalid extension keeps its dependent presentation unavailable and grants no actions.
+Decision: render Content's current card disclosures independently of historical citation; retain exact/lower-bound
+public activity and at most two opening-post-owned images, and never fill withheld native authors from the public author batch.
+
+The native card's media container is the opening post and each image must be declared and referenced by that exact
+document. Spoiler content stays behind the existing disclosure. Admitted overflow uses the existing report menu,
+original canonical thread target and route verification configuration; absent configuration links to the thread owner.
+Selected opening-revision replacement retires the complete card even when control states happen to be equal.
+The historical extension alone retains its thread-container contract; current native cards never fabricate it.
 
 Community reading cost:
 
 - **Session:** Session/CSRF and exposure replacement uses the existing cache observers and adds zero reads.
-- **Page:** One native page per region (five overview/twenty full-view rows) and one shared author batch; zero
+- **Page:** One native page per region (five overview/twenty full-view rows) and at most one shared author batch for ordinary rows; zero
   added question, vote, media or per-card reads. The page supplies each card's current reaction/viewer baseline and
   watch baseline. Sparse continuation never refills. Retry repeats the opaque cursor. A full region mounts at most
   twenty reaction controls and twenty watch controls.
@@ -1102,7 +1110,8 @@ Community reading cost:
 - **Bound:** Source row ≤2 MiB + 64 KiB JSON bytes; page ≤`limit * rowBytes + 64 KiB`, or 43,319,296 at twenty;
   card extension ≤32 KiB; normalized thread ≤48 KiB. Text fields ≤4096 UTF-16 units, excerpts 280, licences 128,
   language tags 64, timestamps 40, decimal source/freshness positions 20. Realm title ≤2048 units/4096 UTF-8 bytes.
-  Each card has ≤2 images with ≤12 derivatives each, hence ≤40 images/480 derivative entries per full region;
+  Native media admission inspects ≤32 supplied images within 32 KiB and retains the first two in supplied order.
+  Each retained card has ≤2 images with ≤12 derivatives each, hence ≤40 images/480 derivative entries per full region;
   media credit text ≤1024 units, credit licence ≤80 ASCII characters, ≤4 unique obligations, dimensions ≤65536,
   placeholders ≤128/64 units. Seven reaction counters per thread are never summed. Counts are safe integers,
   scale units 0–4096, revisions positive int32. Action advice is capped at 512 KiB JSON per card, two references,
@@ -1117,7 +1126,7 @@ Community reading cost:
   status retains at most twenty booleans. Admission temporarily creates
   page JSON/UTF-8 copies and one row/card/normalized-row copy at a time. Parsed-document and JS object overhead
   remains additional; these are logical admission bounds, not exact heap measurements or a transport-input cap.
-  Projection/rendering/source comparison is O(N + admitted bytes), N≤20. Consumer checks at 1/5/20 rows do not
+  Native author display name/handle each retain ≤4096 units, presentation language ≤256 units, and activity one public count/source pair. Projection/rendering/source comparison is O(N + admitted bytes), N≤20. Consumer checks at 1/5/20 rows do not
   establish Content's raw80 or independent 256/1024/4096 growth evidence. Control concurrency remains bounded at
   one owner of each action type per row; repeated network attempts require deliberate user actions and add no
   retained command history. The [page reader contract](../apps/web/src/features/pages/README.md) defines the closed seam.

@@ -12,9 +12,12 @@ import { useSubjectCommunityReading } from './subject-community-lifetime';
 import { linkClass, linkColor } from './shared';
 import { StreamHeading } from './view-heading';
 import { CommunityCardPresentation } from './subject-community-card-view';
+import { CommunityNativeByline, CommunityNativePresentation } from './subject-community-card-view';
+import type { VerificationConfig } from '../../report/turnstile';
 import { SubjectCommunityInteractions } from './subject-community-interactions';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
+export const SubjectCommunityVerificationContext = createContext<VerificationConfig | undefined>(undefined);
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const actionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
@@ -49,6 +52,7 @@ export function SubjectCommunityRegion({
 }) {
   const options = { locale: locale as never };
   const community = useContext(SubjectCommunityContext);
+  const verification = useContext(SubjectCommunityVerificationContext);
   const reading = useSubjectCommunityReading({
     source: community?.sourceKey ?? region,
     reader: community?.reader ?? null,
@@ -64,7 +68,15 @@ export function SubjectCommunityRegion({
       region.state,
       region.state === 'ready' ? region.context : null,
       region.state === 'ready' ? region.reactionsAsOf : null,
-      region.state === 'ready' ? region.threads.map(({ id, card, actions }) => [id, card, actions]) : null,
+      region.state === 'ready'
+        ? region.threads.map(({ id, postRevisionId, card, nativeCard, actions }) => [
+            id,
+            postRevisionId,
+            card,
+            nativeCard,
+            actions,
+          ])
+        : null,
     ]),
   });
   if (!reading.available) region = { state: 'unavailable' };
@@ -192,21 +204,39 @@ export function SubjectCommunityRegion({
                     data-content-item-slot="metadata"
                     className="min-w-0 [overflow-wrap:anywhere] [&_.truncate]:overflow-visible [&_.truncate]:whitespace-normal [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:items-center [&_a]:rounded-sm [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-offset-2 [&_a:focus-visible]:outline-ring"
                   >
-                    <Byline
-                      author={authors?.[thread.authorId]}
-                      createdAt={thread.createdAt}
-                      now={now}
-                      showAuthor
-                      size="sm"
-                    />
+                    {thread.nativeCard ? (
+                      <CommunityNativeByline
+                        card={thread.nativeCard}
+                        createdAt={thread.createdAt}
+                        now={now}
+                        locale={locale}
+                      />
+                    ) : (
+                      <Byline
+                        author={authors?.[thread.authorId]}
+                        createdAt={thread.createdAt}
+                        now={now}
+                        showAuthor
+                        size="sm"
+                      />
+                    )}
                   </ListRowControl>
-                  {thread.summary && (
-                    <p
-                      data-content-item-slot="preview"
-                      className="text-sm break-words text-muted-foreground [overflow-wrap:anywhere]"
-                    >
-                      {thread.summary}
-                    </p>
+                  {thread.nativeCard ? (
+                    <CommunityNativePresentation
+                      card={thread.nativeCard}
+                      summary={thread.summary}
+                      locale={locale}
+                      now={now}
+                    />
+                  ) : (
+                    thread.summary && (
+                      <p
+                        data-content-item-slot="preview"
+                        className="text-sm break-words text-muted-foreground [overflow-wrap:anywhere]"
+                      >
+                        {thread.summary}
+                      </p>
+                    )
                   )}
                   {thread.card ? <CommunityCardPresentation card={thread.card} locale={locale} now={now} /> : null}
                   <SubjectCommunityPreview
@@ -226,6 +256,7 @@ export function SubjectCommunityRegion({
                     reader={reader}
                     source={community?.sourceKey ?? community?.now ?? ''}
                     reactionsAsOf={reactionsAsOf}
+                    {...(verification ? { verification } : {})}
                     {...(preparedTransport ? { preparedTransport } : {})}
                     {...(preparedWatch ? { preparedWatch } : {})}
                   />

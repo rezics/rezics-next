@@ -7,6 +7,8 @@ import { ThreadReactions, type ThreadReactionsProps } from '../../threads/thread
 import { ThreadWatch, type ThreadWatchProps } from '../../threads/thread-watch';
 import type { CommunityReactionFreshness, CommunityThread } from './subject-community';
 import { useSubjectCommunityLifetime } from './subject-community-lifetime';
+import { PostActions } from '../../report/content-actions';
+import type { VerificationConfig } from '../../report/turnstile';
 
 const actionClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -23,6 +25,7 @@ export function SubjectCommunityInteractions({
   reactionsAsOf,
   preparedTransport,
   preparedWatch,
+  verification,
 }: {
   thread: CommunityThread;
   subject: { id: string; label: string };
@@ -34,6 +37,7 @@ export function SubjectCommunityInteractions({
   reactionsAsOf: CommunityReactionFreshness;
   preparedTransport?: ThreadReactionsProps['preparedTransport'];
   preparedWatch?: ThreadWatchProps['native'];
+  verification?: VerificationConfig;
 }) {
   const client = useContext(QueryClientContext);
   const sessionState = client?.getQueryState(['session']);
@@ -116,7 +120,9 @@ export function SubjectCommunityInteractions({
       ) : watchSignIn ? (
         <SignInPrompt returnTo={replyHref} label={m.thread_watch_anonymous({}, options)} compact />
       ) : null}
-      {showOverflow ? (
+      {showOverflow && verification ? (
+        <PostActions target={{ kind: 'thread', id: thread.id }} canonicalHref={href} verification={verification} />
+      ) : showOverflow ? (
         <a className={actionClass} href={href}>
           {m.report_more({}, options)}
         </a>

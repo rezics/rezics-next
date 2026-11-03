@@ -51,7 +51,8 @@ import { linkClass, linkColor, PlainLink, type PageLink } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import { boundedProfileRelations, type ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
-import { SubjectCommunityContext } from './subject-community-view';
+import { SubjectCommunityContext, SubjectCommunityVerificationContext } from './subject-community-view';
+import type { VerificationConfig } from '../../report/turnstile';
 import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
@@ -478,8 +479,10 @@ export function SubjectPage({
   connections,
   subjectLabel,
   framed = false,
+  verification,
 }: {
   page: SubjectPageData;
+  verification?: VerificationConfig;
   /** Mounted native connection readers share this visit’s labels, disclosure and selected Context. */
   connections?: ReactNode;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
@@ -738,12 +741,14 @@ export function SubjectPage({
               />
             ) : null}
             <SubjectCommunityContext.Provider value={page.community}>
-              <CompositionRender
-                document={page.document}
-                definitions={pageDefinitions}
-                components={pageComponents(framed)}
-                root={PageRoot}
-              />
+              <SubjectCommunityVerificationContext.Provider value={verification}>
+                <CompositionRender
+                  document={page.document}
+                  definitions={pageDefinitions}
+                  components={pageComponents(framed)}
+                  root={PageRoot}
+                />
+              </SubjectCommunityVerificationContext.Provider>
             </SubjectCommunityContext.Provider>
             {overview && connections}
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}

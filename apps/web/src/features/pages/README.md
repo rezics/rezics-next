@@ -13,12 +13,26 @@ installed generated declaration still exposes ordinary ThreadView rows. The reta
 snapshot. Neither that context nor the current question, personal vote or selected population supplies historical
 provenance or action authority. See Content's [Subject threads contract](../../../../../services/kernel/src/content/README.md#subject-threads).
 
-Decision: accept historical presentation only through the optional versioned `card` consumer seam; an absent or
-invalid extension keeps its dependent presentation unavailable and grants no actions.
+Decision: render Content's current card disclosures independently of historical citation; retain exact/lower-bound
+public activity and at most two opening-post-owned images, and never fill withheld native authors from the public author batch.
+
+The default composition consumes the installed `card.state`, `authors`, `presentation`, `media`, `comments` and
+`currentness` fields from the existing generated Subject threads method. Native cards use their disclosed thread
+author, document language and spoiler gate. Their media container is the exact opening post, not the thread;
+images must also be declared and referenced by that opening document. Public comment coverage keeps its exact or
+lower-bound count, including zero with a null activity time. Missing coverage displays no guessed count or date.
+No native card starts author enrichment. The shared author batch remains available for ordinary rows.
+
+The installed card does not supply historical scale/lifecycle/original-target provenance. Its reviewContext remains
+current; a review's recorded citation therefore stays explicitly unavailable unless the separate historical extension
+below is present. The default route does not manufacture that extension. The controller retains generation and
+native publication. Reply/reaction/watch retain their existing owners; admitted overflow mounts `PostActions` with
+the route's existing verification configuration and the original canonical thread target. Without configuration it
+links to that thread's owner. Opening-post revision replacement retires the card even if its normalized advice is unchanged.
 
 ## Consumer card seam
 
-`subject-community-card.ts` declares the minimal Web interface pending Content's complete card response. This is
+`subject-community-card.ts` retains the minimal historical Web interface pending Content's historical provenance response. This is
 not a generated declaration or a claim that the installed producer supplies it. Each optional `thread.card` has
 `version: 1`, the exact `threadId` and first-post `postRevisionId`, and these closed fields:
 
@@ -58,7 +72,7 @@ card returns focus to the stable region heading; replacing the source remounts i
   session or exposure reads. A current card action carries only the actor identity needed by its existing command
   owner. Credentials remain owned by the existing session/command boundary.
 - **Page:** One planned native page per placed region, at most five rows on overview or twenty in a full view,
-  plus one shared public author batch per composition page. Context, reaction freshness and current watch baseline
+  plus at most one shared public author batch for ordinary rows per composition page. Context, reaction freshness and current watch baseline
   come from that same page. A full view mounts at most twenty reaction controls and twenty watch controls. A sparse
   page retains its native continuation without refill; explicit retry repeats the same opaque cursor. Projection
   and cache subscriptions add zero session, media, activity, question, vote or per-card requests.
@@ -88,7 +102,7 @@ card returns focus to the stable region heading; replacing the source remounts i
   at most 64 UTF-16 units. A twenty-row page admits at most 10 MiB of inspected advice. Web retains only four
   control states, at most 128 JSON bytes per row or 2560 bytes per full region; it never retains the operation list.
   Cursors are opaque, nonempty and at most 4096 UTF-16 units (at most 12,288 UTF-8 or 24,576 escaped JSON bytes).
-  One local observation UUID uses 36 ASCII characters. These maxima compose under the stricter JSON byte caps.
+  Native media admission inspects at most 32 supplied images within 32 KiB, retaining the first two in native order. Native authors retain only display name/handle (each ≤4096 units), presentation language ≤256 units, and one public count/source pair. One local observation UUID uses 36 ASCII characters. These maxima compose under the stricter JSON byte caps.
 - **Retained memory:** One raw accepted native window (at most 43,319,296 JSON bytes), one normalized window
   (at most twenty × 48 KiB), one context/cursor, at most twenty distinct author keys, and at most 2560 JSON bytes
   of normalized action advice per region. Up to twenty pending reaction intents and twenty pending watch commands

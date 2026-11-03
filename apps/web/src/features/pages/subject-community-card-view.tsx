@@ -3,7 +3,95 @@ import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { threadActivity } from '../../threads/activity';
 import { fullDateTime, timeText } from '../../threads/byline';
 import { NativeDocumentImage } from '../../threads/document-media';
-import type { CommunityCard } from './subject-community-card';
+import type { CommunityCard, CommunityNativeCard } from './subject-community-card';
+import { Byline } from '../../threads/byline';
+import { SpoilerGate } from './values';
+
+export function CommunityNativeByline({
+  card,
+  createdAt,
+  now,
+  locale,
+}: {
+  card: CommunityNativeCard;
+  createdAt: string;
+  now: string;
+  locale: string;
+}) {
+  const author = card.author;
+  const name = author?.displayName || author?.handle || m.thread_author_unknown({}, { locale: locale as never });
+  return (
+    <div data-slot="community-native-author" className="min-w-0 text-sm [overflow-wrap:anywhere]">
+      {author?.handle && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(author.handle) ? (
+        <a
+          className="inline-flex min-h-11 min-w-11 items-center text-primary hover:underline"
+          href={`/${locale}/@${encodeURIComponent(author.handle)}`}
+        >
+          <bdi>{name}</bdi>
+        </a>
+      ) : (
+        <bdi>{name}</bdi>
+      )}
+      <Byline author={undefined} createdAt={createdAt} now={now} showAuthor={false} size="sm" />
+    </div>
+  );
+}
+
+/** The native public activity coverage is independent of presentation and recorded rating provenance. */
+export function CommunityNativePresentation({
+  card,
+  summary,
+  locale,
+  now,
+}: {
+  card: CommunityNativeCard;
+  summary: string;
+  locale: string;
+  now: string;
+}) {
+  const options = { locale: locale as never };
+  const content = card.presentation ? (
+    <div lang={card.presentation.language ?? undefined} className="min-w-0 space-y-2">
+      {summary ? (
+        <p data-content-item-slot="preview" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          {summary}
+        </p>
+      ) : null}
+      {card.media.map(({ image, alt }) => (
+        <NativeDocumentImage key={image.id} image={image} alt={alt} locale={locale} />
+      ))}
+    </div>
+  ) : null;
+  const activity = card.comments;
+  return (
+    <div className="min-w-0 space-y-2 [&_button]:min-h-11 [&_button]:min-w-11 [&_a]:min-h-11 [&_a]:min-w-11">
+      {card.presentation?.spoiler ? (
+        <SpoilerGate label={m.subject_spoiler_show({}, options)} hideLabel={m.subject_spoiler_hide({}, options)}>
+          {content}
+        </SpoilerGate>
+      ) : (
+        content
+      )}
+      {activity ? (
+        <p data-slot="community-activity" className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+          <span>
+            {m.board_thread_replies(
+              {
+                count: `${new Intl.NumberFormat(locale).format(activity.count.value)}${activity.count.kind === 'lower-bound' ? '+' : ''}`,
+              },
+              options,
+            )}
+          </span>
+          {activity.lastActivityAt ? (
+            <time dateTime={activity.lastActivityAt} title={fullDateTime(activity.lastActivityAt, locale)}>
+              {m.board_thread_last_activity({ time: timeText(activity.lastActivityAt, now, locale) }, options)}
+            </time>
+          ) : null}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function CommunityRecordedCitation({
   citation,

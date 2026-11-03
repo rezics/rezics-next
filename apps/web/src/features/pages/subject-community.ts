@@ -13,8 +13,10 @@ import {
   COMMUNITY_ROW_BYTES,
   COMMUNITY_TEXT_LIMIT,
   projectCommunityCard,
+  projectNativeCommunityCard,
   withinCommunityBytes,
   type CommunityCard,
+  type CommunityNativeCard,
 } from './subject-community-card';
 import { projectCommunityActionAdvice, type CommunityActionAdvice } from './subject-community-actions';
 
@@ -32,10 +34,12 @@ export type CommunityReactionFreshness = { epoch: number; position: string } | n
 export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'authorId' | 'boardId' | 'createdAt'> & {
   summary: string;
   licence: string;
+  postRevisionId?: string;
   voteCitation?: CommunityVoteCitation | null;
   reactions?: CommunityReactionCounts;
   viewerReaction?: ReactionKind | null;
   card?: CommunityCard;
+  nativeCard?: CommunityNativeCard;
   actions?: CommunityActionAdvice;
 };
 export type CommunityRegion =
@@ -216,9 +220,13 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
   if (typeof post.licence !== 'string' || post.licence.length < 1 || post.licence.length > 128) return null;
   const citationPresent = Object.hasOwn(post, 'voteCitation');
   if (citationPresent && post.voteCitation !== null && !communityCitation(post.voteCitation)) return null;
-  const referencedMedia = new Set<string>();
+  const referencedMedia = new Map<string, string>();
   function collectImages(node: DocumentNode) {
-    if (node.type === 'image' && typeof node.attrs?.src === 'string') referencedMedia.add(node.attrs.src);
+    if (node.type === 'image' && typeof node.attrs?.src === 'string')
+      referencedMedia.set(
+        node.attrs.src,
+        typeof node.attrs.alt === 'string' ? node.attrs.alt.slice(0, COMMUNITY_TEXT_LIMIT) : '',
+      );
     for (const child of node.content ?? []) collectImages(child);
   }
   // Only a supplied extension needs media inspection; ordinary ThreadView stays text-only.
@@ -229,6 +237,12 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
     mediaIds: Array.isArray(post.mediaIds) ? post.mediaIds.filter((id) => referencedMedia.has(id)) : [],
     citation: citationPresent ? (post.voteCitation as CommunityVoteCitation | null) : undefined,
   });
+  const nativeCard = projectNativeCommunityCard(thread.card, {
+    postId: post.id,
+    mediaIds: Array.isArray(post.mediaIds) ? post.mediaIds : [],
+    images: referencedMedia,
+  });
+  if (isRecord(thread.card) && 'state' in thread.card && !nativeCard) return null;
   const actions = nativeId(post.revisionId)
     ? projectCommunityActionAdvice(thread, { threadId: thread.id, postRevisionId: post.revisionId })
     : undefined;
@@ -252,10 +266,12 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
     createdAt: thread.createdAt,
     summary: documentText(post.body).replace(/\s+/g, ' ').trim().slice(0, 280),
     licence: post.licence,
+    ...(nativeId(post.revisionId) ? { postRevisionId: post.revisionId } : {}),
     ...(citationPresent ? { voteCitation: post.voteCitation as CommunityVoteCitation | null } : {}),
     ...(reactionsPresent ? { reactions: reactions! } : {}),
     ...(admitViewer && viewerPresent ? { viewerReaction: thread.viewerReaction as ReactionKind | null } : {}),
     ...(card ? { card } : {}),
+    ...(nativeCard ? { nativeCard } : {}),
     ...(actions ? { actions } : {}),
   };
   return withinCommunityBytes(projected, COMMUNITY_PROJECTED_BYTES) ? projected : null;
@@ -293,7 +309,9 @@ export async function readSubjectCommunity(
     }),
   );
   const authorIds = entries.flatMap(([, region]) =>
-    region.state === 'ready' ? region.threads.map((thread) => thread.authorId) : [],
+    region.state === 'ready'
+      ? region.threads.filter((thread) => !thread.nativeCard).map((thread) => thread.authorId)
+      : [],
   );
   return {
     regions: Object.fromEntries(entries),
@@ -383,7 +401,9 @@ export async function withComposedCommunity(client: KernelClient, loaded: Subjec
     regions[descriptor.threadKind] ??= region;
   }
   const authorIds = Object.values(nodes).flatMap((region) =>
-    region.state === 'ready' ? region.threads.map((thread) => thread.authorId) : [],
+    region.state === 'ready'
+      ? region.threads.filter((thread) => !thread.nativeCard).map((thread) => thread.authorId)
+      : [],
   );
   return {
     ...loaded,

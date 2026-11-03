@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import type { DocumentImagePresentation } from '../../threads/document-media';
+import { isRecord } from './shared';
 
 /** Consumer seam, not a claim that ordinary ThreadView or reviewContext supplies historical facts. */
 export const COMMUNITY_CARD_BYTES = 32 * 1024;
@@ -86,6 +87,83 @@ const card = v.strictObject({
 });
 
 export type CommunityCard = v.InferOutput<typeof card>;
+
+const presentation = v.strictObject({
+  state: v.literal('current'),
+  language: v.nullable(v.pipe(v.string(), v.maxLength(256))),
+  spoiler: v.boolean(),
+});
+const author = v.object({ displayName: v.nullable(text), handle: v.nullable(text) });
+const comments = v.strictObject({
+  state: v.literal('current'),
+  cohort: v.literal('public'),
+  count: v.strictObject({
+    kind: v.picklist(['exact', 'lower-bound']),
+    value: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+  }),
+  lastActivityAt: v.nullable(date),
+  source: v.strictObject({
+    epoch: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
+    position: v.pipe(v.string(), v.maxLength(COMMUNITY_POSITION_LIMIT), v.regex(/^[0-9]+$/)),
+  }),
+});
+
+/** A bounded display projection of Content's installed card, separate from historical provenance. */
+export type CommunityNativeCard = {
+  author: v.InferOutput<typeof author> | null;
+  presentation: v.InferOutput<typeof presentation> | null;
+  comments: v.InferOutput<typeof comments> | null;
+  media: { alt: string; image: DocumentImagePresentation }[];
+};
+
+export function projectNativeCommunityCard(
+  value: unknown,
+  source: { postId: string; mediaIds: readonly unknown[]; images: ReadonlyMap<string, string> },
+): CommunityNativeCard | undefined {
+  if (
+    !isRecord(value) ||
+    value.state !== 'current' ||
+    !isRecord(value.currentness) ||
+    value.currentness.source !== 'current' ||
+    value.currentness.place !== 'current'
+  )
+    return;
+  const currentness = value.currentness;
+  const display = v.safeParse(presentation, value.presentation);
+  const identity =
+    isRecord(value.authors) &&
+    isRecord(value.authors.thread) &&
+    value.authors.thread.state === 'current' &&
+    currentness.authors === 'current'
+      ? v.safeParse(author, value.authors.thread.identity)
+      : null;
+  const activity = currentness.comments === 'current' ? v.safeParse(comments, value.comments) : null;
+  const media: CommunityNativeCard['media'] = [];
+  if (
+    currentness.media === 'current' &&
+    isRecord(value.media) &&
+    value.media.state === 'available' &&
+    withinCommunityBytes(value.media, COMMUNITY_CARD_BYTES)
+  ) {
+    const images = v.safeParse(v.pipe(v.array(image), v.maxLength(32)), value.media.images);
+    if (
+      images.success &&
+      new Set(images.output.map((item) => item.id)).size === images.output.length &&
+      images.output.every(
+        (item) => item.containerId === source.postId && source.mediaIds.includes(item.id) && source.images.has(item.id),
+      )
+    ) {
+      for (const item of images.output.slice(0, COMMUNITY_MEDIA_LIMIT))
+        media.push({ image: item, alt: source.images.get(item.id)! });
+    }
+  }
+  return {
+    author: identity?.success ? identity.output : null,
+    presentation: display.success ? display.output : null,
+    comments: activity?.success ? activity.output : null,
+    media,
+  };
+}
 
 /** Bound accepted JSON bytes, including unknown fields, before retaining a projected card. */
 export function withinCommunityBytes(value: unknown, maximum: number): boolean {

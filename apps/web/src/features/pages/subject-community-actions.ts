@@ -125,6 +125,7 @@ export function projectCommunityActionAdvice(
     !exactKeys(currentness, ['source', 'place', 'authors', 'reactions', 'actions', 'watch', 'media', 'comments']) ||
     currentness.source !== 'current' ||
     currentness.place !== 'current' ||
+    currentness.actions !== 'current' ||
     !['current', 'unavailable', 'not_applicable'].includes(String(currentness.authors)) ||
     !['current', 'unavailable', 'not_applicable'].includes(String(currentness.reactions)) ||
     !['current', 'unavailable', 'not_applicable'].includes(String(currentness.actions)) ||

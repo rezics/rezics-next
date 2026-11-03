@@ -465,6 +465,7 @@ export function SubjectOverview({
             <RatingsContext.Provider value={ratings}>
               <SubjectPage
                 page={page}
+                verification={verification}
                 connections={
                   currentReader ? (
                     <SubjectConnections page={page} viewer={browserSession} returnTo={search.via} />

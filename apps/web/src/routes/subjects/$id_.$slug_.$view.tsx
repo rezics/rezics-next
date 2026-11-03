@@ -32,6 +32,7 @@ import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { SubjectViewError } from '../../subject/view-error';
+import { env } from 'cloudflare:workers';
 
 const viewLabel = {
   overview: () => m.subject_overview(),
@@ -93,7 +94,17 @@ const readView = createServerFn({ method: 'GET', strict: false })
     if (canonical.value.id !== data.id || canonical.value.slug !== data.slug || canonical.value.href.includes('/@'))
       throw redirect(canonicalRedirect(subjectUrlForView(canonical.value, data.view), data.search));
 
-    return { href: canonical.value.href, paths: subjectViewPaths(canonical.value.paths, data.view) };
+    const config = env as { TURNSTILE_SITE_KEY?: string; TURNSTILE_SCRIPT_URL?: string };
+    return {
+      href: canonical.value.href,
+      paths: subjectViewPaths(canonical.value.paths, data.view),
+      verification: {
+        sitekey: config.TURNSTILE_SITE_KEY ?? '',
+        scriptUrl:
+          (import.meta.env.DEV && config.TURNSTILE_SCRIPT_URL) ||
+          'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit',
+      },
+    };
   });
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
@@ -157,7 +168,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       const address = contextSubjectAddress(loaded.overview, getLocale());
       if (address.slug !== params.slug)
         throw redirect(canonicalRedirect(subjectUrlForView(address, params.view), location.searchStr, location.hash));
-      canonical = { href: address.href, paths: subjectViewPaths(address.paths, params.view) };
+      canonical = { ...canonical, href: address.href, paths: subjectViewPaths(address.paths, params.view) };
     }
     const frame = subjectFrame(loaded.overview, getLocale());
     if (!frame) throw notFound();
@@ -213,7 +224,18 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
 });
 
 function SubjectViewRoute() {
-  const { type, frame, tabs, view, cursor, nextHref, realm, reader: initialReader, page } = Route.useLoaderData();
+  const {
+    type,
+    frame,
+    tabs,
+    view,
+    cursor,
+    nextHref,
+    realm,
+    reader: initialReader,
+    page,
+    verification,
+  } = Route.useLoaderData();
   const browserSession = useSession();
   const { state: session } = browserSession;
   const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
@@ -239,6 +261,7 @@ function SubjectViewRoute() {
       }
       locale={locale}
       messages={subjectPageMessages()}
+      verification={verification}
       reader={reader}
       {...(type.label ? { typeLabel: type.label } : {})}
       {...(type.ratio ? { ratio: type.ratio } : {})}

@@ -4,7 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { readSubjectCommunity, type CommunityKind, type SubjectCommunity } from '../features/pages/subject-community';
 import type { CommunityCard } from '../features/pages/subject-community-card';
-import { SubjectCommunityContext, SubjectCommunityRegion } from '../features/pages/subject-community-view';
+import {
+  SubjectCommunityContext,
+  SubjectCommunityRegion,
+  SubjectCommunityVerificationContext,
+} from '../features/pages/subject-community-view';
 import { GLOBAL } from '../features/pages/subject-ratings';
 import type { ThreadReactionsProps } from '../threads/thread-reactions';
 import type { ThreadWatchNative } from '../threads/thread-watch-native';
@@ -113,7 +117,16 @@ function CurrentCommunityReading({
           // This consumer seam is deliberately independent of the installed current-question reviewContext.
           const actionCard = {
             state: 'current',
-            authors: { thread: { state: 'withheld' }, openingPost: { state: 'withheld' } },
+            authors: {
+              thread: {
+                state: 'current',
+                identity: { displayName: communityAuthor.displayName, handle: communityAuthor.handle, avatar: null },
+              },
+              openingPost: {
+                state: 'current',
+                identity: { displayName: communityAuthor.displayName, handle: communityAuthor.handle, avatar: null },
+              },
+            },
             presentation: { state: 'current', language: 'en', spoiler: false },
             media: { state: 'none', images: [] },
             comments: {
@@ -159,7 +172,20 @@ function CurrentCommunityReading({
           const native = {
             ...thread,
             firstPost: opening,
-            ...(scenario === 'actions' ? { card: actionCard } : { card }),
+            ...(['actions', 'anonymous', 'member', 'writer'].includes(scenario)
+              ? {
+                  card:
+                    scenario === 'actions'
+                      ? actionCard
+                      : {
+                          ...actionCard,
+                          actions: { state: 'unavailable', retryable: true, references: [] },
+                          reply: { state: 'unavailable' },
+                          watch: { state: 'unavailable', retryable: true },
+                          currentness: { ...actionCard.currentness, actions: 'unavailable', watch: 'unavailable' },
+                        },
+                }
+              : { card }),
             ...(scenario === 'changed-scale'
               ? {
                   reviewContext: {
@@ -183,24 +209,28 @@ function CurrentCommunityReading({
   return (
     <QueryClientProvider client={client}>
       <SubjectCommunityContext.Provider value={data}>
-        <PatternStory>
-          <div className="mx-auto w-full max-w-4xl p-4 sm:p-8">
-            <SubjectCommunityRegion
-              id="community-current"
-              kind={kind}
-              region={data?.regions[kind] ?? { state: 'loading' }}
-              authors={data?.authors ?? {}}
-              now="2026-11-02T00:00:00Z"
-              subject={communitySubject}
-              locale={locale}
-              href={subjectViewHref(communitySubject, locale, kind === 'review' ? 'reviews' : 'discussion')}
-              paged
-              {...(scenario === 'actions'
-                ? { preparedTransport: unavailableReactions, preparedWatch: uncertainWatch }
-                : {})}
-            />
-          </div>
-        </PatternStory>
+        <SubjectCommunityVerificationContext.Provider
+          value={{ sitekey: '', scriptUrl: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit' }}
+        >
+          <PatternStory>
+            <div className="mx-auto w-full max-w-4xl p-4 sm:p-8">
+              <SubjectCommunityRegion
+                id="community-current"
+                kind={kind}
+                region={data?.regions[kind] ?? { state: 'loading' }}
+                authors={data?.authors ?? {}}
+                now="2026-11-02T00:00:00Z"
+                subject={communitySubject}
+                locale={locale}
+                href={subjectViewHref(communitySubject, locale, kind === 'review' ? 'reviews' : 'discussion')}
+                paged
+                {...(scenario === 'actions'
+                  ? { preparedTransport: unavailableReactions, preparedWatch: uncertainWatch }
+                  : {})}
+              />
+            </div>
+          </PatternStory>
+        </SubjectCommunityVerificationContext.Provider>
       </SubjectCommunityContext.Provider>
     </QueryClientProvider>
   );
