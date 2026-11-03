@@ -5,6 +5,7 @@ import {
   createReviewDiscoveryAdapter,
   reviewDiscoveryDocument,
   type ContentReviewDiscoverySource,
+  type ReviewDiscoveryObservation,
   type ReviewDiscoveryRecord,
 } from '../../src/search/review-discovery.ts';
 
@@ -141,7 +142,7 @@ describe('public review discovery adapter', () => {
   test('withdrawal and deletion suppress lagging hits; restoration needs its newer indexed revision', async () => {
     const active = review(id(3), 6n);
     const partition = partitionOf(active.route);
-    let current: { position: bigint; observation: unknown } = {
+    let current: { position: bigint; observation: ReviewDiscoveryObservation } = {
       position: 21n,
       observation: { state: 'withdrawn', id: active.id, route: active.route, version: 7n },
     };
