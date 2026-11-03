@@ -113,6 +113,9 @@ resource references remain rejected, without recursion. No query-time account se
   canonical identity preparation and indexed name windows are connected. Unknown or withheld evidence remains
   unavailable, including under NOT or a true OR branch.
 
+  Decision: Realm-scoped subject Search uses canonical `name_sort`, then subject UUID order, including text
+  queries, so sparse membership can produce complete seekable pages from the retained population.
+
   Search still needs the complete retained Content-prefix-to-canonical-identity preparation and indexed actual-name
   tuple windows before it can return useful pages for sparse Realm populations. A `population_ready` observation is
   preparation input only. No raw prefix, Home Space publication membership, `subject_thread` scan or

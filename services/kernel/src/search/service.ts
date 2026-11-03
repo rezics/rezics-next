@@ -11,7 +11,7 @@ import {
   type FilterDocument,
   type FilterRelease,
 } from '@rezics/filter';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -47,7 +47,7 @@ export { validateSearchLimit } from './hits.ts';
 import { readSubjectSortFormat, SUBJECT_SORT_FORMAT, subjectGenerations, subjectIndexName } from './indices.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
-import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
+import { installTemplates, searchSubjectHits, suggestSubjects, type SearchHit as SearchIndexHit, type SearchPlan } from './query.ts';
 import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
@@ -57,7 +57,9 @@ import { serviceScopeFacetAdmission } from './scoped-facet-source.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import { ScopeWork, scopeAllowance } from './scope-execution.ts';
+import { ScopeWork, scopeAllowance, zeroScopeWork } from './scope-execution.ts';
+import { createScopePreparationStore, type ScopeCaptureFrontier } from './scope-preparation-store.ts';
+import { readOrderedScopeRows } from './scope-preparation-ordered.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
@@ -331,10 +333,12 @@ function validate(request: SearchRequest) {
     throw error;
   }
 
-  const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
+  const realmScoped = filter !== undefined && containsRealmPredicate(filter);
+  const sort = request.sort === undefined ? (realmScoped ? 'name' : text ? 'relevance' : 'name') : request.sort;
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
+  if (realmScoped && sort !== 'name') unsupported('/sort');
   if (request.population !== undefined) {
     const population = request.population;
     if (

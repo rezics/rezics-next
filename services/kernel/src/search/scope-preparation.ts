@@ -99,6 +99,9 @@ export function createScopePreparation(
       return store.advance(record, frontier, observation, delay);
     }
     if (Number(record.expires_at) <= Date.now()) return advance(record.frontier, null, 0);
+    // Realm preparations advance only while the original request reader is present.
+    // They are retained in the shared indexed store but never scheduled as worker jobs.
+    if (record.definition.kind === 'realm') throw new ProblemError('dependency_unavailable');
     if (record.definition.ordered && record.observation) {
       await orderedStep(
         record,

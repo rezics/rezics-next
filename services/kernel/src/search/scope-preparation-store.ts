@@ -7,7 +7,8 @@ import type { PublicFilterSourceDefinition } from '../semantic/public-filter-sou
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { withConnection } from '../database/pool.ts';
 import { enqueueWorkIntent, type WorkClient } from '../work/client.ts';
-import type { ScopeOrderedDefinition } from './scope-ordered.ts';
+import { scopeOrderedNameKey, type ScopeOrderedDefinition } from './scope-ordered.ts';
+import type { SearchHit } from './query.ts';
 
 export type ScopeOrdinalMembershipProgress = Readonly<{ row: NativeOrdinalKey; value: CollectionAliasProgress }>;
 
@@ -20,6 +21,7 @@ export type ScopeCaptureDefinition = (
         meaning: Omit<PublicFilterSourceDefinition['meaning'], 'release'>;
       };
     }>
+  | Readonly<{ kind: 'realm'; basis: string; realms: readonly string[] }>
 ) &
   Readonly<{
     ordered?: ScopeOrderedDefinition;
@@ -27,7 +29,15 @@ export type ScopeCaptureDefinition = (
   }>;
 export type ScopeCaptureFrontier =
   | Readonly<{ kind: 'library'; value: NativeSourceFrontier | null }>
-  | Readonly<{ kind: 'public'; value: string | null }>;
+  | Readonly<{ kind: 'public'; value: string | null }>
+  | Readonly<{
+      kind: 'realm';
+      value: Readonly<{
+        realms: readonly Readonly<{ id: string; after: string | null; exhausted: boolean }>[];
+        catalogueAfter: readonly (string | number | null)[] | null;
+        catalogueExhausted: boolean;
+      }>;
+    }>;
 export type RetainedScopeObservation = Omit<IdentityScopeObservation, 'committedRevision'> & {
   committedRevision: string;
 };
@@ -40,13 +50,30 @@ export type ScopePreparationRecord = {
   state: 'capture' | 'ready' | 'retained';
   expires_at: string;
 };
+export type RealmScopePreparationState = Readonly<{
+  definition: Extract<ScopeCaptureDefinition, { kind: 'realm' }>;
+  frontier: Extract<ScopeCaptureFrontier, { kind: 'realm' }>;
+  revision: string;
+  complete: boolean;
+}>;
 
 /** Only native locators/frontiers; never Actor, Access, facts, allow lists or caller verdicts. */
 export function createScopePreparationStore(pool: Pool, prefix: string, work?: WorkClient) {
   return {
     async retain(scopeId: string, definition: ScopeCaptureDefinition): Promise<void> {
       const frontier: ScopeCaptureFrontier =
-        definition.kind === 'library' ? { kind: 'library', value: null } : { kind: 'public', value: null };
+        definition.kind === 'library'
+          ? { kind: 'library', value: null }
+          : definition.kind === 'public'
+            ? { kind: 'public', value: null }
+            : {
+                kind: 'realm',
+                value: {
+                  realms: definition.realms.map((id) => ({ id, after: null, exhausted: false })),
+                  catalogueAfter: null,
+                  catalogueExhausted: false,
+                },
+              };
       await pool.query(
         `INSERT INTO search.scope_preparation
         (partition_no,prefix,scope_id,definition,frontier,due_at,expires_at)
@@ -58,6 +85,142 @@ export function createScopePreparationStore(pool: Pool, prefix: string, work?: W
         WHERE search.scope_preparation.definition=EXCLUDED.definition`,
         [prefix, scopeId, JSON.stringify(definition), JSON.stringify(frontier), Date.now(), Date.now() + 86400000],
       );
+    },
+    async retainRealm(scopeId: string, basis: string, realms: readonly string[]): Promise<void> {
+      const definition: Extract<ScopeCaptureDefinition, { kind: 'realm' }> = {
+        kind: 'realm',
+        basis,
+        realms: [...new Set(realms)].sort(),
+      };
+      const frontier: Extract<ScopeCaptureFrontier, { kind: 'realm' }> = {
+        kind: 'realm',
+        value: {
+          realms: definition.realms.map((id) => ({ id, after: null, exhausted: false })),
+          catalogueAfter: null,
+          catalogueExhausted: false,
+        },
+      };
+      const now = Date.now();
+      await pool.query(
+        `INSERT INTO search.scope_preparation
+        (partition_no,prefix,scope_id,definition,frontier,state,ordinal_complete,due_at,expires_at)
+        VALUES (0,$1,$2,$3,$4,'ready',false,$5,$6)
+        ON CONFLICT (partition_no,prefix,scope_id) DO NOTHING`,
+        [prefix, scopeId, JSON.stringify(definition), JSON.stringify(frontier), now, now + 86400000],
+      );
+      await withConnection(pool, async (client) => {
+        await client.query('BEGIN');
+        try {
+          const found = await client.query<{ expires_at: string }>(
+            `SELECT expires_at::text FROM search.scope_preparation
+            WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND definition=$3::jsonb FOR UPDATE`,
+            [prefix, scopeId, JSON.stringify(definition)],
+          );
+          if (found.rowCount !== 1) throw new Error('Realm preparation definition changed');
+          if (Number(found.rows[0]!.expires_at) <= now) {
+            await client.query(
+              `DELETE FROM search.scope_preparation_ordered
+              WHERE partition_no=0 AND prefix=$1 AND scope_id=$2`,
+              [prefix, scopeId],
+            );
+            await client.query(
+              `UPDATE search.scope_preparation SET frontier=$3::jsonb,ordinal_complete=false,
+              revision=revision+1,expires_at=$4,state='ready'
+              WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND definition=$5::jsonb`,
+              [prefix, scopeId, JSON.stringify(frontier), now + 86400000, JSON.stringify(definition)],
+            );
+          } else {
+            await client.query(
+              `UPDATE search.scope_preparation SET expires_at=GREATEST(expires_at,$3)
+              WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND definition=$4::jsonb`,
+              [prefix, scopeId, now + 86400000, JSON.stringify(definition)],
+            );
+          }
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
+    },
+    async readRealm(scopeId: string, basis: string, realms: readonly string[]): Promise<RealmScopePreparationState> {
+      const definition: Extract<ScopeCaptureDefinition, { kind: 'realm' }> = {
+        kind: 'realm',
+        basis,
+        realms: [...new Set(realms)].sort(),
+      };
+      const result = await pool.query<{
+        frontier: Extract<ScopeCaptureFrontier, { kind: 'realm' }>;
+        revision: string;
+        ordinal_complete: boolean;
+        expires_at: string;
+      }>(
+        `SELECT frontier,revision::text,ordinal_complete,expires_at::text FROM search.scope_preparation
+        WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND definition=$3::jsonb AND state='ready'`,
+        [prefix, scopeId, JSON.stringify(definition)],
+      );
+      const row = result.rows[0];
+      if (!row || Number(row.expires_at) <= Date.now() || row.frontier?.kind !== 'realm')
+        throw new Error('Realm preparation is not retained');
+      return { definition, frontier: row.frontier, revision: row.revision, complete: row.ordinal_complete };
+    },
+    async advanceRealm(
+      scopeId: string,
+      state: RealmScopePreparationState,
+      frontier: Extract<ScopeCaptureFrontier, { kind: 'realm' }>,
+      complete: boolean,
+      hits: readonly SearchHit[],
+    ): Promise<boolean> {
+      if (state.complete || hits.length > 64) throw new RangeError('Invalid Realm preparation advance');
+      for (const hit of hits) {
+        if (
+          !hit ||
+          typeof hit.id !== 'string' ||
+          hit.sort.length !== 2 ||
+          !(hit.sort[0] === null || typeof hit.sort[0] === 'string') ||
+          hit.sort[1] !== hit.id
+        )
+          throw new RangeError('Invalid Realm actual-name tuple');
+      }
+      return withConnection(pool, async (client) => {
+        await client.query('BEGIN');
+        try {
+          const updated = await client.query(
+            `UPDATE search.scope_preparation SET frontier=$4::jsonb,ordinal_complete=$5,
+            revision=revision+1 WHERE partition_no=0 AND prefix=$1 AND scope_id=$2 AND revision=$3
+            AND definition=$6::jsonb AND state='ready' AND ordinal_complete=false
+            AND frontier=$7::jsonb RETURNING scope_id`,
+            [
+              prefix,
+              scopeId,
+              state.revision,
+              JSON.stringify(frontier),
+              complete,
+              JSON.stringify(state.definition),
+              JSON.stringify(state.frontier),
+            ],
+          );
+          if (updated.rowCount !== 1) {
+            await client.query('ROLLBACK');
+            return false;
+          }
+          for (const hit of hits) {
+            const name = hit.sort[0] as string | null;
+            await client.query(
+              `INSERT INTO search.scope_preparation_ordered
+              (partition_no,prefix,scope_id,subject,count_key,name_key,hit)
+              VALUES (0,$1,$2,$3::uuid,0,$4,$5)
+              ON CONFLICT (partition_no,prefix,scope_id,subject) DO NOTHING`,
+              [prefix, scopeId, hit.id, scopeOrderedNameKey(name), Buffer.from(JSON.stringify(hit))],
+            );
+          }
+          await client.query('COMMIT');
+          return true;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
     },
     async read(scopeId: string): Promise<ScopePreparationRecord | null> {
       const result = await pool.query<ScopePreparationRecord>(
