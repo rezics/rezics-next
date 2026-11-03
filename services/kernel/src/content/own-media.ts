@@ -510,8 +510,8 @@ function entry(candidate: Candidate): OwnMediaInventoryPage['entries'][number] {
   };
 }
 
-/** Add a committed browser reservation to the existing account-home erasure locator.
- * The registered reserved-event projection repeats this upsert as its durable repair path. */
+/** Add a committed browser or imported reservation to the existing account-home erasure locator.
+ * The upsert is safe to repeat when the original reservation key is replayed. */
 export async function recordOwnMediaReservation(pool: Pool, actor: AccountActor, mediaId: string): Promise<void> {
   const mediaRoute = routeOf(mediaId);
   const homeRoute = accountRoute(actor);

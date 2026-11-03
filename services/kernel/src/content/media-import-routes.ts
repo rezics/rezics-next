@@ -16,6 +16,7 @@ import {
   type MediaImportFetchConfig,
 } from './media-import.ts';
 import { MediaImportInputSchema, MediaImportReceiptSchema, MediaImportPollSchema } from './schemas.ts';
+import { recordOwnMediaReservation } from './own-media.ts';
 
 /** Supplied by trusted runtime composition. Missing configuration fails closed. */
 export type MediaImportRouteDependencies = ContentCommandDependencies & { fetchConfig?: MediaImportFetchConfig };
@@ -111,6 +112,7 @@ export function mediaImportRoutes(
           admission.run('normal', job, async () => {
             const deps = configured();
             const outcome = await importMediaFromUrl(deps, actor, body, context);
+            await recordOwnMediaReservation(deps.pool, actor, outcome.value.mediaId);
             // Receipts contain IDs only. Resolve current disclosure on every return,
             // including replay, before publishing either the identity or session token.
             const current = await readMediaImportStatus(deps, actor, outcome.value.mediaId, { deadline: job.deadline });

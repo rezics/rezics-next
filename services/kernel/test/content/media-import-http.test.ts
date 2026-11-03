@@ -33,6 +33,7 @@ const containerId = newId(route);
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 const actions = [
+  'account:read',
   'media:import_from_url',
   'source_fence:read',
   'media:read_reservation',
@@ -339,6 +340,18 @@ test('focused native outcomes preserve current authorization and partition bound
   expect((await poll(id, otherBearer)).response.status).toBe(404);
   const replay = await accepted(key);
   expect(replay.body).toEqual(result.body);
+  const history = await call('GET', '/v1/media');
+  expect(history.response.status).toBe(200);
+  const owned = (history.body as { entries: Array<Record<string, unknown>> }).entries.find(
+    (entry) => entry.id === id,
+  );
+  expect(owned).toMatchObject({
+    id,
+    purpose: 'cover',
+    state: 'reserved',
+    actions: { read: null, resume: null },
+  });
+  expect(JSON.stringify(owned)).not.toMatch(/"(?:key|sourceUrl|provenance|reservationRequestId)"\s*:/);
   expect(
     (
       await call(
