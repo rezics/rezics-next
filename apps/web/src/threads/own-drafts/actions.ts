@@ -107,16 +107,18 @@ export const readOwnDraftPost = createServerFn({ method: 'GET' })
         if (result.status === 401 || result.status === 403) return 'denied' as const;
         return 'unavailable' as const;
       }
-      const revision = new Headers(result.headers).get('etag')?.replace(/^"|"$/g, '') ?? result.data.post.revisionId;
+      const post = result.data.post;
+      if (post.availability !== 'available') return 'concealed' as const;
+      const revision = new Headers(result.headers).get('etag')?.replace(/^"|"$/g, '') ?? post.revisionId;
       return {
         state: 'available' as const,
         revision,
         visibility:
-          result.data.post.visibility === 'draft' || result.data.post.visibility === 'published'
-            ? result.data.post.visibility
+          post.visibility === 'draft' || post.visibility === 'published'
+            ? post.visibility
             : 'other' as const,
-        body: (result.data.post as CurrentPost).body ?? null,
-        mediaIds: (result.data.post as CurrentPost).mediaIds ?? [],
+        body: post.body ?? null,
+        mediaIds: post.mediaIds,
       };
     } catch (error) {
       return isPlatformClosedError(error) ? ('unavailable' as const) : ('unavailable' as const);
