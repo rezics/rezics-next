@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { assertGrowthAccessPaths, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  checkGrowth,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+} from '../support/growth.ts';
 import {
   createRestoreScenario,
   createRevisionHistory,
@@ -48,10 +54,7 @@ async function reviewSnapshot(scenario: RestoreScenario) {
       'SELECT count(*)::integer AS count FROM core.receipt WHERE partition_no = $1 AND principal_id = $2',
       [partition, fixture.author.accountId],
     ),
-    fixture.admin.query(
-      'SELECT count(*)::integer AS count FROM core.outbox WHERE partition_no = $1',
-      [partition],
-    ),
+    fixture.admin.query('SELECT count(*)::integer AS count FROM core.outbox WHERE partition_no = $1', [partition]),
     fixture.admin.query(
       'SELECT thread_id, author_account_id, board_id, review_subject_id, review_live, availability, visibility FROM content.thread WHERE route = $1 AND thread_id = $2',
       [route, original.threadId],
@@ -122,11 +125,9 @@ async function assertRestoredDisclosure(scenario: RestoreScenario): Promise<void
       availability: 'available',
     },
   });
-  const exactRevision = await fixture.call(
-    'GET',
-    `/v1/posts/${original.postId}/revisions/${original.revisionId}`,
-    { bearer: fixture.author.bearer },
-  );
+  const exactRevision = await fixture.call('GET', `/v1/posts/${original.postId}/revisions/${original.revisionId}`, {
+    bearer: fixture.author.bearer,
+  });
   expect(exactRevision.response.status).toBe(200);
   expect(exactRevision.value.post).toMatchObject({
     id: original.postId,
@@ -307,92 +308,88 @@ async function runSuccessGrowth(
   return key;
 }
 
-test(
-  'Successful native review restoration stays bounded as unrelated population and retained command history grow independently',
-  async () => {
-    const populationScenario = await createRestoreScenario();
-    let populationGrowth: GrowthDatabase | undefined;
-    try {
-      await assertHiddenBeforeRestore(populationScenario);
-      const initialRestoreKey = requestKey('restore-success-initial-http-restore');
-      const initialRestore = await populationScenario.fixture.call(
-        'POST',
-        `/v1/posts/${populationScenario.original.postId}:restore`,
-        { bearer: populationScenario.fixture.author.bearer, key: initialRestoreKey },
-      );
-      expect(initialRestore.response.status).toBe(204);
-      await assertRestoredDisclosure(populationScenario);
-      await prepareForMeasurement(populationScenario);
+test('Successful native review restoration stays bounded as unrelated population and retained command history grow independently', async () => {
+  const populationScenario = await createRestoreScenario();
+  let populationGrowth: GrowthDatabase | undefined;
+  try {
+    await assertHiddenBeforeRestore(populationScenario);
+    const initialRestoreKey = requestKey('restore-success-initial-http-restore');
+    const initialRestore = await populationScenario.fixture.call(
+      'POST',
+      `/v1/posts/${populationScenario.original.postId}:restore`,
+      { bearer: populationScenario.fixture.author.bearer, key: initialRestoreKey },
+    );
+    expect(initialRestore.response.status).toBe(204);
+    await assertRestoredDisclosure(populationScenario);
+    await prepareForMeasurement(populationScenario);
 
-      populationGrowth = await openGrowth(populationScenario);
-      const population = unrelatedReviewPopulation(populationScenario);
-      const populationReplayKey = await runSuccessGrowth(
-        populationScenario,
-        populationGrowth,
-        'Native successful review restore with growing unrelated author, subject, board and vote population',
-        async (database, scale, previous) => {
-          const before = await populationCounts(populationScenario, 'Unrelated restore population ');
-          await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
-          const after = await populationCounts(populationScenario, 'Unrelated restore population ');
-          const delta = scale - previous;
-          expect(after.threads - before.threads).toBe(delta);
-          expect(after.revisions - before.revisions).toBe(delta);
-          expect(after.votes - before.votes).toBe(delta);
-          expect(after.receipts).toBe(before.receipts);
-          expect(after.outbox).toBe(before.outbox);
-          expect(after.threads).toBe(scale);
-          expect(after.revisions).toBe(scale);
-          expect(after.votes).toBe(scale);
-        },
-      );
-      await assertRestoredDisclosure(populationScenario);
-      await assertReplayAddsNoContribution(populationScenario, populationReplayKey);
-    } finally {
-      await populationGrowth?.close();
-      await populationScenario.fixture.close();
-    }
+    populationGrowth = await openGrowth(populationScenario);
+    const population = unrelatedReviewPopulation(populationScenario);
+    const populationReplayKey = await runSuccessGrowth(
+      populationScenario,
+      populationGrowth,
+      'Native successful review restore with growing unrelated author, subject, board and vote population',
+      async (database, scale, previous) => {
+        const before = await populationCounts(populationScenario, 'Unrelated restore population ');
+        await seed({ pool: database.pool, admin: database.admin }, population, { from: previous, to: scale });
+        const after = await populationCounts(populationScenario, 'Unrelated restore population ');
+        const delta = scale - previous;
+        expect(after.threads - before.threads).toBe(delta);
+        expect(after.revisions - before.revisions).toBe(delta);
+        expect(after.votes - before.votes).toBe(delta);
+        expect(after.receipts).toBe(before.receipts);
+        expect(after.outbox).toBe(before.outbox);
+        expect(after.threads).toBe(scale);
+        expect(after.revisions).toBe(scale);
+        expect(after.votes).toBe(scale);
+      },
+    );
+    await assertRestoredDisclosure(populationScenario);
+    await assertReplayAddsNoContribution(populationScenario, populationReplayKey);
+  } finally {
+    await populationGrowth?.close();
+    await populationScenario.fixture.close();
+  }
 
-    const historyScenario = await createRestoreScenario();
-    let historyGrowth: GrowthDatabase | undefined;
-    try {
-      await assertHiddenBeforeRestore(historyScenario);
-      const initialRestore = await historyScenario.fixture.call(
-        'POST',
-        `/v1/posts/${historyScenario.original.postId}:restore`,
-        {
-          bearer: historyScenario.fixture.author.bearer,
-          key: requestKey('restore-success-history-initial-http-restore'),
-        },
-      );
-      expect(initialRestore.response.status).toBe(204);
-      await assertRestoredDisclosure(historyScenario);
-      await prepareForMeasurement(historyScenario);
+  const historyScenario = await createRestoreScenario();
+  let historyGrowth: GrowthDatabase | undefined;
+  try {
+    await assertHiddenBeforeRestore(historyScenario);
+    const initialRestore = await historyScenario.fixture.call(
+      'POST',
+      `/v1/posts/${historyScenario.original.postId}:restore`,
+      {
+        bearer: historyScenario.fixture.author.bearer,
+        key: requestKey('restore-success-history-initial-http-restore'),
+      },
+    );
+    expect(initialRestore.response.status).toBe(204);
+    await assertRestoredDisclosure(historyScenario);
+    await prepareForMeasurement(historyScenario);
 
-      const history = await createRevisionHistory(historyScenario);
-      historyGrowth = await openGrowth(historyScenario);
-      const historyReplayKey = await runSuccessGrowth(
-        historyScenario,
-        historyGrowth,
-        'Native successful review restore with growing retained revision and command history',
-        async (database, scale, previous) => {
-          const before = await historyCounts(historyScenario, history.review.threadId);
-          await growRetainedRevisionHistory(historyScenario, history, database.pool, previous, scale);
-          const after = await historyCounts(historyScenario, history.review.threadId);
-          const delta = scale - previous;
-          expect(after.threads).toBe(before.threads);
-          expect(after.votes).toBe(before.votes);
-          expect(after.revisions - before.revisions).toBe(delta);
-          expect(after.receipts - before.receipts).toBe(delta);
-          expect(after.outbox - before.outbox).toBe(delta);
-          expect(after.revisions).toBe(1 + scale);
-        },
-      );
-      await assertRestoredDisclosure(historyScenario);
-      await assertReplayAddsNoContribution(historyScenario, historyReplayKey);
-    } finally {
-      await historyGrowth?.close();
-      await historyScenario.fixture.close();
-    }
-  },
-  600_000,
-);
+    const history = await createRevisionHistory(historyScenario);
+    historyGrowth = await openGrowth(historyScenario);
+    const historyReplayKey = await runSuccessGrowth(
+      historyScenario,
+      historyGrowth,
+      'Native successful review restore with growing retained revision and command history',
+      async (database, scale, previous) => {
+        const before = await historyCounts(historyScenario, history.review.threadId);
+        await growRetainedRevisionHistory(historyScenario, history, database.pool, previous, scale);
+        const after = await historyCounts(historyScenario, history.review.threadId);
+        const delta = scale - previous;
+        expect(after.threads).toBe(before.threads);
+        expect(after.votes).toBe(before.votes);
+        expect(after.revisions - before.revisions).toBe(delta);
+        expect(after.receipts - before.receipts).toBe(delta);
+        expect(after.outbox - before.outbox).toBe(delta);
+        expect(after.revisions).toBe(1 + scale);
+      },
+    );
+    await assertRestoredDisclosure(historyScenario);
+    await assertReplayAddsNoContribution(historyScenario, historyReplayKey);
+  } finally {
+    await historyGrowth?.close();
+    await historyScenario.fixture.close();
+  }
+}, 600_000);

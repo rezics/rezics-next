@@ -5,7 +5,11 @@ import { restorePost } from '../../../src/content/restore-post.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import type { GrowthDatabase, Population } from '../../support/growth.ts';
-import { createReviewLifecycleFixture, requestKey, type ReviewLifecycleFixture } from '../review-native-lifecycle-fixture.ts';
+import {
+  createReviewLifecycleFixture,
+  requestKey,
+  type ReviewLifecycleFixture,
+} from '../review-native-lifecycle-fixture.ts';
 
 export const restoreBody = fromPlainText('A native review restored with its original licence and vote citation.');
 export const restoreBodyBytes = Buffer.from(serializeDocument(restoreBody));
@@ -162,11 +166,7 @@ function commandContext(key: string) {
   };
 }
 
-export async function restoreSelectedReview(
-  scenario: RestoreScenario,
-  pool: GrowthDatabase['pool'],
-  key: string,
-) {
+export async function restoreSelectedReview(scenario: RestoreScenario, pool: GrowthDatabase['pool'], key: string) {
   const { fixture, original } = scenario;
   return restorePost(
     { pool, access: fixture.system.access, routeKey: fixture.system.routeKey },
