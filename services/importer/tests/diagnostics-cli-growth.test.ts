@@ -87,10 +87,15 @@ function sample(
   const evidence = probe.verifyPlans();
   expect(evidence.some((event) => event.kind === 'write' || event.kind === 'insert')).toBe(false);
   expect(evidence.some((event) => event.plan.some((row) => /^SEARCH/.test(row.detail)))).toBe(true);
-  expect(evidence.every((event) => !event.plan.some((row) => /\bSCAN\b/i.test(row.detail) && !/CONSTANT ROW/.test(row.detail)))).toBe(
-    true,
-  );
-  return { 'sqlite statements': measured.counts['sqlite statements'], 'sqlite returned rows': measured.counts['sqlite returned rows'] };
+  expect(
+    evidence.every(
+      (event) => !event.plan.some((row) => /\bSCAN\b/i.test(row.detail) && !/CONSTANT ROW/.test(row.detail)),
+    ),
+  ).toBe(true);
+  return {
+    'sqlite statements': measured.counts['sqlite statements'],
+    'sqlite returned rows': measured.counts['sqlite returned rows'],
+  };
 }
 
 test('diagnostic pages and exact lookup stay indexed as current omissions and unrelated history grow', () => {
@@ -101,9 +106,7 @@ test('diagnostic pages and exact lookup stay indexed as current omissions and un
       history(current.store, 32, 1000000000);
       const generation = populate(current.store, scale, 2000000000);
       current.store.database.exec('ANALYZE');
-      const first = sample(current.probe, () =>
-        current.view.pageRecords({ source, generation, limit: 20 }),
-      );
+      const first = sample(current.probe, () => current.view.pageRecords({ source, generation, limit: 20 }));
       const page = current.view.pageRecords({ source, generation, limit: 20 });
       expect(page.records).toHaveLength(20);
       expect(page.nextCursor).toBeString();
@@ -118,7 +121,9 @@ test('diagnostic pages and exact lookup stay indexed as current omissions and un
         current.view.pageRecords({ source, generation, limit: 20, after: page.records[0]!.recordKey }),
       );
       const lastKey = key(2000000000, scale);
-      const end = sample(current.probe, () => current.view.pageRecords({ source, generation, limit: 20, after: lastKey }));
+      const end = sample(current.probe, () =>
+        current.view.pageRecords({ source, generation, limit: 20, after: lastKey }),
+      );
       const exact = sample(current.probe, () =>
         current.view.recordDetail({ source, generation, recordKey: key(2000000000, 1) }),
       );

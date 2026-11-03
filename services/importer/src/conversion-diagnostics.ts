@@ -91,7 +91,11 @@ function jsonPointer(value: string): boolean {
   return true;
 }
 
-function ownData(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
+function ownData(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail();
   const prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) fail();
@@ -298,7 +302,13 @@ export class ConversionDiagnosticsView {
       if (id === undefined) id = pointer?.generation ?? undefined;
     }
     if (id === undefined)
-      return { source, generation: '', status: 'missing', live: false, coverage: this.capability === 'unsupported' ? 'unsupported' : 'unavailable' };
+      return {
+        source,
+        generation: '',
+        status: 'missing',
+        live: false,
+        coverage: this.capability === 'unsupported' ? 'unsupported' : 'unavailable',
+      };
     const row = this.get<{
       status: string;
       diagnostics_recorded?: number | null;
@@ -306,7 +316,13 @@ export class ConversionDiagnosticsView {
       diagnostic_entries?: number | null;
     }>('SELECT * FROM run_generations WHERE source=? AND id=?', source, id);
     if (!row)
-      return { source, generation: id, status: 'missing', live: false, coverage: this.capability === 'unsupported' ? 'unsupported' : 'unavailable' };
+      return {
+        source,
+        generation: id,
+        status: 'missing',
+        live: false,
+        coverage: this.capability === 'unsupported' ? 'unsupported' : 'unavailable',
+      };
     if (this.capability === 'unsupported')
       return { source, generation: id, status: row.status, live: LIVE_STATUS.has(row.status), coverage: 'unsupported' };
     if (!row.diagnostics_recorded)

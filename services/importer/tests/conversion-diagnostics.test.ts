@@ -41,8 +41,16 @@ function transport() {
       return {
         results: request.commands.map((command) =>
           command.op === 'create'
-            ? { key: command.key, status: 201 as const, value: { id: '00000000-0000-4000-8000-000000000001', revision: 1 } }
-            : { key: command.key, status: 200 as const, value: { candidate: '00000000-0000-4000-8000-000000000002', revision: 1 } },
+            ? {
+                key: command.key,
+                status: 201 as const,
+                value: { id: '00000000-0000-4000-8000-000000000001', revision: 1 },
+              }
+            : {
+                key: command.key,
+                status: 200 as const,
+                value: { candidate: '00000000-0000-4000-8000-000000000002', revision: 1 },
+              },
         ),
       };
     },
@@ -65,19 +73,27 @@ function edition(n: number, date = 'circa 1980') {
 }
 
 test('sanitize admits sentence codes and pointers and rejects accessors or over-limit vectors', () => {
-  expect(sanitizeConversionDiagnostics([{ pointer: '/publish_date', code: 'unsupported_publication_date_format' }])).toEqual(
-    [{ pointer: '/publish_date', code: 'unsupported_publication_date_format' }],
-  );
+  expect(
+    sanitizeConversionDiagnostics([{ pointer: '/publish_date', code: 'unsupported_publication_date_format' }]),
+  ).toEqual([{ pointer: '/publish_date', code: 'unsupported_publication_date_format' }]);
   expect(
     sanitizeConversionDiagnostics([
-      { pointer: '/claims/P31', code: 'Duplicate canonical term language; kept the first source key', category: 'omission' },
+      {
+        pointer: '/claims/P31',
+        code: 'Duplicate canonical term language; kept the first source key',
+        category: 'omission',
+      },
     ]),
   ).toEqual([
-    { pointer: '/claims/P31', code: 'Duplicate canonical term language; kept the first source key', category: 'omission' },
+    {
+      pointer: '/claims/P31',
+      code: 'Duplicate canonical term language; kept the first source key',
+      category: 'omission',
+    },
   ]);
-  expect(() => sanitizeConversionDiagnostics([{ pointer: 'publish_date', code: 'unsupported_publication_date_format' }])).toThrow(
-    ConversionDiagnosticError,
-  );
+  expect(() =>
+    sanitizeConversionDiagnostics([{ pointer: 'publish_date', code: 'unsupported_publication_date_format' }]),
+  ).toThrow(ConversionDiagnosticError);
   const getter = {};
   Object.defineProperty(getter, '0', { enumerable: true, get: () => ({ pointer: '/a', code: 'x' }) });
   Object.defineProperty(getter, 'length', { enumerable: false, value: 1 });
@@ -136,7 +152,9 @@ test('retained empty diagnostics are distinct from missing evidence and resume k
       diagnostics: [{ pointer: '/publish_date', code: 'unsupported_publication_date_format' }],
     });
     expect(
-      runStore.database.query('SELECT diagnostics_json FROM run_conversion_diagnostics WHERE record_key=?').get(row.row.recordKey),
+      runStore.database
+        .query('SELECT diagnostics_json FROM run_conversion_diagnostics WHERE record_key=?')
+        .get(row.row.recordKey),
     ).toEqual({ diagnostics_json: '[]' });
     expect(() =>
       runStore.retainConversionDiagnostics(run, {
@@ -158,7 +176,9 @@ test('Open Library dump staging retains the real publication-date omission', asy
   const importer = new Importer({ path: join(directory, 'state.sqlite'), transport: transport() });
   try {
     const record = edition(1);
-    const line = [record.type.key, record.key, record.revision, record.last_modified.value, JSON.stringify(record)].join('\t') + '\n';
+    const line =
+      [record.type.key, record.key, record.revision, record.last_modified.value, JSON.stringify(record)].join('\t') +
+      '\n';
     const controller = new AbortController();
     const original = importer.session.store.seal.bind(importer.session.store);
     importer.session.store.seal = (...args) => {
@@ -166,9 +186,13 @@ test('Open Library dump staging retains the real publication-date omission', asy
       controller.abort();
       return outcome;
     };
-    const result = await importer.runDump(createSourceRegistration('openlibrary'), (async function* () {
-      yield new TextEncoder().encode(line);
-    })(), { signal: controller.signal });
+    const result = await importer.runDump(
+      createSourceRegistration('openlibrary'),
+      (async function* () {
+        yield new TextEncoder().encode(line);
+      })(),
+      { signal: controller.signal },
+    );
     expect(result.status).toBe('interrupted');
     const retained = importer.session.store.database
       .query('SELECT diagnostics_json,phase FROM run_conversion_diagnostics WHERE record_key=?')

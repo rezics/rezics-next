@@ -53,7 +53,12 @@ function history(store: RunStore<SourceProjection>, count: number, prefix: numbe
   }
 }
 
-function retain(store: RunStore<SourceProjection>, run: Exclude<ReturnType<RunStore['begin']>, 'busy'>, n: number, prefix: number) {
+function retain(
+  store: RunStore<SourceProjection>,
+  run: Exclude<ReturnType<RunStore['begin']>, 'busy'>,
+  n: number,
+  prefix: number,
+) {
   const recordKey = key(prefix, n);
   store.stage(run, {
     row: {
@@ -90,13 +95,18 @@ test('staging diagnostic retention stays indexed as diagnostic-bearing records a
       const sample = current.probe.measure(() => retain(current.store, run, scale, 2000000000));
       current.probe.verifyPlans();
       expect(sample.statements.some((event) => event.plan.some((row) => /^SEARCH/.test(row.detail)))).toBe(true);
-      expect(sample.statements.every((event) => event.kind !== 'write' || event.plan.some((row) => /^SEARCH/.test(row.detail)))).toBe(
-        true,
-      );
+      expect(
+        sample.statements.every(
+          (event) => event.kind !== 'write' || event.plan.some((row) => /^SEARCH/.test(row.detail)),
+        ),
+      ).toBe(true);
       bearing.push({
         scale,
         counted: countedSample([
-          { 'sqlite statements': sample.counts['sqlite statements'], 'sqlite returned rows': sample.counts['sqlite returned rows'] },
+          {
+            'sqlite statements': sample.counts['sqlite statements'],
+            'sqlite returned rows': sample.counts['sqlite returned rows'],
+          },
         ]),
       });
     } finally {
@@ -114,7 +124,10 @@ test('staging diagnostic retention stays indexed as diagnostic-bearing records a
       unrelated.push({
         scale,
         counted: countedSample([
-          { 'sqlite statements': sample.counts['sqlite statements'], 'sqlite returned rows': sample.counts['sqlite returned rows'] },
+          {
+            'sqlite statements': sample.counts['sqlite statements'],
+            'sqlite returned rows': sample.counts['sqlite returned rows'],
+          },
         ]),
       });
     } finally {

@@ -29,7 +29,9 @@ function edition(n: number, date = 'circa 1980') {
 function dump(records: ReturnType<typeof edition>[]) {
   return (
     records
-      .map((record) => [record.type.key, record.key, record.revision, record.last_modified.value, JSON.stringify(record)].join('\t'))
+      .map((record) =>
+        [record.type.key, record.key, record.revision, record.last_modified.value, JSON.stringify(record)].join('\t'),
+      )
       .join('\n') + '\n'
   );
 }
@@ -45,7 +47,14 @@ function transport() {
                 status: 201 as const,
                 value: { id: `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, '0')}`, revision: 1 },
               }
-            : { key: command.key, status: 200 as const, value: { candidate: `00000000-0000-4000-8000-${(index + 11).toString(16).padStart(12, '0')}`, revision: 1 } },
+            : {
+                key: command.key,
+                status: 200 as const,
+                value: {
+                  candidate: `00000000-0000-4000-8000-${(index + 11).toString(16).padStart(12, '0')}`,
+                  revision: 1,
+                },
+              },
         ),
       };
     },
@@ -182,7 +191,15 @@ test('pages diagnostic-bearing records, exact lookup, JSON version and hostile c
     const hostile = await runImportCli(['diagnostics', '--source', source, '--state', state, '--cursor', '!!!!']);
     expect(hostile.code).toBe(2);
     expect(hostile.openHandles).toBe(0);
-    const text = await runImportCli(['diagnostics', '--source', source, '--state', state, '--record', '/books/OL900000001M']);
+    const text = await runImportCli([
+      'diagnostics',
+      '--source',
+      source,
+      '--state',
+      state,
+      '--record',
+      '/books/OL900000001M',
+    ]);
     expect(text.stdout).toContain('unsupported_publication_date_format');
     expect(text.stdout).toContain('/publish_date');
   } finally {
@@ -195,7 +212,9 @@ test('legacy stores report unavailable evidence and control characters stay esca
   try {
     const legacy = join(directory, 'legacy.sqlite');
     const db = new Database(legacy);
-    db.exec(`CREATE TABLE run_sources (source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT, generation TEXT, present_count INTEGER NOT NULL) WITHOUT ROWID`);
+    db.exec(
+      `CREATE TABLE run_sources (source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT, generation TEXT, present_count INTEGER NOT NULL) WITHOUT ROWID`,
+    );
     db.exec(
       `CREATE TABLE run_generations (source TEXT NOT NULL, id TEXT NOT NULL, seq INTEGER NOT NULL, lease TEXT NOT NULL, status TEXT NOT NULL, threshold REAL NOT NULL, prior INTEGER NOT NULL, PRIMARY KEY(source,id)) WITHOUT ROWID`,
     );
@@ -209,7 +228,15 @@ test('legacy stores report unavailable evidence and control characters stay esca
     expect(JSON.parse(result.stdout).coverage).toBe('unsupported');
     const current = join(directory, 'current.sqlite');
     seed(current, 1, { code: 'unsupported\nformat' });
-    const text = await runImportCli(['diagnostics', '--source', source, '--state', current, '--record', '/books/OL900000001M']);
+    const text = await runImportCli([
+      'diagnostics',
+      '--source',
+      source,
+      '--state',
+      current,
+      '--record',
+      '/books/OL900000001M',
+    ]);
     expect(text.stdout).toContain('\\u000a');
     expect(text.stdout).not.toMatch(/\nunsupported\nformat/);
   } finally {
@@ -277,13 +304,18 @@ test('interrupted Open Library import reopens staging diagnostics without creden
     expect(body.records[0]!.diagnostics.map((d) => d.code)).toContain('unsupported_publication_date_format');
     const importer = new Importer({ path: state, transport: transport() });
     try {
-      const resumed = await importer.runDump(createSourceRegistration('openlibrary', { source }), (async function* () {
-        yield new TextEncoder().encode(dump([record]));
-      })());
+      const resumed = await importer.runDump(
+        createSourceRegistration('openlibrary', { source }),
+        (async function* () {
+          yield new TextEncoder().encode(dump([record]));
+        })(),
+      );
       expect(resumed.status, resumed.diagnostic).toBe('committed');
       const pointer = importer.session.store.source(source);
       const phases = importer.session.store.database
-        .query('SELECT phase FROM run_conversion_diagnostics WHERE source=? AND run_id=? AND record_key=? ORDER BY phase')
+        .query(
+          'SELECT phase FROM run_conversion_diagnostics WHERE source=? AND run_id=? AND record_key=? ORDER BY phase',
+        )
         .all(source, pointer.generation, record.key) as { phase: string }[];
       expect(pointer.generation).toBeString();
       expect(phases.map((row) => row.phase)).toEqual(['application', 'staging']);

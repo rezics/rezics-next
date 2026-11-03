@@ -179,9 +179,7 @@ function renderRecord(record: ConversionDiagnosticRecordView): string {
   }
   for (const diagnostic of record.diagnostics) {
     const category = diagnostic.category ? `  category=${escapeDiagnosticText(diagnostic.category)}` : '';
-    lines.push(
-      `  ${escapeDiagnosticText(diagnostic.pointer)}  ${escapeDiagnosticText(diagnostic.code)}${category}`,
-    );
+    lines.push(`  ${escapeDiagnosticText(diagnostic.pointer)}  ${escapeDiagnosticText(diagnostic.code)}${category}`);
   }
   return lines.join('\n');
 }
@@ -202,11 +200,15 @@ function renderText(
   if (generation.live) lines.push('A live generation can change between invocations.');
   if (generation.coverage === 'recorded') {
     if (!records.length)
-      lines.push(exact ? 'No retained diagnostic vector for this record.' : 'No diagnostic-bearing records on this page.');
+      lines.push(
+        exact ? 'No retained diagnostic vector for this record.' : 'No diagnostic-bearing records on this page.',
+      );
     else for (const record of records) lines.push(renderRecord(record));
     if (nextCursor) lines.push(`Next: --cursor ${nextCursor}`);
   }
-  lines.push('Omitted fields use converter codes and source JSON pointers. Supported facts are native-selected, not journal rows.');
+  lines.push(
+    'Omitted fields use converter codes and source JSON pointers. Supported facts are native-selected, not journal rows.',
+  );
   lines.push(`Repair admitted local source input and reimport: ${importInvocationShape()}`);
   lines.push('See services/importer/README.md#conversion-field-omissions');
   return `${lines.join('\n')}\n`;
@@ -257,7 +259,9 @@ function output(
   nextCursor: string | null,
   exact: boolean,
 ): string {
-  return format === 'json' ? renderJson(generation, records, nextCursor) : renderText(generation, records, nextCursor, exact);
+  return format === 'json'
+    ? renderJson(generation, records, nextCursor)
+    : renderText(generation, records, nextCursor, exact);
 }
 
 /** Read-only review of retained converter diagnostics. Never opens credentials, network or a writer. */
@@ -274,8 +278,7 @@ export async function runDiagnosticsCli(
   } catch {
     return { code: 2, stdout: '', stderr: 'Invalid diagnostics arguments.\n', openHandles: 0 };
   }
-  if (signal.aborted)
-    return { code: 130, stdout: '', stderr: 'Diagnostics interrupted.\n', openHandles: 0 };
+  if (signal.aborted) return { code: 130, stdout: '', stderr: 'Diagnostics interrupted.\n', openHandles: 0 };
   let opened: { database: Database; close(): void; handles: number } | undefined;
   let view: ConversionDiagnosticsView | undefined;
   try {
