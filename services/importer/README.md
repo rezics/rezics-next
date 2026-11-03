@@ -412,6 +412,16 @@ Decision: observation-conflict is RunStatus plus CLI exit 6; same-date dump refr
 resolution; local digests use kernel `sourceObservation`; generated client fields `expectedObservation` and
 `observation` are an additive seam.
 
+Indexed custody lives in `run_aggregate_operations` (primary key `source,run_id,operation_id`;
+`run_aggregate_pending` on unresolved statuses; `run_aggregate_record` on `record_key`) and
+`run_aggregate_heads` (`source,subject_id,provider`). Each eligible record does one indexed journal
+lookup/prepare, one GET of `/v1/subjects/{id}/source-statistics`, three fence checks per
+`fences()` pass (facts/summary/cover; two passes once the subject exists), one native PUT or
+`:clear` for a newly prepared intent, and after delivery one list GET plus one public figure GET.
+Retries and explicit resolutions are extra transitions R. Work is O(N+A+R). A conflict page is
+`SELECT ... WHERE status IN ('prepared','uncertain','conflict','refused') AND operation_id>? ORDER BY operation_id LIMIT P`
+with P≤20. Unrelated retained history is not scanned per record.
+
 ## Resolve source-classification conflicts
 
 A first admitted classification observation writes with `expectedObservation: null`. Any later change to the
@@ -446,16 +456,6 @@ evaluates admitted classification when `classificationAdmission` is configured.
 Indexed custody for a classification is one journal lookup/prepare, one POST of
 `/v1/subjects/{id}/source-classifications:read`, the same three fence checks, one `:put` or `:clear` for a
 newly prepared intent, and after delivery one independent read. Work remains O(N+A+R).
-
-Indexed custody lives in `run_aggregate_operations` (primary key `source,run_id,operation_id`;
-`run_aggregate_pending` on unresolved statuses; `run_aggregate_record` on `record_key`) and
-`run_aggregate_heads` (`source,subject_id,provider`). Each eligible record does one indexed journal
-lookup/prepare, one GET of `/v1/subjects/{id}/source-statistics`, three fence checks per
-`fences()` pass (facts/summary/cover; two passes once the subject exists), one native PUT or
-`:clear` for a newly prepared intent, and after delivery one list GET plus one public figure GET.
-Retries and explicit resolutions are extra transitions R. Work is O(N+A+R). A conflict page is
-`SELECT ... WHERE status IN ('prepared','uncertain','conflict','refused') AND operation_id>? ORDER BY operation_id LIMIT P`
-with P≤20. Unrelated retained history is not scanned per record.
 
 After inspection, return to the existing authorized import command and provide a complete input and the usual
 credentials. For the built-in Wikidata source, the invocation shape is:
@@ -537,19 +537,13 @@ member replacement or reordering, a different budget/codec/converter, an old unc
 database and live ownership never resume and never rotate the stored checkpoint. After a valid seal the checkpoint is
 deleted so it cannot compete with sealed recovery. An interruption after sealing uses `rezics-import resume` without
 the dump, or the ordinary import command with the original requests; `--resume-staging` does not replace that path.
-`--checkpoint-staging` and `--resume-staging` admit one uncompressed regular-file Bangumi, Open Library or Wikidata dump.
-VNDB archives, gzip, stdin and multi-file manifests are refused; those producers are not guessed from a byte offset.
 Help names full-file hashing, committed-prefix verification, remaining conversion and later native application as
-separate steps. Local conversion is not publication; Bangumi ratings stay omitted.
-Before a checkpointed generation starts, the CLI hashes every byte of the opened file. Path, inode, size, mtime and
-prefix hashes are not that identity. A failed hash creates no capture and does not contact Auth or the API. Resume
-re-hashes the same file, then re-decodes from the first record to verify the committed prefix, and converts only the
-remaining records. Changed bytes, a same-size rewrite, a different converter or alias, an old uncheckpointed staging
-row, a missing database and live ownership never resume. After a valid seal the checkpoint is deleted so it cannot
-compete with sealed recovery. An interruption after sealing uses `rezics-import resume` without the dump, or the
-ordinary import command with the original requests; `--resume-staging` does not replace that path. An operator who
-will not continue an unpublished checkpoint uses `rezics-import retire-staging` instead of supplying replacement
-input.
+separate steps. An operator who will not continue an unpublished checkpoint uses `rezics-import retire-staging`
+instead of supplying replacement input.
+
+Decision: checkpointed staging commits each accepted record with its prefix cursor in one SQLite transaction so a
+crash keeps either the previous complete checkpoint or the new one. Ordinary acquisition keeps the existing 100-record
+staging page.
 
 ## Resume a sealed generation without its dump
 
@@ -604,10 +598,6 @@ Decision: unprepared staged rows must match the current registration's source ki
 pending envelopes still drain under their original bytes. Stored projections without source-kind provenance are
 incompatible rather than treated as verified. Sealed resume opens an existing state file without creating tables or
 applying additive migrations; missing required run schema is unsupported rather than repaired.
-
-Decision: checkpointed staging commits each accepted record with its prefix cursor in one SQLite transaction so a
-crash keeps either the previous complete checkpoint or the new one. Ordinary acquisition keeps the existing 100-record
-staging page.
 
 ## Resume a checkpointed VNDB table acquisition
 
