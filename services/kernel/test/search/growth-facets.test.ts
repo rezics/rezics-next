@@ -12,7 +12,7 @@ import { bulkLines, documentActions } from '../../src/search/document.ts';
 import { createSubjectIndex, subjectAlias, subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch, type OpenSearch, type SearchQuery } from '../../src/search/opensearch.ts';
 import { measurePublicFilterIteratorSteps } from '../../src/search/public-filter-consumer.ts';
-import { FACET_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
+import { FACET_TEMPLATE, HIT_TEMPLATE, SEARCH_TEMPLATE, SUGGEST_TEMPLATE } from '../../src/search/query.ts';
 import { createSearchService } from '../../src/search/service.ts';
 import { subjectPartition, type IndexedSubject, type SubjectSource } from '../../src/search/source.ts';
 import type { AccountActor } from '../../src/request/access.ts';
@@ -69,7 +69,20 @@ const statement = (property: string, content: unknown) => ({
 });
 const digest = (value: string) => createHash('sha256').update(value).digest();
 
-type Probe = { aggregations: number; reads: { partition: number; ids: string[] }[]; iteratorSteps: number };
+type Probe = {
+  aggregations: number;
+  reads: { partition: number; ids: string[] }[];
+  iteratorSteps: number;
+  engineRequests: number;
+  candidateHits: number;
+};
+type SearchWork = {
+  iteratorSteps: number;
+  engineRequests: number;
+  candidateHits: number;
+  discardedCandidates: number;
+  returnedRows: number;
+};
 let db: GrowthDatabase | undefined;
 let engine: OpenSearch | undefined;
 let observedEngine: OpenSearch | undefined;
@@ -79,6 +92,7 @@ let kernel: ReturnType<typeof createKernel> | undefined;
 let probe: Probe | undefined;
 let authorIds: string[] = [];
 let bookIds: string[] = [];
+let matchedBookIds: string[] = [];
 // semantic.partition_subjects holds one counter row per partition from its migration on, so it is reset, not emptied.
 type Counts = Record<(typeof seededRelations)[number] | 'visible', number>;
 const starts: Counts[] = [];
@@ -130,6 +144,7 @@ async function checkSeeded(database: GrowthDatabase, check: Parameters<typeof ch
       if (previous === 0) {
         await resetSeeded(target);
         starts.push(await seededCounts(target));
+        matchedBookIds = [];
         await buildFixtures();
         fixtureRows.push(await seededCounts(target));
       }
@@ -193,8 +208,12 @@ async function buildFixtures(): Promise<void> {
 
 async function addSubject(route: number, item: unknown): Promise<string> {
   if (!db) throw new Error('Growth database is not open');
+  return createSubjectAt(db.pool, route, item);
+}
+
+async function createSubjectAt(pool: GrowthDatabase['pool'], route: number, item: unknown): Promise<string> {
   const target = { route, id: newId(route) };
-  await createSubject(db.pool, {
+  await createSubject(pool, {
     actor,
     target,
     idempotencyKey: randomUUID(),
@@ -470,6 +489,55 @@ async function growCatalogue(database: GrowthDatabase, scale: number, previous: 
   await growUnrelatedEngineDocuments(previous * unit, scale * unit);
 }
 
+function matchedCatalogue(): Population {
+  return {
+    name: 'facet-matched-catalogue',
+    hotPartition,
+    write: async (target, place) => {
+      const id = await createSubjectAt(target.pool, place.route, {
+        type: 'schema:Book',
+        labels: { en: `Growth book ${place.ordinal.toString().padStart(4, '0')}` },
+        statements: { 'schema:genre': [statement('schema:genre', authorIds[0]!)] },
+      });
+      matchedBookIds[place.ordinal] = id;
+    },
+  };
+}
+
+async function indexMatchedSubjects(ids: readonly string[]): Promise<void> {
+  if (!db || !engine) throw new Error('Growth fixtures are not open');
+  const byPartition = new Map<number, string[]>();
+  for (const id of ids) {
+    const partition = subjectPartition(id);
+    byPartition.set(partition, [...(byPartition.get(partition) ?? []), id]);
+  }
+  const productionSource = subjectSource(db.pool);
+  for (const [partition, partitionIds] of byPartition) {
+    for (let start = 0; start < partitionIds.length; start += 128) {
+      const batch = partitionIds.slice(start, start + 128);
+      const snapshot = await productionSource.read(partition, batch);
+      const result = await engine.bulk<{ errors: boolean }>(
+        bulkLines(subjectIndexName(prefix, 1), documentActions(snapshot, batch)),
+      );
+      if (result.errors) throw new Error('Matched catalogue documents failed to index');
+    }
+  }
+  await engine.request('POST', `/${subjectIndexName(prefix, 1)}/_refresh`);
+}
+
+async function growMatchedCatalogue(database: GrowthDatabase, scale: number, previous: number): Promise<void> {
+  if (bookIds.length === 0) throw new Error('Growth fixtures are not open');
+  const from = Math.max(0, previous - bookIds.length);
+  const to = Math.max(0, scale - bookIds.length);
+  if (to <= from) return;
+  const population = matchedCatalogue();
+  await seed({ pool: database.pool, admin: database.admin }, population, { from, to });
+  const ids = matchedBookIds.slice(from, to);
+  if (ids.length !== to - from || ids.some((id) => typeof id !== 'string'))
+    throw new Error('Matched catalogue fixture omitted a created subject');
+  await indexMatchedSubjects(ids);
+}
+
 async function growHistory(database: GrowthDatabase, scale: number, previous: number): Promise<void> {
   if (bookIds.length === 0) throw new Error('Growth fixtures are not open');
   await seed(
@@ -495,7 +563,7 @@ async function growHistory(database: GrowthDatabase, scale: number, previous: nu
         };
       },
     },
-    { from: previous * unit, to: scale * unit },
+    { from: previous, to: scale },
   );
 }
 
@@ -527,12 +595,17 @@ beforeAll(async () => {
           ? body.id
           : undefined;
       if (probe && templateId === `${prefix}${FACET_TEMPLATE}`) probe.aggregations++;
-      const profiled = templateId === `${prefix}${SEARCH_TEMPLATE}`;
+      const profiled =
+        templateId === `${prefix}${SEARCH_TEMPLATE}` || templateId === `${prefix}${HIT_TEMPLATE}`;
       const requestOptions = profiled ? { ...options, query: { ...options?.query, profile: true } } : options;
       const result = engine!.request<T>(method, path, body, requestOptions);
       if (!probe || !profiled) return result;
+      const activeProbe = probe;
       return result.then((response) => {
-        probe!.iteratorSteps += measurePublicFilterIteratorSteps(response.body);
+        const body = response.body as { hits?: { hits?: unknown } };
+        activeProbe.engineRequests++;
+        if (Array.isArray(body.hits?.hits)) activeProbe.candidateHits += body.hits.hits.length;
+        activeProbe.iteratorSteps += measurePublicFilterIteratorSteps(response.body);
         return response;
       });
     },
@@ -576,16 +649,29 @@ afterAll(async () => {
   await db?.close();
 });
 
-function recordGrowthEvidence(name: string, report: Awaited<ReturnType<typeof checkGrowth>>): void {
+function recordGrowthEvidence(
+  name: string,
+  report: Awaited<ReturnType<typeof checkGrowth>>,
+  populationUnit = unit,
+): void {
   for (const sample of report.samples) {
     console.info(
       JSON.stringify({
         evidence: name,
         scale: sample.scale,
-        population: sample.scale * unit,
+        population: sample.scale * populationUnit,
         rows: sample.cost.rows,
         blocks: sample.cost.blocks,
         statements: sample.cost.statements,
+        sharedHit: sample.cost.sharedHit,
+        sharedRead: sample.cost.sharedRead,
+        relations: sample.cost.relations,
+        background: {
+          statements: sample.cost.backgroundStatements ?? 0,
+          rows: sample.cost.backgroundRows ?? 0,
+          blocks: sample.cost.backgroundBlocks ?? 0,
+          costs: sample.cost.backgroundCosts ?? {},
+        },
         ...(sample.counted === undefined ? {} : { counted: sample.counted }),
       }),
     );
@@ -593,7 +679,7 @@ function recordGrowthEvidence(name: string, report: Awaited<ReturnType<typeof ch
 }
 
 function emptyProbe(): Probe {
-  return { aggregations: 0, reads: [], iteratorSteps: 0 };
+  return { aggregations: 0, reads: [], iteratorSteps: 0, engineRequests: 0, candidateHits: 0 };
 }
 
 async function postSearch(body: Record<string, unknown>): Promise<Response> {
@@ -613,12 +699,34 @@ const admittedSearch = {
   languages: ['en'],
 } as const;
 
-async function measureAdmittedSearchPlan(): Promise<{ iteratorSteps: number }> {
-  probe = emptyProbe();
-  const selectedPartitions = new Set(authorIds.map(subjectPartition));
-  const allowedIds = new Set([...bookIds, ...authorIds]);
-  const authorsByBook = [[0], [0, 1], [0], [1]];
+const deepSearch = { filter: { type: { in: ['schema:Book'] } }, sort: 'name' } as const;
+const deepPageLimit = 32;
+const deepScales = [64, 512, 4096] as const;
+
+async function measureSearchCase(operation: (sample: Probe) => Promise<number>): Promise<SearchWork> {
+  const sample = emptyProbe();
+  probe = sample;
   try {
+    const returnedRows = await operation(sample);
+    if (sample.candidateHits < returnedRows)
+      throw new Error('Search returned more subjects than the native candidate hits observed');
+    return {
+      iteratorSteps: sample.iteratorSteps,
+      engineRequests: sample.engineRequests,
+      candidateHits: sample.candidateHits,
+      discardedCandidates: sample.candidateHits - returnedRows,
+      returnedRows,
+    };
+  } finally {
+    probe = undefined;
+  }
+}
+
+async function measureAdmittedSearchPositive(): Promise<SearchWork> {
+  return measureSearchCase(async (sample) => {
+    const selectedPartitions = new Set(authorIds.map(subjectPartition));
+    const allowedIds = new Set([...bookIds, ...authorIds]);
+    const authorsByBook = [[0], [0, 1], [0], [1]];
     const admitted = await postSearch(admittedSearch);
     expect(admitted.status).toBe(200);
     const answer = (await admitted.json()) as {
@@ -627,6 +735,7 @@ async function measureAdmittedSearchPlan(): Promise<{ iteratorSteps: number }> {
     };
     expect(answer).not.toHaveProperty('total');
     expect(answer.subjects.map(({ id }) => id)).toEqual([bookIds[3]!, bookIds[0]!, bookIds[2]!, bookIds[1]!]);
+    expect(answer.next).toBeNull();
     for (const hit of answer.subjects) {
       const authors = authorsByBook[bookIds.indexOf(hit.id)]!;
       expect(hit.facts['schema:genre']).toEqual(
@@ -637,42 +746,175 @@ async function measureAdmittedSearchPlan(): Promise<{ iteratorSteps: number }> {
         })),
       );
     }
-    const authorReads = probe.reads.filter(({ ids }) => ids.some((id) => authorIds.includes(id)));
+    const authorReads = sample.reads.filter(({ ids }) => ids.some((id) => authorIds.includes(id)));
     expect(authorReads.map(({ partition }) => partition).sort((a, b) => a - b)).toEqual(
       [...selectedPartitions].sort((a, b) => a - b),
     );
     expect(authorReads.flatMap(({ ids }) => ids).sort()).toEqual([...authorIds].sort());
-    for (const { ids } of probe.reads) for (const id of ids) expect(allowedIds.has(id)).toBe(true);
-    expect(probe.iteratorSteps).toBeGreaterThan(0);
+    for (const { ids } of sample.reads) for (const id of ids) expect(allowedIds.has(id)).toBe(true);
+    expect(sample.iteratorSteps).toBeGreaterThan(0);
+    expect(sample.engineRequests).toBeGreaterThan(0);
+    return answer.subjects.length;
+  });
+}
 
-    const empty = await postSearch({
+async function measureExhaustedEmptySearch(): Promise<SearchWork> {
+  return measureSearchCase(async (sample) => {
+    const response = await postSearch({
       ...admittedSearch,
       filter: {
         type: { in: ['schema:Book'] },
         'schema:genre': { in: ['019a1b2c-3d4e-7f00-8a00-ed170e000099'] },
       },
     });
-    expect(empty.status).toBe(200);
-    expect(((await empty.json()) as { subjects: unknown[] }).subjects).toEqual([]);
+    expect(response.status).toBe(200);
+    const answer = (await response.json()) as { subjects: unknown[]; next: string | null };
+    expect(answer.subjects).toEqual([]);
+    expect(answer.next).toBeNull();
+    expect(sample.engineRequests).toBe(1);
+    return answer.subjects.length;
+  });
+}
 
-    const denied = await postSearch({ ...admittedSearch, cursor: 'not-a-cursor' });
-    expect(denied.status).toBe(400);
-    expect(await denied.json()).toMatchObject({ code: 'invalid_request' });
+async function measureInvalidCursorSearch(): Promise<SearchWork> {
+  return measureSearchCase(async (sample) => {
+    const response = await postSearch({ ...admittedSearch, cursor: 'not-a-cursor' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: 'invalid_request' });
+    expect(sample.engineRequests).toBe(0);
+    expect(sample.candidateHits).toBe(0);
+    expect(sample.iteratorSteps).toBe(0);
+    return 0;
+  });
+}
 
-    const first = await postSearch({ ...admittedSearch, limit: 1 });
-    expect(first.status).toBe(200);
-    const firstPage = (await first.json()) as { subjects: { id: string }[]; next: string | null };
-    expect(firstPage.subjects.map(({ id }) => id)).toEqual([bookIds[3]!]);
-    expect(firstPage.next).toBeString();
-    const deep = await postSearch({ ...admittedSearch, limit: 1, cursor: firstPage.next! });
-    expect(deep.status).toBe(200);
-    const deepPage = (await deep.json()) as { subjects: { id: string }[] };
-    expect(deepPage.subjects.map(({ id }) => id)).toEqual([bookIds[0]!]);
+async function measureFirstSearchPage(): Promise<SearchWork> {
+  return measureSearchCase(async (sample) => {
+    const response = await postSearch({ ...admittedSearch, limit: 1 });
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as { subjects: { id: string }[]; next: string | null };
+    expect(page.subjects.map(({ id }) => id)).toEqual([bookIds[3]!]);
+    expect(page.next).toBeString();
+    expect(sample.candidateHits).toBeGreaterThan(page.subjects.length);
+    return page.subjects.length;
+  });
+}
 
-    return { iteratorSteps: probe.iteratorSteps };
-  } finally {
-    probe = undefined;
+async function issueFirstSearchCursor(): Promise<string> {
+  const response = await postSearch({ ...admittedSearch, limit: 1 });
+  expect(response.status).toBe(200);
+  const page = (await response.json()) as { subjects: { id: string }[]; next: string | null };
+  expect(page.subjects.map(({ id }) => id)).toEqual([bookIds[3]!]);
+  expect(page.next).toBeString();
+  return page.next!;
+}
+
+async function measureSecondSearchPage(cursor: string): Promise<SearchWork> {
+  return measureSearchCase(async (sample) => {
+    const response = await postSearch({ ...admittedSearch, limit: 1, cursor });
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as { subjects: { id: string }[]; next: string | null };
+    expect(page.subjects.map(({ id }) => id)).toEqual([bookIds[0]!]);
+    expect(page.next).toBeString();
+    expect(sample.candidateHits).toBeGreaterThan(page.subjects.length);
+    return page.subjects.length;
+  });
+}
+
+async function issueDeepSearchCursor(total: number): Promise<string> {
+  const orderedIds = [bookIds[3]!, bookIds[0]!, bookIds[2]!, bookIds[1]!, ...matchedBookIds];
+  expect(orderedIds).toHaveLength(total);
+  let cursor: string | undefined;
+  let consumed = 0;
+  const depth = total - deepPageLimit;
+  while (consumed < depth) {
+    const response = await postSearch({
+      ...deepSearch,
+      limit: deepPageLimit,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as { subjects: { id: string }[]; next: string | null };
+    expect(page.subjects.map(({ id }) => id)).toEqual(orderedIds.slice(consumed, consumed + deepPageLimit));
+    expect(page.subjects).toHaveLength(deepPageLimit);
+    expect(page.next).toBeString();
+    cursor = page.next!;
+    consumed += page.subjects.length;
   }
+  expect(consumed).toBe(depth);
+  if (!cursor) throw new Error('Public Search did not issue the deep continuation cursor');
+  return cursor;
+}
+
+async function measureDeepSearchPage(cursor: string, total: number): Promise<SearchWork> {
+  return measureSearchCase(async (sample) => {
+    const response = await postSearch({ ...deepSearch, limit: deepPageLimit, cursor });
+    expect(response.status).toBe(200);
+    const page = (await response.json()) as { subjects: { id: string }[]; next: string | null };
+    expect(page.subjects.map(({ id }) => id)).toEqual(matchedBookIds.slice(-deepPageLimit));
+    expect(page.subjects).toHaveLength(deepPageLimit);
+    expect(page.next).toBeNull();
+    expect(total % deepPageLimit).toBe(0);
+    expect(sample.engineRequests).toBeGreaterThan(0);
+    return page.subjects.length;
+  });
+}
+
+function searchWorkCounted(limit: number) {
+  const candidateLimit = Math.min(600, 6 * limit + 3);
+  return {
+    read(value: unknown) {
+      return value as SearchWork;
+    },
+    limits: { engineRequests: 3, candidateHits: candidateLimit, discardedCandidates: candidateLimit },
+    bounds: {
+      iteratorSteps: 'logarithmic' as const,
+      engineRequests: 'constant' as const,
+      candidateHits: 'constant' as const,
+      discardedCandidates: 'constant' as const,
+    },
+  };
+}
+
+function expectNoSemanticSearchScans(report: Awaited<ReturnType<typeof checkGrowth>>): void {
+  for (const sample of report.samples) {
+    const scans = Object.entries(sample.cost.relations ?? {}).filter(
+      ([relation, cost]) => relation.startsWith('semantic.') && (cost.sequentialScans ?? 0) > 0,
+    );
+    expect(scans).toEqual([]);
+  }
+}
+
+async function checkSearchGrowth(
+  database: GrowthDatabase,
+  options: {
+    name: string;
+    scales: readonly [number, number, number];
+    grow: (database: GrowthDatabase, scale: number, previous: number) => Promise<void>;
+    limit: number;
+    populationUnit?: number;
+    prepare?: (scale: number, repetition: number) => Promise<void>;
+    operation: (scale: number) => Promise<SearchWork>;
+  },
+): Promise<Awaited<ReturnType<typeof checkGrowth>>> {
+  const report = await checkSeeded(database, {
+    name: options.name,
+    scales: options.scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    counted: searchWorkCounted(options.limit),
+    repetitions: 1,
+    warmups: 1,
+    warmup: async () => undefined,
+    ...(options.prepare === undefined
+      ? {}
+      : { prepare: async (_database: GrowthDatabase, scale: number, repetition: number) => options.prepare!(scale, repetition) }),
+    grow: options.grow,
+    operation: (_database, scale) => options.operation(scale),
+  });
+  recordGrowthEvidence(options.name, report, options.populationUnit);
+  expect(report.samples).toHaveLength(3);
+  expectNoSemanticSearchScans(report);
+  return report;
 }
 
 test('Facet counts stays within its bound as N grows', async () => {
@@ -787,62 +1029,102 @@ test('type facet stays within its bound as subjects grow', async () => {
 
 test('Search hit facts stay within their bound as N grows', async () => {
   if (!db || !kernel) throw new Error('Growth fixtures are not ready');
-  const report = await checkSeeded(db, {
+  await checkSearchGrowth(db, {
     name: 'Search hit facts',
     scales: [1, 4, 16],
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    counted: {
-      read(value) {
-        return { iteratorSteps: (value as { iteratorSteps: number }).iteratorSteps };
-      },
-      bounds: { iteratorSteps: 'logarithmic' },
-    },
-    repetitions: 1,
-    warmups: 1,
     grow: growCatalogue,
-    operation: measureAdmittedSearchPlan,
+    limit: 20,
+    operation: () => measureAdmittedSearchPositive(),
   });
-  recordGrowthEvidence('search-hit-facts', report);
-  expect(report.samples).toHaveLength(3);
-  for (const sample of report.samples) {
-    const scans = Object.entries(sample.cost.relations ?? {}).filter(
-      ([relation, cost]) => relation.startsWith('semantic.') && (cost.sequentialScans ?? 0) > 0,
-    );
-    expect(scans).toEqual([]);
-  }
 }, 90_000);
 
 test('Search hit facts stay within their bound as neighbourhood history grows', async () => {
   if (!db || !kernel) throw new Error('Growth fixtures are not ready');
-  const report = await checkSeeded(db, {
+  await checkSearchGrowth(db, {
     name: 'Search hit facts history',
-    scales: [1, 4, 16],
-    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-    counted: {
-      read(value) {
-        return { iteratorSteps: (value as { iteratorSteps: number }).iteratorSteps };
-      },
-      bounds: { iteratorSteps: 'logarithmic' },
-    },
-    repetitions: 1,
-    warmups: 1,
+    scales: deepScales,
     grow: growHistory,
-    operation: measureAdmittedSearchPlan,
+    limit: 20,
+    populationUnit: 1,
+    operation: () => measureAdmittedSearchPositive(),
   });
-  recordGrowthEvidence('search-hit-facts-history', report);
-  expect(report.samples).toHaveLength(3);
-  for (const sample of report.samples) {
-    const scans = Object.entries(sample.cost.relations ?? {}).filter(
-      ([relation, cost]) => relation.startsWith('semantic.') && (cost.sequentialScans ?? 0) > 0,
-    );
-    expect(scans).toEqual([]);
-  }
 }, 90_000);
 
-test('every growth-facets check starts empty and seeds at most sixteen scale units of 500', async () => {
-  expect(starts).toHaveLength(4);
-  expect(fixtureRows).toHaveLength(4);
-  expect(finishes).toHaveLength(4);
+test('Search exhausted empty stays within its bound as history grows', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  await checkSearchGrowth(db, {
+    name: 'Search exhausted empty history',
+    scales: deepScales,
+    grow: growHistory,
+    limit: 20,
+    populationUnit: 1,
+    operation: () => measureExhaustedEmptySearch(),
+  });
+}, 90_000);
+
+test('Search invalid cursor refusal has an independent zero-query report', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  await checkSearchGrowth(db, {
+    name: 'Search invalid cursor',
+    scales: [1, 4, 16],
+    grow: growCatalogue,
+    limit: 20,
+    operation: () => measureInvalidCursorSearch(),
+  });
+}, 90_000);
+
+test('Search first page has an independent bounded-candidate report', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  await checkSearchGrowth(db, {
+    name: 'Search first page',
+    scales: [1, 4, 16],
+    grow: growCatalogue,
+    limit: 1,
+    operation: () => measureFirstSearchPage(),
+  });
+}, 90_000);
+
+test('Search second page has an independent public-cursor report', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  let cursor: string | undefined;
+  await checkSearchGrowth(db, {
+    name: 'Search second page',
+    scales: [1, 4, 16],
+    grow: growCatalogue,
+    limit: 1,
+    prepare: async () => {
+      cursor = await issueFirstSearchCursor();
+    },
+    operation: () => {
+      if (!cursor) throw new Error('Search second page cursor was not issued');
+      return measureSecondSearchPage(cursor);
+    },
+  });
+}, 90_000);
+
+test('Search deep page stays bounded as the matched catalogue and cursor depth grow', async () => {
+  if (!db || !kernel) throw new Error('Growth fixtures are not ready');
+  let cursor: string | undefined;
+  await checkSearchGrowth(db, {
+    name: 'Search deep page',
+    scales: deepScales,
+    grow: growMatchedCatalogue,
+    limit: deepPageLimit,
+    populationUnit: 1,
+    prepare: async (scale) => {
+      cursor = await issueDeepSearchCursor(scale);
+    },
+    operation: (scale) => {
+      if (!cursor) throw new Error('Search deep page cursor was not issued');
+      return measureDeepSearchPage(cursor, scale);
+    },
+  });
+}, 300_000);
+
+test('every growth-facets check starts empty and stays within the seeded maximum', async () => {
+  expect(starts).toHaveLength(9);
+  expect(fixtureRows).toHaveLength(9);
+  expect(finishes).toHaveLength(9);
   const sample = unrelatedPopulation('facet-counts-bound');
   const written = Object.fromEntries([...seededRelations, 'visible'].map((relation) => [relation, 0])) as Counts;
   for (let ordinal = 0; ordinal < 16 * unit; ordinal++) {
@@ -854,6 +1136,7 @@ test('every growth-facets check starts empty and seeds at most sixteen scale uni
   const empty = Object.fromEntries([...seededRelations, 'visible'].map((relation) => [relation, 0])) as Counts;
   for (const start of starts) expect(start).toEqual(empty);
   // The fixtures every check builds around the seeded rows are not part of the ordinals' units.
+  // The 8,000-row ceiling also covers the 4,096 matched-catalogue and history scales.
   finishes.forEach((finish, check) => {
     for (const relation of [...seededRelations, 'visible'] as const)
       expect(finish[relation]).toBeLessThanOrEqual(written[relation] + fixtureRows[check]![relation]);
