@@ -95,7 +95,7 @@ export function RealmBansPanel({ realmId }: { realmId: string }) {
       key={`${realmId}:${subject}`}
       realmId={realmId}
       {...binding}
-      selectedMember={selectedMember ?? undefined}
+      {...(selectedMember ? { selectedMember } : {})}
       ready={!!csrfToken}
     />
   );

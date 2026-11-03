@@ -88,7 +88,7 @@ function fixture(
           addMember: (intent) => {
             const response = state === 'addition-unknown' ? 'unknown' : state === 'addition-rejected' ? 'rejected' : 'accepted';
             const client = createKernelClient('https://kernel.story.invalid', {
-              fetch: async () => {
+              fetch: Object.assign(async () => {
                 if (response === 'unknown') throw new Error('Story response unavailable');
                 if (response === 'rejected')
                   return Response.json(
@@ -104,7 +104,7 @@ function fixture(
                     { status: 403 },
                   );
                 return Response.json({ workflowId: 'story-workflow' }, { status: 202 });
-              },
+              }, { preconnect() {} }),
             });
             return requestRealmMemberAddition(
               client,

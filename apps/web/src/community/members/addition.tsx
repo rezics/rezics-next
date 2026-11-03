@@ -5,6 +5,7 @@ import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type {
   MemberAdditionIntent,
   MemberAdditionResult,
+  RealmMembersSource,
   MemberSelectionRead,
   MemberSelectionAddress,
 } from './source';
