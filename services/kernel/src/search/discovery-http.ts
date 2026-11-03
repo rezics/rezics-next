@@ -337,6 +337,23 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
 /** Close the owner/summary union and snapshot nested owner values before serialization. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
+  const viewerFacts: DiscoveryHttpPage['viewerFacts'] =
+    page.viewerFacts === undefined || page.viewerFacts === null
+      ? page.viewerFacts
+      : page.viewerFacts.state === 'unavailable'
+        ? { ...page.viewerFacts }
+        : {
+            state: 'current',
+            question: page.viewerFacts.question
+              ? { ...page.viewerFacts.question, scale: { ...page.viewerFacts.question.scale } }
+              : null,
+            rows: page.viewerFacts.rows.map((row) => ({
+              rowKey: row.rowKey,
+              subjectId: row.subjectId,
+              entry: structuredClone(row.entry),
+              vote: structuredClone(row.vote),
+            })),
+          };
   return {
     ...page,
     hits: page.hits.map((hit): DiscoveryHttpPage['hits'][number] => {
@@ -345,7 +362,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const account = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'account' } }>;
         const summary = account.summary.value;
         return {
-          key: { ...account.key },
+          key: { owner: 'accounts', kind: 'account', route: account.key.route, id: account.key.id },
           summary: {
             kind: 'account' as const,
             value: {
@@ -361,7 +378,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         if (hit.key.owner !== 'semantic') throw new SearchUnavailableError('Discovery summary owner disagrees');
         const subject = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
         return {
-          key: { ...subject.key },
+          key: { owner: 'semantic', kind: subject.key.kind, route: subject.key.route, id: subject.key.id },
           summary: { kind: 'subject' as const, value: { ...subject.summary.value } },
           ...(subject.labels === undefined ? {} : { labels: { ...subject.labels } }),
           ...(subject.aliases === undefined
@@ -414,7 +431,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const collection = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'collection' } }>;
         const value = collection.summary.value;
         return {
-          key: { ...collection.key },
+          key: { owner: 'library', kind: 'collection', route: collection.key.route, id: collection.key.id },
           summary: {
             kind: 'collection' as const,
             value: {
@@ -444,7 +461,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         const review = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'review' } }>;
         const value = review.summary.value;
         return {
-          key: { ...review.key },
+          key: { owner: 'content', kind: 'review', route: review.key.route, id: review.key.id },
           summary: {
             kind: 'review' as const,
             value: {
@@ -459,13 +476,13 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       const space = hit as Extract<DiscoveryUnionHit, { summary: { kind: 'space' } }>;
       const value = space.summary.value;
       return {
-        key: { ...space.key },
+        key: { owner: 'community', kind: 'space', route: space.key.route, id: space.key.id },
         summary: {
           kind: 'space' as const,
           value: { ...value, ...(value.realm && value.realm !== null ? { realm: { ...value.realm } } : {}) },
         },
       };
     }),
-    ...(page.viewerFacts === undefined ? {} : { viewerFacts: structuredClone(page.viewerFacts) }),
+    ...(viewerFacts === undefined ? {} : { viewerFacts }),
   };
 }
