@@ -467,10 +467,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         params: t.Object({ subjectId: id }, closed),
         response: { 200: personalEntryResponse, ...failures },
-        detail: {
-          ...detail('library_entry_personal.get', 'library_entry:read'),
-          'x-authority-anchor': 'own-account',
-        },
+        detail: detail('library_entry_personal.get', 'library_entry:read'),
       },
       async ({ actor, params, admission, job, set }) => {
         point(actor, params.subjectId, 'library_entry:read');
