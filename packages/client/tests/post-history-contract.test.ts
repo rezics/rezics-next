@@ -29,10 +29,10 @@ test('post history and exact revision reads keep their compatible route addresse
       .posts({ id: postId })
       .revisions({ revisionId })
       .get({ query: { editionIdentity: 'true' } });
-    // @ts-expect-error Only the edition identity compatibility value is supported.
     await client
       .posts({ id: postId })
       .revisions({ revisionId })
+      // @ts-expect-error Only the edition identity compatibility value is supported.
       .get({ query: { editionIdentity: 'false' } });
   };
   expect(typeof typed).toBe('function');

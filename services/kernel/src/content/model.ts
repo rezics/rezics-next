@@ -124,7 +124,7 @@ export type ThreadInput = Readonly<{
 }>;
 export type PostInput = Readonly<{
   threadId: ThreadId;
-  visibility?: 'published' | 'draft' | 'protected';
+  visibility?: 'published' | 'draft';
   body: unknown;
   licence: string;
   subjectIds?: readonly ContentId[];
