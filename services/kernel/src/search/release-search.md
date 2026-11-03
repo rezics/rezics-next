@@ -85,6 +85,8 @@ Decision: platform, developer and publisher operands are chosen from localized p
 Decision: ordered display languages and release-language operands have separate URL fields; applying a predicate
 edit drops result continuations, while navigation links preserve the complete form and ordered operands.
 
+Decision: grouped results use `representation: 'release-grouped-v1'` on the universal search operation; `operation: 'children'` resumes one work's independent expansion, while omission selects the group stream.
+
 The mounted `/search/releases` page derives subtype controls and its filter from the shared `@rezics/filter`
 release roster. It preserves precise calendar endpoints, separate developer/publisher operands, imported Boolean
 conditions, sort, spoiler threshold and display language order across URL navigation. Unsupported or withdrawn

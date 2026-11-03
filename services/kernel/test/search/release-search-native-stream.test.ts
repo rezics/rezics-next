@@ -216,3 +216,25 @@ test('missing complete evidence fails closed and dispatch reservation failures p
   await expect(streams.groups(request, null, 2)).rejects.toThrow('no work-link allowance');
   expect(f.reads).toEqual([]);
 });
+
+test('a complete relation does not establish remote ownership when its canonical target is concealed', async () => {
+  const f = await fixture();
+  const owner = f.pools[0]!.source.read;
+  let targetReads = 0;
+  f.pools[0]!.source.read = async (partition, ids) => {
+    const snapshot = await owner(partition, ids);
+    if (!ids.includes(f.id(0))) return snapshot;
+    targetReads++;
+    return {
+      ...snapshot,
+      subjects: snapshot.subjects.map((subject) =>
+        subject.id === f.id(0) ? { ...subject, visibility: 'hidden' as const } : subject,
+      ),
+    };
+  };
+  const page = await f.streams.groups(request, null, 20);
+  expect(targetReads).toBeGreaterThan(0);
+  expect(page.keys).not.toContainEqual({ kind: 'work', id: f.id(0) });
+  expect(page.keys).toContainEqual({ kind: 'release', id: f.id(1) });
+  expect(JSON.stringify(page.keys)).not.toContain(f.id(0));
+});

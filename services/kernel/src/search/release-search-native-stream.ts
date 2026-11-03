@@ -34,13 +34,20 @@ export type ReleaseSearchCandidateReservation = ReleaseSearchNameReservation &
     sourceReads: number;
     completeWorkLinkReads: number;
     authorityObservations: number;
+    relationFacetReads?: number;
+    hydrationReads?: number;
+    serializationBytes?: number;
   }>;
-type Context = Readonly<{
+export type ReleaseSearchCandidateContext = Readonly<{
   deadline: number;
   reserve: (reservation: ReleaseSearchCandidateReservation) => void;
   /** Full retained authority across ALL pools, beyond canonical-name publication. */
-  observe: (context: { deadline: number }) => Promise<ReleaseGroupingBasis>;
+  observe: (context: {
+    deadline: number;
+    homesByPool: Readonly<Record<string, readonly { partition: number; position: string }[]>>;
+  }) => Promise<ReleaseGroupingBasis>;
 }>;
+type Context = ReleaseSearchCandidateContext;
 export type ReleaseSearchCandidateCut = Readonly<{
   names: ReleaseSearchNameCut;
   basis: ReleaseGroupingBasis;
@@ -103,9 +110,23 @@ function reserve(
   });
 }
 
-async function authority(pools: readonly ReleaseSearchCandidatePool[], context: Context) {
-  for (const pool of pools) reserve(context, pool.id, 'authorityObservations');
-  return structuredClone(await context.observe({ deadline: context.deadline }));
+async function authority(
+  pools: readonly ReleaseSearchCandidatePool[],
+  names: ReleaseSearchNameCut,
+  context: Context,
+) {
+  const homesByPool: Record<string, { partition: number; position: string }[]> = {};
+  for (const pool of pools) {
+    const population = names.pools.find(({ id }) => id === pool.id)?.population;
+    if (!population) throw new ReleaseGroupingRestartRequired();
+    const homes = population.homes.map(({ partition, position }) => ({ partition, position }));
+    homesByPool[pool.id] = homes;
+    // The final authority observer reads each populated owner cut separately. Empty pools still
+    // reserve and retain their generation observation so later population invalidates progress.
+    reserve(context, pool.id, 'authorityObservations');
+    for (const _home of homes) reserve(context, pool.id, 'sourceReads');
+  }
+  return structuredClone(await context.observe({ deadline: context.deadline, homesByPool }));
 }
 
 /** Retain full authority around the name population observation, including empty pools. */
@@ -114,10 +135,13 @@ export async function observeReleaseSearchCandidates(
   context: Context,
 ): Promise<ReleaseSearchCandidateCut> {
   const plan = [...pools];
-  const basis = await authority(plan, context);
   const names = await observeReleaseSearchNames(plan, nameContext(context));
-  if (!isDeepStrictEqual(basis, await authority(plan, context))) throw new ReleaseGroupingRestartRequired();
-  return { names, basis };
+  const basis = await authority(plan, names, context);
+  const currentNames = await observeReleaseSearchNames(plan, nameContext(context));
+  const currentBasis = await authority(plan, currentNames, context);
+  if (!isDeepStrictEqual(names, currentNames) || !isDeepStrictEqual(basis, currentBasis))
+    throw new ReleaseGroupingRestartRequired();
+  return { names: currentNames, basis: currentBasis };
 }
 
 function binding(request: ReleaseGroupingRequest, cut: ReleaseSearchCandidateCut, work?: string): string {
@@ -169,6 +193,12 @@ export function createReleaseSearchCandidateStreams(input: {
 
   async function classify(keys: Awaited<ReturnType<typeof readReleaseSearchNames>>['keys']): Promise<Classified[]> {
     const current = new Map<string, Classified>();
+    const poolByPartition = new Map<number, { pool: ReleaseSearchCandidatePool; position: string }>();
+    for (const pool of pools) {
+      const population = cut.names.pools.find(({ id }) => id === pool.id)?.population;
+      if (!population) throw new ReleaseGroupingRestartRequired();
+      for (const home of population.homes) poolByPartition.set(home.partition, { pool, position: home.position });
+    }
     // Native name order interleaves homes. Keep every current read anchored to its exact retained home.
     for (const pool of pools) {
       const population = cut.names.pools.find(({ id }) => id === pool.id)?.population;
@@ -207,6 +237,45 @@ export function createReleaseSearchCandidateStreams(input: {
           )
             return unavailable();
           current.get(id)!.link = releaseWorkLink(evidence.complete, evidence.values);
+        }
+      }
+    }
+
+    // The relation owner establishes a complete link, but only the target's own pool can
+    // establish that the canonical work is still a visible current CreativeWork. This
+    // cross-pool anchor keeps a stale, remote, concealed, or redirected target identity-free.
+    const linked = new Map<string, Classified[]>();
+    for (const value of current.values())
+      if (value.link?.kind === 'linked')
+        linked.set(value.link.work, [...(linked.get(value.link.work) ?? []), value]);
+    const byOwner = new Map<ReleaseSearchCandidatePool, Map<number, string[]>>();
+    for (const [work, releases] of linked) {
+      const owner = poolByPartition.get(subjectPartition(work));
+      if (!owner) {
+        for (const release of releases) release.link = { kind: 'unknown' };
+        continue;
+      }
+      const partitions = byOwner.get(owner.pool) ?? new Map<number, string[]>();
+      const ids = partitions.get(subjectPartition(work)) ?? [];
+      ids.push(work);
+      partitions.set(subjectPartition(work), ids);
+      byOwner.set(owner.pool, partitions);
+    }
+    for (const [pool, partitions] of byOwner) {
+      for (const [partition, ids] of partitions) {
+        const home = poolByPartition.get(partition);
+        if (!home || home.pool !== pool) throw new ReleaseGroupingRestartRequired();
+        reserve(context, pool.id, 'sourceReads', ids.length);
+        const snapshot = await pool.source.read(partition, ids);
+        const subjects = validateRequestSourceSnapshot(snapshot, partition, ids);
+        if (snapshot.position.toString() !== home.position) throw new ReleaseGroupingRestartRequired();
+        for (const id of ids) {
+          const subject = subjects.get(id);
+          const type = subject && Object.hasOwn(release.types, subject.type) ? release.types[subject.type] : undefined;
+          const workType =
+            subject?.type === 'schema:CreativeWork' || !!type?.bases?.includes('schema:CreativeWork');
+          if (!subject || subject.visibility !== 'visible' || subject.redirect !== null || !workType)
+            for (const release of linked.get(id) ?? []) release.link = { kind: 'unknown' };
         }
       }
     }
@@ -264,6 +333,12 @@ export function createReleaseSearchCandidateStreams(input: {
       if (keys.length === size) break;
     }
     const consumed = namesAfter === page.after && skipWorkFor === undefined;
+    const rechecked = new Map((await classify(page.keys)).map((key) => [key.id, key]));
+    if (
+      [...classified].some(([id, value]) => !isDeepStrictEqual(value, rechecked.get(id))) ||
+      [...rechecked.keys()].some((id) => !classified.has(id))
+    )
+      throw new ReleaseGroupingRestartRequired();
     await assertCurrent();
     return {
       keys,
