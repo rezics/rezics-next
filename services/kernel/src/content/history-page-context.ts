@@ -9,7 +9,7 @@ import { readVisibleRatingQuestion, ratingQuestionView } from '../rating/questio
 import type { RatingQuestionView } from '../rating/question-directory.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import { readDocumentMediaPresentations, type DocumentImagePresentation } from './media-presentation.ts';
-import type { Anchored, AnchoredPosition, BoardView, ReadContext, ThreadView } from './model.ts';
+import type { Anchored, AnchoredPosition, BoardView, ReadContext } from './model.ts';
 import {
   ContentNotFoundError,
   listPostRevisions,
@@ -18,6 +18,7 @@ import {
   type ContentReadDependencies,
   type ItemView,
   type PostEntry,
+  type ThreadView,
 } from './reads.ts';
 import { readingPageOperationState, type ReadingPageViewerActionRuntime } from './reading-page.ts';
 import { routeOf } from '../route/route.ts';
@@ -108,7 +109,9 @@ function identityIds(posts: readonly ItemView[], currentHead: PostEntry, convers
 function documentMentionIds(posts: readonly ItemView[]): string[] {
   const ids = new Set<string>();
   for (const post of posts) {
-    const pending: unknown[] = [post.body.doc];
+    const body = post.body;
+    if (!body) continue;
+    const pending: unknown[] = [body.doc];
     while (pending.length && ids.size < HISTORY_MENTION_LIMIT) {
       const value = pending.pop();
       if (!value || typeof value !== 'object') continue;
@@ -362,11 +365,12 @@ export async function readContentHistoryPage(
   const selected = await listPostRevisions(dependencies, threadId, postId, readContext, cursor, limit);
   if (selected.currentHead.availability === 'withheld') throw new ContentNotFoundError();
   const firstThread: Anchored<ThreadView | null> = await readThread(dependencies, threadId, readContext);
-  if (!firstThread.value || firstThread.value.firstPost.availability === 'withheld') throw new ContentNotFoundError();
-  const firstBoard = await readBoard(dependencies, firstThread.value.boardId, readContext);
+  const initialThread = firstThread.value;
+  if (!initialThread) throw new ContentNotFoundError();
+  const firstBoard = await readBoard(dependencies, initialThread.boardId, readContext);
   if (!firstBoard.value) throw new ContentNotFoundError();
 
-  const authors = identityIds(selected.posts, selected.currentHead, firstThread.value.authorId);
+  const authors = identityIds(selected.posts, selected.currentHead, initialThread.authorId);
   const mentions = documentMentionIds(selected.posts);
   const subjects = selectedSubjectIds(selected.posts);
   const media = mediaIds(selected.posts);
@@ -420,7 +424,7 @@ export async function readContentHistoryPage(
 
   let reviewState: OptionalState = 'current';
   let questions: ReadonlyMap<string, RatingQuestionView | null> = new Map();
-  if (firstThread.value.kind === 'review') {
+  if (initialThread.kind === 'review') {
     try {
       questions = await readReviewQuestions(dependencies, actor, selected.posts, deadline);
       if (
@@ -433,7 +437,7 @@ export async function readContentHistoryPage(
     }
   }
 
-  const actions = await readHistoryActions(dependencies, actor, firstThread.value, selected.currentHead, deadline);
+  const actions = await readHistoryActions(dependencies, actor, initialThread, selected.currentHead, deadline);
 
   // Recheck every optional owner read before the final native source fence. A changed or failed
   // optional owner is explicitly unavailable; it is never serialized as a confirmed absence.
@@ -492,15 +496,15 @@ export async function readContentHistoryPage(
       reviewState = 'unavailable';
     }
   }
-  if (subjectState === 'unavailable' && firstThread.value.kind === 'review') reviewState = 'unavailable';
+  if (subjectState === 'unavailable' && initialThread.kind === 'review') reviewState = 'unavailable';
 
   const finalThread = await readThread(dependencies, threadId, readContext);
-  const finalBoard = finalThread.value ? await readBoard(dependencies, finalThread.value.boardId, readContext) : null;
+  const finalConversation = finalThread.value;
+  const finalBoard = finalConversation ? await readBoard(dependencies, finalConversation.boardId, readContext) : null;
   if (
-    !finalThread.value ||
-    finalThread.value.firstPost.availability === 'withheld' ||
+    !finalConversation ||
     !finalBoard?.value ||
-    threadWitness(firstThread.value) !== threadWitness(finalThread.value) ||
+    threadWitness(initialThread) !== threadWitness(finalConversation) ||
     boardWitness(firstBoard.value) !== boardWitness(finalBoard.value) ||
     !(await selected.revalidate())
   )
@@ -521,7 +525,7 @@ export async function readContentHistoryPage(
       : [],
   );
   let reviewItemsForPage =
-    firstThread.value.kind === 'review'
+    initialThread.kind === 'review'
       ? reviewItems(selected.posts, questions, readableSubjects, reviewState === 'unavailable')
       : [];
   if (reviewItemsForPage.some((item) => responseBytes(item) > MAX_REVIEW_DISPLAY_BYTES)) {
@@ -532,12 +536,12 @@ export async function readContentHistoryPage(
     reviewItemsForPage.flatMap((item) => (item.state === 'available' ? [item.revisionId] : [])),
   );
   const outputRevisions = selected.posts.map((post) =>
-    firstThread.value!.kind === 'review' && post.voteCitation && !visibleCitationIds.has(post.revisionId)
+    initialThread.kind === 'review' && post.voteCitation && !visibleCitationIds.has(post.revisionId)
       ? { ...post, voteCitation: null }
       : post,
   );
   const review =
-    firstThread.value.kind === 'review'
+    initialThread.kind === 'review'
       ? {
           state: reviewState,
           retryable: reviewState === 'unavailable',
@@ -559,18 +563,18 @@ export async function readContentHistoryPage(
     viewer:
       actor.kind === 'account' ? { kind: 'account' as const, id: actor.accountId } : { kind: 'anonymous' as const },
     conversation: {
-      id: firstThread.value.id,
-      kind: firstThread.value.kind,
-      title: firstThread.value.title,
-      authorId: firstThread.value.authorId,
-      boardId: firstThread.value.boardId,
-      subjectIds: [...firstThread.value.subjectIds],
-      createdAt: firstThread.value.createdAt,
+      id: initialThread.id,
+      kind: initialThread.kind,
+      title: initialThread.title,
+      authorId: initialThread.authorId,
+      boardId: initialThread.boardId,
+      subjectIds: [...initialThread.subjectIds],
+      createdAt: initialThread.createdAt,
     },
     board: finalBoard.value,
     place:
       finalBoard.value.realmId === null
-        ? { kind: 'global' as const, id: GLOBAL_CONTEXT.id }
+        ? { kind: 'global' as const, id: GLOBAL_CONTEXT }
         : { kind: 'realm' as const, id: finalBoard.value.realmId },
     head,
     authors: {
@@ -631,7 +635,7 @@ export async function readContentHistoryPage(
       firstThread.anchor,
       firstBoard.anchor,
       finalThread.anchor,
-      finalBoard.value.anchor,
+      finalBoard.anchor,
     ]),
   };
 }
