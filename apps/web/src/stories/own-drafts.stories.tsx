@@ -1,6 +1,8 @@
 import { fromPlainText } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
+import { expect, userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { OwnDraftsPage } from '../threads/own-drafts/page';
 import type {
   OwnDraftEntry,
@@ -123,3 +125,36 @@ export const SparseContinuation: Story = { args: { scenario: 'sparse' } };
 export const SelectedUnavailable: Story = { args: { scenario: 'concealed' } };
 export const Denied: Story = { args: { scenario: 'denied' } };
 export const LongGerman: Story = { args: { locale: 'de', scenario: 'ready' } };
+
+const selectDraft: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
+  const view = within(canvasElement);
+  const inspect = await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) });
+  await userEvent.click(inspect[0]!);
+  const body = await view.findByRole('article');
+  await expect(body).toHaveTextContent('The exact selected draft body');
+  await expect(view.getByRole('heading', { level: 1 })).toHaveFocus();
+};
+
+export const Selected: Story = { play: selectDraft };
+export const ReadyPhoneLight: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-[390px] max-w-full bg-background text-foreground">
+        <Story />
+      </div>
+    ),
+  ],
+};
+export const SelectedPhoneDark: Story = {
+  play: selectDraft,
+  decorators: [
+    (Story) => (
+      <div className="dark w-[390px] max-w-full bg-background text-foreground">
+        <Story />
+      </div>
+    ),
+  ],
+};
+export const PreparingPhoneDark: Story = { ...SelectedPhoneDark, args: { scenario: 'preparing' }, play: undefined };
+export const DeniedPhoneDark: Story = { ...SelectedPhoneDark, args: { scenario: 'denied' }, play: undefined };
+export const LongGermanPhoneDark: Story = { ...SelectedPhoneDark, args: { locale: 'de' }, play: undefined };

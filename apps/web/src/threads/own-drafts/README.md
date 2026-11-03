@@ -4,7 +4,10 @@ This Web slice defines the bounded inventory and private inspection component. T
 metadata, indexes that page once, and requests one selected body only after an explicit selection. Continuation
 replaces the current page; the opaque cursor stays in component memory. Unknown and concealed selections share one
 message, a stale revision asks for an explicit inventory restart, and an operational read failure retains the exact
-selection for retry.
+selection for retry. Account, authentication/caller epoch, locale, source, reader and active-state replacements
+remount the private boundary and synchronously abort outstanding reads. A concealed or changed selected head drops
+its metadata and action advice; returning to the inventory requires an explicit retry or restart. Keyboard selection
+focuses the inspection heading and returning restores focus to the corresponding inventory control.
 
 Decision: resume inspection through a typed `OwnDraftReader` seam and bind it only after Content publishes its
 generated own-draft client methods; browser-local writing is not read or replaced by this consumer.
@@ -23,5 +26,7 @@ readback, browser-local recovery choice, and their mounted tests remain in the c
   while listing or opening another page.
 - Bound: At most 20 metadata rows in one page index, one retained page and one selected native body. Lookup is O(1)
   after one O(N) map build. Continuation replaces the page; there is no refill, polling or accumulated body list.
-- Growth check: `apps/web/tests/own-drafts-page.test.tsx` checks the 20-row bound, duplicate identities, exact action
-  paths and identity/cursor keying. Native 256/1024/4096 history and partition growth remain Content acceptance.
+- Growth check: `apps/web/tests/own-drafts-page.test.tsx` checks the 20-row bound, duplicate identities and
+  identity/cursor keying. Mounted `own-drafts-resume.test.tsx` checks 1/10/20-row pages, one explicitly selected body,
+  sparse replacement, focus restoration and late-response retirement. `own-drafts-commands.test.tsx` pins exact
+  account/resource/revision action advice, including malformed and absolute paths. Native 256/1024/4096 history and partition growth remain Content acceptance.

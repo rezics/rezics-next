@@ -1,6 +1,6 @@
 import { documentText } from '@rezics/document';
 import { Button } from '@rezics/ui/shadcn/button';
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import {
   admittedOwnDraftAction,
@@ -25,7 +25,8 @@ type PageState =
 
 type SelectionState =
   | { identityKey: string; entry: OwnDraftEntry; state: 'loading' }
-  | { identityKey: string; entry: OwnDraftEntry; state: 'unavailable' | 'concealed' | 'stale' }
+  | { identityKey: string; entry: OwnDraftEntry; state: 'unavailable' }
+  | { identityKey: string; state: 'concealed' | 'stale' }
   | { identityKey: string; entry: OwnDraftEntry; state: 'ready'; selection: OwnDraftSelection };
 
 const control = 'min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere]';
@@ -59,10 +60,26 @@ export function OwnDraftsPage({
   reader: OwnDraftReader;
   initialPage?: OwnDraftPageData;
 }) {
-  return <BoundOwnDraftsPage key={ownDraftIdentityKey(identity)} identity={identity} active={active} reader={reader} initialPage={initialPage} />;
+  const binding = useRef({ reader, active, generation: 0 });
+  if (binding.current.reader !== reader || binding.current.active !== active)
+    binding.current = { reader, active, generation: binding.current.generation + 1 };
+  return (
+    <BoundOwnDraftsPage
+      key={JSON.stringify([ownDraftIdentityKey(identity), binding.current.generation])}
+      identity={identity}
+      active={active}
+      reader={reader}
+      initialPage={initialPage}
+    />
+  );
 }
 
-function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
+function BoundOwnDraftsPage({
+  identity,
+  active,
+  reader,
+  initialPage,
+}: {
   identity: OwnDraftIdentity;
   active: boolean;
   reader: OwnDraftReader;
@@ -72,38 +89,50 @@ function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
   const identityKey = ownDraftIdentityKey(identity);
   const identityRef = useRef(identityKey);
   identityRef.current = identityKey;
-  const previousIdentity = useRef(identityKey);
   const listController = useRef<AbortController | null>(null);
   const selectionController = useRef<AbortController | null>(null);
   const selectionGeneration = useRef(0);
-  const returnFocus = useRef<{ key: string; button: HTMLButtonElement } | null>(null);
+  const controlId = useId();
+  const selectionHeading = useRef<HTMLHeadingElement>(null);
+  const returnFocus = useRef<{ key: string; id: string } | null>(null);
   const [cursor, setCursor] = useState<{ key: string; value: string | null }>({ key: identityKey, value: null });
   const currentCursor = cursor.key === identityKey ? cursor.value : null;
   const requestKey = ownDraftRequestKey(identityKey, currentCursor);
   const [retry, setRetry] = useState(0);
-  const initial = useRef(initialPage);
-  const [pageState, setPageState] = useState<PageState | null>(() => initialPage ? {
-    requestKey, state: initialPage.state, page: initialPage, index: indexOwnDraftPage(initialPage),
-  } : null);
+  const admittedInitial =
+    initialPage?.viewer.accountId === identity.accountId && initialPage.viewer.authnEpoch === identity.authnEpoch
+      ? initialPage
+      : undefined;
+  const initial = useRef(admittedInitial);
+  const [pageState, setPageState] = useState<PageState | null>(() =>
+    admittedInitial
+      ? {
+          requestKey,
+          state: admittedInitial.state,
+          page: admittedInitial,
+          index: indexOwnDraftPage(admittedInitial),
+        }
+      : null,
+  );
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null);
   const page = active && pageState?.requestKey === requestKey ? pageState : null;
   const selection = active && page && selectionState?.identityKey === identityKey ? selectionState : null;
   const admission = useRef({ active, reader, requestKey });
   admission.current = { active, reader, requestKey };
-  const current = () => admission.current.active && admission.current.reader === reader && admission.current.requestKey === requestKey;
+  const current = () =>
+    admission.current.active && admission.current.reader === reader && admission.current.requestKey === requestKey;
 
   useLayoutEffect(() => {
-    if (previousIdentity.current === identityKey) return;
-    previousIdentity.current = identityKey;
-    listController.current?.abort();
-    selectionController.current?.abort();
-    selectionGeneration.current++;
-    returnFocus.current = null;
-    setCursor({ key: identityKey, value: null });
-    setRetry(0);
-    setPageState(null);
-    setSelectionState(null);
-  }, [identityKey]);
+    admission.current.active = active;
+    return () => {
+      // Retirement must abort a selected read even when only its promise remains mounted.
+      admission.current.active = false;
+      listController.current?.abort();
+      selectionController.current?.abort();
+      selectionGeneration.current++;
+      returnFocus.current = null;
+    };
+  }, [active]);
 
   useEffect(() => {
     if (!active) {
@@ -155,18 +184,23 @@ function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
     const pending = returnFocus.current;
     if (!selection && pending?.key === identityKey) {
       returnFocus.current = null;
-      pending.button.focus();
+      document.getElementById(pending.id)?.focus();
     }
   }, [identityKey, selection]);
 
-  const open = (entry: OwnDraftEntry, button: HTMLButtonElement) => {
+  const selectedId = selection && 'entry' in selection ? selection.entry.id : null;
+  useLayoutEffect(() => {
+    if (selection) selectionHeading.current?.focus();
+  }, [selectedId]);
+
+  const open = (entry: OwnDraftEntry) => {
     if (!admittedOwnDraftAction(entry, identity.accountId, 'resume')) return;
     listController.current?.abort();
     selectionController.current?.abort();
     const controller = new AbortController();
     selectionController.current = controller;
     const generation = ++selectionGeneration.current;
-    returnFocus.current = { key: identityKey, button };
+    returnFocus.current = { key: identityKey, id: `${controlId}-${entry.id}` };
     setSelectionState({ identityKey, entry, state: 'loading' });
     void readSelectedOwnDraft(reader, identity, entry, controller.signal)
       .then((result) => {
@@ -182,11 +216,13 @@ function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
             setPageState({ requestKey, state: 'denied' });
             return;
           }
-          setSelectionState({
-            identityKey,
-            entry,
-            state: result === 'unavailable' || result === 'stale' ? result : 'concealed',
-          });
+          if (result === 'unavailable') {
+            setSelectionState({ identityKey, entry, state: 'unavailable' });
+          } else {
+            // A changed or concealed head retires its metadata and action advice as well as its bytes.
+            setPageState({ requestKey, state: 'unavailable' });
+            setSelectionState({ identityKey, state: result === 'stale' ? 'stale' : 'concealed' });
+          }
           return;
         }
         setSelectionState({ identityKey, entry, state: 'ready', selection: result });
@@ -209,9 +245,7 @@ function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
   };
 
   const retrySelection = () => {
-    if (!selection || selection.state === 'loading') return;
-    const button = returnFocus.current?.button;
-    if (button) open(selection.entry, button);
+    if (selection?.state === 'unavailable') open(selection.entry);
   };
 
   const continuePage = () => {
@@ -243,28 +277,37 @@ function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
   }
 
   if (selection) {
-    const title = selection.entry.title ?? m.own_drafts_no_title({}, { locale });
+    const title =
+      selection.state === 'ready'
+        ? (selection.entry.title ?? m.own_drafts_no_title({}, { locale }))
+        : m.own_drafts_title({}, { locale });
     return (
       <main className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6" aria-busy={selection.state === 'loading'}>
         <Button type="button" variant="outline" className={control} onClick={closeSelection}>
           {m.own_drafts_return({}, { locale })}
         </Button>
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <p className="text-sm text-muted-foreground">
-          {kindLabel(selection.entry, locale)} · {documentKindLabel(selection.entry, locale)} ·{' '}
-          <a className="underline" href={`/boards/${selection.entry.board.id}`}>
-            {selection.entry.board.title ?? m.own_drafts_board_unavailable({}, { locale })}
-          </a>
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {m.own_drafts_language({}, { locale })}:{' '}
-          {selection.entry.language ?? m.own_drafts_language_unknown({}, { locale })}
-          {' · '}
-          {m.own_drafts_licence({}, { locale })}: {selection.entry.licence}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {m.own_drafts_revision({}, { locale })}: {selection.entry.revisionId}
-        </p>
+        <h1 ref={selectionHeading} tabIndex={-1} className="text-2xl font-semibold">
+          {title}
+        </h1>
+        {selection.state === 'ready' ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {kindLabel(selection.entry, locale)} · {documentKindLabel(selection.entry, locale)} ·{' '}
+              <a className="underline" href={`/boards/${selection.entry.board.id}`}>
+                {selection.entry.board.title ?? m.own_drafts_board_unavailable({}, { locale })}
+              </a>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {m.own_drafts_language({}, { locale })}:{' '}
+              {selection.entry.language ?? m.own_drafts_language_unknown({}, { locale })}
+              {' · '}
+              {m.own_drafts_licence({}, { locale })}: {selection.entry.licence}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {m.own_drafts_revision({}, { locale })}: {selection.entry.revisionId}
+            </p>
+          </>
+        ) : null}
         {selection.state === 'loading' ? <p role="status">{m.own_drafts_opening_selection({}, { locale })}</p> : null}
         {selection.state === 'concealed' ? (
           <p role="status">{m.own_drafts_selection_unavailable({}, { locale })}</p>
@@ -377,8 +420,9 @@ function BoundOwnDraftsPage({ identity, active, reader, initialPage }: {
                   <Button
                     type="button"
                     className={`${control} mt-3`}
+                    id={`${controlId}-${entry.id}`}
                     disabled={!admittedOwnDraftAction(entry, identity.accountId, 'resume')}
-                    onClick={(event: MouseEvent<HTMLButtonElement>) => open(entry, event.currentTarget)}
+                    onClick={() => open(entry)}
                   >
                     {m.own_drafts_inspect({}, { locale })}
                   </Button>

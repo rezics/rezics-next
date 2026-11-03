@@ -105,16 +105,15 @@ export function admittedOwnDraftAction(
   accountId: string,
   action: keyof OwnDraftActionPaths,
 ): string | null {
-  const offered = entry.actions[action];
-  const expected = pathFor(entry, accountId, action);
-  if (!offered || !expected) return null;
-  try {
-    const url = new URL(offered, 'https://kernel.invalid');
-    if (url.origin !== 'https://kernel.invalid' || `${url.pathname}${url.search}` !== expected) return null;
-    return expected;
-  } catch {
+  // Advice never grants authority for a different account or a replacement revision.
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (
+    entry.authorId !== accountId ||
+    ![accountId, entry.id, entry.threadId, entry.revisionId].every((id) => uuid.test(id))
+  )
     return null;
-  }
+  const expected = pathFor(entry, accountId, action);
+  return entry.actions[action] === expected ? expected : null;
 }
 
 export function ownDraftIdentityKey(identity: OwnDraftIdentity): string {
