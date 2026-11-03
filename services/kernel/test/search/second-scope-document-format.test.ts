@@ -186,4 +186,5 @@ test('incomplete, foreign and expanded documents fail before indexing or hit dis
   ).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, document_format: 1 })).toThrow();
   expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'commerce' })).toThrow();
+  expect(() => validateDiscoveryDocumentFormat(registry, { ...spaceAction.document, owner: 'semantic' })).toThrow();
 });

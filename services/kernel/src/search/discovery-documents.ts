@@ -419,7 +419,11 @@ function validateSecondScopeDiscoveryDocument(
 
 /** Typed validator for the closed format-1/format-2 family and the local second-scope seam. */
 export function validateDiscoveryDocumentFormat(registry: DiscoveryRegistry, value: unknown): DiscoveryDocumentValue {
-  if (record(value) && (value.owner === 'commerce' || value.owner === 'content'))
+  if (
+    record(value) &&
+    ((value.owner === 'commerce' || value.owner === 'content') ||
+      (typeof value.kind === 'string' && secondScopeOwner(value.kind) !== undefined))
+  )
     return validateSecondScopeDiscoveryDocument(registry, value);
   return validateRegisteredDiscoveryDocument(registry, value);
 }
