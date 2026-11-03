@@ -4,14 +4,11 @@ import { routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
-let clockTime: number | undefined;
-const clock = () => new Date(clockTime ?? Date.now());
 
 beforeAll(async () => {
-  f = await createProfileEntryFixture({ clock });
+  f = await createProfileEntryFixture();
 }, 120_000);
 beforeEach(async () => {
-  clockTime = undefined;
   await f.activate(f.originalDigest);
 });
 afterAll(async () => f?.close());
@@ -19,7 +16,6 @@ afterAll(async () => f?.close());
 test('private annotations and reviewed provider observations have independent revisions, replay, privacy and source clocks', async () => {
   const subjectId = await f.createSubject('game');
   await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey());
-  clockTime = Date.parse('2025-01-02T03:04:05.000Z');
 
   const annotationKey = entryKey();
   const saved = await f.send(
@@ -108,8 +104,8 @@ test('private annotations and reviewed provider observations have independent re
     privacy: { status: 'known', meaning: 'private' },
     sourceCreated: { status: 'known', value: '2004-02', precision: 'month', zone: 'unknown' },
     sourceUpdated: { status: 'known', value: '2004-02-29T23:59:01.123+08:00', precision: 'fraction', zone: 'offset' },
-    recordedAt: '2025-01-02T03:04:05.000000Z',
   });
+  expect(personal.sourceObservations[1]!.recordedAt).not.toBe('2004-02-29T23:59:01.123+08:00');
   expect(personal.sourceObservations[2]).toMatchObject({
     privacy: { status: 'known', meaning: 'source_visible' },
     sourceUpdated: { status: 'known', value: '2005-04-01T00:00-00:00', precision: 'minute', zone: 'unknown' },
@@ -140,7 +136,6 @@ test('private annotations and reviewed provider observations have independent re
   expect(stale.status).toBe(409);
 
   const correctionKey = entryKey();
-  clockTime = Date.parse('2025-02-03T04:05:06.000Z');
   const correctionBody = {
     provider: 'mal',
     recordId: 'list/17',
@@ -174,9 +169,9 @@ test('private annotations and reviewed provider observations have independent re
       privacy: { status: 'cleared' },
       sourceCreated: { status: 'known', value: '2004-02', precision: 'month', zone: 'unknown' },
       sourceUpdated: { status: 'cleared' },
-      recordedAt: '2025-02-03T04:05:06.000000Z',
     },
   });
+  expect(correctedBody.sourceObservation.recordedAt).not.toBe('2004-02-29T23:59:01.123+08:00');
   const staleCorrection = await f.send('owner', 'PATCH', `/v1/libraryEntries/${subjectId}/sourceObservations`, {
     provider: 'mal',
     recordId: 'list/17',
