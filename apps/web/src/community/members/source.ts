@@ -63,9 +63,7 @@ export type MemberAdditionIntent = Readonly<{
   idempotencyKey: string;
 }>;
 
-export type MemberAdditionResult =
-  | { kind: 'accepted'; workflowId: string }
-  | { kind: 'rejected' | 'unknown' };
+export type MemberAdditionResult = { kind: 'accepted'; workflowId: string } | { kind: 'rejected' | 'unknown' };
 
 export interface RealmMembersSource {
   /**

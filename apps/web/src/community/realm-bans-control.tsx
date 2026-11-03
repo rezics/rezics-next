@@ -433,12 +433,8 @@ function RealmBansVisit({
     const destination =
       request.destination === 'trigger'
         ? review.action === 'ban'
-          ? (
-              selectedNow.current?.account.id === review.target ||
-              (selectedMember !== undefined &&
-                selectedMember.accountId === review.target &&
-                selectedMember.current())
-            )
+          ? selectedNow.current?.account.id === review.target ||
+            (selectedMember !== undefined && selectedMember.accountId === review.target && selectedMember.current())
             ? review.trigger
             : null
           : view.state === 'ready'
@@ -1071,14 +1067,12 @@ function RealmBansVisit({
                 </Button>
               ) : null}
               {selectedMember.advice.ban === 'unknown' || selectedMember.advice.unban === 'unknown' ? (
-                <p role="status" className="text-sm">{m.realm_members_actions_unavailable()}</p>
+                <p role="status" className="text-sm">
+                  {m.realm_members_actions_unavailable()}
+                </p>
               ) : null}
               {selectedReview && selectedMember.current() ? (
-                <div
-                  role="group"
-                  aria-labelledby={`${id}-selected-review`}
-                  className="space-y-3 rounded-lg border p-4"
-                >
+                <div role="group" aria-labelledby={`${id}-selected-review`} className="space-y-3 rounded-lg border p-4">
                   <h4 id={`${id}-selected-review`} className="font-medium">
                     {selectedReview === 'ban' ? m.realm_bans_ban() : m.realm_bans_unban_confirm()}
                   </h4>
@@ -1101,9 +1095,7 @@ function RealmBansVisit({
                       {m.realm_bans_reason()}: {selectedReviewReason || '—'}
                     </p>
                   ) : null}
-                  {selectedReview === 'ban' ? (
-                    <p className="text-sm">{m.realm_bans_help()}</p>
-                  ) : null}
+                  {selectedReview === 'ban' ? <p className="text-sm">{m.realm_bans_help()}</p> : null}
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"

@@ -141,13 +141,19 @@ export function MemberAddition({
   if (selected.membership !== 'none' && !workPending) return null;
   if (selected.membership === 'none' && selected.advice.add === 'unavailable' && !workPending) return null;
   if (selected.membership === 'none' && selected.advice.add === 'unknown' && !workPending)
-    return <p role="status" className="text-sm">{m.realm_members_actions_unavailable()}</p>;
+    return (
+      <p role="status" className="text-sm">
+        {m.realm_members_actions_unavailable()}
+      </p>
+    );
   if (!addMember && !workPending) return null;
 
   const intent = 'intent' in state ? state.intent : null;
   return (
     <section aria-labelledby="realm-member-add-heading" className="space-y-3 rounded-lg border p-4">
-      <h3 id="realm-member-add-heading" className="font-semibold">{m.realm_members_add_member()}</h3>
+      <h3 id="realm-member-add-heading" className="font-semibold">
+        {m.realm_members_add_member()}
+      </h3>
       {state.kind === 'review' && intent ? (
         <div role="group" aria-label={m.realm_members_add_member()} className="space-y-3">
           <p>{m.realm_members_add_review({ account: selected.identity.label, realm: realmLabel })}</p>
@@ -203,7 +209,9 @@ export function MemberAddition({
       {state.kind === 'submitting' ? <p role="status">{m.realm_members_loading()}</p> : null}
       {state.kind === 'uncertain' && intent ? (
         <div className="space-y-3">
-          <p ref={status} role="status" tabIndex={-1}>{m.realm_members_unknown_command()}</p>
+          <p ref={status} role="status" tabIndex={-1}>
+            {m.realm_members_unknown_command()}
+          </p>
           <Button
             type="button"
             variant="outline"
@@ -232,10 +240,14 @@ export function MemberAddition({
         </div>
       ) : null}
       {state.kind === 'rejected' ? (
-        <p ref={status} role="alert" tabIndex={-1}>{m.realm_members_add_rejected()}</p>
+        <p ref={status} role="alert" tabIndex={-1}>
+          {m.realm_members_add_rejected()}
+        </p>
       ) : null}
       {state.kind === 'complete' ? (
-        <p ref={status} role="status" tabIndex={-1}>{m.realm_members_add_complete()}</p>
+        <p ref={status} role="status" tabIndex={-1}>
+          {m.realm_members_add_complete()}
+        </p>
       ) : null}
     </section>
   );

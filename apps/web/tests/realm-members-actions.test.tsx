@@ -6,9 +6,9 @@ import { requestRealmMemberAddition } from '../src/community/space';
 
 test('the installed unavailable seam grants no enumeration, identity or command', async () => {
   expect(await boundedRealmMemberPage.readPage({ realmId: 'realm', cursor: null })).toEqual({ kind: 'unavailable' });
-  expect(
-    await boundedRealmMemberPage.readSelected({ realmId: 'realm', accountId: 'a', authority: 'g' }),
-  ).toEqual({ kind: 'unavailable' });
+  expect(await boundedRealmMemberPage.readSelected({ realmId: 'realm', accountId: 'a', authority: 'g' })).toEqual({
+    kind: 'unavailable',
+  });
   expect(Object.keys(boundedRealmMemberPage).sort()).toEqual(['pageBound', 'readPage', 'readSelected']);
 });
 

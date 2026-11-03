@@ -555,9 +555,7 @@ export async function requestRealmMembership(
 }
 
 export type RealmMemberAdditionInput = { realmId: string; accountId: string; idempotencyKey: string };
-export type RealmMemberAdditionResult =
-  | { kind: 'accepted'; workflowId: string }
-  | { kind: 'rejected' | 'unknown' };
+export type RealmMemberAdditionResult = { kind: 'accepted'; workflowId: string } | { kind: 'rejected' | 'unknown' };
 
 /** Selected-account addition reuses the native accepted-202 membership command. */
 export async function requestRealmMemberAddition(

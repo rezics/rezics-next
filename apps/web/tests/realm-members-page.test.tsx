@@ -188,9 +188,7 @@ test('producer lifetime retirement conceals the mounted page and delayed selecti
     const focus = document.activeElement;
     await act(async () => {
       pending.resolve(await fixture.readPage({ realmId: 'realm', cursor: null }));
-      selected.resolve(
-        await fixture.readSelected({ realmId: 'realm', accountId: 'a', authority: 'grant' }),
-      );
+      selected.resolve(await fixture.readSelected({ realmId: 'realm', accountId: 'a', authority: 'grant' }));
       await tick();
     });
     expect(host.textContent).not.toContain('Exact selected account');
@@ -235,7 +233,11 @@ test('selected addition reviews the entered identity, retries one immutable comm
         kind: 'ready',
         realmId: address.realmId,
         authority: address.authority,
-        identity: { accountId: address.accountId, reference: 'selected-account-reference', label: 'Exact inspected account' },
+        identity: {
+          accountId: address.accountId,
+          reference: 'selected-account-reference',
+          label: 'Exact inspected account',
+        },
         membershipInterval: memberCurrent ? 'producer-new-membership-interval' : null,
         membership: memberCurrent ? 'current' : 'none',
         advice: { add: memberCurrent ? 'unavailable' : 'available', ban: 'unavailable', unban: 'unavailable' },
@@ -290,8 +292,7 @@ test('selected ban and unban review the exact identity and use the existing nati
   const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
   const accountId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
   const authorization = 'Bearer current-manager';
-  const request = () =>
-    new Request('https://site.example.test/action', { method: 'POST', headers: { authorization } });
+  const request = () => new Request('https://site.example.test/action', { method: 'POST', headers: { authorization } });
   let banned = false;
   let reads = 0;
   const calls: { method: string; path: string; idempotencyKey: string | null; body: unknown }[] = [];
@@ -304,7 +305,9 @@ test('selected ban and unban review the exact identity and use the existing nati
       if (next.method === 'GET') {
         reads++;
         const response = Response.json({
-          items: banned ? [{ accountId, reason: 'Selected moderation reason', actor: null, at: '2026-11-01T00:00:00Z' }] : [],
+          items: banned
+            ? [{ accountId, reason: 'Selected moderation reason', actor: null, at: '2026-11-01T00:00:00Z' }]
+            : [],
           next: null,
         });
         if (reads > 1) refreshFinished.resolve();
@@ -386,7 +389,9 @@ test('selected ban and unban review the exact identity and use the existing nati
   writeFinished = Promise.withResolvers<void>();
   refreshFinished = Promise.withResolvers<void>();
   await act(async () => {
-    const confirm = [...host.querySelectorAll('button')].find((node) => node.textContent === m.realm_bans_confirm_ban());
+    const confirm = [...host.querySelectorAll('button')].find(
+      (node) => node.textContent === m.realm_bans_confirm_ban(),
+    );
     expect(confirm).toBeDefined();
     confirm!.click();
     await writeFinished.promise;

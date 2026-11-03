@@ -178,9 +178,9 @@ test('a newer selected account and a retired caller ignore delayed identity comp
     kind: 'ready',
     realmId: 'realm',
     authority: 'grant',
-        membershipInterval: 'producer-interval-a',
+    membershipInterval: 'producer-interval-a',
     identity: { accountId: 'a', reference: 'a', label: 'Retired person' },
-        advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
+    advice: { add: 'unavailable', ban: 'available', unban: 'unavailable' },
     membership: 'current',
   });
   await selecting;

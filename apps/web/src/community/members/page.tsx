@@ -178,7 +178,9 @@ export function RealmMembersPage({
             {m.realm_members_lookup_account()}
           </Button>
           {accountIdInvalid ? (
-            <p role="alert" className="w-full text-sm">{m.realm_members_invalid_account_id()}</p>
+            <p role="alert" className="w-full text-sm">
+              {m.realm_members_invalid_account_id()}
+            </p>
           ) : null}
         </form>
       ) : null}

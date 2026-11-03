@@ -70,15 +70,13 @@ function fixture(
         : {
             kind: 'ready',
             ...address,
-            identity:
-              rows.find((row) => row.identity.accountId === address.accountId)?.identity ?? {
-                accountId: address.accountId,
-                reference: 'selected-account-reference',
-                label: 'Alex Chen',
-              },
+            identity: rows.find((row) => row.identity.accountId === address.accountId)?.identity ?? {
+              accountId: address.accountId,
+              reference: 'selected-account-reference',
+              label: 'Alex Chen',
+            },
             membershipInterval: address.membershipInterval ?? null,
-            membership:
-              state === 'pending' ? 'pending' : state.startsWith('addition-') ? 'none' : 'current',
+            membership: state === 'pending' ? 'pending' : state.startsWith('addition-') ? 'none' : 'current',
             advice: state.startsWith('addition-')
               ? { add: 'available', ban: 'unavailable', unban: 'unavailable' }
               : { add: 'unavailable', ban: 'available', unban: 'available' },
@@ -86,25 +84,29 @@ function fixture(
     ...(state.startsWith('addition-')
       ? {
           addMember: (intent) => {
-            const response = state === 'addition-unknown' ? 'unknown' : state === 'addition-rejected' ? 'rejected' : 'accepted';
+            const response =
+              state === 'addition-unknown' ? 'unknown' : state === 'addition-rejected' ? 'rejected' : 'accepted';
             const client = createKernelClient('https://kernel.story.invalid', {
-              fetch: Object.assign(async () => {
-                if (response === 'unknown') throw new Error('Story response unavailable');
-                if (response === 'rejected')
-                  return Response.json(
-                    {
-                      type: 'https://rezics.com/problems/forbidden',
-                      title: 'Forbidden',
-                      status: 403,
-                      code: 'forbidden',
-                      retryable: false,
-                      effect_status: 'not_applied',
-                      request_id: 'story-command',
-                    },
-                    { status: 403 },
-                  );
-                return Response.json({ workflowId: 'story-workflow' }, { status: 202 });
-              }, { preconnect() {} }),
+              fetch: Object.assign(
+                async () => {
+                  if (response === 'unknown') throw new Error('Story response unavailable');
+                  if (response === 'rejected')
+                    return Response.json(
+                      {
+                        type: 'https://rezics.com/problems/forbidden',
+                        title: 'Forbidden',
+                        status: 403,
+                        code: 'forbidden',
+                        retryable: false,
+                        effect_status: 'not_applied',
+                        request_id: 'story-command',
+                      },
+                      { status: 403 },
+                    );
+                  return Response.json({ workflowId: 'story-workflow' }, { status: 202 });
+                },
+                { preconnect() {} },
+              ),
             });
             return requestRealmMemberAddition(
               client,

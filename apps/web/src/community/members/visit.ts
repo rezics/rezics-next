@@ -245,9 +245,7 @@ export class RealmMembersVisit {
       previous.address.authority === address.authority &&
       previous.address.membershipInterval === address.membershipInterval
     ) {
-      previousRead = previous.read.kind === 'ready'
-        ? previous.read
-        : previous.previous;
+      previousRead = previous.read.kind === 'ready' ? previous.read : previous.previous;
     }
     this.value = {
       ...this.value,
@@ -288,7 +286,8 @@ export class RealmMembersVisit {
       this.rows.clear();
       this.value = { read: { kind: 'unavailable' }, address: this.value.address, selection: { address, read } };
     } else {
-      if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference)) currentRead = { kind: 'unavailable' };
+      if (read.kind === 'ready' && (!read.identity.label || !read.identity.reference))
+        currentRead = { kind: 'unavailable' };
       const retained =
         previousRead && (currentRead.kind === 'failed' || currentRead.kind === 'unavailable')
           ? { previous: previousRead }
