@@ -1,6 +1,25 @@
 /** Imports owns extraction and licence admission; Web owns presentation. */
 export { createOwnVotesReader, OWN_VOTES_PAGE_SIZE } from './own-votes-page.ts';
 export type { OwnVoteActions, OwnVoteEntry, OwnVotesPage } from './own-votes-page.ts';
+export {
+  createOwnCountedVoteReader,
+  OWN_COUNTED_VOTE_TARGET_LIMIT,
+  STANDARD_RATING_MEASUREMENT,
+} from './own-votes-counted.ts';
+export type {
+  OwnCountedVoteAccountObservation,
+  OwnCountedVoteIdentity,
+  OwnCountedVoteObservation,
+  OwnCountedVotePrepareResult,
+  OwnCountedVotePreparedTarget,
+  OwnCountedVotePreparation,
+  OwnCountedVoteQuestionObservation,
+  OwnCountedVoteReadResult,
+  OwnCountedVoteRequest,
+  OwnCountedVoteResult,
+  OwnCountedVoteRow,
+  StandardRatingMeasurement,
+} from './own-votes-counted.ts';
 export { OwnVoteActionsSchema, OwnVotesPageSchema, OwnVotesPageQuerySchema } from './own-votes-schemas.ts';
 export { createSourceClassificationProducer, SOURCE_CLASSIFICATION_WRITE_ACTION } from './source-classification.ts';
 export type {

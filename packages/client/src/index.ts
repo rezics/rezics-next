@@ -97,6 +97,20 @@ type PersonalEntryEndpoints = {
     }>;
   };
 };
+export type {
+  OwnCountedVoteAccountObservation,
+  OwnCountedVoteIdentity,
+  OwnCountedVoteObservation,
+  OwnCountedVotePrepareResult,
+  OwnCountedVotePreparedTarget,
+  OwnCountedVotePreparation,
+  OwnCountedVoteQuestionObservation,
+  OwnCountedVoteReadResult,
+  OwnCountedVoteRequest,
+  OwnCountedVoteResult,
+  OwnCountedVoteRow,
+  StandardRatingMeasurement,
+} from './kernel/rating/own-votes-counted';
 type PersonalLibraryEntries = Omit<GeneratedKernelClient['libraryEntries'], keyof Function> &
   ((...args: Parameters<GeneratedKernelClient['libraryEntries']>) => PersonalEntryPath & PersonalEntryEndpoints);
 

@@ -1047,6 +1047,37 @@ the viewer's current native counted vote for each supplied Content terminal. It 
 dedupe, uses the caller's repeatable-read client, preserves zero and omits absent or cleared votes. The caller must
 resolve and revalidate Content identity and visible question meaning; this helper does not admit a result row or
 expose aggregate ratings.
+`createOwnCountedVoteReader({ pool, access }).prepare(request, deadline)` admits at most 100 requested Subject keys,
+requires the current native actor account, authentication epoch and `rating:vote` scope, checks the standard question,
+captures current Subject mappings and verifies ordinary Subject
+readability before the owner starts its checkout. A pending identity mapping returns `preparing`; an absent,
+concealed or unavailable Subject is retained as `unavailable` without exposing its terminal. The fixed measurement is
+question `00000000-0000-7000-8000-000000000001`, revision 1, units 0 through 20 in steps of 1.
+
+The caller retains one reader instance and the exact same actor and ordered requested IDs through all three phases;
+preparations are instance-local and must not be serialized or reconstructed. The caller starts its own repeatable-read
+transaction on the account's native home and passes that `PoolClient` to `read(client, request, preparation)`. The
+read phase checks the same account standing and selects only `rating.vote.counted_target` rows for the admitted
+terminal IDs. It never searches original slots or decides which source vote wins. After releasing the owner checkout,
+the caller invokes `finish(request, preparation, readResult, deadline)`. Finish rechecks the actual account, question,
+identity mapping, Subject disclosure and selected counted rows. It returns `current` only when those observations
+match; otherwise it returns `preparing` with a same-input retry. This composition spans native snapshots and is not
+one atomic snapshot.
+
+Each current observation correlates `requestedTargetId`, the selected row's `originalTargetId`, and the native
+`countingTargetId`. A present row with `units: 0` is a real score; `state: 'clear'` preserves a counted tombstone with
+its original `revision` and separate `countedRevision`; `state: 'absent'` means no counted row exists at the current
+destination. `unavailable` remains distinct from pending identity coverage. Callers keep their existing Library gate,
+source witnesses, owner fencing and exact request on retry. The reader adds no route, derivative, writer or repair.
+
+Decision: native own-score reads prepare identity and disclosure before the caller checkout, read only counted-target
+rows in the caller snapshot, then return `preparing` with the same input when final native observations differ.
+
+#### Native counted own-score reader Cost
+
+- Touches: preparation reads the account once, then reads the standard question and native identity mappings outside the caller checkout. The identity producer double-collects each supplied source/control home; Subject disclosure repeats a bounded identity collection and prepares and evaluates Access for each original and terminal. The caller phase binds the account home, reads the account once and probes at most 100 exact counted-target keys. Finish reads the question, mappings and Subject disclosure again, then re-reads the account and those same counted-target keys in one final account-home snapshot. It releases every foreign home before the caller checkout and before the final account snapshot.
+- Bound: at most 100 raw requested IDs, 100 distinct requested identities and 100 distinct counting destinations; duplicates are admitted against the raw limit and queried once. Each counted-target statement uses the exact `(route, voter_id, question_id, counted_target)` prefix and returns at most one row per requested destination under the native unique index. There is no vote-history scan, refill, winner selection, write or event. Account/question/identity rows and Access evidence are supplied-key bounded; B-tree positioning grows logarithmically with retained history. Original vote `revision`, `counted_revision`, units, time and transaction ID are retained separately through final comparison and the returned DTO.
+- Growth check: `test/rating/own-votes-page.test.ts` covers registered vote outcomes, zero and clear, duplicate keys, native merge selection and changed observations. Controller acceptance retains physical-prefix plans and independent unrelated/selected identity-history growth at 256/1024/4096 with fixed requested keys, homes, page limits and byte caps; no returned-row count substitutes for those plans.
 
 ### My ratings
 
