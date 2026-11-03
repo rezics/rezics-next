@@ -197,6 +197,7 @@ async function deployment(entries: IndexedSubject[]) {
     return body;
   }
   return {
+    service,
     prefix,
     index,
     fake,
@@ -217,6 +218,23 @@ async function deployment(entries: IndexedSubject[]) {
   };
 }
 const ids = (page: { subjects: { id: string }[] }) => page.subjects.map((subject) => subject.id);
+
+test('release replacement after page composition retires populated and empty public results', async () => {
+  for (const entries of [[], [book(1, [by(target)])]]) {
+    const fixture = await deployment(entries);
+    const original = structuredClone(release);
+    try {
+      await expect(fixture.service.search('anonymous', { filter: value(), sort: 'id' }, Date.now(), undefined, {
+        deadline: Date.now() + 30_000,
+        async complete() {
+          release.properties[author].qualifiers = [];
+        },
+      })).rejects.toMatchObject({ code: 'search_restart_required' });
+    } finally {
+      Object.assign(release, original);
+    }
+  }
+});
 
 test('overflow search rechecks positive and negated candidates beyond the sampled values through the API', async () => {
   const entries = [1, 2, 3, 4].map((n) =>

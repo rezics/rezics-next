@@ -17,7 +17,7 @@ import {
   type IndexedSubject,
   type RelationFacetProbe as SharedRelationFacetProbe,
 } from '../../src/search/source.ts';
-import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { capture, costOf, withoutCatalogStatements, openGrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from './real-access.ts';
@@ -47,6 +47,8 @@ const actions = [
   'moderation:takedown',
   'subject:batch_write',
   'source_fence:takedown',
+  'definitions:publish',
+  'definitions:activate',
 ];
 const editor = newId(30000);
 const access = await createRealAccess(admin, { editor }, actions);
@@ -121,7 +123,7 @@ async function post(path: string, body: unknown, key = randomUUID()) {
   );
   const result = (await response.json()) as any;
   expect([response.status, result.code], `${path}: ${JSON.stringify(result)}`).toEqual([
-    path.endsWith('/subjects') || path.endsWith('/candidates') ? 201 : 200,
+    path.endsWith('/subjects') || path.endsWith('/candidates') || path.endsWith('/definitions/releases') ? 201 : 200,
     undefined,
   ]);
   return result;
@@ -760,6 +762,50 @@ test('a bounded witness probe suppresses hidden evidence and schedules finite re
   }
 }, 300_000);
 const runnerConsumer = `facet_restart_${randomUUID().replaceAll('-', '')}`;
+
+test('active facet and qualifier retirement suppress historical selected credits until restored', async () => {
+  const [person, role] = await Promise.all([create(), create('skos:Concept')]);
+  const book = await create('schema:Book', {
+    'schema:author': [statement('schema:author', person.id, [snak('wdt:P3831', role.id)])],
+  });
+  await snapshot(book.id);
+  const probe: SharedRelationFacetProbe = {
+    subject: book.id, property: 'schema:author', value: person.id,
+    qualifiers: [{ property: 'wdt:P3831', in: [role.id] }],
+  };
+  const match = source.matchRelationFacets!;
+  const partition = subjectPartition(book.id);
+  expect(await match(partition, [probe])).toEqual([true]);
+  const original = (await activeRelease(pool))!;
+  for (const change of ['facet', 'qualifier']) {
+    const replacement = structuredClone(original.release);
+    replacement.catalogue.version += `-${change}`;
+    if (change === 'facet') {
+      replacement.types['schema:Book']!.facets = replacement.types['schema:Book']!.facets!
+        .filter((property) => property !== probe.property);
+    } else {
+      const property = replacement.properties[probe.property]!;
+      property.qualifiers = property.qualifiers.filter((property) => property !== 'wdt:P3831');
+      if (property.relation?.filter)
+        property.relation.filter = property.relation.filter.filter((property) => property !== 'wdt:P3831');
+    }
+    const published = await post('/v1/definitions/releases', { release: replacement });
+    try {
+      await post(`/v1/definitions/releases/${published.digest}:activate`, {
+        expected_head: (await activeRelease(pool))!.head,
+      });
+      expect(await match(partition, [probe])).toEqual(['not_proven']);
+      const current = await source.read(partition, [book.id]);
+      expect(values(current.subjects[0]!, probe.property)).toEqual([]);
+    } finally {
+      await post(`/v1/definitions/releases/${original.digest}:activate`, {
+        expected_head: (await activeRelease(pool))!.head,
+      });
+    }
+    // A retained native seek may first finish its previous sweep; EOF is not absence.
+    expect([await match(partition, [probe]), await match(partition, [probe])]).toContainEqual([true]);
+  }
+});
 
 test('absence and overflow negation converge and removed hints recover on local restore and new adoption', async () => {
   const match = matcher();

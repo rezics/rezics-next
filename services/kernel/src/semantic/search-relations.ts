@@ -20,7 +20,7 @@ import {
   type RelationFacetMatch,
   type RelationFacetProbe,
 } from '../search/source.ts';
-import { readRelease } from './definitions.ts';
+import { activeRelease, readRelease } from './definitions.ts';
 import { sourceTuple } from './fences.ts';
 import { holdsCurrentStatements } from '../search/current-leaf.ts';
 import { indexedStatement, inSearchSnapshot } from './search-source.ts';
@@ -62,6 +62,7 @@ type SourceSubject = {
 };
 type Prepared = {
   partition: number;
+  runtime: Awaited<ReturnType<typeof activeRelease>>;
   rows: SelectedStatement[];
   releases: Map<string, Release | null>;
   subjects: { subject: SourceSubject; properties: string[] }[];
@@ -110,7 +111,9 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             !before ||
             (value?.current_revision === before.current_revision &&
               value?.securityRevision === before.securityRevision &&
-              value?.currentRelease === before.currentRelease);
+              value?.currentRelease === before.currentRelease &&
+              value?.type === before.type &&
+              value?.selection_ready === before.selection_ready);
           states.set(id, { visible: value?.visibility === 'visible' && stable, redirect: value?.redirect ?? null });
           if (value?.visibility === 'visible' && value.redirect) pending.push(value.redirect);
         }
@@ -139,9 +142,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
   async function disclosed(
     rows: readonly SelectedStatement[],
     releases: ReadonlyMap<string, Release | null>,
-    expected: ReadonlyMap<string, SourceSubject> = new Map(),
+    expected: ReadonlyMap<string, SourceSubject>,
+    runtime: Prepared['runtime'],
   ): Promise<{ subject: string; statement: IndexedStatement }[]> {
-    if (!routeKey) return [];
+    if (!routeKey || !runtime) return [];
+    const facets = new Map<string, Set<string>>();
     const prepared: {
       row: SelectedStatement;
       statement: IndexedStatement;
@@ -150,13 +155,29 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     }[] = [];
     for (const row of rows) {
       const release = releases.get(row.release);
-      if (!release || row.eligible !== true || !object(row.body) || !relationFacetProperty(release, row.property))
+      const subject = expected.get(row.subject_id);
+      const current = runtime.release.properties[row.property];
+      if (!subject) continue;
+      let admitted = facets.get(subject.type);
+      if (!admitted) {
+        admitted = new Set(facetProperties(runtime.release, [subject.type]));
+        facets.set(subject.type, admitted);
+      }
+      // The selected row's release explains its stored shape. It cannot grant
+      // today's capability after a facet, property or qualifier is retired.
+      if (
+        !release || !current || row.eligible !== true || !object(row.body) ||
+        !admitted.has(row.property) || !relationFacetProperty(runtime.release, row.property) ||
+        !relationFacetProperty(release, row.property) ||
+        release.properties[row.property]?.datatype !== current.datatype
+      )
         continue;
       const statement = indexedStatement(row, release);
       if (!statement) continue;
       const dependencies: string[] = [row.subject_id];
       if (release.properties[row.property]?.datatype === 'wikibase-item') dependencies.push(statement.value);
       let complete = true;
+      let spoilerLevel: string | undefined;
       if (Array.isArray(row.body.qualifiers)) {
         for (const qualifier of row.body.qualifiers) {
           // Unknown or withheld qualifiers cannot become an apparently unqualified statement.
@@ -170,17 +191,30 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             break;
           }
           const datatype = release.properties[qualifier.property]?.datatype;
+          if (
+            !release.properties[row.property]?.qualifiers?.includes(qualifier.property) ||
+            !current.qualifiers?.includes(qualifier.property) ||
+            runtime.release.properties[qualifier.property]?.datatype !== datatype
+          ) {
+            complete = false;
+            break;
+          }
           if (datatype === 'quantity' && qualifier.property === 'rezics:spoilerLevel') {
             // Scalar spoiler evidence has no foreign identity, but must be declared
             // on this exact relation and preserve an exact dimensionless quantity.
             if (
-              !release.properties[row.property]?.qualifiers?.includes(qualifier.property) ||
               !release.properties[qualifier.property]?.units?.includes('1') ||
-              readNativeSpoilerLevel(qualifier.value.content) === null
+              !runtime.release.properties[qualifier.property]?.units?.includes('1')
             ) {
               complete = false;
               break;
             }
+            const level = readNativeSpoilerLevel(qualifier.value.content);
+            if (level === null || (spoilerLevel !== undefined && spoilerLevel !== level)) {
+              complete = false;
+              break;
+            }
+            spoilerLevel = level;
             continue;
           }
           if (datatype !== 'wikibase-item' && datatype !== 'string') {
@@ -243,6 +277,12 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       .map((item) => ({ subject: item.row.subject_id, statement: item.statement }));
   }
 
+  async function runtimeIsCurrent(runtime: Prepared['runtime']): Promise<boolean> {
+    if (!runtime) return false;
+    const current = await activeRelease(pool);
+    return current?.digest === runtime.digest && current.head === runtime.head;
+  }
+
   return {
     async prepare(
       client: PoolClient,
@@ -250,10 +290,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       releases: ReadonlyMap<string, Release>,
       partition: number,
     ): Promise<Prepared> {
-      const prepared: Prepared = { partition, rows: [], releases: new Map(releases), subjects: [] };
+      const runtime = await activeRelease(client);
+      const prepared: Prepared = { partition, runtime, rows: [], releases: new Map(releases), subjects: [] };
       const requests: { route: number; subject_id: string; property: string }[] = [];
       for (const subject of subjects) {
-        const release = subject.currentRelease ? releases.get(subject.currentRelease) : null;
+        const release = runtime?.release;
         const properties = release
           ? facetProperties(release, [subject.type]).filter((p) => relationFacetProperty(release, p))
           : [];
@@ -287,7 +328,8 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       if (pending) await rebuild.run(pool, { route: pending.subject.route, subject_id: pending.subject.id });
       if (!prepared.rows.length) return results;
       const expected = new Map(prepared.subjects.map(({ subject }) => [subject.id, subject]));
-      const disclosedStatements = await disclosed(prepared.rows, prepared.releases, expected);
+      const disclosedStatements = await disclosed(prepared.rows, prepared.releases, expected, prepared.runtime);
+      if (!(await runtimeIsCurrent(prepared.runtime))) return results;
       for (const { subject, statement } of disclosedStatements) results.get(subject)!.statements.push(statement);
       return results;
     },
@@ -332,6 +374,8 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       const snapshot = await inSearchSnapshot(pool, async (client) => {
         const home = await readPartition(client, partition);
         if (!home || home.writeState === 'moved') return null;
+        const runtime = await activeRelease(client);
+        if (!runtime) return null;
         const local = await readSubjects.run(client, {
           partition_no: partition,
           routes: unique.map((p) => routeOf(p.subject)!),
@@ -352,7 +396,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             results.set(keyOf(probe), false);
             continue;
           }
-          const release = subject?.currentRelease ? releases.get(subject.currentRelease) : null;
+          const release = runtime.release;
           if (
             !subject ||
             !routeKey ||
@@ -436,12 +480,12 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             const body = row.body as Release;
             if (releaseDigest(body) === row.digest) releases.set(row.digest, body);
           }
-        return { subjects, releases, cursors, rows, pending: local.find((subject) => !subject.selection_ready) };
+        return { runtime, subjects, releases, cursors, rows, pending: local.find((subject) => !subject.selection_ready) };
       });
       if (!snapshot) return probes.map(() => 'not_proven');
-      const { subjects, releases, cursors, rows, pending } = snapshot;
+      const { runtime, subjects, releases, cursors, rows, pending } = snapshot;
       if (pending) await rebuild.run(pool, { route: pending.route, subject_id: pending.id });
-      const disclosedStatements = await disclosed(rows, releases, subjects);
+      const disclosedStatements = await disclosed(rows, releases, subjects, runtime);
       for (const { subject, statement } of disclosedStatements) {
         const key = nativeKey({ subject, property: statement.property, value: statement.value });
         for (const probe of admitted.get(key) ?? []) {
@@ -495,6 +539,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           });
       }
       if (progress.length) await withConnection(pool, (client) => writeCursor.run(client, { progress }));
+      if (!(await runtimeIsCurrent(runtime))) return probes.map(() => 'not_proven');
       return probes.map((p) => results.get(keyOf(p)) ?? 'not_proven');
     },
   };

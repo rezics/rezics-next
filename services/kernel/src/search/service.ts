@@ -632,7 +632,7 @@ export function createSearchService({
       principal: 'anonymous' | `account:${string}`,
       request: SearchRequest,
       now = clock().getTime(),
-      active?: { digest: string; release: FilterRelease } | null,
+      active?: { digest: string; head?: number; release: FilterRelease } | null,
       readContext?: PublicSearchReadContext,
     ) {
       request = ownSubjectRequest(request);
@@ -644,6 +644,20 @@ export function createSearchService({
       const kinds: KindSnapshot | undefined = current
         ? compileKinds(current, native?.digest ?? kindDigest(current))
         : undefined;
+      const assertCurrentRelease = async () => {
+        if (!current) return;
+        if (native) {
+          const latest = await activeRelease(pool);
+          if (
+            latest?.digest !== native.digest ||
+            (native.head !== undefined && latest.head !== native.head)
+          ) throw new ProblemError('search_restart_required');
+        } else if (releaseOverride) {
+          const latest = await release();
+          if (!latest || kindDigest(latest) !== kinds!.digest)
+            throw new ProblemError('search_restart_required');
+        }
+      };
       if ((filter || hitOptions.properties) && !current)
         throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       const admitted = await admitQuery(
@@ -705,6 +719,7 @@ export function createSearchService({
         };
         await readContext?.complete(response);
         await ordered.finalize();
+        await assertCurrentRelease();
         return response;
       }
       const realmScopedRequest = admitted !== undefined && containsRealmPredicate(admitted);
@@ -1144,6 +1159,7 @@ export function createSearchService({
         if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
         if ((await indexRequest(freshAliasGeneration)) !== generation)
           throw new ProblemError('search_restart_required');
+        await assertCurrentRelease();
         return response;
       }
       const runtime = publicFilters?.();
@@ -1299,6 +1315,7 @@ export function createSearchService({
           await indexRequest(retainedRead.finalize);
           await indexRequest(retainedRead.release);
         }
+        await assertCurrentRelease();
         return response;
       } finally {
         try {

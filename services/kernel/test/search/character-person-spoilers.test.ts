@@ -95,7 +95,9 @@ test('current raised or removed spoiler evidence retires a stale hit and stays u
     { value: { type: 'value', content: id(2) } },
     bundledRelease.properties,
   )!;
-  for (const replacement of [[missing], []]) {
+  const contradictory = statement('+0');
+  contradictory.qualifiers!.push({ property: spoiler, value: '2' });
+  for (const replacement of [[missing], [], [contradictory]]) {
     current = replacement;
     for (const threshold of [0, 1, 2] as const) {
       const filter = leaf(threshold);

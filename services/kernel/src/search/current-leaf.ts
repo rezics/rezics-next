@@ -38,10 +38,15 @@ export function holdsCurrentStatements(
       if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte))
         return false;
     }
-    return (clause.qualifiers ?? []).every((qualifier) =>
-      statement.qualifiers?.some(
-        (value) => value.property === qualifier.property && qualifier.in.includes(value.value),
-      ),
-    );
+    return (clause.qualifiers ?? []).every((qualifier) => {
+      const evidence = statement.qualifiers?.filter((value) => value.property === qualifier.property) ?? [];
+      // A contradictory spoiler level is uncertain, even if one of its values
+      // would satisfy the threshold. Partial sources keep this as not_proven.
+      if (qualifier.property === 'rezics:spoilerLevel') {
+        const levels = new Set(evidence.map((value) => value.value));
+        if (levels.size !== 1 || !['0', '1', '2'].includes(evidence[0]!.value)) return false;
+      }
+      return evidence.some((value) => qualifier.in.includes(value.value));
+    });
   });
 }
