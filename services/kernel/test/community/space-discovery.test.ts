@@ -20,9 +20,10 @@ import {
 
 let system: ContentSystem;
 beforeAll(async () => {
-  system = await createContentSystemWithOrdinaryScopes({ databaseUrl: process.env.DATABASE_URL! }, [
-    ...productionActions().keys(),
-  ]);
+  system = await createContentSystemWithOrdinaryScopes(
+    { databaseUrl: process.env.DATABASE_URL! },
+    [...productionActions().keys()].filter((action) => action !== 'media:complete'),
+  );
   await bootstrapRelease(system.database.pool, bundledRelease);
 }, 120_000);
 afterAll(async () => {
