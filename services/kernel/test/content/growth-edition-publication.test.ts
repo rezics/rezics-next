@@ -51,9 +51,7 @@ async function prepare(fixture: Fixture, mode: Mode, key: string) {
 }
 
 async function execute(fixture: Fixture, mode: Mode, editionId: string, expected: string, key: string) {
-  return mode === 'publish'
-    ? publish(fixture, editionId, expected, key)
-    : unpublish(fixture, editionId, expected, key);
+  return mode === 'publish' ? publish(fixture, editionId, expected, key) : unpublish(fixture, editionId, expected, key);
 }
 
 async function publicationRows(fixture: Fixture, editionId: string) {
@@ -106,7 +104,8 @@ async function assertCommandCommitted(fixture: Fixture, mode: Mode, run: Command
   });
 
   const commandKind = mode === 'publish' ? 'content.edition.publish' : 'content.edition.unpublish';
-  const eventType = mode === 'publish' ? 'com.rezics.content.edition.published.v1' : 'com.rezics.content.edition.unpublished.v1';
+  const eventType =
+    mode === 'publish' ? 'com.rezics.content.edition.published.v1' : 'com.rezics.content.edition.unpublished.v1';
   const receipt = await fixture.database.admin.query<{
     transaction_id: string;
     request_digest: string;
@@ -167,9 +166,7 @@ async function assertGrowthEvidence(report: GrowthReport, mode: Mode): Promise<v
   expect(report.samples.every(({ repetitions }) => repetitions.length === 1)).toBe(true);
   const relations = [
     ...new Set(
-      report.samples.flatMap((sample) =>
-        sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations)),
-      ),
+      report.samples.flatMap((sample) => sample.repetitions.flatMap((repetition) => Object.keys(repetition.relations))),
     ),
   ].sort();
   expect(relations).toContain('content.edition');
@@ -231,7 +228,13 @@ async function measureAxis(fixture: Fixture, mode: Mode, axis: Axis): Promise<vo
     grow: (database, scale, previous) => growAxis(fixture, database, mode, axis, scale, previous),
     async warmup(_database, scale, repetition) {
       const selected = await prepare(fixture, mode, `growth-warmup-${mode}-${axis}-${scale}-${repetition}`);
-      await execute(fixture, mode, selected.editionId, selected.expected, `growth-warmup-command-${mode}-${axis}-${scale}-${repetition}`);
+      await execute(
+        fixture,
+        mode,
+        selected.editionId,
+        selected.expected,
+        `growth-warmup-command-${mode}-${axis}-${scale}-${repetition}`,
+      );
     },
     async prepare(_database, _scale, repetition) {
       const selected = await prepare(fixture, mode, `growth-selected-${mode}-${axis}-${repetition}`);
@@ -272,12 +275,18 @@ test('Native edition publication and terminal withdrawal preserve replay, CAS, a
     );
     expect(replayReceipt.rows[0]!.count).toBe(1);
     expect(replayEvents.rows[0]!.count).toBe(1);
-    await assertCommandCommitted(fixture, 'publish', { editionId: replayDraft.editionId, key: replayKey, editionRevision: '2' });
+    await assertCommandCommitted(fixture, 'publish', {
+      editionId: replayDraft.editionId,
+      key: replayKey,
+      editionRevision: '2',
+    });
 
     const competing = await fixture.createDraft();
     const conflictKeys = [randomUUID(), randomUUID()] as const;
     const conflicts = await Promise.all(
-      conflictKeys.map((key) => fixture.call(`/v1/contentEditions/${competing.editionId}:publish`, 'POST', {}, '1', key)),
+      conflictKeys.map((key) =>
+        fixture.call(`/v1/contentEditions/${competing.editionId}:publish`, 'POST', {}, '1', key),
+      ),
     );
     expect(conflicts.map(({ status }) => status).sort()).toEqual([200, 412]);
     const conflictReceipts = await fixture.database.admin.query<{ key: string }>(
@@ -302,9 +311,13 @@ test('Native edition publication and terminal withdrawal preserve replay, CAS, a
     expect(committedPublication).toBeDefined();
     const withdrawKey = randomUUID();
     const withdrawn = await unpublish(fixture, withdrawDraft.editionId, published.editionRevision, withdrawKey);
-    expect(await unpublish(fixture, withdrawDraft.editionId, published.editionRevision, withdrawKey)).toEqual(withdrawn);
+    expect(await unpublish(fixture, withdrawDraft.editionId, published.editionRevision, withdrawKey)).toEqual(
+      withdrawn,
+    );
     expect((await publicationRows(fixture, withdrawDraft.editionId)).rows[0]).toEqual(committedPublication);
-    expect((await fixture.call(`/v1/contentEditions/${withdrawDraft.editionId}:publish`, 'POST', {}, '3')).status).toBe(404);
+    expect((await fixture.call(`/v1/contentEditions/${withdrawDraft.editionId}:publish`, 'POST', {}, '3')).status).toBe(
+      404,
+    );
     await assertCommandCommitted(fixture, 'unpublish', {
       editionId: withdrawDraft.editionId,
       key: withdrawKey,
@@ -404,4 +417,3 @@ test('Native edition publish and unpublish stay bounded across three independent
     await fixture.close();
   }
 });
-

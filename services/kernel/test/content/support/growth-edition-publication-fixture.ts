@@ -46,13 +46,7 @@ export async function growthEditionPublicationFixture() {
     });
     const author = native.actors.author;
     const token = author.bearer;
-    const call = (
-      path: string,
-      method = 'GET',
-      body?: unknown,
-      version?: string,
-      key: string = randomUUID(),
-    ) =>
+    const call = (path: string, method = 'GET', body?: unknown, version?: string, key: string = randomUUID()) =>
       app.handle(
         new Request(`https://content.test${path}`, {
           method,
@@ -344,4 +338,3 @@ export async function seedUnrelatedPublicationHistory(
   };
   await seed({ pool: database.pool, admin: database.admin }, population, { from, to });
 }
-
