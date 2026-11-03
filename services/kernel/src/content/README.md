@@ -414,6 +414,81 @@ The exact reader also withholds an erased decider's expired statement even if th
 decision metadata remains readable with an empty statement. This guard does not expire other retained reasons.
 Responses are private/no-store and the history is not a public feed or search source.
 
+
+### Cost: board action and command replay
+
+- Touches: `moderationRoutes` → `takedown` → `mutateContentPoint` → `prepareAuthorizedPoint` /
+  `mutateAuthorizedPoint`; shared `accessCommandAuthorization` executes before the native receipt lookup.
+  `prepareDiscoveryMutation`, `discoveryMutationAuthorization`, `lockDiscoveryMutation` and
+  `applyDiscoveryMutation` remain the actual Realm discovery fence callsites. No interface or new collaborator
+  is introduced. `registerContent` registers `contentEffects`, including `createModerationDecisionEffect`;
+  the shared effects relay owns durable enqueue/checkpoint/retry, not the HTTP caller.
+- Bound: the authorized source body adds one point `read-erasure-scope`, one board UPDATE, one decision INSERT
+  and one registered takedown event. The inserted decision stores the live `currentCommand(tx).transactionId`;
+  native command completion, receipt and outbox share its transaction. Replay has the same current authorization
+  and scope probe, one exact receipt lookup and no second action/decision/event. Realm discovery adds its existing
+  finite preparation/fence/source commands; it does not synchronously enumerate affected threads. Their command
+  controls, source-fence witnesses and original-history writes belong to the existing command/discovery bound,
+  not a constant inferred from observed test totals. No board lift or downstream Search completion is claimed.
+- Growth check: `test/content/moderation-board-decision.test.ts` executes action and replay in the same native
+  three-scale journey as projection and inspection. Runtime success requires this test on the integrated source.
+
+### Cost: history projection
+
+- Touches: the registered effect validates the takedown schema and original partition/epoch/position, reads the
+  source decision by its unique `(route,target_kind,target_id,security_revision)`, resolves its recorded board
+  scope, releases the source snapshot and upserts one board-local reference. A board has no author recipient.
+- Bound: board projection uses exactly two transactions, each BEGIN + partition PK + body SQL + COMMIT:
+  eight statements, four transaction controls, two partition rows, at most three source relation rows
+  (decision/post/thread; board and thread branches use fewer), and one inserted or conflicting index row.
+  The source SQL's scalar input and equality-join intermediates are each bounded by one; no history range is read.
+  Thread/post decisions additionally use the existing single-recipient preference/notice path after releasing both
+  source and board checkouts. Duplicate delivery repeats the same finite upsert; there is one candidate per decision.
+- Growth check: the native journey completes the registered durable command effect, re-enqueues the same envelope,
+  and directly repeats that registered projector. Its three-scale operation repeats the real point/write path.
+
+### Cost: exact decision read
+
+- Touches: `readModerationDecision` reads one decision/optional appeal and one current target placement, then prepares
+  current target Access for a moderator and checks it in a fresh anchored snapshot. The author shortcut remains
+  thread/post-only. Statement expiry is one scalar condition inside the exact decision SQL.
+- Bound: at most two snapshots, each BEGIN + partition PK + COMMIT; two additional source statements read at most
+  two decision/appeal rows and two target/parent rows. Thus eight Content statements, four controls and six physical
+  relation rows, plus one Access preparation and final formula. SQL equality-join/UNION intermediates remain singleton;
+  no decider account lookup, old decision search or expiry range is added. Source absence needs only the first snapshot.
+- Growth check: the journey reads the original exact board decision as other decision history grows. Focused outcomes
+  separately cover author/stranger disclosure, removed authority, erased decider and reason expiry.
+
+### Cost: scoped history page
+
+- Touches: `listModerationHistory` prepares board Access once, checks it before/after, reads one board-bound index
+  range, and hydrates each admitted raw key through current target Access, `reportBoardPlacement` and the exact reader.
+- Bound: let L be the requested limit (1–100), B=L+1 (at most 101 raw keys), and H≤L the selected raw candidates.
+  There are at most `3+3H` anchored snapshots, `10+13H` Content statements including `6+6H` controls, and
+  `3+B+9H` physical relation rows: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
+  and at most `4H` decision/appeal/target/parent rows. Board placement needs no extra SQL for board targets and
+  at most two PK reads for posts. Plan intermediates add only bounded scalar inputs and singleton equality joins;
+  physical plan/tuple evidence, including withholding, is retained by the native growth harness.
+  Access adds `1+2H` preparations and `2+2H` final formulas. Preparation calls the actual `permission.ts` callees:
+  one permission-time scalar, at most one assignment/account join, at most two membership-inverse ranges (each
+  capped by `MEMBERSHIP_LIMIT=1000` plus one coverage row), at most two selected-target/Global candidate formulas,
+  and at most D=2000 matched organization/Realm role readers. Each final formula is one SQL statement. For I≤2
+  identities, R≤2I×1000 role records and K configured grant roles for the action, the owner declaration in
+  `access/work.ts:accessNativeDeclaration` expands candidate/formula native probes as
+  `P=T×(R+2I)×J`, `N=P×(K+4)`, and rows as
+  `N+assignment+1+T+(R+2I)+J+P+T×J+6T`, with T≤2 and J=1 here. Organization role dependencies are one
+  statement/five native rows each; Realm dependencies use the registered owner's finite current-role producer.
+  Missing owner producers are unavailable seams, not zero-cost successful callbacks. These are actual callee terms,
+  not measured caps: `Q_fixed + B×(Q_decision+Q_current_authority+Q_retention) + D_total×Q_dependency`, with
+  `D_total≤(1+2H)×2000`. HTTP authentication, session recording, admission and native command controls are shared
+  caller work, additional to these engine terms. Memory is O(B+D_total), with at most four concurrent role reads.
+  Both all-kind and exact-kind seeks include their complete board/selection/order prefix; no filter can scan
+  unrelated kinds, no request refills a sparse page, and cursor progress follows raw keys rather than returned rows.
+- Growth check: the same native journey seeds 256/1024/4096 retained source/index decisions under fixed L=1, measures
+  action/replay/projection/exact/all-kind/exact-kind/sparse continuation together, and retains strict indexed physical
+  access-path assertions. It checks that changing selection refuses a signed cursor and denied candidates do not refill.
+  This source declaration is distinct from successful native execution and main promotion.
+
 ## Appeals
 
 Each thread or post takedown stores a decision with its target, action, moderator's statement (the takedown

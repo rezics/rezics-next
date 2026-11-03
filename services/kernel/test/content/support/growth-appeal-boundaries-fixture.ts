@@ -9,6 +9,7 @@ import { newId, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { registerNativeContentAccount } from './native-system.ts';
 import { createReactionRelayBase } from '../reaction-relay-convergence-fixture.ts';
@@ -46,6 +47,7 @@ export async function createGrowthAppealBoundariesFixture() {
       access: system.access,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
+      receiptKeys: testReceiptKeys(),
     });
 
     const suffix = randomUUID().replaceAll('-', '');
