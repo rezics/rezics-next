@@ -80,7 +80,7 @@ function ReleaseSearchSubjectPicker({
   };
   const statusText =
     status === 'loading'
-      ? m.search_suggestions_preparing({}, options)
+      ? m.header_search_loading({}, options)
       : status === 'empty'
         ? m.search_no_suggestions({}, options)
         : status === 'unavailable'
