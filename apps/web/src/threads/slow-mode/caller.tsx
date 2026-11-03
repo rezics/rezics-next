@@ -7,7 +7,6 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { personalRead } from '../../kernel/query';
 import { sessionCsrfToken, sessionQuery } from '../../session/query';
 import type { SlowModePort, SlowModeRead } from './contract';
 
@@ -118,8 +117,8 @@ export function useSlowModeRead(boardId: string | undefined): {
   const port = useSlowModePort();
   const visit = useSlowModeVisit(boardId);
   const query = useQuery({
-    ...personalRead,
-    enabled: personalRead.enabled && !!visit,
+    staleTime: 0,
+    enabled: !!visit,
     queryKey: visit ? slowModeQueryKey(visit) : ['board-slow-mode', 'closed'],
     queryFn: async ({ signal }) => {
       if (!visit?.current(signal)) return { kind: 'unavailable' as const };

@@ -48,8 +48,10 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     matchMedia: window.matchMedia.bind(window),
+    scrollTo: () => undefined,
     IS_REACT_ACT_ENVIRONMENT: true,
   };
+  window.scrollTo = () => undefined;
   const previous = new Map(
     [...Object.keys(globals), 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
   );
@@ -119,10 +121,15 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   });
   const root = createRoot(host);
   await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))));
-  await act(async () => { await router.load(); });
+  const appeared = async (text: string) => {
+    for (let attempt = 0; attempt < 25; attempt++) {
+      if (host.textContent?.includes(text)) return;
+      await act(async () => { await Promise.resolve(); });
+    }
+    expect(host.textContent).toContain(text);
+  };
   try {
-    await act(async () => { await Promise.resolve(); });
-    expect(host.textContent).toContain(m.slow_mode_unavailable());
+    await appeared(m.slow_mode_unavailable());
     expect(host.textContent).toContain(m.slow_mode_next_unavailable());
     read = {
       kind: 'available',
