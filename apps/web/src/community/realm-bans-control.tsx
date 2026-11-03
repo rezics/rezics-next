@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { initials } from '@rezics/ui/avatar-initials';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import {
   parseRealmBanTarget,
   revalidateRealmBanTarget,
@@ -230,12 +231,15 @@ const retiredInitials = new WeakSet<BanReadState>();
 export function RealmBansControl(props: RealmBansControlProps) {
   const visit = useRef<{
     props: RealmBansControlProps;
+    locale: string;
     gate: RealmBanLifetime;
     initial: BanReadState | undefined;
   } | null>(null);
+  const locale = getLocale();
   const old = visit.current;
   if (
     !old ||
+    old.locale !== locale ||
     old.props.realmId !== props.realmId ||
     old.props.ready !== props.ready ||
     old.props.read !== props.read ||
@@ -248,8 +252,9 @@ export function RealmBansControl(props: RealmBansControlProps) {
     if (old?.initial) retiredInitials.add(old.initial);
     visit.current = {
       props,
+      locale,
       gate: new RealmBanLifetime(
-        () => props.ready && (props.lifetime?.current() ?? true),
+        () => props.ready && getLocale() === locale && (props.lifetime?.current() ?? true),
         props.lifetime?.subscribe,
         () => {
           if (props.initial) retiredInitials.add(props.initial);
