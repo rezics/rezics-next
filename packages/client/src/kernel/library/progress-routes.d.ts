@@ -5216,6 +5216,115 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
     };
 } & {
     v1: {
+        libraryReportedYearSummary: {
+            get: {
+                body: unknown;
+                params: {};
+                query: { year: number; };
+                headers: unknown;
+                response: {
+                    200: Readonly<{
+                        completedOccurrences: string;
+                        distinctCompletedSubjects: string;
+                        repeatOccurrences: string;
+                        completedOccurrencesWithUnknownProfile: string;
+                        finishPrecision: Readonly<{ year: string; month: string; day: string; }>;
+                    }> & Readonly<{
+                        scope: 'retained_native_sessions';
+                        year: number;
+                        calendar: 'gregorian';
+                        dateSource: 'explicitly_reported_journal_finish';
+                        months: readonly (Readonly<{
+                            completedOccurrences: string;
+                            distinctCompletedSubjects: string;
+                            repeatOccurrences: string;
+                            completedOccurrencesWithUnknownProfile: string;
+                            finishPrecision: Readonly<{ year: string; month: string; day: string; }>;
+                        }> & { month: number; })[];
+                        monthUnallocated: Readonly<{
+                            completedOccurrences: string;
+                            distinctCompletedSubjects: string;
+                            repeatOccurrences: string;
+                            completedOccurrencesWithUnknownProfile: string;
+                            finishPrecision: Readonly<{ year: string; month: string; day: string; }>;
+                        }>;
+                        coverage: Readonly<{
+                            nativeSessions: 'complete';
+                            initializedSessions: string;
+                            retainedSessions: string;
+                            completedOccurrencesWithMissingFinish: string;
+                            completedOccurrencesWithUnsupportedFinish: string;
+                            otherHistory: 'unavailable';
+                            unitMeaning: 'not_evaluated';
+                        }>;
+                        currentness: Readonly<{ state: 'snapshot'; revision: string; }>;
+                    }>;
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
         libraryConsumptionSummary: {
             get: {
                 body: unknown;

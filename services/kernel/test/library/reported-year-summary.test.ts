@@ -5,6 +5,7 @@ import { sessionScopes } from './support/session-profile-fixture.ts';
 import { createReportedYearSummaryReads, type ReportedYearSummary } from '../../src/library/reported-year-summary.ts';
 import { routeOf } from '../../src/route/route.ts';
 import maintenanceSessions from '../../src/library/shelf-maintenance-sessions.sql';
+import eraseSession from '../../src/library/erasure-owned-session-delete.sql';
 
 let native: NativeProfileFixture;
 let owner: NativeProfileFixture['owner'];
@@ -83,6 +84,13 @@ test('concurrent first and last memberships, native retirement and bounded insta
   expect(counts(await summary(1700))).toEqual(['2', '1', '1']);
   await Promise.all(ids.map((id) => send('PATCH', `/v1/progressSessions/${id}/journal`, { revision: 1, finishDate: null })));
   expect(counts(await summary(1700))).toEqual(['0', '0', '0']);
+  const transition = await occurrence(independent, { year: 1800 });
+  await send('PATCH', `/v1/progressSessions/${transition}/journal`, { revision: 1, finishDate: { year: 1800, month: 4 } });
+  expect((await summary(1800)).monthUnallocated.completedOccurrences).toBe('0');
+  expect((await summary(1800)).months[3]!.finishPrecision.month).toBe('1');
+  await send('PATCH', `/v1/progressSessions/${transition}/journal`, { revision: 2, finishDate: { year: 1800, month: 4, day: 30 } });
+  expect((await summary(1800)).months[3]!.finishPrecision.day).toBe('1');
+  expect(counts(await summary(1800))).toEqual(['1', '1', '0']);
   const route = routeOf(owner.actor.accountId)!;
   // Emulate the pre-installation row at the migration boundary in this isolated DB.
   // Retire it through the source trigger, then restore only its uninitialized source.
@@ -106,7 +114,7 @@ test('concurrent first and last memberships, native retirement and bounded insta
     after: '00000000-0000-0000-0000-000000000000', run_id: entryKey() });
   expect(rows.length).toBeLessThanOrEqual(100);
   expect(counts(await summary(1600))).toEqual(['1', '1', '0']);
-  await native.pool.query('DELETE FROM library.progress_session WHERE route=$1 AND session_id=$2', [route, id]);
+  expect(await eraseSession.run(native.pool, { route, account_id: owner.actor.accountId, parent_id: id })).toMatchObject({ removed: true });
   expect(counts(await summary(1600))).toEqual(['0', '0', '0']);
   expect((await native.pool.query('SELECT 1 FROM library.reported_year_subject WHERE route=$1 AND account_id=$2 AND year=1600',
     [route, owner.actor.accountId])).rowCount).toBe(0);
@@ -128,6 +136,14 @@ test('cancellation at delivery and terminal authority cannot deliver a successfu
   await expect(createReportedYearSummaryReads({ pool }).summary(owner.actor, 2020, Date.now() + 5000,
     controller.signal, () => { delivered = true; })).rejects.toMatchObject({ code: 'deadline_exceeded' });
   expect(delivered).toBe(false);
+  const route = routeOf(owner.actor.accountId)!;
+  const retained = await native.pool.query<{session_id:string}>('SELECT session_id FROM library.progress_session WHERE route=$1 AND account_id=$2', [route, owner.actor.accountId]);
+  await native.revokeIdentity(owner.actor.accountId);
+  await expect(read.summary(owner.actor, 2020, Date.now() + 5000)).rejects.toMatchObject({ code: 'forbidden' });
+  for (const row of retained.rows)
+    expect(await eraseSession.run(native.pool, { route, account_id: owner.actor.accountId, parent_id: row.session_id })).toMatchObject({ removed: true });
+  for (const table of ['reported_year_subject', 'reported_year_bucket', 'reported_year_owner'])
+    expect((await native.pool.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2`, [route, owner.actor.accountId])).rowCount).toBe(0);
   const terminal = await native.identity(sessionScopes);
   await native.revokeIdentity(terminal.actor.accountId);
   await expect(read.summary(terminal.actor, 2020, Date.now() + 5000)).rejects.toMatchObject({ code: 'forbidden' });
