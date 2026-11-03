@@ -19,7 +19,7 @@ type Assignment = {
 
 export type SetLabelAssignmentResult =
   | { kind: 'applied' | 'existing'; assignment: Assignment }
-  | { kind: 'capacity' | 'not_found' | 'migration_required' };
+  | { kind: 'capacity' | 'not_found' | 'migration_required' | 'stale' };
 
 type Observed = Awaited<ReturnType<typeof reservations.run>>[number];
 
@@ -71,7 +71,13 @@ export async function lockLabelAssignmentSubject(
  */
 export async function setLabelAssignment(
   client: Pick<PoolClient, 'query'>,
-  input: { route: number; accountId: string; subjectId: string; labelId: string },
+  input: {
+    route: number;
+    accountId: string;
+    subjectId: string;
+    labelId: string;
+    expectedLabelRevision?: number;
+  },
   context: { transactionId: string; time: string },
 ): Promise<SetLabelAssignmentResult> {
   const db = { query: client.query.bind(client) };
@@ -96,6 +102,8 @@ export async function setLabelAssignment(
   const current = new Map(locked.map((parent) => [parent.labelId, parent]));
   const parent = current.get(labelId);
   if (!parent || parent.deletedAt !== null) return { kind: 'not_found' };
+  if (input.expectedLabelRevision !== undefined && parent.revision !== input.expectedLabelRevision)
+    return { kind: 'stale' };
   // Legacy tuples require a separate bounded cutover; reads never stamp identities or claims.
   if (desired && (desired.id === null || (desired.deletedAt === null && desired.slotNo === null)))
     return { kind: 'migration_required' };
