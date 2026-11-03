@@ -305,6 +305,22 @@ test('the generated source verifier accepts producer controls after the frozen s
   }
 });
 
+test('source verification validates the preparation supervisor marker before installation', () => {
+  const fixture = createFixture();
+  try {
+    const marker = { schema: 1, host, run, deadline: Date.now() + 1000, limitMs: 1000 };
+    writeOwned(fixture.root, '.preparation-started', JSON.stringify(marker));
+    const verified = runSource(fixture);
+    expect(verified.status, verified.stderr).toBe(0);
+    writeOwned(fixture.root, '.preparation-started', JSON.stringify({ ...marker, run: 'foreign-run' }));
+    const rejected = runSource(fixture);
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain('producer preparation identity is foreign or malformed');
+  } finally {
+    cleanup(fixture);
+  }
+});
+
 test('the generated source verifier rejects frozen candidate content, mode, link, and path changes', () => {
   const content = createFixture();
   try {
