@@ -73,7 +73,12 @@ async function addPart(region: ReturnType<typeof field>, property: string, label
   });
   await add.getByRole('combobox', { name: 'Add citation part', exact: true }).selectOption(property);
   await add.getByRole('button', { name: 'Add', exact: true }).click();
-  await region.locator('div[data-statement-addition]').filter({ hasText: label }).last().getByRole('textbox').fill(value);
+  await region
+    .locator('div[data-statement-addition]')
+    .filter({ hasText: label })
+    .last()
+    .getByRole('textbox')
+    .fill(value);
 }
 
 async function edit(page: Page, property: string, name: string, citation?: string) {
@@ -138,17 +143,21 @@ test('Screen corrections review admitted holders, copy evidence independently, a
   expect(writes.map((request) => propertyOf(request.body!)).sort()).toEqual(['schema:genre', 'schema:keywords']);
   expect(new Set(writes.map((request) => request.idempotencyKey)).size).toBe(2);
   expect(
-    referenceParts(
-      writes.find((request) => propertyOf(request.body!) === 'schema:genre')!.body!,
-      'schema:genre',
-    ),
-  ).toEqual([[['schema:url', `${fixture.citation}/genre`], ['schema:inLanguage', 'en']]]);
+    referenceParts(writes.find((request) => propertyOf(request.body!) === 'schema:genre')!.body!, 'schema:genre'),
+  ).toEqual([
+    [
+      ['schema:url', `${fixture.citation}/genre`],
+      ['schema:inLanguage', 'en'],
+    ],
+  ]);
   expect(
-    referenceParts(
-      writes.find((request) => propertyOf(request.body!) === 'schema:keywords')!.body!,
-      'schema:keywords',
-    ),
-  ).toEqual([[['schema:url', `${fixture.citation}/keywords`], ['schema:inLanguage', 'en']]]);
+    referenceParts(writes.find((request) => propertyOf(request.body!) === 'schema:keywords')!.body!, 'schema:keywords'),
+  ).toEqual([
+    [
+      ['schema:url', `${fixture.citation}/keywords`],
+      ['schema:inLanguage', 'en'],
+    ],
+  ]);
 
   await genre.getByRole('button', { name: 'Review this proposal', exact: true }).click();
   await page.locator('[data-candidate-item]').waitFor({ state: 'visible' });

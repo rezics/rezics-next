@@ -15,7 +15,11 @@ test('Screen classification readback observes current values, failures, and read
     propose: async () => ({ ok: false, reason: 'unavailable' }),
   } as unknown as FactsTransport;
 
-  const live = screenClassificationTransport(transport, () => true, (next) => observed.push(next));
+  const live = screenClassificationTransport(
+    transport,
+    () => true,
+    (next) => observed.push(next),
+  );
   expect(await live.read()).toBe(current);
   expect(observed).toEqual([current]);
 
@@ -27,7 +31,11 @@ test('Screen classification readback observes current values, failures, and read
   expect(await unavailable.read()).toMatchObject({ ok: false, reason: 'unavailable' });
   expect(observed.at(-1)).toMatchObject({ ok: false, reason: 'unavailable' });
 
-  const retired = screenClassificationTransport(transport, () => false, (next) => observed.push(next));
+  const retired = screenClassificationTransport(
+    transport,
+    () => false,
+    (next) => observed.push(next),
+  );
   await expect(retired.read()).rejects.toThrow('Retired catalogue editor');
   expect(reads).toBe(1);
   expect(observed).toHaveLength(2);
