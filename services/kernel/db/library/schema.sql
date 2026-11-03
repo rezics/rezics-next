@@ -3748,6 +3748,7 @@ CREATE TABLE library.progress_session (
     transaction_id uuid NOT NULL,
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
+    episode_completed_count integer DEFAULT 0 NOT NULL,
     additional_measures jsonb DEFAULT '[]'::jsonb NOT NULL,
     journal_revision integer DEFAULT 0 NOT NULL,
     journal_start_year integer,
