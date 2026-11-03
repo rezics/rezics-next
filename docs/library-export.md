@@ -74,7 +74,7 @@ remain unsupported by that recovery journey.
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `trash`                  | Excluded; current live facts and retained session history only                                                        | Same                                                                                                                      | Same                                                                          |
 | `providerIdentifiers`    | Stored personal import evidence only; no shared custody scan or inferred identifiers                                  | Explicitly reviewed owner observations and retained import evidence only; no shared custody scan or inferred identifiers  | Same as version 2                                                             |
-| `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded | Same as version 2                                                             |
+| `personalImportEvidence` | Retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded | Retained Bangumi and unexpired MAL row evidence; raw uploads, credentials and internal review/apply capabilities excluded | Retained Bangumi, unexpired MAL/VNDB and retained AniList parsed rows; raw uploads and capabilities excluded |
 | `commerce`               | Excluded; orders and financial evidence use Commerce retention/export policy                                          | Same                                                                                                                      | Same                                                                          |
 | `publication`            | Excluded; stored rules only, no dynamic evaluation or working publication output                                      | Same                                                                                                                      | Same                                                                          |
 | `reimport`               | Unavailable; no installed re-import endpoint is promised                                                              | V1 recovery plus reviewed V2 annotations and journal dates/reflection; provenance remains unsupported                     | Existing V1/V2 recovery remains; V3 manifests and assessments are unsupported |
@@ -138,7 +138,7 @@ V1/V2 absence never establishes an assessment. Their serialized journals stay un
 
 The same owner source generation covers VNDB parent and indexed evidence rows, plus every AniList header/source/
 review mutation, cancellation, pruning and deletion. Indexed MAL/VNDB expiry probes run before and after each page,
-status and original create replay. Expiry needs no row write to make collecting or completed captures stale.
+and on status and original create replay. Expiry needs no row write to make collecting or completed captures stale.
 The final page rechecks current owner, source and time under the existing account barrier and source lock; no GET
 repairs, replacements, partial success or new request identities occur. Erasure still owns the export control row;
 VNDB parent deletion cascades its source-owned parsed row index, and existing AniList erasure deletes its rows.
@@ -157,7 +157,7 @@ currentness. Status and cancel each use one currentness check, with cancel's exa
 these bounded checks; R retries add R times the respective caller work, never a refreshed lifetime.
 
 Parsed VNDB rows are indexed at source write time: one backfill over retained arrays at migration and, on actual
-source rows change, at most 5,000 row replacements per upload (16 MiB total parsed input). Export never reparses
+source rows change, at most 5,000 deletes and 5,000 inserts per upload (16 MiB total parsed input), plus their source-fence updates. Export never reparses
 that upload array. AniList source and header metadata are stored generated projections, computed once per source
 write (existing payload cap 4 MiB); export reads no raw wrapper/header document. Candidate source JSON work is
 bounded by admitted source bytes (VNDB <=16 MiB per addressed parent, AniList <=17*4 MiB worst-case parsed source
@@ -167,7 +167,7 @@ Native annotation/provenance optional joins remain at most 16 exact Subject keys
 21 fixed pairs. Artifact caps, browser assembly, expiry and one control row per owner are unchanged.
 
 VNDB deletion/pruning/terminal cleanup adds at most 5,000 indexed child deletes and fence updates per parent to its
-existing source cleanup payer; AniList generated projections follow each existing row's cleanup. Source index data
+existing source cleanup payer (at most four VNDB parents and 20,000 children in its installed owner erase call); AniList generated projections follow each existing row's cleanup. Source index data
 is never an export artifact and has no independent lifetime. No new server artifact, scheduler, payer, automatic
 retry or runtime refill is introduced. Total work is the existing capture/status/cancel costs plus K bounded page
 callers, returned native rows/bytes, source projection write/cleanup work and explicit retries. Native growth and
