@@ -1,5 +1,14 @@
 # Library capability acceptance inventory
 
+Personal consumption statistics now have the mounted owner-only
+`GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.
+The [statistics contract](../library-consumption-statistics.md) owns exact occurrence,
+distinct-subject, repeat, completeness and retry/clear semantics for the existing Web interface.
+Focused native scenarios: `test/library/consumption-statistics.test.ts` cover explicit native
+completion, repeats, independent entry state, clear/replay, corrections, removal, unknown
+historic profiles, other owners, terminal fences, bounded reads and unavailable/cancelled reads.
+Broader acceptance and Web interface validation remain deferred to integration.
+
 This inventory maps the seven Library Done-when clauses to their existing native acceptance, persona denials,
 owned routes and current page-story source exports. Product behavior remains in the linked owner documents and the
 [Library Goal](library.md). This file records evidence status; it does not replace frozen outcomes or establish
