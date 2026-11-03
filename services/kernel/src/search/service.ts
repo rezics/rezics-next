@@ -10,6 +10,7 @@ import {
   type DiscoveryFilterDocument,
   type FilterDocument,
   type FilterRelease,
+  type SpoilerThreshold,
 } from '@rezics/filter';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -89,6 +90,7 @@ export type SearchRequest = {
   text?: string;
   filter?: unknown;
   sort?: SearchPlan['sort'];
+  spoilerThreshold?: number;
   population?: { realm: string };
   limit?: number;
   cursor?: string;
@@ -335,6 +337,13 @@ function validate(request: SearchRequest) {
   if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
+  let spoilerThreshold: SpoilerThreshold | undefined;
+  if (request.spoilerThreshold !== undefined) {
+    const value = request.spoilerThreshold;
+    if (!Number.isSafeInteger(value) || value < 0 || value > 2) invalid('/spoilerThreshold', 'invalid_format');
+    spoilerThreshold = value as SpoilerThreshold;
+  }
+  if (spoilerThreshold !== undefined && !filter) unsupported('/spoilerThreshold');
   if (request.population !== undefined) {
     const population = request.population;
     if (
@@ -356,6 +365,7 @@ function validate(request: SearchRequest) {
     text,
     filter,
     sort,
+    spoilerThreshold,
     limit,
     hitOptions,
     // Keep the validated JSON, rather than the compiler's internal representation, in the binding.
@@ -363,6 +373,7 @@ function validate(request: SearchRequest) {
       ...(text ? { text: request.text } : {}),
       ...(filter ? { filter } : {}),
       sort,
+      ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
       ...(request.population ? { population: request.population } : {}),
       limit,
       ...(hitOptions.descriptions ? { descriptions: true } : {}),
@@ -557,6 +568,7 @@ export function createSearchService({
     filter: SearchFilterDocument | undefined,
     current?: FilterRelease,
     nativeOrder = false,
+    spoilerThreshold?: SpoilerThreshold,
   ) {
     let admitted;
     if (filter) {
@@ -565,12 +577,18 @@ export function createSearchService({
       try {
         if (containsRealmPredicate(filter)) {
           if (containsUnsupportedDiscoveryLeaf(filter)) unsupported('/filter');
-          admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), active, new Set(), { owner: true });
+          admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), active, new Set(), {
+            owner: true,
+            ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
+          });
         } else {
           admitted = admitFilter(
             filter as FilterDocument,
             active,
-            containsOwnerPredicate(filter) ? { owner: true } : undefined,
+            {
+              ...(containsOwnerPredicate(filter) ? { owner: true as const } : {}),
+              ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
+            },
           );
         }
       } catch (error) {
@@ -606,7 +624,7 @@ export function createSearchService({
       readContext?: PublicSearchReadContext,
     ) {
       request = ownSubjectRequest(request);
-      const { text, filter, sort, limit, hitOptions, bindingRequest } = validate(request);
+      const { text, filter, sort, limit, hitOptions, spoilerThreshold, bindingRequest } = validate(request);
       // One lookup serves filter admission and the requested properties.
       const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
       const current = native?.release ?? (releaseOverride ? await release() : undefined);
@@ -616,7 +634,13 @@ export function createSearchService({
         : undefined;
       if ((filter || hitOptions.properties) && !current)
         throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-      const admitted = await admitQuery(text, filter, current ?? undefined, request.population !== undefined);
+      const admitted = await admitQuery(
+        text,
+        filter,
+        current ?? undefined,
+        request.population !== undefined,
+        spoilerThreshold,
+      );
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
         invalid('/kindCursor', 'invalid_type');

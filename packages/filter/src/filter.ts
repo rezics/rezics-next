@@ -68,6 +68,8 @@ export type DiscoveryFilterDocument =
   | RealmLeaf
   | Exclude<FilterDocument, { readonly and: unknown } | { readonly or: unknown } | { readonly not: unknown }>;
 
+export type SpoilerThreshold = 0 | 1 | 2;
+
 function catalogueOnly(filter: DiscoveryFilterDocument): FilterDocument {
   if ('kind' in filter) throw new FilterError('invalid_request', '/kind', 'unknown_field');
   if ('ratingQuestion' in filter) throw new FilterError('invalid_request', '/ratingQuestion', 'unknown_field');
@@ -93,8 +95,15 @@ export type FilterRelease = {
   filters?: Record<string, { filter: unknown }>;
 };
 
+function spoilerThresholdSupport(release: FilterRelease, property: string): 'supported' | 'missing' | 'unaffected' {
+  const definition = Object.hasOwn(release.properties, property) ? release.properties[property] : undefined;
+  const group = definition?.relation?.group;
+  if (group !== 'classification' && group !== 'appearance') return 'unaffected';
+  return definition?.qualifiers?.includes('rezics:spoilerLevel') === true ? 'supported' : 'missing';
+}
+
 /** Owner-context admission checks structure, not authorization, capabilities or accepted historical pins. */
-export type FilterAdmissionOptions = { saved?: boolean; owner?: true };
+export type FilterAdmissionOptions = { saved?: boolean; owner?: true; spoilerThreshold?: SpoilerThreshold };
 
 export type FilterValidationError = { problem: FilterProblem; pointer: string; code: FieldErrorCode };
 
@@ -1034,15 +1043,57 @@ function admitConstructed(
       }
     }
     validateStatement(node, pointer, source);
+    let admittedStatement = statement;
+    const thresholdSupport =
+      options.spoilerThreshold === undefined ? 'unaffected' : spoilerThresholdSupport(release, statement.property);
+    if (thresholdSupport === 'missing')
+      reject(
+        appendPointer(pointer, 'statement'),
+        source,
+        'unsupported',
+        'unsupported_query',
+      );
+    if (options.spoilerThreshold !== undefined && thresholdSupport === 'supported') {
+      const allowed = SPOILER_LEVELS.slice(0, options.spoilerThreshold + 1);
+      const qualifiers = [...(statement.qualifiers ?? [])];
+      const spoilerIndices = qualifiers.flatMap((qualifier, index) =>
+        qualifier.property === 'rezics:spoilerLevel' ? [index] : [],
+      );
+      if (!spoilerIndices.length) qualifiers.push({ property: 'rezics:spoilerLevel', in: allowed });
+      else {
+        for (const index of spoilerIndices) {
+          const selected = qualifiers[index]!.in.filter((value) => allowed.includes(value as (typeof allowed)[number]));
+          if (!selected.length) {
+            const pointer = appendPointer(
+              appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
+              'in',
+            );
+            reject(pointer, source, 'invalid_format', 'invalid_request');
+          }
+          qualifiers[index] = { ...qualifiers[index]!, in: selected };
+        }
+      }
+      if (qualifiers.length > FILTER_LIMITS.qualifiers)
+        reject(
+          appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'),
+          source,
+          'out_of_range',
+          'unsupported_query',
+        );
+      expandedLeaves += qualifiers.length - (statement.qualifiers?.length ?? 0);
+      if (expandedLeaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+      admittedStatement = { ...statement, qualifiers };
+      validateStatement({ statement: admittedStatement }, pointer, source);
+    }
     return {
       statement:
-        'in' in statement
+        'in' in admittedStatement
           ? {
-              property: statement.property,
-              in: [...statement.in],
-              ...(statement.qualifiers
+              property: admittedStatement.property,
+              in: [...admittedStatement.in],
+              ...(admittedStatement.qualifiers
                 ? {
-                    qualifiers: statement.qualifiers.map((qualifier) => ({
+                    qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
                       property: qualifier.property,
                       in: [...qualifier.in],
                     })),
@@ -1050,11 +1101,11 @@ function admitConstructed(
                 : {}),
             }
           : {
-              property: statement.property,
-              range: { ...statement.range },
-              ...(statement.qualifiers
+              property: admittedStatement.property,
+              range: { ...admittedStatement.range },
+              ...(admittedStatement.qualifiers
                 ? {
-                    qualifiers: statement.qualifiers.map((qualifier) => ({
+                    qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
                       property: qualifier.property,
                       in: [...qualifier.in],
                     })),
@@ -1100,7 +1151,7 @@ export function admitDiscoveryFilter(
   filter: DiscoveryFilterDocument,
   release: FilterRelease,
   kinds: ReadonlySet<string>,
-  options?: Pick<FilterAdmissionOptions, 'owner'>,
+  options?: Pick<FilterAdmissionOptions, 'owner' | 'spoilerThreshold'>,
 ): DiscoveryFilterDocument {
   return admitConstructed(filter, release, { ...options, kinds }, constructionFor(release));
 }

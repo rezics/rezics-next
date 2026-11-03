@@ -321,6 +321,7 @@ export function searchRoutes<App>(
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
             population: t.Optional(t.Object({ realm: t.String({ format: 'uuid' }) }, object)),
+            spoilerThreshold: t.Optional(t.Integer({ minimum: 0, maximum: 2 })),
             sort: t.Optional(
               t.Union([
                 t.Literal('relevance'),
