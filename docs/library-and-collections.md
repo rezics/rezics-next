@@ -611,3 +611,21 @@ receipt, revision and terminal fences apply. Web's existing canonical checklist 
 canonical Subject review to the existing VNDB provider flow. Native commands create only explicitly named private
 labels and add assignments. Source removal/expiry clears consent/results without removing adopted native effects;
 terminal erasure uses the existing source and native label coordinators. Ordinary VNDB import creates no labels.
+
+## Web private entry and history visit
+
+The Web-owned authenticated visit is mounted in the existing Subject Library slot and the existing progress-session
+detail. The slot reads the installed typed libraryEntries({subjectId}).personal.get method and edits private
+annotations through .annotations.put; source privacy corrections use .sourceObservations.patch followed by a
+personal-entry readback. Each write is bound to the current viewer, CSRF session, original key and operands. Annotation
+fields use field-local unchanged/clear/set operations. Provider privacy is distinct from REZICS disclosure and never
+grants publication permission. The source created/updated values and native recorded time remain separately labelled.
+
+The private /library/history route reads one native diary page and the native consumption summary. Next-page
+navigation replaces the current page, and leaving cancels its continuation. Addressed occurrence details reuse the
+existing progress-session page for journal correction, reopen and retirement. Acknowledged retirement refreshes the
+caller and returns to the diary; it does not withdraw any public snapshot.
+
+The installed generated client does not expose the state-history list/review/restore method family. The Subject
+Library visit says that state history is unavailable and keeps it distinct from the occurrence diary. No Web history
+or restoration endpoint is fabricated. See [state-history Web receiving](library-entry-state-history.md#web-receiving).

@@ -104,3 +104,16 @@ Native growth acceptance remains controller-owned and unmeasured here. It must c
 occurrences, unrelated owners, and retained versus cleared journal values with a fixed addressed response, and record
 statements, examined rows/buffers, bytes and lifetime cleanup for read, edit, stale refusal and receipt replay. Source
 typing and this derivation do not establish that execution evidence.
+
+## Web addressed journal editor
+
+The existing progress-session detail now reads the installed
+progressSessions({sessionId}).journal.get method and edits with .journal.patch. The editor accepts only reported year,
+year-month or full calendar date and keeps reflection independent of current shelf state. Clearing a date or reflection
+is explicit. A journal correction uses the native journal revision and a fresh addressed readback; a stale revision
+keeps the draft visible and requires review of the latest journal before resubmission. Unknown results retain the
+original key and exact patch for explicit retry. Private reflection is never copied into publication.
+
+The diary distinguishes these reported dates from native started/completed audit clocks and source observation
+timestamps. Missing or partial dates are never filled with a guessed day, instant or duration. Current progress
+controls and the caller's progress-session authority stay with the existing page.

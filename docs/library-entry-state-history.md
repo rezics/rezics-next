@@ -72,3 +72,18 @@ storage bounds; native growth, buffers, bytes and cleanup remain controller acce
 
 Focused native coverage is in `services/kernel/test/library/personal-http.test.ts` and
 `services/kernel/test/library/account-fact-purge.test.ts`.
+
+## Web receiving
+
+The Web client currently has no generated typed methods for
+listEntryStateHistory(actor, subjectId, {cursor?, limit?}), reviewEntryStateChange(actor, subjectId,
+changeRevision) or restoreEntryState(actor, subjectId, changeRevision, {incarnationId,currentRevision}, requestKey).
+The Subject Library visit labels this capability unavailable; it does not query a guessed route, cast a substitute
+client or treat an empty history page as complete. State history remains distinct from the occurrence diary.
+
+Before activation, install and verify the generated methods and typed problem variants, bind every request to the
+current private viewer, and retain the original restore key and operands for an explicit retry. Review must precede
+deliberate restore; stale incarnation/revision requires a new review, and restore must not recreate a missing entry.
+The native page cap remains the documented maximum of 50 with default 20; Web must retain only that addressed page
+and the fixed review/restore/readback sequence. Pruned coverage is partial, pre-install coverage unknown, and an empty
+page does not establish completeness. No state-history acceptance ran in this increment.

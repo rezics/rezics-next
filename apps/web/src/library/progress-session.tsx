@@ -44,6 +44,7 @@ import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressFailureMessage, progressView } from './progress-label';
 import { scalarRecordingValue } from './progress-view';
 import { ProgressCorrectionReview } from './progress-actions';
+import { PrivateOccurrenceControls } from './private-diary/occurrence-detail';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import {
   IndependentMeasuresReadout,
@@ -1352,6 +1353,7 @@ function SessionEditor({
         </div>
         {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
       </header>
+      <PrivateOccurrenceControls session={session} isCurrent={canHandle} />
       {unsupported || session.recordingState === 'unsupported' ? (
         <p role="status">{m.library_progress_no_longer_offered()}</p>
       ) : session.recordingState !== 'supported' ? (

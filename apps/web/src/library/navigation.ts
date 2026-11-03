@@ -1,4 +1,4 @@
-import { Compass, Download, FolderPlus, Import } from 'lucide-react';
+import { BookOpenText, Compass, Download, FolderPlus, Import } from 'lucide-react';
 import type { NavigationContribution } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 
@@ -11,6 +11,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     href: '/collections',
     label: ({ locale }) => m.collection_discovery_nav({}, { locale }),
     icon: Compass,
+  },
+  {
+    id: 'library.private-diary',
+    kind: 'navigation',
+    group: 'personal',
+    order: 15,
+    href: '/library/history',
+    match: 'exact',
+    signedIn: true,
+    operation: 'progress_session.list',
+    label: ({ locale }) => m.library_diary_nav({}, { locale }),
+    icon: BookOpenText,
   },
   {
     id: 'library.import-mal',

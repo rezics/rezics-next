@@ -92,3 +92,21 @@ from different records independently. Use the public typed fields `PersonalEntry
   Supply `unchanged` for omitted or unmodified values. The adapter never maps source privacy to
   public visibility and never derives priority from a provider rank or rating. If it cannot retain the original
   timestamp and its precision/zone meaning, report that mapping as unsupported and do not submit a normalized value.
+
+## Web source review
+
+The private Subject Library editor lists native observations independently by provider and record. It displays the
+source privacy meaning, source-created and source-updated values with their returned precision and zone, and native
+recordedAt separately. Missing, cleared and unknown values retain their distinct labels. Source-visible is explicitly
+not REZICS-public. The privacy editor defaults to retaining the current field, requires review confirmation, submits
+one field operation with the observation revision, and leaves both source timestamps unchanged. A conflict requires
+a fresh entry read and a deliberate review before a new correction. An uncertain correction retries the same key and
+body; accepted PATCH results are reconciled with a personal-entry readback.
+
+The existing personal-list import confirmation pages remain owned by their provider import journeys. This receiving
+increment does not translate raw provider payloads into source admissions or claim source fields were applied during
+an import. The installed adapter contract is PersonalEntrySourceAdmission / PersonalEntrySourceCorrection through
+the generated libraryEntries(...).sourceObservations methods. Import journeys must preserve each provider's exact
+record identity, confirm its native preview evidence, and retain an exact idempotent retry before admitting those
+facts. VNDB remains unavailable until its generated libraryImports.vndb client family is delivered; no second
+parser or import route is introduced.

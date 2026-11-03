@@ -78,3 +78,18 @@ examined rows/buffers, bytes, refusals/replays and cleanup at 64/512/4096 live a
 failed preparation or absent counters is unmeasured.
 
 Shared journal reads and fresh edits return not found after retirement; an admitted journal command still replays its original receipt. Diary pages use the live-session seek index, and native exports exclude retired sessions and their units/history even when continuing an already selected parent. The installed consumption and reported-year statistics triggers remove completed contributions when state changes, without rewriting journal values.
+
+## Web lifecycle receiving
+
+The existing progress-session detail uses the installed generated custom methods
+progressSessions({sessionId}).$reopen.post and .$retire.post, passing {revision} and the original
+Idempotency-Key. The typed custom-method mapping is the only transport; Web does not construct raw /$verb paths.
+An uncertain response retries the same action, revision and key. A fresh stale revision is reported for deliberate
+review; Web does not silently rebase the intent. Reopen preserves journal and accepted values while the native result
+clears completion. Value clear remains separate. An acknowledged retired state clears the addressed detail and
+navigates back to private history; current lists and native counts refresh through the existing bounded route
+mechanisms without speculative local decrements. Public log snapshots remain independent.
+
+Occurrence detail is a fixed addressed journal read; correction is one PATCH plus readback; lifecycle is one command.
+No route enumerates prior occurrences. Native filtering, export invalidation and the producer's indexed Cost remain
+native acceptance responsibilities and are not inferred from this Web receiving change.

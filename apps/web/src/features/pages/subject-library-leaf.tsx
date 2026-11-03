@@ -6,6 +6,7 @@ import { useOperation } from '../../kernel/exposure';
 import { subjectSlotReturnTo } from '../../library/subject-slot-return-context';
 import type { SubjectLibrarySlotData } from '../../library/subject-slot';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
+import { RichPrivateEntry } from '../../library/rich-private-entry/view';
 import { useSubjectLibraryObservation } from '../../library/subject-library-current-origin';
 import { ConfiguredProfileControls, isMangaLibrarySubject } from '../../library/configured-profile-controls';
 import type { useSession } from '../../session/query';
@@ -189,6 +190,13 @@ export function SubjectLibraryLeaf({
         subject={{ id: frame.id, type: frame.type, label: frame.title.text }}
         locale={locale}
         data={current}
+      />
+      <RichPrivateEntry
+        key={frame.id + ':' + (session.state === 'signed-in' ? session.subject + ':' + (session.csrfToken ?? '') : session.state)}
+        subject={{ id: frame.id, label: frame.title.text }}
+        session={session}
+        admitted={admitted && query.enabled === true}
+        returnTo={returnTo}
       />
       {isMangaLibrarySubject(frame.type) ? (
         <ConfiguredProfileControls

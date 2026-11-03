@@ -106,3 +106,17 @@ does not resume a preparation job or send a mutation/idempotency key. A successf
 replaces all counts and coverage together. Clearing progress values uses the installed
 session command and preserves completed occurrences; erasure/removal follows the existing
 native lifecycle rather than a statistics-specific clear operation.
+
+## Web private history surface
+
+The private /library/history page consumes the installed generated libraryDiary.get and
+libraryConsumptionSummary.get methods through an authenticated server loader. It shows completed occurrence,
+distinct completed subject and repeat counts from the native definitions above, plus unknown-profile count, native
+coverage, unavailable other-history coverage, unevaluated unit meaning and snapshot currentness. Counts remain
+decimal strings so values above JavaScript's safe integer range are not rounded. An unavailable summary is shown as
+unavailable rather than zero. Web does not enumerate sessions or derive statistics from diary pages.
+
+Web performs one summary call per page visit; the summary's reader remains bounded by its native installation and
+owner-index reads. Its design-visible source/statement bound is documented above: constant database rows and
+statements, with logarithmic index seek blocks as the owner count grows. This Web increment adds no summary engine
+query, projection or worker. Three-scale growth acceptance remains with the normal dev verifier and was not run here.

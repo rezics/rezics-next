@@ -43,3 +43,17 @@ these facts under the same currentness and terminal-erasure fences.
 Terminal account fact deletion removes annotation and source rows together. Ordinary state removal does not clear
 them. The [Library and Collections owner contract](library-and-collections.md#private-rich-personal-entries) owns the
 combined behavior.
+
+## Web private editor
+
+The existing Subject Library slot mounts the authenticated personal-entry editor. It reads the generated
+libraryEntries({subjectId}).personal.get method and writes through .annotations.put. It exposes a UTF-8 byte
+counter with the native 4,096-byte note cap, owner-local priority 1–100 and an explicit Unranked state. Note and
+priority edits are field-local, so clearing one leaves the other unchanged. The editor is independent of current
+shelf state and remains available for an annotation-only subject while that subject is admitted.
+
+The BFF binds each read and command to the current authenticated viewer, authorization and CSRF session. On an
+uncertain write, Retry sends the original body and idempotency key. A conflict refreshes the entry; the person must
+review the new revision before deliberately applying their still-visible draft. No credential arrival submits a
+command. Native 401 retires the displayed private entry. Source provenance remains a separate owner fact and is not
+cleared by annotation edits.
