@@ -275,9 +275,9 @@ describe('moderation decisions through HTTP and committed effects', () => {
       expect(first.body.entries[0].id).toBe(indexed[0].decision_id);
       expect(first.body.entries[0]).not.toHaveProperty('deciderAccountId');
       expect(first.body.entries[0]).not.toHaveProperty('evidence');
-      expect(
-        openApiDocument(app).paths?.['/v1/boards/{id}/moderation-history']?.get?.operationId,
-      ).toBe('board.moderation_history.list');
+      expect(openApiDocument(app).paths?.['/v1/boards/{id}/moderation-history']?.get?.operationId).toBe(
+        'board.moderation_history.list',
+      );
       const exact = await call(
         'GET',
         '/v1/moderation-decisions/' + first.body.entries[0].id,
