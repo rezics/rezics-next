@@ -8,7 +8,7 @@ search surface.
 
 The expanded composer inherits the panel's `background` surface in both themes. Expanded chrome uses the panel's top
 rounding only, so the rest pill does not remain as a second card. Its separator divides entry from discovery.
-Keyboard focus outlines the actual input or action using `foreground`; the composer has no enclosing focus ring.
+Keyboard focus outlines the actual input or action using a solid `foreground` outline; the composer has no enclosing focus ring.
 Keyboard-activated suggestion Retry
 restores that input when loading removes the action; the intent retires on close,
 unmount, owner change, or a reader who has moved. Shared Aura tokens and danger styling retain their existing meaning.

@@ -311,7 +311,7 @@ export function HeaderSearchView({
               value={query}
               autoComplete="off"
               maxLength={scope ? 256 : undefined}
-              className="h-11 min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-foreground focus-visible:-outline-offset-2"
+              className="h-11 min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 py-3 text-sm placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-foreground focus-visible:-outline-offset-2"
             />
             {keyboardShortcut && (
               <Kbd aria-hidden="true" className="shrink-0">

@@ -112,6 +112,23 @@ test('desktop search remains one named search form at rest and while expanded wi
   }
 });
 
+test('expanded composer uses the panel top rounding and outlines the actual input', () => {
+  const markup = renderToStaticMarkup(
+    createElement(HeaderSearchView, {
+      id: 'desktop',
+      state: reduceHeaderSearchState(initialHeaderSearchState(), { type: 'focus' }),
+      locale: 'en',
+      region: null,
+    }),
+  );
+  const composer = markup.match(/<div data-search-composer="true" class="([^"]*)"/u)?.[1];
+  expect(composer).toContain('rounded-t-3xl');
+  expect(composer).not.toContain('rounded-full');
+  const input = markup.match(/<input\b(?=[^>]*role="combobox")[^>]*>/u)?.[0];
+  expect(input).toContain('focus-visible:outline-solid');
+  expect(input).toContain('focus-visible:outline-foreground');
+});
+
 test('separate HeaderSearch instances keep their shortcut help and form references unique', () => {
   const markup = renderToStaticMarkup(
     createElement(
