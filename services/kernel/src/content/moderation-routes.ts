@@ -7,6 +7,11 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError } from '../request/access.ts';
 import { ModerationDecisionSchema, readModerationDecision } from './moderation-decisions.ts';
+import {
+  listModerationHistory,
+  ModerationHistoryPageSchema,
+  ModerationHistoryQuerySchema,
+} from './moderation-history.ts';
 import { erasePost, takedown } from './moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
 import { beginAuthorErasure, postEraseReceiptAccess, readOperation } from './operations.ts';
@@ -34,6 +39,7 @@ const readFailures = {
   500: problemSchema('internal_error'),
   503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'dependency_unavailable'),
 };
+const historyReadFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
 const writeFailures = {
   ...readFailures,
   403: problemSchema('forbidden'),
@@ -152,6 +158,35 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
         return admission.run('normal', job, async () => {
           const result = await readModerationDecision(deps, id, { actor, deadline: job.deadline });
           if (!result || !result.value) throw new ProblemError('not_found');
+          session.record(result.anchor);
+          return result.value;
+        });
+      },
+    )
+    .get(
+      '/v1/boards/:id/moderation-history',
+      {
+        params,
+        query: ModerationHistoryQuerySchema,
+        response: {
+          200: withHeaders(strictContentSchema(ModerationHistoryPageSchema), {
+            ...sessionHeader,
+            'cache-control': t.String(),
+          }),
+          ...historyReadFailures,
+        },
+        detail: {
+          operationId: 'moderation_decision.list',
+          'x-resource-types': ['content.board'],
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { id }, query, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () => {
+          const result = await listModerationHistory(deps, id, { actor, deadline: job.deadline }, query);
           session.record(result.anchor);
           return result.value;
         });

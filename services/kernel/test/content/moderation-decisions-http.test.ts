@@ -12,6 +12,7 @@ import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { contentEffects } from '../../src/content/relays.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const routeKey = new Uint8Array(32).fill(17);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) };
@@ -73,6 +74,7 @@ describe('moderation decisions through HTTP and committed effects', () => {
       pool: db.pool,
       routeKey,
       tokens,
+      receiptKeys: testReceiptKeys(),
       access: fixture.access,
       writeRate: createWriteRateLimiter({ secret: 'moderation-http-fixture-secret-at-least-32-bytes' }),
     });
@@ -125,8 +127,8 @@ describe('moderation decisions through HTTP and committed effects', () => {
     return result.body.thread;
   }
 
-  async function decide(kind: 'thread' | 'post' = 'thread') {
-    const thread = await create();
+  async function decide(kind: 'thread' | 'post' = 'thread', targetBoard = boardId) {
+    const thread = await create('Authored erasure sentinel', targetBoard);
     const id = kind === 'thread' ? thread.id : thread.firstPost.id;
     await fixture.grant(fixture.principal, 'moderation:takedown', { route: routeOf(id)!, id });
     const key = randomUUID();
@@ -239,6 +241,85 @@ describe('moderation decisions through HTTP and committed effects', () => {
     }
     const operation = openApiDocument(app).paths?.['/v1/moderation-decisions/{id}']?.get;
     expect(operation?.operationId).toBe('moderation_decision.get');
+  });
+  test('board history pages exact decisions, binds selection, and skips a protected target after permission loss', async () => {
+    const historyBoard = newId(0x4321);
+    await db.admin.query(
+      `INSERT INTO content.board
+       (route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+       VALUES ($1,$2,$3,'History board','published',1,$4)`,
+      [routeOf(historyBoard), historyBoard, newId(0x6789), randomUUID()],
+    );
+    await fixture.grant(fixture.actor, 'thread:create', { route: routeOf(historyBoard)!, id: historyBoard });
+    await fixture.grant(fixture.actor, 'board:read', { route: routeOf(historyBoard)!, id: historyBoard });
+    await fixture.grant(fixture.principal, 'moderation:takedown', {
+      route: routeOf(historyBoard)!,
+      id: historyBoard,
+    });
+    const older = await decide('thread', historyBoard);
+    const newer = await decide('post', historyBoard);
+    await deliver(older.id);
+    await deliver(newer.id);
+    try {
+      const { rows: indexed } = await db.admin.query(
+        `SELECT * FROM content.moderation_decision_board WHERE route=$1 AND board_id=$2
+        ORDER BY decided_at DESC, decision_id DESC`,
+        [routeOf(historyBoard), historyBoard],
+      );
+      expect(indexed).toHaveLength(2);
+      expect(indexed[0]).not.toHaveProperty('statement');
+      expect(indexed[0]).not.toHaveProperty('decider_account_id');
+      const path = '/v1/boards/' + historyBoard + '/moderation-history?limit=1';
+      const first = await call('GET', path, undefined, undefined, fixture.principal);
+      expect(first.response.status).toBe(200);
+      expect(first.response.headers.get('cache-control')).toBe('private, no-store');
+      expect(first.body.entries).toHaveLength(1);
+      expect(first.body.entries[0].id).toBe(indexed[0].decision_id);
+      expect(first.body.entries[0]).not.toHaveProperty('deciderAccountId');
+      expect(first.body.entries[0]).not.toHaveProperty('evidence');
+      expect(openApiDocument(app).paths?.['/v1/boards/{id}/moderation-history']?.get?.operationId).toBe(
+        'board.moderation_history.list',
+      );
+      const exact = await call(
+        'GET',
+        '/v1/moderation-decisions/' + first.body.entries[0].id,
+        undefined,
+        undefined,
+        fixture.principal,
+      );
+      expect(exact.response.status).toBe(200);
+      const cursor = first.body.nextCursor as string;
+      expect(typeof cursor).toBe('string');
+      const changedSelection = await call(
+        'GET',
+        path + '&targetKind=thread&cursor=' + encodeURIComponent(cursor),
+        undefined,
+        undefined,
+        fixture.principal,
+      );
+      expect(changedSelection.response.status).toBe(400);
+      const hidden = indexed[1]!;
+      await db.admin.query(
+        "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='moderation:takedown'",
+        [routeOf(hidden.target_id), hidden.target_id, fixture.principal],
+      );
+      const sparse = await call(
+        'GET',
+        path + '&cursor=' + encodeURIComponent(cursor),
+        undefined,
+        undefined,
+        fixture.principal,
+      );
+      expect(sparse.response.status).toBe(200);
+      expect(sparse.body).toEqual({ entries: [], nextCursor: null });
+      expect(JSON.stringify(sparse.body)).not.toContain(hidden.decision_id);
+      expect(JSON.stringify(sparse.body)).not.toContain(hidden.target_id);
+    } finally {
+      await db.admin.query(
+        "DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='moderation:takedown'",
+        [routeOf(historyBoard), historyBoard, fixture.principal],
+      );
+    }
   });
   test('a deleted author is sent nothing', async () => {
     const { id } = await decide();
