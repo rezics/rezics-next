@@ -162,7 +162,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await apply([unsupported], path2)).outcomes[0].status).toBe('unsupported');
   const conflicts = await f.send(importer.bearer, 'POST', base + ':preview', {
     upload: JSON.stringify([
-      { mediaId, media: { idMal: mediaId }, status: 'PLANNING' },
+      { mediaId, media: { idMal: mediaId }, status: 'PLANNING', customLists: { Personal: true } },
       { status: 'PLANNING' },
       { status: 'PLANNING' },
     ]),
@@ -174,6 +174,15 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect((await f.send(importer.bearer, 'POST', path3 + ':review', { ordinal: 0, fields: ['status'] })).status).toBe(
     409,
   );
+  const label = await f.send(importer.bearer, 'POST', '/v1/libraryLabels', { name: 'Explicit ambiguous choice' });
+  expect(label.status).toBe(201);
+  const selections = [{ key: 'customLists:Personal', target: { labelId: (await label.json()).label.id } }];
+  expect((await f.send(importer.bearer, 'POST', path3 + ':reviewLabels', { ordinal: 0, selections })).status).toBe(409);
+  const labelReview = await f.send(importer.bearer, 'POST', path3 + ':reviewLabels', { ordinal: 0, subjectId, selections });
+  expect(labelReview.status).toBe(200);
+  const labelApply = await f.send(importer.bearer, 'POST', path3 + ':applyLabels', { confirmations: [{ ordinal: 0, reviewId: (await labelReview.json()).review.id }] });
+  expect(labelApply.status).toBe(200);
+  expect((await labelApply.json()).outcomes[0].items[0].status).toBe('applied');
   const guarded = await review(1, { subjectId, fields: ['status'], replace: true }, path3);
   const before = (await (await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).json()).libraryEntry;
   const changed = await f.send(importer.bearer, 'PUT', `/v1/libraryEntries/${subjectId}`, {
