@@ -66,7 +66,7 @@ const fact: v.GenericSchema<NonNullable<NativeHit['facts']>[string][number]> = v
       month: v.exactOptional(v.pipe(v.number(), v.integer())),
       day: v.exactOptional(v.pipe(v.number(), v.integer())),
     }),
-    v.check(isCalendarDate),
+    v.check((value) => isCalendarDate(value)),
   ),
   v.object({ kind: v.literal('quantity'), amount: v.pipe(v.number(), v.finite()), unit: v.string() }),
   v.object({ kind: v.literal('code'), value: v.string() }),
