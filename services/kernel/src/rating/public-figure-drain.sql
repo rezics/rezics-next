@@ -5,7 +5,7 @@ WITH input AS (
     AS key(subject_id, question_id, population_id)
 ), candidates AS MATERIALIZED (
   SELECT figure.route, figure.partition_no, figure.question_id, figure.population_id, figure.subject_id,
-         figure.pending_position, figure.pending_prior_generation
+         figure.pending_position, figure.pending_prior_generation, figure.question_identity
   FROM keys
   JOIN rating.public_figure AS figure
     ON figure.route = get_byte(uuid_send(keys.subject_id), 10) * 256 + get_byte(uuid_send(keys.subject_id), 11)
@@ -27,13 +27,13 @@ WITH input AS (
                       (COALESCE(sum(component.count), 0)::numeric * 2), 4)
            ELSE NULL
          END AS mean,
-         CASE WHEN prior.status = 'active' THEN prior.m END AS prior_m,
-         CASE WHEN prior.status = 'active' THEN prior.c END AS prior_c,
-         CASE WHEN prior.status = 'active' THEN prior.epoch END AS prior_epoch,
+         CASE WHEN prior.status = 'active' AND prior.question_identity IS NOT DISTINCT FROM candidates.question_identity THEN prior.m END AS prior_m,
+         CASE WHEN prior.status = 'active' AND prior.question_identity IS NOT DISTINCT FROM candidates.question_identity THEN prior.c END AS prior_c,
+         CASE WHEN prior.status = 'active' AND prior.question_identity IS NOT DISTINCT FROM candidates.question_identity THEN prior.epoch END AS prior_epoch,
          COALESCE(prior.generation, 0) AS prior_generation,
          CASE WHEN COALESCE(sum(component.count), 0) >=
                         CASE WHEN question.grain IN ('work', 'release') THEN 5 ELSE 10 END
-                   AND prior.status = 'active'
+                   AND prior.status = 'active' AND prior.question_identity IS NOT DISTINCT FROM candidates.question_identity
               THEN round(((prior.c::numeric * prior.m) + (COALESCE(sum(component.sum), 0)::numeric / 2)) /
                          (prior.c + COALESCE(sum(component.count), 0)), 4)
               ELSE NULL END AS score,
@@ -53,7 +53,8 @@ WITH input AS (
    AND prior.population_id = candidates.population_id
   GROUP BY candidates.route, candidates.question_id, candidates.population_id,
            candidates.subject_id, candidates.pending_position, candidates.pending_prior_generation,
-           question.grain, prior.status, prior.epoch, prior.generation, prior.m, prior.c
+           question.grain, prior.status, prior.epoch, prior.generation, prior.m, prior.c,
+           candidates.question_identity, prior.question_identity
 ), updated AS (
   UPDATE rating.public_figure AS figure
   SET count = totals.count,

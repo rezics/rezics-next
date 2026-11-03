@@ -19,7 +19,9 @@ import readPublicFiguresSql from './public-figures-read.sql';
 import readPendingFigure from './public-figure-pending-read.sql';
 import lockPriorEpochTotals from './population-prior-epoch-totals-lock.sql';
 import readPriorEpoch from './population-prior-epoch-read.sql';
-import readPriorGrain from './population-prior-grain-read.sql';
+import readPriorQuestion from './question-read.sql';
+import { partitionReadClient } from '../database/read-snapshot.ts';
+import { ratingQuestionIdentity } from './question-directory.ts';
 import writePriorEpoch from './population-prior-epoch-upsert.sql';
 import enqueuePriorRepublish from './population-prior-republish-enqueue.sql';
 import readNextPriorRepublish from './population-prior-republish-next.sql';
@@ -105,6 +107,7 @@ function returnedRows(value: unknown): boolean {
 
 type PendingPopulation = { questionId: string; populationId: string };
 type PriorEpochRow = {
+  questionIdentity: string | null;
   epoch: number;
   generation: string;
   startCount: string | null;
@@ -113,6 +116,7 @@ type PriorEpochRow = {
 };
 type FigureInputKey = { questionId: string; populationId: string; subjectId: string };
 export type SubjectPriorInput = {
+  question_identity?: string | null;
   population_route: number;
   question_id: string;
   population_id: string;
@@ -144,6 +148,7 @@ export async function capturePublicFigurePriorInputs(
       question_id: key.questionId,
       population_id: key.populationId,
       generation: prior?.generation ?? '0',
+      question_identity: prior?.questionIdentity ?? null,
       epoch: prior?.epoch ?? null,
       status: prior == null ? 'absent' : prior.startCount === null ? 'inactive' : 'active',
       m: prior?.m ?? null,
@@ -185,6 +190,14 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
   if (populationRoute === null || routeOf(population.questionId) === null)
     throw new TypeError('Invalid rating prior epoch address');
   const partition = partitionOf(populationRoute);
+  // Current question authority is observed at its home before the population command.
+  const question = await withReadTransaction(pool, async (client) => {
+    const bound = await partitionReadClient(client, partitionOf(routeOf(population.questionId)!));
+    return readPriorQuestion.run(bound, { question_id: population.questionId });
+  });
+  if (!question) throw new Error('Rating question unavailable while starting a prior epoch');
+  const identity = ratingQuestionIdentity(question);
+  const threshold = question.grain === 'work' || question.grain === 'release' ? 5 : 10;
   try {
     await runCommand(pool, { partition }, async (tx) => {
       const [totals] = await lockPriorEpochTotals.run(tx, {
@@ -199,6 +212,10 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
         question_id: population.questionId,
         population_id: population.populationId,
       })) as PriorEpochRow | undefined;
+      // A changed measurement requires a new question ID, never a prior over the old votes.
+      if (previous?.questionIdentity != null && previous.questionIdentity !== identity)
+        return { value: undefined, events: [priorEpochWorkEvent('check', population.questionId,
+          population.populationId, previous.generation, 0)] };
       const count = BigInt(totals.count);
       let epoch = previous?.epoch ?? 0;
       let generation = BigInt(previous?.generation ?? '0');
@@ -216,11 +233,6 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
         generation += 1n;
         changed = true;
       } else if (count >= 50n && !active) {
-        const grain = (await readPriorGrain.run(tx, { question_id: population.questionId })) as
-          | { grain: string }
-          | undefined;
-        if (!grain) throw new Error('Rating question unavailable while starting a prior epoch');
-        const threshold = grain.grain === 'work' || grain.grain === 'release' ? 5 : 10;
         if (totals.mean === null) throw new Error('Rating population prior mean is unavailable');
         epoch += 1;
         generation += 1n;
@@ -229,11 +241,6 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
         C = threshold;
         changed = true;
       } else if (active && (count >= startCount! * 2n || count * 2n <= startCount!)) {
-        const grain = (await readPriorGrain.run(tx, { question_id: population.questionId })) as
-          | { grain: string }
-          | undefined;
-        if (!grain) throw new Error('Rating question unavailable while starting a prior epoch');
-        const threshold = grain.grain === 'work' || grain.grain === 'release' ? 5 : 10;
         if (totals.mean === null) throw new Error('Rating population prior mean is unavailable');
         epoch += 1;
         generation += 1n;
@@ -253,6 +260,7 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
           start_count: startCount?.toString() ?? null,
           m: mean?.toString() ?? null,
           c: C,
+          question_identity: identity,
         });
         const queued = await enqueuePriorRepublish.run(tx, {
           route: populationRoute,
@@ -278,12 +286,17 @@ async function checkPopulationPriorEpoch(pool: Pool, population: PendingPopulati
 async function drainPendingPriorEpochChecks(pool: Pool): Promise<void> {
   for (;;) {
     const populations = (await readPendingEpochPopulations.run(pool, {
-      question_id: STANDARD_QUESTION_ID,
       limit: PRIOR_EPOCH_CHECK_BATCH,
     })) as PendingPopulation[];
     if (populations.length === 0) return;
     await Promise.all(populations.map((population) => checkPopulationPriorEpoch(pool, population)));
   }
+}
+
+/** Resume retained custom totals through the existing durable epoch/republish work. */
+export async function resumeRealmRankPublication(pool: Pool): Promise<void> {
+  await drainPendingPriorEpochChecks(pool);
+  await markPriorEpochRepublishPage(pool, MAX_DRAIN_LIMIT);
 }
 
 async function markPriorEpochRepublishPage(pool: Pool, limit: number): Promise<void> {
@@ -454,7 +467,11 @@ async function drainFigurePage(
       const figures = rows.map(figureFromRow);
       return {
         value: figures.length,
-        events: figures.map((figure) => ({ type: FIGURE_CHANGED, subject: figure.subjectId, data: figure })),
+        events: figures.map((figure) => figure.questionId === STANDARD_QUESTION_ID
+          ? { type: FIGURE_CHANGED, subject: figure.subjectId, data: figure }
+          : { type: 'com.rezics.rating.realm_rank.changed.v1', subject: figure.subjectId,
+              data: { questionId: figure.questionId, populationId: figure.populationId,
+                subjectId: figure.subjectId, revision: figure.revision } }),
       };
     });
     return outcome.value;

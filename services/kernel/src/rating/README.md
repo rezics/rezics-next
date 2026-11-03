@@ -327,28 +327,39 @@ the factory with the production `{ pool, access, tokens }`, and calls
 The actor comes from native credential verification. The factory performs current Realm authorization itself,
 then checks every consumed candidate through native subject Access and current identity before release; an
 unreadable or redirected subject contributes no returned figure. Missing or denied Realm returns `not_found`.
-Unavailable authority, data or moved homes fail closed. Search owns selection/rating-sort controls, query
-integration and coordination of partition-local pages; Content retains the native partition-local producer contract. This port installs no additional search route or service.
+Unavailable authority, data or moved homes fail closed. Search owns predicate integration and any coordination
+of partition-local pages and Search rating controls; Web owns the remaining Content interfaces. This port installs no additional search route or service.
 
-Decision: the first usable slice requires an explicitly selected standard question, one subject partition and
-descending Bayesian score; other questions return `invalid_request` until their separate private publication lands.
-Global is rejected as a Realm selection. The remaining question publication and lifecycle proof are described in
-the continuation brief; the Global source and public figure transport retain their existing contracts.
+Decision: eligible selected questions use the released integer vote range (0–20 inclusive); custom means and
+scores use that question's stored units, while the standard question retains its 0–10 display units.
+The producer loads the exact current directory question by key at its home, checks native `definitions:read`
+authority before and after traversal, and returns its `{ id, revision, label, grain, scale }` as `question`.
+Out-of-range scales return `invalid_request`; absent or denied questions return `not_found`. Global remains
+invalid as a Realm selection. Question revision, grain and exact scale are frozen with both publication and
+its same-question, same-Realm prior, included in the ordered index prefix and cursor binding. Changing a
+measurement requires a new question ID: mutating an existing definition with retained votes withholds its old
+ranking rather than reinterpreting those votes or borrowing another scale's prior.
 
-The result is `{ candidates, next }`. Each candidate contains `{ subjectId, count, mean, score, priorEpoch,
-revision, asOf, updating }`, with the standard question's display units. Only threshold-ready, actively scored figures in
+The result is `{ question, candidates, next }`. Each candidate contains `{ subjectId, count, mean, score, priorEpoch,
+revision, asOf, updating }`, in the selected question’s units described above. Only threshold-ready, actively scored figures in
 the selected population's current prior generation qualify. No unscored tail, suppressed counts, histogram,
 total, scanned count, raw position or readiness estimate is returned. Zero mean and score remain valid values.
 Equal scores use subject UUID descending. A full consumed batch may return a continuation followed by an empty
 terminal page. Disclosure filtering can shorten or empty a page; the reader never refills it.
 
-`rating.realm_rank` is a private, subject-home ordered projection of the existing standard-question publication.
+`rating.realm_rank` is a private, subject-home ordered projection maintained by the native publication drain.
+`applyRatingChanges` marks custom Realm snapshots pending as well as standard snapshots; custom Global totals
+remain separate and never supply a Realm prior. `createRatingWorkModule` installs the existing drain effect and
+`resumeRealmRankPublication` startup seam. Retained custom totals are marked for epoch checks by migration;
+startup resumes those checks and existing durable republish work, without another membership or repair workflow.
+The existing `public_figure` table carries internal custom Realm publication envelopes in its half-unit arithmetic,
+with the frozen question identity; those envelopes emit only `com.rezics.rating.realm_rank.changed.v1` containing
+keys and revision, never the public-figure event or Global public transport. Custom reader numbers multiply that
+internal representation by two. The standard publication, public events and Global source keep their units.
 The publication transaction maintains it through `public_figure_realm_rank`; migration installs the trigger and
 backfills eligible retained figures under a write barrier. No external consumer, new queue or asynchronous copy
-lies between figure commit and rank visibility. Committed vote, eligibility, membership, identity-repair and erasure
-effects reach that publication path and update or remove the rank row in the same transaction. This is separate
-from production Semantic repair admission: its held mapping/obligation producer remains unavailable as documented
-under Identity repair. Rank
+lies between figure commit and rank visibility. Votes, eligibility and membership jobs, identity repair and erasure
+continue to use that publication path; this increment adds no separate convergence, repair or erasure workflow or outcome claim. Rank
 freshness is exactly the existing figure freshness bound, rather than a new synchronous vote guarantee. A pending
 publication retains the last eligible published snapshot. Epoch changes exclude old-generation rows immediately;
 the existing durable republish pages admit new-generation rows as they converge. An inactive prior admits none.
@@ -392,7 +403,7 @@ work, not a completed rank publication or an atomic Access/rank snapshot. An end
 candidates. A denied viewer loses access independently of this work and cannot use a saved continuation.
 
 Every continuation is signed with the native token keyring and additionally encrypted so withheld candidate keys
-cannot appear in its payload. It expires after 15 minutes and binds Realm, question, partition, sort, limit,
+cannot appear in its payload. It expires after 15 minutes and binds Realm, exact question revision/grain/scale, partition, sort, limit,
 verified credential authority, home epoch, rank source generation and population prior generation. Rank generation
 changes atomically with eligible published rows, never with changes confined below threshold. Every request
 reauthorizes the Realm, observes the current prior, reads one candidate batch, checks disclosure, reauthorizes the
@@ -403,14 +414,20 @@ snapshot of independently homed Access and rating data.
 Operation Cost:
 
 - Touches: exact population-home prior and subject-home generation keys; the equality prefix
-  `(partition_no, question_id, population_id, prior_generation)` of `realm_rank_score_idx`, then the strict
+  `(partition_no, question_id, population_id, question_identity, prior_generation)` of `realm_rank_score_idx`, then the strict
   descending `(score, subject_id)` seek; native Realm and subject authority/identity probes.
 - Bound: `limit` is 1–100. One candidate query reads at most `limit` rows and releases at most that many figures.
-  At most `limit` current subject checks and two Realm checks run. Both prior reads and generation reads are
+  At most `limit` current subject checks, two Realm checks and two question authority/key reads run. Both prior reads and generation reads are
   point operations. Each consumed rank row adds one exact figure-key probe for its pending mark, and each prior
   observation adds one population pending-jobs probe. There is no candidate lookahead, refill, cross-partition candidate scan, aggregate read,
   history replay or population expansion. B-tree descent grows logarithmically; authority retains its existing
   bounded native cost. Publication adds one exact rank upsert/delete and at most one generation upsert per figure.
+  Prior checks sum at most sixteen population-home shards after an anchored question-key read. Custom publication
+  reuses pages of at most 500 subject snapshots, each summing at most sixteen shards; prior republish traverses
+  `(question_id, population_id, target_id)` by its existing indexed strict subject keyset, at most 501 rows
+  including lookahead. Total republish work is linear in rated subjects; no candidate scan supplies a page.
+- `test/rating/realm-rank-question.test.ts` adds distinct questions/scales through native vote workers,
+  threshold suppression, independent priors and generations, question authority and cross-question cursor replay.
 - Membership/eligibility delivery adds one indexed frontier upsert per source event and per changed target key,
   with no population, membership or history scan. Pages remain at most 100 votes and 101 populations; aggregate
   commands remain at most 100 changes, 16 component shards per figure and the existing population-total bounds.

@@ -34,7 +34,7 @@ test('protected native rank converges after votes, clear and membership loss wit
       code: 'not_found',
     });
     await expect(page({ ...request, realmId: GLOBAL_CONTEXT.id })).rejects.toMatchObject({ code: 'invalid_request' });
-    await expect(page({ ...request, questionId: newId(0x2100) })).rejects.toMatchObject({ code: 'invalid_request' });
+    await expect(page({ ...request, questionId: newId(0x2100) })).rejects.toMatchObject({ code: 'not_found' });
     const boundary = fixture.subjectIds.at(-1)!;
     for (const subject of fixture.subjectIds)
       for (const voter of subject === boundary ? fixture.realmMembers.slice(0, 4) : fixture.realmMembers)
