@@ -29,6 +29,13 @@ Includes the public index tier, admitted catalogue plans and preparation, presen
 page read aggregation. [Public scope](../scope.md) owns discovery boundaries. Private library facts remain in their
 owner's PostgreSQL partition; a public index is never an authorization authority. Web owns interface integration.
 Realm browsing advances one explicit page at a time: successful More replaces the visible window (up to 20 rows), pending and failed reads preserve it, and broken cursors offer a first-page restart.
+Second-scope mixed discovery adds public Collection, review and Space metadata to the existing native query and
+continuation. Their owners supply the closed registry, complete common-generation projection and current public
+eligibility/hydration seams; Search owns query compilation, ordered candidate consumption and response execution.
+Decision: while those seams are absent, an unexpected metadata candidate is unavailable; missing owner evidence
+never becomes a successful empty result or count.
+The query contract is [discovery-query](../../services/kernel/src/search/discovery-query.md), under the
+[universal search conditions](../search-conditions.md) authority.
 Header and Recent Realm browsing reuse the strict Search reader through the shared one-page controller; injected loaders keep their request shape and receive its AbortSignal as an optional second argument.
 Rating population pages retain the disclosed page when an opaque continuation exceeds the native 4096-character request limit, show the existing localized unavailable message, and offer a first-page restart without issuing the cursor.
 A focused Realm Retry or terminal More recovers onto a surviving current More/Retry of that owner or the named discovery region after the page commits; an unactivated load, a replaced locale/sort/reader/QueryClient owner, unmount, a superseded activation, a disposed progress controller, and a reader who has moved elsewhere do not transfer focus.

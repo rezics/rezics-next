@@ -22,6 +22,10 @@ import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts
 function unavailable(): never {
   throw new SearchUnavailableError('Current discovery owner evidence is unavailable or malformed');
 }
+function requireCurrentOwner(registry: DiscoveryRegistry, key: DiscoveryKey): void {
+  const owner = String(registry.get(key.kind).owner);
+  if (owner !== String(key.owner) || (owner !== 'semantic' && owner !== 'accounts')) unavailable();
+}
 function partitioned<T extends { id: string }>(values: readonly T[]): Map<number, T[]> {
   const groups = new Map<number, T[]>();
   for (const value of values) {
@@ -49,6 +53,7 @@ export async function currentDiscoveryPrimaryCandidates(
 ): Promise<readonly boolean[]> {
   if (!Array.isArray(keys) || keys.length > 160) unavailable();
   const saved = keys.map((key) => registry.key({ ...key }));
+  for (const key of saved) requireCurrentOwner(registry, key);
   const subjects = new Map<number, SubjectSnapshot>();
   const accounts = new Map<number, AccountSnapshot>();
   const candidates: DiscoveryEngineHit[] = [];
@@ -186,6 +191,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   const passed = new Map<Candidate, DiscoveryHit>();
   for (const candidate of candidates) {
     registry.key(candidate.key);
+    requireCurrentOwner(registry, candidate.key);
     if (
       'revision' in candidate &&
       (!/^(0|[1-9][0-9]{0,18})$/.test(candidate.revision) ||

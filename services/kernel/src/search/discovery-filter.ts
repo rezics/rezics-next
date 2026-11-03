@@ -135,7 +135,8 @@ export function currentDiscoveryFilter(
     if ('ratingQuestion' in node) throw new FilterError('unsupported_query', '/ratingQuestion', 'unsupported');
     if ('saved' in node || 'owner' in node)
       throw new FilterError('unsupported_query', 'owner' in node ? '/owner' : '/saved', 'unsupported');
-    if (entry.owner === 'accounts') return { yes: false, no: false };
+    const domain = 'type' in node ? 'type' : 'statement';
+    if (!entry.domains.includes(domain)) return { yes: false, no: false };
     if ('type' in node) {
       const yes = node.type.in.some((type) => type === kind || release.types[kind]?.bases?.includes(type));
       return { yes, no: !yes };
