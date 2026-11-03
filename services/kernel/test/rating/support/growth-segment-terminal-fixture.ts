@@ -26,6 +26,7 @@ import type { RatingSegmentJob } from '../../../src/rating/segment-job.ts';
 import { ratingSegmentWorkflowId } from '../../../src/rating/segment-job.ts';
 import { createProductionAccess } from '../../community/membership-fixture.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 const route = 0x3a19;
 const actorScopes = ['subject:read', 'rating:vote', 'realm:join'];
@@ -212,6 +213,7 @@ export async function openTerminalGrowthFixture(): Promise<TerminalGrowthFixture
       pool: database.pool,
       routeKey,
       tokens: sessionKeys,
+      receiptKeys: testReceiptKeys(),
       access: production.access,
       workClient,
       writeRate: createWriteRateLimiter({
