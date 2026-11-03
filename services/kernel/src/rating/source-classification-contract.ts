@@ -17,11 +17,19 @@ const tuple = {
 };
 
 /** Exact Semantic identity. Labels never participate in association resolution. */
-export const ClassificationAssociationSchema = Type.Object({
-  subjectId: uuid, candidateId: uuid, contextId: uuid, targetId: uuid,
-  property: text(256), revision: Type.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-  release: digest, qualifiersDigest: digest,
-}, closed);
+export const ClassificationAssociationSchema = Type.Object(
+  {
+    subjectId: uuid,
+    candidateId: uuid,
+    contextId: uuid,
+    targetId: uuid,
+    property: text(256),
+    revision: Type.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+    release: digest,
+    qualifiersDigest: digest,
+  },
+  closed,
+);
 export type ClassificationAssociation = Static<typeof ClassificationAssociationSchema>;
 
 export const ClassificationSourceVersionSchema = Type.Union([
@@ -31,15 +39,19 @@ export const ClassificationSourceVersionSchema = Type.Union([
 /** This is an admitted aggregate, never a provider response or an arbitrary property bag.
  * Imports owns extraction, permission and the meaning of independently supplied counts.
  */
-export const ClassificationObservationSchema = Type.Object({
-  ...tuple,
-  confidence: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 3 })),
-  lie: Type.Optional(Type.Boolean()),
-  confidenceCount: Type.Optional(Type.Integer({ minimum: 0, maximum: 2_147_483_647 })),
-  lieCount: Type.Optional(Type.Integer({ minimum: 0, maximum: 2_147_483_647 })),
-  sourceVersion: ClassificationSourceVersionSchema,
-  attribution: text(2000), licence: text(1024),
-}, closed);
+export const ClassificationObservationSchema = Type.Object(
+  {
+    ...tuple,
+    confidence: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 3 })),
+    lie: Type.Optional(Type.Boolean()),
+    confidenceCount: Type.Optional(Type.Integer({ minimum: 0, maximum: 2_147_483_647 })),
+    lieCount: Type.Optional(Type.Integer({ minimum: 0, maximum: 2_147_483_647 })),
+    sourceVersion: ClassificationSourceVersionSchema,
+    attribution: text(2000),
+    licence: text(1024),
+  },
+  closed,
+);
 export type ClassificationObservation = Static<typeof ClassificationObservationSchema>;
 export const ClassificationClearSchema = Type.Object({ ...tuple, cleared: Type.Literal(true) }, closed);
 export type ClassificationClear = Static<typeof ClassificationClearSchema>;
@@ -56,12 +68,15 @@ function stringsValid(value: unknown): boolean {
   return true;
 }
 export function validateClassificationAssociation(value: unknown): asserts value is ClassificationAssociation {
-  if (!associationValidator.Check(value) || !stringsValid(value)) throw new TypeError('Invalid classification association');
+  if (!associationValidator.Check(value) || !stringsValid(value))
+    throw new TypeError('Invalid classification association');
 }
 export function validateClassificationObservation(value: unknown): asserts value is ClassificationObservation {
-  if (!observationValidator.Check(value) || !stringsValid(value)) throw new TypeError('Invalid classification observation');
+  if (!observationValidator.Check(value) || !stringsValid(value))
+    throw new TypeError('Invalid classification observation');
   validateTuple(value);
-  if (value.confidence === undefined && value.lie === undefined) throw new TypeError('No supplied classification indicator');
+  if (value.confidence === undefined && value.lie === undefined)
+    throw new TypeError('No supplied classification indicator');
   if (value.sourceRecordId.startsWith('c') && value.confidence !== undefined)
     throw new TypeError('VNDB character traits do not supply confidence');
   if (Buffer.byteLength(value.licence) > 1024 || Buffer.byteLength(value.attribution) > 2000)
@@ -100,28 +115,44 @@ export function classificationObservation(
 }
 
 export type ClassificationUnavailableReason =
-  | 'not_found' | 'not_observed' | 'provenance_unavailable' | 'authority_unavailable' | 'changed';
+  | 'not_found'
+  | 'not_observed'
+  | 'provenance_unavailable'
+  | 'authority_unavailable'
+  | 'changed';
 export type SourceClassificationFigure = Readonly<{
   provider: 'vndb';
   association: ClassificationAssociation;
   observation: { digest: string; sourceVersion: ClassificationObservation['sourceVersion'] };
-  sourceAlias: string; sourceRecordId: string; sourceAssociationId: string;
-  confidence: { state: 'available'; value: number; unit: 'vndb-tag-rating'; minExclusive: 0; max: 3 }
+  sourceAlias: string;
+  sourceRecordId: string;
+  sourceAssociationId: string;
+  confidence:
+    | { state: 'available'; value: number; unit: 'vndb-tag-rating'; minExclusive: 0; max: 3 }
     | { state: 'unavailable'; reason: 'not_supplied' };
-  lie: { state: 'available'; value: boolean; unit: 'boolean' }
-    | { state: 'unavailable'; reason: 'not_supplied' };
-  confidenceCount?: number; lieCount?: number;
-  asOf: string; ageSeconds: number; attribution: string; licence: string;
+  lie: { state: 'available'; value: boolean; unit: 'boolean' } | { state: 'unavailable'; reason: 'not_supplied' };
+  confidenceCount?: number;
+  lieCount?: number;
+  asOf: string;
+  ageSeconds: number;
+  attribution: string;
+  licence: string;
 }>;
 export type SourceClassificationRead =
   | { state: 'available'; value: SourceClassificationFigure }
   | { state: 'unavailable'; reason: ClassificationUnavailableReason };
 
 /** Hash public Semantic qualifier snaks without presentation datatype fields. */
-export function classificationQualifiersDigest(qualifiers: readonly {
-  property: string | { id: string }; value: unknown;
-}[]): string {
-  return classificationDigest(qualifiers.map((q) => ({
-    property: typeof q.property === 'string' ? q.property : q.property.id, value: q.value,
-  })));
+export function classificationQualifiersDigest(
+  qualifiers: readonly {
+    property: string | { id: string };
+    value: unknown;
+  }[],
+): string {
+  return classificationDigest(
+    qualifiers.map((q) => ({
+      property: typeof q.property === 'string' ? q.property : q.property.id,
+      value: q.value,
+    })),
+  );
 }

@@ -141,7 +141,9 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
       bearer: fullBearer,
       readerBearer,
       nativeFigures,
-      get access() { return access; },
+      get access() {
+        return access;
+      },
       identityCommand,
       async createSubject(item: unknown = { type: 'schema:Book', labels: { en: 'Alias lifecycle subject' } }) {
         const key = crypto.randomUUID();
