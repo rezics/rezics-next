@@ -20,6 +20,8 @@ Missing values and unknown snaks do not acquire a date.
 Decision: Search result metadata and list facts display exactly the recorded Gregorian components in the reader's
 locale, retaining signed astronomical years; malformed dates have no display projection. Client fact declarations
 preserve optional month/day. Year-only consumers may still request a year, but result cards do not discard precision.
+This presentation uses the existing four-property, three-values-per-property preview and four-visible-fact cap;
+it adds no native read, source seek or retained state. It does not establish a bound for grouped execution.
 
 The Semantic source and current Search hit facts preserve this shape. The HTTP fact schema admits month/day
 without changing the existing year-only shape. Facts use the normal current disclosure path; this adds no new

@@ -69,7 +69,7 @@ export function SubjectMeta({
 }: {
   type: { text: string; lang?: string | undefined };
   year: number | undefined;
-  date?: CalendarDate;
+  date?: CalendarDate | undefined;
   locale: string;
   className?: string;
 }) {
