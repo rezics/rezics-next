@@ -273,7 +273,6 @@ function signedInState(): Promise<NonNullable<BrowserContextOptions['storageStat
     const origin = await site();
     const en = await messages('en');
     const page = await open('/en');
-    await page.getByRole('button', { name: en.account_menu!, exact: true }).click();
     await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
       page.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
@@ -319,7 +318,7 @@ test.serial(
 );
 
 test.serial(
-  'on a phone the header has menu and one marked search pill, with account and display controls in You and every destination in the navigation sheet',
+  'on a phone the header has menu, logo, Create and one marked search pill, with account and display controls in You and every destination in the navigation sheet',
   async () => {
     const session = await signedInState();
     for (const locale of ['en', 'ja'] as const) {
@@ -331,7 +330,7 @@ test.serial(
         expect(
           await header.getByRole('link', { name: 'REZICS', exact: true }).isVisible(),
           `${where} standalone logo`,
-        ).toBe(false);
+        ).toBe(true);
         expect(await visible(page, own.shell_language!), `${where} header language`).toBe(false);
         expect(await visible(page, own.shell_theme!), `${where} header theme`).toBe(false);
         expect(await visible(page, own.account_menu!), `${where} header account`).toBe(false);
@@ -363,7 +362,9 @@ test.serial(
         const bar = page.getByRole('navigation', { name: own.shell_navigation!, exact: true }).locator('a');
         const names = await bar.evaluateAll((anchors) => anchors.map((a) => (a.textContent ?? '').trim()));
         expect(names, where).toEqual(
-          signed ? [own.nav_home, own.nav_search, own.nav_library] : [own.nav_home, own.nav_search],
+          signed
+            ? [own.nav_home, own.nav_search, own.nav_library, own.library_nav_collections]
+            : [own.nav_home, own.nav_search],
         );
         await page.context().close();
       }

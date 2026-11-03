@@ -416,7 +416,7 @@ function validateDescriptor(value: unknown): PreparedCheckRunDescriptor {
   }
 }
 
-function validatePhysical(value: unknown): PhysicalIdentity {
+function validatePhysical(value: unknown): PhysicalIdentity & { host: 'a' | 'b' } {
   const item = closed(value, ['host', 'run'], 'physical run identity');
   if (item.host !== 'a' && item.host !== 'b') throw new Error('Web check custody: invalid physical host');
   const run = text(item.run, 'physical run id', 96);

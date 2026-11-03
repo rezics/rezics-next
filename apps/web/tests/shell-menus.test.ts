@@ -154,24 +154,21 @@ test(
 );
 
 test(
-  'the signed-out account action opens a sheet on phones and a dropdown on desktop',
+  'signed-out visitors get a direct sign-in action in the header at both viewport sizes',
   async () => {
     const en = await messages('en');
-    const phonePage = await open('/en', phone);
-    const account = phonePage.getByRole('button', { name: en.account_menu!, exact: true });
-    await account.waitFor();
-    await account.click();
-    const accountSheet = phonePage.getByRole('dialog', { name: en.account_menu!, exact: true });
-    await accountSheet.waitFor();
-    await accountSheet.getByRole('link', { name: en.account_sign_in!, exact: true }).waitFor();
-    await phonePage.keyboard.press('Escape');
-    await accountSheet.waitFor({ state: 'hidden' });
-    await phonePage.setViewportSize(desktop);
-    await account.click();
-    const signInLink = phonePage.getByRole('menu').getByRole('link', { name: en.account_sign_in!, exact: true });
-    await signInLink.waitFor();
-    await expectActive(phonePage, signInLink);
-    await phonePage.context().close();
+    const page = await open('/en', phone);
+    for (const viewport of [phone, desktop]) {
+      await page.setViewportSize(viewport);
+      const header = page.getByRole('banner');
+      const signIn = header.getByRole('link', { name: en.account_sign_in!, exact: true });
+      await signIn.waitFor();
+      expect(await signIn.getAttribute('href')).toBe('/auth/sign-in?return_to=%2Fen');
+      expect(await header.getByRole('button', { name: en.account_menu!, exact: true }).count()).toBe(0);
+      await signIn.focus();
+      await expectActive(page, signIn);
+    }
+    await page.context().close();
   },
   timeout,
 );

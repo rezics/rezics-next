@@ -288,7 +288,6 @@ function signedInState(): Promise<NonNullable<BrowserContextOptions['storageStat
     const origin = await site();
     const en = await messages('en');
     const page = await open('/en');
-    await page.getByRole('button', { name: en.account_menu!, exact: true }).click();
     await Promise.all([
       page.waitForResponse((response) => response.url().startsWith(`${origin}/auth/callback`)),
       page.getByRole('link', { name: en.account_sign_in!, exact: true }).click(),
@@ -441,7 +440,9 @@ test.serial(
           .locator('a')
           .evaluateAll((anchors) => anchors.map((a) => (a.textContent ?? '').trim()));
         expect(names, where).toEqual(
-          signed ? [own.nav_home, own.nav_search, own.nav_library] : [own.nav_home, own.nav_search],
+          signed
+            ? [own.nav_home, own.nav_search, own.nav_library, own.library_nav_collections]
+            : [own.nav_home, own.nav_search],
         );
         expect(await sheet.getByRole('button', { name: own.shell_close_navigation!, exact: true }).count(), where).toBe(
           1,
