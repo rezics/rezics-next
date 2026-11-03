@@ -1,22 +1,26 @@
 #!/usr/bin/env bun
 import { join } from 'node:path';
-import { defaultPolicy } from '../src/policy.ts';
-import { BoundedProcessError, runBoundedInstallProcess, type ProcessLimits } from '../src/install-process.ts';
+import {
+  BoundedProcessError,
+  GOAL_GATE_CHECK_LIMITS,
+  INSTALL_PROCESS_LIMITS,
+  runBoundedInstallProcess,
+  type ProcessLimits,
+} from '../src/install-process.ts';
 
 // Run from the candidate checkout, including its lockfile and dependencies, rather than the controller checkout.
 export function runGoalGate(
   root = process.cwd(),
   limits: { install?: Partial<ProcessLimits>; check?: Partial<ProcessLimits> } = {},
-  policy = defaultPolicy,
 ): number {
   const cwd = join(root, 'tools/goal');
   const steps = [
     {
       args: ['install', '--frozen-lockfile'],
       purpose: 'preparation' as const,
-      limits: { ...policy.dependencies.install, ...limits.install },
+      limits: { ...INSTALL_PROCESS_LIMITS, ...limits.install },
     },
-    { args: ['run', 'check'], purpose: 'check' as const, limits: { ...policy.dependencies.gate, ...limits.check } },
+    { args: ['run', 'check'], purpose: 'check' as const, limits: { ...GOAL_GATE_CHECK_LIMITS, ...limits.check } },
   ];
   for (const step of steps) {
     const command = ['bun', ...step.args];
@@ -28,7 +32,6 @@ export function runGoalGate(
         step: command.join(' '),
         purpose: step.purpose,
         limits: step.limits,
-        policy,
       });
       if (output.stdout) process.stdout.write(output.stdout);
       if (output.stderr) process.stderr.write(output.stderr);
@@ -46,7 +49,4 @@ export function runGoalGate(
   return 0;
 }
 
-if (import.meta.main) {
-  const { loadSettings } = await import('../src/config.ts');
-  process.exitCode = runGoalGate(process.cwd(), {}, loadSettings().policy);
-}
+if (import.meta.main) process.exitCode = runGoalGate();
