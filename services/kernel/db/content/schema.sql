@@ -24,6 +24,47 @@ CREATE SCHEMA content;
 
 
 --
+-- Name: advance_review_census_source_frontier(); Type: FUNCTION; Schema: content; Owner: -
+--
+
+CREATE FUNCTION content.advance_review_census_source_frontier() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  source_route integer;
+BEGIN
+  IF TG_OP='UPDATE' AND NEW IS NOT DISTINCT FROM OLD THEN
+    RETURN NULL;
+  END IF;
+  IF TG_TABLE_NAME='thread' THEN
+    IF TG_OP='INSERT' AND NEW.kind<>'review' THEN RETURN NULL; END IF;
+    IF TG_OP='DELETE' AND OLD.kind<>'review' THEN RETURN NULL; END IF;
+    IF TG_OP='UPDATE' AND NEW.kind<>'review' AND OLD.kind<>'review' THEN RETURN NULL; END IF;
+  ELSIF TG_TABLE_NAME='board' THEN
+    IF TG_OP='INSERT' AND NEW.purpose<>'reviews' THEN RETURN NULL; END IF;
+    IF TG_OP='DELETE' AND OLD.purpose<>'reviews' THEN RETURN NULL; END IF;
+    IF TG_OP='UPDATE' AND NEW.purpose<>'reviews' AND OLD.purpose<>'reviews' THEN RETURN NULL; END IF;
+  ELSIF TG_TABLE_NAME='post' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM content.thread t
+      WHERE t.route=COALESCE(NEW.route,OLD.route)
+        AND t.thread_id=COALESCE(NEW.thread_id,OLD.thread_id) AND t.kind='review'
+        AND t.first_post_id=COALESCE(NEW.post_id,OLD.post_id)
+    ) THEN RETURN NULL; END IF;
+  END IF;
+  source_route := COALESCE(NEW.route,OLD.route)/16*16;
+  INSERT INTO content.review_census_source_frontier(route,revision) VALUES(source_route,1)
+  ON CONFLICT(route) DO UPDATE SET revision=content.review_census_source_frontier.revision+1;
+  IF TG_OP='UPDATE' AND OLD.route/16<>NEW.route/16 THEN
+    INSERT INTO content.review_census_source_frontier(route,revision) VALUES(OLD.route/16*16,1)
+    ON CONFLICT(route) DO UPDATE SET revision=content.review_census_source_frontier.revision+1;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: board_thread_active_rank(integer, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: content; Owner: -
 --
 
@@ -2281,6 +2322,18 @@ CREATE TABLE content.review_census_installation (
 
 
 --
+-- Name: review_census_source_frontier; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_census_source_frontier (
+    route integer NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT review_census_source_frontier_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT review_census_source_frontier_route_check CHECK ((((route >= 0) AND (route <= 65535)) AND ((route % 16) = 0)))
+);
+
+
+--
 -- Name: review_discovery_change; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -3163,6 +3216,14 @@ ALTER TABLE ONLY content.review_census_installation
 
 
 --
+-- Name: review_census_source_frontier review_census_source_frontier_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_census_source_frontier
+    ADD CONSTRAINT review_census_source_frontier_pkey PRIMARY KEY (route);
+
+
+--
 -- Name: review_discovery_change review_discovery_change_partition_no_position_key; Type: CONSTRAINT; Schema: content; Owner: -
 --
 
@@ -3946,6 +4007,34 @@ CREATE TRIGGER reaction_total_identity BEFORE UPDATE ON content.reaction_total F
 --
 
 CREATE TRIGGER report_immutable BEFORE DELETE OR UPDATE ON content.report FOR EACH ROW EXECUTE FUNCTION content.guard_report();
+
+
+--
+-- Name: board review_census_board_source; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER review_census_board_source AFTER INSERT OR DELETE OR UPDATE OF route, board_id, realm_id, purpose, visibility, security_revision ON content.board FOR EACH ROW EXECUTE FUNCTION content.advance_review_census_source_frontier();
+
+
+--
+-- Name: review_discovery_dependency review_census_dependency_source; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER review_census_dependency_source AFTER INSERT OR DELETE OR UPDATE ON content.review_discovery_dependency FOR EACH ROW EXECUTE FUNCTION content.advance_review_census_source_frontier();
+
+
+--
+-- Name: post review_census_post_source; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER review_census_post_source AFTER INSERT OR DELETE OR UPDATE OF route, thread_id, post_id, head_revision_id, security_revision, availability, visibility, deleted_at ON content.post FOR EACH ROW EXECUTE FUNCTION content.advance_review_census_source_frontier();
+
+
+--
+-- Name: thread review_census_thread_source; Type: TRIGGER; Schema: content; Owner: -
+--
+
+CREATE TRIGGER review_census_thread_source AFTER INSERT OR DELETE OR UPDATE OF route, thread_id, kind, author_account_id, board_id, review_subject_id, title, security_revision, first_post_id, review_live, availability, visibility ON content.thread FOR EACH ROW EXECUTE FUNCTION content.advance_review_census_source_frontier();
 
 
 --
