@@ -51,9 +51,7 @@ function metadata(id: string, labels: Record<string, string>, icon: string) {
 }
 
 /** Closed dispatch: released catalogue types and the Accounts source, with no arbitrary owner registration. */
-export function createDiscoveryRegistry(
-  options: DiscoveryRegistryOptions,
-): DiscoveryRegistry & DiscoveryOwnerRegistry {
+export function createDiscoveryRegistry(options: DiscoveryRegistryOptions): DiscoveryRegistry & DiscoveryOwnerRegistry {
   const types = Object.entries(options.release.types);
   if (types.length > RELEASE_LIMITS.types) throw new RangeError('Discovery catalogue exceeds the release limit');
   const byKind = new Map<string, DiscoveryRegistration>();
