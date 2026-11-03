@@ -76,6 +76,11 @@ import type {
 import { REACTION_KINDS } from './events.ts';
 import { pagePostCandidates } from './post-pages.ts';
 import { pageRevisionCandidates } from './revision-pages.ts';
+import {
+  readNativePostRevisionPage,
+  type HistoryPostObservation,
+  type NativePostRevisionPage,
+} from './history-page.ts';
 import read from './read-chain.sql';
 import pageCounts from './reaction-count-page.sql';
 import viewerReactions from './reaction-viewer.sql';
@@ -1179,6 +1184,7 @@ async function disclose(
   threadReference = threadDetail,
   beforeFinal?: () => Promise<void>,
   metadataOnly = false,
+  retain?: (current: () => Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | null>>) => void,
 ): Promise<Anchored<PostEntry | ThreadView | NativeDraftMetadata | null>> {
   const observed = await snapshot(dependencies, threadId, context, async (client) => {
     if (threadDetail) {
@@ -1352,6 +1358,19 @@ async function disclose(
   if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
   if (disclosed.value && !('firstPostId' in disclosed.value))
     disclosed = { ...disclosed, value: await readableCitation(dependencies, context, disclosed.value) };
+  // History retains the same original source rows and exact Access checks for
+  // its final page observation. Each round prepares fresh Realm evidence;
+  // cached associations from initial hydration cannot survive revalidation.
+  retain?.(() =>
+    realmDisclosure.run({}, async () => {
+      let final = await snapshot(dependencies, threadId, context, discloseCurrent);
+      if (final.anchor.epoch !== observed.anchor.epoch) return { ...final, value: null };
+      if (final.value && !(await boardObservation!.recheck())) return { ...final, value: null };
+      if (final.value && !('firstPostId' in final.value))
+        final = { ...final, value: await readableCitation(dependencies, context, final.value) };
+      return final;
+    }),
+  );
   return disclosed;
 }
 
@@ -1835,20 +1854,16 @@ async function list(
   context: ReadContext,
   cursor: string | undefined,
   limit: number,
-  postId?: string,
-): Promise<Page<PostEntry | RevisionView>> {
+): Promise<Page<PostEntry>> {
   const clock = dependencies.clock ?? (() => new Date());
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
-  const root = postId
-    ? await readPost(dependencies, threadId, postId, context)
-    : await readThread(dependencies, threadId, context);
+  const root = await readThread(dependencies, threadId, context);
   if (!root.value) throw new ContentNotFoundError();
-  if (postId && !('revisionId' in root.value)) return { entries: [], anchor: root.anchor, nextCursor: null };
   const binding: CursorBinding = {
-    operation: postId ? 'content.revisions' : 'content.posts',
+    operation: 'content.posts',
     parameters: {
       threadId,
-      postId: postId ?? null,
+      postId: null,
       viewer: context.actor.kind === 'account' ? context.actor.accountId : null,
     },
   };
@@ -1865,23 +1880,19 @@ async function list(
       throw new TypeError('Invalid content cursor');
     after = { at: decoded.after[0], id: decoded.after[1] };
   }
-  const entries: (PostEntry | RevisionView)[] = [];
+  const entries: PostEntry[] = [];
   let scanned = 0;
   let more = false;
   while (scanned < 200 && entries.length < limit) {
     const remaining = Math.min(limit - entries.length, 200 - scanned);
     const selected = await snapshot(dependencies, threadId, context, (client) =>
-      postId
-        ? pageRevisionCandidates(client, { postId, after, limit: remaining })
-        : pagePostCandidates(client, { threadId, after, limit: remaining }),
+      pagePostCandidates(client, { threadId, after, limit: remaining }),
     );
     more = selected.value.nextKey !== null;
     for (const key of selected.value.candidates) {
       after = key;
       scanned++;
-      const result = postId
-        ? await readPost(dependencies, threadId, postId, context, key.id)
-        : await withRealmDisclosureScope(
+      const result = await withRealmDisclosureScope(
             async () =>
               (await disclose(
                 dependencies,
@@ -1896,27 +1907,13 @@ async function list(
               )) as Anchored<PostEntry | null>,
           );
       if (!result.value) continue;
-      if (postId) {
-        if (!('revisionId' in result.value) || result.value.availability === 'withheld') continue;
-        const {
-          revisionId,
-          id,
-          parentId: _parentId,
-          visibility: _visibility,
-          securityRevision: _securityRevision,
-          ...value
-        } = result.value;
-        entries.push({ ...value, id: revisionId, itemId: id, createdAt: key.at });
-      } else entries.push(result.value);
+      entries.push(result.value);
     }
     if (!more) break;
   }
   // Recheck the root after hydration; concealed and missing roots share absence.
-  const final = postId
-    ? await readPost(dependencies, threadId, postId, context)
-    : await readThread(dependencies, threadId, context);
+  const final = await readThread(dependencies, threadId, context);
   if (!final.value) throw new ContentNotFoundError();
-  if (postId && !('revisionId' in final.value)) return { entries: [], anchor: final.anchor, nextCursor: null };
   return {
     entries,
     anchor: final.anchor,
@@ -1948,8 +1945,47 @@ export async function listPostRevisions(
   context: ReadContext,
   cursor?: string,
   limit = 100,
-): Promise<Page<RevisionView>> {
-  return (await list(dependencies, threadId, context, cursor, limit, postId)) as Page<RevisionView>;
+): Promise<NativePostRevisionPage> {
+  if (routeOf(threadId) === null || routeOf(postId) !== routeOf(threadId)) throw new ContentNotFoundError();
+  const observe = async (revisionId?: string): Promise<HistoryPostObservation> => {
+    if (revisionId !== undefined && routeOf(revisionId) !== routeOf(postId)) throw new ContentNotFoundError();
+    let current: HistoryPostObservation['current'] | undefined;
+    const initial = await withRealmDisclosureScope(
+      async () =>
+        (await disclose(
+          dependencies,
+          threadId,
+          context,
+          postId,
+          revisionId,
+          false,
+          undefined,
+          undefined,
+          false,
+          undefined,
+          false,
+          (read) => {
+            current = read as HistoryPostObservation['current'];
+          },
+        )) as Anchored<PostEntry | null>,
+    );
+    return { initial, current: current ?? (async () => ({ ...initial, value: null })) };
+  };
+  return readNativePostRevisionPage(
+    {
+      tokens: dependencies.tokens,
+      now: () => (dependencies.clock?.() ?? new Date()).getTime(),
+      observe,
+      select: (after, selectedLimit) =>
+        snapshot(dependencies, threadId, context, (client) =>
+          pageRevisionCandidates(client, { postId, after, limit: selectedLimit }),
+        ),
+      unavailable: () => {
+        throw new ContentNotFoundError();
+      },
+    },
+    { threadId, postId, context, ...(cursor !== undefined ? { cursor } : {}), limit },
+  );
 }
 
 export async function discloseThreads(
