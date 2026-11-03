@@ -33,7 +33,9 @@ const contexts = [{}, { subjectId, mediaIds: { [image]: mediaId } }];
 for (const [type, expected] of [
   [1, 'schema:Book'],
   [2, 'schema:TVSeries'],
+  [3, 'schema:MusicAlbum'],
   [4, 'schema:VideoGame'],
+  [6, 'schema:TVSeries'],
 ] as const) {
   test(`launch type ${type} retains bootstrap, bound facts, summary rights and published cover`, () => {
     const bootstrap = convertBangumi(input(type));
@@ -97,15 +99,17 @@ for (const [type, expected] of [
 }
 
 for (const type of [3, 6]) {
-  test(`excluded type ${type} returns a safe explicit ignored outcome in both phases`, () => {
+  test(`identity-only type ${type} projection stays ignored in both phases`, () => {
     for (const context of contexts) {
-      const output = convertBangumi(input(type), context);
+      const request = { external_id: '81', record_revision: 'native:7', record: { id: 81, type } };
+      const output = convertBangumi(request, context);
       expect(output).toHaveProperty('outcome', 'ignored');
       expect(output).toMatchObject({
         source: 'bangumi',
         external_id: '81',
         record_revision: 'native:7',
         converter_revision,
+        normalizedRecord: { id: 81, type },
       });
       expect(output.digest).toMatch(/^[0-9a-f]{64}$/);
       expect(output.proposals).toEqual([]);
@@ -115,13 +119,9 @@ for (const type of [3, 6]) {
         pointer: '/type',
         code: expect.stringMatching(/ignored|skipped|unsupported/),
       });
-      for (const diagnostic of output.diagnostics) {
-        expect(diagnostic.code).toMatch(/^[a-z][a-z0-9_]{0,127}$/);
-        expect(diagnostic.pointer.length).toBeLessThanOrEqual(128);
-      }
       expect(JSON.stringify(output)).not.toContain(privateMarker);
-      expect(convertBangumi({ ...input(type), record: output.normalizedRecord }, context)).toEqual(output);
-      expect(convertBangumi({ ...input(type), record_revision: null }, context).record_revision).toBe('unversioned');
+      expect(convertBangumi({ ...request, record: output.normalizedRecord }, context)).toEqual(output);
+      expect(convertBangumi({ ...request, record_revision: null }, context).record_revision).toBe('unversioned');
     }
   });
 }

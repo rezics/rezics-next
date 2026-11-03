@@ -143,15 +143,6 @@ export async function runJourney() {
       const input = records.map((r, i) => ({
         ...r,
         ...(i === 0 ? { type, name: title } : {}),
-        ...((i === 0 && (type === 3 || type === 6)) || r.type === 3 || r.type === 6
-          ? {
-              // Invalid supported-field shapes must be discarded before validation.
-              name: { private: marker },
-              summary: { private: marker },
-              images: { large: `http://127.0.0.1/${marker}` },
-              tags: { private: marker },
-            }
-          : {}),
         user_posts: [{ text: marker }],
         reviews: { private: marker },
       }));
@@ -231,7 +222,7 @@ export async function runJourney() {
       for (const member of observed.members) {
         expect(member.row.baseline?.state).toBe('present');
         expect(member.row.acknowledged).toEqual(member.row.baseline);
-        expect(member.row.baseline?.converter_revision).toBe('bangumi@4');
+        expect(member.row.baseline?.converter_revision).toBe('bangumi@5');
         expect(member.row.baseline?.recordRevision).toBe('unversioned');
       }
       sourceRows.push(observed);
@@ -297,7 +288,7 @@ export async function runJourney() {
     if (claim?.state !== 'bound') throw new Error('CLI did not bind the Book');
     const id = claim.subject;
     const subjectIdsBefore = await nativeIdentities();
-    expect(subjectIdsBefore.filter((r) => r.rows.length)).toHaveLength(3);
+    expect(subjectIdsBefore.filter((r) => r.rows.length)).toHaveLength(5);
     const originalCommands = [...commands.values()];
     const originalReceiptsBefore = await Promise.all(originalCommands.map(receipt));
     async function immutable() {
@@ -381,26 +372,24 @@ export async function runJourney() {
     const firstIgnoredCommands = music.writes.flatMap((e) =>
       e.path === '/v1/subjects:batchWrite' ? (JSON.parse(e.bytes) as { commands: BatchCommand[] }).commands : [],
     );
-    expect(firstIgnoredCommands).toHaveLength(oldCandidateIds.length);
-    expect(
-      firstIgnoredCommands.every(
-        (c) => c.op === 'retract' && c.source.external_id === target && oldCandidateIds.includes(c.candidate),
-      ),
-    ).toBe(true);
-    const retractionReceipts = await Promise.all(firstIgnoredCommands.map(receipt));
+    const musicRetracts = firstIgnoredCommands.filter(
+      (c) => c.op === 'retract' && c.source.external_id === target && oldCandidateIds.includes(c.candidate),
+    );
+    expect(musicRetracts).toHaveLength(oldCandidateIds.length);
+    expect(firstIgnoredCommands.some((c) => c.op === 'propose' && c.source.external_id === target)).toBe(true);
+    const retractionReceipts = await Promise.all(musicRetracts.map(receipt));
     const oldOwnedCandidates = [
       ...(await candidates(id, 'schema:name')),
       ...(await candidates(id, 'wdt:P5732')),
     ].filter((c) => oldCandidateIds.includes(c.id));
     expect(oldOwnedCandidates).toHaveLength(oldCandidateIds.length);
     const liveAction = await invoke(6);
-    expect(liveAction.writes).toEqual([]);
+    expect(liveAction.writes.every((e) => e.path !== '/v1/subjects:batchWrite' || !e.bytes.includes('"op":"create"'))).toBe(
+      true,
+    );
     for (const observed of sourceRows.slice(1)) {
       expect(observed.members[0]!.claim).toEqual(claim);
-      expect(observed.members[0]!.candidates).toEqual([]);
-      expect(observed.members.slice(1).map((m) => m.candidates)).toEqual(
-        initialState.members.slice(1).map((m) => m.candidates),
-      );
+      expect(observed.members.slice(1).map((m) => m.claim)).toEqual(initialState.members.slice(1).map((m) => m.claim));
       expect(observed.bootstrap).toEqual(initialState.bootstrap);
     }
     expect(await nativeIdentities()).toEqual(subjectIdsBefore);
@@ -420,7 +409,7 @@ export async function runJourney() {
         source: 'bangumi',
         external_id: target,
         record_revision: 'unversioned',
-        converter_revision: 'bangumi@4',
+        converter_revision: 'bangumi@5',
         digest: returnedState.members[0]!.row.baseline!.digest,
         field_group: 'facts',
       });

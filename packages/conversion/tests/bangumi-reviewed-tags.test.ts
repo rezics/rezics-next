@@ -16,7 +16,7 @@ function keywords(record: unknown, bindings = context) {
 }
 test('actual pinned public meta_tags emit the trusted source Concept with its required qualifier and data-only digest', () => {
   const conversion = convertBangumi(input(pinned), context);
-  expect(converter_revision).toBe('bangumi@4');
+  expect(converter_revision).toBe('bangumi@5');
   expect(key).toBe('v1:["https://rezics.com/schemes/bangumi/public-tags","后宫"]');
   expect(key.length).toBe(58);
   expect(Buffer.byteLength(key)).toBe(62);
@@ -55,7 +55,7 @@ test('missing withheld empty ordinary private and inexact tags never substitute 
     ).toEqual([]);
   }
 });
-test('public meta_tags normalization is bounded and descriptor safe; ignored types never inspect it', () => {
+test('public meta_tags normalization is bounded and descriptor safe; identity-only types never inspect it', () => {
   expect(() => convertBangumi(input({ ...pinned, meta_tags: Array(65).fill('后宫') }), context)).toThrow();
   expect(() => convertBangumi(input({ ...pinned, meta_tags: ['x'.repeat(201)] }), context)).toThrow();
   let reads = 0;
@@ -69,7 +69,7 @@ test('public meta_tags normalization is bounded and descriptor safe; ignored typ
   expect(() => convertBangumi(input(record), context)).toThrow();
   expect(reads).toBe(0);
   for (const type of [3, 6]) {
-    const ignored = { ...pinned, type };
+    const ignored = { id: pinned.id, type };
     Object.defineProperty(ignored, 'meta_tags', {
       get() {
         reads++;

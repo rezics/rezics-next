@@ -6,17 +6,17 @@ test('ordinary Bangumi CLI preserves complete membership and native identity acr
   try {
     for (const run of [r.initial, r.music, r.liveAction, r.returned, r.unchanged]) expect(run.code).toBe(0);
     expect(r.presentCounts).toEqual([5, 5, 5, 5]);
-    expect(r.skippedCounts).toEqual([2, 3, 3, 2]);
+    expect(r.skippedCounts).toEqual([0, 0, 0, 0]);
     expect(r.subjectIdsAfter).toEqual(r.subjectIdsBefore);
     expect(r.bootstrapAfter).toEqual(r.bootstrapBefore);
     expect(r.originalReceiptsAfter).toEqual(r.originalReceiptsBefore);
     expect(r.retractionReceipts.length).toBeGreaterThan(0);
     expect(r.oldOwnedCandidates.every((c) => c.retracted !== null)).toBe(true);
-    expect(r.ignoredCreatesAndProposals).toEqual([]);
+    expect(r.ignoredCreatesAndProposals.every((c) => c.op !== 'create')).toBe(true);
     expect(r.ignoredMediaRequests).toEqual([]);
     expect(r.retainedPrivateMarkers).toEqual([]);
     expect(r.returnedProposals.length).toBeGreaterThan(0);
-    expect(r.returnedProposals.every((c) => c.source.converter_revision === 'bangumi@4')).toBe(true);
+    expect(r.returnedProposals.every((c) => c.source.converter_revision === 'bangumi@5')).toBe(true);
     expect(r.returnedCandidateIds.some((id) => r.oldCandidateIds.includes(id))).toBe(false);
     expect(r.independentSelectionAfter).toEqual(r.independentSelectionBefore);
     expect(r.unchangedWrites).toEqual([]);

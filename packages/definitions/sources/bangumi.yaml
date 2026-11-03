@@ -29,8 +29,10 @@ notes:
     keys cover the published templates, not arbitrary user-created wiki keys.
   - A mapping is one decision. Existing means bundled on the named type; proposed includes missing profile bindings and
     qualifiers even where the property is already bundled on another type.
-  - Initial subject import scope is type 1 (book), type 2 (anime) and type 4 (game); type 3 (music) and type 6 (live-action)
-    are omitted. Real people remain available as credited creators and voice actors.
+  - Subject import covers type 1 (book), type 2 (anime), type 3 (music), type 4 (game) and type 6 (live-action). Music
+    uses the admitted MusicAlbum work fallback; live-action dispatches film versus series from pinned platform/template
+    codes. Real people remain available as credited creators and voice actors. Staff, relation and episode-kind codes
+    for music and live-action remain row-6 vocabulary work.
   - Source strings used as field keys, template names and role labels retain their original spelling. All descriptive
     prose is English.
   - The concept Wikidata mapping describes skos:Concept. No equivalence is asserted between a Bangumi staff role concept
@@ -1730,11 +1732,15 @@ enumerations:
         mapping:
           status: omitted
           reason: The anime family is dispatched by its format concept, and has no separate generic profile.
-      - &id084
-        id: 3
-        mapping: &id073
-          status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+      - id: 3
+        mapping:
+          status: existing
+          term: schema:MusicAlbum
+          'on': schema:MusicAlbum
+          wikidata: wd:Q482994
+          meaning: >-
+            A music subject is the admitted album-work fallback. Bangumi type 3 does not distinguish work, release and
+            track; those grains stay unmapped until Semantic admits them.
       - id: 4
         mapping:
           status: omitted
@@ -1742,7 +1748,10 @@ enumerations:
             The game family dispatches by platform to a video game or independently referable add-on;
             software and tabletop records are outside this video-game profile. No generic family subject is created.
       - id: 6
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: >-
+            Live-action is dispatched by platform.real to a film or series profile; no generic live-action type is created.
   - id: subject.series
     values:
       - id: 'false'
@@ -2094,26 +2103,118 @@ enumerations:
     values:
       - &id085
         id: 0
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-0
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: other
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: &liveActionSeries
+            status: existing
+            term: schema:TVSeries
+            'on': schema:TVSeries
+            wikidata: wd:Q5398426
+            meaning: A live-action series or programme using the pinned TV wiki template.
       - id: 1
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-1
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: jp
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 2
-        mapping: *id073
-      - *id084
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-2
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: en
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
+      - &id084
+        id: 3
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-3
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: cn
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 6001
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6001
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: tv
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 6002
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6002
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: movie
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile:
+            status: existing
+            term: schema:Movie
+            'on': schema:Movie
+            wikidata: wd:Q11424
+            meaning: A live-action film using the pinned realMovie wiki template.
       - id: 6003
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6003
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: live
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 6004
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6004
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: show
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
   - id: platform.music
     values:
-      - *id085
+      - id: 0
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/3-0
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: other
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: &musicAlbum
+            status: existing
+            term: schema:MusicAlbum
+            'on': schema:MusicAlbum
+            wikidata: wd:Q482994
+            meaning: A music subject using the admitted album-work fallback.
       - &id101
         id: 3001
-        mapping: *id073
+        mapping: &id073
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - &id102
         id: 3002
         mapping: *id073
@@ -6320,42 +6421,42 @@ enumerations:
         label: OST
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3002
         label: Character Song
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3003
         label: Opening Song
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3004
         label: Ending Song
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3005
         label: Insert Song
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3006
         label: Image Song
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3007
         label: Drama
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3099
         label: Other
         mapping:
           status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
   - id: relation.4
     values:
       - id: 1
