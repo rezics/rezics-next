@@ -9,6 +9,7 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { activeProfile } from '../../src/presentation/profiles.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -21,6 +22,7 @@ afterAll(async () => {
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
+const receiptKeys = testReceiptKeys();
 const curatorId = '019a1b2c-3d4e-7f00-8a00-c0a7e0000001';
 const editorId = '019a1b2c-3d4e-7f00-8a00-ed170e000002';
 const presentationScopes = ['presentation:publish', 'presentation:activate', 'presentation:read'] as const;
@@ -37,6 +39,7 @@ const kernel = createKernel({
   requestDeadlineMs: 30_000,
   access: realAccess.access,
   tokens,
+  receiptKeys,
   routeKey: new Uint8Array(32).fill(6),
   writeRate: {
     async spend() {

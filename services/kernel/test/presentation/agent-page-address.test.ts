@@ -29,12 +29,14 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
 const accountRoute = 0x5274;
 const catalogueRoute = 0x6573;
 const routeKey = new Uint8Array(32).fill(31);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(32)]]) };
+const receiptKeys = testReceiptKeys();
 const clock = () => new Date();
 const links = [{ label: 'Website', url: 'https://example.test/profile' }];
 type Seeded = { id: string; handle: string; kind: 'actor' | 'organization'; displayName: string };
@@ -188,7 +190,7 @@ beforeAll(async () => {
   pool = db.pool;
   await bootstrapRelease(pool, bundledRelease);
   await bootstrapProfile(pool, profile);
-  const initial = createKernel({ pool, routeKey, tokens, clock });
+  const initial = createKernel({ pool, routeKey, tokens, receiptKeys, clock });
   const actions = new Map(actionCatalogue(initial));
   for (const [action, value] of LIFECYCLE_ACTIONS) actions.set(action, value);
   actions.set('account:manage', { anonymous: false });
@@ -197,6 +199,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys,
     clock,
     requestDeadlineMs: 30_000,
     access: () => access,

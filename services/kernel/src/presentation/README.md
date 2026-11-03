@@ -43,7 +43,9 @@ owned body without evaluating accessors or serialization hooks; caller objects r
 fresh on each attempt and before receipt replay; the executor retains receipt-byte and basis ownership. Trusted
 bootstrap captures its potential body before the initial pointer read and defers an invalid-body error until needed,
 so an already-active setup still returns after one pointer read without writing. This adds bounded in-memory work
-only, with no additional SQL, cache entries, authority decisions or command frames. The connected invocation cases
+only, with no additional SQL, cache entries, authority decisions or command frames. Commerce catalogue and Access
+identity-bridge maps initialize without reading unfinished module bindings so these native files can load; Global
+Context identity and bridge behavior stay the same. The connected invocation cases
 in `test/presentation/profile-invocation-custody.test.ts` are authored but unrun; native, growth and browser proof
 remain deferred for this change. Compiler evidence alone does not establish those outcomes.
 

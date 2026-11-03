@@ -1,3 +1,4 @@
+import { approvalIdentityBridges, approvalIdentityProofs } from './identity-bridge-maps.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { carryExpiry, identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { createHash } from 'node:crypto';
@@ -33,31 +34,35 @@ declare const approvedIdentity: unique symbol;
 /** Internal opaque evidence. Only a verified native row can mint this brand. */
 export type ApprovedIdentity = { readonly [approvedIdentity]: true };
 type Claims = { actor: AccountActor; expires: number; scope: object; pool: AccessContext['pool'] };
-const proofs = new WeakMap<ApprovedIdentity, Claims>();
 type Bridge = {
   scope: object;
   expiry(actor: AccountActor, context: AccessContext): IdentityExpiry | undefined;
   restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
 };
-const bridges = new WeakMap<Access, Bridge>();
+function proofs(): WeakMap<ApprovedIdentity, Claims> {
+  return approvalIdentityProofs as WeakMap<ApprovedIdentity, Claims>;
+}
+function bridges(): WeakMap<Access, Bridge> {
+  return approvalIdentityBridges as WeakMap<Access, Bridge>;
+}
 
 /** Factory composition only; no actor JSON registration or public bearer port. */
 export function installApprovalIdentityBridge(access: Access, bridge: Bridge): void {
   const root = accessRoot(access);
   if (root !== access) throw new Error('Cannot install approval identity bridge on derived Access');
-  if (bridges.has(root)) throw new Error('Approval identity bridge already installed');
-  bridges.set(root, Object.freeze(bridge));
+  if (bridges().has(root)) throw new Error('Approval identity bridge already installed');
+  bridges().set(root, Object.freeze(bridge));
 }
 export function approvedIdentityClaims(
   proof: ApprovedIdentity,
   scope: object,
   pool: AccessContext['pool'],
 ): Claims | undefined {
-  const facts = proofs.get(proof);
+  const facts = proofs().get(proof);
   return facts?.scope === scope && facts.pool === pool ? facts : undefined;
 }
 function verifiedExpiry(access: Access, actor: AccountActor, context: AccessContext): IdentityExpiry {
-  const bridge = bridges.get(accessRoot(access));
+  const bridge = bridges().get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   const expires = bridge.expiry(actor, context);
   if (expires === undefined || identityExpired(expires, accessClock(access))) throw new ApprovalIdentityDeniedError();
@@ -88,7 +93,7 @@ export async function readApprovedIdentity(
   reference: string,
   context: AccessContext,
 ): Promise<{ row: ApprovalRow; actor: AccountActor }> {
-  const bridge = bridges.get(accessRoot(access));
+  const bridge = bridges().get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   if (typeof reference !== 'string' || reference.length > 4096) throw new ApprovalIdentityDeniedError();
   const locator = unseal(keys, APPROVAL_REFERENCE_PURPOSE, reference) as
@@ -144,13 +149,13 @@ export async function readApprovedIdentity(
     authnEpoch: Number(row.authnEpoch),
   });
   const proof = Object.freeze({}) as ApprovedIdentity;
-  proofs.set(proof, { actor, expires, scope: bridge.scope, pool: context.pool });
+  proofs().set(proof, { actor, expires, scope: bridge.scope, pool: context.pool });
   try {
     return { row: Object.freeze(row), actor: await bridge.restore(proof, context) };
   } catch (error) {
     if (error instanceof AuthenticationError) throw new ApprovalIdentityDeniedError();
     throw error;
   } finally {
-    proofs.delete(proof);
+    proofs().delete(proof);
   }
 }
