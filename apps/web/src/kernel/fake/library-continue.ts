@@ -113,7 +113,7 @@ function subjects(): Record<string, unknown>[] {
   return available.slice(0, storySize);
 }
 
-function basicSession(session: (typeof sessionsRecording.progressSessions)[number] | undefined) {
+function basicSession<Session extends { subject: unknown }>(session: Session | undefined) {
   if (!session) return null;
   const { subject: _subject, ...basic } = session;
   return basic;
