@@ -1090,6 +1090,30 @@ CREATE TABLE content.conversation_activity_episode (
 
 
 --
+-- Name: conversation_activity_episode; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.conversation_activity_episode (
+    route integer NOT NULL,
+    post_id uuid NOT NULL,
+    thread_id uuid NOT NULL,
+    opening boolean NOT NULL,
+    contributed_at timestamp with time zone,
+    native_eligible boolean NOT NULL,
+    security_revision bigint NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT conversation_activity_episode_check CHECK ((route = ((get_byte(uuid_send(post_id), 10) * 256) + get_byte(uuid_send(post_id), 11)))),
+    CONSTRAINT conversation_activity_episode_check1 CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT conversation_activity_episode_contributed_at_check CHECK (((contributed_at IS NULL) OR isfinite(contributed_at))),
+    CONSTRAINT conversation_activity_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT conversation_activity_episode_security_revision_check CHECK ((security_revision > 0)),
+    CONSTRAINT conversation_activity_episode_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT conversation_activity_episode_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: creator_edition; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2131,6 +2155,67 @@ CREATE TABLE content.report_target (
 
 
 --
+-- Name: review_census_contribution; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_census_contribution (
+    route integer NOT NULL,
+    thread_id uuid NOT NULL,
+    generation uuid NOT NULL,
+    source_version text NOT NULL,
+    eligible boolean NOT NULL,
+    CONSTRAINT review_census_contribution_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: review_census_episode; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_census_episode (
+    route integer NOT NULL,
+    thread_id uuid NOT NULL,
+    source_version text NOT NULL,
+    board_id uuid,
+    realm_id uuid,
+    subject_id uuid,
+    opening_id uuid,
+    revision_id uuid,
+    eligible boolean NOT NULL,
+    CONSTRAINT review_census_episode_check CHECK ((route = ((get_byte(uuid_send(thread_id), 10) * 256) + get_byte(uuid_send(thread_id), 11)))),
+    CONSTRAINT review_census_episode_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT review_census_episode_source_version_check CHECK ((source_version ~ '^rv1_[A-Za-z0-9_-]{43}$'::text))
+);
+
+
+--
+-- Name: review_census_installation; Type: TABLE; Schema: content; Owner: -
+--
+
+CREATE TABLE content.review_census_installation (
+    route integer NOT NULL,
+    generation uuid DEFAULT gen_random_uuid() NOT NULL,
+    revision bigint DEFAULT 1 NOT NULL,
+    after_route integer,
+    after_id uuid,
+    after_token text,
+    cut jsonb,
+    exhausted boolean DEFAULT false NOT NULL,
+    observed_public bigint DEFAULT 0 NOT NULL,
+    examined bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT review_census_installation_after_token_check CHECK ((octet_length(after_token) <= 65536)),
+    CONSTRAINT review_census_installation_check CHECK ((((after_route IS NULL) = (after_id IS NULL)) AND ((after_id IS NULL) = (after_token IS NULL)))),
+    CONSTRAINT review_census_installation_check1 CHECK (((after_route IS NULL) OR ((after_route / 16) = (route / 16)))),
+    CONSTRAINT review_census_installation_check2 CHECK (((NOT exhausted) OR ((cut IS NOT NULL) AND (after_id IS NULL)))),
+    CONSTRAINT review_census_installation_cut_check CHECK (((cut IS NULL) OR ((jsonb_typeof(cut) = 'object'::text) AND (jsonb_typeof((cut -> 'homes'::text)) = 'array'::text) AND ((jsonb_array_length((cut -> 'homes'::text)) >= 1) AND (jsonb_array_length((cut -> 'homes'::text)) <= 256))))),
+    CONSTRAINT review_census_installation_examined_check CHECK ((examined >= 0)),
+    CONSTRAINT review_census_installation_observed_public_check CHECK ((observed_public >= 0)),
+    CONSTRAINT review_census_installation_revision_check CHECK ((revision > 0)),
+    CONSTRAINT review_census_installation_route_check CHECK ((((route >= 0) AND (route <= 65535)) AND ((route % 16) = 0)))
+);
+
+
+--
 -- Name: review_discovery_change; Type: TABLE; Schema: content; Owner: -
 --
 
@@ -2962,6 +3047,30 @@ ALTER TABLE ONLY content.report_reporter
 
 ALTER TABLE ONLY content.report_target
     ADD CONSTRAINT report_target_pkey PRIMARY KEY (route, target_kind, target_id, report_route, report_id);
+
+
+--
+-- Name: review_census_contribution review_census_contribution_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_census_contribution
+    ADD CONSTRAINT review_census_contribution_pkey PRIMARY KEY (route, thread_id);
+
+
+--
+-- Name: review_census_episode review_census_episode_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_census_episode
+    ADD CONSTRAINT review_census_episode_pkey PRIMARY KEY (route, thread_id, source_version);
+
+
+--
+-- Name: review_census_installation review_census_installation_pkey; Type: CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_census_installation
+    ADD CONSTRAINT review_census_installation_pkey PRIMARY KEY (route);
 
 
 --
@@ -3859,6 +3968,14 @@ ALTER TABLE ONLY content.post
 
 ALTER TABLE ONLY content.realm_discovery_contribution
     ADD CONSTRAINT realm_discovery_contribution_route_thread_id_fkey FOREIGN KEY (route, thread_id) REFERENCES content.thread(route, thread_id);
+
+
+--
+-- Name: review_census_contribution review_census_contribution_route_thread_id_source_version_fkey; Type: FK CONSTRAINT; Schema: content; Owner: -
+--
+
+ALTER TABLE ONLY content.review_census_contribution
+    ADD CONSTRAINT review_census_contribution_route_thread_id_source_version_fkey FOREIGN KEY (route, thread_id, source_version) REFERENCES content.review_census_episode(route, thread_id, source_version);
 
 
 --
