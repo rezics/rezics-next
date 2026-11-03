@@ -453,7 +453,7 @@ export class WorkerTasks {
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     let markdown = readFileSync(briefFile, 'utf8');
     if (urgent) markdown = markdown.replace(/^---\r?\n([\s\S]*?)\r?\n---/, (_match, front: string) =>
-      `---\n${JSON.stringify({ ...Bun.YAML.parse(front), urgent: true }, null, 2)}\n---`);
+      `---\n${JSON.stringify({ ...(Bun.YAML.parse(front) as Record<string, unknown>), urgent: true }, null, 2)}\n---`);
     const brief = parseBrief(
       markdown,
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
