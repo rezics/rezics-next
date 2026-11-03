@@ -324,7 +324,7 @@ Never evaluate a fresh query at `T` over undisclosed private facts; if no genera
 manufactured. Private, UNLISTED and already-deleted Collections, including formerly-public ones, are erased by bounded work.
 
 Native terminal cleanup records only a proven selected A in `collection_retained_output`, using the actual
-Collection ID and a committed account-free disposition locator; no query runs at T. Live native custody keeps
+Collection ID and an account-free locator guarded by the original committed publication proof; no query runs at T. Live native custody keeps
 physical deidentification pending while rules and unrelated private references drain. Pending B, canonical
 working/result references and staging evidence drain in bounded child-before-parent pages. The existing Library
 participant owns this work; shared Core/DBOS history and foreign Source holds still require their actual owners.

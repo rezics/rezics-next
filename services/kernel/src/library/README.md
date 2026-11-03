@@ -1215,7 +1215,7 @@ Publication operation/source/episode references use the participant's existing p
 preparation results/headers/owner associations use its existing appended owned-graph phases.
 
 Only actual committed active-PUBLIC output A enters `collection_retained_output` at `(route, collection_id)`:
-its generation, source generation, cardinality, member fence and native disposition transaction contain no account,
+its generation, source generation, cardinality, member fence and original native publication proof contain no account,
 rule or private fact. It preserves A's original ID and subjects; pending B never supplies membership. Frozen
 headers/members/head reject writes. After native custody settles, A's output account attribution and original
 private publication reference are removed, then its Collection curator is cleared. Private/unlisted/deleted and

@@ -35,5 +35,6 @@ WHERE r.route=input.route AND r.collection_id=input.collection_id AND r.source_g
   AND s.state='active' AND s.visibility='public' AND s.source_generation=r.source_generation
   AND g.state='complete' AND g.member_count=r.members AND g.member_fence=r.member_fence
   AND g.expected_members=r.members AND g.written_members=r.members
-  AND r.xmin=b.xmin AND r.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+  AND b.xmin::text=r.native_xid::text AND b.principal_kind='account' AND b.position>0
+  AND r.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
 ;

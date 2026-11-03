@@ -1,5 +1,5 @@
 /** Local terminal disposition; shared native holds remain their actual owner's obligation. */
-import { currentCommand, type CommandTransaction } from '../command/command.ts';
+import { type CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import type { CollectionCleanupPage } from './collection-retention.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';
@@ -79,15 +79,16 @@ export async function purgeSavedCollectionPage(
     if (published) {
       await tx.query(
         `INSERT INTO library.collection_retained_output
-        (route,collection_id,generation,source_generation,members,member_fence,transaction_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        (route,collection_id,generation,source_generation,members,member_fence,transaction_id,native_xid)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8::xid8)`,
         [
           ...keys,
           published.generation,
           row.source_generation,
           published.members,
           published.memberFence,
-          currentCommand(tx).transactionId,
+          published.transactionId,
+          published.nativeXid,
         ],
       );
       frozen = published.generation;
