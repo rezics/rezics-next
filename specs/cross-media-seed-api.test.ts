@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
+import { bundledDigest } from '@rezics/definitions/bundled';
+import type { BatchCommand, BatchStatement, Source } from '@rezics/definitions/bulk';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -166,7 +167,58 @@ test('ordinary reader, importer and editor see the connected seeded graph throug
   try {
     const plan = await planCrossMediaSeed(dump());
     const importer = store.port('importer');
-    const first = await seedCrossMedia(plan, join(dir, 'state.sqlite'), importer);
+    const authored = (externalId: string, suffix: string): Source => ({
+      source: 'bangumi',
+      external_id: externalId,
+      record_revision: `authored-${suffix}`,
+      digest: 'b'.repeat(64),
+      converter_revision: 'authored-fixture@1',
+      field_group: 'facts',
+    });
+    const schemeCreated = await importer.batch({
+      commands: [
+        {
+          op: 'create',
+          source: authored('900010', 'scheme'),
+          key: 'authored-bangumi-staff-scheme',
+          subject: { type: 'skos:ConceptScheme', labels: { en: 'Bangumi staff' } },
+        },
+      ],
+    });
+    const schemeId = (schemeCreated.results[0] as { value: { id: string } }).value.id;
+    const conceptCreated = await importer.batch({
+      commands: [
+        {
+          op: 'create',
+          source: authored('900011', 'director'),
+          key: 'authored-bangumi-staff-director',
+          subject: { type: 'skos:Concept', labels: { en: 'Director' } },
+        },
+      ],
+    });
+    const directorConcept = (conceptCreated.results[0] as { value: { id: string } }).value.id;
+    const first = await seedCrossMedia(plan, join(dir, 'state.sqlite'), importer, undefined, {
+      releaseDigest: bundledDigest,
+      schemes: [
+        {
+          taxonomy: 'bangumi.staff',
+          uri: 'https://rezics.com/schemes/bangumi/staff',
+          id: schemeId,
+          type: 'skos:ConceptScheme',
+          releaseDigest: bundledDigest,
+        },
+      ],
+      concepts: [
+        {
+          taxonomy: 'bangumi.staff',
+          code: '2',
+          id: directorConcept,
+          type: 'skos:Concept',
+          schemeId,
+          releaseDigest: bundledDigest,
+        },
+      ],
+    });
     expect(first.readings.length).toBeGreaterThan(6);
     const work = first.readings.find((row) => row.externalId === '1')!;
     const sequel = first.readings.find((row) => row.externalId === '4')!;
