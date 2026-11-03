@@ -10,10 +10,11 @@ generation stays in service until a complete replacement can publish.
 
 ## Producer readiness
 
-The second-scope public metadata kinds are `collection`, `review` and `space`. Their owner adapters must supply a
-bounded full-key population page, exact native observation positions and current keyed reads. The strict document
-codec owns their canonical document shape and mapping. Search uses the common generation and writer lifecycle; it
-does not create a second eligibility or reduction store.
+The second-scope public metadata kinds are `collection`, `review` and `space`. Their population producers supply
+bounded raw-key pages, exact native observation positions and current keyed reads. Review population requires
+Content's `pageWithCut` and retains its opaque continuation; the legacy key-only page cannot certify coverage. The
+strict Format2 codec keeps review `source_version` through durable actions and current equality. Search uses the
+common generation and writer lifecycle; it does not create a second eligibility or reduction store.
 
 Registry ownership follows the current scope table: `collection` uses Commerce, while `review` and `space` use Content.
 
@@ -27,13 +28,12 @@ population evidence.
 Decision: use the English labels “Collections”, “Reviews” and “Spaces” with the `library`, `message-square` and
 `users` icons until the owner adapters supply localized kind metadata.
 
-The retained generation runner still has population and reconciliation ports for Accounts and semantic Subjects
-only. It therefore requires all three metadata producers before allocating a replacement; missing kinds return
-explicit `DiscoveryProducerCoverageError` readiness before a database transaction, physical target or population row
-is created. Existing active generations and their relays remain available. A complete replacement must enumerate
-each registered native producer, persist exact full-key frontiers only after visible writes, catch up each producer's
-native positions, reconcile every registered kind, and match the expanded registry to the strict Format2 mapping
-before activating its physical UUID. Census and unverifiable dynamic-publication witnesses remain unavailable.
+The retained generation runner now allocates five independent producer frontiers: Accounts, semantic Subjects,
+Collections, reviews and Spaces. It requires all five population capabilities before allocating a replacement; missing kinds return
+explicit `DiscoveryProducerCoverageError` readiness before a transaction, physical target or population row is
+created. Each producer advances only after its exact actions are visible at the captured physical UUID. Existing active
+generations and relays remain available while a replacement is incomplete. Native census or source-fence capability
+remains typed unavailable; neither counts nor empty scans certify it.
 
 Only owner-approved public metadata may enter these documents. Realm rating figures, private Collection membership
 and Collection predicates remain outside the public index. Current summaries continue to hydrate from their owners.
@@ -62,5 +62,9 @@ deletes the exact physical index incarnation, then reclaims bounded copy locator
 Account erasure retains its late-item acknowledgement protocol through retirement. Generation observations establish
 index readiness only; current owner authorization and disclosure checks remain authoritative.
 
-The durable Collection, review and Space population, relay, reconciliation and Format2 generation binding remains a
-continuation of this change. Current owner hydration does not make an incomplete generation ready.
+The actual default worker path is `searchWorkModule.register` → `startSearchIndexing` →
+`startDiscoveryIndexing` → `advanceDiscovery`. It wires the Commerce Collection source, Content review source and
+native Space source into the five independent population, relay and reconciliation frontiers. Publication requires
+complete populations, caught-up replay, current keyed reconciliation, the strict expanded registry, the captured
+physical UUID and durable native frontiers to agree. Current owner hydration alone does not make an incomplete
+generation ready.

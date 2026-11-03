@@ -44,7 +44,7 @@ const SUBJECT_FIELDS = [
   'rating_score',
   'rating_prior_epoch',
 ];
-const SECOND_SCOPE_FIELDS = [...COMMON_FIELDS, 'revision', 'names', 'descriptions', 'name_sort'];
+const SECOND_SCOPE_FIELDS = [...COMMON_FIELDS, 'revision', 'source_version', 'names', 'descriptions', 'name_sort'];
 const SECOND_SCOPE_BATCH_SIZE = 256;
 
 /** Local codec seam until the closed DiscoveryKey/snapshot union owns these kinds. */
@@ -55,6 +55,7 @@ export type DiscoveryDocumentKey = DiscoveryKey | SecondScopeDiscoveryKey;
 export type SecondScopeDiscoveryRecord = {
   key: SecondScopeDiscoveryKey;
   revision: bigint;
+  sourceVersion: string | null;
   names: readonly string[];
   descriptions: readonly string[];
   nameSort: string | null;
@@ -79,6 +80,7 @@ export type SecondScopeIndexedDiscoveryDocument = {
   partition: number;
   source_position: string;
   revision: string;
+  source_version: string | null;
   names: string[];
   descriptions: string[];
   name_sort: string | null;
@@ -101,6 +103,9 @@ function decimalVersion(value: unknown): value is string {
 }
 function nullableText(value: unknown): value is string | null {
   return value === null || (typeof value === 'string' && value.isWellFormed());
+}
+function validSourceVersion(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 128 && value.isWellFormed();
 }
 function texts(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.isWellFormed());
@@ -232,11 +237,12 @@ export function secondScopeDiscoveryDocumentActions(
   for (const input of snapshot.records) {
     if (
       !record(input) ||
-      !exactFields(input, ['key', 'revision', 'names', 'descriptions', 'nameSort']) ||
+      !exactFields(input, ['key', 'revision', 'sourceVersion', 'names', 'descriptions', 'nameSort']) ||
       !Array.isArray(input.names) ||
       !texts(input.names) ||
       !Array.isArray(input.descriptions) ||
       !texts(input.descriptions) ||
+      !(input.sourceVersion === null || validSourceVersion(input.sourceVersion)) ||
       !nullableText(input.nameSort)
     )
       throw new TypeError('Invalid second-scope discovery source row');
@@ -250,6 +256,7 @@ export function secondScopeDiscoveryDocumentActions(
     rows.set(identity, {
       key,
       revision: input.revision,
+      sourceVersion: input.sourceVersion,
       names: input.names,
       descriptions: input.descriptions,
       nameSort: input.nameSort,
@@ -273,6 +280,7 @@ export function secondScopeDiscoveryDocumentActions(
       partition: snapshot.partition,
       source_position: snapshot.position.toString(),
       revision: row.revision.toString(),
+      source_version: row.sourceVersion,
       names: [...row.names],
       descriptions: [...row.descriptions],
       name_sort: row.nameSort,
@@ -413,6 +421,7 @@ function validateSecondScopeDiscoveryDocument(
     value.partition !== partitionOf(key.route) ||
     !decimalVersion(value.source_position) ||
     !decimalVersion(value.revision) ||
+    !(value.source_version === null || validSourceVersion(value.source_version)) ||
     !texts(value.names) ||
     !texts(value.descriptions) ||
     !nullableText(value.name_sort)
@@ -423,6 +432,8 @@ function validateSecondScopeDiscoveryDocument(
     (key.kind === 'space' && (value.names.length !== 1 || value.descriptions.length !== 1))
   )
     throw new TypeError('Invalid public Collection or Space metadata');
+  if ((key.kind === 'review') !== (value.source_version !== null))
+    throw new TypeError('Review source version is missing or attached to another kind');
   return value as unknown as SecondScopeIndexedDiscoveryDocument;
 }
 

@@ -164,6 +164,9 @@
       "revision": {
         "type": "keyword"
       },
+      "source_version": {
+        "type": "keyword"
+      },
       "account_kind": {
         "type": "keyword"
       },

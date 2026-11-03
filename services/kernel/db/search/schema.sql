@@ -394,6 +394,7 @@ CREATE TABLE search.discovery_population (
     owner text NOT NULL,
     after_route integer,
     after_id uuid,
+    continuation jsonb,
     complete boolean DEFAULT false NOT NULL,
     certified boolean DEFAULT false NOT NULL,
     indexed bigint DEFAULT 0 NOT NULL,
@@ -405,7 +406,7 @@ CREATE TABLE search.discovery_population (
     CONSTRAINT discovery_population_check CHECK (((after_route IS NULL) = (after_id IS NULL))),
     CONSTRAINT discovery_population_check1 CHECK (((after_route IS NULL) OR ((after_route / 16) = partition_no))),
     CONSTRAINT discovery_population_claim_revision_check CHECK ((claim_revision >= 0)),
-    CONSTRAINT discovery_population_owner_check CHECK ((owner = ANY (ARRAY['accounts'::text, 'semantic'::text]))),
+    CONSTRAINT discovery_population_owner_check CHECK ((owner = ANY (ARRAY['accounts'::text, 'semantic'::text, 'collection'::text, 'review'::text, 'space'::text]))),
     CONSTRAINT discovery_population_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
     CONSTRAINT discovery_population_position_check CHECK (("position" >= 0)),
     CONSTRAINT discovery_population_revision_check CHECK ((revision >= 0))

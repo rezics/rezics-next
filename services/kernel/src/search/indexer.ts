@@ -1,5 +1,6 @@
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
+import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/space-discovery.ts';
 import type { DiscoveryKey } from './discovery.ts';
 import type { DiscoveryProjection } from './account-discovery.ts';
 import type { Pool } from 'pg';
@@ -124,7 +125,9 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
         partition,
         apply: async (envelopes) => {
           const subjects = new Set<string>(),
-            accounts = new Set<string>();
+            accounts = new Set<string>(),
+            collections = new Set<string>(),
+            spaces = new Set<string>();
           for (const envelope of envelopes)
             for (const event of envelope.events) {
               if (!event.subject || subjectPartition(event.subject) !== partition) continue;
@@ -147,6 +150,26 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
                 ].includes(event.type)
               )
                 accounts.add(event.subject);
+              if (
+                [
+                  'com.rezics.library.collection.updated.v1',
+                  'com.rezics.library.collection.deleted.v1',
+                  'com.rezics.library.collection.listing.changed.v1',
+                ].includes(event.type) &&
+                lookupEventType(event.type)?.Check(event.data) === true &&
+                record(event.data) &&
+                typeof event.data.collectionId === 'string' &&
+                event.data.collectionId === event.subject &&
+                routeOf(event.subject) !== null
+              )
+                collections.add(event.subject);
+              if (SPACE_DISCOVERY_NATIVE_EVENTS.includes(event.type)) {
+                const invalidation = await spaceDiscoveryInvalidation(
+                  pool,
+                  event as Parameters<typeof spaceDiscoveryInvalidation>[1],
+                );
+                if (invalidation?.target.kind === 'space') spaces.add(invalidation.target.id);
+              }
             }
           const keys: DiscoveryKey[] = [...accounts].map((id) => ({
             owner: 'accounts',
@@ -178,6 +201,10 @@ export function createDiscoveryIndexer(pool: Pool, projection: DiscoveryProjecti
             keys.push(...rows.map((row): DiscoveryKey => ({ owner: 'semantic', ...row })));
           }
           await projection.project(partition, keys, envelopes.at(-1)?.position ?? 0n);
+          if (collections.size > 0 && projection.metadataProducers?.collection)
+            await projection.projectOwner('collection', partition, [...collections]);
+          if (spaces.size > 0 && projection.metadataProducers?.space)
+            await projection.projectOwner('space', partition, [...spaces]);
         },
       });
     },

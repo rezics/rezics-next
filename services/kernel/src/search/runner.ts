@@ -19,6 +19,7 @@ import {
 } from './generations.ts';
 import { createDiscoveryIndexer } from './indexer.ts';
 import { createDefaultDiscoveryOwnerAdapters } from './default-discovery.ts';
+import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
@@ -354,11 +355,18 @@ export function startDiscoveryIndexing(options: {
       options.source,
       ownerAdapters ? { ownerAdapters } : undefined,
     );
-    let readiness: DiscoveryProducerCoverageError | undefined;
+    const metadataProducers = ownerAdapters?.metadataProducers;
+    let readiness: Error | undefined;
     try {
-      await advanceDiscovery({ ...options, registry, requiredKinds: options.requiredKinds ?? [] });
+      await advanceDiscovery({
+        ...options,
+        registry,
+        requiredKinds: options.requiredKinds ?? SECOND_SCOPE_PUBLIC_METADATA_KINDS,
+        metadataProducers,
+      });
     } catch (error) {
-      if (!(error instanceof DiscoveryProducerCoverageError)) throw error;
+      if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))
+        throw error;
       readiness = error;
     }
     const generations = await discoveryGenerations(options.pool, options.prefix);
@@ -376,15 +384,12 @@ export function startDiscoveryIndexing(options: {
       }
       if (!relays.has(target.generation)) {
         incarnations.set(target.generation, binding);
-        const projection = createDiscoveryProjection({ ...options, target, registry });
-        const completeOwnerSet =
-          !readiness &&
-          SECOND_SCOPE_PUBLIC_METADATA_KINDS.every(
-            (kind) =>
-              target.kinds.includes(kind) &&
-              registry.ownerAdapters[kind as 'collection' | 'review' | 'space'].readiness === 'ready',
-          );
-        if (options.reviewSource && completeOwnerSet)
+        const projection = createDiscoveryProjection({ ...options, target, registry, metadataProducers });
+        if (
+          options.reviewSource &&
+          registry.ownerAdapters?.review?.readiness === 'ready' &&
+          (await projection.hasMetadataPopulation?.('review'))
+        )
           receivers.set(
             target.generation,
             createReviewDiscoveryReceiving({

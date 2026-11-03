@@ -3,9 +3,15 @@ import { subjectSource } from '../semantic/search-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import { withConnection } from '../database/pool.ts';
-import { routeOf } from '../route/route.ts';
+import { PARTITIONS, routeOf } from '../route/route.ts';
 import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
-import type { DiscoveryKey, DiscoveryRegistry, DiscoveryIndexAction, IndexedDiscoveryDocument } from './discovery.ts';
+import type {
+  DiscoveryKey,
+  DiscoveryOwnerRegistry,
+  DiscoveryRegistry,
+  DiscoveryIndexAction,
+  IndexedDiscoveryDocument,
+} from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import {
   nativeDiscoveryRegistry,
@@ -44,6 +50,11 @@ import unlockRebuild from './rebuild-unlock.sql';
 
 export { observedWrite };
 import type { SubjectSource } from './source.ts';
+import type {
+  DiscoveryDocumentValue,
+  SecondScopeDiscoveryKey,
+  SecondScopeDiscoveryRecord,
+} from './discovery-documents.ts';
 import { discoveryConsumer, subjectConsumer } from './consumer-name.ts';
 export { discoveryConsumer } from './consumer-name.ts';
 
@@ -359,7 +370,43 @@ export type DiscoveryGeneration = DiscoveryTarget & { state: string; kinds: stri
 /** Required public metadata kinds for a complete second-scope discovery generation. */
 export const SECOND_SCOPE_PUBLIC_METADATA_KINDS = Object.freeze(['collection', 'review', 'space'] as const);
 
+export type DiscoveryMetadataKind = (typeof SECOND_SCOPE_PUBLIC_METADATA_KINDS)[number];
+export type DiscoveryMetadataProducer = Readonly<{
+  kind: DiscoveryMetadataKind;
+  owner: 'commerce' | 'content';
+  readiness(): Promise<'ready' | 'preparing' | 'unavailable'>;
+  page(
+    partition: number,
+    after: Readonly<{ route: number; id: string }> | null,
+    continuation: string | null,
+    limit: number,
+  ): Promise<Readonly<{
+    position: bigint;
+    next: Readonly<{ route: number; id: string }> | null;
+    continuation: string | null;
+    keys: readonly SecondScopeDiscoveryKey[];
+    records: readonly SecondScopeDiscoveryRecord[];
+  }>>;
+  read(partition: number, ids: readonly string[]): Promise<Readonly<{
+    position: bigint;
+    keys: readonly SecondScopeDiscoveryKey[];
+    records: readonly SecondScopeDiscoveryRecord[];
+  }>>;
+  position(partition: number): Promise<bigint>;
+}>;
+export type DiscoveryMetadataProducers = Readonly<Partial<Record<DiscoveryMetadataKind, DiscoveryMetadataProducer>>>;
+
 export type DiscoveryProducerRegistration = Readonly<{ kind: string; owner: string }>;
+
+function discoveryProducerRegistrations(registry: DiscoveryRegistry): DiscoveryProducerRegistration[] {
+  const registrations: DiscoveryProducerRegistration[] = registry.entries.map(({ kind, owner }) => ({ kind, owner }));
+  const ownerRegistry = registry as DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>;
+  for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+    const slot = ownerRegistry.ownerAdapters?.[kind];
+    if (slot?.readiness === 'ready') registrations.push({ kind, owner: slot.adapter.owner });
+  }
+  return registrations;
+}
 
 /** A candidate cannot be populated or published from an incomplete native producer set. */
 export class DiscoveryProducerCoverageError extends Error {
@@ -390,6 +437,7 @@ export class DiscoveryProducerCoverageError extends Error {
 export function assertDiscoveryProducerCoverage(
   registrations: readonly DiscoveryProducerRegistration[],
   requiredKinds: readonly string[] = [],
+  producerKinds: readonly string[] = ['account', 'subject'],
 ): void {
   const owners = new Map<string, string>();
   const duplicates = new Set<string>();
@@ -399,10 +447,24 @@ export function assertDiscoveryProducerCoverage(
     else owners.set(kind, owner);
   }
   const missingKinds = [...new Set(requiredKinds)].filter((kind) => !owners.has(kind)).sort();
-  const unsupportedKinds = [...owners]
-    .filter(([, owner]) => owner !== 'accounts' && owner !== 'semantic')
-    .map(([kind]) => kind)
-    .sort();
+  const expectedOwners: Readonly<Record<string, string>> = {
+    account: 'accounts',
+    subject: 'semantic',
+    collection: 'commerce',
+    review: 'content',
+    space: 'content',
+  };
+  const available = new Set(producerKinds);
+  const unsupportedKinds = [...new Set([
+    ...[...owners]
+      .filter(([kind, owner]) =>
+        expectedOwners[kind] === undefined ? owner !== 'semantic' : expectedOwners[kind] !== owner,
+      )
+      .map(([kind]) => kind),
+    ...[...owners.keys()].filter((kind) => expectedOwners[kind] !== undefined && !available.has(kind)),
+    ...requiredKinds.filter((kind) => owners.has(kind) && !available.has(kind)),
+    ...producerKinds.filter((kind) => expectedOwners[kind] === undefined),
+  ])].sort();
   const duplicateKinds = [...duplicates].sort();
   if (missingKinds.length || unsupportedKinds.length || duplicateKinds.length)
     throw new DiscoveryProducerCoverageError({ missingKinds, unsupportedKinds, duplicateKinds });
@@ -439,8 +501,9 @@ export async function allocateDiscovery(
   prefix: string,
   registry: DiscoveryRegistry,
   requiredKinds: readonly string[] = [],
+  producerKinds: readonly string[] = ['account', 'subject'],
 ): Promise<void> {
-  assertDiscoveryProducerCoverage(registry.entries, requiredKinds);
+  assertDiscoveryProducerCoverage(discoveryProducerRegistrations(registry), requiredKinds, producerKinds);
   discoveryAlias(prefix);
   await withConnection(pool, async (client) => {
     await client.query('BEGIN');
@@ -468,8 +531,12 @@ export async function allocateDiscovery(
       );
       await client.query(
         `INSERT INTO search.discovery_population(partition_no,prefix,generation,owner)
-        SELECT p,$1,$2,owner FROM generate_series(0,4095) p CROSS JOIN unnest(ARRAY['accounts','semantic']) owner`,
-        [prefix, generation],
+        SELECT p,$1,$2,owner FROM generate_series(0,4095) p CROSS JOIN unnest($3::text[]) owner`,
+        [
+          prefix,
+          generation,
+          ['accounts', 'semantic', ...SECOND_SCOPE_PUBLIC_METADATA_KINDS.filter((kind) => requiredKinds.includes(kind))],
+        ],
       );
       await client.query(
         `INSERT INTO core.consumer_checkpoint(partition_no,consumer,epoch,position)
@@ -486,9 +553,10 @@ export async function allocateDiscovery(
 
 type Population = {
   partition: number;
-  owner: 'accounts' | 'semantic';
+  owner: 'accounts' | 'semantic' | DiscoveryMetadataKind;
   after_route: number | null;
   after_id: string | null;
+  continuation: string | null;
   position: string;
   revision: string;
   claim_revision: string;
@@ -509,7 +577,7 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     keys = page.accounts.map(({ id }) => ({ owner: 'accounts', kind: 'account', id, route: routeOf(id)! }));
     next = page.next;
     position = page.position;
-  } else {
+  } else if (row.owner === 'semantic') {
     const rows = await withConnection(
       pool,
       async (client) =>
@@ -525,6 +593,40 @@ async function populationPage(pool: Pool, projection: DiscoveryProjection, row: 
     const last = keys.at(-1);
     next = rows.length === 257 && last ? { route: last.route, id: last.id } : null;
     position = 0n;
+  } else {
+    const producer = projection.metadataProducers?.[row.owner];
+    if (!producer || (await producer.readiness()) !== 'ready')
+      throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: [row.owner], duplicateKinds: [] });
+    const after = row.after_id === null ? null : { route: row.after_route!, id: row.after_id };
+    const page = await producer.page(partition, after, row.continuation, 100);
+    if (page.position < 0n || page.position > 9_223_372_036_854_775_807n)
+      throw new TypeError('Metadata discovery page has an invalid native position');
+    const actions = projection.prepareOwnerPageActions(row.owner, partition, page);
+    next = page.next;
+    position = page.position;
+    await projection.applyNativeActions(actions);
+    await withConnection(pool, async (client) => {
+      await client.query(
+        `UPDATE search.discovery_population SET after_route=$5,after_id=$6,continuation=$7::jsonb,
+        complete=$8,position=GREATEST(position,$9)
+        WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
+        AND after_id IS NOT DISTINCT FROM $10::uuid AND continuation IS NOT DISTINCT FROM $11::jsonb AND NOT complete`,
+        [
+          partition,
+          target.prefix,
+          target.generation,
+          row.owner,
+          next?.route ?? null,
+          next?.id ?? null,
+          page.continuation === null ? null : JSON.stringify(page.continuation),
+          next === null,
+          position.toString(),
+          row.after_id,
+          row.continuation === null ? null : JSON.stringify(row.continuation),
+        ],
+      );
+    });
+    return;
   }
   await projection.project(partition, keys, 0n, true);
   await withConnection(pool, async (client) => {
@@ -555,6 +657,10 @@ async function reconcileDiscoveryPage(
 ): Promise<void> {
   const { registry, target } = projection,
     partition = row.partition;
+  if (row.owner === 'collection' || row.owner === 'review' || row.owner === 'space') {
+    await reconcileMetadataDiscoveryPage(pool, search, projection, row);
+    return;
+  }
   const entry =
     row.owner === 'accounts' ? registry.get('account') : registry.entries.find((entry) => entry.owner === 'semantic');
   if (!entry || entry.owner !== row.owner) throw new Error('Both native discovery producers are required');
@@ -700,6 +806,104 @@ async function reconcileDiscoveryPage(
   });
 }
 
+/** Reconcile a metadata producer by current keyed reads; no unavailable census is synthesized. */
+async function reconcileMetadataDiscoveryPage(
+  pool: Pool,
+  search: OpenSearch,
+  projection: DiscoveryProjection,
+  row: Population,
+): Promise<void> {
+  const { target, registry } = projection;
+  const kind = row.owner as DiscoveryMetadataKind;
+  const owner = kind === 'collection' ? 'commerce' : 'content';
+  const after = row.reconcile_position === null ? null : row.after_id;
+  const result = await search.request<unknown>(
+    'POST',
+    `/${discoveryIndexName(target.prefix, target.generation)}/_search`,
+    {
+      size: 100,
+      version: true,
+      query: { bool: { filter: [{ term: { partition: row.partition } }, { term: { owner } }, { term: { kind } }] } },
+      sort: [{ route: 'asc' }, { id: 'asc' }],
+      ...(after === null ? {} : { search_after: [row.after_route, after] }),
+    },
+    { query: { allow_partial_search_results: false } },
+  );
+  assertCompleteSearch(result.body);
+  if (!record(result.body) || !record(result.body.hits) || !Array.isArray(result.body.hits.hits))
+    throw new TypeError('Invalid metadata discovery reconciliation page');
+  const hits = result.body.hits.hits;
+  if (hits.length > 100) throw new RangeError('Metadata discovery reconciliation exceeded its page bound');
+  const keys = hits.map((hit): { route: number; id: string } => {
+    if (!record(hit) || typeof hit._id !== 'string' || !record(hit._source))
+      throw new GenerationReconciliationMismatch();
+    const key = parseDiscoveryDocumentKey(registry, hit._id);
+    if (
+      key.kind !== kind ||
+      key.owner !== owner ||
+      partitionOf(key.route) !== row.partition ||
+      hit._source.identity !== hit._id ||
+      hit._source.kind !== kind ||
+      hit._source.owner !== owner ||
+      hit._source.id !== key.id ||
+      hit._source.route !== key.route ||
+      hit._source.partition !== row.partition
+    )
+      throw new GenerationReconciliationMismatch();
+    return { route: key.route, id: key.id };
+  });
+  const snapshot = await projection.prepareOwnerActions(kind, row.partition, keys.map(({ id }) => id));
+  if (row.reconcile_position !== null && BigInt(row.reconcile_position) !== snapshot.position) {
+    await withConnection(pool, (client) =>
+      client.query(
+        `UPDATE search.discovery_population SET certified=false,after_route=NULL,after_id=NULL,
+        reconcile_position=NULL,indexed=0 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4`,
+        [row.partition, target.prefix, target.generation, kind],
+      ),
+    );
+    return;
+  }
+  const actions = projection.prepareOwnerPageActions(kind, row.partition, {
+    position: snapshot.position,
+    keys: snapshot.keys,
+    records: snapshot.records,
+  });
+  await projection.applyNativeActions(actions);
+  const exhausted = hits.length < 100;
+  const finalPosition = exhausted ? await projection.ownerPosition(kind, row.partition) : snapshot.position;
+  if (finalPosition !== snapshot.position) {
+    await withConnection(pool, (client) =>
+      client.query(
+        `UPDATE search.discovery_population SET certified=false,after_route=NULL,after_id=NULL,
+        reconcile_position=NULL,indexed=0 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4`,
+        [row.partition, target.prefix, target.generation, kind],
+      ),
+    );
+    return;
+  }
+  const last = keys.at(-1);
+  await withConnection(pool, (client) =>
+    client.query(
+      `UPDATE search.discovery_population SET after_route=$5,after_id=$6,indexed=$7,census=$7,
+      reconcile_position=$8,certified=$9 WHERE partition_no=$1 AND prefix=$2 AND generation=$3 AND owner=$4
+      AND after_id IS NOT DISTINCT FROM $10::uuid AND reconcile_position IS NOT DISTINCT FROM $11::bigint`,
+      [
+        row.partition,
+        target.prefix,
+        target.generation,
+        kind,
+        exhausted ? null : (last?.route ?? null),
+        exhausted ? null : (last?.id ?? null),
+        (BigInt(row.indexed) + BigInt(hits.length)).toString(),
+        snapshot.position.toString(),
+        exhausted,
+        row.after_id,
+        row.reconcile_position,
+      ],
+    ),
+  );
+}
+
 /** One bounded maintenance step; failed external work leaves its actual frontier replayable. */
 export async function advanceDiscovery(options: {
   pool: Pool;
@@ -708,17 +912,47 @@ export async function advanceDiscovery(options: {
   registry: DiscoveryRegistry;
   listing: SubjectListingSource;
   requiredKinds?: readonly string[];
+  metadataProducers?: DiscoveryMetadataProducers;
 }): Promise<void> {
   const { pool, search, prefix, registry } = options;
-  assertDiscoveryProducerCoverage(registry.entries, options.requiredKinds ?? []);
+  const requiredKinds = options.requiredKinds ?? [];
+  const metadataProducers = options.metadataProducers ?? {};
+  const producerKinds = ['account', 'subject'];
+  for (const kind of SECOND_SCOPE_PUBLIC_METADATA_KINDS) {
+    const producer = metadataProducers[kind];
+    if (producer && (await producer.readiness()) === 'ready') producerKinds.push(kind);
+  }
+  assertDiscoveryProducerCoverage(discoveryProducerRegistrations(registry), requiredKinds, producerKinds);
   let generations = await discoveryGenerations(pool, prefix);
   const kinds = registry.entries.map(({ kind }) => kind).sort();
+  const active = generations.find((row) => row.state === 'active');
+  let activeCoverageComplete = true;
+  if (active && requiredKinds.length > 0) {
+    const coverage = await withConnection(pool, async (client) =>
+      (
+        await client.query<{ owner: string; complete: boolean; partitions: string }>(
+          `SELECT owner,bool_and(complete AND certified) AS complete,count(*)::text AS partitions
+          FROM search.discovery_population WHERE prefix=$1 AND generation=$2 AND owner=ANY($3::text[]) GROUP BY owner`,
+          [prefix, active.generation, requiredKinds],
+        )
+      ).rows,
+    );
+    const byOwner = new Map(coverage.map((row) => [row.owner, row]));
+    activeCoverageComplete = requiredKinds.every((kind) => {
+      const owner = byOwner.get(kind);
+      return owner?.complete === true && Number(owner.partitions) === PARTITIONS;
+    });
+  }
   if (
     generations.length === 0 ||
     (generations.every((row) => ['active', 'retiring', 'quarantined'].includes(row.state)) &&
-      generations.some((row) => row.state === 'active' && !isDeepStrictEqual(row.kinds, kinds)))
+      generations.some(
+        (row) =>
+          row.state === 'active' &&
+          (!isDeepStrictEqual(row.kinds, kinds) || !activeCoverageComplete),
+      ))
   ) {
-    await allocateDiscovery(pool, prefix, registry, options.requiredKinds ?? []);
+    await allocateDiscovery(pool, prefix, registry, requiredKinds, producerKinds);
     generations = await discoveryGenerations(pool, prefix);
   }
   const target = generations.find((row) => !['active', 'retiring', 'quarantined'].includes(row.state));
@@ -745,14 +979,14 @@ export async function advanceDiscovery(options: {
     );
     return;
   }
-  const projection = createDiscoveryProjection({ ...options, target });
+  const projection = createDiscoveryProjection({ ...options, target, metadataProducers });
   if (target.state === 'populating' || target.state === 'reconciling') {
     const population = await withConnection(
       pool,
       async (client) =>
         (
           await client.query<Population>(
-            `SELECT partition_no AS partition,owner,after_route,after_id::text,position::text,
+            `SELECT partition_no AS partition,owner,after_route,after_id::text,continuation #>> '{}' AS continuation,position::text,
       revision::text,claim_revision::text,indexed::text,census::text,reconcile_position::text FROM search.discovery_population
       WHERE prefix=$1 AND generation=$2 AND ${target.state === 'populating' ? 'NOT complete' : 'NOT certified'} ORDER BY partition_no,owner LIMIT 1`,
             [prefix, target.generation],
@@ -796,10 +1030,19 @@ export async function advanceDiscovery(options: {
           claim_revision: string;
           head: string;
           semantic_position: string;
+          collection_position: string | null;
+          review_position: string | null;
+          space_position: string | null;
         }>(
-          `SELECT p.partition_no AS partition,p.reconcile_position::text AS position,p.revision::text,p.claim_revision::text,c.position::text AS head,s.reconcile_position::text AS semantic_position
+          `SELECT p.partition_no AS partition,p.reconcile_position::text AS position,p.revision::text,p.claim_revision::text,
+          c.position::text AS head,s.reconcile_position::text AS semantic_position,
+          collection.reconcile_position::text AS collection_position,review.reconcile_position::text AS review_position,
+          space.reconcile_position::text AS space_position
      FROM search.discovery_population p JOIN core.partition c ON c.partition_no=p.partition_no
      JOIN search.discovery_population s ON s.partition_no=p.partition_no AND s.prefix=p.prefix AND s.generation=p.generation AND s.owner='semantic' 
+     LEFT JOIN search.discovery_population collection ON collection.partition_no=p.partition_no AND collection.prefix=p.prefix AND collection.generation=p.generation AND collection.owner='collection'
+     LEFT JOIN search.discovery_population review ON review.partition_no=p.partition_no AND review.prefix=p.prefix AND review.generation=p.generation AND review.owner='review'
+     LEFT JOIN search.discovery_population space ON space.partition_no=p.partition_no AND space.prefix=p.prefix AND space.generation=p.generation AND space.owner='space'
      WHERE p.prefix=$1 AND p.generation=$2 AND p.owner='accounts' ORDER BY p.partition_no`,
           [prefix, target.generation],
         )
@@ -814,9 +1057,15 @@ export async function advanceDiscovery(options: {
       );
     for (const row of chunk) {
       const witness = witnesses.get(row.partition);
+      const metadataPositions = {
+        collection: row.collection_position,
+        review: row.review_position,
+        space: row.space_position,
+      };
       if (
         row.position === row.head &&
         row.semantic_position === row.head &&
+        requiredKinds.every((kind) => metadataPositions[kind as DiscoveryMetadataKind] === row.head) &&
         witness?.revision === BigInt(row.revision) &&
         witness.claimRevision === BigInt(row.claim_revision)
       )
@@ -1037,7 +1286,7 @@ export async function assertNativeGenerationActionsVisible(
 
 function nativeGenerationDocumentMatches(
   actual: unknown,
-  expected: SubjectDocument | IndexedDiscoveryDocument,
+  expected: SubjectDocument | IndexedDiscoveryDocument | DiscoveryDocumentValue,
 ): boolean {
   return isDeepStrictEqual(actual, expected);
 }

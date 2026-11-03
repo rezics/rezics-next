@@ -3,13 +3,20 @@ import { ProblemError } from '../http/problem.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
-import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
+import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
 import type { Pool } from 'pg';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
-import { createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
-import { createNativeReviewDiscoveryAdapter, createReviewDiscoveryAdapter } from './review-discovery.ts';
+import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
+import { createReviewDiscoveryAdapter } from './review-discovery.ts';
 import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
-import type { DiscoveryOwnerAdapterSlots, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
+import type {
+  DiscoveryOwnerAdapterSlots,
+  DiscoveryOwnerMetadataSummary,
+  DiscoveryReadContext,
+} from './discovery.ts';
+import type { DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './generations.ts';
+import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
+import { routeOf, partitionOf } from '../route/route.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import {
   createRetainedDiscoverySearch,
@@ -20,7 +27,7 @@ import {
 import { ownDiscoveryRequest } from './discovery-request.ts';
 import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntimeConfig } from './public-runtime.ts';
 import { createPublicPreparationStore } from './public-preparation-store.ts';
-import { discoveryConsumer } from './generations.ts';
+import { discoveryConsumer, DiscoveryProducerCoverageError } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
 import { readFreshness } from './freshness.ts';
 import type { PublicDiscoveryConsumerOperations } from './public-filter-consumer-contract.ts';
@@ -37,6 +44,202 @@ export type DefaultDiscoverySearch = Readonly<{
   close(): Promise<void>;
 }>;
 
+export type DefaultDiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots &
+  Readonly<{ metadataProducers: DiscoveryMetadataProducers }>;
+
+function metadataKey(owner: 'commerce' | 'content', kind: 'collection' | 'review' | 'space', id: string) {
+  const route = routeOf(id);
+  if (route === null) throw new TypeError(`Invalid native ${kind} identity`);
+  return { owner, kind, route, id } as SecondScopeDiscoveryKey;
+}
+
+function requestedKeys(
+  owner: 'commerce' | 'content',
+  kind: 'collection' | 'review' | 'space',
+  partition: number,
+  ids: readonly string[],
+): SecondScopeDiscoveryKey[] {
+  if (!Array.isArray(ids) || ids.length > 100) throw new RangeError(`Native ${kind} read exceeds 100 identities`);
+  const unique = [...new Set(ids)];
+  const keys = unique.map((id) => metadataKey(owner, kind, id));
+  if (keys.some((key) => partitionOf(key.route) !== partition))
+    throw new TypeError(`Native ${kind} identities cross their source partition`);
+  return keys;
+}
+
+function collectionRecords(items: readonly import('../library/collection-discovery-source.ts').CollectionDiscoveryItem[]) {
+  const records: SecondScopeDiscoveryRecord[] = [];
+  for (const item of items) {
+    if (item.status === 'unavailable')
+      throw new CollectionDiscoveryReadinessError('unavailable', item.reason);
+    if (item.status !== 'indexable') continue;
+    records.push({
+      key: { owner: 'commerce', kind: 'collection', ...item.key },
+      revision: BigInt(item.value.revision),
+      sourceVersion: null,
+      names: [item.value.title],
+      descriptions: [],
+      nameSort: item.value.title,
+    });
+  }
+  return records;
+}
+
+function reviewRecords(
+  partition: number,
+  position: bigint,
+  reviews: readonly import('../content/review-discovery.ts').IndexedReview[],
+) {
+  const records: SecondScopeDiscoveryRecord[] = [];
+  for (const review of reviews) {
+    const key = metadataKey('content', 'review', review.id);
+    if (partitionOf(key.route) !== partition) throw new TypeError('Review source returned a foreign partition key');
+    if (typeof review.sourceVersion !== 'string' || !review.sourceVersion || !review.sourceVersion.isWellFormed())
+      throw new TypeError('Review source version is invalid');
+    const excerpt = review.excerpt ?? '';
+    records.push({
+      key,
+      revision: position,
+      sourceVersion: review.sourceVersion,
+      names: review.title === null ? [] : [review.title],
+      descriptions: [excerpt],
+      nameSort: review.title,
+    });
+  }
+  return records;
+}
+
+function spaceRecords(
+  partition: number,
+  spaces: readonly import('../community/space-discovery.ts').IndexedSpace[],
+) {
+  return spaces.map((space): SecondScopeDiscoveryRecord => {
+    const key = metadataKey('content', 'space', space.id);
+    if (partitionOf(key.route) !== partition) throw new TypeError('Space source returned a foreign partition key');
+    return {
+      key,
+      revision: BigInt(space.revision),
+      sourceVersion: null,
+      names: [space.name],
+      descriptions: [space.description],
+      nameSort: space.name,
+    };
+  });
+}
+
+function createCollectionPopulationProducer(
+  adapter: ReturnType<typeof createNativeCollectionDiscoveryAdapter>,
+): DiscoveryMetadataProducer {
+  return {
+    kind: 'collection',
+    owner: 'commerce',
+    async readiness() {
+      return adapter.status === 'ready' ? 'ready' : adapter.status;
+    },
+    async page(partition, after, continuation, limit) {
+      if (continuation !== null) throw new TypeError('Collection discovery does not use an opaque continuation');
+      const page = await adapter.source.page(partition, after, limit);
+      if (page.status !== 'available')
+        throw new CollectionDiscoveryReadinessError('unavailable', page.reason);
+      return {
+        position: BigInt(page.stamp.position),
+        next: page.next,
+        continuation: null,
+        keys: page.items.map((item) => ({ owner: 'commerce', kind: 'collection', ...item.key })),
+        records: collectionRecords(page.items),
+      };
+    },
+    async read(partition, ids) {
+      const keys = requestedKeys('commerce', 'collection', partition, ids);
+      const snapshot = await adapter.source.read(partition, keys.map(({ route, id }) => ({ route, id })));
+      if (snapshot.status !== 'available')
+        throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
+      return {
+        position: BigInt(snapshot.stamp.position),
+        keys,
+        records: collectionRecords(snapshot.items),
+      };
+    },
+    async position(partition) {
+      const snapshot = await adapter.source.read(partition, []);
+      if (snapshot.status !== 'available')
+        throw new CollectionDiscoveryReadinessError('unavailable', snapshot.reason);
+      return BigInt(snapshot.stamp.position);
+    },
+  };
+}
+
+function createReviewPopulationProducer(source: ReviewDiscoverySource | undefined): DiscoveryMetadataProducer {
+  return {
+    kind: 'review',
+    owner: 'content',
+    async readiness() {
+      return source?.pageWithCut ? 'ready' : 'unavailable';
+    },
+    async page(partition, after, continuation, limit) {
+      if (!source?.pageWithCut)
+        throw new TypeError('Content review discovery pageWithCut capability is unavailable');
+      if (continuation !== null && after === null)
+        throw new TypeError('Review continuation has no native full-key frontier');
+      const cursor = continuation === null ? null : { ...after!, token: continuation };
+      const page = await source.pageWithCut(partition, cursor, limit);
+      if (page.state !== 'ready')
+        throw new DiscoveryProducerCoverageError({ missingKinds: [], unsupportedKinds: ['review'], duplicateKinds: [] });
+      if (page.next && (typeof page.next.token !== 'string' || !page.next.token))
+        throw new TypeError('Content review population returned an invalid opaque continuation');
+      return {
+        position: page.position,
+        next: page.next ? { route: page.next.route, id: page.next.id } : null,
+        continuation: page.next?.token ?? null,
+        keys: page.reviews.map((review) => metadataKey('content', 'review', review.id)),
+        records: reviewRecords(partition, page.position, page.reviews),
+      };
+    },
+    async read(partition, ids) {
+      if (!source) throw new TypeError('Content review discovery source is unavailable');
+      const keys = requestedKeys('content', 'review', partition, ids);
+      const snapshot = await source.read(partition, ids);
+      return { position: snapshot.position, keys, records: reviewRecords(partition, snapshot.position, snapshot.reviews) };
+    },
+    async position(partition) {
+      if (!source) throw new TypeError('Content review discovery source is unavailable');
+      return (await source.read(partition, [])).position;
+    },
+  };
+}
+
+function createSpacePopulationProducer(
+  adapter: ReturnType<typeof nativeSpaceDiscoveryAdapter>,
+): DiscoveryMetadataProducer {
+  return {
+    kind: 'space',
+    owner: 'content',
+    async readiness() {
+      const capability = await adapter.source.dependencies();
+      return capability.state;
+    },
+    async page(partition, after, continuation, limit) {
+      if (continuation !== null) throw new TypeError('Space discovery does not use an opaque continuation');
+      const page = await adapter.source.page(partition, after, limit);
+      return {
+        position: page.position,
+        next: page.next,
+        continuation: null,
+        keys: page.spaces.map((space) => metadataKey('content', 'space', space.id)),
+        records: spaceRecords(partition, page.spaces),
+      };
+    },
+    async read(partition, ids) {
+      const keys = requestedKeys('content', 'space', partition, ids);
+      const snapshot = await adapter.source.read(partition, ids);
+      return { position: snapshot.position, keys, records: spaceRecords(partition, snapshot.spaces) };
+    },
+    async position(partition) {
+      return (await adapter.source.read(partition, [])).position;
+    },
+  };
+}
+
 /** Bind the delivered Commerce and Content leaves to the canonical current-reader slots. */
 export function createDefaultDiscoveryOwnerAdapters(config: {
   pool: Pool;
@@ -45,7 +248,7 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
   clock?: DefaultPublicFilterRuntimeConfig['clock'];
   keys?: KeyRing;
   reviewSource?: ReviewDiscoverySource;
-}): DiscoveryOwnerAdapterSlots {
+}): DefaultDiscoveryOwnerAdapters {
   const metadata = {
     collection: { id: 'collection', labels: { en: 'Collections' }, icon: 'library' },
     review: { id: 'review', labels: { en: 'Reviews' }, icon: 'message-square' },
@@ -56,14 +259,15 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
     { pool: config.pool, access: config.access, routeKey: config.routeKey, ...clock },
     metadata.collection,
   );
-  const review = config.reviewSource
-    ? createReviewDiscoveryAdapter(config.reviewSource)
-    : config.keys
-      ? createNativeReviewDiscoveryAdapter(
+  const reviewSource =
+    config.reviewSource ??
+    (config.keys
+      ? createReviewDiscoverySource(
           { pool: config.pool, access: config.access, tokens: config.keys, ...clock },
           () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
         )
-      : undefined;
+      : undefined);
+  const review = reviewSource ? createReviewDiscoveryAdapter(reviewSource) : undefined;
   const space = nativeSpaceDiscoveryAdapter({ pool: config.pool, access: config.access, ...clock });
   const ownerContext = (context: DiscoveryReadContext) => ({ deadline: context.deadline });
   const reviewSlot = review
@@ -97,10 +301,16 @@ export function createDefaultDiscoveryOwnerAdapters(config: {
       },
     },
   };
+  const metadataProducers: DiscoveryMetadataProducers = Object.freeze({
+    collection: createCollectionPopulationProducer(collection),
+    review: createReviewPopulationProducer(reviewSource),
+    space: createSpacePopulationProducer(space),
+  });
   return Object.freeze({
     collection: collection.registration,
     review: reviewSlot,
     space: spaceSlot,
+    metadataProducers,
   });
 }
 
@@ -225,6 +435,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
     };
     const operation = execute().catch((error: unknown) => {
       if (error instanceof ProblemError) throw error;
+      if (error instanceof CollectionDiscoveryReadinessError) throw error;
       throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
     });
     pending.add(operation);

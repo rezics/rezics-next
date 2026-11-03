@@ -50,6 +50,7 @@ const collectionObservation: SecondScopeDiscoveryObservation = {
       {
         key: collectionKey,
         revision,
+        sourceVersion: null,
         names: ['Public Collection'],
         descriptions: [],
         nameSort: 'public collection',
@@ -64,8 +65,22 @@ const contentObservation: SecondScopeDiscoveryObservation = {
     position,
     complete: true,
     records: [
-      { key: reviewKey, revision, names: ['Public review'], descriptions: ['Public thread text'], nameSort: 'review' },
-      { key: spaceKey, revision, names: ['Public Space'], descriptions: ['Public summary'], nameSort: 'space' },
+      {
+        key: reviewKey,
+        revision,
+        sourceVersion: 'review-lifecycle:8',
+        names: ['Public review'],
+        descriptions: ['Public thread text'],
+        nameSort: 'review',
+      },
+      {
+        key: spaceKey,
+        revision,
+        sourceVersion: null,
+        names: ['Public Space'],
+        descriptions: ['Public summary'],
+        nameSort: 'space',
+      },
     ],
   },
 };
@@ -94,6 +109,7 @@ test('Collection, review and Space snapshots share format 2 with exact native ke
       'partition',
       'source_position',
       'revision',
+      'source_version',
       'names',
       'descriptions',
       'name_sort',
@@ -115,6 +131,7 @@ test('Collection, review and Space snapshots share format 2 with exact native ke
     partition,
     source_position: position.toString(),
     revision: revision.toString(),
+    source_version: 'review-lifecycle:8',
     names: ['Public review'],
     descriptions: ['Public thread text'],
     name_sort: 'review',
@@ -125,6 +142,7 @@ test('Collection, review and Space snapshots share format 2 with exact native ke
   const body = discoveryBulkBody(registry, 'search-discovery-g1', [review]);
   expect(body).toContain(`"version":${position.toString()}`);
   expect(JSON.parse(body.trim().split('\n')[1]!).source_position).toBe(position.toString());
+  expect(JSON.parse(body.trim().split('\n')[1]!).source_version).toBe('review-lifecycle:8');
 
   const mapping = mixedDiscoveryIndexDefinition().mappings;
   expect(mapping.dynamic).toBe('strict');

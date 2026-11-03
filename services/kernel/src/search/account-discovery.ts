@@ -35,6 +35,7 @@ import {
   type IndexedAccount,
 } from './discovery.ts';
 import { reviewDiscoveryDocument } from './review-discovery.ts';
+import type { DiscoveryMetadataKind, DiscoveryMetadataProducers } from './generations.ts';
 import type { ReviewDiscoveryRefresh } from '../content/review-discovery-changes.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { accountDocumentActions } from './document.ts';
@@ -446,8 +447,11 @@ export function createDiscoveryProjection(options: {
   registry: DiscoveryRegistry;
   listing: SubjectListingSource;
   target: DiscoveryTarget;
+  metadataProducers?: DiscoveryMetadataProducers;
 }) {
   const { pool, search, registry, listing, target } = options;
+  const metadataProducers = options.metadataProducers ?? {};
+  let metadataPopulationOwners: Promise<ReadonlySet<string>> | undefined;
   const accounts = registry.get('account');
   if (accounts.owner !== 'accounts') throw new TypeError('Account source is required');
   const subject = registry.entries.find((entry) => entry.owner === 'semantic');
@@ -713,6 +717,7 @@ export function createDiscoveryProjection(options: {
       return {
         key: { owner: 'content' as const, kind: 'review' as const, id: row.id, route },
         revision: refresh.nativePosition,
+        sourceVersion: row.sourceVersion,
         names: doc.title === null ? [] : [doc.title],
         descriptions: [doc.text],
         nameSort: doc.title,
@@ -752,7 +757,107 @@ export function createDiscoveryProjection(options: {
       throw new TypeError('Invalid review receiving actions');
     await applyActions(actions, true, false, held);
   }
-  return { project, prepareRepair, applyRepair, prepareReviews, applyReviews, registry, target, listing };
+  async function applyNativeActions(actions: readonly AnyDiscoveryIndexAction[]) {
+    if (actions.length > 100) throw new RangeError('Metadata discovery write exceeds its native batch bound');
+    const prepared = await prepareBoundedSortKeys(search, discoveryIndexName(target.prefix, target.generation), [
+      ...actions,
+    ]);
+    return applyActions(prepared, false, true);
+  }
+  async function hasMetadataPopulation(kind: DiscoveryMetadataKind) {
+    metadataPopulationOwners ??= withConnection(pool, async (client) => {
+      const result = await client.query<{ owner: string }>(
+        `SELECT owner FROM search.discovery_population
+        WHERE partition_no=0 AND prefix=$1 AND generation=$2
+        AND owner=ANY($3::text[])`,
+        [target.prefix, target.generation, ['collection', 'review', 'space']],
+      );
+      return new Set(result.rows.map(({ owner }) => owner));
+    });
+    return (await metadataPopulationOwners).has(kind);
+  }
+  function prepareOwnerPageActions(
+    kind: DiscoveryMetadataKind,
+    partition: number,
+    snapshot: {
+      position: bigint;
+      keys: readonly import('./discovery-documents.ts').SecondScopeDiscoveryKey[];
+      records: readonly import('./discovery-documents.ts').SecondScopeDiscoveryRecord[];
+    },
+  ) {
+    const producer = metadataProducers[kind];
+    if (!producer || producer.owner !== (kind === 'collection' ? 'commerce' : 'content'))
+      throw new Error(`Native ${kind} discovery producer is not registered`);
+    if (snapshot.position < 0n || snapshot.position > 9_223_372_036_854_775_807n)
+      throw new TypeError(`Native ${kind} discovery observation has an invalid position`);
+    if (!Array.isArray(snapshot.keys) || snapshot.keys.length > 100)
+      throw new RangeError(`Native ${kind} discovery page exceeds its raw-key bound`);
+    const seen = new Set<string>();
+    for (const key of snapshot.keys) {
+      if (key.kind !== kind || seen.has(key.id))
+        throw new TypeError(`Native ${kind} discovery page returned a duplicate or foreign identity`);
+      seen.add(key.id);
+    }
+    return secondScopeDiscoveryDocumentActions(
+      registry,
+      {
+        owner: producer.owner,
+        snapshot: { partition, position: snapshot.position, complete: true, records: snapshot.records },
+      },
+      snapshot.keys,
+    );
+  }
+  async function prepareOwnerActions(kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) {
+    const producer = metadataProducers[kind];
+    if (!producer)
+      throw new Error(`Native ${kind} discovery producer is not ready`);
+    if (!Array.isArray(ids) || ids.length > 100 || new Set(ids).size !== ids.length)
+      throw new RangeError('Metadata discovery read exceeds its bound or repeats an identity');
+    const snapshot = await producer.read(partition, ids);
+    if (
+      snapshot.position < 0n ||
+      snapshot.position > 9_223_372_036_854_775_807n ||
+      !Array.isArray(snapshot.keys) ||
+      snapshot.keys.length !== ids.length ||
+      snapshot.keys.some((key) => key.kind !== kind || !ids.includes(key.id)) ||
+      new Set(snapshot.keys.map(({ id }) => id)).size !== ids.length
+    )
+      throw new TypeError(`Native ${kind} discovery read did not settle every requested identity`);
+    const actions = prepareOwnerPageActions(kind, partition, snapshot);
+    if (actions.length !== ids.length) throw new TypeError(`Native ${kind} discovery action set is incomplete`);
+    return { position: snapshot.position, actions };
+  }
+  async function projectOwner(kind: DiscoveryMetadataKind, partition: number, ids: readonly string[]) {
+    if (!(await hasMetadataPopulation(kind))) return;
+    const snapshot = await prepareOwnerActions(kind, partition, ids);
+    return applyNativeActions(snapshot.actions);
+  }
+  async function ownerPosition(kind: DiscoveryMetadataKind, partition: number) {
+    const producer = metadataProducers[kind];
+    if (!producer)
+      throw new Error(`Native ${kind} discovery producer is not ready`);
+    const value = await producer.position(partition);
+    if (value < 0n || value > 9_223_372_036_854_775_807n)
+      throw new TypeError(`Native ${kind} position is invalid`);
+    return value;
+  }
+  return {
+    project,
+    prepareRepair,
+    applyRepair,
+    prepareReviews,
+    applyReviews,
+    applyNativeActions,
+    hasMetadataPopulation,
+    prepareOwnerPageActions,
+    prepareOwnerActions,
+    projectOwner,
+    ownerPosition,
+    metadataProducers,
+    registry,
+    target,
+    listing,
+  };
 }
 
 /** Terminal work is located from Search's own copy inventory, never inferred from a missing source. */
