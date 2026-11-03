@@ -27,7 +27,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
 const { createRoot } = await import('react-dom/client');
 const { SecurityPage } = await import('../src/routes/security');
-const { initial } = await import('../src/stories/accounts-security/security/security.stories');
+const { initial, Denied } = await import('../src/stories/accounts-security/security/security.stories');
 const { populatedInventory, button, fill } = await import('../src/stories/accounts-operations/story');
 const { m } = await import('../src/paraglide/messages.js');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
@@ -81,6 +81,14 @@ async function mount() {
   );
   await flush(() => fill(host.querySelector('#security-new-password')!, 'a secure password'));
 }
+
+test('denied security story preserves credentials without exposing connected applications', async () => {
+  await mount();
+  await flush(() => root.render(Denied.render()));
+  expect(host.textContent).toContain(m.auth_inventory_denied());
+  expect(host.textContent).toContain('Security key');
+  expect(host.textContent).not.toContain('Reading companion');
+});
 
 test.each([200, 401, 403, 503])('consent review serializes security writes and preserves native %i', async (status) => {
   await mount();
