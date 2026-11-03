@@ -101,10 +101,7 @@ function expectDiscoveryIndexes(runs: readonly RunEvidence[]): void {
     expect(plans.length, `discovery plan at scale ${scale}`).toBeGreaterThan(0);
     const indexes = new Set(plans.flatMap(({ plan }) => indexNamesIn(plan)));
     expect(indexes).toEqual(
-      expect.arrayContaining([
-        'work_legacy_leave_parent_input_identity',
-        'work_legacy_leave_child_input_identity',
-      ]),
+      expect.arrayContaining(['work_legacy_leave_parent_input_identity', 'work_legacy_leave_child_input_identity']),
     );
   }
 }
