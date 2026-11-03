@@ -13,7 +13,13 @@ type StateChoice = { id: string; label: string };
 
 function labelFor(state: VndbState): string {
   const locale = getLocale();
-  return state.labels[locale] ?? state.labels[locale.split('-')[0]!] ?? Object.values(state.labels)[0] ?? state.id;
+  const labels = Object.entries(state.labels);
+  return (
+    labels.find(([key]) => key === locale)?.[1] ??
+    labels.find(([key]) => key === locale.split('-')[0])?.[1] ??
+    labels[0]?.[1] ??
+    state.id
+  );
 }
 
 export function VndbRowReview({
