@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -12,6 +12,7 @@ import {
   type Access,
   type AccountActor,
   type Actor,
+  type AccessClient,
   type ReadDecisions,
 } from '../request/access.ts';
 import { readRealm } from '../community/realm.ts';
@@ -70,6 +71,8 @@ type Candidate = Readonly<{
 
 type OwnMediaDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
 type ReadHome = Readonly<{ partition: number; ids: readonly string[] }>;
+type DecisionSet = Readonly<Record<string, { allowed: boolean; explicit: boolean }>>;
+const noDecisions: DecisionSet = {};
 
 function accountRoute(actor: AccountActor): number {
   const route = routeOf(actor.accountId);
@@ -190,12 +193,12 @@ function homesFor(ids: readonly string[]): readonly ReadHome[] {
 
 function decisionsFor(
   decisions: ReadDecisions,
-  client: PoolClient,
+  client: AccessClient,
   action: string,
   resourceType: string,
   ids: readonly string[],
   time: Awaited<ReturnType<typeof mintReadTime>>,
-): Promise<Readonly<Record<string, { allowed: boolean; explicit: boolean }>>> {
+): Promise<DecisionSet> {
   return decisions.decide(client, { action, resourceType, ids }, time);
 }
 
@@ -331,7 +334,7 @@ async function readObjectHome(
         if (!partition || partition.writeState === 'moved') throw new ProblemError('partition_unavailable');
         const rows = (await objects.run(bounded, {
           routes,
-          ids: home.ids,
+          ids: [...home.ids],
           uploader_id: actor.accountId,
         })) as readonly MediaRow[];
         if (rows.length === 0) {
@@ -350,10 +353,10 @@ async function readObjectHome(
         const [threads, posts] = await Promise.all([
           threadIds.length
             ? decisionsFor(decisions, bounded, 'thread:read', 'content.thread', [...new Set(threadIds)], time)
-            : Promise.resolve({}),
+            : Promise.resolve(noDecisions),
           postIds.length
             ? decisionsFor(decisions, bounded, 'post:read', 'content.post', [...new Set(postIds)], time)
-            : Promise.resolve({}),
+            : Promise.resolve(noDecisions),
         ]);
         const candidates = rows.flatMap((row) => {
           if (!reservation[row.id]?.allowed) return [];
@@ -421,7 +424,7 @@ async function currentRealmActions(
         !candidate.row.erased &&
         !candidate.row.taken_down,
     );
-    const downloadable = new Map<string, readonly string[]>();
+    const downloadable = new Map<string, string[]>();
     for (let offset = 0; offset < visibleRows.length; offset += 2) {
       const batch = visibleRows.slice(offset, offset + 2);
       const permitted = await authorizedRealmMedia(

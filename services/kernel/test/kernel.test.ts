@@ -293,6 +293,7 @@ const typed = [
   'POST /v1/media',
   'POST /v1/media/presentations',
   'POST /v1/realms/:realmId/media',
+  'GET /v1/media',
   'GET /v1/media/:id',
   'POST /v1/media/:id/$complete',
   'DELETE /v1/media/:id',
