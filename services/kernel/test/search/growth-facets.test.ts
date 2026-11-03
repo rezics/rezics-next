@@ -595,8 +595,7 @@ beforeAll(async () => {
           ? body.id
           : undefined;
       if (probe && templateId === `${prefix}${FACET_TEMPLATE}`) probe.aggregations++;
-      const profiled =
-        templateId === `${prefix}${SEARCH_TEMPLATE}` || templateId === `${prefix}${HIT_TEMPLATE}`;
+      const profiled = templateId === `${prefix}${SEARCH_TEMPLATE}` || templateId === `${prefix}${HIT_TEMPLATE}`;
       const requestOptions = profiled ? { ...options, query: { ...options?.query, profile: true } } : options;
       const result = engine!.request<T>(method, path, body, requestOptions);
       if (!probe || !profiled) return result;
@@ -907,7 +906,10 @@ async function checkSearchGrowth(
     warmup: async () => undefined,
     ...(options.prepare === undefined
       ? {}
-      : { prepare: async (_database: GrowthDatabase, scale: number, repetition: number) => options.prepare!(scale, repetition) }),
+      : {
+          prepare: async (_database: GrowthDatabase, scale: number, repetition: number) =>
+            options.prepare!(scale, repetition),
+        }),
     grow: options.grow,
     operation: (_database, scale) => options.operation(scale),
   });
