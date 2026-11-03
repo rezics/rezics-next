@@ -8,6 +8,8 @@ import { type OpenSearch } from './opensearch.ts';
 import { type SearchPlan } from './query.ts';
 import { type PublicRatingSource } from './rating-source.ts';
 import type { RealmSubjectSource } from './realm-scope.ts';
+import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
+import type { ScopeBasis } from './scope-source.ts';
 import type { SubjectSource } from './source.ts';
 import { type DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
@@ -37,6 +39,8 @@ export type PublicSearchPage = {
 };
 export type PublicSearchReadContext = Readonly<{
     deadline: number;
+    /** The verified request context used only by the service-bound native Scope. */
+    scope?: LeafOptions;
     complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 type Result = {
@@ -44,6 +48,7 @@ type Result = {
     type: string;
     labels: Record<string, string>;
 };
+export declare function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown;
 /** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
 export declare function requiresAdvancedSearch(request: SearchRequest): boolean;
 export declare function createSearchService({ pool, client, prefix, source, ratings, realmSubjects, cursors, clock, facetSample, facetProvider, publicFilters, preparePublic, release: releaseOverride, }: {

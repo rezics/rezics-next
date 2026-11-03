@@ -120,6 +120,7 @@ export declare function readNativeCollectionMemberAdmission(admission: Collectio
     actor: Actor;
     pool: Pool;
     deadline: number;
+    retainedMeaning: boolean;
 }> | undefined;
 /** Repeat the admitted expanded families at the actual caller time, including every negative branch. */
 export declare function prepareNativeCollectionMemberAuthority(deps: Dependencies, viewer: Actor, admission: CollectionMemberAdmission, at: AuthoritativeTime, deadline: number, attempt?: CommandAttempt): Promise<import("../request/access.ts").AccessCheck[]>;

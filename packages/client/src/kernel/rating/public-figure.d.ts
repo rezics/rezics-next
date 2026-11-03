@@ -38,6 +38,13 @@ export declare function markPublicFigurePriorPage(pool: Pool, input: {
     prior: SubjectPriorInput;
     requiredGeneration: string;
 }): Promise<void>;
+/** Exact native erasure obligation; unrelated figure pages never extend this call. */
+export declare function drainErasedFigureTargets(pool: Pool, input: {
+    partition: number;
+    questionId: string;
+    populationId: string;
+    subjectIds: readonly string[];
+}): Promise<boolean>;
 /** Compute consumer readiness from the published count, never from pending votes or shard totals. */
 export declare function publicFigureState(figure: Pick<PublicFigure, 'count'> | null, grain: string, pending: boolean): 'ready' | 'insufficient_data' | 'updating';
 /** Point-read the pending mark, including an unpublished row; no vote or aggregate data is read. */

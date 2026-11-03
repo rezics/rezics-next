@@ -1,3 +1,4 @@
+import { type RealmSubjectReadContext } from './realm-subject-disclosure-work.ts';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
@@ -98,7 +99,7 @@ export declare class ContentNotFoundError extends Error {
 }
 /** All pool preparation happens outside this boundary. A failed rollback evicts
  * the connection rather than returning an open transaction to the pool. */
-export declare function snapshot<T>(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, id: string, context: Pick<ReadContext, 'deadline'>, work: (client: AccessClient) => Promise<T>): Promise<Anchored<T>>;
+export declare function snapshot<T>(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, id: string, context: Pick<RealmSubjectReadContext, 'deadline' | 'work'>, work: (client: AccessClient) => Promise<T>): Promise<Anchored<T>>;
 type BoardDisclosureFinal = Readonly<{
     boardAnchor: AnchoredPosition;
     parentAllowed: boolean;
@@ -168,6 +169,23 @@ export declare function readThread(dependencies: ContentReadDependencies, thread
 /** Subject listings use the same final thread, post, board and Access checks as exact thread reads, then
  * confirm the current subject reference and board's current Global/Realm placement in that snapshot. */
 export declare function readSubjectThread(dependencies: ContentReadDependencies, threadId: ThreadId, subjectId: string, placeId: string, context: ReadContext): Promise<Anchored<ThreadView | null>>;
+/** Internal exact-opening evidence. This shares the ordinary native resources,
+ * board observation, ancestry, account fences and Access evaluator. It loads no
+ * document bytes and cannot enumerate candidates or establish census coverage.
+ */
+export declare function prepareRealmSubjectThreadDisclosure(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, candidate: Readonly<{
+    threadId: string;
+    openingPostId: string;
+    subjectId: string;
+}>, realmId: string, context: RealmSubjectReadContext): Promise<Readonly<{
+    state: 'positive' | 'absent' | 'withheld';
+    signature: string | null;
+    anchors: readonly AnchoredPosition[];
+    final(): Promise<Readonly<{
+        signature: string;
+        anchors: readonly AnchoredPosition[];
+    }> | null>;
+}>>;
 /** Send-time disclosure uses the ordinary read resources and current account standing,
  * without constructing a bearer principal. Release every observation before Access checks. */
 export declare function postReadableByAccount(dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>, accountId: string, threadId: string, postId: string, context: Pick<ReadContext, 'deadline'>): Promise<boolean>;

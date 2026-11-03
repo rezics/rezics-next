@@ -5832,11 +5832,146 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
     };
 } & {
     v1: {
+        realms: {
+            ":realmId": {
+                "rating-questions": {
+                    post: {
+                        body: {
+                            meaning: string;
+                            label: string;
+                            grain: "character" | "episode" | "release" | "work";
+                            scale: {
+                                min: number;
+                                max: number;
+                                displayStep: number;
+                            };
+                        };
+                        params: {
+                            realmId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                id: string;
+                                realmId: string;
+                                meaning: string;
+                                revision: number;
+                                label: string;
+                                grain: import("./question-authoring.ts").QuestionGrain;
+                                scale: {
+                                    min: number;
+                                    max: number;
+                                    displayStep: number;
+                                };
+                            };
+                            201: {
+                                id: string;
+                                revision: number;
+                                realmId?: string;
+                                meaning?: string;
+                                label: string;
+                                grain: "character" | "episode" | "release" | "work";
+                                scale: {
+                                    min: number;
+                                    max: number;
+                                    displayStep: number;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
         "rating-questions": {
             get: {
                 body: unknown;
                 params: {};
                 query: {
+                    realm?: string;
                     limit?: string | number;
                     cursor?: string;
                 };
@@ -5846,6 +5981,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                         ratingQuestions: {
                             id: string;
                             revision: number;
+                            realmId?: string;
+                            meaning?: string;
                             label: string;
                             grain: "character" | "episode" | "release" | "work";
                             scale: {
@@ -6058,6 +6195,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         200: import("typebox").TObject<{
             id: import("typebox").TString;
             revision: import("typebox").TInteger;
+            realmId: import("typebox").TOptional<import("typebox").TString>;
+            meaning: import("typebox").TOptional<import("typebox").TString>;
             label: import("typebox").TString;
             grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
             scale: import("typebox").TObject<{
@@ -6076,6 +6215,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         } | {
             bearerAuth?: never;
         })[];
+        'x-resource-types': string[];
     };
 }, {
     PublicFigure: import("typebox").TObject<{
@@ -6091,7 +6231,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         mean: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
         score: import("typebox").TUnion<[import("typebox").TNumber, import("typebox").TNull]>;
     }>;
-}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ params, authorize, admission, job }: {
+}, "/v1/rating-questions/:questionId">, import("elysia/types").MergeScopedSchemas<{}, {}, {}>>, {}, ({ actor, params, admission, job }: {
     server: import("elysia").Server | null;
     redirect: import("elysia").redirect;
     set: {
@@ -6181,6 +6321,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         200: {
             id: string;
             revision: number;
+            realmId?: string;
+            meaning?: string;
             label: string;
             grain: "character" | "episode" | "release" | "work";
             scale: {
@@ -6271,6 +6413,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         200: {
             id: string;
             revision: number;
+            realmId?: string;
+            meaning?: string;
             label: string;
             grain: "character" | "episode" | "release" | "work";
             scale: {
@@ -6386,6 +6530,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             200: import("typebox").TObject<{
                 id: import("typebox").TString;
                 revision: import("typebox").TInteger;
+                realmId: import("typebox").TOptional<import("typebox").TString>;
+                meaning: import("typebox").TOptional<import("typebox").TString>;
                 label: import("typebox").TString;
                 grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
                 scale: import("typebox").TObject<{
@@ -6404,6 +6550,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             } | {
                 bearerAuth?: never;
             })[];
+            'x-resource-types': string[];
         };
     }, {
         PublicFigure: import("typebox").TObject<{
@@ -6463,17 +6610,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
     };
     readonly authorize: (resource: import("../request/access.ts").Resource) => Promise<import("../request/access.ts").AccessCheck>;
     readonly authorizeCommand: (resource: import("../request/access.ts").Resource, denied: () => Error) => Promise<import("../request/access.ts").AccessCommandAuthorization>;
-}) => Promise<{
-    id: string;
-    revision: number;
-    label: string;
-    grain: "character" | "episode" | "release" | "work";
-    scale: {
-        min: number;
-        max: number;
-        displayStep: number;
-    };
-}>, {
+}) => Promise<import("./question-directory.ts").RatingQuestionView>, {
     params: import("typebox").TObject<{
         questionId: import("typebox").TString;
     }>;
@@ -6579,6 +6716,8 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         200: import("typebox").TObject<{
             id: import("typebox").TString;
             revision: import("typebox").TInteger;
+            realmId: import("typebox").TOptional<import("typebox").TString>;
+            meaning: import("typebox").TOptional<import("typebox").TString>;
             label: import("typebox").TString;
             grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
             scale: import("typebox").TObject<{
@@ -6597,6 +6736,7 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
         } | {
             bearerAuth?: never;
         })[];
+        'x-resource-types': string[];
     };
 }>;
 export {};

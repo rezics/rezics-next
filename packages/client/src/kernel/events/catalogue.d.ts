@@ -1486,6 +1486,12 @@ declare const productEventTypes: {
     readonly 'com.rezics.library.collection.listing.changed.v1': Type.TObject<{
         collectionId: Type.TString;
     }>;
+    readonly 'com.rezics.rating.question.created.v1': Type.TObject<{
+        questionId: Type.TString;
+        realmId: Type.TString;
+        ownerId: Type.TString;
+        revision: Type.TLiteral<1>;
+    }>;
     readonly "com.rezics.rating.identity-repair.page.v1": Type.TObject<{
         voterId: Type.TString;
         workId: Type.TString;
@@ -1582,6 +1588,7 @@ declare const productEventTypes: {
             questionId: Type.TString;
             targetId: Type.TString;
             countedTargetId: Type.TOptional<Type.TUnion<[Type.TString, Type.TNull]>>;
+            changedAt: Type.TOptional<Type.TString>;
             units: Type.TUnion<[Type.TInteger, Type.TNull]>;
             revision: Type.TInteger;
             populations: Type.TArray<Type.TString>;
@@ -1594,6 +1601,7 @@ declare const productEventTypes: {
             questionId: Type.TString;
             targetId: Type.TString;
             countedTargetId: Type.TOptional<Type.TUnion<[Type.TString, Type.TNull]>>;
+            changedAt: Type.TOptional<Type.TString>;
             units: Type.TUnion<[Type.TInteger, Type.TNull]>;
             revision: Type.TInteger;
         }>>;

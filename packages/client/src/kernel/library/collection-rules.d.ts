@@ -1,6 +1,7 @@
 import { type FilterDocument } from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
 import { type AuthoritativeTime, type CommandAttempt, type CommandTransaction } from '../command/command.ts';
+import { ProblemError } from '../http/problem.ts';
 import { type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
@@ -24,6 +25,16 @@ export declare function parseCollectionRule(input: unknown): CollectionRule;
 export declare function collectionRuleActions(filter: FilterDocument): readonly string[];
 /** Meaning admission is independent of native execution admission and never certifies completeness. */
 export declare function admitCollectionRule(pool: Pool, rule: CollectionRule): Promise<AdmittedCollectionRule>;
+export type PreparedCollectionRuleWrite = Readonly<{
+    rule: AdmittedCollectionRule | null;
+    failure: ProblemError | null;
+    checks: readonly AccessCheck[];
+}>;
+/** An exact retry needs current authority, but need not admit a new meaning or perform another CAS. */
+export declare function prepareCollectionRuleWrite(config: {
+    pool: Pool;
+    access: Access;
+}, actor: AccountActor, rule: CollectionRule, attempt: CommandAttempt, deadline: number): Promise<PreparedCollectionRuleWrite>;
 /** Prepare the actual private-family checks before the owning transaction takes its connection. */
 export declare function prepareCollectionRuleAuthority(config: {
     pool: Pool;

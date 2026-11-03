@@ -31,7 +31,7 @@ export declare function readDiscoveryCensus(subjects: SubjectSource, accounts: A
 export declare function nativeDiscoveryRegistry(pool: Pool, routeKey: Uint8Array, subjects: SubjectSource, options?: {
     release: Release;
     languages?: readonly string[];
-}): Promise<DiscoveryRegistry>;
+}): Promise<DiscoveryRegistry & import("./discovery.ts").DiscoveryOwnerRegistry>;
 export type DiscoveryTarget = {
     prefix: string;
     generation: number;
