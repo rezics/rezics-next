@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, expect, expectTypeOf, spyOn, test } from 'bun:test';
+import type { OwnVoteActions, OwnVoteEntry, OwnVotesPage, OwnVotesPageQuery } from '@rezics/client';
 import { STANDARD_QUESTION_ID, VoteInvalidError } from '../../src/rating/votes.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
@@ -75,6 +76,12 @@ async function countedVoteActor() {
 }
 const pagePath = '/v1/me/rating-votes';
 const votePath = (target: string) => `/v1/subjects/${target}/ratings/${STANDARD_QUESTION_ID}/vote`;
+
+test('public My ratings types follow the mounted closed response', () => {
+  expectTypeOf<OwnVotesPage['votes'][number]>().toEqualTypeOf<OwnVoteEntry>();
+  expectTypeOf<OwnVoteEntry['actions']>().toEqualTypeOf<OwnVoteActions>();
+  expectTypeOf<OwnVotesPageQuery>().toEqualTypeOf<{ cursor?: string }>();
+});
 
 async function moderate(target: string, action: 'hide' | 'restore') {
   const { system, kernel } = communityFixtureRuntime();

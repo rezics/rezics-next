@@ -1277,6 +1277,7 @@ query field is `cursor`; unknown fields, including voter, selection, search, sor
 Responses use `Cache-Control: no-store`. `register.ts` exports `createOwnVotesReader`, `OWN_VOTES_PAGE_SIZE`,
 `OwnVoteActions`, `OwnVoteEntry`, `OwnVotesPage` and their mounted schemas. The factory takes the existing
 `{pool, access, tokens, routeKey, clock?}` dependencies; `page(actor, {cursor?}, deadline)` returns the same DTO.
+`@rezics/client` exports `OwnVotesPageQuery`, `OwnVotesPage`, `OwnVoteEntry` and `OwnVoteActions`, inferred from the mounted closed route response.
 The default Kernel passes its existing trusted route key; this read-only operation registers no new writer,
 projection, event or worker. Existing vote effects and session-token transport remain the mutation authority.
 
@@ -1335,13 +1336,20 @@ Examples for Web's existing account reader and Subject assessment owners:
 { viewer: { accountId }, votes: [{ targetId, questionId, subject, subjectHref,
   question, own: { units: 0, revision: 1, at },
   actions: { state: 'editable', put: votePath, clear: votePath, readback: votePath } }], next: null }
+// Retired questions preserve withdrawal, with no PUT link.
+{ state: 'retired', reason: 'question_retired', clear: votePath, readback: votePath }
+// A merged source keeps its exact original key and withholds all command links.
+{ targetId: sourceId, actions: { state: 'unavailable', reason: 'merged_source' } }
 // Empty; deliberately withheld raw windows can instead retain a continuation.
 { viewer: { accountId }, votes: [], next: null }
 { viewer: { accountId }, votes: [], next: opaqueCursor }
+// After clear, exact-source GET returns the same 404 used for an unknown or concealed slot.
+{ status: 404, code: 'not_found' }
 // Failed load is HTTP 503 with a retryable problem, never the empty DTO.
 // Revoked/suspended or missing rating:vote is HTTP 403; signed out is HTTP 401.
 // A fenced home/closed native command gate preserves the readable row without action links.
 { state: 'unavailable', reason: 'read_only' }
+{ state: 'unavailable', reason: 'identity_pending' }
 // A retryable 503 keeps the original cursor. Reload that exact cursor after recovery.
 // Uncertain PUT/DELETE retains the original method/path/body/key and uses exact-source GET readback.
 ```
