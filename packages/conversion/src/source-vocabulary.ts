@@ -127,7 +127,7 @@ export type SourceVocabularyResult = Readonly<{
   proposals: readonly BatchCommand[];
   gaps: readonly SourceVocabularyGap[];
 }>;
-type SourceVocabularyGapInput = Omit<SourceVocabularyGap, 'provider'> & {
+type SourceVocabularyGapInput = Omit<SourceVocabularyGap, 'provider' | 'code' | 'endpoint' | 'requiredProfile' | 'property'> & {
   provider?: SourceVocabularyProvider;
   code?: string | undefined;
   endpoint?: string | undefined;
