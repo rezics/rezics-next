@@ -15,6 +15,7 @@ import {
   type CurrentTypeDescriptor,
 } from './type-directory-client';
 import { musicContextKind } from './music-context-profile';
+import { isFileOrGroupType } from './catalogue-file-profile/model';
 export type { TypeDirectoryDescriptor } from './type-directory-client';
 
 type CreateDescriptorRead =
@@ -70,8 +71,11 @@ async function readCreateDescriptor(typeId: string, locale: string): Promise<Cre
       return { ok: false, reason: 'unavailable' };
     const release = response.data.release as Release;
     if (!release.types?.[typeId] || !release.properties) return { ok: false, reason: 'unavailable' };
-    const specializedPath =
-      musicContextKind(release, typeId) === 'unsupported' ? undefined : '/catalogue/music-context';
+    const specializedPath = isFileOrGroupType(release, typeId)
+      ? '/catalogue/file'
+      : musicContextKind(release, typeId) === 'unsupported'
+        ? undefined
+        : '/catalogue/music-context';
     const missing = new Set<string>();
     for (const id of result.descriptor.definition.properties) {
       const property = result.descriptor.properties[id];

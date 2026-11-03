@@ -26,6 +26,7 @@ import { AlbumProfileEntry } from './album-profile-entry';
 import { MusicContextCreateEntry } from './music-context-create-entry';
 import { identityIntentKey, type IdentityIntakeInput } from './identity-intake';
 import { IdentityIntakePanel } from './identity-intake-view';
+import { CatalogueFileCreateEntry } from './catalogue-file-create-entry';
 import { createSubjectControls, createSubjectGuidance } from './create-subject-guidance';
 import {
   GenericCreateFactsWorkspace,
@@ -1130,6 +1131,7 @@ function CreateSubjectFormLive({
                 <PeopleProfileEntry locale={locale} />
                 <AlbumProfileEntry locale={locale} />
                 <MusicContextCreateEntry locale={locale} />
+                <CatalogueFileCreateEntry locale={locale} />
               </nav>
             </details>
           )}

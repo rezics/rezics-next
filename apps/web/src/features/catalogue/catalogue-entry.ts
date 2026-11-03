@@ -171,17 +171,20 @@ export const catalogueEntries = {
   }: Locale & { id?: string | undefined; type?: string | undefined; label?: string | undefined }):
     | CatalogueEntry
     | undefined => {
-    if (
-      !id ||
-      !['schema:MediaObject', 'rezics:CatalogueFile', 'rezics:ReleaseGroup', 'wd:Q82753', 'wd:Q55327'].includes(
-        type ?? '',
-      )
-    )
-      return;
+    const fileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'rezics:ReleaseGroup', 'wd:Q82753', 'wd:Q55327'];
+    if (id) {
+      if (!fileTypes.includes(type ?? '')) return;
+      return {
+        group: 'edit',
+        label: m.catalogue_file_title({}, options(locale)),
+        href: `${subject({ id, label, locale })}/file`,
+      };
+    }
+    if (type && !fileTypes.includes(type)) return;
     return {
-      group: 'edit',
-      label: m.catalogue_file_title({}, options(locale)),
-      href: `${subject({ id, label, locale })}/file`,
+      group: 'create',
+      label: m.catalogue_file_create_title({}, options(locale)),
+      href: `/${locale}/catalogue/file`,
     };
   },
   graph: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({

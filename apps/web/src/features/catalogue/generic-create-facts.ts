@@ -58,6 +58,11 @@ const specializedCreatePaths: Record<string, string> = {
   'wd:Q95074': '/catalogue/character',
   'schema:Recipe': '/catalogue/recipe',
   'wd:Q2620972': '/catalogue/story-arc',
+  'schema:MediaObject': '/catalogue/file',
+  'rezics:CatalogueFile': '/catalogue/file',
+  'wd:Q82753': '/catalogue/file',
+  'rezics:ReleaseGroup': '/catalogue/file',
+  'wd:Q55327': '/catalogue/file',
 };
 
 export function genericCreateSpecializedPath(

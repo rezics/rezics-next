@@ -90,6 +90,8 @@ test('A contributor starts the actual creation task before alternative editors a
       '/en/catalogue/manga',
       '/en/catalogue/people',
       '/en/catalogue/album',
+      '/en/catalogue/music-context',
+      '/en/catalogue/file',
     ]);
     await act(async () => {
       await user.type(name, '  A name & another  ');
